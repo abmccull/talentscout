@@ -22,6 +22,7 @@ import { DiscoveriesScreen } from "@/components/game/DiscoveriesScreen";
 import { LeaderboardScreen } from "@/components/game/LeaderboardScreen";
 import { AnalyticsScreen } from "@/components/game/AnalyticsScreen";
 import { MatchSummaryScreen } from "@/components/game/MatchSummaryScreen";
+import { FixtureBrowser } from "@/components/game/FixtureBrowser";
 
 export default function Home() {
   const currentScreen = useGameStore((s) => s.currentScreen);
@@ -73,6 +74,8 @@ export default function Home() {
       return <LeaderboardScreen />;
     case "analytics":
       return <AnalyticsScreen />;
+    case "fixtureBrowser":
+      return <FixtureBrowser />;
     default:
       return <MainMenu />;
   }

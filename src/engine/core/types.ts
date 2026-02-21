@@ -537,6 +537,9 @@ export interface ScoutReport {
    */
   qualityScore: number;
 
+  /** Reputation change when this report was submitted. */
+  reputationDelta?: number;
+
   /** Club's subsequent decision on the scouted player. */
   clubResponse?: "ignored" | "shortlisted" | "signed";
   /**
@@ -799,6 +802,9 @@ export interface GameState {
    * fixtures before the engine auto-simulates the week.
    */
   playedFixtures: string[];
+
+  /** Player IDs bookmarked by the scout for quick access. */
+  watchlist: string[];
 
   /** Unix timestamp (ms) when this game save was created. */
   createdAt: number;

@@ -44,7 +44,7 @@ import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases"
 import { processFocusedObservations } from "@/engine/match/focus";
 import { generateReportContent, finalizeReport, calculateReportQuality } from "@/engine/reports/reporting";
 import { updateReputation, generateJobOffers } from "@/engine/career/progression";
-import { generateStartingContacts, meetContact } from "@/engine/network/contacts";
+import { generateStartingContacts, meetContact, generateContactForType } from "@/engine/network/contacts";
 import {
   createWeekSchedule,
   addActivity,
@@ -118,7 +118,8 @@ export type GameScreen =
   | "internationalView"
   | "discoveries"
   | "leaderboard"
-  | "analytics";
+  | "analytics"
+  | "fixtureBrowser";
 
 interface GameStore {
   // Navigation
@@ -136,6 +137,10 @@ interface GameStore {
     currentPhase: number;
     focusSelections: FocusSelection[];
   } | null;
+
+  // Last week summary — shown after advanceWeek() completes
+  lastWeekSummary: WeekSummary | null;
+  dismissWeekSummary: () => void;
 
   // Last match result — persisted so MatchSummaryScreen can read it after activeMatch is cleared
   lastMatchResult: {
@@ -211,6 +216,9 @@ interface GameStore {
   resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
   purchaseEquipment: () => void;
 
+  // Watchlist
+  toggleWatchlist: (playerId: string) => void;
+
   // Leaderboard
   submitToLeaderboard: () => Promise<void>;
 
@@ -235,6 +243,18 @@ interface GameStore {
   getPerformanceHistory: () => ScoutPerformanceSnapshot[];
 }
 
+export interface WeekSummary {
+  fatigueChange: number;
+  skillXpGained: Record<string, number>;
+  attributeXpGained: Record<string, number>;
+  matchesAttended: number;
+  reportsWritten: number;
+  meetingsHeld: number;
+  newMessages: number;
+  rivalAlerts: number;
+  financeSummary?: { income: number; expenses: number } | null;
+}
+
 export interface ClubStanding {
   clubId: string;
   clubName: string;
@@ -257,6 +277,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gameState: null,
   isLoaded: false,
   activeMatch: null,
+  lastWeekSummary: null,
+  dismissWeekSummary: () => set({ lastWeekSummary: null }),
   lastMatchResult: null,
   selectedPlayerId: null,
   selectedFixtureId: null,
@@ -355,6 +377,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       discoveryRecords: [],
       performanceHistory: [],
       playedFixtures: [],
+      watchlist: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -635,6 +658,162 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
+    // e) Write Reports — process scheduled writeReport activities into actual reports
+    if (weekResult.reportsWritten.length > 0) {
+      const updatedReports = { ...stateWithScheduleApplied.reports };
+      let reportScout = { ...stateWithScheduleApplied.scout };
+      let reportDiscoveries = [...(stateWithScheduleApplied.discoveryRecords ?? [])];
+      const reportMessages: InboxMessage[] = [];
+
+      for (const playerId of weekResult.reportsWritten) {
+        const player = stateWithScheduleApplied.players[playerId];
+        if (!player) continue;
+
+        const playerObs = Object.values(stateWithScheduleApplied.observations).filter(
+          (o) => o.playerId === playerId,
+        );
+        if (playerObs.length === 0) continue;
+
+        const draft = generateReportContent(player, playerObs, reportScout);
+        const report = finalizeReport(
+          draft,
+          "recommend",
+          `Scouting report on ${player.firstName} ${player.lastName} based on ${playerObs.length} observation${playerObs.length !== 1 ? "s" : ""}.`,
+          draft.suggestedStrengths ?? [],
+          draft.suggestedWeaknesses ?? [],
+          reportScout,
+          stateWithScheduleApplied.currentWeek,
+          stateWithScheduleApplied.currentSeason,
+          playerId,
+        );
+        const quality = calculateReportQuality(report, player);
+        const scoredReport = { ...report, qualityScore: quality };
+        updatedReports[scoredReport.id] = scoredReport;
+
+        const repBefore = reportScout.reputation;
+        reportScout = updateReputation(reportScout, { type: "reportSubmitted", quality });
+        reportScout = { ...reportScout, reportsSubmitted: reportScout.reportsSubmitted + 1 };
+        const repDelta = +(reportScout.reputation - repBefore).toFixed(1);
+
+        // Record discovery
+        const alreadyDiscovered = reportDiscoveries.some((r) => r.playerId === playerId);
+        if (!alreadyDiscovered) {
+          const disc = recordDiscovery(player, reportScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason);
+          reportDiscoveries = [...reportDiscoveries, disc];
+        }
+
+        reportMessages.push({
+          id: `auto-report-${playerId}-w${stateWithScheduleApplied.currentWeek}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: `Report Filed: ${player.firstName} ${player.lastName}`,
+          body: `Your scouting report on ${player.firstName} ${player.lastName} has been filed.\nQuality: ${quality}/100 | Reputation ${repDelta >= 0 ? "+" : ""}${repDelta}`,
+          read: false,
+          actionRequired: false,
+          relatedId: scoredReport.id,
+        });
+      }
+
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        reports: updatedReports,
+        scout: reportScout,
+        discoveryRecords: reportDiscoveries,
+        inbox: [...stateWithScheduleApplied.inbox, ...reportMessages],
+      };
+    }
+
+    // f) Activity XP feedback — generate inbox messages for silent activities
+    {
+      const activityFeedbackTypes: Record<string, string> = {
+        watchVideo: "Video Analysis Complete",
+        trainingVisit: "Training Visit Complete",
+        study: "Study Session Complete",
+      };
+      const seenTypes = new Set<string>();
+      const feedbackMessages: InboxMessage[] = [];
+      for (const act of stateWithScheduleApplied.schedule.activities) {
+        if (!act || seenTypes.has(act.type) || !(act.type in activityFeedbackTypes)) continue;
+        seenTypes.add(act.type);
+
+        const skillXp = weekResult.skillXpGained;
+        const attrXp = weekResult.attributeXpGained;
+        const parts: string[] = [];
+        // Show XP from this specific activity type
+        const SKILL_LABELS_MAP: Record<string, string> = {
+          technicalEye: "Technical Eye", physicalAssessment: "Physical Assessment",
+          psychologicalRead: "Psychological Read", tacticalUnderstanding: "Tactical Understanding",
+          dataLiteracy: "Data Literacy",
+        };
+        for (const [skill, val] of Object.entries(skillXp)) {
+          if (val && val > 0) parts.push(`${SKILL_LABELS_MAP[skill] ?? skill} +${val} XP`);
+        }
+        for (const [attr, val] of Object.entries(attrXp)) {
+          if (val && val > 0) parts.push(`${attr.charAt(0).toUpperCase() + attr.slice(1)} +${val} XP`);
+        }
+        parts.push(`Fatigue ${weekResult.fatigueChange >= 0 ? "+" : ""}${weekResult.fatigueChange}.`);
+
+        feedbackMessages.push({
+          id: `activity-${act.type}-w${stateWithScheduleApplied.currentWeek}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: activityFeedbackTypes[act.type],
+          body: parts.join(", "),
+          read: false,
+          actionRequired: false,
+        });
+      }
+      if (feedbackMessages.length > 0) {
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          inbox: [...stateWithScheduleApplied.inbox, ...feedbackMessages],
+        };
+      }
+    }
+
+    // g) New contact generation — every 8th week, 30% chance
+    if (stateWithScheduleApplied.currentWeek % 8 === 0) {
+      const contactRng = createRNG(
+        `${gameState.seed}-newcontact-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+      if (contactRng.nextFloat(0, 1) < 0.3) {
+        const contactTypes: Array<"agent" | "scout" | "clubStaff" | "journalist" | "academyCoach" | "sportingDirector"> = [
+          "agent", "scout", "clubStaff", "journalist", "academyCoach", "sportingDirector",
+        ];
+        const type = contactRng.pick(contactTypes);
+        const orgs = ["Base Soccer", "Elite Scouting", "Global Football Network", "Football Insights"];
+        const org = contactRng.pick(orgs);
+        const newContact = generateContactForType(contactRng, type, org);
+        // Populate knownPlayerIds with random players
+        const allPIds = Object.keys(stateWithScheduleApplied.players);
+        const knownCount = contactRng.nextInt(3, 7);
+        const knownIds: string[] = [];
+        for (let i = 0; i < knownCount && allPIds.length > 0; i++) {
+          const idx = contactRng.nextInt(0, allPIds.length - 1);
+          if (!knownIds.includes(allPIds[idx])) knownIds.push(allPIds[idx]);
+        }
+        const contactWithPlayers = { ...newContact, knownPlayerIds: knownIds };
+        const contactMsg: InboxMessage = {
+          id: `new-contact-${newContact.id}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "event" as const,
+          title: `New Contact: ${newContact.name}`,
+          body: `You've been introduced to ${newContact.name} (${type}) from ${org}${newContact.region ? `, covering ${newContact.region}` : ""}. They know ${knownCount} player${knownCount !== 1 ? "s" : ""} and appear in your contact network.`,
+          read: false,
+          actionRequired: false,
+          relatedId: newContact.id,
+        };
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          contacts: { ...stateWithScheduleApplied.contacts, [newContact.id]: contactWithPlayers },
+          inbox: [...stateWithScheduleApplied.inbox, contactMsg],
+        };
+      }
+    }
+
     // ── Process cross-country transfers (only when multiple countries are active) ──
     if (stateWithScheduleApplied.countries.length > 1) {
       const transferRng = createRNG(
@@ -880,7 +1059,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newState = { ...newState, inbox: newState.inbox.slice(-200) };
     }
 
-    set({ gameState: newState });
+    // ── Build week summary for UI feedback ──────────────────────────────────
+    const newInboxCount = newState.inbox.length - gameState.inbox.length;
+    const isPayWeek = gameState.currentWeek % 4 === 0;
+    const weekSummary: WeekSummary = {
+      fatigueChange: weekResult.fatigueChange,
+      skillXpGained: weekResult.skillXpGained as Record<string, number>,
+      attributeXpGained: weekResult.attributeXpGained as Record<string, number>,
+      matchesAttended: weekResult.matchesAttended.length,
+      reportsWritten: weekResult.reportsWritten.length,
+      meetingsHeld: weekResult.meetingsHeld.length,
+      newMessages: Math.max(0, newInboxCount),
+      rivalAlerts: rivalInboxMessages.length,
+      financeSummary: isPayWeek && gameState.finances
+        ? {
+            income: gameState.finances.monthlyIncome,
+            expenses: Object.values(gameState.finances.expenses).reduce((s, v) => s + v, 0),
+          }
+        : null,
+    };
+
+    set({ gameState: newState, lastWeekSummary: weekSummary });
     // Autosave after each week advance
     dbAutosave(newState).catch((err) => {
       console.warn("Autosave failed:", err);
@@ -1085,13 +1284,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
 
     const quality = calculateReportQuality(report, player);
-    const scoredReport = { ...report, qualityScore: quality };
 
+    const repBefore = gameState.scout.reputation;
     const baseUpdatedScout = updateReputation(gameState.scout, {
       type: "reportSubmitted",
       quality,
     });
     const updatedScout = { ...baseUpdatedScout, reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1 };
+    const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
+    const scoredReport = { ...report, qualityScore: quality, reputationDelta };
 
     // Record discovery if this player has not been tracked before
     const alreadyDiscovered = gameState.discoveryRecords.some(
@@ -1388,6 +1589,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!updatedFinances) return; // Cannot afford or already at max level
 
     set({ gameState: { ...gameState, finances: updatedFinances } });
+  },
+
+  toggleWatchlist: (playerId: string) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const idx = gameState.watchlist.indexOf(playerId);
+    const next =
+      idx >= 0
+        ? gameState.watchlist.filter((id) => id !== playerId)
+        : [...gameState.watchlist, playerId];
+    set({ gameState: { ...gameState, watchlist: next } });
   },
 
   // Helpers

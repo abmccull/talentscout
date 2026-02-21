@@ -6,7 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, ChevronUp, ChevronDown, Users, FileText } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, Users, FileText, Star } from "lucide-react";
 import type { Player, Position } from "@/engine/core/types";
 
 type SortKey = "name" | "age" | "position" | "club" | "observations" | "reports" | "lastSeen";
@@ -29,6 +29,7 @@ export function PlayerDatabase() {
     selectPlayer,
     setScreen,
     startReport,
+    toggleWatchlist,
     getPlayerObservations,
     getPlayerReports,
     getClub,
@@ -41,6 +42,7 @@ export function PlayerDatabase() {
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
   const [scoutedOnly, setScoutedOnly] = useState(true);
+  const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -80,6 +82,11 @@ export function PlayerDatabase() {
 
   const filtered = useMemo(() => {
     let result = rows;
+
+    if (watchlistOnly && gameState) {
+      const wl = new Set(gameState.watchlist);
+      result = result.filter((r) => wl.has(r.player.id));
+    }
 
     if (search.trim()) {
       const q = search.trim().toLowerCase();
@@ -132,7 +139,7 @@ export function PlayerDatabase() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [rows, search, positionFilter, minAge, maxAge, sortKey, sortDir]);
+  }, [rows, search, positionFilter, minAge, maxAge, sortKey, sortDir, watchlistOnly, gameState]);
 
   // Early return after all hooks
   if (!gameState) return null;
@@ -169,6 +176,14 @@ export function PlayerDatabase() {
             <p className="text-sm text-zinc-400">{filtered.length} players shown</p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant={watchlistOnly ? "default" : "outline"}
+              size="sm"
+              onClick={() => setWatchlistOnly(!watchlistOnly)}
+            >
+              <Star size={12} className={`mr-1 ${watchlistOnly ? "fill-amber-400 text-amber-400" : ""}`} aria-hidden="true" />
+              Watchlist
+            </Button>
             <Button
               variant={scoutedOnly ? "default" : "outline"}
               size="sm"
@@ -313,9 +328,28 @@ export function PlayerDatabase() {
                       aria-label={`View profile for ${row.player.firstName} ${row.player.lastName}`}
                     >
                       <td className="px-4 py-3">
-                        <span className="font-medium text-white">
-                          {row.player.firstName} {row.player.lastName}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleWatchlist(row.player.id);
+                            }}
+                            className="shrink-0"
+                            aria-label={gameState.watchlist.includes(row.player.id) ? "Remove from watchlist" : "Add to watchlist"}
+                          >
+                            <Star
+                              size={12}
+                              className={
+                                gameState.watchlist.includes(row.player.id)
+                                  ? "text-amber-400 fill-amber-400"
+                                  : "text-zinc-700 hover:text-zinc-500 transition"
+                              }
+                            />
+                          </button>
+                          <span className="font-medium text-white">
+                            {row.player.firstName} {row.player.lastName}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-zinc-400">{row.player.age}</td>
                       <td className="px-4 py-3">

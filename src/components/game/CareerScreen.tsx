@@ -25,7 +25,7 @@ import type {
   Specialization,
 } from "@/engine/core/types";
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
-import { TOOL_DEFINITIONS, getToolDefinition } from "@/engine/tools/index";
+import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
 import { purchaseEquipmentUpgrade } from "@/engine/finance";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
@@ -468,6 +468,23 @@ export function CareerScreen() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {/* Active bonus summary */}
+                {unlockedTools.length > 0 && (() => {
+                  const bonuses = getActiveToolBonuses(unlockedTools);
+                  const parts: string[] = [];
+                  if (bonuses.accuracyBonus) parts.push(`+${Math.round(bonuses.accuracyBonus * 100)}% accuracy`);
+                  if (bonuses.confidenceBonus) parts.push(`+${Math.round(bonuses.confidenceBonus * 100)}% confidence`);
+                  if (bonuses.fatigueReduction) parts.push(`-${bonuses.fatigueReduction} fatigue/report`);
+                  if (bonuses.travelFatigueReduction) parts.push(`-${Math.round(bonuses.travelFatigueReduction * 100)}% travel fatigue`);
+                  if (bonuses.relationshipGainBonus) parts.push(`+${Math.round(bonuses.relationshipGainBonus * 100)}% relationship gains`);
+                  if (parts.length === 0) return null;
+                  return (
+                    <div className="mb-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                      <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">Active Bonuses</p>
+                      <p className="text-xs text-emerald-300">{parts.join(" | ")}</p>
+                    </div>
+                  );
+                })()}
                 <div className="grid grid-cols-1 gap-2">
                   {TOOL_DEFINITIONS.map((tool) => {
                     const isUnlocked = unlockedTools.includes(tool.id);

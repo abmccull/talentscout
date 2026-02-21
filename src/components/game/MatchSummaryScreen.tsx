@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,8 +12,11 @@ import {
   FileText,
   User,
   ChevronRight,
+  ChevronDown,
   AlertTriangle,
 } from "lucide-react";
+import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
+import type { AttributeDomain } from "@/engine/core/types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -34,6 +38,26 @@ function scoreResultLabel(homeGoals: number, awayGoals: number): string {
 // Component
 // ---------------------------------------------------------------------------
 
+const DOMAIN_ORDER: AttributeDomain[] = ["technical", "physical", "mental", "tactical"];
+const DOMAIN_LABELS: Record<string, string> = {
+  technical: "Technical",
+  physical: "Physical",
+  mental: "Mental",
+  tactical: "Tactical",
+};
+
+function readingConfidenceColor(confidence: number): string {
+  if (confidence >= 0.7) return "text-emerald-400";
+  if (confidence >= 0.4) return "text-amber-400";
+  return "text-red-400";
+}
+
+function readingBarColor(confidence: number): string {
+  if (confidence >= 0.7) return "bg-emerald-500";
+  if (confidence >= 0.4) return "bg-amber-500";
+  return "bg-red-500";
+}
+
 export function MatchSummaryScreen() {
   const {
     gameState,
@@ -46,6 +70,16 @@ export function MatchSummaryScreen() {
     startReport,
     setScreen,
   } = useGameStore();
+  const [expandedPlayers, setExpandedPlayers] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (playerId: string) => {
+    setExpandedPlayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(playerId)) next.delete(playerId);
+      else next.add(playerId);
+      return next;
+    });
+  };
 
   // All hooks called before any early return
   const fixture = lastMatchResult ? getFixture(lastMatchResult.fixtureId) : undefined;
@@ -246,6 +280,91 @@ export function MatchSummaryScreen() {
                               )}
                             </div>
                           </div>
+
+                          {/* Expandable attribute readings */}
+                          {hasObservations && (
+                            <>
+                              <button
+                                onClick={() => toggleExpanded(playerId)}
+                                className="mt-3 flex w-full items-center gap-1 text-xs text-zinc-400 hover:text-white transition"
+                              >
+                                {expandedPlayers.has(playerId) ? (
+                                  <ChevronDown size={12} />
+                                ) : (
+                                  <ChevronRight size={12} />
+                                )}
+                                {expandedPlayers.has(playerId)
+                                  ? "Hide attribute readings"
+                                  : `Show ${totalReadings} attribute reading${totalReadings !== 1 ? "s" : ""}`}
+                              </button>
+                              {expandedPlayers.has(playerId) && (() => {
+                                const allReadings = getPlayerObservations(playerId).flatMap(
+                                  (o) => o.attributeReadings,
+                                );
+                                // Group by domain, dedup by attribute (keep best confidence)
+                                const byAttr = new Map<string, typeof allReadings[0]>();
+                                for (const r of allReadings) {
+                                  const existing = byAttr.get(r.attribute);
+                                  if (!existing || r.confidence > existing.confidence) {
+                                    byAttr.set(r.attribute, r);
+                                  }
+                                }
+                                const byDomain = new Map<string, typeof allReadings>();
+                                for (const [attr, reading] of byAttr) {
+                                  const domain = ATTRIBUTE_DOMAINS[reading.attribute] ?? "unknown";
+                                  if (!byDomain.has(domain)) byDomain.set(domain, []);
+                                  byDomain.get(domain)!.push(reading);
+                                }
+                                return (
+                                  <div className="mt-2 space-y-3 rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
+                                    {DOMAIN_ORDER.filter((d) => byDomain.has(d)).map(
+                                      (domain) => (
+                                        <div key={domain}>
+                                          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                                            {DOMAIN_LABELS[domain]}
+                                          </p>
+                                          <div className="space-y-1">
+                                            {byDomain.get(domain)!.map((r) => (
+                                              <div
+                                                key={r.attribute}
+                                                className="flex items-center gap-2"
+                                              >
+                                                <span className="w-28 shrink-0 text-[11px] capitalize text-zinc-400">
+                                                  {String(r.attribute)
+                                                    .replace(/([A-Z])/g, " $1")
+                                                    .trim()}
+                                                </span>
+                                                <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                                                  <div
+                                                    className={`absolute left-0 top-0 h-full rounded-full ${readingBarColor(r.confidence)}`}
+                                                    style={{
+                                                      width: `${(r.perceivedValue / 20) * 100}%`,
+                                                    }}
+                                                  />
+                                                </div>
+                                                <span className="w-5 shrink-0 text-right text-[11px] font-mono font-bold text-white">
+                                                  {r.perceivedValue}
+                                                </span>
+                                                <span
+                                                  className={`w-8 shrink-0 text-right text-[10px] font-medium ${readingConfidenceColor(r.confidence)}`}
+                                                >
+                                                  {r.confidence >= 0.7
+                                                    ? "High"
+                                                    : r.confidence >= 0.4
+                                                      ? "Med"
+                                                      : "Low"}
+                                                </span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </>
+                          )}
                         </CardContent>
                       </Card>
                     );

@@ -5,8 +5,9 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, ArrowLeft, Eye } from "lucide-react";
-import type { AttributeReading } from "@/engine/core/types";
+import { useState, useMemo } from "react";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import type { AttributeReading, Observation } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -36,6 +37,174 @@ function formatMarketValue(value: number): string {
   return `£${value}`;
 }
 
+function ObservationsSidebar({ observations }: { observations: Observation[] }) {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  };
+
+  const comparison = useMemo(() => {
+    if (selected.length !== 2) return null;
+    const obsA = observations.find((o) => o.id === selected[0]);
+    const obsB = observations.find((o) => o.id === selected[1]);
+    if (!obsA || !obsB) return null;
+
+    const mapA = new Map(obsA.attributeReadings.map((r) => [String(r.attribute), r]));
+    const mapB = new Map(obsB.attributeReadings.map((r) => [String(r.attribute), r]));
+    const allAttrs = new Set([...mapA.keys(), ...mapB.keys()]);
+
+    const rows: { attr: string; valA: number | null; valB: number | null; delta: number | null }[] = [];
+    for (const attr of allAttrs) {
+      const rA = mapA.get(attr);
+      const rB = mapB.get(attr);
+      rows.push({
+        attr,
+        valA: rA?.perceivedValue ?? null,
+        valB: rB?.perceivedValue ?? null,
+        delta: rA && rB ? rB.perceivedValue - rA.perceivedValue : null,
+      });
+    }
+    rows.sort((a, b) => a.attr.localeCompare(b.attr));
+    return { obsA, obsB, rows };
+  }, [selected, observations]);
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-sm">
+            <span>Observations ({observations.length})</span>
+            {observations.length >= 2 && (
+              <Button
+                size="sm"
+                variant={compareMode ? "default" : "ghost"}
+                className="text-[10px] h-6 px-2"
+                onClick={() => {
+                  setCompareMode(!compareMode);
+                  if (compareMode) setSelected([]);
+                }}
+              >
+                Compare
+              </Button>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {observations.length === 0 ? (
+            <p className="text-xs text-zinc-500">None yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {observations.slice(-5).reverse().map((obs) => {
+                const isSelected = selected.includes(obs.id);
+                return (
+                  <div
+                    key={obs.id}
+                    className={`rounded-md border p-2 ${
+                      compareMode
+                        ? isSelected
+                          ? "border-emerald-500 bg-emerald-500/5 cursor-pointer"
+                          : "border-[#27272a] cursor-pointer hover:border-zinc-600"
+                        : "border-[#27272a]"
+                    }`}
+                    onClick={compareMode ? () => toggleSelect(obs.id) : undefined}
+                    role={compareMode ? "button" : undefined}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      {compareMode && (
+                        <div
+                          className={`mr-2 h-3.5 w-3.5 shrink-0 rounded-sm border ${
+                            isSelected
+                              ? "bg-emerald-500 border-emerald-500"
+                              : "border-zinc-600"
+                          }`}
+                        />
+                      )}
+                      <span className="text-xs text-zinc-400 capitalize flex-1">
+                        {obs.context.replace(/([A-Z])/g, " $1").trim()}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        W{obs.week} S{obs.season}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      {obs.attributeReadings.length} attribute
+                      {obs.attributeReadings.length !== 1 ? "s" : ""} read
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {compareMode && selected.length < 2 && (
+            <p className="mt-2 text-[10px] text-zinc-500">
+              Select {2 - selected.length} more observation{selected.length === 0 ? "s" : ""} to compare.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Comparison panel */}
+      {comparison && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">
+              Comparison: W{comparison.obsA.week} vs W{comparison.obsB.week}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              <div className="flex items-center text-[10px] text-zinc-500 mb-2">
+                <span className="w-24 shrink-0">Attribute</span>
+                <span className="w-8 text-center shrink-0">W{comparison.obsA.week}</span>
+                <span className="w-8 text-center shrink-0">W{comparison.obsB.week}</span>
+                <span className="w-8 text-center shrink-0">Chg</span>
+              </div>
+              {comparison.rows.map((row) => (
+                <div key={row.attr} className="flex items-center text-xs">
+                  <span className="w-24 shrink-0 text-zinc-400 capitalize truncate">
+                    {row.attr.replace(/([A-Z])/g, " $1").trim()}
+                  </span>
+                  <span className="w-8 text-center shrink-0 font-mono text-zinc-300">
+                    {row.valA ?? "—"}
+                  </span>
+                  <span className="w-8 text-center shrink-0 font-mono text-zinc-300">
+                    {row.valB ?? "—"}
+                  </span>
+                  <span className="w-8 flex items-center justify-center shrink-0">
+                    {row.delta !== null ? (
+                      row.delta > 0 ? (
+                        <span className="flex items-center text-emerald-400">
+                          <ArrowUp size={10} />
+                          <span className="text-[10px]">{row.delta}</span>
+                        </span>
+                      ) : row.delta < 0 ? (
+                        <span className="flex items-center text-red-400">
+                          <ArrowDown size={10} />
+                          <span className="text-[10px]">{Math.abs(row.delta)}</span>
+                        </span>
+                      ) : (
+                        <Minus size={10} className="text-zinc-600" />
+                      )
+                    ) : (
+                      <span className="text-zinc-700 text-[10px]">—</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+}
+
 export function PlayerProfile() {
   const {
     gameState,
@@ -46,6 +215,7 @@ export function PlayerProfile() {
     startReport,
     getClub,
     getLeague,
+    toggleWatchlist,
   } = useGameStore();
 
   if (!gameState || !selectedPlayerId) return null;
@@ -101,9 +271,25 @@ export function PlayerProfile() {
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-bold">
-              {player.firstName} {player.lastName}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">
+                {player.firstName} {player.lastName}
+              </h1>
+              <button
+                onClick={() => toggleWatchlist(selectedPlayerId)}
+                className="p-1 rounded hover:bg-zinc-800 transition"
+                aria-label={gameState.watchlist.includes(selectedPlayerId) ? "Remove from watchlist" : "Add to watchlist"}
+              >
+                <Star
+                  size={18}
+                  className={
+                    gameState.watchlist.includes(selectedPlayerId)
+                      ? "text-amber-400 fill-amber-400"
+                      : "text-zinc-600"
+                  }
+                />
+              </button>
+            </div>
             <div className="mt-1 flex items-center gap-2 flex-wrap">
               <Badge variant="secondary">{player.position}</Badge>
               <span className="text-sm text-zinc-400">
@@ -224,40 +410,8 @@ export function PlayerProfile() {
           {/* Sidebar: observations & reports */}
           <div className="space-y-4">
             {/* Observation history */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">
-                  Observations ({observations.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {observations.length === 0 ? (
-                  <p className="text-xs text-zinc-500">None yet.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {observations.slice(-5).reverse().map((obs) => (
-                      <div
-                        key={obs.id}
-                        className="rounded-md border border-[#27272a] p-2"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-xs text-zinc-400 capitalize">
-                            {obs.context.replace(/([A-Z])/g, " $1").trim()}
-                          </span>
-                          <span className="text-xs text-zinc-500">
-                            W{obs.week} S{obs.season}
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-500">
-                          {obs.attributeReadings.length} attribute
-                          {obs.attributeReadings.length !== 1 ? "s" : ""} read
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <ObservationsSidebar observations={observations} />
+
 
             {/* Reports */}
             <Card>

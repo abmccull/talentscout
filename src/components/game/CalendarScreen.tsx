@@ -50,6 +50,23 @@ function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {
   return "ok";
 }
 
+const SKILL_LABELS: Record<string, string> = {
+  technicalEye: "Technical Eye",
+  physicalAssessment: "Physical Assessment",
+  psychologicalRead: "Psychological Read",
+  tacticalUnderstanding: "Tactical Understanding",
+  dataLiteracy: "Data Literacy",
+};
+
+const ATTR_LABELS: Record<string, string> = {
+  networking: "Networking",
+  persuasion: "Persuasion",
+  endurance: "Endurance",
+  adaptability: "Adaptability",
+  memory: "Memory",
+  intuition: "Intuition",
+};
+
 export function CalendarScreen() {
   const {
     gameState,
@@ -59,6 +76,8 @@ export function CalendarScreen() {
     getUpcomingFixtures,
     getClub,
     getLeague,
+    lastWeekSummary,
+    dismissWeekSummary,
   } = useGameStore();
 
   if (!gameState) return null;
@@ -78,12 +97,13 @@ export function CalendarScreen() {
       const home = getClub(f.homeClubId);
       const away = getClub(f.awayClubId);
       const league = getLeague(f.leagueId);
+      const weatherStr = f.weather ? ` — ${f.weather.replace(/([A-Z])/g, " $1").trim()}` : "";
       return {
         activity: {
           type: "attendMatch" as ActivityType,
           slots: 2,
           targetId: f.id,
-          description: `${home?.shortName ?? "?"} vs ${away?.shortName ?? "?"} (${league?.shortName ?? "?"})`,
+          description: `${home?.shortName ?? "?"} vs ${away?.shortName ?? "?"} (${league?.shortName ?? "?"})${weatherStr}`,
         } satisfies Activity,
         label: `${home?.shortName ?? "?"} vs ${away?.shortName ?? "?"}`,
       };
@@ -137,7 +157,90 @@ export function CalendarScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="p-6 relative">
+        {/* Week Summary Overlay */}
+        {lastWeekSummary && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <Card className="w-full max-w-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Week Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
+                    <span className="text-zinc-500">Fatigue</span>
+                    <span className={lastWeekSummary.fatigueChange >= 0 ? "text-red-400 font-semibold" : "text-emerald-400 font-semibold"}>
+                      {lastWeekSummary.fatigueChange >= 0 ? "+" : ""}{lastWeekSummary.fatigueChange}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
+                    <span className="text-zinc-500">Matches</span>
+                    <span className="text-white font-semibold">{lastWeekSummary.matchesAttended}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
+                    <span className="text-zinc-500">Reports</span>
+                    <span className="text-white font-semibold">{lastWeekSummary.reportsWritten}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
+                    <span className="text-zinc-500">Meetings</span>
+                    <span className="text-white font-semibold">{lastWeekSummary.meetingsHeld}</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
+                    <span className="text-zinc-500">New Messages</span>
+                    <span className="text-white font-semibold">{lastWeekSummary.newMessages}</span>
+                  </div>
+                  {lastWeekSummary.rivalAlerts > 0 && (
+                    <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
+                      <span className="text-amber-400">Rival Alerts</span>
+                      <span className="text-amber-400 font-semibold">{lastWeekSummary.rivalAlerts}</span>
+                    </div>
+                  )}
+                </div>
+                {/* XP gains */}
+                {Object.keys(lastWeekSummary.skillXpGained).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">Skill XP</p>
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(lastWeekSummary.skillXpGained).map(([skill, xp]) => (
+                        <Badge key={skill} variant="secondary" className="text-[10px]">
+                          {SKILL_LABELS[skill] ?? skill} +{xp}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {Object.keys(lastWeekSummary.attributeXpGained).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">Attribute XP</p>
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(lastWeekSummary.attributeXpGained).map(([attr, xp]) => (
+                        <Badge key={attr} variant="secondary" className="text-[10px]">
+                          {ATTR_LABELS[attr] ?? attr} +{xp}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Finance summary */}
+                {lastWeekSummary.financeSummary && (
+                  <div className="rounded-md border border-[#27272a] px-3 py-2 text-xs">
+                    <p className="text-zinc-500 mb-1">Monthly Pay</p>
+                    <p className="text-white">
+                      <span className="text-emerald-400">+£{lastWeekSummary.financeSummary.income}</span>
+                      {" income, "}
+                      <span className="text-red-400">-£{lastWeekSummary.financeSummary.expenses}</span>
+                      {" expenses"}
+                    </p>
+                  </div>
+                )}
+                <Button className="w-full" onClick={dismissWeekSummary}>
+                  Continue
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>

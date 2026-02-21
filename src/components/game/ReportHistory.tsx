@@ -72,6 +72,11 @@ function ReportDetailModal({ report, playerName, onClose }: ReportDetailModalPro
             <span className={`text-sm font-semibold ${qualityColor(report.qualityScore)}`}>
               Quality: {report.qualityScore}/100
             </span>
+            {report.reputationDelta !== undefined && (
+              <span className={`text-sm font-semibold ${report.reputationDelta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                Rep: {report.reputationDelta >= 0 ? "+" : ""}{report.reputationDelta}
+              </span>
+            )}
             {report.clubResponse && (
               <Badge variant="secondary" className="text-[10px] capitalize">
                 Club: {report.clubResponse}
@@ -238,6 +243,7 @@ export function ReportHistory() {
                       <th className="px-4 py-3 font-medium">Player</th>
                       <th className="px-4 py-3 font-medium">Conviction</th>
                       <th className="px-4 py-3 font-medium">Quality</th>
+                      <th className="px-4 py-3 font-medium">Rep</th>
                       <th className="px-4 py-3 font-medium">Week</th>
                       <th className="px-4 py-3 font-medium">Club Response</th>
                       <th className="px-4 py-3 font-medium">Actions</th>
@@ -276,6 +282,15 @@ export function ReportHistory() {
                               {report.qualityScore}
                             </span>
                             <span className="text-zinc-600">/100</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {report.reputationDelta !== undefined ? (
+                              <span className={`text-xs font-semibold ${report.reputationDelta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                {report.reputationDelta >= 0 ? "+" : ""}{report.reputationDelta}
+                              </span>
+                            ) : (
+                              <span className="text-zinc-600 text-xs">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3 text-zinc-400">
                             W{report.submittedWeek} S{report.submittedSeason}

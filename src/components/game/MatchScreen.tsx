@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Plus, X, ChevronRight, Trophy } from "lucide-react";
-import type { MatchPhase, Player } from "@/engine/core/types";
+import type { MatchPhase, Player, PlayerAttribute } from "@/engine/core/types";
+import { EVENT_REVEALED } from "@/engine/match/phases";
 
 type FocusLens = "technical" | "physical" | "mental" | "tactical" | "general";
 
@@ -174,6 +175,27 @@ export function MatchScreen() {
                           <p className="text-xs text-zinc-400 leading-relaxed">
                             {event.description}
                           </p>
+                          {/* Attribute pills showing what this event reveals */}
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {event.attributesRevealed.map((attr) => {
+                              const isFocused = focusedIds.has(event.playerId);
+                              return (
+                                <span
+                                  key={attr}
+                                  className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                                    isFocused
+                                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                                  }`}
+                                >
+                                  {attr.replace(/([A-Z])/g, " $1").trim()}
+                                  {isFocused && (
+                                    <span className="text-[9px] text-emerald-500">+obs</span>
+                                  )}
+                                </span>
+                              );
+                            })}
+                          </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <div

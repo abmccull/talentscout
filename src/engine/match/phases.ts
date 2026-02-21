@@ -29,7 +29,7 @@ export interface MatchContext {
 // Attribute mapping — which attributes each event type reveals
 // ---------------------------------------------------------------------------
 
-const EVENT_REVEALED: Record<MatchEventType, PlayerAttribute[]> = {
+export const EVENT_REVEALED: Record<MatchEventType, PlayerAttribute[]> = {
   goal:        ["shooting", "composure"],
   assist:      ["passing", "decisionMaking"],
   shot:        ["shooting", "composure"],
