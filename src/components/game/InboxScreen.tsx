@@ -1,0 +1,420 @@
+"use client";
+
+import { useState } from "react";
+import { useGameStore } from "@/stores/gameStore";
+import { GameLayout } from "./GameLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  ClipboardList,
+  Star,
+  Newspaper,
+  Briefcase,
+  Bell,
+  Mail,
+  MailOpen,
+  Zap,
+  X,
+} from "lucide-react";
+import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType } from "@/engine/core/types";
+
+// ─── Message type config ──────────────────────────────────────────────────────
+
+const MESSAGE_TYPE_CONFIG: Record<
+  InboxMessageType,
+  { label: string; icon: React.ElementType; color: string }
+> = {
+  assignment: { label: "Assignment", icon: ClipboardList, color: "text-blue-400" },
+  feedback: { label: "Feedback", icon: Star, color: "text-amber-400" },
+  news: { label: "News", icon: Newspaper, color: "text-zinc-400" },
+  jobOffer: { label: "Job Offer", icon: Briefcase, color: "text-emerald-400" },
+  event: { label: "Event", icon: Bell, color: "text-purple-400" },
+};
+
+// ─── Narrative event type config ─────────────────────────────────────────────
+
+const NARRATIVE_TYPE_CONFIG: Record<
+  NarrativeEventType,
+  { label: string; color: string }
+> = {
+  rivalPoach:              { label: "Rival Activity", color: "text-red-400" },
+  managerFired:            { label: "Management Change", color: "text-amber-400" },
+  exclusiveTip:            { label: "Exclusive Tip", color: "text-emerald-400" },
+  debutHatTrick:           { label: "Player Form", color: "text-blue-400" },
+  targetInjured:           { label: "Injury Alert", color: "text-red-400" },
+  reportCitedInBoardMeeting: { label: "Board Recognition", color: "text-purple-400" },
+  rivalRecruitment:        { label: "Rival Recruitment", color: "text-orange-400" },
+  agentDeception:          { label: "Agent Intel", color: "text-zinc-400" },
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function timeAgo(
+  week: number,
+  season: number,
+  currentWeek: number,
+  currentSeason: number,
+): string {
+  const totalWeeksAgo =
+    (currentSeason - season) * 38 + (currentWeek - week);
+  if (totalWeeksAgo === 0) return "This week";
+  if (totalWeeksAgo === 1) return "1 week ago";
+  if (totalWeeksAgo < 4) return `${totalWeeksAgo} weeks ago`;
+  return `Season ${season}, Week ${week}`;
+}
+
+// ─── NarrativeEventCard ──────────────────────────────────────────────────────
+
+interface NarrativeEventCardProps {
+  event: NarrativeEvent;
+  onAcknowledge: () => void;
+  onChoice: (index: number) => void;
+}
+
+function NarrativeEventCard({
+  event,
+  onAcknowledge,
+  onChoice,
+}: NarrativeEventCardProps) {
+  const typeConfig = NARRATIVE_TYPE_CONFIG[event.type];
+  const hasChoices = event.choices && event.choices.length > 0;
+  const choiceResolved = event.selectedChoice !== undefined;
+
+  return (
+    <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2 min-w-0">
+          <Zap size={14} className="shrink-0 text-purple-400" aria-hidden="true" />
+          <span className="font-semibold text-white truncate">{event.title}</span>
+        </div>
+        <Badge variant="outline" className={`shrink-0 text-[10px] border-current ${typeConfig.color}`}>
+          {typeConfig.label}
+        </Badge>
+      </div>
+
+      <p className="mb-3 text-sm text-zinc-300 leading-relaxed">
+        {event.description}
+      </p>
+
+      {/* Related entity count */}
+      {event.relatedIds.length > 0 && (
+        <p className="mb-3 text-xs text-zinc-500">
+          {event.relatedIds.length} related{" "}
+          {event.relatedIds.length === 1 ? "entity" : "entities"}
+        </p>
+      )}
+
+      {/* Choices or dismiss */}
+      {hasChoices && !choiceResolved ? (
+        <div className="flex flex-wrap gap-2">
+          {event.choices!.map((choice, i) => (
+            <Button
+              key={i}
+              size="sm"
+              variant="outline"
+              className="text-xs border-purple-500/40 hover:border-purple-500"
+              onClick={() => onChoice(i)}
+            >
+              {choice.label}
+            </Button>
+          ))}
+        </div>
+      ) : choiceResolved ? (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-zinc-500">
+            Choice made: {event.choices?.[event.selectedChoice!]?.label ?? "—"}
+          </p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-xs text-zinc-500 hover:text-white h-7 px-2"
+            onClick={onAcknowledge}
+            aria-label={`Dismiss narrative event: ${event.title}`}
+          >
+            <X size={12} className="mr-1" aria-hidden="true" />
+            Dismiss
+          </Button>
+        </div>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="text-xs text-zinc-500 hover:text-white h-7 px-2"
+          onClick={onAcknowledge}
+          aria-label={`Dismiss narrative event: ${event.title}`}
+        >
+          <X size={12} className="mr-1" aria-hidden="true" />
+          Dismiss
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// ─── MessageItem ─────────────────────────────────────────────────────────────
+
+interface MessageItemProps {
+  message: InboxMessage;
+  isExpanded: boolean;
+  currentWeek: number;
+  currentSeason: number;
+  onClick: () => void;
+}
+
+function MessageItem({
+  message,
+  isExpanded,
+  currentWeek,
+  currentSeason,
+  onClick,
+}: MessageItemProps) {
+  const config = MESSAGE_TYPE_CONFIG[message.type];
+  const Icon = config.icon;
+
+  return (
+    <button
+      onClick={onClick}
+      aria-expanded={isExpanded}
+      aria-label={`${message.read ? "Read" : "Unread"} message: ${message.title}`}
+      className={`w-full rounded-lg border text-left transition ${
+        !message.read
+          ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50"
+          : isExpanded
+            ? "border-zinc-600 bg-[#141414]"
+            : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
+      }`}
+    >
+      <div className="flex items-start gap-3 p-4">
+        {/* Icon */}
+        <div
+          className={`mt-0.5 shrink-0 rounded-md p-1.5 ${
+            !message.read ? "bg-emerald-500/10" : "bg-[#27272a]"
+          }`}
+        >
+          <Icon size={14} className={config.color} aria-hidden="true" />
+        </div>
+
+        {/* Content */}
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              {!message.read && (
+                <span
+                  className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                  aria-label="Unread"
+                />
+              )}
+              <span
+                className={`truncate text-sm font-semibold ${
+                  !message.read ? "text-white" : "text-zinc-300"
+                }`}
+              >
+                {message.title}
+              </span>
+            </div>
+            <span className="shrink-0 text-xs text-zinc-600">
+              {timeAgo(message.week, message.season, currentWeek, currentSeason)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="outline" className="text-[10px]">
+              {config.label}
+            </Badge>
+            {message.actionRequired && (
+              <Badge variant="warning" className="text-[10px]">
+                Action Required
+              </Badge>
+            )}
+          </div>
+
+          {isExpanded ? (
+            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+              {message.body}
+            </p>
+          ) : (
+            <p className="text-xs text-zinc-500 line-clamp-2">{message.body}</p>
+          )}
+        </div>
+
+        {/* Read indicator */}
+        <div className="shrink-0 mt-0.5">
+          {message.read ? (
+            <MailOpen size={14} className="text-zinc-600" aria-hidden="true" />
+          ) : (
+            <Mail size={14} className="text-emerald-500" aria-hidden="true" />
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ─── InboxScreen ─────────────────────────────────────────────────────────────
+
+export function InboxScreen() {
+  const {
+    gameState,
+    markMessageRead,
+    acknowledgeNarrativeEvent,
+    resolveNarrativeEventChoice,
+  } = useGameStore();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState<InboxMessageType | "all">("all");
+
+  if (!gameState) return null;
+
+  const { inbox, currentWeek, currentSeason, narrativeEvents } = gameState;
+
+  // Active (unacknowledged) narrative events
+  const activeNarrativeEvents = narrativeEvents.filter((e) => !e.acknowledged);
+
+  // Sort messages by most recent (week desc, season desc)
+  const sorted = [...inbox].sort((a, b) => {
+    if (b.season !== a.season) return b.season - a.season;
+    return b.week - a.week;
+  });
+
+  const filtered =
+    filterType === "all" ? sorted : sorted.filter((m) => m.type === filterType);
+
+  const unreadCount = inbox.filter((m) => !m.read).length;
+
+  const handleExpand = (message: InboxMessage) => {
+    const isExpanding = expandedId !== message.id;
+    setExpandedId(isExpanding ? message.id : null);
+    if (isExpanding && !message.read) {
+      markMessageRead(message.id);
+    }
+  };
+
+  const handleMarkAllRead = () => {
+    inbox.filter((m) => !m.read).forEach((m) => markMessageRead(m.id));
+  };
+
+  return (
+    <GameLayout>
+      <div className="p-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Inbox</h1>
+            <p className="text-sm text-zinc-400">
+              {unreadCount > 0
+                ? `${unreadCount} unread message${unreadCount !== 1 ? "s" : ""}`
+                : "All messages read"}
+            </p>
+          </div>
+          {unreadCount > 0 && (
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs text-zinc-500 hover:text-white transition"
+              aria-label="Mark all messages as read"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+
+        {/* ── T8.3: Narrative events at the top ─────────────────────────── */}
+        {activeNarrativeEvents.length > 0 && (
+          <section aria-label="Narrative events" className="mb-6">
+            <div className="mb-3 flex items-center gap-2">
+              <Zap size={14} className="text-purple-400" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-white">
+                Events Requiring Attention
+              </h2>
+              <Badge className="text-[10px]">{activeNarrativeEvents.length}</Badge>
+            </div>
+            <div className="space-y-3">
+              {activeNarrativeEvents.map((event) => (
+                <NarrativeEventCard
+                  key={event.id}
+                  event={event}
+                  onAcknowledge={() => acknowledgeNarrativeEvent(event.id)}
+                  onChoice={(index) =>
+                    resolveNarrativeEventChoice(event.id, index)
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Type filter tabs */}
+        <div
+          className="mb-4 flex flex-wrap gap-2"
+          role="tablist"
+          aria-label="Filter messages by type"
+        >
+          <button
+            role="tab"
+            aria-selected={filterType === "all"}
+            onClick={() => setFilterType("all")}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              filterType === "all"
+                ? "bg-emerald-500/20 text-emerald-400"
+                : "bg-[#141414] text-zinc-500 hover:text-white border border-[#27272a]"
+            }`}
+          >
+            All ({inbox.length})
+          </button>
+          {(
+            Object.entries(MESSAGE_TYPE_CONFIG) as [
+              InboxMessageType,
+              (typeof MESSAGE_TYPE_CONFIG)[InboxMessageType],
+            ][]
+          ).map(([type, config]) => {
+            const count = inbox.filter((m) => m.type === type).length;
+            if (count === 0) return null;
+            const Icon = config.icon;
+            return (
+              <button
+                key={type}
+                role="tab"
+                aria-selected={filterType === type}
+                onClick={() => setFilterType(type)}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                  filterType === type
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-[#141414] text-zinc-500 hover:text-white border border-[#27272a]"
+                }`}
+              >
+                <Icon size={11} className={config.color} aria-hidden="true" />
+                {config.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Messages */}
+        {filtered.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <MailOpen size={32} className="mb-3 text-zinc-700" aria-hidden="true" />
+              <p className="text-sm text-zinc-500">
+                {filterType === "all"
+                  ? "No messages yet."
+                  : `No ${MESSAGE_TYPE_CONFIG[filterType as InboxMessageType]?.label.toLowerCase()} messages.`}
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-2" role="list">
+            {filtered.map((message) => (
+              <div key={message.id} role="listitem">
+                <MessageItem
+                  message={message}
+                  isExpanded={expandedId === message.id}
+                  currentWeek={currentWeek}
+                  currentSeason={currentSeason}
+                  onClick={() => handleExpand(message)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </GameLayout>
+  );
+}

@@ -1,0 +1,563 @@
+/**
+ * Calendar system — weekly schedule management, activity validation, and
+ * end-of-week result processing.
+ *
+ * The week is modelled as 7 day-slots (Monday through Sunday). Each activity
+ * has a slot cost; multiple activities can share the same week but a single
+ * day-slot can only hold one activity.
+ *
+ * All functions are pure: no side effects, no mutation.
+ */
+
+import type {
+  Scout,
+  Contact,
+  Fixture,
+  WeekSchedule,
+  Activity,
+  ActivityType,
+  ScoutSkill,
+  ScoutAttribute,
+} from "@/engine/core/types";
+import { RNG } from "@/engine/rng";
+
+// ---------------------------------------------------------------------------
+// Result type
+// ---------------------------------------------------------------------------
+
+export interface WeekProcessingResult {
+  /** Net fatigue change for the week (can be negative — rest reduces fatigue) */
+  fatigueChange: number;
+  /** XP gains per scout skill from activities performed */
+  skillXpGained: Partial<Record<ScoutSkill, number>>;
+  /** XP gains per scout attribute from activities performed */
+  attributeXpGained: Partial<Record<ScoutAttribute, number>>;
+  /** Fixture IDs where the scout attended a match */
+  matchesAttended: string[];
+  /** Report draft IDs that were submitted this week */
+  reportsWritten: string[];
+  /** Contact IDs of meetings held */
+  meetingsHeld: string[];
+  /**
+   * NPC report IDs that were reviewed this week.
+   * Reviewing an NPC report gives +1 familiarity with the report's country
+   * (applied by the store/caller via countryReputations).
+   */
+  npcReportsReviewed: string[];
+  /**
+   * Whether a manager meeting was executed this week.
+   * The caller (store/game loop) should call processManagerMeeting() when true.
+   */
+  managerMeetingExecuted: boolean;
+  /**
+   * Whether a board presentation activity was executed this week (tier 5).
+   * The caller should apply a reputation boost if the scout is tier 5.
+   */
+  boardPresentationExecuted: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Slot cost per activity type */
+const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
+  attendMatch:        2,
+  watchVideo:         1,
+  writeReport:        1,
+  networkMeeting:     1,
+  trainingVisit:      2,
+  travel:             1, // up to 2 — set on the Activity itself for long-haul
+  study:              1,
+  rest:               1, // rest occupies a day but reduces fatigue
+  academyVisit:       2,
+  youthTournament:    2,
+  reviewNPCReport:    1,
+  managerMeeting:     1,
+  boardPresentation:  2,
+  assignTerritory:    1,
+  internationalTravel:2,
+};
+
+/** Fatigue cost per activity type */
+const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
+  attendMatch:        10,
+  watchVideo:         5,
+  writeReport:        5,
+  networkMeeting:     3,
+  trainingVisit:      8,
+  travel:             6, // per travel block
+  study:              3,
+  rest:               -15, // rest reduces fatigue
+  academyVisit:       8,
+  youthTournament:    12,
+  reviewNPCReport:    3,
+  managerMeeting:     4,
+  boardPresentation:  8,
+  assignTerritory:    2,
+  internationalTravel:10,
+};
+
+/** Skills that each activity type directly develops */
+const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill, number>>>> = {
+  attendMatch:    { technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 2 },
+  watchVideo:     { technicalEye: 2, tacticalUnderstanding: 3, dataLiteracy: 1 },
+  writeReport:    { dataLiteracy: 3 },
+  networkMeeting: { psychologicalRead: 2 },
+  trainingVisit:  { physicalAssessment: 3, psychologicalRead: 2 },
+  academyVisit:   { technicalEye: 2, physicalAssessment: 2, dataLiteracy: 1 },
+  youthTournament:{ technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 1 },
+  study:          { dataLiteracy: 4, tacticalUnderstanding: 2 },
+};
+
+/** Scout attributes that each activity type develops */
+const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<ScoutAttribute, number>>>> = {
+  attendMatch:    { memory: 2, endurance: 1 },
+  watchVideo:     { memory: 3 },
+  writeReport:    { memory: 2, intuition: 1 },
+  networkMeeting: { networking: 3, persuasion: 2 },
+  trainingVisit:  { memory: 2, endurance: 1 },
+  academyVisit:   { intuition: 2, memory: 1 },
+  youthTournament:{ intuition: 3, endurance: 2 },
+  travel:         { adaptability: 2 },
+  study:          { memory: 3, intuition: 1 },
+};
+
+const TOTAL_WEEK_SLOTS = 7;
+const MAX_FATIGUE = 100;
+const FORCED_REST_FATIGUE_THRESHOLD = 90;
+const ACCURACY_PENALTY_FATIGUE_THRESHOLD = 70;
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a blank week schedule for the given week and season.
+ */
+export function createWeekSchedule(week: number, season: number): WeekSchedule {
+  return {
+    week,
+    season,
+    activities: Array(TOTAL_WEEK_SLOTS).fill(null) as (Activity | null)[],
+    completed: false,
+  };
+}
+
+/**
+ * Check whether an activity can be added to the schedule at the given
+ * day-slot index.
+ *
+ * Rules:
+ * 1. dayIndex must be 0–6.
+ * 2. The slot must currently be empty (null).
+ * 3. Multi-slot activities (slotCost > 1) must have enough consecutive free
+ *    slots starting from dayIndex.
+ * 4. Adding this activity must not push total slots used over TOTAL_WEEK_SLOTS.
+ */
+export function canAddActivity(
+  schedule: WeekSchedule,
+  activity: Activity,
+  dayIndex: number,
+): boolean {
+  if (dayIndex < 0 || dayIndex >= TOTAL_WEEK_SLOTS) return false;
+  if (schedule.completed) return false;
+
+  const cost = activity.slots;
+
+  // Check enough consecutive free slots exist
+  if (dayIndex + cost > TOTAL_WEEK_SLOTS) return false;
+
+  for (let i = dayIndex; i < dayIndex + cost; i++) {
+    if (schedule.activities[i] !== null) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Add an activity to the schedule at the given day-slot index.
+ * Returns an updated WeekSchedule (does not mutate the input).
+ * Throws if the placement is invalid — call canAddActivity first.
+ */
+export function addActivity(
+  schedule: WeekSchedule,
+  activity: Activity,
+  dayIndex: number,
+): WeekSchedule {
+  if (!canAddActivity(schedule, activity, dayIndex)) {
+    throw new Error(
+      `Cannot add activity '${activity.type}' at slot ${dayIndex}: slot occupied or out of bounds.`,
+    );
+  }
+
+  const updatedActivities = [...schedule.activities] as (Activity | null)[];
+
+  // Fill all slots the activity occupies
+  for (let i = dayIndex; i < dayIndex + activity.slots; i++) {
+    updatedActivities[i] = activity;
+  }
+
+  return { ...schedule, activities: updatedActivities };
+}
+
+/**
+ * Remove the activity at the given day-slot index.
+ * If the activity spans multiple slots, all of its slots are cleared.
+ * Returns an updated WeekSchedule.
+ */
+export function removeActivity(
+  schedule: WeekSchedule,
+  dayIndex: number,
+): WeekSchedule {
+  if (dayIndex < 0 || dayIndex >= TOTAL_WEEK_SLOTS) {
+    return schedule;
+  }
+
+  const activity = schedule.activities[dayIndex];
+  if (activity === null) return schedule;
+
+  const updatedActivities = [...schedule.activities] as (Activity | null)[];
+
+  // Clear every slot that contains this same activity instance
+  for (let i = 0; i < TOTAL_WEEK_SLOTS; i++) {
+    if (updatedActivities[i] === activity) {
+      updatedActivities[i] = null;
+    }
+  }
+
+  return { ...schedule, activities: updatedActivities };
+}
+
+/**
+ * Build the list of activities the scout can currently schedule.
+ *
+ * Availability rules:
+ * - attendMatch / youthTournament: only if there are upcoming fixtures
+ * - networkMeeting: only if the scout has contacts
+ * - academyVisit: only if the scout has unlocked the academy_access perk
+ *   (checked via unlockedPerks array)
+ * - trainingVisit: always available
+ * - watchVideo / writeReport / study / rest / travel: always available
+ * - If fatigue > FORCED_REST_FATIGUE_THRESHOLD: only rest is available
+ */
+export function getAvailableActivities(
+  scout: Scout,
+  week: number,
+  fixtures: Fixture[],
+  contacts: Contact[],
+): Activity[] {
+  const activities: Activity[] = [];
+
+  // Forced rest when exhausted
+  if (scout.fatigue > FORCED_REST_FATIGUE_THRESHOLD) {
+    activities.push({
+      type: "rest",
+      slots: 1,
+      description: "Rest and recover — your fatigue is too high to do anything productive.",
+    });
+    return activities;
+  }
+
+  // Match attendance — current and upcoming fixtures
+  const upcomingFixtures = fixtures.filter((f) => f.week === week && !f.played);
+  for (const fixture of upcomingFixtures.slice(0, 5)) {
+    activities.push({
+      type: "attendMatch",
+      slots: ACTIVITY_SLOT_COSTS.attendMatch,
+      targetId: fixture.id,
+      description: `Attend match: ${fixture.homeClubId} vs ${fixture.awayClubId}`,
+    });
+  }
+
+  // Video analysis (flexible — no fixture dependency)
+  activities.push({
+    type: "watchVideo",
+    slots: ACTIVITY_SLOT_COSTS.watchVideo,
+    description: "Watch video footage of a target player",
+  });
+
+  // Write report
+  activities.push({
+    type: "writeReport",
+    slots: ACTIVITY_SLOT_COSTS.writeReport,
+    description: "Write up a scouting report from your observations",
+  });
+
+  // Network meetings
+  if (contacts.length > 0) {
+    for (const contact of contacts.slice(0, 4)) {
+      activities.push({
+        type: "networkMeeting",
+        slots: ACTIVITY_SLOT_COSTS.networkMeeting,
+        targetId: contact.id,
+        description: `Meet with ${contact.name} (${contact.type})`,
+      });
+    }
+  }
+
+  // Training visit
+  activities.push({
+    type: "trainingVisit",
+    slots: ACTIVITY_SLOT_COSTS.trainingVisit,
+    description: "Visit a club's training ground to observe a player in a controlled setting",
+  });
+
+  // Academy visit (requires perk)
+  const hasAcademyAccess = scout.unlockedPerks.some(
+    (perkId) =>
+      perkId === "youth_academy_access" || perkId.includes("academy"),
+  );
+  if (hasAcademyAccess) {
+    activities.push({
+      type: "academyVisit",
+      slots: ACTIVITY_SLOT_COSTS.academyVisit,
+      description: "Visit a club academy to observe youth players",
+    });
+  }
+
+  // Youth tournament (available in certain weeks — simplified to always-available)
+  activities.push({
+    type: "youthTournament",
+    slots: ACTIVITY_SLOT_COSTS.youthTournament,
+    description: "Attend a youth tournament — observe multiple young players",
+  });
+
+  // Travel
+  activities.push({
+    type: "travel",
+    slots: ACTIVITY_SLOT_COSTS.travel,
+    description: "Travel to another region or league",
+  });
+
+  // Study
+  activities.push({
+    type: "study",
+    slots: ACTIVITY_SLOT_COSTS.study,
+    description: "Study tactics, statistical models, or player profiles",
+  });
+
+  // Rest — always available
+  activities.push({
+    type: "rest",
+    slots: 1,
+    description: "Take a day off to rest and recover fatigue",
+  });
+
+  return activities;
+}
+
+/**
+ * Process a completed week's schedule, returning the effects on the scout.
+ *
+ * Fatigue mechanics:
+ * - Each activity adds fatigue according to ACTIVITY_FATIGUE_COSTS
+ * - Endurance attribute reduces fatigue gain: cost × (1 - endurance/40)
+ * - Rest activities reduce fatigue by 15
+ * - If resulting fatigue > 70: accuracy penalties are flagged
+ * - If resulting fatigue > 90: forced rest recorded in output
+ *
+ * Skill/attribute XP is accumulated from all activities performed.
+ * Duplicate activities in multi-slot blocks are counted once only.
+ */
+export function processCompletedWeek(
+  schedule: WeekSchedule,
+  scout: Scout,
+  rng: RNG,
+): WeekProcessingResult {
+  const seenActivities = new Set<Activity>();
+  let fatigueChange = 0;
+  const skillXpGained: Partial<Record<ScoutSkill, number>> = {};
+  const attributeXpGained: Partial<Record<ScoutAttribute, number>> = {};
+  const matchesAttended: string[] = [];
+  const reportsWritten: string[] = [];
+  const meetingsHeld: string[] = [];
+  const npcReportsReviewed: string[] = [];
+  let managerMeetingExecuted = false;
+  let boardPresentationExecuted = false;
+
+  const endurance = scout.attributes.endurance; // 1–20
+
+  for (const activity of schedule.activities) {
+    if (activity === null) continue;
+    if (seenActivities.has(activity)) continue;
+    seenActivities.add(activity);
+
+    // Fatigue cost, modulated by endurance
+    const rawFatigueCost = ACTIVITY_FATIGUE_COSTS[activity.type];
+    let actualFatigueCost: number;
+
+    if (rawFatigueCost < 0) {
+      // Rest — full recovery regardless of endurance
+      actualFatigueCost = rawFatigueCost;
+    } else {
+      // Endurance reduces fatigue cost: at endurance 40 (max practical) → 0
+      const enduranceFactor = 1 - Math.min(0.75, endurance / 40);
+      actualFatigueCost = Math.round(rawFatigueCost * enduranceFactor);
+    }
+
+    fatigueChange += actualFatigueCost;
+
+    // Skill XP
+    const skillXp = ACTIVITY_SKILL_XP[activity.type];
+    if (skillXp) {
+      for (const [skill, xp] of Object.entries(skillXp) as [ScoutSkill, number][]) {
+        skillXpGained[skill] = (skillXpGained[skill] ?? 0) + xp;
+      }
+    }
+
+    // Attribute XP
+    const attrXp = ACTIVITY_ATTRIBUTE_XP[activity.type];
+    if (attrXp) {
+      for (const [attr, xp] of Object.entries(attrXp) as [ScoutAttribute, number][]) {
+        attributeXpGained[attr] = (attributeXpGained[attr] ?? 0) + xp;
+      }
+    }
+
+    // Track what happened
+    switch (activity.type) {
+      case "attendMatch":
+        if (activity.targetId) matchesAttended.push(activity.targetId);
+        break;
+      case "writeReport":
+        if (activity.targetId) reportsWritten.push(activity.targetId);
+        break;
+      case "networkMeeting":
+        if (activity.targetId) meetingsHeld.push(activity.targetId);
+        break;
+
+      // ---- Career system activities (Wave 1) ----
+
+      case "reviewNPCReport":
+        // targetId is the NPC report ID. Marking it reviewed gives +1 familiarity
+        // with the report's country; the store applies the countryReputation update
+        // using this list.
+        if (activity.targetId) npcReportsReviewed.push(activity.targetId);
+        break;
+
+      case "managerMeeting":
+        // Signal to the caller that a manager meeting occurred this week.
+        // The actual relationship update is performed by the store via
+        // processManagerMeeting() so that the RNG sequence stays deterministic.
+        managerMeetingExecuted = true;
+        break;
+
+      case "boardPresentation":
+        // Signal to the caller that a board presentation took place.
+        // The caller applies the reputation boost for tier 5 scouts.
+        boardPresentationExecuted = true;
+        break;
+
+      case "assignTerritory":
+      case "internationalTravel":
+        // These activities are handled entirely through store actions that
+        // mutate state directly (territory assignment, travel booking).
+        // The calendar records their slot and fatigue costs only; no additional
+        // processing is needed here.
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  // High fatigue suppresses skill XP gains (bad conditions, tired scouts)
+  const newFatigue = clamp(scout.fatigue + fatigueChange, 0, MAX_FATIGUE);
+  if (newFatigue > ACCURACY_PENALTY_FATIGUE_THRESHOLD) {
+    // Reduce all XP by 30 % when exhausted
+    for (const key of Object.keys(skillXpGained) as ScoutSkill[]) {
+      skillXpGained[key] = Math.round((skillXpGained[key] ?? 0) * 0.7);
+    }
+    for (const key of Object.keys(attributeXpGained) as ScoutAttribute[]) {
+      attributeXpGained[key] = Math.round((attributeXpGained[key] ?? 0) * 0.7);
+    }
+  }
+
+  return {
+    fatigueChange,
+    skillXpGained,
+    attributeXpGained,
+    matchesAttended,
+    reportsWritten,
+    meetingsHeld,
+    npcReportsReviewed,
+    managerMeetingExecuted,
+    boardPresentationExecuted,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// XP Application
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply XP gains from a completed week to the scout, producing an updated
+ * scout with accumulated XP and any level-ups applied.
+ *
+ * Level-up threshold: currentLevel * 10 XP. When accumulated XP exceeds
+ * the threshold, the skill/attribute increases by 1 and excess XP carries
+ * over. Skills and attributes are capped at 20.
+ */
+export function applyWeekResults(
+  scout: Scout,
+  result: WeekProcessingResult,
+): Scout {
+  const updatedSkills = { ...scout.skills };
+  const updatedSkillXp = { ...scout.skillXp };
+  const updatedAttributes = { ...scout.attributes };
+  const updatedAttributeXp = { ...scout.attributeXp };
+
+  // Apply skill XP
+  for (const [skill, xp] of Object.entries(result.skillXpGained) as [ScoutSkill, number][]) {
+    if (!xp) continue;
+    const current = updatedSkills[skill];
+    if (current >= 20) continue; // already maxed
+
+    const accumulated = (updatedSkillXp[skill] ?? 0) + xp;
+    const threshold = current * 10;
+
+    if (accumulated >= threshold) {
+      updatedSkills[skill] = Math.min(20, current + 1);
+      updatedSkillXp[skill] = accumulated - threshold;
+    } else {
+      updatedSkillXp[skill] = accumulated;
+    }
+  }
+
+  // Apply attribute XP
+  for (const [attr, xp] of Object.entries(result.attributeXpGained) as [ScoutAttribute, number][]) {
+    if (!xp) continue;
+    const current = updatedAttributes[attr];
+    if (current >= 20) continue;
+
+    const accumulated = (updatedAttributeXp[attr] ?? 0) + xp;
+    const threshold = current * 10;
+
+    if (accumulated >= threshold) {
+      updatedAttributes[attr] = Math.min(20, current + 1);
+      updatedAttributeXp[attr] = accumulated - threshold;
+    } else {
+      updatedAttributeXp[attr] = accumulated;
+    }
+  }
+
+  // Apply fatigue
+  const newFatigue = clamp(scout.fatigue + result.fatigueChange, 0, MAX_FATIGUE);
+
+  return {
+    ...scout,
+    skills: updatedSkills,
+    skillXp: updatedSkillXp,
+    attributes: updatedAttributes,
+    attributeXp: updatedAttributeXp,
+    fatigue: newFatigue,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
