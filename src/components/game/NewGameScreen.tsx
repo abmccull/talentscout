@@ -134,7 +134,10 @@ export function NewGameScreen() {
               <input
                 type="number"
                 value={age}
-                onChange={(e) => setAge(parseInt(e.target.value) || 28)}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value) || 28;
+                  setAge(Math.max(22, Math.min(65, v)));
+                }}
                 min={22}
                 max={65}
                 className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"

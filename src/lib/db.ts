@@ -112,6 +112,16 @@ export async function autosave(state: GameState): Promise<void> {
  * pure engine functions.
  */
 function migrateSaveState(raw: unknown): GameState {
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    !("scout" in raw) ||
+    !("currentSeason" in raw) ||
+    !("currentWeek" in raw)
+  ) {
+    throw new Error("Invalid save data: missing required game state fields");
+  }
+
   const state = raw as GameState;
 
   // Phase 1 defaults — NPC scouts, territories, countries

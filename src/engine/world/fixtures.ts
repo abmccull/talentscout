@@ -112,6 +112,7 @@ function buildDoubleRoundRobin(clubIds: string[]): UnscheduledFixture[][] {
 function seasonWeekToMonth(week: number, totalWeeks: number): number {
   // Week 1 → month 8 (August), Week totalWeeks → month 5 (May)
   // Map [1, totalWeeks] → [8, 17] (17 = May next year), then mod 12
+  if (totalWeeks <= 1) return 8; // single-week season defaults to August
   const month = Math.round(8 + ((week - 1) / (totalWeeks - 1)) * 9);
   // Normalise to 1-12
   return ((month - 1) % 12) + 1;

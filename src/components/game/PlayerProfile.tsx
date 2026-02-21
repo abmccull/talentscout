@@ -13,10 +13,10 @@ const DOMAIN_LABELS: Record<string, string> = {
   technical: "Technical",
   physical: "Physical",
   mental: "Mental",
-  goalkeeper: "Goalkeeper",
+  tactical: "Tactical",
 };
 
-const DOMAIN_ORDER = ["technical", "physical", "mental", "goalkeeper"] as const;
+const DOMAIN_ORDER = ["technical", "physical", "mental", "tactical"] as const;
 
 function confidenceColor(confidence: number): string {
   if (confidence >= 0.7) return "bg-emerald-500";
@@ -166,7 +166,7 @@ export function PlayerProfile() {
               const domainAttrs = byDomain.get(domain) ?? [];
               if (domainAttrs.length === 0) return null;
               const hasAny = domainAttrs.some(([, r]) => !!r);
-              if (!hasAny && domain === "goalkeeper" && player.position !== "GK") return null;
+              if (!hasAny) return null;
               return (
                 <Card key={domain}>
                   <CardHeader className="pb-2 pt-4 px-4">

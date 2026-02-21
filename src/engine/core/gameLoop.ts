@@ -113,10 +113,10 @@ export interface TickResult {
 // =============================================================================
 
 /**
- * Standard season length in weeks. Seasons with 20 clubs use 38 match weeks;
- * we add 2 buffer weeks for international breaks and cup rounds.
+ * Minimum season length in weeks. Actual season length is determined
+ * dynamically from the maximum fixture week across all leagues.
  */
-const SEASON_LENGTH_WEEKS = 38;
+const MIN_SEASON_LENGTH_WEEKS = 38;
 
 /**
  * Fatigue recovered per week from natural rest (no rest activity).
@@ -616,6 +616,8 @@ function findTransferDestination(
  */
 function processAITransfers(state: GameState, rng: RNG): Transfer[] {
   const transfers: Transfer[] = [];
+  // Track cumulative spending per club to prevent budget overspending
+  const spentBudget = new Map<string, number>();
 
   for (const player of Object.values(state.players)) {
     if (!isTransferEligible(player, state.currentSeason)) continue;
@@ -636,8 +638,11 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     const feeVariance = rng.nextFloat(0.8, 1.2);
     const fee = Math.round(player.marketValue * feeVariance);
 
-    // Destination must still have budget
-    if (destination.budget < fee) continue;
+    // Destination must still have budget (accounting for other transfers this tick)
+    const alreadySpent = spentBudget.get(destination.id) ?? 0;
+    if (destination.budget - alreadySpent < fee) continue;
+
+    spentBudget.set(destination.id, alreadySpent + fee);
 
     transfers.push({
       playerId: player.id,
@@ -841,8 +846,21 @@ function computeFatigueRecovery(scout: { attributes: { endurance: number } }): n
  * Determine if this week is the final week of the season.
  * End-of-season triggers performance reviews, contract renewals, etc.
  */
-function isEndOfSeason(currentWeek: number): boolean {
-  return currentWeek >= SEASON_LENGTH_WEEKS;
+/**
+ * Compute the actual season length from the generated fixtures.
+ * Returns the maximum fixture week across all leagues, or the minimum
+ * season length if no fixtures exist.
+ */
+function getSeasonLength(fixtures: Record<string, Fixture>): number {
+  let maxWeek = MIN_SEASON_LENGTH_WEEKS;
+  for (const fixture of Object.values(fixtures)) {
+    if (fixture.week > maxWeek) maxWeek = fixture.week;
+  }
+  return maxWeek;
+}
+
+function isEndOfSeason(currentWeek: number, fixtures: Record<string, Fixture>): boolean {
+  return currentWeek >= getSeasonLength(fixtures);
 }
 
 /**
@@ -1085,7 +1103,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const injuries = processInjuries(state, rng);
 
   // 6. Inbox messages (after computing transfers and injuries so we can ref them)
-  const endOfSeasonTriggered = isEndOfSeason(state.currentWeek);
+  const endOfSeasonTriggered = isEndOfSeason(state.currentWeek, state.fixtures);
   const newMessages = generateInboxMessages(state, transfers, injuries, rng);
 
   if (endOfSeasonTriggered) {
@@ -1224,10 +1242,11 @@ export function advanceWeek(
 
     if (!player || !fromClub || !toClub) continue;
 
-    // Remove from source club
+    // Remove from source club and credit the transfer fee
     updatedClubs[transfer.fromClubId] = {
       ...fromClub,
       playerIds: fromClub.playerIds.filter((id) => id !== transfer.playerId),
+      budget: fromClub.budget + transfer.fee,
     };
 
     // Add to destination club and deduct fee from budget
@@ -1258,11 +1277,11 @@ export function advanceWeek(
 
   // ---- Scout updates ----
   // Board directive evaluation may add an additional reputation change (tier 5).
+  // Note: fatigue recovery is handled by the calendar system (applyWeekResults),
+  // so we only apply reputation changes here.
   const boardReputationChange = tickResult.boardDirectiveResult?.reputationChange ?? 0;
-  const fatigueRecovery = computeFatigueRecovery(state.scout);
   const updatedScout = {
     ...state.scout,
-    fatigue: clamp(state.scout.fatigue - fatigueRecovery, 0, MAX_FATIGUE),
     reputation: clamp(
       state.scout.reputation + tickResult.reputationChange + boardReputationChange,
       0,
@@ -1280,6 +1299,11 @@ export function advanceWeek(
   if (tickResult.endOfSeasonTriggered) {
     nextWeek = 1;
     nextSeason = state.currentSeason + 1;
+
+    // Age all players by 1 year at season end
+    for (const [id, player] of Object.entries(updatedPlayers)) {
+      updatedPlayers[id] = { ...player, age: player.age + 1 };
+    }
 
     // Update season in all leagues
     const updatedLeagues = { ...state.leagues };

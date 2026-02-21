@@ -316,9 +316,10 @@ export function ReportWriter() {
               <textarea
                 id="summary"
                 value={summary}
-                onChange={(e) => setSummary(e.target.value)}
+                onChange={(e) => setSummary(e.target.value.slice(0, 2000))}
                 placeholder="Write your assessment of this player..."
                 rows={5}
+                maxLength={2000}
                 className="w-full rounded-md border border-[#27272a] bg-[#141414] p-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
                 aria-required="true"
               />

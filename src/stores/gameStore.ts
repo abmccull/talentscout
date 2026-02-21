@@ -71,6 +71,7 @@ import {
   processCrossCountryTransfers,
   processInternationalWeek,
 } from "@/engine/world/index";
+import { generateSeasonFixtures } from "@/engine/world/fixtures";
 import {
   initializeFinances,
   processWeeklyFinances,
@@ -653,8 +654,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const tickResult = processWeeklyTick(stateWithPhase2, rng);
     let newState = advanceWeek(stateWithPhase2, tickResult);
 
-    // ── Monthly performance snapshot ────────────────────────────────────────
-    const monthlySnapshot = processMonthlySnapshot(stateWithPhase2);
+    // ── Monthly performance snapshot (uses post-tick state for accuracy) ────
+    const monthlySnapshot = processMonthlySnapshot(newState);
     if (monthlySnapshot) {
       newState = {
         ...newState,
@@ -662,7 +663,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
-    // ── Season transition: regenerate events and transfer windows ───────────
+    // ── Season transition: regenerate events, fixtures, and transfer windows ─
     if (tickResult.endOfSeasonTriggered) {
       // Process end-of-season discoveries before transitioning
       const updatedDiscoveryRecords = processSeasonDiscoveries(
@@ -671,6 +672,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         stateWithPhase2.currentSeason,
       );
       newState = { ...newState, discoveryRecords: updatedDiscoveryRecords };
+
+      // Generate new season fixtures for all leagues
+      const fixtureRng = createRNG(`${gameState.seed}-fixtures-s${newState.currentSeason}`);
+      const newFixtures: Record<string, Fixture> = {};
+      for (const league of Object.values(newState.leagues)) {
+        const leagueFixtures = generateSeasonFixtures(fixtureRng, league, newState.currentSeason);
+        for (const f of leagueFixtures) {
+          newFixtures[f.id] = f;
+        }
+      }
+      newState = { ...newState, fixtures: newFixtures };
 
       const newSeasonEvents = generateSeasonEvents(newState.currentSeason);
       const newTransferWindows = initializeTransferWindows(newState.currentSeason);
@@ -695,9 +707,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newState = { ...newState, transferWindow: updatedTransferWindow };
     }
 
+    // Prune inbox to keep the most recent 200 messages
+    if (newState.inbox.length > 200) {
+      newState = { ...newState, inbox: newState.inbox.slice(-200) };
+    }
+
     set({ gameState: newState });
     // Autosave after each week advance
-    dbAutosave(newState).catch(() => {});
+    dbAutosave(newState).catch((err) => {
+      console.warn("Autosave failed:", err);
+    });
   },
 
   // Match
@@ -742,7 +761,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   advancePhase: () => {
     const { activeMatch } = get();
     if (!activeMatch) return;
-    if (activeMatch.currentPhase >= activeMatch.phases.length - 1) return;
+    if (activeMatch.currentPhase >= activeMatch.phases.length) return;
     set({
       activeMatch: {
         ...activeMatch,
@@ -812,6 +831,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const fixture = gameState.fixtures[activeMatch.fixtureId];
     const homeClub = gameState.clubs[fixture.homeClubId];
     const awayClub = gameState.clubs[fixture.awayClubId];
+    if (!homeClub || !awayClub) {
+      set({ activeMatch: null, currentScreen: "dashboard" });
+      return;
+    }
     const homePlayers = homeClub.playerIds
       .map((id) => gameState.players[id])
       .filter((p): p is Player => !!p);
@@ -868,13 +891,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
 
     const quality = calculateReportQuality(report, player);
-    report.qualityScore = quality;
+    const scoredReport = { ...report, qualityScore: quality };
 
-    const updatedScout = updateReputation(gameState.scout, {
+    const baseUpdatedScout = updateReputation(gameState.scout, {
       type: "reportSubmitted",
       quality,
     });
-    updatedScout.reportsSubmitted += 1;
+    const updatedScout = { ...baseUpdatedScout, reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1 };
 
     // Record discovery if this player has not been tracked before
     const alreadyDiscovered = gameState.discoveryRecords.some(
@@ -891,7 +914,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set({
       gameState: {
         ...gameState,
-        reports: { ...gameState.reports, [report.id]: report },
+        reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
         scout: updatedScout,
         discoveryRecords: updatedDiscoveryRecords,
       },
