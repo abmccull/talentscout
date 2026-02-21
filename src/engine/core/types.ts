@@ -372,6 +372,8 @@ export interface Scout {
   firstName: string;
   lastName: string;
   age: number;
+  /** Scout's nationality (flavour / display field, not mechanically enforced). */
+  nationality?: string;
 
   /** Scout skill ratings on 1–20 scale. */
   skills: Record<ScoutSkill, number>;
@@ -791,6 +793,13 @@ export interface GameState {
   /** Historical performance snapshots for analytics. */
   performanceHistory: ScoutPerformanceSnapshot[];
 
+  /**
+   * Fixture IDs that the player has completed interactively via the MatchScreen.
+   * Used by advanceWeek() to ensure the player scouts scheduled attendMatch
+   * fixtures before the engine auto-simulates the week.
+   */
+  playedFixtures: string[];
+
   /** Unix timestamp (ms) when this game save was created. */
   createdAt: number;
   /** Unix timestamp (ms) of the most recent save. */
@@ -816,6 +825,13 @@ export interface NewGameConfig {
   selectedCountries?: string[];
   /** Starting country for the scout. Defaults to first selected country. */
   startingCountry?: string;
+  /** Scout's nationality (display/flavour field). */
+  nationality?: string;
+  /**
+   * If set, the scout begins employed at this club (tier 2 club scout).
+   * If omitted, the scout starts as a freelancer (tier 1).
+   */
+  startingClubId?: string;
 }
 
 // =============================================================================

@@ -21,6 +21,7 @@ import { InternationalScreen } from "@/components/game/InternationalScreen";
 import { DiscoveriesScreen } from "@/components/game/DiscoveriesScreen";
 import { LeaderboardScreen } from "@/components/game/LeaderboardScreen";
 import { AnalyticsScreen } from "@/components/game/AnalyticsScreen";
+import { MatchSummaryScreen } from "@/components/game/MatchSummaryScreen";
 
 export default function Home() {
   const currentScreen = useGameStore((s) => s.currentScreen);
@@ -44,6 +45,8 @@ export default function Home() {
       return <CalendarScreen />;
     case "match":
       return <MatchScreen />;
+    case "matchSummary":
+      return <MatchSummaryScreen />;
     case "playerProfile":
       return <PlayerProfile />;
     case "playerDatabase":

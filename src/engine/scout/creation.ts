@@ -14,6 +14,7 @@ import type {
   NewGameConfig,
   Specialization,
   Position,
+  CareerTier,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 
@@ -167,11 +168,18 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
 
   const id = `scout_${config.worldSeed}_${rng.nextInt(100000, 999999)}`;
 
+  // If the player chose to start employed at a club, begin as a tier-2 club
+  // scout with a modest salary. Otherwise start freelance at tier 1.
+  const startingClubId = config.startingClubId;
+  const careerTier: CareerTier = startingClubId ? 2 : 1;
+  const salary = startingClubId ? 800 : 0;
+
   return {
     id,
     firstName: config.scoutFirstName,
     lastName: config.scoutLastName,
     age: config.scoutAge,
+    nationality: config.nationality,
 
     skills,
     attributes,
@@ -180,14 +188,14 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
     specializationLevel: 1,
     unlockedPerks: STARTING_PERKS[specialization],
 
-    careerTier: 1,
+    careerTier,
     reputation: 10,
-    clubTrust: 0,
+    clubTrust: startingClubId ? 20 : 0,
     specializationReputation: 5,
 
-    currentClubId: undefined,
+    currentClubId: startingClubId,
     contractEndSeason: undefined,
-    salary: 0,
+    salary,
     savings: 5000,
 
     reportsSubmitted: 0,

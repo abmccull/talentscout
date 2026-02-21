@@ -143,6 +143,9 @@ function migrateSaveState(raw: unknown): GameState {
   if (!state.discoveryRecords) state.discoveryRecords = [];
   if (!state.performanceHistory) state.performanceHistory = [];
 
+  // Interactive match tracking — fixture IDs played via MatchScreen
+  if (!state.playedFixtures) state.playedFixtures = [];
+
   // Scout field defaults — Phase 1 extensions on the Scout object
   if (!state.scout.npcScoutIds) state.scout.npcScoutIds = [];
   if (!state.scout.countryReputations) state.scout.countryReputations = {};

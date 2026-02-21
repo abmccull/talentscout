@@ -6,7 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, ChevronUp, ChevronDown, Users } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, Users, FileText } from "lucide-react";
 import type { Player, Position } from "@/engine/core/types";
 
 type SortKey = "name" | "age" | "position" | "club" | "observations" | "reports" | "lastSeen";
@@ -28,6 +28,7 @@ export function PlayerDatabase() {
     gameState,
     selectPlayer,
     setScreen,
+    startReport,
     getPlayerObservations,
     getPlayerReports,
     getClub,
@@ -289,6 +290,10 @@ export function PlayerDatabase() {
                         </button>
                       </th>
                     ))}
+                    {/* Non-sortable actions column */}
+                    <th className="px-4 py-3 font-medium" scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -338,6 +343,22 @@ export function PlayerDatabase() {
                       </td>
                       <td className="px-4 py-3 text-zinc-500">
                         {row.lastSeenWeek ? `W${row.lastSeenWeek}` : "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.observationCount > 0 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startReport(row.player.id);
+                            }}
+                            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-400 hover:bg-amber-500/10 hover:text-amber-300 transition focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            aria-label={`Write report for ${row.player.firstName} ${row.player.lastName}`}
+                            title="Write Report"
+                          >
+                            <FileText size={12} aria-hidden="true" />
+                            Report
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

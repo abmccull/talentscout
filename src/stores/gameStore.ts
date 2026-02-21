@@ -105,6 +105,7 @@ export type GameScreen =
   | "dashboard"
   | "calendar"
   | "match"
+  | "matchSummary"
   | "playerProfile"
   | "playerDatabase"
   | "reportWriter"
@@ -134,6 +135,16 @@ interface GameStore {
     phases: MatchPhase[];
     currentPhase: number;
     focusSelections: FocusSelection[];
+  } | null;
+
+  // Last match result — persisted so MatchSummaryScreen can read it after activeMatch is cleared
+  lastMatchResult: {
+    fixtureId: string;
+    focusedPlayerIds: string[];
+    homeGoals: number;
+    awayGoals: number;
+    /** Screen to navigate to when the user clicks "Continue" */
+    continueScreen: GameScreen;
   } | null;
 
   // Selected entities
@@ -204,6 +215,7 @@ interface GameStore {
   submitToLeaderboard: () => Promise<void>;
 
   // Helpers
+  getPendingMatches: () => string[];
   getPlayer: (id: string) => Player | undefined;
   getClub: (id: string) => Club | undefined;
   getLeague: (id: string) => League | undefined;
@@ -245,6 +257,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gameState: null,
   isLoaded: false,
   activeMatch: null,
+  lastMatchResult: null,
   selectedPlayerId: null,
   selectedFixtureId: null,
   selectedReportId: null,
@@ -304,6 +317,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       transferWindow: initialTransferWindow,
       discoveryRecords: [],
       performanceHistory: [],
+      playedFixtures: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -325,6 +339,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // 4. Check for any starting tools the scout might already qualify for
     const startingTools = checkToolUnlocks(scout, []);
 
+    const specializationLabel =
+      config.specialization === "youth" ? "Youth Scout"
+      : config.specialization === "firstTeam" ? "First Team Scout"
+      : config.specialization === "regional" ? "Regional Expert"
+      : "Data Scout";
+
+    const employmentIntro = scout.currentClubId
+      ? `You are employed as a club scout with a weekly salary of £${scout.salary}. Your club expects reports aligned with their scouting priorities. Build trust with your employer to earn more influence over signings.`
+      : `You are a freelance scout. You earn fees for every report you submit. Build your reputation to attract club offers and secure a full-time contract.`;
+
     const gameState: GameState = {
       ...tempState,
       inbox: [
@@ -334,7 +358,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
           season: 1,
           type: "event",
           title: "Welcome to TalentScout",
-          body: `Welcome, ${scout.firstName}. Your career as a ${config.specialization} scout begins now. Start by checking the fixture calendar and scheduling your first match observation.`,
+          body: [
+            `Welcome, ${scout.firstName} ${scout.lastName}. Your career as a ${specializationLabel} begins now.`,
+            "",
+            employmentIntro,
+            "",
+            "YOUR ROLE",
+            "As a scout, your job is to find players worth signing and write convincing reports that persuade clubs to act. You observe players at matches, through video analysis, and via contacts on the ground.",
+            "",
+            "SCHEDULING ACTIVITIES",
+            "Open the Calendar screen each week to plan your time. You have 7 day-slots (Monday through Sunday). Schedule activities such as attending matches, writing reports, networking meetings, or rest. Once your week is planned, press Advance Week to simulate it.",
+            "",
+            "SCOUTING MATCHES",
+            "Find an upcoming fixture in the Calendar or Fixture list and schedule an Attend Match activity. During the match you can focus on up to 3 players — choose a lens (Technical, Physical, Mental, or Tactical) to direct your observations. The more sessions you spend watching a player, the narrower your confidence ranges become on their report.",
+            "",
+            "WRITING REPORTS",
+            "After observing a player at least once, open their Player Profile and navigate to the Report Writer. Choose your conviction level carefully: a Table Pound stakes your personal reputation and should only be used when you are certain about a player.",
+            "",
+            "BUILDING YOUR NETWORK",
+            "Schedule networking meetings to develop contacts — agents, academy coaches, club staff, and journalists. High-quality contacts share tips about players you have not yet spotted yourself.",
+            "",
+            "REPUTATION AND CAREER PROGRESSION",
+            "Every report you submit affects your reputation. Accurate reports on players who go on to succeed will build your standing. As your reputation grows, clubs will offer you contracts with better salaries and wider territories. Your long-term goal is to rise from the starting tier all the way to Head of Scouting.",
+            "",
+            "Good luck, scout. The pitch is waiting.",
+          ].join("\n"),
           read: false,
           actionRequired: false,
         },
@@ -420,6 +468,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
   advanceWeek: () => {
     const { gameState } = get();
     if (!gameState) return;
+
+    // ── Gate: play all scheduled attendMatch fixtures interactively first ───
+    // Find every attendMatch activity in this week's schedule that has a
+    // targetId (fixture ID) which hasn't been played via the MatchScreen yet.
+    const pendingFixtureIds = get().getPendingMatches();
+    if (pendingFixtureIds.length > 0) {
+      // Launch the first unplayed fixture. The user will call endMatch(), which
+      // records it in playedFixtures. They then click "Advance Week" again and
+      // this gate re-evaluates — eventually clearing all pending matches.
+      get().startMatch(pendingFixtureIds[0]);
+      return;
+    }
+
     const rng = createRNG(`${gameState.seed}-week-${gameState.currentWeek}-${gameState.currentSeason}`);
 
     // Process scheduled activities → fatigue, skill XP, attribute XP
@@ -693,7 +754,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         })),
         newState.currentWeek,
       );
-      newState = { ...newState, seasonEvents: newSeasonEvents, transferWindow: newTransferWindow };
+      newState = {
+        ...newState,
+        seasonEvents: newSeasonEvents,
+        transferWindow: newTransferWindow,
+        // Reset at the start of each new season — every fixture is fresh
+        playedFixtures: [],
+      };
     } else {
       // Keep season events as-is; update transfer window open/closed state
       const existingWindows = initializeTransferWindows(newState.currentSeason);
@@ -832,7 +899,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const homeClub = gameState.clubs[fixture.homeClubId];
     const awayClub = gameState.clubs[fixture.awayClubId];
     if (!homeClub || !awayClub) {
-      set({ activeMatch: null, currentScreen: "dashboard" });
+      set({ activeMatch: null, lastMatchResult: null, currentScreen: "dashboard" });
       return;
     }
     const homePlayers = homeClub.playerIds
@@ -851,14 +918,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
       awayGoals: result.awayGoals,
     };
 
+    // Mark this fixture as interactively played so advanceWeek() won't re-queue it
+    const alreadyPlayed = gameState.playedFixtures.includes(activeMatch.fixtureId);
+    const updatedPlayedFixtures = alreadyPlayed
+      ? gameState.playedFixtures
+      : [...gameState.playedFixtures, activeMatch.fixtureId];
+
+    const updatedGameState: GameState = {
+      ...gameState,
+      observations: newObservations,
+      fixtures: { ...gameState.fixtures, [fixture.id]: updatedFixture },
+      playedFixtures: updatedPlayedFixtures,
+    };
+
+    // Determine where to navigate when the user dismisses the summary screen.
+    // If this match was launched from the advanceWeek() gate (i.e., it was a
+    // scheduled attendMatch activity), return to the calendar so the user can
+    // click "Advance Week" again and either play the next pending match or
+    // proceed with the week. Otherwise go to the dashboard as before.
+    const wasScheduled = gameState.schedule.activities.some(
+      (a) => a?.type === "attendMatch" && a.targetId === activeMatch.fixtureId,
+    );
+    const continueScreen: GameScreen = wasScheduled ? "calendar" : "dashboard";
+
     set({
-      gameState: {
-        ...gameState,
-        observations: newObservations,
-        fixtures: { ...gameState.fixtures, [fixture.id]: updatedFixture },
-      },
+      gameState: updatedGameState,
       activeMatch: null,
-      currentScreen: "dashboard",
+      lastMatchResult: {
+        fixtureId: activeMatch.fixtureId,
+        focusedPlayerIds: activeMatch.focusSelections.map((f) => f.playerId),
+        homeGoals: result.homeGoals,
+        awayGoals: result.awayGoals,
+        continueScreen,
+      },
+      currentScreen: "matchSummary",
     });
   },
 
@@ -1197,6 +1290,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   // Helpers
+
+  getPendingMatches: () => {
+    const { gameState } = get();
+    if (!gameState) return [];
+    // Collect unique fixture IDs from attendMatch activities in this week's
+    // schedule that have not yet been played interactively.
+    const pendingIds: string[] = [];
+    for (const activity of gameState.schedule.activities) {
+      if (
+        activity?.type === "attendMatch" &&
+        activity.targetId &&
+        !gameState.playedFixtures.includes(activity.targetId) &&
+        !pendingIds.includes(activity.targetId)
+      ) {
+        pendingIds.push(activity.targetId);
+      }
+    }
+    return pendingIds;
+  },
+
   getPlayer: (id) => get().gameState?.players[id],
   getClub: (id) => get().gameState?.clubs[id],
   getLeague: (id) => get().gameState?.leagues[id],
