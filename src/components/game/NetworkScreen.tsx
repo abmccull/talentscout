@@ -102,11 +102,11 @@ function ContactDetail({ contact, knownPlayerNames, onScheduleMeeting, onClose }
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="text-zinc-500">Intel Reliability</span>
             <span className="text-white font-medium">
-              {Math.round(contact.reliability * 100)}%
+              {contact.reliability}%
             </span>
           </div>
           <Progress
-            value={contact.reliability * 100}
+            value={contact.reliability}
             max={100}
             indicatorClassName="bg-purple-500"
           />

@@ -6,7 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, X } from "lucide-react";
 import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 
@@ -87,6 +87,9 @@ export function ReportWriter() {
   const [summary, setSummary] = useState("");
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
+  const [customStrength, setCustomStrength] = useState("");
+  const [customWeakness, setCustomWeakness] = useState("");
+  const [comparison, setComparison] = useState("");
 
   // Derive data before any early return — use optional chaining for safety
   const player = gameState && selectedPlayerId ? gameState.players[selectedPlayerId] : undefined;
@@ -143,7 +146,10 @@ export function ReportWriter() {
 
   const handleSubmit = () => {
     if (!summary.trim()) return;
-    submitReport(conviction, summary, selectedStrengths, selectedWeaknesses);
+    const fullSummary = comparison.trim()
+      ? `${summary.trim()}\n\nPlayer comparison: ${comparison.trim()}`
+      : summary.trim();
+    submitReport(conviction, fullSummary, selectedStrengths, selectedWeaknesses);
   };
 
   const isTablePound = conviction === "tablePound";
@@ -250,6 +256,30 @@ export function ReportWriter() {
             </Card>
           )}
 
+          {/* Player comparison */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Player Comparison</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-zinc-500 mb-2">
+                Who does this player remind you of? A comparison helps clubs understand your vision.
+              </p>
+              <label htmlFor="comparison" className="sr-only">
+                Player comparison
+              </label>
+              <input
+                id="comparison"
+                type="text"
+                value={comparison}
+                onChange={(e) => setComparison(e.target.value.slice(0, 100))}
+                placeholder="e.g. A young N'Golo Kanté..."
+                maxLength={100}
+                className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </CardContent>
+          </Card>
+
           {/* Strengths */}
           <Card>
             <CardHeader className="pb-3">
@@ -273,6 +303,68 @@ export function ReportWriter() {
                     {s}
                   </button>
                 ))}
+              </div>
+
+              {/* Custom strength tags */}
+              {selectedStrengths.filter((s) => !SUGGESTED_STRENGTHS.includes(s)).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {selectedStrengths
+                    .filter((s) => !SUGGESTED_STRENGTHS.includes(s))
+                    .map((s) => (
+                      <span
+                        key={s}
+                        className="inline-flex items-center gap-1 rounded-full border border-emerald-500 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400"
+                      >
+                        {s}
+                        <button
+                          onClick={() =>
+                            setSelectedStrengths((prev) => prev.filter((x) => x !== s))
+                          }
+                          className="hover:text-white transition"
+                          aria-label={`Remove ${s}`}
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              )}
+
+              {/* Custom strength input */}
+              <div className="mt-3 flex gap-2">
+                <label htmlFor="custom-strength" className="sr-only">
+                  Add custom strength
+                </label>
+                <input
+                  id="custom-strength"
+                  type="text"
+                  value={customStrength}
+                  onChange={(e) => setCustomStrength(e.target.value.slice(0, 100))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customStrength.trim()) {
+                      e.preventDefault();
+                      setSelectedStrengths((prev) => [...prev, customStrength.trim()]);
+                      setCustomStrength("");
+                    }
+                  }}
+                  placeholder="Add custom strength..."
+                  maxLength={100}
+                  className="flex-1 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (customStrength.trim()) {
+                      setSelectedStrengths((prev) => [...prev, customStrength.trim()]);
+                      setCustomStrength("");
+                    }
+                  }}
+                  disabled={!customStrength.trim()}
+                  className="text-xs"
+                >
+                  Add
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -300,6 +392,68 @@ export function ReportWriter() {
                     {w}
                   </button>
                 ))}
+              </div>
+
+              {/* Custom weakness tags */}
+              {selectedWeaknesses.filter((w) => !SUGGESTED_WEAKNESSES.includes(w)).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {selectedWeaknesses
+                    .filter((w) => !SUGGESTED_WEAKNESSES.includes(w))
+                    .map((w) => (
+                      <span
+                        key={w}
+                        className="inline-flex items-center gap-1 rounded-full border border-red-500 bg-red-500/20 px-3 py-1 text-xs text-red-400"
+                      >
+                        {w}
+                        <button
+                          onClick={() =>
+                            setSelectedWeaknesses((prev) => prev.filter((x) => x !== w))
+                          }
+                          className="hover:text-white transition"
+                          aria-label={`Remove ${w}`}
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              )}
+
+              {/* Custom weakness input */}
+              <div className="mt-3 flex gap-2">
+                <label htmlFor="custom-weakness" className="sr-only">
+                  Add custom weakness
+                </label>
+                <input
+                  id="custom-weakness"
+                  type="text"
+                  value={customWeakness}
+                  onChange={(e) => setCustomWeakness(e.target.value.slice(0, 100))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && customWeakness.trim()) {
+                      e.preventDefault();
+                      setSelectedWeaknesses((prev) => [...prev, customWeakness.trim()]);
+                      setCustomWeakness("");
+                    }
+                  }}
+                  placeholder="Add custom weakness..."
+                  maxLength={100}
+                  className="flex-1 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (customWeakness.trim()) {
+                      setSelectedWeaknesses((prev) => [...prev, customWeakness.trim()]);
+                      setCustomWeakness("");
+                    }
+                  }}
+                  disabled={!customWeakness.trim()}
+                  className="text-xs"
+                >
+                  Add
+                </Button>
               </div>
             </CardContent>
           </Card>

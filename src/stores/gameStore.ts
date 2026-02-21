@@ -44,7 +44,7 @@ import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases"
 import { processFocusedObservations } from "@/engine/match/focus";
 import { generateReportContent, finalizeReport, calculateReportQuality } from "@/engine/reports/reporting";
 import { updateReputation, generateJobOffers } from "@/engine/career/progression";
-import { generateStartingContacts } from "@/engine/network/contacts";
+import { generateStartingContacts, meetContact } from "@/engine/network/contacts";
 import {
   createWeekSchedule,
   addActivity,
@@ -276,8 +276,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const scout = createScout(config, rng);
     const contacts: Record<string, Contact> = {};
     const startingContacts = generateStartingContacts(rng, scout);
+
+    // Populate knownPlayerIds for each contact using their region to prefer local players.
+    // This is done after world generation so all player/club/league data is available.
+    const regionToCountry: Record<string, string> = {
+      England: "england",
+      Spain: "spain",
+      Germany: "germany",
+      France: "france",
+      Italy: "italy",
+      Portugal: "portugal",
+      Netherlands: "netherlands",
+      Brazil: "brazil",
+      Argentina: "argentina",
+      Belgium: "belgium",
+      Scandinavia: "sweden", // best approximation for multi-country region
+      "Eastern Europe": "czech", // best approximation for multi-country region
+    };
+    const allPlayerIds = Object.keys(players);
+
     for (const c of startingContacts) {
-      contacts[c.id] = c;
+      const countryCode = regionToCountry[c.region ?? ""];
+      const candidateIds = countryCode
+        ? allPlayerIds.filter((id) => {
+            const p = players[id];
+            const club = p ? clubs[p.clubId] : undefined;
+            const league = club ? leagues[club.leagueId] : undefined;
+            return league?.country === countryCode;
+          })
+        : [];
+      const pool = candidateIds.length > 0 ? candidateIds : allPlayerIds;
+      const count = 4 + Math.floor(rng.nextFloat(0, 1) * 5); // 4–8 players
+      const picked: string[] = [];
+      for (let i = 0; i < count && pool.length > 0; i++) {
+        const idx = rng.nextInt(0, pool.length - 1);
+        if (!picked.includes(pool[idx])) {
+          picked.push(pool[idx]);
+        }
+      }
+      contacts[c.id] = { ...c, knownPlayerIds: picked };
     }
 
     // Generate season events and transfer windows for season 1
@@ -531,6 +568,70 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stateWithScheduleApplied = {
         ...stateWithScheduleApplied,
         scout: { ...stateWithScheduleApplied.scout, reputation: newReputation },
+      };
+    }
+
+    // d) Network meetings — call meetContact() for each meeting and apply results
+    if (weekResult.meetingsHeld.length > 0) {
+      const updatedContacts = { ...stateWithScheduleApplied.contacts };
+      const meetingMessages: InboxMessage[] = [];
+
+      for (const contactId of weekResult.meetingsHeld) {
+        const contact = updatedContacts[contactId];
+        if (!contact) continue;
+
+        const meetingRng = createRNG(
+          `${gameState.seed}-meeting-${contactId}-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const result = meetContact(meetingRng, stateWithScheduleApplied.scout, contact);
+
+        // Apply relationship change — clamp to 0–100
+        const newRelationship = Math.max(
+          0,
+          Math.min(100, contact.relationship + result.relationshipChange),
+        );
+        updatedContacts[contactId] = { ...contact, relationship: newRelationship };
+
+        // Build meeting summary message
+        const parts: string[] = [
+          `You met with ${contact.name} (${contact.type}).`,
+          `Relationship ${result.relationshipChange >= 0 ? "improved" : "declined"} by ${Math.abs(result.relationshipChange)} points (now ${newRelationship}/100).`,
+        ];
+
+        for (const intel of result.intel) {
+          const player = stateWithScheduleApplied.players[intel.playerId];
+          const playerName = player
+            ? `${player.firstName} ${player.lastName}`
+            : "a player";
+          parts.push("");
+          parts.push(`INTEL on ${playerName}: ${intel.hint}`);
+        }
+
+        for (const tip of result.tips) {
+          const player = stateWithScheduleApplied.players[tip.playerId];
+          const playerName = player
+            ? `${player.firstName} ${player.lastName}`
+            : "a player";
+          parts.push("");
+          parts.push(`TIP: ${playerName} ${tip.description}`);
+        }
+
+        meetingMessages.push({
+          id: `meeting-${contactId}-w${gameState.currentWeek}-s${gameState.currentSeason}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "event" as const,
+          title: `Meeting with ${contact.name}`,
+          body: parts.join("\n"),
+          read: false,
+          actionRequired: false,
+        });
+      }
+
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        contacts: updatedContacts,
+        inbox: [...stateWithScheduleApplied.inbox, ...meetingMessages],
       };
     }
 
