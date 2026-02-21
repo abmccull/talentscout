@@ -14,6 +14,7 @@ import type {
   ContactType,
   Player,
   HiddenAttribute,
+  HiddenIntel,
   Specialization,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
@@ -40,17 +41,7 @@ export interface ContactMeetingResult {
   tips: PlayerTip[];
 }
 
-export interface HiddenIntel {
-  playerId: string;
-  attribute: HiddenAttribute;
-  /** Human-readable hint — worded as a scout's note, not a raw number */
-  hint: string;
-  /**
-   * 0–1: how reliable this intel is.
-   * Determined by the contact's own reliability stat, not shown directly.
-   */
-  reliability: number;
-}
+export type { HiddenIntel } from "@/engine/core/types";
 
 export interface PlayerTip {
   playerId: string;

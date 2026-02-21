@@ -339,21 +339,39 @@ export function CareerScreen() {
             {/* Career stats */}
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Career Statistics</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Career Statistics</CardTitle>
+                  <button
+                    type="button"
+                    className="text-blue-400 hover:text-blue-300 text-sm cursor-pointer"
+                    onClick={() => setScreen("analytics")}
+                  >
+                    View Analytics
+                  </button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-2">
-                {(
-                  [
-                    ["Reports Submitted", scout.reportsSubmitted],
-                    ["Successful Finds", scout.successfulFinds],
-                    ["Discovery Credits", scout.discoveryCredits.length],
-                  ] as [string, number][]
-                ).map(([label, val]) => (
-                  <div key={label} className="flex items-center justify-between">
-                    <span className="text-xs text-zinc-500">{label}</span>
-                    <span className="text-white font-semibold">{val}</span>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Reports Submitted</span>
+                  <span className="text-white font-semibold">{scout.reportsSubmitted}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Successful Finds</span>
+                  <span className="text-white font-semibold">{scout.successfulFinds}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-zinc-500">Discovery Credits</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-semibold">{scout.discoveryCredits.length}</span>
+                    <button
+                      type="button"
+                      className="text-blue-400 hover:text-blue-300 text-sm cursor-pointer"
+                      onClick={() => setScreen("discoveries")}
+                    >
+                      View Discoveries
+                    </button>
                   </div>
-                ))}
+                </div>
               </CardContent>
             </Card>
           </div>

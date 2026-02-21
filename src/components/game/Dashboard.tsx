@@ -19,8 +19,12 @@ import {
   ChevronDown,
   ChevronRight,
   Bookmark,
+  Compass,
+  Trophy,
+  BarChart3,
 } from "lucide-react";
 import { isBroke } from "@/engine/finance";
+import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { SeasonTimeline } from "./SeasonTimeline";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -117,6 +121,23 @@ export function Dashboard() {
     Object.values(gameState.observations).map((o) => o.playerId),
   );
 
+  // Issue 9: season phase badge
+  const seasonPhase = getSeasonPhase(currentWeek);
+  const phaseLabel: Record<typeof seasonPhase, string> = {
+    preseason: "Preseason",
+    earlyseason: "Early Season",
+    midseason: "Midseason",
+    lateseason: "Late Season",
+    endseason: "End of Season",
+  };
+  const phaseClass: Record<typeof seasonPhase, string> = {
+    preseason: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+    earlyseason: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    midseason: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+    lateseason: "bg-orange-500/15 text-orange-400 border-orange-500/30",
+    endseason: "bg-red-500/15 text-red-400 border-red-500/30",
+  };
+
   return (
     <GameLayout>
       <div className="p-6">
@@ -124,9 +145,16 @@ export function Dashboard() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-zinc-400">
-              Week {currentWeek} — Season {currentSeason}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-zinc-400">
+                Week {currentWeek} — Season {currentSeason}
+              </p>
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${phaseClass[seasonPhase]}`}
+              >
+                {phaseLabel[seasonPhase]}
+              </span>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setScreen("calendar")}>
@@ -597,6 +625,40 @@ export function Dashboard() {
               </Card>
             )}
           </div>
+        </div>
+
+        {/* Issue 13: Quick Links */}
+        <div className="mt-6">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Quick Links</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => setScreen("discoveries")}
+                  className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                >
+                  <Compass size={15} className="text-emerald-400" aria-hidden="true" />
+                  Discoveries
+                </button>
+                <button
+                  onClick={() => setScreen("leaderboard")}
+                  className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                >
+                  <Trophy size={15} className="text-amber-400" aria-hidden="true" />
+                  Leaderboard
+                </button>
+                <button
+                  onClick={() => setScreen("analytics")}
+                  className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                >
+                  <BarChart3 size={15} className="text-blue-400" aria-hidden="true" />
+                  Analytics
+                </button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── T8.6: Rival scouts section ───────────────────────────────────── */}

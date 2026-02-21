@@ -18,10 +18,28 @@ import {
   X,
   AlertTriangle,
   ChevronRight,
+  Info,
+  CalendarDays,
 } from "lucide-react";
 import type { Activity, ActivityType } from "@/engine/core/types";
+import {
+  getUpcomingSeasonEvents,
+  isInternationalBreak,
+  getSeasonPhase,
+} from "@/engine/core/seasonEvents";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+const SEASON_PHASE_CONFIG: Record<
+  "preseason" | "earlyseason" | "midseason" | "lateseason" | "endseason",
+  { label: string; className: string }
+> = {
+  preseason:   { label: "Preseason",    className: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
+  earlyseason: { label: "Early Season", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+  midseason:   { label: "Midseason",    className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  lateseason:  { label: "Late Season",  className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  endseason:   { label: "End of Season", className: "bg-red-500/15 text-red-400 border-red-500/30" },
+};
 
 const ACTIVITY_CONFIG: Record<
   ActivityType,
@@ -92,6 +110,10 @@ export function CalendarScreen() {
     (f) => f.week === currentWeek
   );
 
+  const seasonPhase = getSeasonPhase(currentWeek);
+  const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
+  const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
+
   const availableActivities: Array<{ activity: Activity; label: string }> = [
     ...upcomingFixtures.map((f) => {
       const home = getClub(f.homeClubId);
@@ -140,6 +162,18 @@ export function CalendarScreen() {
       activity: { type: "youthTournament", slots: 2, description: "Attend youth tournament" },
       label: "Youth Tournament (2 slots)",
     },
+    ...(scout.careerTier >= 5
+      ? [
+          {
+            activity: {
+              type: "boardPresentation" as ActivityType,
+              slots: 2,
+              description: "Present scouting strategy to the board",
+            } satisfies Activity,
+            label: "Board Presentation (2 slots)",
+          },
+        ]
+      : []),
   ];
 
   const canScheduleAt = (activity: Activity, dayIndex: number): boolean => {
@@ -242,15 +276,51 @@ export function CalendarScreen() {
         )}
 
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Weekly Planner</h1>
+            <div className="mb-1 flex items-center gap-2">
+              <h1 className="text-2xl font-bold">Weekly Planner</h1>
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SEASON_PHASE_CONFIG[seasonPhase].className}`}
+              >
+                {SEASON_PHASE_CONFIG[seasonPhase].label}
+              </span>
+            </div>
             <p className="text-sm text-zinc-400">
               Week {currentWeek} — Season {currentSeason}
             </p>
           </div>
           <Button onClick={advanceWeek}>Advance Week</Button>
         </div>
+
+        {/* International break banner */}
+        {internationalBreak && (
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm text-sky-300">
+            <Info size={14} className="shrink-0" aria-hidden="true" />
+            International Break — League matches suspended
+          </div>
+        )}
+
+        {/* Upcoming season events */}
+        {upcomingEvents.length > 0 && (
+          <div className="mb-6 rounded-lg border border-[#27272a] bg-[#141414] p-3">
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <CalendarDays size={12} aria-hidden="true" />
+              Upcoming Events
+            </div>
+            <ul className="space-y-1">
+              {upcomingEvents.map((event) => (
+                <li key={event.id} className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-300">{event.name}</span>
+                  <span className="text-zinc-500">
+                    Week {event.startWeek}
+                    {event.endWeek !== event.startWeek ? `–${event.endWeek}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Fatigue meter */}
         <div className="mb-6 rounded-lg border border-[#27272a] bg-[#141414] p-4">

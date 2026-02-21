@@ -610,6 +610,26 @@ export interface Contact {
 }
 
 // =============================================================================
+// CONTACT INTEL
+// =============================================================================
+
+/**
+ * A piece of hidden intelligence shared by a contact about a player.
+ * Keyed by playerId in the `contactIntel` GameState record.
+ */
+export interface HiddenIntel {
+  playerId: string;
+  attribute: HiddenAttribute;
+  /** Human-readable hint — worded as a scout's note, not a raw number. */
+  hint: string;
+  /**
+   * 0–1: how reliable this intel is.
+   * Determined by the contact's own reliability stat, not shown directly.
+   */
+  reliability: number;
+}
+
+// =============================================================================
 // CALENDAR / SCHEDULE
 // =============================================================================
 
@@ -805,6 +825,9 @@ export interface GameState {
 
   /** Player IDs bookmarked by the scout for quick access. */
   watchlist: string[];
+
+  /** Hidden intel gathered from contacts, keyed by playerId. */
+  contactIntel: Record<string, HiddenIntel[]>;
 
   /** Unix timestamp (ms) when this game save was created. */
   createdAt: number;

@@ -26,6 +26,7 @@ import type {
   SeasonEvent,
   DiscoveryRecord,
   ScoutPerformanceSnapshot,
+  HiddenIntel,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import {
@@ -36,14 +37,16 @@ import {
   initializeTransferWindows,
   isTransferWindowOpen,
   getCurrentTransferWindow,
+  generateUrgentAssessment,
+  isDeadlineDayPressure,
 } from "@/engine/core/transferWindow";
 import { initializeWorld } from "@/engine/world";
 import { createScout } from "@/engine/scout/creation";
 import { processWeeklyTick, advanceWeek } from "@/engine/core/gameLoop";
 import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases";
 import { processFocusedObservations } from "@/engine/match/focus";
-import { generateReportContent, finalizeReport, calculateReportQuality } from "@/engine/reports/reporting";
-import { updateReputation, generateJobOffers } from "@/engine/career/progression";
+import { generateReportContent, finalizeReport, calculateReportQuality, trackPostTransfer } from "@/engine/reports/reporting";
+import { updateReputation, generateJobOffers, calculatePerformanceReview, type TierReviewContext } from "@/engine/career/progression";
 import { generateStartingContacts, meetContact, generateContactForType } from "@/engine/network/contacts";
 import {
   createWeekSchedule,
@@ -87,6 +90,8 @@ import {
   processRivalWeek,
 } from "@/engine/rivals";
 import { checkToolUnlocks } from "@/engine/tools";
+import { getActiveToolBonuses } from "@/engine/tools/unlockables";
+import { getEquipmentObservationBonus } from "@/engine/finance/expenses";
 import { generateManagerProfiles } from "@/engine/analytics";
 import {
   saveGame as dbSaveGame,
@@ -155,12 +160,13 @@ interface GameStore {
   // Selected entities
   selectedPlayerId: string | null;
   selectedFixtureId: string | null;
-  selectedReportId: string | null;
-
   // Save/Load state
   saveSlots: Omit<SaveRecord, "state">[];
   isSaving: boolean;
   isLoadingSave: boolean;
+
+  // Autosave error state
+  autosaveError: string | null;
 
   // Actions
   startNewGame: (config: NewGameConfig) => Promise<void>;
@@ -282,10 +288,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastMatchResult: null,
   selectedPlayerId: null,
   selectedFixtureId: null,
-  selectedReportId: null,
   saveSlots: [],
   isSaving: false,
   isLoadingSave: false,
+  autosaveError: null,
 
   // Start new game
   startNewGame: async (config) => {
@@ -378,6 +384,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       performanceHistory: [],
       playedFixtures: [],
       watchlist: [],
+      contactIntel: {},
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -545,7 +552,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Process scheduled activities → fatigue, skill XP, attribute XP
     const weekResult = processCompletedWeek(gameState.schedule, gameState.scout, rng);
-    const updatedScout = applyWeekResults(gameState.scout, weekResult);
+    let updatedScout = applyWeekResults(gameState.scout, weekResult);
+
+    // Issue 5c+5d: Apply tool fatigue reduction bonuses
+    const weekToolBonuses = getActiveToolBonuses(gameState.unlockedTools);
+    const fatigueReduction = weekToolBonuses.fatigueReduction ?? 0;
+    const travelFatigueReduction = weekToolBonuses.travelFatigueReduction ?? 0;
+    if (fatigueReduction > 0 || travelFatigueReduction > 0) {
+      // Check if any travel activities were scheduled this week
+      const hasTravelActivity = gameState.schedule.activities.some(
+        (a) => a?.type === "internationalTravel" || a?.type === "travel",
+      );
+      const totalReduction = fatigueReduction + (hasTravelActivity ? travelFatigueReduction : 0);
+      if (totalReduction > 0) {
+        updatedScout = {
+          ...updatedScout,
+          fatigue: Math.max(0, updatedScout.fatigue - totalReduction),
+        };
+      }
+    }
+
     let stateWithScheduleApplied = { ...gameState, scout: updatedScout };
 
     // ── Process week results for new activity types ─────────────────────────
@@ -598,6 +624,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (weekResult.meetingsHeld.length > 0) {
       const updatedContacts = { ...stateWithScheduleApplied.contacts };
       const meetingMessages: InboxMessage[] = [];
+      let updatedIntel = { ...(stateWithScheduleApplied.contactIntel ?? {}) };
+
+      // Issue 5b: Get tool bonuses for relationship gain
+      const meetingToolBonuses = getActiveToolBonuses(stateWithScheduleApplied.unlockedTools);
 
       for (const contactId of weekResult.meetingsHeld) {
         const contact = updatedContacts[contactId];
@@ -608,17 +638,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
         );
         const result = meetContact(meetingRng, stateWithScheduleApplied.scout, contact);
 
+        // Issue 5b: Apply relationship gain bonus from tools
+        const relBonus = meetingToolBonuses.relationshipGainBonus ?? 0;
+        const adjustedChange = result.relationshipChange >= 0
+          ? Math.round(result.relationshipChange * (1 + relBonus))
+          : result.relationshipChange;
+
         // Apply relationship change — clamp to 0–100
         const newRelationship = Math.max(
           0,
-          Math.min(100, contact.relationship + result.relationshipChange),
+          Math.min(100, contact.relationship + adjustedChange),
         );
         updatedContacts[contactId] = { ...contact, relationship: newRelationship };
+
+        // Issue 7: Store contact intel entries
+        for (const hint of result.intel) {
+          const existing = updatedIntel[hint.playerId] ?? [];
+          updatedIntel[hint.playerId] = [...existing, hint];
+        }
 
         // Build meeting summary message
         const parts: string[] = [
           `You met with ${contact.name} (${contact.type}).`,
-          `Relationship ${result.relationshipChange >= 0 ? "improved" : "declined"} by ${Math.abs(result.relationshipChange)} points (now ${newRelationship}/100).`,
+          `Relationship ${adjustedChange >= 0 ? "improved" : "declined"} by ${Math.abs(adjustedChange)} points (now ${newRelationship}/100).`,
         ];
 
         for (const intel of result.intel) {
@@ -654,6 +696,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stateWithScheduleApplied = {
         ...stateWithScheduleApplied,
         contacts: updatedContacts,
+        contactIntel: updatedIntel,
         inbox: [...stateWithScheduleApplied.inbox, ...meetingMessages],
       };
     }
@@ -908,6 +951,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stateWithPhase2 = { ...stateWithPhase2, finances: updatedFinances };
     }
 
+    // 1b. Transfer window urgency — generate urgent assessments during open windows
+    const activeTransferWindow = stateWithPhase2.transferWindow;
+    if (activeTransferWindow?.isOpen) {
+      const twRng = createRNG(
+        `${gameState.seed}-tw-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+      const urgent = generateUrgentAssessment(twRng, stateWithPhase2);
+      if (urgent) {
+        const urgentPlayer = stateWithPhase2.players[urgent.playerId];
+        const urgentMsg: InboxMessage = {
+          id: `urgent-${urgent.id}`,
+          week: stateWithPhase2.currentWeek,
+          season: stateWithPhase2.currentSeason,
+          type: "assignment" as const,
+          title: "Urgent Assessment Request",
+          body: `${urgent.requestedBy} needs a report on ${urgentPlayer ? `${urgentPlayer.firstName} ${urgentPlayer.lastName}` : "a player"} by day ${urgent.deadline}. Reward: +${urgent.reputationReward} reputation.`,
+          read: false,
+          actionRequired: true,
+          relatedId: urgent.playerId,
+        };
+        stateWithPhase2 = {
+          ...stateWithPhase2,
+          inbox: [...stateWithPhase2.inbox, urgentMsg],
+        };
+      }
+      if (isDeadlineDayPressure(activeTransferWindow, stateWithPhase2.currentWeek)) {
+        const deadlineMsg: InboxMessage = {
+          id: `deadline-w${stateWithPhase2.currentWeek}-s${stateWithPhase2.currentSeason}`,
+          week: stateWithPhase2.currentWeek,
+          season: stateWithPhase2.currentSeason,
+          type: "news" as const,
+          title: "Transfer Deadline Approaching",
+          body: "The transfer window closes this week. Clubs are making final decisions — file any outstanding reports now.",
+          read: false,
+          actionRequired: false,
+        };
+        stateWithPhase2 = {
+          ...stateWithPhase2,
+          inbox: [...stateWithPhase2.inbox, deadlineMsg],
+        };
+      }
+    }
+
     // 2. Process rival scouts for this week
     const rivalRng = createRNG(
       `${gameState.seed}-rivals-${gameState.currentWeek}-${gameState.currentSeason}`,
@@ -1014,6 +1100,122 @@ export const useGameStore = create<GameStore>((set, get) => ({
       );
       newState = { ...newState, discoveryRecords: updatedDiscoveryRecords };
 
+      const seasonEndMessages: InboxMessage[] = [];
+      const completedSeason = stateWithPhase2.currentSeason;
+
+      // ── Issue 3: Performance review ──────────────────────────────────────
+      const seasonReports = Object.values(newState.reports).filter(
+        (r) => r.submittedSeason === completedSeason,
+      );
+      const tierContext: TierReviewContext = {
+        countriesScoutedThisSeason: newState.countries,
+        homeCountry: newState.countries[0],
+        npcScouts: Object.values(newState.npcScouts),
+        managerRelationship: newState.scout.managerRelationship,
+        boardDirectives: newState.scout.boardDirectives,
+      };
+      const review = calculatePerformanceReview(
+        newState.scout,
+        seasonReports,
+        completedSeason,
+        tierContext,
+      );
+      newState = {
+        ...newState,
+        performanceReviews: [...newState.performanceReviews, review],
+      };
+
+      // Apply reputation change from review
+      const reviewedScout = updateReputation(newState.scout, {
+        type: "seasonEnd",
+        reviewOutcome: review.outcome,
+      });
+      newState = { ...newState, scout: reviewedScout };
+
+      // If promoted, advance career tier
+      if (review.outcome === "promoted" && newState.scout.careerTier < 5) {
+        newState = {
+          ...newState,
+          scout: {
+            ...newState.scout,
+            careerTier: (newState.scout.careerTier + 1) as 1 | 2 | 3 | 4 | 5,
+          },
+        };
+      }
+
+      const reviewOutcomeText =
+        review.outcome === "promoted"
+          ? "Congratulations! You have been promoted."
+          : review.outcome === "retained"
+            ? "You have been retained for next season."
+            : review.outcome === "warning"
+              ? "You have received a formal warning. Improve your performance next season."
+              : "Your contract has been terminated.";
+      seasonEndMessages.push({
+        id: `review-s${completedSeason}`,
+        week: newState.currentWeek,
+        season: newState.currentSeason,
+        type: "feedback" as const,
+        title: `Season ${completedSeason} Performance Review`,
+        body: `Reports submitted: ${review.reportsSubmitted} | Avg quality: ${review.averageQuality}/100\nSuccessful recommendations: ${review.successfulRecommendations}\nReputation change: ${review.reputationChange >= 0 ? "+" : ""}${review.reputationChange}\n\n${reviewOutcomeText}`,
+        read: false,
+        actionRequired: false,
+      });
+
+      // ── Issue 1: Generate job offers ─────────────────────────────────────
+      const seasonEndRng = createRNG(`${gameState.seed}-seasonend-${completedSeason}`);
+      const offers = generateJobOffers(seasonEndRng, newState.scout, newState.clubs, newState.currentSeason);
+      if (offers.length > 0) {
+        newState = { ...newState, jobOffers: [...newState.jobOffers, ...offers] };
+        for (const offer of offers) {
+          const club = newState.clubs[offer.clubId];
+          seasonEndMessages.push({
+            id: `job-offer-${offer.id}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            title: `Job Offer: ${club?.name ?? "Unknown"}`,
+            body: `You've been offered a ${offer.role} position. Salary: £${offer.salary}/month. Contract: ${offer.contractLength} season${offer.contractLength !== 1 ? "s" : ""}. Expires week ${offer.expiresWeek}.`,
+            type: "jobOffer" as const,
+            read: false,
+            actionRequired: true,
+            relatedId: offer.id,
+          });
+        }
+      }
+
+      // ── Issue 8: Post-transfer retrospective accuracy ────────────────────
+      const signedReports = Object.values(newState.reports).filter(
+        (r) => r.clubResponse === "signed" && completedSeason - r.submittedSeason >= 2,
+      );
+      if (signedReports.length > 0) {
+        const updatedReports = { ...newState.reports };
+        for (const report of signedReports) {
+          if (report.postTransferRating !== undefined) continue; // already rated
+          const player = newState.players[report.playerId];
+          if (!player) continue;
+          const seasonsSinceSigning = completedSeason - report.submittedSeason;
+          const accuracy = trackPostTransfer(report, player, seasonsSinceSigning);
+          updatedReports[report.id] = { ...report, postTransferRating: accuracy };
+          seasonEndMessages.push({
+            id: `retro-${report.id}-s${completedSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            title: `Report Validated: ${player.firstName} ${player.lastName}`,
+            body: `Your report on ${player.firstName} ${player.lastName} from season ${report.submittedSeason} has been validated after ${seasonsSinceSigning} seasons. Accuracy: ${accuracy}/100.`,
+            type: "feedback" as const,
+            read: false,
+            actionRequired: false,
+            relatedId: report.id,
+          });
+        }
+        newState = { ...newState, reports: updatedReports };
+      }
+
+      // Add all season-end messages to inbox
+      if (seasonEndMessages.length > 0) {
+        newState = { ...newState, inbox: [...newState.inbox, ...seasonEndMessages] };
+      }
+
       // Generate new season fixtures for all leagues
       const fixtureRng = createRNG(`${gameState.seed}-fixtures-s${newState.currentSeason}`);
       const newFixtures: Record<string, Fixture> = {};
@@ -1059,6 +1261,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newState = { ...newState, inbox: newState.inbox.slice(-200) };
     }
 
+    // Issue 17: Prune old acknowledged narrative events (keep last 10 weeks)
+    if (newState.narrativeEvents.length > 0) {
+      const prunedNarratives = newState.narrativeEvents.filter(
+        (e) => !e.acknowledged || newState.currentWeek - e.week < 10,
+      );
+      newState = { ...newState, narrativeEvents: prunedNarratives };
+    }
+
     // ── Build week summary for UI feedback ──────────────────────────────────
     const newInboxCount = newState.inbox.length - gameState.inbox.length;
     const isPayWeek = gameState.currentWeek % 4 === 0;
@@ -1081,8 +1291,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({ gameState: newState, lastWeekSummary: weekSummary });
     // Autosave after each week advance
+    set({ autosaveError: null });
     dbAutosave(newState).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
       console.warn("Autosave failed:", err);
+      set({ autosaveError: message });
     });
   },
 
@@ -1173,6 +1386,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rng = createRNG(`${gameState.seed}-observe-${activeMatch.fixtureId}`);
     const newObservations = { ...gameState.observations };
 
+    // Issue 5a+6: Compute tool and equipment bonuses for observation confidence
+    const toolBonuses = getActiveToolBonuses(gameState.unlockedTools);
+    const equipBonus = getEquipmentObservationBonus(gameState.finances?.equipmentLevel ?? 1);
+
     for (const focus of activeMatch.focusSelections) {
       const player = gameState.players[focus.playerId];
       if (!player) continue;
@@ -1191,11 +1408,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
       observation.week = gameState.currentWeek;
       observation.season = gameState.currentSeason;
       observation.matchId = activeMatch.fixtureId;
+
+      // Apply tool confidence bonus + equipment observation bonus to readings
+      const confBoost = (toolBonuses.confidenceBonus ?? 0) + equipBonus;
+      if (confBoost > 0) {
+        observation.attributeReadings = observation.attributeReadings.map((r) => ({
+          ...r,
+          confidence: Math.min(1, r.confidence + confBoost),
+        }));
+      }
+
       newObservations[observation.id] = observation;
     }
 
     // Simulate match result
     const fixture = gameState.fixtures[activeMatch.fixtureId];
+    if (!fixture) {
+      set({ activeMatch: null, lastMatchResult: null, currentScreen: "dashboard" });
+      return;
+    }
     const homeClub = gameState.clubs[fixture.homeClubId];
     const awayClub = gameState.clubs[fixture.awayClubId];
     if (!homeClub || !awayClub) {

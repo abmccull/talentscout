@@ -149,6 +149,9 @@ function migrateSaveState(raw: unknown): GameState {
   // Watchlist — player bookmarks
   if (!state.watchlist) state.watchlist = [];
 
+  // Contact intel — hidden intel from meetings
+  if (!state.contactIntel) state.contactIntel = {};
+
   // Scout field defaults — Phase 1 extensions on the Scout object
   if (!state.scout.npcScoutIds) state.scout.npcScoutIds = [];
   if (!state.scout.countryReputations) state.scout.countryReputations = {};

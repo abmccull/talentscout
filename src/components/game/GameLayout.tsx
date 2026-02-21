@@ -16,6 +16,7 @@ import {
   Trophy,
   Award,
   BarChart3,
+  X,
 } from "lucide-react";
 
 const NAV_ITEMS: { screen: GameScreen; label: string; icon: React.ElementType }[] = [
@@ -36,6 +37,7 @@ const NAV_ITEMS: { screen: GameScreen; label: string; icon: React.ElementType }[
 
 export function GameLayout({ children }: { children: React.ReactNode }) {
   const { currentScreen, setScreen, gameState } = useGameStore();
+  const autosaveError = useGameStore((s) => s.autosaveError);
 
   if (!gameState) return null;
 
@@ -121,7 +123,27 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        {autosaveError !== null && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="flex items-center justify-between gap-3 bg-red-900/90 px-4 py-2.5 text-sm text-white"
+          >
+            <span>
+              <span className="font-semibold">Autosave failed:</span> {autosaveError}
+            </span>
+            <button
+              onClick={() => useGameStore.setState({ autosaveError: null })}
+              aria-label="Dismiss autosave error"
+              className="shrink-0 rounded p-0.5 text-red-200 transition hover:bg-red-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

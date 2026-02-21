@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus } from "lucide-react";
-import type { AttributeReading, Observation } from "@/engine/core/types";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle } from "lucide-react";
+import type { AttributeReading, HiddenIntel, Observation } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 
 const DOMAIN_LABELS: Record<string, string> = {
@@ -35,6 +35,28 @@ function formatMarketValue(value: number): string {
   if (value >= 1_000_000) return `£${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `£${(value / 1_000).toFixed(0)}K`;
   return `£${value}`;
+}
+
+function formatAttribute(attr: string): string {
+  const spaced = attr.replace(/([A-Z])/g, " $1").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function ReliabilityDots({ reliability }: { reliability: number }) {
+  const total = 5;
+  const filled = Math.round(reliability * total);
+  return (
+    <div className="flex items-center gap-0.5" aria-label={`Reliability: ${filled} out of ${total}`}>
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-1.5 w-1.5 rounded-full ${
+            i < filled ? "bg-violet-400" : "bg-[#27272a]"
+          }`}
+        />
+      ))}
+    </div>
+  );
 }
 
 function ObservationsSidebar({ observations }: { observations: Observation[] }) {
@@ -248,6 +270,8 @@ export function PlayerProfile() {
     byDomain.get(domain)!.push([attr, merged.get(attr)]);
   }
 
+  const contactIntel: HiddenIntel[] = gameState.contactIntel[selectedPlayerId] ?? [];
+
   const convictionVariant = (c: string) => {
     if (c === "tablePound") return "default" as const;
     if (c === "strongRecommend") return "success" as const;
@@ -403,6 +427,33 @@ export function PlayerProfile() {
                 <p className="text-xs text-zinc-600 mt-1">
                   Attend a match and focus on this player to gather data.
                 </p>
+              </div>
+            )}
+
+            {/* Contact Intel */}
+            {contactIntel.length > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3 flex items-center gap-1.5">
+                  <MessageCircle size={13} aria-hidden="true" />
+                  Contact Intel
+                </h2>
+                <Card>
+                  <CardContent className="px-4 pb-4 pt-4">
+                    <div className="space-y-3">
+                      {contactIntel.map((intel, i) => (
+                        <div key={i} className="rounded-md border border-[#27272a] bg-[#141414] p-3">
+                          <div className="flex items-start justify-between gap-3 mb-1.5">
+                            <span className="text-xs font-medium text-violet-300">
+                              {formatAttribute(intel.attribute)}
+                            </span>
+                            <ReliabilityDots reliability={intel.reliability} />
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed">{intel.hint}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             )}
           </div>

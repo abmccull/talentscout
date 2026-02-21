@@ -44,8 +44,6 @@ export function SettingsScreen() {
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [syncingSlot, setSyncingSlot] = useState<number | null>(null);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   useEffect(() => {
     refreshSaveSlots();
@@ -78,21 +76,6 @@ export function SettingsScreen() {
       if (oldest) slot = oldest.slot;
     }
     await handleSave(slot);
-  };
-
-  const handleSyncToCloud = async (slot: number) => {
-    // The SupabaseCloudSaveProvider will be injected via gameStore in a future
-    // iteration. For now we locate the save from local slots and delegate to
-    // the provider that is wired at the store level.
-    setSyncingSlot(slot);
-    setSyncStatus(null);
-    try {
-      await saveToSlot(slot, `Save ${slot}`);
-      setSyncStatus(`Slot ${slot} synced to cloud`);
-      setTimeout(() => setSyncStatus(null), 2500);
-    } finally {
-      setSyncingSlot(null);
-    }
   };
 
   const formatDate = (timestamp: number) => {
@@ -188,12 +171,6 @@ export function SettingsScreen() {
                   </button>
                 </div>
 
-                {syncStatus && (
-                  <span className="flex items-center gap-1 text-sm text-emerald-400">
-                    <Check size={14} aria-hidden="true" />
-                    {syncStatus}
-                  </span>
-                )}
               </>
             ) : (
               /* Signed-out state */
@@ -265,7 +242,6 @@ export function SettingsScreen() {
             {Array.from({ length: MAX_MANUAL_SLOTS }, (_, i) => i + 1).map(
               (slot) => {
                 const existing = manualSaves.find((s) => s.slot === slot);
-                const isSyncingThis = syncingSlot === slot;
                 return (
                   <div
                     key={slot}
@@ -317,24 +293,23 @@ export function SettingsScreen() {
                             Load
                           </Button>
 
-                          {/* Cloud sync button — only when authenticated + enabled */}
+                          {/* Cloud sync — not yet implemented */}
                           {isAuthenticated && cloudSaveEnabled && (
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => void handleSyncToCloud(slot)}
-                              disabled={isSyncingThis}
-                              aria-label={`Sync slot ${slot} to cloud`}
+                              disabled
+                              aria-label="Cloud sync coming soon"
+                              title="Cloud Sync — Coming Soon"
                             >
-                              {isSyncingThis ? (
-                                <Loader2
-                                  size={12}
-                                  className="animate-spin"
-                                  aria-hidden="true"
-                                />
-                              ) : (
-                                <Cloud size={12} aria-hidden="true" />
-                              )}
+                              <Cloud
+                                size={12}
+                                className="mr-1 opacity-50"
+                                aria-hidden="true"
+                              />
+                              <span className="text-xs opacity-50">
+                                Coming Soon
+                              </span>
                             </Button>
                           )}
 

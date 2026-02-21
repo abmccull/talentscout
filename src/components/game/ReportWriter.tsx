@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -83,6 +83,7 @@ export function ReportWriter() {
     getClub,
   } = useGameStore();
 
+  const [isDirty, setIsDirty] = useState(false);
   const [conviction, setConviction] = useState<ConvictionLevel>("note");
   const [summary, setSummary] = useState("");
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
@@ -129,16 +130,37 @@ export function ReportWriter() {
     [observations]
   );
 
+  // Warn the user if they try to close/reload the tab while the form is dirty
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
   // Early return after all hooks
   if (!gameState || !selectedPlayerId || !player) return null;
 
+  const handleBack = () => {
+    if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to leave?")) {
+      return;
+    }
+    setScreen("playerProfile");
+  };
+
   const toggleStrength = (s: string) => {
+    setIsDirty(true);
     setSelectedStrengths((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
     );
   };
 
   const toggleWeakness = (w: string) => {
+    setIsDirty(true);
     setSelectedWeaknesses((prev) =>
       prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]
     );
@@ -149,6 +171,7 @@ export function ReportWriter() {
     const fullSummary = comparison.trim()
       ? `${summary.trim()}\n\nPlayer comparison: ${comparison.trim()}`
       : summary.trim();
+    setIsDirty(false);
     submitReport(conviction, fullSummary, selectedStrengths, selectedWeaknesses);
   };
 
@@ -159,7 +182,7 @@ export function ReportWriter() {
     <GameLayout>
       <div className="p-6 max-w-4xl mx-auto">
         <button
-          onClick={() => setScreen("playerProfile")}
+          onClick={handleBack}
           className="mb-4 flex items-center gap-1 text-sm text-zinc-500 hover:text-white transition"
           aria-label="Back to player profile"
         >
@@ -272,7 +295,7 @@ export function ReportWriter() {
                 id="comparison"
                 type="text"
                 value={comparison}
-                onChange={(e) => setComparison(e.target.value.slice(0, 100))}
+                onChange={(e) => { setIsDirty(true); setComparison(e.target.value.slice(0, 100)); }}
                 placeholder="e.g. A young N'Golo Kanté..."
                 maxLength={100}
                 className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -339,10 +362,11 @@ export function ReportWriter() {
                   id="custom-strength"
                   type="text"
                   value={customStrength}
-                  onChange={(e) => setCustomStrength(e.target.value.slice(0, 100))}
+                  onChange={(e) => { setIsDirty(true); setCustomStrength(e.target.value.slice(0, 100)); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && customStrength.trim()) {
                       e.preventDefault();
+                      setIsDirty(true);
                       setSelectedStrengths((prev) => [...prev, customStrength.trim()]);
                       setCustomStrength("");
                     }
@@ -356,6 +380,7 @@ export function ReportWriter() {
                   variant="outline"
                   onClick={() => {
                     if (customStrength.trim()) {
+                      setIsDirty(true);
                       setSelectedStrengths((prev) => [...prev, customStrength.trim()]);
                       setCustomStrength("");
                     }
@@ -428,10 +453,11 @@ export function ReportWriter() {
                   id="custom-weakness"
                   type="text"
                   value={customWeakness}
-                  onChange={(e) => setCustomWeakness(e.target.value.slice(0, 100))}
+                  onChange={(e) => { setIsDirty(true); setCustomWeakness(e.target.value.slice(0, 100)); }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && customWeakness.trim()) {
                       e.preventDefault();
+                      setIsDirty(true);
                       setSelectedWeaknesses((prev) => [...prev, customWeakness.trim()]);
                       setCustomWeakness("");
                     }
@@ -445,6 +471,7 @@ export function ReportWriter() {
                   variant="outline"
                   onClick={() => {
                     if (customWeakness.trim()) {
+                      setIsDirty(true);
                       setSelectedWeaknesses((prev) => [...prev, customWeakness.trim()]);
                       setCustomWeakness("");
                     }
@@ -470,7 +497,7 @@ export function ReportWriter() {
               <textarea
                 id="summary"
                 value={summary}
-                onChange={(e) => setSummary(e.target.value.slice(0, 2000))}
+                onChange={(e) => { setIsDirty(true); setSummary(e.target.value.slice(0, 2000)); }}
                 placeholder="Write your assessment of this player..."
                 rows={5}
                 maxLength={2000}
@@ -495,7 +522,7 @@ export function ReportWriter() {
                 {CONVICTION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => setConviction(opt.value)}
+                    onClick={() => { setIsDirty(true); setConviction(opt.value); }}
                     role="radio"
                     aria-checked={conviction === opt.value}
                     className={`rounded-lg border p-3 text-left transition ${
@@ -545,7 +572,7 @@ export function ReportWriter() {
 
           {/* Submit */}
           <div className="flex items-center justify-end gap-3">
-            <Button variant="ghost" onClick={() => setScreen("playerProfile")}>
+            <Button variant="ghost" onClick={handleBack}>
               Cancel
             </Button>
             <Button

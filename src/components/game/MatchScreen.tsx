@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Plus, X, ChevronRight, Trophy } from "lucide-react";
-import type { MatchPhase, Player, PlayerAttribute } from "@/engine/core/types";
+import type { MatchPhase } from "@/engine/core/types";
 import { EVENT_REVEALED } from "@/engine/match/phases";
 
 type FocusLens = "technical" | "physical" | "mental" | "tactical" | "general";
@@ -51,16 +51,34 @@ export function MatchScreen() {
     useGameStore();
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
 
+  // Compute isComplete before the early returns so the useEffect below is
+  // always called unconditionally (Rules of Hooks). Optional chaining makes
+  // this safe even when activeMatch is null.
+  const isComplete =
+    activeMatch != null &&
+    activeMatch.currentPhase >= activeMatch.phases.length;
+
+  // When all phases have been advanced through, navigate to MatchSummaryScreen.
+  // This handles the edge case where currentPhase overshoots phases.length
+  // (e.g. rapid clicks). endMatch() is called via useEffect to avoid
+  // triggering a state update during render.
+  useEffect(() => {
+    if (isComplete) {
+      endMatch();
+    }
+  }, [isComplete, endMatch]);
+
   if (!gameState || !activeMatch) return null;
 
   const fixture = gameState.fixtures[activeMatch.fixtureId];
   if (!fixture) return null;
 
+  if (isComplete) return null;
+
   const homeClub = getClub(fixture.homeClubId);
   const awayClub = getClub(fixture.awayClubId);
   const currentPhase = activeMatch.phases[activeMatch.currentPhase];
   const isLastPhase = activeMatch.currentPhase >= activeMatch.phases.length - 1;
-  const isComplete = activeMatch.currentPhase >= activeMatch.phases.length;
 
   // Compute running score from past phases' goal events
   let homeGoals = 0;
@@ -89,18 +107,6 @@ export function MatchScreen() {
     setFocus(playerId, "general");
     setShowPlayerPicker(false);
   };
-
-  if (isComplete) {
-    return (
-      <GameLayout>
-        <MatchSummary
-          focusSelections={activeMatch.focusSelections}
-          getPlayer={getPlayer}
-          onReturn={endMatch}
-        />
-      </GameLayout>
-    );
-  }
 
   return (
     <GameLayout>
@@ -327,73 +333,5 @@ export function MatchScreen() {
         </div>
       </div>
     </GameLayout>
-  );
-}
-
-interface MatchSummaryProps {
-  focusSelections: Array<{ playerId: string; phases: number[]; lens: string }>;
-  getPlayer: (id: string) => Player | undefined;
-  onReturn: () => void;
-}
-
-function MatchSummary({ focusSelections, getPlayer, onReturn }: MatchSummaryProps) {
-  return (
-    <div className="flex h-full items-center justify-center p-6">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy size={20} className="text-emerald-500" />
-            Match Complete
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-zinc-400">
-            You observed{" "}
-            <span className="text-white font-semibold">{focusSelections.length}</span>{" "}
-            player{focusSelections.length !== 1 ? "s" : ""} during this match.
-          </p>
-
-          {focusSelections.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                Observations Recorded
-              </h4>
-              {focusSelections.map((fs) => {
-                const player = getPlayer(fs.playerId);
-                return (
-                  <div
-                    key={fs.playerId}
-                    className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#141414] p-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">
-                        {player ? `${player.firstName} ${player.lastName}` : "Unknown"}
-                      </p>
-                      <p className="text-xs text-zinc-500 capitalize">{player?.position}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-emerald-400">
-                        {fs.phases.length} phase{fs.phases.length !== 1 ? "s" : ""}
-                      </p>
-                      <p className="text-xs text-zinc-500 capitalize">{fs.lens} lens</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {focusSelections.length === 0 && (
-            <p className="rounded-md border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-400">
-              No players were focused this match. Observations require at least one focus selection.
-            </p>
-          )}
-
-          <Button className="w-full" onClick={onReturn}>
-            Return to Dashboard
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
   );
 }
