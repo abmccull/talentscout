@@ -1,0 +1,322 @@
+"use client";
+
+import { useState } from "react";
+import { useGameStore } from "@/stores/gameStore";
+import { GameLayout } from "./GameLayout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FileText, X, ChevronDown, ChevronUp } from "lucide-react";
+import type { ScoutReport, ConvictionLevel } from "@/engine/core/types";
+
+const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
+  note: "Note",
+  recommend: "Recommend",
+  strongRecommend: "Strong Rec",
+  tablePound: "Table Pound",
+};
+
+const CONVICTION_VARIANT: Record<
+  ConvictionLevel,
+  "default" | "secondary" | "success" | "warning" | "destructive" | "outline"
+> = {
+  note: "outline",
+  recommend: "secondary",
+  strongRecommend: "success",
+  tablePound: "default",
+};
+
+function qualityColor(score: number): string {
+  if (score >= 75) return "text-emerald-400";
+  if (score >= 50) return "text-amber-400";
+  return "text-red-400";
+}
+
+interface ReportDetailModalProps {
+  report: ScoutReport;
+  playerName: string;
+  onClose: () => void;
+}
+
+function ReportDetailModal({ report, playerName, onClose }: ReportDetailModalProps) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Report for ${playerName}`}
+    >
+      <div className="w-full max-w-2xl max-h-[85vh] overflow-auto rounded-xl border border-[#27272a] bg-[#0a0a0a] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#27272a] p-5">
+          <div>
+            <h2 className="text-lg font-bold">{playerName}</h2>
+            <p className="text-xs text-zinc-500">
+              Week {report.submittedWeek} — Season {report.submittedSeason}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-[#27272a] hover:text-white transition"
+            aria-label="Close report"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* Conviction & quality */}
+          <div className="flex items-center gap-3">
+            <Badge variant={CONVICTION_VARIANT[report.conviction]}>
+              {CONVICTION_LABELS[report.conviction]}
+            </Badge>
+            <span className={`text-sm font-semibold ${qualityColor(report.qualityScore)}`}>
+              Quality: {report.qualityScore}/100
+            </span>
+            {report.clubResponse && (
+              <Badge variant="secondary" className="text-[10px] capitalize">
+                Club: {report.clubResponse}
+              </Badge>
+            )}
+          </div>
+
+          {/* Summary */}
+          {report.summary && (
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+                Summary
+              </h3>
+              <p className="text-sm text-zinc-300 leading-relaxed">{report.summary}</p>
+            </div>
+          )}
+
+          {/* Attribute assessments */}
+          {report.attributeAssessments.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+                Attribute Assessments
+              </h3>
+              <div className="space-y-1.5">
+                {report.attributeAssessments.map((a, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="w-32 shrink-0 text-xs capitalize text-zinc-400">
+                      {String(a.attribute).replace(/([A-Z])/g, " $1").trim()}
+                    </span>
+                    <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                      <div
+                        className="absolute left-0 top-0 h-full rounded-full bg-emerald-500"
+                        style={{ width: `${(a.estimatedValue / 20) * 100}%` }}
+                      />
+                    </div>
+                    <span className="w-6 shrink-0 text-right text-xs font-mono font-bold text-white">
+                      {a.estimatedValue}
+                    </span>
+                    <span className="w-12 shrink-0 text-right text-xs text-zinc-500">
+                      [{a.confidenceRange[0]}–{a.confidenceRange[1]}]
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Strengths & weaknesses */}
+          <div className="grid grid-cols-2 gap-4">
+            {report.strengths.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+                  Strengths
+                </h3>
+                <ul className="space-y-1">
+                  {report.strengths.map((s, i) => (
+                    <li key={i} className="text-xs text-emerald-400 flex items-center gap-1">
+                      <span className="text-emerald-600">+</span> {s}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {report.weaknesses.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+                  Weaknesses
+                </h3>
+                <ul className="space-y-1">
+                  {report.weaknesses.map((w, i) => (
+                    <li key={i} className="text-xs text-red-400 flex items-center gap-1">
+                      <span className="text-red-600">–</span> {w}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ReportHistory() {
+  const { gameState, selectPlayer, setScreen } = useGameStore();
+  const [selectedReport, setSelectedReport] = useState<ScoutReport | null>(null);
+
+  if (!gameState) return null;
+
+  const reports = Object.values(gameState.reports).sort(
+    (a, b) => b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason
+  );
+
+  const totalReports = reports.length;
+  const avgQuality =
+    totalReports > 0
+      ? Math.round(reports.reduce((sum, r) => sum + r.qualityScore, 0) / totalReports)
+      : 0;
+
+  const convictionCounts = reports.reduce(
+    (acc, r) => {
+      acc[r.conviction] = (acc[r.conviction] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<ConvictionLevel, number>
+  );
+
+  const selectedPlayerName = selectedReport
+    ? (() => {
+        const p = gameState.players[selectedReport.playerId];
+        return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
+      })()
+    : "";
+
+  return (
+    <GameLayout>
+      <div className="p-6">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold">Report History</h1>
+          <p className="text-sm text-zinc-400">All submitted scouting reports</p>
+        </div>
+
+        {/* Stats */}
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-zinc-500">Total Reports</p>
+              <p className="text-2xl font-bold text-emerald-400">{totalReports}</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <p className="text-xs text-zinc-500">Avg Quality</p>
+              <p className={`text-2xl font-bold ${qualityColor(avgQuality)}`}>{avgQuality}</p>
+            </CardContent>
+          </Card>
+          {(["tablePound", "strongRecommend"] as ConvictionLevel[]).map((c) => (
+            <Card key={c}>
+              <CardContent className="p-4">
+                <p className="text-xs text-zinc-500">{CONVICTION_LABELS[c]}</p>
+                <p className="text-2xl font-bold">{convictionCounts[c] ?? 0}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Reports table */}
+        <Card>
+          <CardContent className="p-0">
+            {reports.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FileText size={32} className="mb-3 text-zinc-700" aria-hidden="true" />
+                <p className="text-sm text-zinc-500">No reports filed yet.</p>
+                <p className="text-xs text-zinc-600 mt-1">
+                  Observe players and write your first scouting report.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[#27272a] text-left text-xs text-zinc-500">
+                      <th className="px-4 py-3 font-medium">Player</th>
+                      <th className="px-4 py-3 font-medium">Conviction</th>
+                      <th className="px-4 py-3 font-medium">Quality</th>
+                      <th className="px-4 py-3 font-medium">Week</th>
+                      <th className="px-4 py-3 font-medium">Club Response</th>
+                      <th className="px-4 py-3 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reports.map((report) => {
+                      const player = gameState.players[report.playerId];
+                      const playerName = player
+                        ? `${player.firstName} ${player.lastName}`
+                        : "Unknown";
+                      return (
+                        <tr
+                          key={report.id}
+                          className="border-b border-[#27272a] transition hover:bg-[#141414]"
+                        >
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => {
+                                selectPlayer(report.playerId);
+                                setScreen("playerProfile");
+                              }}
+                              className="font-medium text-white hover:text-emerald-400 transition text-left"
+                              aria-label={`View profile for ${playerName}`}
+                            >
+                              {playerName}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={CONVICTION_VARIANT[report.conviction]} className="text-[10px]">
+                              {CONVICTION_LABELS[report.conviction]}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`font-semibold ${qualityColor(report.qualityScore)}`}>
+                              {report.qualityScore}
+                            </span>
+                            <span className="text-zinc-600">/100</span>
+                          </td>
+                          <td className="px-4 py-3 text-zinc-400">
+                            W{report.submittedWeek} S{report.submittedSeason}
+                          </td>
+                          <td className="px-4 py-3">
+                            {report.clubResponse ? (
+                              <Badge variant="secondary" className="text-[10px] capitalize">
+                                {report.clubResponse}
+                              </Badge>
+                            ) : (
+                              <span className="text-zinc-600 text-xs">Pending</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setSelectedReport(report)}
+                              aria-label={`View full report for ${playerName}`}
+                            >
+                              View
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {selectedReport && (
+        <ReportDetailModal
+          report={selectedReport}
+          playerName={selectedPlayerName}
+          onClose={() => setSelectedReport(null)}
+        />
+      )}
+    </GameLayout>
+  );
+}
