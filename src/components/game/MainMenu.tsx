@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { useAuthStore } from "@/stores/authStore";
+import { AuthModal } from "./AuthModal";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, LogOut } from "lucide-react";
 import type { SaveRecord } from "@/lib/db";
 
 export function MainMenu() {
@@ -16,7 +18,11 @@ export function MainMenu() {
     deleteSlot,
     isLoadingSave,
   } = useGameStore();
+
+  const { isAuthenticated, displayName, signOut } = useAuthStore();
+
   const [showLoadPicker, setShowLoadPicker] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
 
   useEffect(() => {
     refreshSaveSlots();
@@ -26,7 +32,6 @@ export function MainMenu() {
   const manualSaves = saveSlots.filter((s) => s.slot > 0);
 
   const handleContinue = async () => {
-    // Load the most recent save (autosave or latest manual)
     const mostRecent = saveSlots.sort((a, b) => b.savedAt - a.savedAt)[0];
     if (mostRecent) {
       await loadFromSlot(mostRecent.slot);
@@ -65,6 +70,7 @@ export function MainMenu() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#0a0a0a] to-[#0f1a0f]">
+      {/* Title */}
       <div className="mb-16 text-center">
         <h1 className="mb-2 text-6xl font-bold tracking-tight text-white">
           Talent<span className="text-emerald-500">Scout</span>
@@ -86,7 +92,7 @@ export function MainMenu() {
             size="lg"
             className="w-full text-base"
             disabled={!hasSaves}
-            onClick={handleContinue}
+            onClick={() => void handleContinue()}
           >
             Continue
           </Button>
@@ -99,6 +105,32 @@ export function MainMenu() {
           >
             Load Game
           </Button>
+
+          {/* Auth status indicator */}
+          <div className="mt-2 flex flex-col items-center gap-1.5">
+            {isAuthenticated ? (
+              <>
+                <p className="text-xs text-zinc-500">
+                  Signed in as{" "}
+                  <span className="text-emerald-400">{displayName}</span>
+                </p>
+                <button
+                  onClick={() => void signOut()}
+                  className="flex items-center gap-1 text-xs text-zinc-600 transition hover:text-zinc-400"
+                >
+                  <LogOut size={11} aria-hidden="true" />
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="text-xs text-zinc-600 underline-offset-2 transition hover:text-emerald-400 hover:underline"
+              >
+                Sign In
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="w-full max-w-md space-y-3 px-4">
@@ -110,8 +142,8 @@ export function MainMenu() {
             <SaveSlotCard
               save={autosave}
               label="Autosave"
-              onLoad={() => handleLoad(autosave.slot)}
-              onDelete={() => handleDelete(autosave.slot)}
+              onLoad={() => void handleLoad(autosave.slot)}
+              onDelete={() => void handleDelete(autosave.slot)}
               formatDate={formatDate}
             />
           )}
@@ -121,8 +153,8 @@ export function MainMenu() {
               key={save.slot}
               save={save}
               label={save.name}
-              onLoad={() => handleLoad(save.slot)}
-              onDelete={() => handleDelete(save.slot)}
+              onLoad={() => void handleLoad(save.slot)}
+              onDelete={() => void handleDelete(save.slot)}
               formatDate={formatDate}
             />
           ))}
@@ -146,9 +178,17 @@ export function MainMenu() {
       <p className="mt-16 text-xs text-zinc-600">
         v0.1.0 — The scout&apos;s eye sees what others miss
       </p>
+
+      {/* Auth modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
     </div>
   );
 }
+
+// ─── SaveSlotCard ─────────────────────────────────────────────────────────────
 
 function SaveSlotCard({
   save,
@@ -169,7 +209,8 @@ function SaveSlotCard({
         <button onClick={onLoad} className="flex-1 text-left">
           <p className="text-sm font-medium text-white">{label}</p>
           <p className="text-xs text-zinc-400">
-            {save.scoutName} &middot; {save.specialization} &middot; S{save.season} W{save.week}
+            {save.scoutName} &middot; {save.specialization} &middot; S
+            {save.season} W{save.week}
           </p>
           <p className="text-xs text-zinc-500">
             Rep: {Math.round(save.reputation)} &middot; {formatDate(save.savedAt)}
@@ -183,7 +224,7 @@ function SaveSlotCard({
           className="ml-3 rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
           aria-label={`Delete ${label}`}
         >
-          <Trash2 size={14} />
+          <Trash2 size={14} aria-hidden="true" />
         </button>
       </CardContent>
     </Card>

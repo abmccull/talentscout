@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { useAuthStore } from "@/stores/authStore";
 import { MainMenu } from "@/components/game/MainMenu";
 import { NewGameScreen } from "@/components/game/NewGameScreen";
 import { Dashboard } from "@/components/game/Dashboard";
@@ -22,6 +24,14 @@ import { AnalyticsScreen } from "@/components/game/AnalyticsScreen";
 
 export default function Home() {
   const currentScreen = useGameStore((s) => s.currentScreen);
+  const initialize = useAuthStore((s) => s.initialize);
+
+  // Check for an existing Supabase session once on mount.
+  // initialize() is a no-op if the auth store has not yet been wired to
+  // Supabase — safe to call unconditionally.
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   switch (currentScreen) {
     case "mainMenu":
