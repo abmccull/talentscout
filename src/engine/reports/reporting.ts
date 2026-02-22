@@ -305,6 +305,8 @@ export function generateReportContent(
 export function calculateReportQuality(
   report: ScoutReport,
   player: Player,
+  /** Additive bonus from equipment (0–1 scale, e.g. 0.05 = +5%). */
+  reportQualityBonus?: number,
 ): number {
   if (report.attributeAssessments.length === 0) return 0;
 
@@ -345,11 +347,14 @@ export function calculateReportQuality(
   // Range tightness (when ranges are correct, tight is better)
   const tightnessScore = scoreRangeTightness(report.attributeAssessments, trueAttrs);
 
-  const quality =
+  const baseQuality =
     accuracyScore  * 0.45 +
     coverageScore  * 0.25 +
     convictionScore * 0.20 +
     tightnessScore * 0.10;
+
+  // Apply equipment report quality bonus (additive, capped at 100)
+  const quality = baseQuality + (reportQualityBonus ?? 0) * 100;
 
   return Math.round(Math.max(0, Math.min(100, quality)));
 }

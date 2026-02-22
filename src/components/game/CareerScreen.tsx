@@ -31,7 +31,7 @@ import type {
 } from "@/engine/core/types";
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
-import { purchaseEquipmentUpgrade } from "@/engine/finance";
+import { EquipmentPanel } from "./EquipmentPanel";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -178,7 +178,6 @@ export function CareerScreen() {
     setScreen,
     unlockSecondarySpecialization,
     meetManager,
-    purchaseEquipment,
   } = useGameStore();
 
   const { scout, currentSeason, jobOffers, performanceReviews } = gameState ?? {
@@ -209,12 +208,6 @@ export function CareerScreen() {
   // Phase 2: tools and finances — call hooks/derived values before early return
   const unlockedTools = gameState?.unlockedTools ?? [];
   const finances = gameState?.finances ?? null;
-
-  // Equipment upgrade availability
-  const canUpgradeEquipment =
-    finances !== null &&
-    finances.equipmentLevel < 5 &&
-    purchaseEquipmentUpgrade(finances, 0, 0) !== null;
 
   // Specialization career details — derive before early return
   const specialization = scout?.primarySpecialization;
@@ -619,80 +612,10 @@ export function CareerScreen() {
                   })}
                 </div>
 
-                {/* Equipment upgrade */}
-                {finances && (() => {
-                  const EQUIP_INFO: Record<number, { name: string; desc: string; bonus: string }> = {
-                    1: { name: "Basic Kit", desc: "Notepad, pen, and stopwatch", bonus: "No bonus" },
-                    2: { name: "Digital Toolkit", desc: "Tablet with match notes app and GPS tracker", bonus: "+2% observation accuracy" },
-                    3: { name: "Professional Suite", desc: "Video analysis software and performance database access", bonus: "+5% observation accuracy" },
-                    4: { name: "Advanced Analytics", desc: "AI-assisted analytics platform with biometric monitoring", bonus: "+8% observation accuracy" },
-                    5: { name: "Elite Setup", desc: "Full data science suite with satellite tracking and proprietary algorithms", bonus: "+12% observation accuracy" },
-                  };
-                  const UPGRADE_COSTS: Record<number, number> = { 2: 500, 3: 1500, 4: 4000, 5: 10000 };
-                  const current = EQUIP_INFO[finances.equipmentLevel] ?? EQUIP_INFO[1];
-                  const nextLevel = finances.equipmentLevel + 1;
-                  const nextCost = UPGRADE_COSTS[nextLevel];
-                  const nextInfo = EQUIP_INFO[nextLevel];
-
-                  return (
-                    <div className="mt-4 rounded-md border border-[#27272a] p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <div>
-                          <p className="text-xs font-semibold text-white">
-                            {current.name}
-                          </p>
-                          <div className="mt-1 flex items-center gap-0.5">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <Star
-                                key={i}
-                                size={10}
-                                aria-hidden="true"
-                                className={
-                                  i < finances.equipmentLevel
-                                    ? "text-amber-400 fill-amber-400"
-                                    : "text-zinc-700"
-                                }
-                              />
-                            ))}
-                            <span className="ml-1 text-[10px] text-zinc-500">
-                              Level {finances.equipmentLevel}/5
-                            </span>
-                          </div>
-                        </div>
-                        {finances.equipmentLevel < 5 ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-[10px] h-7 px-2"
-                            onClick={() => purchaseEquipment()}
-                            disabled={!canUpgradeEquipment}
-                            aria-label={
-                              canUpgradeEquipment
-                                ? `Upgrade to ${nextInfo?.name} for £${nextCost?.toLocaleString()}`
-                                : "Cannot afford equipment upgrade"
-                            }
-                          >
-                            {canUpgradeEquipment ? `Upgrade — £${nextCost?.toLocaleString()}` : "Cannot Afford"}
-                          </Button>
-                        ) : (
-                          <Badge variant="success" className="text-[10px]">
-                            Max Level
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-zinc-400">{current.desc}</p>
-                      <p className="text-[10px] text-emerald-400 mt-1">{current.bonus}</p>
-                      {nextInfo && nextCost !== undefined && (
-                        <div className="mt-2 rounded border border-zinc-800 bg-zinc-900/50 px-2 py-1.5">
-                          <p className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider mb-0.5">Next: {nextInfo.name}</p>
-                          <p className="text-[10px] text-zinc-400">{nextInfo.desc}</p>
-                          <p className="text-[10px] text-emerald-400">{nextInfo.bonus}</p>
-                          <p className="text-[10px] text-amber-400 mt-0.5">Cost: £{nextCost.toLocaleString()}</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* Equipment loadout */}
+                <div className="mt-4">
+                  <EquipmentPanel />
+                </div>
               </CardContent>
             </Card>
           </div>

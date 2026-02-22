@@ -27,8 +27,12 @@ import {
   ArrowRight,
   Users,
   Brain,
+  BookOpen,
+  Monitor,
+  Plane,
 } from "lucide-react";
-import { isBroke } from "@/engine/finance";
+import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS } from "@/engine/finance";
+import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { SeasonTimeline } from "./SeasonTimeline";
 
@@ -376,22 +380,37 @@ export function Dashboard() {
                     )}
                   </div>
 
-                  {/* Equipment level */}
+                  {/* Equipment loadout */}
                   <div>
                     <p className="text-xs text-zinc-500 mb-1">Equipment</p>
-                    <div className="flex items-center gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          size={14}
-                          aria-hidden="true"
-                          className={
-                            i < finances.equipmentLevel
-                              ? "text-amber-400 fill-amber-400"
-                              : "text-zinc-700"
-                          }
-                        />
-                      ))}
+                    <div className="flex items-center gap-1">
+                      {ALL_EQUIPMENT_SLOTS.map((slot) => {
+                        const itemId = finances.equipment?.loadout[slot];
+                        const item = itemId ? getEquipmentItem(itemId) : null;
+                        const tier = item?.tier ?? 1;
+                        const isSpecialist = !!item?.specialization;
+                        const SlotIcon = (
+                          { notebook: BookOpen, video: Monitor, travel: Plane, network: Users, analysis: BarChart3 } as Record<EquipmentSlot, React.ElementType>
+                        )[slot];
+                        const tierColor = isSpecialist
+                          ? "text-purple-400 ring-1 ring-purple-500/50"
+                          : tier === 4
+                            ? "text-emerald-400"
+                            : tier === 3
+                              ? "text-amber-400"
+                              : tier === 2
+                                ? "text-blue-400"
+                                : "text-zinc-600";
+                        return (
+                          <div
+                            key={slot}
+                            className={`rounded p-0.5 ${tierColor}`}
+                            title={item?.name ?? slot}
+                          >
+                            <SlotIcon size={14} aria-hidden="true" />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

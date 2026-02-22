@@ -454,26 +454,29 @@ export function getForeignScoutingPenalty(scout: Scout, country: string): number
 export function updateCountryReputation(
   rep: CountryReputation,
   event: "report" | "success" | "contact",
+  /** Flat bonus added to familiarity gain from equipment (e.g. 5 = +5 familiarity). */
+  familiarityGainBonus?: number,
 ): CountryReputation {
+  const bonus = familiarityGainBonus ?? 0;
   switch (event) {
     case "report":
       return {
         ...rep,
-        familiarity: clamp(rep.familiarity + 2, 0, 100),
+        familiarity: clamp(rep.familiarity + 2 + bonus, 0, 100),
         reportsSubmitted: rep.reportsSubmitted + 1,
       };
 
     case "success":
       return {
         ...rep,
-        familiarity: clamp(rep.familiarity + 5, 0, 100),
+        familiarity: clamp(rep.familiarity + 5 + bonus, 0, 100),
         successfulFinds: rep.successfulFinds + 1,
       };
 
     case "contact":
       return {
         ...rep,
-        familiarity: clamp(rep.familiarity + 3, 0, 100),
+        familiarity: clamp(rep.familiarity + 3 + bonus, 0, 100),
         contactCount: rep.contactCount + 1,
       };
   }

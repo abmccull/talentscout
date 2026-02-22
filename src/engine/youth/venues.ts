@@ -104,6 +104,8 @@ export function getYouthVenuePool(
   scout: Scout,
   subRegionId?: string,
   targetYouthId?: string,
+  /** Fractional bonus to discovery pool size from equipment (e.g. 0.10 = +10% more youth visible). */
+  youthDiscoveryBonus?: number,
 ): UnsignedYouth[] {
   // Step 1: base pool — active (not placed, not retired) youth
   const activeYouth = Object.values(unsignedYouth).filter(
@@ -164,9 +166,10 @@ export function getYouthVenuePool(
       break;
   }
 
-  // Step 4: shuffle and slice to venue pool size range
+  // Step 4: shuffle and slice to venue pool size range (equipment bonus expands pool)
   const config = VENUE_POOL_SIZES[venueType];
-  const poolSize = rng.nextInt(config.minPoolSize, config.maxPoolSize);
+  const bonusMultiplier = 1 + (youthDiscoveryBonus ?? 0);
+  const poolSize = Math.round(rng.nextInt(config.minPoolSize, config.maxPoolSize) * bonusMultiplier);
   const shuffled = rng.shuffle(filtered);
   return shuffled.slice(0, poolSize);
 }

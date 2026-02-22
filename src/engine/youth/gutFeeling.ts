@@ -234,6 +234,8 @@ export function rollGutFeeling(
   youth: UnsignedYouth,
   context: ObservationContext,
   perkModifiers?: GutFeelingPerkModifiers,
+  /** Fractional bonus to gut feeling trigger rate from equipment (e.g. 0.20 = +20%). */
+  equipmentGutFeelingBonus?: number,
 ): GutFeeling | null {
   // --- Compute raw chance ---
   const intuitionBonus = Math.max(0, scout.attributes.intuition - 10) * 0.02;
@@ -252,6 +254,11 @@ export function rollGutFeeling(
   // Perk multiplier for very young players
   if (perkModifiers?.gutFeelingBonus === true && youth.player.age < 16) {
     chance *= 1.4;
+  }
+
+  // Equipment gut feeling bonus (multiplicative with base chance)
+  if (equipmentGutFeelingBonus && equipmentGutFeelingBonus > 0) {
+    chance *= 1 + equipmentGutFeelingBonus;
   }
 
   // --- Roll ---

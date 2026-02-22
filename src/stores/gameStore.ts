@@ -100,7 +100,13 @@ import {
   initializeFinances,
   processWeeklyFinances,
   purchaseEquipmentUpgrade,
+  purchaseEquipmentItem,
+  sellEquipmentItem,
+  equipItem,
+  getActiveEquipmentBonuses,
+  migrateEquipmentLevel,
 } from "@/engine/finance";
+import type { EquipmentItemId } from "@/engine/finance";
 import {
   generateWeeklyEvent,
   resolveEventChoice,
@@ -112,7 +118,6 @@ import {
 } from "@/engine/rivals";
 import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
-import { getEquipmentObservationBonus } from "@/engine/finance/expenses";
 import { generateManagerProfiles } from "@/engine/analytics";
 import { generateRegionalYouth, generateAcademyIntake } from "@/engine/youth/generation";
 import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
@@ -245,7 +250,13 @@ interface GameStore {
   // Phase 2 actions
   acknowledgeNarrativeEvent: (eventId: string) => void;
   resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
+  /** @deprecated Use purchaseEquipItem/sellEquipItem/equipEquipItem instead. */
   purchaseEquipment: () => void;
+
+  // Equipment loadout actions
+  purchaseEquipItem: (itemId: EquipmentItemId) => void;
+  sellEquipItem: (itemId: EquipmentItemId) => void;
+  equipEquipItem: (itemId: EquipmentItemId) => void;
 
   // Watchlist
   toggleWatchlist: (playerId: string) => void;
@@ -567,6 +578,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       state.scout.skills.playerJudgment = 5;
       state.scout.skills.potentialAssessment = 5;
     }
+    // Migration: convert old equipmentLevel to new equipment loadout system
+    if (state.finances && !state.finances.equipment) {
+      state.finances.equipment = migrateEquipmentLevel(state.finances.equipmentLevel);
+    }
     set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
   },
 
@@ -760,6 +775,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // Issue 5b: Get tool bonuses for relationship gain
       const meetingToolBonuses = getActiveToolBonuses(stateWithScheduleApplied.unlockedTools);
+      const meetingEquipBonuses = stateWithScheduleApplied.finances?.equipment
+        ? getActiveEquipmentBonuses(stateWithScheduleApplied.finances.equipment.loadout)
+        : undefined;
 
       for (const contactId of weekResult.meetingsHeld) {
         const contact = updatedContacts[contactId];
@@ -770,8 +788,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         );
         const result = meetContact(meetingRng, stateWithScheduleApplied.scout, contact);
 
-        // Issue 5b: Apply relationship gain bonus from tools
-        const relBonus = meetingToolBonuses.relationshipGainBonus ?? 0;
+        // Issue 5b: Apply relationship gain bonus from tools + equipment
+        const relBonus = (meetingToolBonuses.relationshipGainBonus ?? 0) + (meetingEquipBonuses?.relationshipGainBonus ?? 0);
         const adjustedChange = result.relationshipChange >= 0
           ? Math.round(result.relationshipChange * (1 + relBonus))
           : result.relationshipChange;
@@ -2631,7 +2649,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Issue 5a+6: Compute tool and equipment bonuses for observation confidence
     const toolBonuses = getActiveToolBonuses(gameState.unlockedTools);
-    const equipBonus = getEquipmentObservationBonus(gameState.finances?.equipmentLevel ?? 1);
+    const equipBonuses = gameState.finances?.equipment
+      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+      : undefined;
+    const equipBonus = equipBonuses?.observationConfidence ?? 0;
 
     for (const focus of activeMatch.focusSelections) {
       const player = gameState.players[focus.playerId];
@@ -3128,6 +3149,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     if (!updatedFinances) return; // Cannot afford or already at max level
 
+    set({ gameState: { ...gameState, finances: updatedFinances } });
+  },
+
+  purchaseEquipItem: (itemId: EquipmentItemId) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+
+    const updatedFinances = purchaseEquipmentItem(
+      gameState.finances,
+      itemId,
+      gameState.currentWeek,
+      gameState.currentSeason,
+    );
+
+    if (!updatedFinances) return;
+    set({ gameState: { ...gameState, finances: updatedFinances } });
+  },
+
+  sellEquipItem: (itemId: EquipmentItemId) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+
+    const updatedFinances = sellEquipmentItem(
+      gameState.finances,
+      itemId,
+      gameState.currentWeek,
+      gameState.currentSeason,
+    );
+
+    if (!updatedFinances) return;
+    set({ gameState: { ...gameState, finances: updatedFinances } });
+  },
+
+  equipEquipItem: (itemId: EquipmentItemId) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+
+    const updatedFinances = equipItem(gameState.finances, itemId);
+
+    if (!updatedFinances) return;
     set({ gameState: { ...gameState, finances: updatedFinances } });
   },
 

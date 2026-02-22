@@ -447,6 +447,8 @@ export function getHiddenAttributeIntel(
   contact: Contact,
   playerId: string,
   player: Player,
+  /** Additive bonus to intel reliability from equipment (0–1 scale). */
+  intelReliabilityBonus?: number,
 ): HiddenIntel | null {
   if (!contact.knownPlayerIds.includes(playerId)) return null;
   if (contact.relationship < 35) return null;
@@ -464,9 +466,9 @@ export function getHiddenAttributeIntel(
 
   const hints = HIDDEN_INTEL_HINTS[attribute][isHigh ? "high" : "low"];
 
-  // Reliability varies: contact's base reliability ± some noise
+  // Reliability varies: contact's base reliability ± some noise + equipment bonus
   const reliabilityNoise = rng.nextFloat(-0.1, 0.1);
-  const reliability = clamp(contact.reliability / 100 + reliabilityNoise, 0, 1);
+  const reliability = clamp(contact.reliability / 100 + reliabilityNoise + (intelReliabilityBonus ?? 0), 0, 1);
 
   return {
     playerId,

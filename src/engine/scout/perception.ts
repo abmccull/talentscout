@@ -224,6 +224,8 @@ export function observePlayerLight(
   scout: Scout,
   context: ObservationContext,
   existingObservations: Observation[],
+  /** Additional attributes to observe per session (from equipment bonuses). */
+  extraAttributes?: number,
 ): Observation {
   // Count prior readings for this player
   const priorCounts = new Map<PlayerAttribute, number>();
@@ -254,8 +256,9 @@ export function observePlayerLight(
 
   const visibleArray = Array.from(baseVisible);
 
-  // Select 4–7 attributes to observe (fewer than a full match)
-  const attrCount = Math.min(visibleArray.length, rng.nextInt(4, 7));
+  // Select 4–7 attributes to observe (fewer than a full match), plus equipment bonus
+  const baseCount = rng.nextInt(4, 7);
+  const attrCount = Math.min(visibleArray.length, baseCount + (extraAttributes ?? 0));
   const selected: PlayerAttribute[] = [];
   const pool = [...visibleArray];
   for (let i = 0; i < attrCount && pool.length > 0; i++) {

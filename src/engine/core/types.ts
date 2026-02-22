@@ -1224,6 +1224,25 @@ export interface NarrativeEvent {
   selectedChoice?: number;
 }
 
+export type EquipmentSlot = "notebook" | "video" | "travel" | "network" | "analysis";
+
+export type EquipmentItemId = string;
+
+export interface EquipmentLoadout {
+  notebook: EquipmentItemId;
+  video: EquipmentItemId;
+  travel: EquipmentItemId;
+  network: EquipmentItemId;
+  analysis: EquipmentItemId;
+}
+
+export interface EquipmentInventory {
+  /** All items the scout has purchased (can re-equip without repurchasing). */
+  ownedItems: EquipmentItemId[];
+  /** Currently equipped items per slot. */
+  loadout: EquipmentLoadout;
+}
+
 export interface FinancialRecord {
   /** Current balance. */
   balance: number;
@@ -1231,10 +1250,12 @@ export interface FinancialRecord {
   monthlyIncome: number;
   /** Monthly expenses breakdown. */
   expenses: Record<ExpenseType, number>;
-  /** Equipment quality level 1–5. Higher = better observation quality. */
+  /** @deprecated Use `equipment` loadout instead. Kept for save migration. */
   equipmentLevel: number;
   /** History of transactions. */
   transactions: { week: number; season: number; amount: number; description: string }[];
+  /** 5-slot equipment loadout and owned items. */
+  equipment?: EquipmentInventory;
 }
 
 export type ExpenseType =

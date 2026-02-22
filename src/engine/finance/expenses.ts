@@ -9,6 +9,9 @@
  */
 
 import type { Scout, FinancialRecord, ExpenseType, CareerTier } from "../core/types";
+import { getEquipmentMonthlyTotal } from "./equipmentBonuses";
+import { DEFAULT_LOADOUT, DEFAULT_OWNED_ITEMS } from "./equipmentCatalog";
+import type { EquipmentInventory } from "./equipmentCatalog";
 
 // =============================================================================
 // CONSTANTS
@@ -103,6 +106,11 @@ const NPC_SALARY_PER_SCOUT: Record<4 | 5, number> = {
 export function initializeFinances(scout: Scout): FinancialRecord {
   const monthlyIncome = scout.salary * 4; // weekly salary × 4 weeks
 
+  const defaultEquipment: EquipmentInventory = {
+    ownedItems: [...DEFAULT_OWNED_ITEMS],
+    loadout: { ...DEFAULT_LOADOUT },
+  };
+
   // Build the initial expense snapshot using the scout's starting state.
   const expenses = calculateMonthlyExpenses(scout, {
     balance: 500,
@@ -110,6 +118,7 @@ export function initializeFinances(scout: Scout): FinancialRecord {
     expenses: emptyExpenses(),
     equipmentLevel: 1,
     transactions: [],
+    equipment: defaultEquipment,
   });
 
   return {
@@ -118,6 +127,7 @@ export function initializeFinances(scout: Scout): FinancialRecord {
     expenses,
     equipmentLevel: 1,
     transactions: [],
+    equipment: defaultEquipment,
   };
 }
 
@@ -144,8 +154,10 @@ export function calculateMonthlyExpenses(
   const travel = travelBase + travelSurcharge;
 
   // --- Subscriptions ---
-  const subscriptions =
-    EQUIPMENT_SUBSCRIPTION_COST[finances.equipmentLevel] ?? EQUIPMENT_SUBSCRIPTION_COST[1];
+  // If the new equipment loadout exists, use its monthly total; otherwise fall back to old system.
+  const subscriptions = finances.equipment
+    ? getEquipmentMonthlyTotal(finances.equipment.loadout)
+    : (EQUIPMENT_SUBSCRIPTION_COST[finances.equipmentLevel] ?? EQUIPMENT_SUBSCRIPTION_COST[1]);
 
   // --- Equipment (one-time only; recurring = 0) ---
   const equipment = 0;
