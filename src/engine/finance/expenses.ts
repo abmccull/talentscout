@@ -8,7 +8,15 @@
  * "Monthly" cycle: every 4 weeks a paycheck arrives and expenses are deducted.
  */
 
-import type { Scout, FinancialRecord, ExpenseType, CareerTier } from "../core/types";
+import type {
+  Scout,
+  FinancialRecord,
+  ExpenseType,
+  CareerTier,
+  CareerPath,
+  LifestyleConfig,
+  Office,
+} from "../core/types";
 import { getEquipmentMonthlyTotal } from "./equipmentBonuses";
 import { DEFAULT_LOADOUT, DEFAULT_OWNED_ITEMS } from "./equipmentCatalog";
 import type { EquipmentInventory } from "./equipmentCatalog";
@@ -103,32 +111,63 @@ const NPC_SALARY_PER_SCOUT: Record<4 | 5, number> = {
  * their salary. Equipment begins at level 1 (no bonus). The expense record is
  * populated with initial estimates for the first month.
  */
-export function initializeFinances(scout: Scout): FinancialRecord {
+export function initializeFinances(scout: Scout, careerPath?: CareerPath): FinancialRecord {
   const monthlyIncome = scout.salary * 4; // weekly salary × 4 weeks
+  const path = careerPath ?? scout.careerPath ?? "club";
 
   const defaultEquipment: EquipmentInventory = {
     ownedItems: [...DEFAULT_OWNED_ITEMS],
     loadout: { ...DEFAULT_LOADOUT },
   };
 
-  // Build the initial expense snapshot using the scout's starting state.
-  const expenses = calculateMonthlyExpenses(scout, {
+  const lifestyle = defaultLifestyleForTier(scout.careerTier);
+  const office: Office = { tier: "home", monthlyCost: 0, qualityBonus: 0, maxEmployees: 0 };
+
+  // Build a temporary record so we can calculate initial expenses
+  const stub: FinancialRecord = {
     balance: 500,
     monthlyIncome,
     expenses: emptyExpenses(),
     equipmentLevel: 1,
     transactions: [],
     equipment: defaultEquipment,
-  });
-
-  return {
-    balance: 500,
-    monthlyIncome,
-    expenses,
-    equipmentLevel: 1,
-    transactions: [],
-    equipment: defaultEquipment,
+    careerPath: path,
+    independentTier: path === "independent" ? 1 : undefined,
+    reportSalesRevenue: 0,
+    placementFeeRevenue: 0,
+    retainerRevenue: 0,
+    consultingRevenue: 0,
+    sellOnRevenue: 0,
+    bonusRevenue: 0,
+    retainerContracts: [],
+    activeLoan: undefined,
+    placementFeeRecords: [],
+    reportListings: [],
+    consultingContracts: [],
+    office,
+    employees: [],
+    lifestyle,
+    completedCourses: [],
+    activeEnrollment: undefined,
+    ownedVehicle: undefined,
+    marketTemperature: "normal",
+    activeEconomicEvents: [],
   };
+
+  const expenses = calculateMonthlyExpenses(scout, stub);
+
+  return { ...stub, expenses };
+}
+
+function defaultLifestyleForTier(tier: CareerTier): LifestyleConfig {
+  const configs: Record<CareerTier, LifestyleConfig> = {
+    1: { level: 1, monthlyCost: 200, networkingBonus: 0, salaryOfferBonus: 0 },
+    2: { level: 2, monthlyCost: 500, networkingBonus: 0.05, salaryOfferBonus: 0 },
+    3: { level: 3, monthlyCost: 1000, networkingBonus: 0.10, salaryOfferBonus: 0.05 },
+    4: { level: 4, monthlyCost: 2000, networkingBonus: 0.15, salaryOfferBonus: 0.10 },
+    5: { level: 5, monthlyCost: 5000, networkingBonus: 0.20, salaryOfferBonus: 0.15 },
+  };
+  return configs[tier];
 }
 
 /**
@@ -175,6 +214,31 @@ export function calculateMonthlyExpenses(
   // --- Other ---
   const other = FLAT_OTHER_EXPENSE;
 
+  // --- Lifestyle (overrides rent for revamped saves) ---
+  const lifestyle = finances.lifestyle ? finances.lifestyle.monthlyCost : 0;
+
+  // --- Office cost (independent path) ---
+  const officeCost = finances.office ? finances.office.monthlyCost : 0;
+
+  // --- Employee salaries (agency) ---
+  const employeeSalaries = finances.employees
+    ? finances.employees.reduce((sum, e) => sum + e.salary, 0)
+    : 0;
+
+  // --- Marketing spend (agency) ---
+  const marketing = 0; // Set via setMarketingSpend action
+
+  // --- Loan payment ---
+  const loanPayment = finances.activeLoan ? finances.activeLoan.monthlyPayment : 0;
+
+  // --- Course fees ---
+  const courseFees = 0; // One-time deduction at enrollment, not recurring
+
+  // --- Insurance (scales with agency size) ---
+  const insurance = finances.employees && finances.employees.length > 0
+    ? Math.round(finances.employees.length * 50)
+    : 0;
+
   return {
     rent,
     travel,
@@ -182,6 +246,13 @@ export function calculateMonthlyExpenses(
     equipment,
     npcSalaries,
     other,
+    lifestyle,
+    officeCost,
+    employeeSalaries,
+    marketing,
+    loanPayment,
+    courseFees,
+    insurance,
   };
 }
 
@@ -328,6 +399,13 @@ function emptyExpenses(): Record<ExpenseType, number> {
     equipment: 0,
     npcSalaries: 0,
     other: 0,
+    lifestyle: 0,
+    officeCost: 0,
+    employeeSalaries: 0,
+    marketing: 0,
+    loanPayment: 0,
+    courseFees: 0,
+    insurance: 0,
   };
 }
 
@@ -335,12 +413,9 @@ function emptyExpenses(): Record<ExpenseType, number> {
  * Sum all expense values into a single monthly total.
  */
 function sumExpenses(expenses: Record<ExpenseType, number>): number {
-  return (
-    expenses.rent +
-    expenses.travel +
-    expenses.subscriptions +
-    expenses.equipment +
-    expenses.npcSalaries +
-    expenses.other
-  );
+  let total = 0;
+  for (const key of Object.keys(expenses) as ExpenseType[]) {
+    total += expenses[key];
+  }
+  return total;
 }

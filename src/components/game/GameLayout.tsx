@@ -17,6 +17,7 @@ import {
   Award,
   BarChart3,
   GraduationCap,
+  Wallet,
   X,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ const NAV_ITEMS: { screen: GameScreen; label: string; icon: React.ElementType }[
   { screen: "playerDatabase", label: "Players", icon: Users },
   { screen: "reportHistory", label: "Reports", icon: FileText },
   { screen: "career", label: "Career", icon: Briefcase },
+  { screen: "finances", label: "Finances", icon: Wallet },
   { screen: "network", label: "Network", icon: Network },
   { screen: "inbox", label: "Inbox", icon: Mail },
   { screen: "npcManagement", label: "Scouts", icon: UserCheck },

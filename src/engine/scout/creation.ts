@@ -239,6 +239,7 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
     unlockedPerks: [...STARTING_PERKS[specialization]],
 
     careerTier,
+    careerPath: "club",
     reputation: 10,
     clubTrust: startingClubId ? 20 : 0,
     specializationReputation: 5,

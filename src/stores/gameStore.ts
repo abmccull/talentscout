@@ -29,6 +29,13 @@ import type {
   HiddenIntel,
   UnsignedYouth,
   ManagerDirective,
+  RetainerContract,
+  ConsultingContract,
+  OfficeTier,
+  AgencyEmployeeRole,
+  LoanType,
+  LifestyleLevel,
+  CareerPath,
 } from "@/engine/core/types";
 import {
   generateDirectives,
@@ -85,7 +92,11 @@ import {
   recordDiscovery,
   processSeasonDiscoveries,
   processMonthlySnapshot,
+  checkIndependentTierAdvancement,
+  advanceIndependentTier,
 } from "@/engine/career/index";
+import { chooseCareerPath, canChooseIndependentPath } from "@/engine/career/pathChoice";
+import { processWeeklyCourseProgress, enrollInCourse } from "@/engine/career/courses";
 import {
   createLeaderboardEntry,
   submitLeaderboardEntry,
@@ -105,12 +116,34 @@ import {
   equipItem,
   getActiveEquipmentBonuses,
   migrateEquipmentLevel,
+  migrateFinancialRecord,
+  processMarketplaceSales,
+  expireOldListings,
+  processRetainerDeliveries,
+  processLoanPayment,
+  processConsultingDeadline,
+  processEmployeeWeek,
+  changeLifestyle,
+  listReport,
+  withdrawListing,
+  acceptRetainer,
+  cancelRetainer,
+  upgradeOffice,
+  hireEmployee,
+  fireEmployee,
+  takeLoan,
+  repayLoanEarly,
+  acceptConsulting,
 } from "@/engine/finance";
 import type { EquipmentItemId } from "@/engine/finance";
 import {
   generateWeeklyEvent,
   resolveEventChoice,
   acknowledgeEvent,
+  updateMarketTemperature,
+  generateEconomicEvent,
+  applyEconomicEvent,
+  expireEconomicEvents,
 } from "@/engine/events";
 import {
   generateRivalScouts,
@@ -154,7 +187,8 @@ export type GameScreen =
   | "analytics"
   | "fixtureBrowser"
   | "youthScouting"
-  | "alumniDashboard";
+  | "alumniDashboard"
+  | "finances";
 
 interface GameStore {
   // Navigation
@@ -257,6 +291,21 @@ interface GameStore {
   purchaseEquipItem: (itemId: EquipmentItemId) => void;
   sellEquipItem: (itemId: EquipmentItemId) => void;
   equipEquipItem: (itemId: EquipmentItemId) => void;
+
+  // Economics actions
+  chooseCareerPath: (path: CareerPath) => void;
+  changeLifestyle: (level: LifestyleLevel) => void;
+  listReportForSale: (reportId: string, price: number, isExclusive: boolean, targetClubId?: string) => void;
+  withdrawReportListing: (listingId: string) => void;
+  acceptRetainerContract: (contract: RetainerContract) => void;
+  cancelRetainerContract: (contractId: string) => void;
+  enrollInCourse: (courseId: string) => void;
+  upgradeAgencyOffice: (tier: OfficeTier) => void;
+  hireAgencyEmployee: (role: AgencyEmployeeRole) => void;
+  fireAgencyEmployee: (employeeId: string) => void;
+  takeLoanAction: (type: LoanType, amount: number) => void;
+  repayLoanAction: () => void;
+  acceptConsultingContract: (contract: ConsultingContract) => void;
 
   // Watchlist
   toggleWatchlist: (playerId: string) => void;
@@ -588,9 +637,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       migrated.scout.skills.playerJudgment = 5;
       migrated.scout.skills.potentialAssessment = 5;
     }
+    // Migration: add careerPath to scout if missing
+    if (migrated.scout.careerPath === undefined) {
+      migrated.scout.careerPath = "club";
+    }
     // Migration: convert old equipmentLevel to new equipment loadout system
     if (migrated.finances && !migrated.finances.equipment) {
       migrated.finances.equipment = migrateEquipmentLevel(migrated.finances.equipmentLevel);
+    }
+    // Migration: economics revamp — add new financial fields
+    if (migrated.finances && migrated.finances.careerPath === undefined) {
+      migrated.finances = migrateFinancialRecord(migrated.finances, migrated.scout);
     }
     set({ gameState: migrated, isLoaded: true, currentScreen: "dashboard" });
   },
@@ -631,6 +688,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (state.scout.skills.playerJudgment === undefined) {
           state.scout.skills.playerJudgment = 5;
           state.scout.skills.potentialAssessment = 5;
+        }
+        // Migration: add careerPath to scout if missing
+        if (state.scout.careerPath === undefined) {
+          (state.scout as Scout & { careerPath?: string }).careerPath = "club";
+        }
+        // Migration: economics revamp
+        if (state.finances && state.finances.careerPath === undefined) {
+          state.finances = migrateFinancialRecord(state.finances, state.scout);
         }
         set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
       }
@@ -1957,6 +2022,74 @@ export const useGameStore = create<GameStore>((set, get) => ({
       stateWithPhase2 = { ...stateWithPhase2, finances: updatedFinances };
     }
 
+    // 1a. Economics revamp: process marketplace, retainers, loans, consulting, courses, agency, economic events
+    if (stateWithPhase2.finances) {
+      const econRng = createRNG(
+        `${gameState.seed}-econ-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+
+      let econFinances = stateWithPhase2.finances;
+
+      // Market temperature update
+      const newTemp = updateMarketTemperature(
+        stateWithPhase2.transferWindow,
+        stateWithPhase2.currentWeek,
+      );
+      econFinances = { ...econFinances, marketTemperature: newTemp };
+
+      // Economic events: generate and expire
+      econFinances = expireEconomicEvents(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+      const newEvent = generateEconomicEvent(econRng, econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+      if (newEvent) {
+        econFinances = applyEconomicEvent(econFinances, newEvent);
+      }
+
+      // Report marketplace: process sales for independent scouts
+      if (stateWithPhase2.scout.careerPath === "independent") {
+        econFinances = processMarketplaceSales(
+          econRng,
+          econFinances,
+          stateWithPhase2.clubs,
+          stateWithPhase2.reports,
+          stateWithPhase2.scout,
+          stateWithPhase2.currentWeek,
+          stateWithPhase2.currentSeason,
+        );
+        econFinances = expireOldListings(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+      }
+
+      // Retainer deliveries (monthly)
+      econFinances = processRetainerDeliveries(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+
+      // Loan payments (monthly)
+      econFinances = processLoanPayment(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+
+      // Consulting deadlines
+      econFinances = processConsultingDeadline(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+
+      // Course progress
+      econFinances = processWeeklyCourseProgress(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+
+      // Agency employee processing
+      if (econFinances.employees.length > 0) {
+        econFinances = processEmployeeWeek(econRng, econFinances);
+      }
+
+      // Independent tier advancement check
+      if (stateWithPhase2.scout.careerPath === "independent") {
+        const nextTier = checkIndependentTierAdvancement(stateWithPhase2.scout, econFinances);
+        if (nextTier) {
+          const { scout: advancedScout, finances: advancedFinances } = advanceIndependentTier(
+            stateWithPhase2.scout, econFinances, nextTier,
+          );
+          stateWithPhase2 = { ...stateWithPhase2, scout: advancedScout };
+          econFinances = advancedFinances;
+        }
+      }
+
+      stateWithPhase2 = { ...stateWithPhase2, finances: econFinances };
+    }
+
     // 1b. Transfer window urgency — generate urgent assessments during open windows
     const activeTransferWindow = stateWithPhase2.transferWindow;
     if (activeTransferWindow?.isOpen) {
@@ -3234,6 +3367,131 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ? gameState.watchlist.filter((id) => id !== playerId)
         : [...gameState.watchlist, playerId];
     set({ gameState: { ...gameState, watchlist: next } });
+  },
+
+  // Economics actions
+
+  chooseCareerPath: (path: CareerPath) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const result = chooseCareerPath(gameState.scout, gameState.finances, path);
+    set({
+      gameState: {
+        ...gameState,
+        scout: result.scout,
+        finances: result.finances,
+      },
+    });
+  },
+
+  changeLifestyle: (level: LifestyleLevel) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = changeLifestyle(gameState.finances, level);
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  listReportForSale: (reportId: string, price: number, isExclusive: boolean, targetClubId?: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = listReport(
+      gameState.finances, reportId, price, isExclusive,
+      targetClubId, gameState.currentWeek, gameState.currentSeason,
+    );
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  withdrawReportListing: (listingId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = withdrawListing(gameState.finances, listingId);
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  acceptRetainerContract: (contract: RetainerContract) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = acceptRetainer(gameState.finances, contract, gameState.scout);
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  cancelRetainerContract: (contractId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = cancelRetainer(gameState.finances, contractId);
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  enrollInCourse: (courseId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = enrollInCourse(
+      gameState.finances, courseId,
+      gameState.currentWeek, gameState.currentSeason,
+    );
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  upgradeAgencyOffice: (tier: OfficeTier) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = upgradeOffice(gameState.finances, tier);
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  hireAgencyEmployee: (role: AgencyEmployeeRole) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const rng = createRNG(`${gameState.seed}-hire-${gameState.currentWeek}`);
+    const updated = hireEmployee(rng, gameState.finances, role);
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  fireAgencyEmployee: (employeeId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = fireEmployee(gameState.finances, employeeId);
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  takeLoanAction: (type: LoanType, amount: number) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = takeLoan(
+      gameState.finances, type, amount,
+      gameState.currentWeek, gameState.currentSeason,
+    );
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  repayLoanAction: () => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = repayLoanEarly(
+      gameState.finances, gameState.currentWeek, gameState.currentSeason,
+    );
+    if (updated) {
+      set({ gameState: { ...gameState, finances: updated } });
+    }
+  },
+
+  acceptConsultingContract: (contract: ConsultingContract) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = acceptConsulting(gameState.finances, contract);
+    set({ gameState: { ...gameState, finances: updated } });
   },
 
   // Helpers

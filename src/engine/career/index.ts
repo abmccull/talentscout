@@ -43,3 +43,15 @@ export {
   getWonderkidDiscoveries,
   getDiscoveryStats,
 } from './discoveryTracking';
+
+export {
+  canChooseIndependentPath,
+  chooseCareerPath,
+  getIndependentTierRequirements,
+  checkIndependentTierAdvancement,
+  advanceIndependentTier,
+} from './pathChoice';
+
+export {
+  processWeeklyCourseProgress,
+} from './courses';

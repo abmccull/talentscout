@@ -32,6 +32,9 @@ import type {
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
 import { EquipmentPanel } from "./EquipmentPanel";
+import { canChooseIndependentPath } from "@/engine/career/pathChoice";
+import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
+import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -209,6 +212,14 @@ export function CareerScreen() {
   const unlockedTools = gameState?.unlockedTools ?? [];
   const finances = gameState?.finances ?? null;
 
+  // Career path choice eligibility — derive before early return
+  const showPathChoice =
+    (scout?.careerTier ?? 0) >= 2 &&
+    scout?.careerPath === "club" &&
+    finances !== null &&
+    scout !== undefined &&
+    canChooseIndependentPath(scout, finances);
+
   // Specialization career details — derive before early return
   const specialization = scout?.primarySpecialization;
   const transferRecords = gameState?.transferRecords ?? [];
@@ -251,6 +262,41 @@ export function CareerScreen() {
           <h1 className="text-2xl font-bold">Career</h1>
           <p className="text-sm text-zinc-400">Season {currentSeason}</p>
         </div>
+
+        {/* ── Career path choice (tier 2+, club default, eligible) ──────── */}
+        {showPathChoice && (
+          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+            <div className="mb-3">
+              <p className="text-sm font-semibold text-amber-400">Career Path Choice Available</p>
+              <p className="mt-0.5 text-xs text-zinc-400">
+                You have earned enough reputation to choose your career direction. This choice shapes
+                how you earn and grow going forward.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => useGameStore.getState().chooseCareerPath("club" as CareerPath)}
+                className="cursor-pointer rounded-md border border-blue-500/30 bg-blue-500/5 p-3 text-left transition hover:border-blue-500/60 hover:bg-blue-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+              >
+                <p className="mb-1 text-sm font-semibold text-blue-300">Club Scout</p>
+                <p className="text-xs text-zinc-400">
+                  Stable salary, performance bonuses, work within a club&apos;s scouting department
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => useGameStore.getState().chooseCareerPath("independent" as CareerPath)}
+                className="cursor-pointer rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-left transition hover:border-emerald-500/60 hover:bg-emerald-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
+              >
+                <p className="mb-1 text-sm font-semibold text-emerald-300">Independent Scout</p>
+                <p className="text-xs text-zinc-400">
+                  Sell reports on the marketplace, build retainer contracts, grow your own agency
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* ── Left column ─────────────────────────────────────────────── */}
@@ -368,6 +414,43 @@ export function CareerScreen() {
                 )}
               </CardContent>
             </Card>
+
+            {/* Lifestyle selector */}
+            {finances && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Lifestyle</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5">
+                  {(Object.entries(LIFESTYLE_TIERS) as [string, (typeof LIFESTYLE_TIERS)[LifestyleLevel]][]).map(
+                    ([levelStr, tier]) => {
+                      const level = Number(levelStr) as LifestyleLevel;
+                      const isActive = finances.lifestyle.level === level;
+                      return (
+                        <button
+                          key={level}
+                          type="button"
+                          onClick={() => useGameStore.getState().changeLifestyle(level)}
+                          aria-pressed={isActive}
+                          className={`flex w-full cursor-pointer items-center justify-between rounded-md border px-3 py-2 text-xs transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500 ${
+                            isActive
+                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                              : "border-[#27272a] text-zinc-400 hover:border-zinc-600 hover:text-zinc-300"
+                          }`}
+                        >
+                          <span className="font-medium">{tier.name}</span>
+                          <span
+                            className={isActive ? "text-emerald-400" : "text-zinc-500"}
+                          >
+                            £{tier.config.monthlyCost.toLocaleString()}/mo
+                          </span>
+                        </button>
+                      );
+                    },
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Career stats */}
             <Card>

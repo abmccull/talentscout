@@ -18,3 +18,12 @@ export {
   getActiveEvents,
   acknowledgeEvent,
 } from "./narrativeEvents";
+
+// Economic events
+export {
+  updateMarketTemperature,
+  generateEconomicEvent,
+  applyEconomicEvent,
+  expireEconomicEvents,
+  getActiveEconomicMultiplier,
+} from "./economicEvents";

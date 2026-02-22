@@ -393,6 +393,10 @@ export interface Scout {
   unlockedPerks: string[];
 
   careerTier: CareerTier;
+  /** Whether the scout is on the club or independent career path. */
+  careerPath: CareerPath;
+  /** Independent path tier (only used when careerPath === "independent"). */
+  independentTier?: IndependentTier;
   /** Global scouting reputation, 0–100. Determines job offer quality. */
   reputation: number;
   /** Trust level with current employer club, 0–100. Affects report weight. */
@@ -1194,6 +1198,146 @@ export interface CountryReputation {
 }
 
 // =============================================================================
+// ECONOMICS REVAMP — CAREER PATHS & FINANCIAL SYSTEMS
+// =============================================================================
+
+export type CareerPath = "club" | "independent";
+export type IndependentTier = 1 | 2 | 3 | 4 | 5;
+export type MarketTemperature = "hot" | "normal" | "cold" | "deadline";
+
+export type ReportListingStatus = "active" | "sold" | "withdrawn" | "expired";
+
+export interface ReportListing {
+  id: string;
+  reportId: string;
+  price: number;
+  isExclusive: boolean;
+  targetClubId?: string;
+  status: ReportListingStatus;
+  buyerClubId?: string;
+  listedWeek: number;
+  listedSeason: number;
+}
+
+export interface PlacementFeeRecord {
+  id: string;
+  playerId: string;
+  clubId: string;
+  transferFee: number;
+  earnedFee: number;
+  hasSellOnClause: boolean;
+  sellOnPercentage: number;
+  week: number;
+  season: number;
+}
+
+export type RetainerStatus = "active" | "suspended" | "cancelled";
+
+export interface RetainerContract {
+  id: string;
+  clubId: string;
+  tier: 1 | 2 | 3 | 4;
+  monthlyFee: number;
+  requiredReportsPerMonth: number;
+  reportsDeliveredThisMonth: number;
+  status: RetainerStatus;
+}
+
+export type AgencyEmployeeRole = "scout" | "analyst" | "administrator" | "relationshipManager";
+
+export interface AgencyEmployee {
+  id: string;
+  name: string;
+  role: AgencyEmployeeRole;
+  quality: number;
+  salary: number;
+  morale: number;
+  fatigue: number;
+}
+
+export type OfficeTier = "home" | "coworking" | "small" | "professional" | "hq";
+
+export interface Office {
+  tier: OfficeTier;
+  monthlyCost: number;
+  qualityBonus: number;
+  maxEmployees: number;
+}
+
+export interface CourseEffect {
+  type: "skillBonus" | "attributeBonus" | "perkUnlock" | "tierGate" | "reputationBonus";
+  target?: string;
+  value: number;
+}
+
+export interface Course {
+  id: string;
+  name: string;
+  description: string;
+  cost: number;
+  durationWeeks: number;
+  prerequisites: string[];
+  minTier: CareerTier;
+  effects: CourseEffect[];
+  category: "coaching" | "scouting" | "business" | "specialization";
+}
+
+export interface CourseEnrollment {
+  courseId: string;
+  startWeek: number;
+  startSeason: number;
+  completionWeek: number;
+  completionSeason: number;
+}
+
+export type LifestyleLevel = 1 | 2 | 3 | 4 | 5;
+
+export interface LifestyleConfig {
+  level: LifestyleLevel;
+  monthlyCost: number;
+  networkingBonus: number;
+  salaryOfferBonus: number;
+}
+
+export type LoanType = "business" | "equipment" | "emergency";
+
+export interface Loan {
+  id: string;
+  type: LoanType;
+  principal: number;
+  monthlyInterestRate: number;
+  remainingBalance: number;
+  monthlyPayment: number;
+  startWeek: number;
+  startSeason: number;
+}
+
+export type ConsultingType = "transferAdvisory" | "youthAudit" | "dataPackage" | "talentWorkshop";
+export type ConsultingStatus = "active" | "completed" | "failed" | "expired";
+
+export interface ConsultingContract {
+  id: string;
+  clubId: string;
+  type: ConsultingType;
+  fee: number;
+  deadline: number;
+  deadlineSeason: number;
+  status: ConsultingStatus;
+}
+
+export type EconomicEventType = "marketCrash" | "tvDealBonanza" | "ffpInvestigation" | "newOwnership" | "wageCap";
+
+export interface EconomicEvent {
+  id: string;
+  type: EconomicEventType;
+  description: string;
+  multiplier: number;
+  startWeek: number;
+  startSeason: number;
+  durationWeeks: number;
+}
+
+// =============================================================================
 // PHASE 2: SYSTEMS DEPTH
 // =============================================================================
 
@@ -1256,6 +1400,40 @@ export interface FinancialRecord {
   transactions: { week: number; season: number; amount: number; description: string }[];
   /** 5-slot equipment loadout and owned items. */
   equipment?: EquipmentInventory;
+
+  // --- Economics Revamp Fields ---
+
+  /** Career path this financial record tracks. */
+  careerPath: CareerPath;
+  /** Independent tier (only for independent path). */
+  independentTier?: IndependentTier;
+
+  // Revenue tracking
+  reportSalesRevenue: number;
+  placementFeeRevenue: number;
+  retainerRevenue: number;
+  consultingRevenue: number;
+  sellOnRevenue: number;
+  bonusRevenue: number;
+
+  // Contracts & records
+  retainerContracts: RetainerContract[];
+  activeLoan?: Loan;
+  placementFeeRecords: PlacementFeeRecord[];
+  reportListings: ReportListing[];
+  consultingContracts: ConsultingContract[];
+
+  // Assets
+  office: Office;
+  employees: AgencyEmployee[];
+  lifestyle: LifestyleConfig;
+  completedCourses: string[];
+  activeEnrollment?: CourseEnrollment;
+  ownedVehicle?: { name: string; value: number; travelBonus: number };
+
+  // Market state
+  marketTemperature: MarketTemperature;
+  activeEconomicEvents: EconomicEvent[];
 }
 
 export type ExpenseType =
@@ -1264,7 +1442,14 @@ export type ExpenseType =
   | "subscriptions"
   | "equipment"
   | "npcSalaries"
-  | "other";
+  | "other"
+  | "lifestyle"
+  | "officeCost"
+  | "employeeSalaries"
+  | "marketing"
+  | "loanPayment"
+  | "courseFees"
+  | "insurance";
 
 export interface RivalScout {
   id: string;
