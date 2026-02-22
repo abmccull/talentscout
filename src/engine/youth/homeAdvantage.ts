@@ -25,12 +25,35 @@ import type {
  * adjacent countries. Relationships are bidirectional and symmetric.
  */
 const NEIGHBOR_MAP: Record<string, string[]> = {
+  // Core countries
   england: ["france", "germany", "spain"],
   france: ["england", "germany", "spain"],
   germany: ["france", "england", "spain"],
   spain: ["france", "england"],
   brazil: ["argentina"],
   argentina: ["brazil"],
+  // North America
+  usa: ["mexico", "canada"],
+  mexico: ["usa", "canada"],
+  canada: ["usa"],
+  // West Africa
+  nigeria: ["ghana", "cameroon"],
+  ghana: ["ivorycoast", "nigeria"],
+  ivorycoast: ["ghana", "senegal"],
+  senegal: ["ivorycoast", "cameroon"],
+  cameroon: ["nigeria", "senegal"],
+  // North/Southern Africa
+  egypt: ["saudiarabia"],
+  southafrica: [],
+  // East Asia
+  japan: ["southkorea", "china"],
+  southkorea: ["japan", "china"],
+  china: ["japan", "southkorea"],
+  // Middle East
+  saudiarabia: ["egypt"],
+  // Oceania
+  australia: ["newzealand"],
+  newzealand: ["australia"],
 };
 
 /**

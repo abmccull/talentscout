@@ -79,6 +79,7 @@ const REPUTATION_MATCH_WINDOW = 20;
  * Sources: Transfermarkt aggregate data patterns, 2018–2024.
  */
 const TRANSFER_FLOW_MATRIX: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+  // Core countries
   Brazil: {
     England: 0.15,
     Spain: 0.12,
@@ -103,6 +104,90 @@ const TRANSFER_FLOW_MATRIX: Readonly<Record<string, Readonly<Record<string, numb
   },
   France: {
     England: 0.05,
+  },
+  // Francophone Africa → France
+  "Ivory Coast": {
+    France: 0.25,
+    England: 0.05,
+    Belgium: 0.05,
+  },
+  Senegal: {
+    France: 0.25,
+    England: 0.05,
+    Spain: 0.03,
+  },
+  Cameroon: {
+    France: 0.20,
+    Germany: 0.05,
+    England: 0.05,
+  },
+  // Anglophone Africa → England
+  Nigeria: {
+    England: 0.20,
+    France: 0.05,
+    Germany: 0.05,
+    Spain: 0.03,
+  },
+  Ghana: {
+    England: 0.15,
+    Germany: 0.05,
+    France: 0.05,
+  },
+  // North/Southern Africa
+  Egypt: {
+    "Saudi Arabia": 0.10,
+    England: 0.08,
+    France: 0.06,
+    Spain: 0.05,
+  },
+  "South Africa": {
+    England: 0.10,
+    France: 0.05,
+  },
+  // East Asia
+  Japan: {
+    Germany: 0.08,
+    England: 0.08,
+    France: 0.05,
+    Spain: 0.04,
+  },
+  "South Korea": {
+    Germany: 0.08,
+    England: 0.08,
+    France: 0.04,
+  },
+  China: {
+    England: 0.04,
+    Brazil: 0.03,
+  },
+  // Middle East
+  "Saudi Arabia": {
+    England: 0.03,
+  },
+  // Oceania
+  Australia: {
+    England: 0.12,
+    Germany: 0.04,
+    France: 0.03,
+  },
+  "New Zealand": {
+    Australia: 0.10,
+    England: 0.06,
+  },
+  // North America
+  USA: {
+    England: 0.08,
+    Germany: 0.05,
+    Spain: 0.03,
+  },
+  Mexico: {
+    Spain: 0.10,
+    England: 0.05,
+    France: 0.03,
+  },
+  Canada: {
+    England: 0.06,
+    France: 0.04,
   },
 };
 

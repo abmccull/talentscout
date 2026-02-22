@@ -142,11 +142,39 @@ function getRegionForCountry(country: string): string {
     "brazil", "argentina", "colombia", "chile", "uruguay",
     "peru", "ecuador", "paraguay", "bolivia", "venezuela",
   ]);
+  const northAmerica = new Set([
+    "usa", "mexico", "canada",
+  ]);
+  const westAfrica = new Set([
+    "nigeria", "ghana", "ivorycoast", "senegal", "cameroon",
+  ]);
+  const northAfrica = new Set([
+    "egypt",
+  ]);
+  const southernAfrica = new Set([
+    "southafrica",
+  ]);
+  const eastAsia = new Set([
+    "japan", "southkorea", "china",
+  ]);
+  const middleEast = new Set([
+    "saudiarabia",
+  ]);
+  const oceania = new Set([
+    "australia", "newzealand",
+  ]);
 
   if (westernEurope.has(lower)) return "Western Europe";
   if (northernEurope.has(lower)) return "Northern Europe";
   if (easternEurope.has(lower)) return "Eastern Europe";
   if (southAmerica.has(lower)) return "South America";
+  if (northAmerica.has(lower)) return "North America";
+  if (westAfrica.has(lower)) return "West Africa";
+  if (northAfrica.has(lower)) return "North Africa";
+  if (southernAfrica.has(lower)) return "Southern Africa";
+  if (eastAsia.has(lower)) return "East Asia";
+  if (middleEast.has(lower)) return "Middle East";
+  if (oceania.has(lower)) return "Oceania";
   return "International";
 }
 

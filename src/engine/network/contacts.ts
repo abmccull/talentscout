@@ -210,6 +210,10 @@ const NAME_POOLS: Record<ContactType, NamePool> = {
 const REGIONS = [
   "England", "Spain", "Germany", "France", "Italy", "Portugal",
   "Netherlands", "Brazil", "Argentina", "Belgium", "Scandinavia", "Eastern Europe",
+  "USA", "Mexico", "Canada",
+  "Nigeria", "Ghana", "Ivory Coast", "Egypt", "South Africa", "Senegal", "Cameroon",
+  "Japan", "South Korea", "Saudi Arabia", "China",
+  "Australia", "New Zealand",
 ];
 
 const ORGANIZATIONS: Record<ContactType, string[]> = {

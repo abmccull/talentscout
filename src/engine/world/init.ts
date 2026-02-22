@@ -4,11 +4,14 @@
  * Multi-country support: pass a `countries` array (e.g. ["england", "spain"]) to
  * populate leagues, clubs, players, fixtures, and territories from multiple nations.
  * Defaults to ["england"] for full backward compatibility.
+ *
+ * Secondary countries (countryData.secondary === true) generate clubs and players
+ * but do NOT get fixture schedules — they are talent pools only.
  */
 
 import type { RNG } from "@/engine/rng";
 import type { League, Club, Player, Fixture, Territory, SubRegion } from "@/engine/core/types";
-import { loadCountries } from "@/data/index";
+import { loadCountries, getSecondaryCountries } from "@/data/index";
 import type { ClubData, LeagueData, CountryData } from "@/data/types";
 import { generateSquad } from "@/engine/players/generation";
 import { generateSeasonFixtures } from "@/engine/world/fixtures";
@@ -73,12 +76,33 @@ function buildTerritory(countryData: CountryData, leagueIds: string[]): Territor
 
 function generateWorldSubRegions(countries: string[]): Record<string, SubRegion> {
   const SUB_REGION_DATA: Record<string, string[]> = {
+    // Core countries
     england: ["London", "North West", "North East", "Midlands", "South Coast", "Yorkshire", "East Anglia"],
     brazil: ["São Paulo", "Rio de Janeiro", "Minas Gerais", "Southern", "Northeast", "North"],
     argentina: ["Buenos Aires", "Rosario", "Córdoba", "Mendoza", "La Plata", "Tucumán"],
     spain: ["Catalonia", "Madrid", "Andalusia", "Basque Country", "Valencia", "Galicia"],
     germany: ["Bavaria", "North Rhine-Westphalia", "Saxony", "Hamburg", "Berlin", "Baden-Württemberg"],
     france: ["Île-de-France", "Provence", "Rhône-Alpes", "Brittany", "Alsace", "Midi-Pyrénées"],
+    // Secondary countries — North America
+    usa: ["East Coast", "West Coast", "Midwest", "South", "Pacific NW"],
+    mexico: ["CDMX", "Monterrey", "Guadalajara", "Puebla", "Tijuana"],
+    canada: ["Ontario", "Quebec", "British Columbia", "Prairies"],
+    // Secondary countries — Africa
+    nigeria: ["Lagos", "Abuja", "South-South", "North"],
+    ghana: ["Greater Accra", "Ashanti", "Northern"],
+    ivorycoast: ["Abidjan", "Bouaké", "Western"],
+    egypt: ["Cairo", "Alexandria", "Upper Egypt"],
+    southafrica: ["Gauteng", "Western Cape", "KZN", "Eastern Cape"],
+    senegal: ["Dakar", "Thiès", "Saint-Louis"],
+    cameroon: ["Centre", "Littoral", "West"],
+    // Secondary countries — Asia
+    japan: ["Kanto", "Kansai", "Chubu", "Kyushu", "Hokkaido"],
+    southkorea: ["Seoul", "Gyeonggi", "Gyeongsang", "Jeolla"],
+    saudiarabia: ["Riyadh", "Jeddah", "Eastern", "Mecca"],
+    china: ["Beijing", "Shanghai", "Guangdong", "Shandong"],
+    // Secondary countries — Oceania
+    australia: ["NSW", "Victoria", "Queensland", "Western Australia"],
+    newzealand: ["Auckland", "Wellington", "Canterbury"],
   };
 
   const result: Record<string, SubRegion> = {};
@@ -169,25 +193,42 @@ export async function initializeWorld(
   const fixtures: Record<string, Fixture> = {};
   const territories: Record<string, Territory> = {};
 
+  // Combine user-selected core countries with all secondary countries.
+  const secondaryKeys = getSecondaryCountries();
+  const allCountryKeys = [...countries, ...secondaryKeys];
+
   // Load all country data in parallel, then process sequentially so that the
   // RNG advances in a deterministic order regardless of I/O timing.
-  const countryDataList = await loadCountries(countries);
+  const countryDataList = await loadCountries(allCountryKeys);
+
+  // Track which countries are secondary so we can skip fixtures for them.
+  const secondarySet = new Set(secondaryKeys);
 
   for (const countryData of countryDataList) {
     const countryLeagueIds = buildCountryWorld(rng, countryData, leagues, clubs, players);
     territories[`territory_${countryData.key}`] = buildTerritory(countryData, countryLeagueIds);
   }
 
-  // Generate fixtures for every league across all countries.
+  // Generate fixtures only for core country leagues (skip secondary).
   for (const league of Object.values(leagues)) {
+    // Derive the country key from the territory mapping
+    const territoryEntry = Object.values(territories).find(
+      (t) => t.leagueIds.includes(league.id),
+    );
+    const countryKey = territoryEntry
+      ? territoryEntry.id.replace("territory_", "")
+      : "";
+
+    if (secondarySet.has(countryKey)) continue; // Skip fixture generation
+
     const seasonFixtures = generateSeasonFixtures(rng, league, 1);
     for (const fixture of seasonFixtures) {
       fixtures[fixture.id] = fixture;
     }
   }
 
-  // Generate sub-regions for youth scouting.
-  const subRegions = generateWorldSubRegions(countries);
+  // Generate sub-regions for youth scouting (all countries including secondary).
+  const subRegions = generateWorldSubRegions(allCountryKeys);
 
   return { leagues, clubs, players, fixtures, territories, subRegions };
 }

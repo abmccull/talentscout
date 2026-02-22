@@ -115,7 +115,7 @@ import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import { getEquipmentObservationBonus } from "@/engine/finance/expenses";
 import { generateManagerProfiles } from "@/engine/analytics";
 import { generateRegionalYouth, generateAcademyIntake } from "@/engine/youth/generation";
-import { getCountryDataSync } from "@/data/index";
+import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
 import {
   saveGame as dbSaveGame,
   loadGame as dbLoadGame,
@@ -355,6 +355,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       Belgium: "belgium",
       Scandinavia: "sweden", // best approximation for multi-country region
       "Eastern Europe": "czech", // best approximation for multi-country region
+      // Secondary regions
+      USA: "usa",
+      Mexico: "mexico",
+      Canada: "canada",
+      Nigeria: "nigeria",
+      Ghana: "ghana",
+      "Ivory Coast": "ivorycoast",
+      Egypt: "egypt",
+      "South Africa": "southafrica",
+      Senegal: "senegal",
+      Cameroon: "cameroon",
+      Japan: "japan",
+      "South Korea": "southkorea",
+      "Saudi Arabia": "saudiarabia",
+      China: "china",
+      Australia: "australia",
+      "New Zealand": "newzealand",
     };
     const allPlayerIds = Object.keys(players);
 
@@ -408,7 +425,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       npcScouts: {},
       npcReports: {},
       territories,
-      countries: selectedCountries,
+      countries: [...selectedCountries, ...getSecondaryCountries()],
       narrativeEvents: [],
       rivalScouts: {},
       unlockedTools: [],
@@ -2280,10 +2297,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
         newState = { ...newState, inbox: [...newState.inbox, ...seasonEndMessages] };
       }
 
-      // Generate new season fixtures for all leagues
+      // Generate new season fixtures for core leagues only (skip secondary talent pools)
       const fixtureRng = createRNG(`${gameState.seed}-fixtures-s${newState.currentSeason}`);
       const newFixtures: Record<string, Fixture> = {};
+      const secondaryCountryKeys = new Set(getSecondaryCountries());
       for (const league of Object.values(newState.leagues)) {
+        // Derive country key from territory to skip secondary leagues
+        const territory = Object.values(newState.territories).find(
+          (t) => t.leagueIds.includes(league.id),
+        );
+        const countryKey = territory
+          ? territory.id.replace("territory_", "")
+          : "";
+        if (secondaryCountryKeys.has(countryKey)) continue;
+
         const leagueFixtures = generateSeasonFixtures(fixtureRng, league, newState.currentSeason);
         for (const f of leagueFixtures) {
           newFixtures[f.id] = f;

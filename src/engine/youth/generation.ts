@@ -36,6 +36,7 @@ interface CountryBias {
  * All numeric values represent raw +/- adjustments on the 1–20 attribute scale.
  */
 const COUNTRY_BIASES: Record<string, CountryBias> = {
+  // Core countries
   Brazil: {
     bonusAttributes: { dribbling: 2, firstTouch: 2 },
     positionWeights: {
@@ -76,6 +77,124 @@ const COUNTRY_BIASES: Record<string, CountryBias> = {
     positionWeights: {
       GK: 7, CB: 11, LB: 10, RB: 10, CDM: 11, CM: 11,
       CAM: 10, LW: 10, RW: 10, ST: 10,
+    },
+  },
+  // North America
+  USA: {
+    bonusAttributes: { pace: 1, strength: 2 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 11, RW: 11, ST: 10,
+    },
+  },
+  Mexico: {
+    bonusAttributes: { dribbling: 2, firstTouch: 1 },
+    positionWeights: {
+      GK: 7, CB: 9, LB: 9, RB: 9, CDM: 10, CM: 12,
+      CAM: 12, LW: 11, RW: 11, ST: 10,
+    },
+  },
+  Canada: {
+    bonusAttributes: { pace: 1, strength: 2 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 11, RW: 11, ST: 10,
+    },
+  },
+  // West Africa — physical powerhouses
+  Nigeria: {
+    bonusAttributes: { pace: 2, strength: 2 },
+    positionWeights: {
+      GK: 7, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 11, RW: 11, ST: 11,
+    },
+  },
+  Ghana: {
+    bonusAttributes: { dribbling: 2, pace: 1 },
+    positionWeights: {
+      GK: 7, CB: 10, LB: 9, RB: 9, CDM: 10, CM: 12,
+      CAM: 11, LW: 11, RW: 11, ST: 10,
+    },
+  },
+  "Ivory Coast": {
+    bonusAttributes: { pace: 2, strength: 2 },
+    positionWeights: {
+      GK: 7, CB: 11, LB: 9, RB: 9, CDM: 11, CM: 11,
+      CAM: 10, LW: 10, RW: 10, ST: 12,
+    },
+  },
+  Cameroon: {
+    bonusAttributes: { pace: 2, strength: 2 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 11, CM: 11,
+      CAM: 9, LW: 10, RW: 10, ST: 12,
+    },
+  },
+  Senegal: {
+    bonusAttributes: { pace: 2, composure: 1 },
+    positionWeights: {
+      GK: 7, CB: 11, LB: 10, RB: 10, CDM: 11, CM: 11,
+      CAM: 10, LW: 10, RW: 10, ST: 10,
+    },
+  },
+  // North/Southern Africa
+  Egypt: {
+    bonusAttributes: { passing: 2, composure: 1 },
+    positionWeights: {
+      GK: 8, CB: 10, LB: 9, RB: 9, CDM: 10, CM: 13,
+      CAM: 12, LW: 10, RW: 10, ST: 9,
+    },
+  },
+  "South Africa": {
+    bonusAttributes: { pace: 2, strength: 1 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 11, RW: 11, ST: 10,
+    },
+  },
+  // East Asia
+  Japan: {
+    bonusAttributes: { passing: 2, workRate: 1 },
+    positionWeights: {
+      GK: 7, CB: 10, LB: 10, RB: 10, CDM: 10, CM: 13,
+      CAM: 12, LW: 10, RW: 10, ST: 8,
+    },
+  },
+  "South Korea": {
+    bonusAttributes: { stamina: 2, workRate: 1 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 10, RB: 10, CDM: 11, CM: 12,
+      CAM: 10, LW: 9, RW: 9, ST: 10,
+    },
+  },
+  China: {
+    bonusAttributes: { strength: 2 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 10, RW: 10, ST: 12,
+    },
+  },
+  // Middle East
+  "Saudi Arabia": {
+    bonusAttributes: { strength: 2 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 10, RW: 10, ST: 12,
+    },
+  },
+  // Oceania
+  Australia: {
+    bonusAttributes: { pace: 1, strength: 1, stamina: 1 },
+    positionWeights: {
+      GK: 8, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 11, RW: 11, ST: 10,
+    },
+  },
+  "New Zealand": {
+    bonusAttributes: { strength: 1, stamina: 1 },
+    positionWeights: {
+      GK: 8, CB: 12, LB: 9, RB: 9, CDM: 10, CM: 11,
+      CAM: 10, LW: 10, RW: 10, ST: 11,
     },
   },
 };
@@ -180,55 +299,48 @@ function sampleYouthCA(rng: RNG, caMin: number, caMax: number, pa: number): numb
  */
 export function generateSubRegions(country: string): SubRegion[] {
   const regionNames: Record<string, string[]> = {
+    // Core countries
     England: [
-      "London",
-      "North West",
-      "North East",
-      "Midlands",
-      "South Coast",
-      "Yorkshire",
-      "East Anglia",
+      "London", "North West", "North East", "Midlands",
+      "South Coast", "Yorkshire", "East Anglia",
     ],
     Brazil: [
-      "São Paulo",
-      "Rio de Janeiro",
-      "Minas Gerais",
-      "Southern",
-      "Northeast",
-      "North",
+      "São Paulo", "Rio de Janeiro", "Minas Gerais",
+      "Southern", "Northeast", "North",
     ],
     Argentina: [
-      "Buenos Aires",
-      "Rosario",
-      "Córdoba",
-      "Mendoza",
-      "La Plata",
-      "Tucumán",
+      "Buenos Aires", "Rosario", "Córdoba",
+      "Mendoza", "La Plata", "Tucumán",
     ],
     Spain: [
-      "Catalonia",
-      "Madrid",
-      "Andalusia",
-      "Basque Country",
-      "Valencia",
-      "Galicia",
+      "Catalonia", "Madrid", "Andalusia",
+      "Basque Country", "Valencia", "Galicia",
     ],
     Germany: [
-      "Bavaria",
-      "North Rhine-Westphalia",
-      "Saxony",
-      "Hamburg",
-      "Berlin",
-      "Baden-Württemberg",
+      "Bavaria", "North Rhine-Westphalia", "Saxony",
+      "Hamburg", "Berlin", "Baden-Württemberg",
     ],
     France: [
-      "Île-de-France",
-      "Provence",
-      "Rhône-Alpes",
-      "Brittany",
-      "Alsace",
-      "Midi-Pyrénées",
+      "Île-de-France", "Provence", "Rhône-Alpes",
+      "Brittany", "Alsace", "Midi-Pyrénées",
     ],
+    // Secondary countries
+    USA: ["East Coast", "West Coast", "Midwest", "South", "Pacific NW"],
+    Mexico: ["CDMX", "Monterrey", "Guadalajara", "Puebla", "Tijuana"],
+    Canada: ["Ontario", "Quebec", "British Columbia", "Prairies"],
+    Nigeria: ["Lagos", "Abuja", "South-South", "North"],
+    Ghana: ["Greater Accra", "Ashanti", "Northern"],
+    "Ivory Coast": ["Abidjan", "Bouaké", "Western"],
+    Egypt: ["Cairo", "Alexandria", "Upper Egypt"],
+    "South Africa": ["Gauteng", "Western Cape", "KZN", "Eastern Cape"],
+    Senegal: ["Dakar", "Thiès", "Saint-Louis"],
+    Cameroon: ["Centre", "Littoral", "West"],
+    Japan: ["Kanto", "Kansai", "Chubu", "Kyushu", "Hokkaido"],
+    "South Korea": ["Seoul", "Gyeonggi", "Gyeongsang", "Jeolla"],
+    "Saudi Arabia": ["Riyadh", "Jeddah", "Eastern", "Mecca"],
+    China: ["Beijing", "Shanghai", "Guangdong", "Shandong"],
+    Australia: ["NSW", "Victoria", "Queensland", "Western Australia"],
+    "New Zealand": ["Auckland", "Wellington", "Canterbury"],
   };
 
   const names = regionNames[country] ?? [];

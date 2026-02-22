@@ -61,20 +61,52 @@ const SOUTH_AMERICAN_COUNTRIES = new Set([
   "venezuela",
 ]);
 
-function isEuropean(country: string): boolean {
-  return EUROPEAN_COUNTRIES.has(country.toLowerCase());
-}
+/** Countries classified as North American. */
+const NORTH_AMERICAN_COUNTRIES = new Set([
+  "usa",
+  "mexico",
+  "canada",
+]);
 
-function isSouthAmerican(country: string): boolean {
-  return SOUTH_AMERICAN_COUNTRIES.has(country.toLowerCase());
-}
+/** Countries classified as African. */
+const AFRICAN_COUNTRIES = new Set([
+  "nigeria",
+  "ghana",
+  "ivorycoast",
+  "egypt",
+  "southafrica",
+  "senegal",
+  "cameroon",
+]);
 
-function isIntercontinental(from: string, to: string): boolean {
-  const fromEur = isEuropean(from);
-  const fromSam = isSouthAmerican(from);
-  const toEur = isEuropean(to);
-  const toSam = isSouthAmerican(to);
-  return (fromEur && toSam) || (fromSam && toEur);
+/** Countries classified as Asian. */
+const ASIAN_COUNTRIES = new Set([
+  "japan",
+  "southkorea",
+  "saudiarabia",
+  "china",
+]);
+
+/** Countries classified as Oceanian. */
+const OCEANIAN_COUNTRIES = new Set([
+  "australia",
+  "newzealand",
+]);
+
+type ContinentId = "europe" | "southamerica" | "northamerica" | "africa" | "asia" | "oceania" | "unknown";
+
+/**
+ * Return the continent ID for a given country key.
+ */
+export function getContinentId(country: string): ContinentId {
+  const lower = country.toLowerCase();
+  if (EUROPEAN_COUNTRIES.has(lower)) return "europe";
+  if (SOUTH_AMERICAN_COUNTRIES.has(lower)) return "southamerica";
+  if (NORTH_AMERICAN_COUNTRIES.has(lower)) return "northamerica";
+  if (AFRICAN_COUNTRIES.has(lower)) return "africa";
+  if (ASIAN_COUNTRIES.has(lower)) return "asia";
+  if (OCEANIAN_COUNTRIES.has(lower)) return "oceania";
+  return "unknown";
 }
 
 // =============================================================================
@@ -118,15 +150,40 @@ export function getScoutHomeCountry(scout: Scout): string {
 // =============================================================================
 
 /**
+ * Adjacent continent pairs for reduced travel costs.
+ */
+const ADJACENT_CONTINENTS: ReadonlySet<string> = new Set([
+  "europe|africa",
+  "africa|europe",
+  "southamerica|northamerica",
+  "northamerica|southamerica",
+  "asia|oceania",
+  "oceania|asia",
+  "europe|northamerica",
+  "northamerica|europe",
+]);
+
+function areAdjacentContinents(a: ContinentId, b: ContinentId): boolean {
+  return ADJACENT_CONTINENTS.has(`${a}|${b}`);
+}
+
+/**
  * Return the travel cost (in game currency) between two countries.
  *
  * Cost table (symmetric — order of from/to does not matter):
  *   Same country                  :     0
+ *   Same continent intra-regional :   300–600
  *   England ↔ France/Germany/Spain:   500
  *   England ↔ Brazil/Argentina    :  2000
  *   France  ↔ Germany/Spain       :   400
- *   Europe  ↔ South America       :  1800
  *   Brazil  ↔ Argentina           :   600
+ *   Europe  ↔ Africa              :  1500
+ *   Europe  ↔ North America       :  2000
+ *   Europe  ↔ Asia                :  2500
+ *   Europe  ↔ Oceania             :  3000
+ *   South America ↔ North America :  1200
+ *   South America ↔ Africa        :  2000
+ *   Intercontinental default      :  2500
  *   Unknown pair                  :  1500
  */
 export function getTravelCost(fromCountry: string, toCountry: string): number {
@@ -158,8 +215,43 @@ export function getTravelCost(fromCountry: string, toCountry: string): number {
   // Brazil ↔ Argentina
   if (pair("brazil", "argentina")) return 600;
 
-  // General Europe ↔ South America (intercontinental)
-  if (isIntercontinental(from, to)) return 1800;
+  // Continent-based costs
+  const fromContinent = getContinentId(from);
+  const toContinent = getContinentId(to);
+
+  // Same continent
+  if (fromContinent === toContinent && fromContinent !== "unknown") {
+    switch (fromContinent) {
+      case "europe": return 500;
+      case "southamerica": return 600;
+      case "northamerica": return 400;
+      case "africa": return 500;
+      case "asia": return 600;
+      case "oceania": return 300;
+    }
+  }
+
+  // Specific inter-continental routes
+  const route = (a: ContinentId, b: ContinentId): boolean =>
+    (fromContinent === a && toContinent === b) || (fromContinent === b && toContinent === a);
+
+  if (route("europe", "africa")) return 1500;
+  if (route("europe", "northamerica")) return 2000;
+  if (route("europe", "asia")) return 2500;
+  if (route("europe", "oceania")) return 3000;
+  if (route("southamerica", "northamerica")) return 1200;
+  if (route("southamerica", "africa")) return 2000;
+  if (route("africa", "asia")) return 2000;
+  if (route("asia", "oceania")) return 1500;
+  if (route("northamerica", "asia")) return 2500;
+  if (route("northamerica", "oceania")) return 3000;
+  if (route("africa", "oceania")) return 3000;
+  if (route("southamerica", "asia")) return 3000;
+  if (route("southamerica", "oceania")) return 3000;
+  if (route("africa", "northamerica")) return 2500;
+
+  // General intercontinental
+  if (fromContinent !== toContinent) return 2500;
 
   // Default unknown pair
   return 1500;
@@ -172,9 +264,10 @@ export function getTravelCost(fromCountry: string, toCountry: string): number {
 /**
  * Return the number of weekly activity slots consumed by this journey.
  *
- *   Same country       : 0 slots (no travel required)
- *   European travel    : 1 slot
- *   Intercontinental   : 2 slots (Europe ↔ South America)
+ *   Same country              : 0 slots (no travel required)
+ *   Same continent            : 1 slot
+ *   Adjacent continents       : 1 slot
+ *   Distant continents        : 2 slots
  */
 export function getTravelSlots(fromCountry: string, toCountry: string): number {
   const from = normalise(fromCountry);
@@ -182,10 +275,17 @@ export function getTravelSlots(fromCountry: string, toCountry: string): number {
 
   if (from === to) return 0;
 
-  if (isIntercontinental(from, to)) return 2;
+  const fromContinent = getContinentId(from);
+  const toContinent = getContinentId(to);
 
-  // Both are the same continent or one is unknown — treat as regional/European
-  return 1;
+  // Same continent
+  if (fromContinent === toContinent) return 1;
+
+  // Adjacent continents
+  if (areAdjacentContinents(fromContinent, toContinent)) return 1;
+
+  // Distant continents
+  return 2;
 }
 
 // =============================================================================

@@ -5,7 +5,7 @@ import { useGameStore } from "@/stores/gameStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Specialization, NewGameConfig, ScoutSkill } from "@/engine/core/types";
-import { getCountryOptions } from "@/data/index";
+import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
 import {
   BASE_SKILLS,
   SKILL_MINIMUMS,
@@ -108,6 +108,23 @@ const NATIONALITY_OPTIONS: string[] = [
   "Dutch",
   "Portuguese",
   "Belgian",
+  // Secondary regions
+  "American",
+  "Mexican",
+  "Canadian",
+  "Nigerian",
+  "Ghanaian",
+  "Ivorian",
+  "Egyptian",
+  "South African",
+  "Senegalese",
+  "Cameroonian",
+  "Japanese",
+  "South Korean",
+  "Saudi",
+  "Chinese",
+  "Australian",
+  "New Zealander",
 ];
 
 /**
@@ -250,6 +267,17 @@ const TOP_LEAGUE_CLUBS: Record<string, { id: string; name: string }[]> = {
 };
 
 const COUNTRY_OPTIONS = getCountryOptions();
+const SECONDARY_OPTIONS = getSecondaryCountryOptions();
+
+/** Group secondary countries by region for the info panel. */
+const SECONDARY_REGIONS = (() => {
+  const grouped: Record<string, { name: string; clubCount: number }[]> = {};
+  for (const c of SECONDARY_OPTIONS) {
+    if (!grouped[c.region]) grouped[c.region] = [];
+    grouped[c.region].push({ name: c.name, clubCount: c.clubCount });
+  }
+  return Object.entries(grouped).map(([name, countries]) => ({ name, countries }));
+})();
 
 // ---------------------------------------------------------------------------
 // Component
@@ -869,6 +897,29 @@ export function NewGameScreen() {
               Total clubs selected:{" "}
               <span className="font-semibold text-white">{totalClubs}</span>
             </p>
+
+            {/* Secondary regions — always active, read-only */}
+            <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 p-4">
+              <h4 className="text-sm font-semibold text-zinc-300 mb-2">
+                Global Talent Pools
+                <span className="ml-2 text-xs font-normal text-zinc-500">
+                  (always active — {SECONDARY_OPTIONS.reduce((sum, c) => sum + c.clubCount, 0)} clubs)
+                </span>
+              </h4>
+              <p className="text-xs text-zinc-500 mb-3">
+                Players from these regions are discoverable, signable, and developable — but leagues do not simulate fixtures.
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {SECONDARY_REGIONS.map((region) => (
+                  <div key={region.name}>
+                    <p className="text-xs font-medium text-zinc-400">{region.name}</p>
+                    <p className="text-xs text-zinc-500">
+                      {region.countries.map((c) => `${c.name} (${c.clubCount})`).join(", ")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
