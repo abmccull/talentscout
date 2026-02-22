@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle } from "lucide-react";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap } from "lucide-react";
 import type { AttributeReading, HiddenIntel, Observation, AbilityReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
@@ -296,6 +296,9 @@ export function PlayerProfile() {
 
   const contactIntel: HiddenIntel[] = gameState.contactIntel[selectedPlayerId] ?? [];
 
+  // Unsigned youth detection
+  const unsignedYouthRecord = gameState.unsignedYouth[selectedPlayerId] ?? null;
+
   const convictionVariant = (c: string) => {
     if (c === "tablePound") return "default" as const;
     if (c === "strongRecommend") return "success" as const;
@@ -343,12 +346,16 @@ export function PlayerProfile() {
               <span className="text-sm text-zinc-400">
                 Age {player.age} — {player.nationality}
               </span>
-              {club && (
+              {unsignedYouthRecord ? (
+                <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400">
+                  Unsigned
+                </Badge>
+              ) : club ? (
                 <span className="text-sm text-zinc-400">
                   {club.name}
                   {league ? ` (${league.shortName})` : ""}
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
           <Button onClick={() => startReport(selectedPlayerId)} disabled={observations.length === 0}>
@@ -389,6 +396,80 @@ export function PlayerProfile() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Unsigned Youth Details */}
+        {unsignedYouthRecord && (
+          <div className="mb-6">
+            <Card className="border-amber-500/20 bg-amber-500/5">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm text-amber-400">
+                  <GraduationCap size={14} aria-hidden="true" />
+                  Unsigned Youth Prospect
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  {/* Buzz level */}
+                  <div>
+                    <p className="mb-1 text-xs text-zinc-500">Buzz Level</p>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full rounded-full bg-amber-400 transition-all"
+                        style={{ width: `${unsignedYouthRecord.buzzLevel}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-white">{unsignedYouthRecord.buzzLevel}/100</p>
+                  </div>
+
+                  {/* Visibility */}
+                  <div>
+                    <p className="mb-1 text-xs text-zinc-500">Visibility</p>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500 transition-all"
+                        style={{ width: `${unsignedYouthRecord.visibility}%` }}
+                      />
+                    </div>
+                    <p className="mt-1 text-xs font-medium text-white">{unsignedYouthRecord.visibility}/100</p>
+                  </div>
+
+                  {/* Discovered by */}
+                  <div>
+                    <p className="mb-1 text-xs text-zinc-500">Discovered By</p>
+                    <p className="text-lg font-medium text-white">
+                      {unsignedYouthRecord.discoveredBy.length}
+                      <span className="ml-1 text-xs text-zinc-500">scout{unsignedYouthRecord.discoveredBy.length !== 1 ? "s" : ""}</span>
+                    </p>
+                  </div>
+
+                  {/* Status */}
+                  <div>
+                    <p className="mb-1 text-xs text-zinc-500">Status</p>
+                    <p className="text-sm font-medium">
+                      {unsignedYouthRecord.placed ? (
+                        <span className="text-emerald-400">Placed</span>
+                      ) : (
+                        <span className="text-amber-400">Available</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {!unsignedYouthRecord.placed && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 border-amber-500/40 text-amber-400 hover:border-amber-400 hover:text-amber-300"
+                    onClick={() => setScreen("calendar")}
+                  >
+                    <FileText size={12} className="mr-1.5" aria-hidden="true" />
+                    Recommend to Club
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Ability Assessment */}
         {aggregatedAbility && (

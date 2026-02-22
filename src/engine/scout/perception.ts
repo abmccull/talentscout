@@ -53,6 +53,13 @@ const CONTEXT_NOISE: Record<ObservationContext, number> = {
   trainingGround: 0.7,
   youthTournament: 1.1,
   academyVisit: 0.8,
+  schoolMatch: 1.2,
+  grassrootsTournament: 1.3,
+  streetFootball: 1.4,
+  academyTrialDay: 0.9,
+  youthFestival: 1.2,
+  followUpSession: 0.85,
+  parentCoachMeeting: 2.0,
 };
 
 /** Bonus visibility: attributes only detectable by skilled scouts. */
@@ -175,6 +182,13 @@ const CONTEXT_VISIBLE_ATTRIBUTES: Record<ObservationContext, PlayerAttribute[]> 
   youthTournament: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "strength"],
   academyVisit: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate"],
   liveMatch: [], // not used by light observation — full pipeline uses PHASE_VISIBLE_ATTRIBUTES
+  schoolMatch: ["pace", "dribbling", "agility", "shooting", "composure"],
+  grassrootsTournament: ["pace", "dribbling", "shooting", "agility", "strength", "workRate"],
+  streetFootball: ["dribbling", "firstTouch", "agility", "composure", "decisionMaking"],
+  academyTrialDay: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate", "positioning"],
+  youthFestival: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "passing"],
+  followUpSession: ["firstTouch", "passing", "composure", "workRate", "agility", "decisionMaking"],
+  parentCoachMeeting: [],
 };
 
 // ---------------------------------------------------------------------------

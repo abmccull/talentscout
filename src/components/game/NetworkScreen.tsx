@@ -20,6 +20,11 @@ const CONTACT_TYPE_CONFIG: Record<
   journalist: { label: "Journalist", icon: Newspaper, color: "text-amber-400" },
   academyCoach: { label: "Academy Coach", icon: GraduationCap, color: "text-pink-400" },
   sportingDirector: { label: "Sporting Director", icon: Users, color: "text-indigo-400" },
+  grassrootsOrganizer: { label: "Grassroots Organizer", icon: Users, color: "text-green-400" },
+  schoolCoach: { label: "School Coach", icon: GraduationCap, color: "text-lime-400" },
+  youthAgent: { label: "Youth Agent", icon: UserCheck, color: "text-cyan-400" },
+  academyDirector: { label: "Academy Director", icon: GraduationCap, color: "text-rose-400" },
+  localScout: { label: "Local Scout", icon: Eye, color: "text-teal-400" },
 };
 
 function relationshipLabel(rel: number): string {

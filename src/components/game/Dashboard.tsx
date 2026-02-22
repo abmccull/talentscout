@@ -22,6 +22,7 @@ import {
   Compass,
   Trophy,
   BarChart3,
+  GraduationCap,
 } from "lucide-react";
 import { isBroke } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
@@ -620,6 +621,52 @@ export function Dashboard() {
                     onClick={() => setScreen("playerDatabase")}
                   >
                     View All
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Youth Scouting */}
+            {Object.keys(gameState.unsignedYouth).length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <GraduationCap size={16} className="text-emerald-400" aria-hidden="true" />
+                    Youth Scouting
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-zinc-500">Unsigned Youth</p>
+                      <p className="text-lg font-medium">{Object.keys(gameState.unsignedYouth).length}</p>
+                    </div>
+                    <div>
+                      <p className="text-zinc-500">Discovered</p>
+                      <p className="text-lg font-medium">
+                        {Object.values(gameState.unsignedYouth).filter((y) =>
+                          y.discoveredBy.includes(gameState.scout.id ?? ""),
+                        ).length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-zinc-500">Placed</p>
+                      <p className="text-lg font-medium">
+                        {Object.values(gameState.unsignedYouth).filter((y) => y.placed).length}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-zinc-500">Legacy Score</p>
+                      <p className="text-lg font-medium text-emerald-400">{gameState.legacyScore.totalScore}</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full"
+                    onClick={() => setScreen("youthScouting")}
+                  >
+                    View Youth Hub
                   </Button>
                 </CardContent>
               </Card>

@@ -446,7 +446,14 @@ export type ObservationContext =
   | "videoAnalysis"
   | "trainingGround"
   | "youthTournament"
-  | "academyVisit";
+  | "academyVisit"
+  | "schoolMatch"
+  | "grassrootsTournament"
+  | "streetFootball"
+  | "academyTrialDay"
+  | "youthFestival"
+  | "followUpSession"
+  | "parentCoachMeeting";
 
 export interface FlaggedMoment {
   /** Minute or phase index when this notable moment occurred. */
@@ -605,7 +612,12 @@ export type ContactType =
   | "clubStaff"
   | "journalist"
   | "academyCoach"
-  | "sportingDirector";
+  | "sportingDirector"
+  | "grassrootsOrganizer"
+  | "schoolCoach"
+  | "youthAgent"
+  | "academyDirector"
+  | "localScout";
 
 export interface Contact {
   id: string;
@@ -623,6 +635,16 @@ export interface Contact {
   knownPlayerIds: string[];
   /** Geographic region of expertise. */
   region?: string;
+  /**
+   * The country this contact primarily operates in.
+   * Used for youth scouting intel and contact introductions.
+   */
+  country?: string;
+  /**
+   * The game week of the last interaction with this contact.
+   * Used to calculate relationship decay over time.
+   */
+  lastInteractionWeek?: number;
 }
 
 // =============================================================================
@@ -664,7 +686,15 @@ export type ActivityType =
   | "managerMeeting"
   | "boardPresentation"
   | "assignTerritory"
-  | "internationalTravel";
+  | "internationalTravel"
+  | "schoolMatch"
+  | "grassrootsTournament"
+  | "streetFootball"
+  | "academyTrialDay"
+  | "youthFestival"
+  | "followUpSession"
+  | "parentCoachMeeting"
+  | "writePlacementReport";
 
 export interface Activity {
   type: ActivityType;
@@ -848,6 +878,23 @@ export interface GameState {
 
   /** Hidden intel gathered from contacts, keyed by playerId. */
   contactIntel: Record<string, HiddenIntel[]>;
+
+  // --- Youth Scouting System ---
+
+  /** Unsigned youth players in the world, keyed by ID. */
+  unsignedYouth: Record<string, UnsignedYouth>;
+  /** Placement reports for unsigned youth, keyed by ID. */
+  placementReports: Record<string, PlacementReport>;
+  /** Gut feelings accumulated by the scout. */
+  gutFeelings: GutFeeling[];
+  /** Alumni records for placed youth. */
+  alumniRecords: AlumniRecord[];
+  /** Legacy score tracking placed youth career impact. */
+  legacyScore: LegacyScore;
+  /** Sub-regions for youth scouting depth, keyed by ID. */
+  subRegions: Record<string, SubRegion>;
+  /** IDs of players who have retired. */
+  retiredPlayerIds: string[];
 
   /** Unix timestamp (ms) when this game save was created. */
   createdAt: number;
@@ -1242,6 +1289,16 @@ export interface DiscoveryRecord {
   wasWonderkid: boolean;
   /** Scout's prediction accuracy (set retroactively). */
   predictionAccuracy?: number;
+  /** Club ID where an unsigned youth was placed (youth scouting). */
+  placementClubId?: string;
+  /** How the youth was placed (academy intake or youth contract). */
+  placementType?: "academyIntake" | "youthContract";
+  /** Week the placement occurred. */
+  placementWeek?: number;
+  /** Season the placement occurred. */
+  placementSeason?: number;
+  /** Career outcome classification set retrospectively. */
+  careerOutcome?: "starPlayer" | "squadPlayer" | "released" | "retired";
 }
 
 export interface CareerSnapshot {
@@ -1284,4 +1341,96 @@ export interface ScoutPerformanceSnapshot {
   skills: Record<ScoutSkill, number>;
   /** Reputation at this snapshot. */
   reputation: number;
+}
+
+// =============================================================================
+// YOUTH SCOUTING SYSTEM
+// =============================================================================
+
+export type YouthVenueType =
+  | "schoolMatch"
+  | "grassrootsTournament"
+  | "streetFootball"
+  | "academyTrialDay"
+  | "youthFestival"
+  | "followUpSession"
+  | "parentCoachMeeting";
+
+export interface UnsignedYouth {
+  id: string;
+  player: Player;
+  visibility: number;      // 0-100
+  buzzLevel: number;       // 0-100
+  discoveredBy: string[];  // scout IDs
+  regionId: string;        // sub-region ID
+  country: string;
+  venueAppearances: YouthVenueType[];
+  generatedSeason: number;
+  placed: boolean;
+  placedClubId?: string;
+  retired: boolean;
+}
+
+export interface PlacementReport {
+  id: string;
+  unsignedYouthId: string;
+  targetClubId: string;
+  scoutId: string;
+  conviction: ConvictionLevel;
+  clubResponse?: "pending" | "accepted" | "rejected" | "trial";
+  placementType?: "academyIntake" | "youthContract";
+  qualityScore: number;    // 0-100
+  week: number;
+  season: number;
+}
+
+export interface GutFeeling {
+  id: string;
+  playerId: string;
+  narrative: string;
+  triggerDomain: AttributeDomain;
+  reliability: number;     // 0-1
+  wasAccurate?: boolean;
+  week: number;
+  season: number;
+}
+
+export type AlumniMilestoneType =
+  | "firstTeamDebut"
+  | "firstGoal"
+  | "internationalCallUp"
+  | "wonderkidStatus"
+  | "transfer";
+
+export interface AlumniMilestone {
+  type: AlumniMilestoneType;
+  week: number;
+  season: number;
+  description: string;
+  notified: boolean;
+}
+
+export interface AlumniRecord {
+  id: string;
+  playerId: string;
+  placedClubId: string;
+  currentClubId: string;
+  milestones: AlumniMilestone[];
+  careerSnapshots: CareerSnapshot[];
+  placedWeek: number;
+  placedSeason: number;
+}
+
+export interface LegacyScore {
+  youthFound: number;
+  firstTeamBreakthroughs: number;
+  internationalCapsFromFinds: number;
+  totalScore: number;
+}
+
+export interface SubRegion {
+  id: string;
+  name: string;
+  country: string;
+  familiarity: number;     // 0-100
 }

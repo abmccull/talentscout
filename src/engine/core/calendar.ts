@@ -18,6 +18,9 @@ import type {
   ActivityType,
   ScoutSkill,
   ScoutAttribute,
+  SubRegion,
+  Observation,
+  UnsignedYouth,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 
@@ -85,6 +88,14 @@ const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   boardPresentation:  2,
   assignTerritory:    1,
   internationalTravel:2,
+  schoolMatch:        2,
+  grassrootsTournament:3,
+  streetFootball:     2,
+  academyTrialDay:    2,
+  youthFestival:      3,
+  followUpSession:    1,
+  parentCoachMeeting: 1,
+  writePlacementReport:1,
 };
 
 /** Fatigue cost per activity type */
@@ -104,6 +115,14 @@ const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   boardPresentation:  8,
   assignTerritory:    2,
   internationalTravel:10,
+  schoolMatch:        8,
+  grassrootsTournament:12,
+  streetFootball:     6,
+  academyTrialDay:    10,
+  youthFestival:      14,
+  followUpSession:    5,
+  parentCoachMeeting: 3,
+  writePlacementReport:4,
 };
 
 /** Skills that each activity type directly develops */
@@ -116,6 +135,14 @@ const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill,
   academyVisit:   { technicalEye: 2, physicalAssessment: 2, dataLiteracy: 1, potentialAssessment: 2 },
   youthTournament:{ technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 1, potentialAssessment: 3 },
   study:          { dataLiteracy: 4, tacticalUnderstanding: 2, potentialAssessment: 1 },
+  schoolMatch:        { technicalEye: 2, physicalAssessment: 1 },
+  grassrootsTournament: { technicalEye: 2, physicalAssessment: 2 },
+  streetFootball:     { technicalEye: 3, psychologicalRead: 1 },
+  academyTrialDay:    { technicalEye: 2, physicalAssessment: 2 },
+  youthFestival:      { technicalEye: 3, physicalAssessment: 2 },
+  followUpSession:    { technicalEye: 3, psychologicalRead: 2 },
+  parentCoachMeeting: { psychologicalRead: 3 },
+  writePlacementReport: { dataLiteracy: 3 },
 };
 
 /** Scout attributes that each activity type develops */
@@ -129,6 +156,14 @@ const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<ScoutAt
   youthTournament:{ intuition: 3, endurance: 2 },
   travel:         { adaptability: 2 },
   study:          { memory: 3, intuition: 1 },
+  schoolMatch:        { intuition: 2, adaptability: 1 },
+  grassrootsTournament: { intuition: 2, endurance: 1, networking: 1 },
+  streetFootball:     { intuition: 3, adaptability: 2 },
+  academyTrialDay:    { networking: 2, intuition: 1 },
+  youthFestival:      { intuition: 2, endurance: 2, networking: 1 },
+  followUpSession:    { intuition: 3, memory: 2 },
+  parentCoachMeeting: { persuasion: 3, networking: 2 },
+  writePlacementReport: { persuasion: 2, memory: 1 },
 };
 
 const TOTAL_WEEK_SLOTS = 7;
@@ -248,12 +283,24 @@ export function removeActivity(
  * - trainingVisit: always available
  * - watchVideo / writeReport / study / rest / travel: always available
  * - If fatigue > FORCED_REST_FATIGUE_THRESHOLD: only rest is available
+ *
+ * Youth scouting venue gating:
+ * - schoolMatch: always available
+ * - grassrootsTournament: requires youth specialization with spec level >= 1
+ * - streetFootball: requires any sub-region with familiarity >= 20
+ * - academyTrialDay: requires contact of type academyCoach/academyDirector with relationship >= 40
+ * - youthFestival: requires careerTier >= 2
+ * - followUpSession / parentCoachMeeting / writePlacementReport:
+ *   requires at least 1 observation of an unsigned (unplaced) youth player
  */
 export function getAvailableActivities(
   scout: Scout,
   week: number,
   fixtures: Fixture[],
   contacts: Contact[],
+  subRegions?: Record<string, SubRegion>,
+  observations?: Record<string, Observation>,
+  unsignedYouth?: Record<string, UnsignedYouth>,
 ): Activity[] {
   const activities: Activity[] = [];
 
@@ -351,6 +398,91 @@ export function getAvailableActivities(
     slots: 1,
     description: "Take a day off to rest and recover fatigue",
   });
+
+  // ── Youth scouting venue activities ────────────────────────────────────────
+
+  // schoolMatch: always available
+  activities.push({
+    type: "schoolMatch",
+    slots: ACTIVITY_SLOT_COSTS.schoolMatch,
+    description: "Watch a school match — observe untapped youth talent in their natural setting",
+  });
+
+  // grassrootsTournament: requires youth specialization with spec level >= 1
+  if (
+    scout.primarySpecialization === "youth" &&
+    scout.specializationLevel >= 1
+  ) {
+    activities.push({
+      type: "grassrootsTournament",
+      slots: ACTIVITY_SLOT_COSTS.grassrootsTournament,
+      description: "Scout a grassroots tournament — high yield of youth talent across multiple teams",
+    });
+  }
+
+  // streetFootball: requires any sub-region with familiarity >= 20
+  const hasLocalFamiliarity =
+    subRegions !== undefined &&
+    Object.values(subRegions).some((sr) => sr.familiarity >= 20);
+  if (hasLocalFamiliarity) {
+    activities.push({
+      type: "streetFootball",
+      slots: ACTIVITY_SLOT_COSTS.streetFootball,
+      description: "Watch street football sessions — hidden gems play where scouts rarely look",
+    });
+  }
+
+  // academyTrialDay: requires contact of type academyCoach or academyDirector with relationship >= 40
+  const hasAcademyContact = contacts.some(
+    (c) =>
+      (c.type === "academyCoach" || c.type === "academyDirector") &&
+      c.relationship >= 40,
+  );
+  if (hasAcademyContact) {
+    activities.push({
+      type: "academyTrialDay",
+      slots: ACTIVITY_SLOT_COSTS.academyTrialDay,
+      description: "Attend an academy trial day — evaluate youth players being assessed by a club",
+    });
+  }
+
+  // youthFestival: requires careerTier >= 2
+  if (scout.careerTier >= 2) {
+    activities.push({
+      type: "youthFestival",
+      slots: ACTIVITY_SLOT_COSTS.youthFestival,
+      description: "Attend a youth festival — multi-team event with large pool of scoutable youth",
+    });
+  }
+
+  // followUpSession / parentCoachMeeting / writePlacementReport:
+  // requires at least 1 observation of an unsigned (unplaced) youth player
+  const unsignedYouthIds = new Set(
+    Object.values(unsignedYouth ?? {})
+      .filter((y) => !y.placed && !y.retired)
+      .map((y) => y.player.id),
+  );
+  const hasUnsignedYouthObservation =
+    observations !== undefined &&
+    Object.values(observations).some((obs) => unsignedYouthIds.has(obs.playerId));
+
+  if (hasUnsignedYouthObservation) {
+    activities.push({
+      type: "followUpSession",
+      slots: ACTIVITY_SLOT_COSTS.followUpSession,
+      description: "Run a follow-up session with a youth prospect — deepen your assessment",
+    });
+    activities.push({
+      type: "parentCoachMeeting",
+      slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
+      description: "Meet with a prospect's parents or coach — build trust and gather context",
+    });
+    activities.push({
+      type: "writePlacementReport",
+      slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
+      description: "Write a placement report — formally recommend a youth player to a club",
+    });
+  }
 
   return activities;
 }

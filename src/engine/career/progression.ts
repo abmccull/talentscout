@@ -38,7 +38,18 @@ export type ReputationEvent =
   | { type: "discoveryCredit"; wonderkidTier: WonderkidTier }
   | { type: "tablePoundSuccess" }
   | { type: "tablePoundFailure" }
-  | { type: "seasonEnd"; reviewOutcome: string };
+  | { type: "seasonEnd"; reviewOutcome: string }
+  /**
+   * A scout places an unsigned youth at a club.
+   * Reputation gain scales with conviction level used on the placement report.
+   */
+  | { type: "youthPlacement"; convictionLevel: ConvictionLevel }
+  /** A scout's placed youth makes their first-team debut. */
+  | { type: "alumniDebut" }
+  /** A scout's placed youth receives a senior international call-up. */
+  | { type: "alumniInternational" }
+  /** A scout's placed youth is classified as a wonderkid (PA >= 150, CA >= 100). */
+  | { type: "alumniWonderkid" };
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -179,6 +190,26 @@ function calculateReputationDelta(event: ReputationEvent): number {
         default:           return 0;
       }
     }
+
+    case "youthPlacement": {
+      // Reputation scales with conviction level used on the placement report
+      const youthPlacementDelta: Record<ConvictionLevel, number> = {
+        note:            2,
+        recommend:       3,
+        strongRecommend: 5,
+        tablePound:      5, // capped at strongRecommend level for placements
+      };
+      return youthPlacementDelta[event.convictionLevel];
+    }
+
+    case "alumniDebut":
+      return 8;
+
+    case "alumniInternational":
+      return 12;
+
+    case "alumniWonderkid":
+      return 20;
   }
 }
 
@@ -218,6 +249,14 @@ export interface TierReviewContext {
   departmentReportCount?: number;
   /** Average NPC report quality across the department, 0–100. */
   departmentAverageQuality?: number;
+
+  // Youth specialist metrics (applies when scout.primarySpecialization === "youth")
+  /** Number of unsigned youth discovered this season. */
+  unsignedYouthDiscovered?: number;
+  /** Number of successful youth placements this season. */
+  successfulPlacements?: number;
+  /** Number of alumni milestones achieved this season (debut, international, wonderkid). */
+  alumniMilestonesThisSeason?: number;
 }
 
 /**
@@ -304,6 +343,18 @@ export function calculatePerformanceReview(
   if (scout.careerTier >= 5 && tierContext !== undefined) {
     const tierBonus = calculateTier5Bonus(tierContext);
     total += tierBonus;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Youth Specialist — additional scoring for youth scouting activity
+  // Only applies when the scout's primary specialization is "youth".
+  // Bonus:   unsigned youth discovered (+up to 10 pts, 1 pt each, max 10)
+  //          successful placements    (+up to 10 pts, 5 pts each, max 10)
+  //          alumni milestones        (+up to 5 pts,  2.5 pts each, max 5)
+  // ---------------------------------------------------------------------------
+  if (scout.primarySpecialization === "youth" && tierContext !== undefined) {
+    const youthBonus = calculateYouthSpecialistBonus(tierContext);
+    total += youthBonus;
   }
 
   // Cap total to 100 so stacking tier bonuses does not trivialise the outcome
@@ -476,6 +527,33 @@ function calculateTier5Bonus(ctx: TierReviewContext): number {
   departmentScore    = volumeScore + qualScore;
 
   return boardScore + departmentScore;
+}
+
+// ---------------------------------------------------------------------------
+// Youth specialist scoring helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a score modifier in the range [0, +25] for youth specialist scouts.
+ *
+ * Youth scouts are judged on their unsigned youth discovery and placement
+ * activity, and on the career progress of their placed alumni.
+ *
+ * Scoring:
+ *  - Unsigned youth discovered: +1 pt each, max +10 pts
+ *  - Successful placements:     +5 pts each, max +10 pts
+ *  - Alumni milestones:         +2.5 pts each, max +5 pts
+ */
+function calculateYouthSpecialistBonus(ctx: TierReviewContext): number {
+  const discovered  = ctx.unsignedYouthDiscovered ?? 0;
+  const placements  = ctx.successfulPlacements ?? 0;
+  const milestones  = ctx.alumniMilestonesThisSeason ?? 0;
+
+  const discoveryScore  = Math.min(10, discovered * 1);
+  const placementScore  = Math.min(10, placements * 5);
+  const milestoneScore  = Math.min(5,  milestones * 2.5);
+
+  return discoveryScore + placementScore + milestoneScore;
 }
 
 // ---------------------------------------------------------------------------

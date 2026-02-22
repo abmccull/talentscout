@@ -16,6 +16,7 @@ import {
   Trophy,
   Award,
   BarChart3,
+  GraduationCap,
   X,
 } from "lucide-react";
 
@@ -32,6 +33,8 @@ const NAV_ITEMS: { screen: GameScreen; label: string; icon: React.ElementType }[
   { screen: "discoveries", label: "Discoveries", icon: Trophy },
   { screen: "leaderboard", label: "Leaderboard", icon: Award },
   { screen: "analytics", label: "Analytics", icon: BarChart3 },
+  { screen: "youthScouting", label: "Youth", icon: GraduationCap },
+  { screen: "alumniDashboard", label: "Alumni", icon: Award },
   { screen: "settings", label: "Settings", icon: Settings },
 ];
 

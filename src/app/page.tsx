@@ -23,6 +23,8 @@ import { LeaderboardScreen } from "@/components/game/LeaderboardScreen";
 import { AnalyticsScreen } from "@/components/game/AnalyticsScreen";
 import { MatchSummaryScreen } from "@/components/game/MatchSummaryScreen";
 import { FixtureBrowser } from "@/components/game/FixtureBrowser";
+import { YouthScoutingScreen } from "@/components/game/YouthScoutingScreen";
+import { AlumniDashboard } from "@/components/game/AlumniDashboard";
 
 export default function Home() {
   const currentScreen = useGameStore((s) => s.currentScreen);
@@ -76,6 +78,10 @@ export default function Home() {
       return <AnalyticsScreen />;
     case "fixtureBrowser":
       return <FixtureBrowser />;
+    case "youthScouting":
+      return <YouthScoutingScreen />;
+    case "alumniDashboard":
+      return <AlumniDashboard />;
     default:
       return <MainMenu />;
   }

@@ -27,6 +27,7 @@ import type {
   DiscoveryRecord,
   ScoutPerformanceSnapshot,
   HiddenIntel,
+  UnsignedYouth,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
@@ -96,6 +97,8 @@ import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import { getEquipmentObservationBonus } from "@/engine/finance/expenses";
 import { generateManagerProfiles } from "@/engine/analytics";
+import { generateRegionalYouth, generateAcademyIntake } from "@/engine/youth/generation";
+import { getCountryDataSync } from "@/data/index";
 import {
   saveGame as dbSaveGame,
   loadGame as dbLoadGame,
@@ -127,7 +130,9 @@ export type GameScreen =
   | "discoveries"
   | "leaderboard"
   | "analytics"
-  | "fixtureBrowser";
+  | "fixtureBrowser"
+  | "youthScouting"
+  | "alumniDashboard";
 
 interface GameStore {
   // Navigation
@@ -398,6 +403,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
       playedFixtures: [],
       watchlist: [],
       contactIntel: {},
+      unsignedYouth: {},
+      placementReports: {},
+      gutFeelings: [],
+      alumniRecords: [],
+      legacyScore: {
+        youthFound: 0,
+        firstTeamBreakthroughs: 0,
+        internationalCapsFromFinds: 0,
+        totalScore: 0,
+      },
+      subRegions: {},
+      retiredPlayerIds: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -1555,6 +1572,73 @@ export const useGameStore = create<GameStore>((set, get) => ({
         // Reset at the start of each new season — every fixture is fresh
         playedFixtures: [],
       };
+
+      // ── Generate unsigned youth and academy intakes for the new season ──────
+      // Country data was loaded into the sync registry during startNewGame, so
+      // getCountryDataSync is safe to call here without awaiting.
+      const youthRng = createRNG(`${gameState.seed}-youth-s${newState.currentSeason}`);
+      const newYouth: UnsignedYouth[] = [];
+      const newAcademyPlayers: Player[] = [];
+
+      for (const countryKey of newState.countries) {
+        const countryData = getCountryDataSync(countryKey);
+        if (!countryData) continue;
+
+        // Regional youth generation
+        const countrySubRegions = Object.values(newState.subRegions).filter(
+          (sr) => sr.country.toLowerCase() === countryData.name.toLowerCase(),
+        );
+        // Use week=1 for the season-start batch (season boundary context)
+        const batch = generateRegionalYouth(
+          youthRng,
+          countryData,
+          newState.currentSeason,
+          1,
+          countrySubRegions,
+        );
+        newYouth.push(...batch);
+
+        // Academy intake for all clubs in this country
+        const countryClubs = Object.values(newState.clubs).filter((c) => {
+          const league = newState.leagues[c.leagueId];
+          return league?.country.toLowerCase() === countryData.name.toLowerCase();
+        });
+        for (const club of countryClubs) {
+          const intake = generateAcademyIntake(
+            youthRng,
+            club,
+            countryData,
+            newState.currentSeason,
+          );
+          newAcademyPlayers.push(...intake);
+        }
+      }
+
+      // Merge unsigned youth pool
+      if (newYouth.length > 0) {
+        const updatedUnsignedYouth = { ...newState.unsignedYouth };
+        for (const y of newYouth) {
+          updatedUnsignedYouth[y.id] = y;
+        }
+        newState = { ...newState, unsignedYouth: updatedUnsignedYouth };
+      }
+
+      // Merge academy intake players into players + club rosters
+      if (newAcademyPlayers.length > 0) {
+        const updatedPlayers = { ...newState.players };
+        const updatedClubs = { ...newState.clubs };
+        for (const p of newAcademyPlayers) {
+          updatedPlayers[p.id] = p;
+          const club = updatedClubs[p.clubId];
+          if (club) {
+            updatedClubs[p.clubId] = {
+              ...club,
+              playerIds: [...club.playerIds, p.id],
+            };
+          }
+        }
+        newState = { ...newState, players: updatedPlayers, clubs: updatedClubs };
+      }
     } else {
       // Keep season events as-is; update transfer window open/closed state
       const existingWindows = initializeTransferWindows(newState.currentSeason);

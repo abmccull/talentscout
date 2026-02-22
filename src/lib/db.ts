@@ -152,6 +152,15 @@ function migrateSaveState(raw: unknown): GameState {
   // Contact intel — hidden intel from meetings
   if (!state.contactIntel) state.contactIntel = {};
 
+  // Youth Scouting System defaults
+  if (!state.unsignedYouth) state.unsignedYouth = {};
+  if (!state.placementReports) state.placementReports = {};
+  if (!state.gutFeelings) state.gutFeelings = [];
+  if (!state.alumniRecords) state.alumniRecords = [];
+  if (!state.legacyScore) state.legacyScore = { youthFound: 0, firstTeamBreakthroughs: 0, internationalCapsFromFinds: 0, totalScore: 0 };
+  if (!state.subRegions) state.subRegions = {};
+  if (!state.retiredPlayerIds) state.retiredPlayerIds = [];
+
   // Scout field defaults — Phase 1 extensions on the Scout object
   if (!state.scout.npcScoutIds) state.scout.npcScoutIds = [];
   if (!state.scout.countryReputations) state.scout.countryReputations = {};

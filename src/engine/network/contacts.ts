@@ -16,6 +16,8 @@ import type {
   HiddenAttribute,
   HiddenIntel,
   Specialization,
+  YouthVenueType,
+  UnsignedYouth,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 
@@ -192,12 +194,17 @@ const TIP_DESCRIPTIONS: Record<PlayerTip["tipType"], string[]> = {
 type NamePool = { first: string[]; last: string[] };
 
 const NAME_POOLS: Record<ContactType, NamePool> = {
-  agent:             { first: AGENT_FIRST_NAMES,      last: AGENT_LAST_NAMES },
-  clubStaff:         { first: CLUB_STAFF_FIRST_NAMES, last: CLUB_STAFF_LAST_NAMES },
-  journalist:        { first: JOURNALIST_FIRST_NAMES, last: JOURNALIST_LAST_NAMES },
-  scout:             { first: SCOUT_FIRST_NAMES,      last: SCOUT_LAST_NAMES },
-  academyCoach:      { first: CLUB_STAFF_FIRST_NAMES, last: CLUB_STAFF_LAST_NAMES },
-  sportingDirector:  { first: AGENT_FIRST_NAMES,      last: AGENT_LAST_NAMES },
+  agent:                { first: AGENT_FIRST_NAMES,        last: AGENT_LAST_NAMES },
+  clubStaff:            { first: CLUB_STAFF_FIRST_NAMES,   last: CLUB_STAFF_LAST_NAMES },
+  journalist:           { first: JOURNALIST_FIRST_NAMES,   last: JOURNALIST_LAST_NAMES },
+  scout:                { first: SCOUT_FIRST_NAMES,        last: SCOUT_LAST_NAMES },
+  academyCoach:         { first: CLUB_STAFF_FIRST_NAMES,   last: CLUB_STAFF_LAST_NAMES },
+  sportingDirector:     { first: AGENT_FIRST_NAMES,        last: AGENT_LAST_NAMES },
+  grassrootsOrganizer:  { first: SCOUT_FIRST_NAMES,        last: SCOUT_LAST_NAMES },
+  schoolCoach:          { first: CLUB_STAFF_FIRST_NAMES,   last: CLUB_STAFF_LAST_NAMES },
+  youthAgent:           { first: AGENT_FIRST_NAMES,        last: AGENT_LAST_NAMES },
+  academyDirector:      { first: CLUB_STAFF_FIRST_NAMES,   last: CLUB_STAFF_LAST_NAMES },
+  localScout:           { first: SCOUT_FIRST_NAMES,        last: SCOUT_LAST_NAMES },
 };
 
 const REGIONS = [
@@ -230,6 +237,26 @@ const ORGANIZATIONS: Record<ContactType, string[]> = {
     "Club front office", "Football operations", "Transfer committee",
     "Technical board", "Senior management",
   ],
+  grassrootsOrganizer: [
+    "Local football association", "Community football trust",
+    "Grassroots development programme", "Regional FA",
+  ],
+  schoolCoach: [
+    "Secondary school PE department", "College football programme",
+    "School sports partnership", "Local education authority",
+  ],
+  youthAgent: [
+    "Independent youth representation", "Junior talent agency",
+    "Youth football management", "Next generation sports",
+  ],
+  academyDirector: [
+    "Academy administration", "Youth development board",
+    "Academy leadership group", "Foundation phase management",
+  ],
+  localScout: [
+    "Volunteer scouting network", "Regional talent identification",
+    "Local club scouting department", "Community scout programme",
+  ],
 };
 
 function generateContactName(type: ContactType, rng: RNG): string {
@@ -241,20 +268,26 @@ function generateContact(
   rng: RNG,
   type: ContactType,
   relationship: number,
+  country?: string,
 ): Contact {
   const id = `contact_${type}_${rng.nextInt(100000, 999999)}`;
   const name = generateContactName(type, rng);
   const organization = rng.pick(ORGANIZATIONS[type]);
-  const region = rng.pick(REGIONS);
+  const region = country ?? rng.pick(REGIONS);
 
   // Reliability: 0–100 (scouts and club staff tend to be more reliable than journalists)
   const reliabilityBase: Record<ContactType, [number, number]> = {
-    agent:            [40, 75],
-    clubStaff:        [55, 90],
-    journalist:       [25, 65],
-    scout:            [50, 85],
-    academyCoach:     [60, 92],
-    sportingDirector: [50, 80],
+    agent:                [40, 75],
+    clubStaff:            [55, 90],
+    journalist:           [25, 65],
+    scout:                [50, 85],
+    academyCoach:         [60, 92],
+    sportingDirector:     [50, 80],
+    grassrootsOrganizer:  [45, 78],
+    schoolCoach:          [50, 82],
+    youthAgent:           [35, 70],
+    academyDirector:      [60, 90],
+    localScout:           [45, 80],
   };
   const [relMin, relMax] = reliabilityBase[type];
   const reliability = rng.nextInt(relMin, relMax);
@@ -268,6 +301,7 @@ function generateContact(
     reliability,
     knownPlayerIds: [],
     region,
+    country,
   };
 }
 
@@ -303,6 +337,9 @@ export function generateStartingContacts(
       contacts.push(generateContact(rng, "clubStaff",    startingRelationship));
       contacts.push(generateContact(rng, "agent",        startingRelationship));
       contacts.push(generateContact(rng, "academyCoach", startingRelationship));
+      // Youth specialists also get 2 home-country grassroots contacts
+      contacts.push(generateContact(rng, "grassrootsOrganizer", startingRelationship));
+      contacts.push(generateContact(rng, "schoolCoach",         startingRelationship));
       break;
 
     case "firstTeam":
@@ -520,12 +557,17 @@ export function generateContactForType(
   const name = generateContactName(type, rng);
 
   const reliabilityBase: Record<ContactType, [number, number]> = {
-    agent:            [40, 75],
-    clubStaff:        [55, 90],
-    journalist:       [25, 65],
-    scout:            [50, 85],
-    academyCoach:     [60, 92],
-    sportingDirector: [50, 80],
+    agent:                [40, 75],
+    clubStaff:            [55, 90],
+    journalist:           [25, 65],
+    scout:                [50, 85],
+    academyCoach:         [60, 92],
+    sportingDirector:     [50, 80],
+    grassrootsOrganizer:  [45, 78],
+    schoolCoach:          [50, 82],
+    youthAgent:           [35, 70],
+    academyDirector:      [60, 90],
+    localScout:           [45, 80],
   };
   const [relMin, relMax] = reliabilityBase[type];
   const reliability = rng.nextInt(relMin, relMax);
@@ -543,6 +585,159 @@ export function generateContactForType(
 }
 
 // ---------------------------------------------------------------------------
+// Youth scouting contact functions
+// ---------------------------------------------------------------------------
+
+/**
+ * When a contact has relationship >= 60, they may introduce a new contact.
+ * Returns null if the introduction roll fails.
+ */
+export function processContactIntroduction(
+  rng: RNG,
+  scout: Scout,
+  contact: Contact,
+): Contact | null {
+  if (contact.relationship < 60) return null;
+  if (!rng.chance(0.15)) return null; // 15% chance per eligible meeting
+
+  // Pick a related contact type
+  const youthContactTypes: ContactType[] = [
+    "grassrootsOrganizer",
+    "schoolCoach",
+    "youthAgent",
+    "academyDirector",
+    "localScout",
+  ];
+  const introType = rng.pick(youthContactTypes);
+
+  // The introduced contact is from the same country/region as the existing contact
+  const country = contact.country ?? contact.region;
+
+  return generateContact(rng, introType, 20, country); // warm start at 20 relationship
+}
+
+/**
+ * Chance to meet a new contact at a youth venue event.
+ * Rate scales with scout's networking attribute.
+ */
+export function processVenueContactAcquisition(
+  rng: RNG,
+  scout: Scout,
+  venueType: YouthVenueType,
+  country: string,
+): Contact | null {
+  const networkingBonus = (scout.attributes.networking - 10) * 0.02;
+  const baseChance =
+    venueType === "youthFestival"        ? 0.30
+    : venueType === "grassrootsTournament" ? 0.20
+    : venueType === "academyTrialDay"      ? 0.25
+    : 0.10;
+
+  if (!rng.chance(baseChance + networkingBonus)) return null;
+
+  // Map venue to likely contact type
+  const typeMap: Record<string, ContactType[]> = {
+    schoolMatch:          ["schoolCoach"],
+    grassrootsTournament: ["grassrootsOrganizer", "localScout"],
+    streetFootball:       ["localScout"],
+    academyTrialDay:      ["academyDirector"],
+    youthFestival:        ["grassrootsOrganizer", "youthAgent", "localScout"],
+    followUpSession:      ["schoolCoach"],
+    parentCoachMeeting:   ["youthAgent"],
+  };
+  const candidates = typeMap[venueType] ?? ["localScout"];
+  const contactType = rng.pick(candidates);
+
+  return generateContact(rng, contactType, 15, country);
+}
+
+/**
+ * Contacts lose 2-3 relationship per week after 8 weeks of no interaction.
+ */
+export function processRelationshipDecay(
+  contacts: Record<string, Contact>,
+  currentWeek: number,
+): Record<string, Contact> {
+  const result: Record<string, Contact> = {};
+  for (const [id, contact] of Object.entries(contacts)) {
+    const weeksSinceInteraction = currentWeek - (contact.lastInteractionWeek ?? 0);
+    if (weeksSinceInteraction > 8 && contact.relationship > 5) {
+      const decay = Math.min(3, contact.relationship - 5);
+      result[id] = { ...contact, relationship: contact.relationship - decay };
+    } else {
+      result[id] = contact;
+    }
+  }
+  return result;
+}
+
+/**
+ * High-relationship contacts (70+) may share exclusive tips about unsigned youth.
+ * Returns a tip with a youth ID and description, or null.
+ */
+export function processExclusiveTip(
+  rng: RNG,
+  contact: Contact,
+  unsignedYouth: Record<string, UnsignedYouth>,
+): { youthId: string; description: string } | null {
+  if (contact.relationship < 70) return null;
+  if (!rng.chance(0.15)) return null;
+
+  // Pick a youth from the contact's country/region
+  const contactLocation = (contact.country ?? contact.region ?? "").toLowerCase();
+  const countryYouth = Object.values(unsignedYouth).filter(
+    (y) =>
+      y.country.toLowerCase() === contactLocation &&
+      !y.placed &&
+      !y.retired,
+  );
+  if (countryYouth.length === 0) return null;
+
+  const youth = rng.pick(countryYouth);
+  const descriptions = [
+    `I've heard about a promising ${youth.player.position} in the area. Worth watching.`,
+    `There's a kid playing locally who has something special. Name's ${youth.player.lastName}.`,
+    `One of my contacts mentioned a talented youngster called ${youth.player.firstName}. Might be worth a look.`,
+    `Keep an eye out for ${youth.player.lastName} — raw but exciting talent.`,
+  ];
+
+  return { youthId: youth.id, description: rng.pick(descriptions) };
+}
+
+/**
+ * Occasionally a contact requests a favor that can boost relationship.
+ * Returns a favor description and relationship bonus, or null.
+ */
+export function generateContactFavor(
+  rng: RNG,
+  contact: Contact,
+): { description: string; relationshipBonus: number } | null {
+  if (!rng.chance(0.08)) return null;
+
+  const favors = [
+    {
+      description: `${contact.name} asks you to attend a local youth match and share your assessment.`,
+      bonus: 10,
+    },
+    {
+      description: `${contact.name} wants your opinion on a young player their organization is considering.`,
+      bonus: 8,
+    },
+    {
+      description: `${contact.name} requests a reference for a coaching position.`,
+      bonus: 12,
+    },
+    {
+      description: `${contact.name} asks if you can recommend any players for an upcoming tournament.`,
+      bonus: 10,
+    },
+  ];
+
+  const favor = rng.pick(favors);
+  return { description: favor.description, relationshipBonus: favor.bonus };
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -554,12 +749,17 @@ function pickHiddenAttributeByContactType(
   rng: RNG,
 ): HiddenAttribute {
   const pools: Record<ContactType, HiddenAttribute[]> = {
-    agent:            ["consistency", "bigGameTemperament"],
-    clubStaff:        ["professionalism", "injuryProneness", "consistency"],
-    journalist:       ["bigGameTemperament", "consistency"],
-    scout:            ["professionalism", "consistency", "bigGameTemperament", "injuryProneness"],
-    academyCoach:     ["professionalism", "consistency", "injuryProneness"],
-    sportingDirector: ["bigGameTemperament", "professionalism", "consistency"],
+    agent:                ["consistency", "bigGameTemperament"],
+    clubStaff:            ["professionalism", "injuryProneness", "consistency"],
+    journalist:           ["bigGameTemperament", "consistency"],
+    scout:                ["professionalism", "consistency", "bigGameTemperament", "injuryProneness"],
+    academyCoach:         ["professionalism", "consistency", "injuryProneness"],
+    sportingDirector:     ["bigGameTemperament", "professionalism", "consistency"],
+    grassrootsOrganizer:  ["consistency", "professionalism"],
+    schoolCoach:          ["professionalism", "consistency", "injuryProneness"],
+    youthAgent:           ["bigGameTemperament", "consistency"],
+    academyDirector:      ["professionalism", "consistency", "injuryProneness"],
+    localScout:           ["consistency", "bigGameTemperament", "professionalism"],
   };
   return rng.pick(pools[type]);
 }
@@ -572,12 +772,17 @@ function pickTipTypeByContactType(
   rng: RNG,
 ): PlayerTip["tipType"] {
   const pools: Record<ContactType, PlayerTip["tipType"][]> = {
-    agent:            ["unsettled", "availableForLoan", "contractRunningDown"],
-    clubStaff:        ["hiddenGem", "injuryProne", "availableForLoan"],
-    journalist:       ["unsettled", "contractRunningDown", "hiddenGem"],
-    scout:            ["hiddenGem", "availableForLoan", "contractRunningDown", "injuryProne"],
-    academyCoach:     ["hiddenGem", "injuryProne", "availableForLoan"],
-    sportingDirector: ["unsettled", "contractRunningDown", "availableForLoan"],
+    agent:                ["unsettled", "availableForLoan", "contractRunningDown"],
+    clubStaff:            ["hiddenGem", "injuryProne", "availableForLoan"],
+    journalist:           ["unsettled", "contractRunningDown", "hiddenGem"],
+    scout:                ["hiddenGem", "availableForLoan", "contractRunningDown", "injuryProne"],
+    academyCoach:         ["hiddenGem", "injuryProne", "availableForLoan"],
+    sportingDirector:     ["unsettled", "contractRunningDown", "availableForLoan"],
+    grassrootsOrganizer:  ["hiddenGem", "availableForLoan"],
+    schoolCoach:          ["hiddenGem", "injuryProne"],
+    youthAgent:           ["unsettled", "availableForLoan", "contractRunningDown"],
+    academyDirector:      ["hiddenGem", "injuryProne", "availableForLoan"],
+    localScout:           ["hiddenGem", "availableForLoan", "injuryProne"],
   };
   return rng.pick(pools[type]);
 }

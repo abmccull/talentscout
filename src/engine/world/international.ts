@@ -12,7 +12,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { Scout, GameState, Player } from "@/engine/core/types";
+import type { Scout, GameState, Player, UnsignedYouth, SeasonEvent } from "@/engine/core/types";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getAvailableCountries } from "@/data/index";
 
@@ -646,4 +646,225 @@ export function getAssignmentExpiryThreshold(currentWeek: number): number {
   // weekAvailable === currentWeek - 1 is the last "still valid" week.
   // Anything with weekAvailable < currentWeek - 1 is expired.
   return currentWeek - 2;
+}
+
+// =============================================================================
+// STRUCTURED YOUTH TOURNAMENTS
+// =============================================================================
+
+/**
+ * A structured youth international tournament with a fixed schedule.
+ * These tournaments occur on a biennial or annual basis and can appear
+ * in the season events calendar so scouts can plan to attend them.
+ */
+export interface StructuredYouthTournament {
+  id: string;
+  name: string;
+  /** Confederation or governing body. */
+  confederation: "FIFA" | "UEFA" | "Open";
+  /** Maximum age for participating players. */
+  ageGroup: number;
+  /**
+   * How often the tournament occurs.
+   * "annual" = every season; "biennial" = every 2 seasons.
+   */
+  frequency: "annual" | "biennial";
+  /**
+   * For biennial tournaments, this offset (0 or 1) determines whether the
+   * tournament runs in even or odd seasons. Season % 2 === phaseOffset.
+   */
+  phaseOffset: 0 | 1;
+  /** Duration of the tournament in weeks. */
+  duration: number;
+  /** Week within the season when the tournament begins. */
+  weekStart: number;
+  /** Brief description for the season events calendar. */
+  description: string;
+}
+
+/**
+ * The canonical set of structured youth international tournaments.
+ *
+ * | Tournament              | Freq      | Age | Duration |
+ * |-------------------------|-----------|-----|----------|
+ * | U-17 World Cup          | Biennial  | U17 | 4 weeks  |
+ * | U-20 World Cup          | Biennial  | U20 | 4 weeks  |
+ * | UEFA U-17 Championship  | Biennial  | U17 | 2 weeks  |
+ * | UEFA U-19 Championship  | Biennial  | U19 | 2 weeks  |
+ * | Toulon Tournament       | Annual    | U21 | 2 weeks  |
+ */
+export const STRUCTURED_YOUTH_TOURNAMENTS: readonly StructuredYouthTournament[] = [
+  {
+    id: "u17_world_cup",
+    name: "U-17 World Cup",
+    confederation: "FIFA",
+    ageGroup: 17,
+    frequency: "biennial",
+    phaseOffset: 0,
+    duration: 4,
+    weekStart: 8,
+    description:
+      "The FIFA U-17 World Cup gathers the best under-17 national teams from every confederation. A unique window to observe the next generation before they enter senior football.",
+  },
+  {
+    id: "u20_world_cup",
+    name: "U-20 World Cup",
+    confederation: "FIFA",
+    ageGroup: 20,
+    frequency: "biennial",
+    phaseOffset: 1, // Offset by one season so it alternates with the U-17 WC
+    duration: 4,
+    weekStart: 12,
+    description:
+      "The FIFA U-20 World Cup is the premier stage for emerging talent on the cusp of senior football. Teams from six confederations compete over four weeks.",
+  },
+  {
+    id: "uefa_u17_championship",
+    name: "UEFA U-17 Championship",
+    confederation: "UEFA",
+    ageGroup: 17,
+    frequency: "biennial",
+    phaseOffset: 0,
+    duration: 2,
+    weekStart: 20,
+    description:
+      "The UEFA Under-17 Championship crowns the best young European talent. The elite phase runs over two weeks and provides concentrated access to the continent's finest prospects.",
+  },
+  {
+    id: "uefa_u19_championship",
+    name: "UEFA U-19 Championship",
+    confederation: "UEFA",
+    ageGroup: 19,
+    frequency: "biennial",
+    phaseOffset: 1,
+    duration: 2,
+    weekStart: 22,
+    description:
+      "The UEFA Under-19 Championship is the premier European youth competition for players on the edge of senior squads. A vital proving ground watched closely by club scouts.",
+  },
+  {
+    id: "toulon_tournament",
+    name: "Toulon Tournament",
+    confederation: "Open",
+    ageGroup: 21,
+    frequency: "annual",
+    phaseOffset: 0, // Annual — always runs
+    duration: 2,
+    weekStart: 26,
+    description:
+      "The Maurice Revello Tournament (historically the Toulon Tournament) is an annual invitational for under-21 nations. Clubs send observers every year to assess near-senior talent.",
+  },
+] as const;
+
+/**
+ * Return the structured youth tournaments that are active in the given season.
+ *
+ * For biennial tournaments, the tournament runs only when
+ * `season % 2 === tournament.phaseOffset`.
+ * Annual tournaments always run.
+ *
+ * @param season - The current season year.
+ * @returns      - Array of tournaments active in this season.
+ */
+export function getYouthTournamentsForSeason(
+  season: number,
+): StructuredYouthTournament[] {
+  return STRUCTURED_YOUTH_TOURNAMENTS.filter((t) => {
+    if (t.frequency === "annual") return true;
+    return season % 2 === t.phaseOffset;
+  });
+}
+
+/**
+ * Build SeasonEvent entries for all structured youth tournaments active in the
+ * given season. These can be merged into the season events calendar produced
+ * by generateSeasonEvents() in seasonEvents.ts.
+ *
+ * @param season - The current season year.
+ * @returns      - Array of SeasonEvent objects for active youth tournaments.
+ */
+export function generateYouthTournamentSeasonEvents(season: number): SeasonEvent[] {
+  const active = getYouthTournamentsForSeason(season);
+  return active.map(
+    (t): SeasonEvent => ({
+      id: `se_${season}_youth_${t.id}`,
+      type: "youthCup",
+      name: t.name,
+      startWeek: t.weekStart,
+      endWeek: t.weekStart + t.duration - 1,
+      description: t.description,
+    }),
+  );
+}
+
+// =============================================================================
+// 6. callUpUnsignedYouthToNationalTeam
+// =============================================================================
+
+/**
+ * Result of the national team youth squad call-up process.
+ */
+export interface YouthCallUpResult {
+  /** IDs of unsigned youth who were called up to the national team squad. */
+  calledUp: string[];
+  /** Buzz increase per youth ID (15-25 points for each called-up player). */
+  buzzIncreases: Record<string, number>;
+}
+
+/**
+ * Select unsigned youth eligible for national team youth squads.
+ *
+ * Youth with buzzLevel >= 40 and age <= ageGroup are candidates.
+ * A successful call-up boosts their buzzLevel by 15–25 points.
+ *
+ * Selection criteria:
+ *  - Player must be from the target country (case-insensitive).
+ *  - Player age must be <= tournament ageGroup.
+ *  - buzzLevel must be >= 40 (the player has a minimum level of recognition).
+ *  - Player must not already be placed or retired.
+ *
+ * @param rng           - Seeded RNG instance.
+ * @param unsignedYouth - All unsigned youth in the world, keyed by ID.
+ * @param tournament    - Describes the target tournament (ageGroup + country).
+ * @returns             - IDs of called-up youth and their buzz increases.
+ */
+export function callUpUnsignedYouthToNationalTeam(
+  rng: RNG,
+  unsignedYouth: Record<string, UnsignedYouth>,
+  tournament: { ageGroup: number; country: string },
+): YouthCallUpResult {
+  const calledUp: string[] = [];
+  const buzzIncreases: Record<string, number> = {};
+
+  // Identify eligible youth
+  const eligible = Object.values(unsignedYouth).filter((y) => {
+    if (y.placed || y.retired) return false;
+    if (y.player.age > tournament.ageGroup) return false;
+    if (y.buzzLevel < 40) return false;
+    return y.country.toLowerCase() === tournament.country.toLowerCase();
+  });
+
+  if (eligible.length === 0) {
+    return { calledUp, buzzIncreases };
+  }
+
+  // Sort by buzz descending so the highest-profile youth are called up first
+  const sorted = [...eligible].sort((a, b) => b.buzzLevel - a.buzzLevel);
+
+  // Take up to 3 youth per call-up (realistic squad selection size from unsigned pool)
+  const maxCallUps = Math.min(3, sorted.length);
+
+  for (let i = 0; i < maxCallUps; i++) {
+    const youth = sorted[i];
+
+    // Call-up probability: 70% for top-buzz, drops linearly with buzz below 70
+    const callUpChance = Math.min(0.70, (youth.buzzLevel - 40) / 60 + 0.30);
+    if (!rng.chance(callUpChance)) continue;
+
+    const buzzGain = rng.nextInt(15, 25);
+    calledUp.push(youth.id);
+    buzzIncreases[youth.id] = buzzGain;
+  }
+
+  return { calledUp, buzzIncreases };
 }

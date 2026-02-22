@@ -7,7 +7,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { League, Club, Player, Fixture, Territory } from "@/engine/core/types";
+import type { League, Club, Player, Fixture, Territory, SubRegion } from "@/engine/core/types";
 import { loadCountries } from "@/data/index";
 import type { ClubData, LeagueData, CountryData } from "@/data/types";
 import { generateSquad } from "@/engine/players/generation";
@@ -19,6 +19,7 @@ export interface WorldState {
   players: Record<string, Player>;
   fixtures: Record<string, Fixture>;
   territories: Record<string, Territory>;
+  subRegions: Record<string, SubRegion>;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +65,32 @@ function buildTerritory(countryData: CountryData, leagueIds: string[]): Territor
     maxScouts: 3,
     assignedScoutIds: [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// Sub-region generation
+// ---------------------------------------------------------------------------
+
+function generateWorldSubRegions(countries: string[]): Record<string, SubRegion> {
+  const SUB_REGION_DATA: Record<string, string[]> = {
+    england: ["London", "North West", "North East", "Midlands", "South Coast", "Yorkshire", "East Anglia"],
+    brazil: ["São Paulo", "Rio de Janeiro", "Minas Gerais", "Southern", "Northeast", "North"],
+    argentina: ["Buenos Aires", "Rosario", "Córdoba", "Mendoza", "La Plata", "Tucumán"],
+    spain: ["Catalonia", "Madrid", "Andalusia", "Basque Country", "Valencia", "Galicia"],
+    germany: ["Bavaria", "North Rhine-Westphalia", "Saxony", "Hamburg", "Berlin", "Baden-Württemberg"],
+    france: ["Île-de-France", "Provence", "Rhône-Alpes", "Brittany", "Alsace", "Midi-Pyrénées"],
+  };
+
+  const result: Record<string, SubRegion> = {};
+  for (const country of countries) {
+    const regions = SUB_REGION_DATA[country.toLowerCase()] ?? ["Central"];
+    for (const name of regions) {
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "");
+      const id = `subregion_${country.toLowerCase()}_${slug}`;
+      result[id] = { id, name, country, familiarity: 0 };
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -159,5 +186,8 @@ export async function initializeWorld(
     }
   }
 
-  return { leagues, clubs, players, fixtures, territories };
+  // Generate sub-regions for youth scouting.
+  const subRegions = generateWorldSubRegions(countries);
+
+  return { leagues, clubs, players, fixtures, territories, subRegions };
 }

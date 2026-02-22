@@ -56,6 +56,13 @@ const CA_CONTEXT_NOISE: Record<ObservationContext, number> = {
   trainingGround: 0.8,
   youthTournament: 1.1,
   academyVisit: 0.9,
+  schoolMatch: 1.2,
+  grassrootsTournament: 1.3,
+  streetFootball: 1.4,
+  academyTrialDay: 0.85,
+  youthFestival: 1.1,
+  followUpSession: 0.9,
+  parentCoachMeeting: 2.0,
 };
 
 const PA_CONTEXT_NOISE: Record<ObservationContext, number> = {
@@ -64,6 +71,13 @@ const PA_CONTEXT_NOISE: Record<ObservationContext, number> = {
   trainingGround: 1.0,
   youthTournament: 0.75,
   academyVisit: 0.8,
+  schoolMatch: 1.1,
+  grassrootsTournament: 1.0,
+  streetFootball: 0.9,
+  academyTrialDay: 0.8,
+  youthFestival: 0.85,
+  followUpSession: 0.85,
+  parentCoachMeeting: 2.0,
 };
 
 // ---------------------------------------------------------------------------

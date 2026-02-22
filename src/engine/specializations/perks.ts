@@ -42,7 +42,19 @@ export type PerkEffect =
   /** Country-specific accuracy improvement for observations made in that country. */
   | { type: "regionalAccuracyBonus"; factor: number; country: string }
   /** Increase the scout's ability to influence a club's transfer decision process. */
-  | { type: "transferInfluence"; factor: number };
+  | { type: "transferInfluence"; factor: number }
+  /** Unlock grassroots venues (streetFootball, grassrootsTournament) for youth scouting. */
+  | { type: "grassrootsAccess"; enabled: true }
+  /** Increase gut feeling trigger rate for young players up to a maximum age. */
+  | { type: "gutFeelingBonus"; multiplier: number; maxAge: number }
+  /** Contacts begin sharing intel tips about unsigned youth sightings. */
+  | { type: "youthNetworkTips"; enabled: true }
+  /** Additive bonus to youth placement acceptance rate across all conviction levels. */
+  | { type: "placementReputationBonus"; factor: number }
+  /** Scout can request clubs to hold dedicated trial days for recommended youth. */
+  | { type: "trialDayAccess"; enabled: true }
+  /** Gut feelings include a PA estimate within a given margin of the true value. */
+  | { type: "paEstimate"; enabled: true; margin: number };
 
 export interface Perk {
   id: string;
@@ -90,6 +102,22 @@ export interface PerkModifiers {
    * needing to infer them through repeated observation.
    */
   hiddenAttributeAccess: PlayerAttribute[];
+  /** Whether grassroots venues (streetFootball, grassrootsTournament) are unlocked */
+  hasGrassrootsAccess: boolean;
+  /** Gut feeling trigger rate multiplier for young players */
+  gutFeelingMultiplier: number;
+  /** Maximum age for gut feeling bonus to apply */
+  gutFeelingMaxAge: number;
+  /** Whether contacts share youth sighting tips */
+  hasYouthNetworkTips: boolean;
+  /** Additive bonus to placement acceptance rate */
+  placementReputationBonus: number;
+  /** Whether scout can request trial days */
+  hasTrialDayAccess: boolean;
+  /** Whether gut feelings include PA estimate */
+  hasPAEstimate: boolean;
+  /** Margin of error for PA estimate */
+  paEstimateMargin: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -98,56 +126,79 @@ export interface PerkModifiers {
 
 export const ALL_PERKS: Perk[] = [
   // -------------------------------------------------------------------------
-  // Youth Scout (levels 1, 3, 5, 8, 12)
+  // Youth Scout (levels 1, 3, 5, 7, 9, 12, 15, 18)
   // -------------------------------------------------------------------------
   {
-    id: "youth_academy_access",
-    name: "Academy Access",
+    id: "youth_grassroots_access",
+    name: "Grassroots Access",
     description:
-      "Grants entry to club academies and youth tournaments. Observations at these venues reveal technical fundamentals and work-rate that are invisible at senior matches.",
+      "Opens doors to street football sessions and grassroots tournaments. Discover unsigned youth in venues hidden from the mainstream scouting circuit.",
     level: 1,
     specialization: "youth",
-    effect: {
-      type: "visibilityBonus",
-      context: "academyVisit",
-      attributes: ["firstTouch", "dribbling", "workRate", "pressing"],
-    },
+    effect: { type: "grassrootsAccess", enabled: true },
   },
   {
-    id: "youth_growth_projection",
-    name: "Growth Projection",
+    id: "youth_raw_potential_reading",
+    name: "Raw Potential Reading",
     description:
-      "Years of watching teenagers develop gives an instinctive sense of ceilings. Unlocks a rough potential ability range indicator on players aged 21 and under.",
+      "Years of watching rough diamonds gives you an instinctive sense of ceilings. Unlocks a rough potential ability range indicator on unsigned youth.",
     level: 3,
     specialization: "youth",
     effect: { type: "youthProjection", enabled: true },
   },
   {
-    id: "youth_early_bloomer",
-    name: "Early Bloomer Detection",
+    id: "youth_instinct_sharpening",
+    name: "Instinct Sharpening",
     description:
-      "Some teenagers peak ahead of schedule. Your eye for micro-progressions in body shape, movement economy, and technical assurance lets you identify which under-19s will develop fastest — before the big clubs notice.",
+      "Your gut reactions to young talent are sharper than most. Gut feeling trigger rate increased by 40% when observing players under 16.",
     level: 5,
     specialization: "youth",
-    effect: { type: "accuracyBonus", factor: 0.7, condition: "playerAge<19" },
+    effect: { type: "gutFeelingBonus", multiplier: 1.4, maxAge: 16 },
   },
   {
-    id: "youth_academy_coach_network",
-    name: "Academy Coach Network",
+    id: "youth_network_expansion",
+    name: "Youth Network",
     description:
-      "A reputation built in academies opens doors. Meetings with academy staff yield better relationship gains and more reliable intel on youth players' hidden attributes.",
-    level: 8,
+      "Your contacts begin sharing intel about unsigned youth sightings. Network meetings occasionally reveal hidden talents in the region.",
+    level: 7,
     specialization: "youth",
-    effect: { type: "networkBonus", contactType: "clubStaff", bonus: 15 },
+    effect: { type: "youthNetworkTips", enabled: true },
+  },
+  {
+    id: "youth_placement_reputation",
+    name: "Placement Reputation",
+    description:
+      "Clubs trust your recommendations. Placement acceptance rate increases by 25% across all conviction levels.",
+    level: 9,
+    specialization: "youth",
+    effect: { type: "placementReputationBonus", factor: 0.25 },
   },
   {
     id: "youth_wonderkid_radar",
     name: "Wonderkid Radar",
     description:
-      "Your pattern recognition for generational talent is razor-sharp. Receive automated alerts when a player aged under 18 in your scouted leagues shows exceptional potential markers.",
+      "Your pattern recognition for generational talent is razor-sharp. Auto-alert when observing an under-16 with generational potential markers.",
     level: 12,
     specialization: "youth",
-    effect: { type: "alertSystem", alertType: "wonderkidEmergence" },
+    effect: { type: "wonderkidDetection", enabled: true },
+  },
+  {
+    id: "youth_academy_whisperer",
+    name: "Academy Whisperer",
+    description:
+      "Your reputation opens private academy doors. You can request clubs to hold dedicated trial days for your recommended youth.",
+    level: 15,
+    specialization: "youth",
+    effect: { type: "trialDayAccess", enabled: true },
+  },
+  {
+    id: "youth_generational_eye",
+    name: "Generational Eye",
+    description:
+      "The pinnacle of youth scouting intuition. Gut feelings now include a PA estimate within ±5 of the true value.",
+    level: 18,
+    specialization: "youth",
+    effect: { type: "paEstimate", enabled: true, margin: 5 },
   },
 
   // -------------------------------------------------------------------------
@@ -332,28 +383,6 @@ export const ALL_PERKS: Perk[] = [
   },
 
   // -------------------------------------------------------------------------
-  // Youth Scout (levels 15, 18)
-  // -------------------------------------------------------------------------
-  {
-    id: "youth_development_trajectory",
-    name: "Development Trajectory",
-    description:
-      "A career spent watching teenagers grow gives an almost prescient feel for the path ahead. Unlock a multi-season development trajectory indicator on players aged 21 and under — showing whether their curve is accelerating, plateauing, or declining before rival clubs realise.",
-    level: 15,
-    specialization: "youth",
-    effect: { type: "developmentPrediction", enabled: true },
-  },
-  {
-    id: "youth_wonderkid_whisperer",
-    name: "Wonderkid Whisperer",
-    description:
-      "Generational talent carries unmistakable signatures — in movement economy, spatial awareness, and an almost eerie composure for the age. This mastery perk auto-flags every player whose hidden potential tier is generational or world-class, so no once-in-a-decade prospect slips past you.",
-    level: 18,
-    specialization: "youth",
-    effect: { type: "wonderkidDetection", enabled: true },
-  },
-
-  // -------------------------------------------------------------------------
   // First Team Scout (levels 15, 18)
   // -------------------------------------------------------------------------
   {
@@ -472,6 +501,11 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
     journalist: 0,
     academyCoach: 0,
     sportingDirector: 0,
+    grassrootsOrganizer: 0,
+    schoolCoach: 0,
+    youthAgent: 0,
+    academyDirector: 0,
+    localScout: 0,
   };
 
   let accuracyMultiplier = 1.0;
@@ -488,6 +522,16 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
   let convictionMultiplier = 1.0;
   let transferInfluenceFactor = 0;
   const hiddenAttributeAccess: PlayerAttribute[] = [];
+
+  // Youth scouting modifier accumulators
+  let hasGrassrootsAccess = false;
+  let gutFeelingMultiplier = 1.0;
+  let gutFeelingMaxAge = 0;
+  let hasYouthNetworkTips = false;
+  let placementReputationBonus = 0;
+  let hasTrialDayAccess = false;
+  let hasPAEstimate = false;
+  let paEstimateMargin = 0;
 
   for (const perk of perks) {
     const effect = perk.effect;
@@ -567,6 +611,37 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
         // here we fold in the raw factor so the modifier is always available.
         accuracyMultiplier *= effect.factor;
         break;
+
+      case "grassrootsAccess":
+        hasGrassrootsAccess = true;
+        break;
+
+      case "gutFeelingBonus":
+        // Use the highest multiplier and the highest (most permissive) max age
+        gutFeelingMultiplier = Math.max(gutFeelingMultiplier, effect.multiplier);
+        gutFeelingMaxAge = Math.max(gutFeelingMaxAge, effect.maxAge);
+        break;
+
+      case "youthNetworkTips":
+        hasYouthNetworkTips = true;
+        break;
+
+      case "placementReputationBonus":
+        placementReputationBonus += effect.factor;
+        break;
+
+      case "trialDayAccess":
+        hasTrialDayAccess = true;
+        break;
+
+      case "paEstimate":
+        hasPAEstimate = true;
+        // Use the smallest (most accurate) margin when multiple perks stack
+        paEstimateMargin =
+          paEstimateMargin === 0
+            ? effect.margin
+            : Math.min(paEstimateMargin, effect.margin);
+        break;
     }
   }
 
@@ -595,5 +670,13 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
     convictionMultiplier,
     transferInfluenceFactor,
     hiddenAttributeAccess,
+    hasGrassrootsAccess,
+    gutFeelingMultiplier,
+    gutFeelingMaxAge,
+    hasYouthNetworkTips,
+    placementReputationBonus,
+    hasTrialDayAccess,
+    hasPAEstimate,
+    paEstimateMargin,
   };
 }

@@ -61,6 +61,14 @@ const ACTIVITY_CONFIG: Record<
   boardPresentation: { label: "Board Presentation", icon: Users, slots: 2, color: "text-indigo-400" },
   assignTerritory: { label: "Assign Territory", icon: ChevronRight, slots: 1, color: "text-lime-400" },
   internationalTravel: { label: "International Travel", icon: ChevronRight, slots: 2, color: "text-sky-400" },
+  schoolMatch: { label: "School Match", icon: Eye, slots: 2, color: "text-green-400" },
+  grassrootsTournament: { label: "Grassroots Tournament", icon: Trophy, slots: 3, color: "text-lime-400" },
+  streetFootball: { label: "Street Football", icon: Eye, slots: 2, color: "text-orange-400" },
+  academyTrialDay: { label: "Academy Trial Day", icon: GraduationCap, slots: 2, color: "text-pink-400" },
+  youthFestival: { label: "Youth Festival", icon: Trophy, slots: 3, color: "text-yellow-400" },
+  followUpSession: { label: "Follow-Up Session", icon: Eye, slots: 1, color: "text-teal-400" },
+  parentCoachMeeting: { label: "Parent/Coach Meeting", icon: Users, slots: 1, color: "text-purple-400" },
+  writePlacementReport: { label: "Write Placement Report", icon: FileText, slots: 1, color: "text-amber-400" },
 };
 
 function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {

@@ -28,12 +28,21 @@ import type {
   NPCScout,
   NPCScoutReport,
   BoardDirective,
+  UnsignedYouth,
+  AlumniMilestone,
+  AlumniRecord,
+  GutFeeling,
 } from "./types";
 import {
   processNPCScoutingWeek,
   restNPCScout,
   evaluateBoardDirectives,
 } from "../career/index";
+import {
+  processYouthAging,
+  processPlayerRetirement,
+} from "../youth/generation";
+import { processAlumniWeek } from "../youth/alumni";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -106,6 +115,27 @@ export interface TickResult {
   npcScoutResults: NPCScoutWeekResult[];
   /** Board directive evaluation result, set only at season-end for tier 5. */
   boardDirectiveResult?: BoardDirectiveEvaluationResult;
+  /** Youth aging results: auto-signed, retired, updated pool. */
+  youthAgingResult?: {
+    autoSigned: Array<{ youthId: string; clubId: string }>;
+    retired: string[];
+    updatedUnsignedYouth: Record<string, UnsignedYouth>;
+  };
+  /** Player retirements this tick. */
+  playerRetirements?: {
+    retiredPlayerIds: string[];
+    updatedClubs: Record<string, Club>;
+  };
+  /** Newly generated unsigned youth this tick. */
+  newUnsignedYouth?: UnsignedYouth[];
+  /** New academy intake players this tick. */
+  newAcademyIntake?: Player[];
+  /** Alumni milestones triggered this tick. */
+  alumniMilestones?: AlumniMilestone[];
+  /** Updated alumni records after processing this week. */
+  alumniRecords?: AlumniRecord[];
+  /** Gut feelings triggered this tick. */
+  gutFeelings?: GutFeeling[];
 }
 
 // =============================================================================
@@ -1125,6 +1155,32 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 10. Board directive evaluation (tier 5, season-end only).
   const boardDirectiveResult = evaluateBoardDirectivesForTick(state, endOfSeasonTriggered);
 
+  // 11. Youth scouting: aging and retirement
+  const youthAgingResult = processYouthAging(
+    rng,
+    state.unsignedYouth,
+    state.clubs,
+    state.currentSeason,
+  );
+
+  // 12. Player retirement (season-end only)
+  const playerRetirements = endOfSeasonTriggered
+    ? processPlayerRetirement(rng, state.players, state.clubs, state.currentSeason)
+    : undefined;
+
+  // 13. Alumni milestone tracking
+  const alumniResult = processAlumniWeek(
+    rng,
+    state.alumniRecords,
+    state.players,
+    state.clubs,
+    state.currentWeek,
+    state.currentSeason,
+  );
+
+  // Merge alumni messages into inbox messages
+  newMessages.push(...alumniResult.newMessages);
+
   return {
     fixturesPlayed,
     standingsUpdated,
@@ -1136,6 +1192,19 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     endOfSeasonTriggered,
     npcScoutResults,
     boardDirectiveResult,
+    youthAgingResult: {
+      autoSigned: youthAgingResult.autoSigned,
+      retired: youthAgingResult.retired,
+      updatedUnsignedYouth: youthAgingResult.updated,
+    },
+    playerRetirements,
+    // newUnsignedYouth and newAcademyIntake are generated asynchronously
+    // in the store layer (they need CountryData which requires async loading)
+    newUnsignedYouth: undefined,
+    newAcademyIntake: undefined,
+    alumniMilestones: alumniResult.newMilestones,
+    alumniRecords: alumniResult.updatedAlumni,
+    gutFeelings: undefined, // generated during observation processing in store
   };
 }
 
@@ -1275,6 +1344,72 @@ export function advanceWeek(
     }
   }
 
+  // ---- Youth aging: auto-signed youth become regular players ----
+  if (tickResult.youthAgingResult) {
+    for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
+      const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
+      if (youth) {
+        const player = { ...youth.player, clubId };
+        updatedPlayers[player.id] = player;
+        const club = updatedClubs[clubId];
+        if (club) {
+          updatedClubs[clubId] = {
+            ...club,
+            playerIds: [...club.playerIds, player.id],
+          };
+        }
+      }
+    }
+  }
+
+  // ---- Player retirements: remove from clubs ----
+  if (tickResult.playerRetirements) {
+    for (const [clubId, club] of Object.entries(tickResult.playerRetirements.updatedClubs)) {
+      updatedClubs[clubId] = club;
+    }
+    for (const pid of tickResult.playerRetirements.retiredPlayerIds) {
+      delete updatedPlayers[pid];
+    }
+  }
+
+  // ---- New unsigned youth: add to pool ----
+  let youthPool = { ...state.unsignedYouth };
+  if (tickResult.newUnsignedYouth) {
+    for (const youth of tickResult.newUnsignedYouth) {
+      youthPool[youth.id] = youth;
+    }
+  }
+
+  // ---- New academy intake: add to clubs ----
+  if (tickResult.newAcademyIntake) {
+    for (const player of tickResult.newAcademyIntake) {
+      updatedPlayers[player.id] = player;
+      const club = updatedClubs[player.clubId];
+      if (club) {
+        updatedClubs[player.clubId] = {
+          ...club,
+          playerIds: [...club.playerIds, player.id],
+        };
+      }
+    }
+  }
+
+  // ---- Gut feelings ----
+  const updatedGutFeelings = [
+    ...state.gutFeelings,
+    ...(tickResult.gutFeelings ?? []),
+  ];
+
+  // ---- Accumulated retired player IDs ----
+  const updatedRetiredPlayerIds = [
+    ...state.retiredPlayerIds,
+    ...(tickResult.playerRetirements?.retiredPlayerIds ?? []),
+    ...(tickResult.youthAgingResult?.retired ?? []),
+  ];
+
+  // ---- Alumni records update ----
+  const updatedAlumniRecords = tickResult.alumniRecords ?? state.alumniRecords;
+
   // ---- Scout updates ----
   // Board directive evaluation may add an additional reputation change (tier 5).
   // Note: fatigue recovery is handled by the calendar system (applyWeekResults),
@@ -1305,6 +1440,27 @@ export function advanceWeek(
       updatedPlayers[id] = { ...player, age: player.age + 1 };
     }
 
+    // Age unsigned youth at season end
+    const updatedUnsignedYouth = { ...youthPool };
+    if (tickResult.youthAgingResult) {
+      // Apply the youth engine's results
+      for (const [id, youth] of Object.entries(tickResult.youthAgingResult.updatedUnsignedYouth)) {
+        updatedUnsignedYouth[id] = youth;
+      }
+      // Remove retired youth
+      for (const rid of tickResult.youthAgingResult.retired) {
+        delete updatedUnsignedYouth[rid];
+      }
+    } else {
+      // Age unsigned youth +1 year
+      for (const [id, youth] of Object.entries(updatedUnsignedYouth)) {
+        updatedUnsignedYouth[id] = {
+          ...youth,
+          player: { ...youth.player, age: youth.player.age + 1 },
+        };
+      }
+    }
+
     // Update season in all leagues
     const updatedLeagues = { ...state.leagues };
     for (const [id, league] of Object.entries(updatedLeagues)) {
@@ -1331,6 +1487,10 @@ export function advanceWeek(
         activities: Array(7).fill(null) as null[],
         completed: false,
       },
+      unsignedYouth: updatedUnsignedYouth,
+      gutFeelings: updatedGutFeelings,
+      retiredPlayerIds: updatedRetiredPlayerIds,
+      alumniRecords: updatedAlumniRecords,
     };
   }
 
@@ -1353,5 +1513,9 @@ export function advanceWeek(
       activities: Array(7).fill(null) as null[],
       completed: false,
     },
+    unsignedYouth: youthPool,
+    gutFeelings: updatedGutFeelings,
+    retiredPlayerIds: updatedRetiredPlayerIds,
+    alumniRecords: updatedAlumniRecords,
   };
 }
