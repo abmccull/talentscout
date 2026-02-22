@@ -20,32 +20,80 @@ import {
 const SPECIALIZATIONS: {
   id: Specialization;
   name: string;
+  tagline: string;
   desc: string;
-  traits: string[];
+  playstyle: string;
+  exclusiveFeatures: string[];
+  exclusiveActivities: string[];
+  keyStrength: string;
 }[] = [
   {
     id: "youth",
     name: "Youth Scout",
-    desc: "Find the wonderkids before anyone else. Patience and projection are your tools.",
-    traits: ["Academy Access", "Growth Projection", "Long-term payoff"],
+    tagline: "The long game",
+    desc: "Find the wonderkids before anyone else. Visit academies, attend youth tournaments, and project which 16-year-olds will become world-class players.",
+    playstyle: "Patient, intuitive gameplay. You won't see results for seasons — but when your discovery becomes a star, nothing beats it.",
+    exclusiveFeatures: [
+      "Academy visits & youth tournament scouting",
+      "Gut feelings — intuitive reads on young talent",
+      "Player placement — recommend youth to clubs",
+      "Alumni tracking — watch your discoveries grow",
+      "Venue discovery — find hidden training grounds",
+      "Home country scouting advantage",
+    ],
+    exclusiveActivities: ["Academy Visit", "Youth Tournament", "Training Visit"],
+    keyStrength: "Potential Assessment — the best at projecting a player's ceiling",
   },
   {
     id: "firstTeam",
     name: "First Team Scout",
-    desc: "Identify the right player for the right system. High stakes, immediate impact.",
-    traits: ["System Fit Analysis", "Transfer Market Sense", "High pressure"],
+    tagline: "High stakes, immediate impact",
+    desc: "Your manager needs a left-back who fits the system, is under 28, and costs less than £20M. Find them — or your job is on the line.",
+    playstyle: "High-pressure, results-driven gameplay. Your manager sets transfer targets and you must deliver players who fit the tactical system and perform immediately.",
+    exclusiveFeatures: [
+      "Manager directives — fulfil specific transfer briefs",
+      "Club response pipeline — see your picks signed or rejected",
+      "System fit analysis — tactical compatibility scoring",
+      "Transfer tracker — monitor your signings' performance",
+      "Trial matches — prove a player's quality in-house",
+      "Contract negotiation assists",
+    ],
+    exclusiveActivities: ["Reserve Match", "Scouting Mission", "Opposition Analysis", "Agent Showcase", "Trial Match", "Contract Negotiation"],
+    keyStrength: "Player Judgment — the best at assessing current ability level",
   },
   {
     id: "regional",
     name: "Regional Expert",
-    desc: "Deep knowledge of a specific region. You know every pitch and every prospect.",
-    traits: ["Local Network", "Hidden Gem Finder", "Cultural expertise"],
+    tagline: "Know every pitch, every prospect",
+    desc: "Deep knowledge of a specific region gives you connections and insights no outsider can match. You find hidden gems before the big clubs even know they exist.",
+    playstyle: "Network-focused gameplay. Your local contacts, cultural expertise, and regional reputation open doors that other scouts can't access.",
+    exclusiveFeatures: [
+      "Regional reputation & territory bonuses",
+      "Stronger local contact network",
+      "Hidden gem discovery advantage",
+      "Choose your starting region",
+      "Cross-league transfer insights",
+      "Cultural scouting expertise",
+    ],
+    exclusiveActivities: ["Match Attendance", "Networking", "Study"],
+    keyStrength: "Balanced skills — strong generalist with deep regional knowledge",
   },
   {
     id: "data",
     name: "Data Scout",
-    desc: "Numbers don't lie. Find market inefficiencies through statistical analysis.",
-    traits: ["Statistical Baseline", "Anomaly Detection", "Modern approach"],
+    tagline: "Numbers reveal what eyes miss",
+    desc: "Query statistical databases, detect anomalies in player data, and make predictions about who's about to break out — or break down.",
+    playstyle: "Analytical, systems-driven gameplay. You manage an analytics team, build statistical profiles, and earn 'Oracle' status by making accurate predictions.",
+    exclusiveFeatures: [
+      "Database queries — filter players by statistical criteria",
+      "Statistical profiling with percentile rankings",
+      "Prediction system — forecast breakouts, declines & transfers",
+      "Oracle status — earn prestige through prediction accuracy",
+      "Analytics team — hire & manage NPC data analysts",
+      "Market inefficiency scanner",
+    ],
+    exclusiveActivities: ["Database Query", "Deep Video Analysis", "Stats Briefing", "Data Conference", "Algorithm Calibration", "Market Inefficiency Scan", "Analytics Team Meeting"],
+    keyStrength: "Data Literacy — the best at interpreting statistics and spotting anomalies",
   },
 ];
 
@@ -437,31 +485,83 @@ export function NewGameScreen() {
             </CardDescription>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-4">
-            {SPECIALIZATIONS.map((spec) => (
-              <button
-                key={spec.id}
-                onClick={() => setSpecialization(spec.id)}
-                aria-pressed={specialization === spec.id}
-                className={`cursor-pointer rounded-lg border p-4 text-left transition ${
-                  specialization === spec.id
-                    ? "border-emerald-500 bg-emerald-500/10"
-                    : "border-[var(--border)] hover:border-zinc-600"
-                }`}
-              >
-                <h3 className="mb-1 font-semibold text-white">{spec.name}</h3>
-                <p className="mb-3 text-sm text-zinc-400">{spec.desc}</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {spec.traits.map((trait) => (
-                    <span
-                      key={trait}
-                      className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300"
-                    >
-                      {trait}
-                    </span>
-                  ))}
-                </div>
-              </button>
-            ))}
+            {SPECIALIZATIONS.map((spec) => {
+              const isSelected = specialization === spec.id;
+              return (
+                <button
+                  key={spec.id}
+                  onClick={() => setSpecialization(spec.id)}
+                  aria-pressed={isSelected}
+                  className={`cursor-pointer rounded-lg border p-4 text-left transition ${
+                    isSelected
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-[var(--border)] hover:border-zinc-600"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="font-semibold text-white">{spec.name}</h3>
+                    <span className="text-[10px] uppercase tracking-wider text-zinc-500">{spec.tagline}</span>
+                  </div>
+                  <p className="mb-3 text-sm text-zinc-400">{spec.desc}</p>
+
+                  {/* Expanded detail when selected */}
+                  {isSelected && (
+                    <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-300 mb-1">How it plays</p>
+                        <p className="text-xs text-zinc-500 leading-relaxed">{spec.playstyle}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-300 mb-1.5">Exclusive features</p>
+                        <ul className="space-y-1">
+                          {spec.exclusiveFeatures.map((f) => (
+                            <li key={f} className="flex items-start gap-1.5 text-xs text-zinc-400">
+                              <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+                              {f}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-zinc-300 mb-1.5">Exclusive activities</p>
+                        <div className="flex flex-wrap gap-1">
+                          {spec.exclusiveActivities.map((a) => (
+                            <span key={a} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                              {a}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="rounded bg-emerald-950/40 border border-emerald-900/30 px-2.5 py-1.5">
+                        <p className="text-[10px] text-emerald-400">
+                          <span className="font-semibold">Key strength:</span>{" "}
+                          <span className="text-emerald-300">{spec.keyStrength}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Collapsed summary when not selected */}
+                  {!isSelected && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {spec.exclusiveActivities.slice(0, 3).map((a) => (
+                        <span
+                          key={a}
+                          className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300"
+                        >
+                          {a}
+                        </span>
+                      ))}
+                      {spec.exclusiveActivities.length > 3 && (
+                        <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
+                          +{spec.exclusiveActivities.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
           </CardContent>
         </Card>
 
