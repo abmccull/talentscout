@@ -70,10 +70,15 @@ export function EquipmentSlotBrowser({ slot, onClose }: Props) {
   const selectedItem = selectedId ? getEquipmentItem(selectedId) : null;
   const currentItem = getEquipmentItem(currentItemId);
 
-  // Calculate monthly delta when selecting a new item
-  const monthlyDelta = selectedItem && currentItem
-    ? selectedItem.monthlyCost - currentItem.monthlyCost
-    : 0;
+  // Calculate monthly delta when selecting a new item (Fix #61: handle empty slot)
+  let monthlyDelta = 0;
+  if (selectedItem) {
+    if (!currentItem) {
+      monthlyDelta = selectedItem.monthlyCost;
+    } else {
+      monthlyDelta = selectedItem.monthlyCost - currentItem.monthlyCost;
+    }
+  }
 
   return (
     <div className="mt-3 rounded-lg border border-zinc-700 bg-zinc-900 p-3">

@@ -64,6 +64,34 @@ const PRIMARY_SKILL_MAP: Partial<Record<ActivityType, ScoutSkill>> = {
   academyVisit: "technicalEye",
   youthTournament: "technicalEye",
   study: "dataLiteracy",
+  // Youth venue activities
+  schoolMatch: "technicalEye",
+  grassrootsTournament: "technicalEye",
+  streetFootball: "technicalEye",
+  academyTrialDay: "technicalEye",
+  youthFestival: "technicalEye",
+  followUpSession: "technicalEye",
+  parentCoachMeeting: "psychologicalRead",
+  writePlacementReport: "dataLiteracy",
+  // First-team exclusive
+  reserveMatch: "playerJudgment",
+  scoutingMission: "tacticalUnderstanding",
+  oppositionAnalysis: "tacticalUnderstanding",
+  agentShowcase: "playerJudgment",
+  trialMatch: "playerJudgment",
+  contractNegotiation: "psychologicalRead",
+  // Data-exclusive
+  databaseQuery: "dataLiteracy",
+  deepVideoAnalysis: "dataLiteracy",
+  statsBriefing: "dataLiteracy",
+  dataConference: "dataLiteracy",
+  algorithmCalibration: "dataLiteracy",
+  marketInefficiency: "dataLiteracy",
+  analyticsTeamMeeting: "dataLiteracy",
+  // Review/management
+  reviewNPCReport: "dataLiteracy",
+  managerMeeting: "psychologicalRead",
+  boardPresentation: "psychologicalRead",
 };
 
 // =============================================================================

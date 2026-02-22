@@ -199,6 +199,7 @@ export function processManagerMeeting(
   rng: RNG,
   scout: Scout,
   relationship: ManagerRelationship,
+  currentWeek: number,
 ): { updatedRelationship: ManagerRelationship; directive?: ScoutingDirective } {
   // ── Soft skill check ──────────────────────────────────────────────────────
   // Networking (ease of building rapport) and persuasion (ability to steer the
@@ -250,7 +251,7 @@ export function processManagerMeeting(
 
   let directive: ScoutingDirective | undefined;
   if (rng.chance(directiveProbability)) {
-    directive = generateManagerDirective(rng, relationship, updatedRelationship.meetingsThisSeason);
+    directive = generateManagerDirective(rng, relationship, currentWeek);
   }
 
   return { updatedRelationship, directive };

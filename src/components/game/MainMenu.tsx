@@ -32,7 +32,7 @@ export function MainMenu() {
   const manualSaves = saveSlots.filter((s) => s.slot > 0);
 
   const handleContinue = async () => {
-    const mostRecent = saveSlots.sort((a, b) => b.savedAt - a.savedAt)[0];
+    const mostRecent = [...saveSlots].sort((a, b) => b.savedAt - a.savedAt)[0];
     if (mostRecent) {
       await loadFromSlot(mostRecent.slot);
     }

@@ -202,24 +202,57 @@ const DEFAULT_FLOW = 0.02;
 // =============================================================================
 
 /**
+ * Normalize a country name for TRANSFER_FLOW_MATRIX lookups.
+ * Converts to lowercase so that "England", "england", and "ENGLAND" all resolve
+ * to the same key. The matrix is pre-normalized at module load (see below).
+ */
+function normalizeTransferCountry(name: string): string {
+  return name.toLowerCase();
+}
+
+/**
+ * A normalized (all-lowercase keys) copy of TRANSFER_FLOW_MATRIX built once
+ * at module load. This avoids repeated normalization on every lookup and
+ * ensures that both outer and inner keys are case-insensitive.
+ */
+const TRANSFER_FLOW_MATRIX_NORMALIZED: Record<string, Record<string, number>> =
+  Object.fromEntries(
+    Object.entries(TRANSFER_FLOW_MATRIX).map(([from, destinations]) => [
+      normalizeTransferCountry(from),
+      Object.fromEntries(
+        Object.entries(destinations).map(([to, prob]) => [
+          normalizeTransferCountry(to),
+          prob,
+        ]),
+      ),
+    ]),
+  );
+
+/**
  * Return the probability weight (0.0–1.0) that a transfer flows from
  * `fromCountry` to `toCountry`.
  *
  * Same-country transfers always return SAME_COUNTRY_FLOW (0.30).
  * Known directional pairs use the flow matrix values.
  * All other pairs fall back to DEFAULT_FLOW (0.02).
+ *
+ * Country names are normalized to lowercase before lookup so that casing
+ * differences between the matrix and the game world data do not cause misses.
  */
 export function getTransferFlowProbability(
   fromCountry: string,
   toCountry: string,
 ): number {
-  if (fromCountry === toCountry) {
+  const normalizedFrom = normalizeTransferCountry(fromCountry);
+  const normalizedTo = normalizeTransferCountry(toCountry);
+
+  if (normalizedFrom === normalizedTo) {
     return SAME_COUNTRY_FLOW;
   }
 
-  const fromRow = TRANSFER_FLOW_MATRIX[fromCountry];
+  const fromRow = TRANSFER_FLOW_MATRIX_NORMALIZED[normalizedFrom];
   if (fromRow !== undefined) {
-    const prob = fromRow[toCountry];
+    const prob = fromRow[normalizedTo];
     if (prob !== undefined) {
       return prob;
     }

@@ -128,6 +128,8 @@ export function perceiveAttribute(
   contextDiversity: number,
   playerForm: number,
   context: ObservationContext,
+  /** Scout fatigue (0–100). Values above 50 widen the error range. */
+  scoutFatigue = 0,
 ): { perceivedValue: number; confidence: number } {
   const skill = Math.max(1, Math.min(20, scoutSkill));
   const obsCount = Math.max(1, observationCount);
@@ -138,7 +140,10 @@ export function perceiveAttribute(
   const diversityFactor = 1 - Math.min(0.3, contextDiversity * 0.3);
   const methodMultiplier = CONTEXT_NOISE[context];
 
-  const stddev = (baseStddev / observationReduction) * diversityFactor * methodMultiplier;
+  // Fatigue widens error: above 50 fatigue adds up to 100% extra stddev
+  const fatigueError = Math.max(0, (scoutFatigue - 50) / 100);
+
+  const stddev = (baseStddev / observationReduction) * diversityFactor * methodMultiplier * (1 + fatigueError);
 
   // Form shifts perception
   const formBias = playerForm * 1.5;
@@ -237,8 +242,8 @@ export function observePlayerLight(
     }
   }
 
-  // Context diversity
-  const contextDiversity = Math.min(1, existingObservations.filter((o) => o.playerId === player.id).length / 10);
+  // Context diversity: count distinct context types seen for this player
+  const contextDiversity = new Set(existingObservations.filter((o) => o.playerId === player.id).map((o) => o.context)).size / 6;
 
   // Build visible attribute set from context + scout skill bonuses
   const baseVisible = new Set<PlayerAttribute>(CONTEXT_VISIBLE_ATTRIBUTES[context]);
@@ -350,8 +355,8 @@ export function observePlayer(
     }
   }
 
-  // Context diversity: how many distinct observations of this player exist
-  const contextDiversity = Math.min(1, existingObservations.filter((o) => o.playerId === player.id).length / 10);
+  // Context diversity: count distinct context types seen for this player
+  const contextDiversity = new Set(existingObservations.filter((o) => o.playerId === player.id).map((o) => o.context)).size / 6;
 
   // Accumulate readings
   const sessionReadings = new Map<PlayerAttribute, { values: number[]; confidences: number[] }>();
@@ -456,7 +461,7 @@ function addReading(
   const skillLevel = scout.skills[skillKey as ScoutSkill];
   const effectiveSkill = extraNoise > 1 ? Math.max(1, skillLevel - Math.round((extraNoise - 1) * 5)) : skillLevel;
 
-  const { perceivedValue, confidence } = perceiveAttribute(rng, trueValue, effectiveSkill, priorCount + 1, contextDiversity, playerForm, context);
+  const { perceivedValue, confidence } = perceiveAttribute(rng, trueValue, effectiveSkill, priorCount + 1, contextDiversity, playerForm, context, scout.fatigue);
 
   const bucket = readings.get(attr) ?? { values: [], confidences: [] };
   bucket.values.push(perceivedValue);

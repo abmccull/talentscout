@@ -52,6 +52,17 @@ function formatMoney(n: number): string {
   return `£${n}`;
 }
 
+function getOrdinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
+
 function threatBadgeVariant(
   quality: number,
 ): "default" | "warning" | "destructive" | "secondary" {
@@ -520,10 +531,10 @@ export function Dashboard() {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">
                               {homeClub?.name || "?"}
-                              {homePos > 0 && <span className="text-zinc-500 text-xs"> ({homePos}{homePos === 1 ? "st" : homePos === 2 ? "nd" : homePos === 3 ? "rd" : "th"})</span>}
+                              {homePos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(homePos)})</span>}
                               {" vs "}
                               {awayClub?.name || "?"}
-                              {awayPos > 0 && <span className="text-zinc-500 text-xs"> ({awayPos}{awayPos === 1 ? "st" : awayPos === 2 ? "nd" : awayPos === 3 ? "rd" : "th"})</span>}
+                              {awayPos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(awayPos)})</span>}
                             </span>
                             {weather && (
                               <span className="text-[10px] text-zinc-500 capitalize">{weather.replace(/([A-Z])/g, " $1").trim()}</span>

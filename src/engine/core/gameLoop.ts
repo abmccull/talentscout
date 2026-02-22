@@ -43,6 +43,7 @@ import {
   processPlayerRetirement,
 } from "../youth/generation";
 import { processAlumniWeek } from "../youth/alumni";
+import { generateSeasonEvents } from "./seasonEvents";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -201,12 +202,17 @@ function clubAverageAbility(
 ): number {
   if (club.playerIds.length === 0) return 100;
 
+  let found = 0;
   const total = club.playerIds.reduce((sum, pid) => {
     const p = players[pid];
-    return p ? sum + p.currentAbility : sum;
+    if (p) {
+      found++;
+      return sum + p.currentAbility;
+    }
+    return sum;
   }, 0);
 
-  return total / club.playerIds.length;
+  return found > 0 ? total / found : 100;
 }
 
 /**
@@ -430,7 +436,7 @@ function developmentMultiplier(
   let base: number;
   if (yearsFromPeak < 0) {
     // Pre-peak: growing
-    base = Math.max(0, 1 - yearsFromPeak * yearsFromPeak * 0.01);
+    base = Math.max(0, Math.min(1, 1 - Math.abs(yearsFromPeak) * 0.08));
   } else {
     // Post-peak: declining
     base = -yearsFromPeak * 0.02;
@@ -447,7 +453,7 @@ function developmentMultiplier(
   }
   if (profile === "lateBloomer") {
     // Slower rise up to peak, then very gradual decline
-    base *= age < 26 ? 0.5 : 0.8;
+    base *= age < peak ? 0.5 : 0.8;
   }
 
   return base;
@@ -529,6 +535,8 @@ function processPlayerDevelopment(
   for (const player of Object.values(state.players)) {
     // Skip heavily injured players — no development during long-term injury
     if (player.injuryWeeksRemaining > 6) continue;
+    // Skip players past their useful development window
+    if (player.age > 35) continue;
 
     const result = computePlayerDevelopment(player, rng);
 
@@ -927,10 +935,18 @@ function generateEndOfSeasonMessage(
 function computeReputationChange(state: GameState): number {
   // Small passive reputation decay to prevent stagnation
   // Active reputation gains come from submitting quality reports
+  const seasonLength = getSeasonLength(state.fixtures);
   const recentReports = Object.values(state.reports).filter(
-    (r) =>
-      r.submittedWeek === state.currentWeek - 1 &&
-      r.submittedSeason === state.currentSeason,
+    (r) => {
+      if (r.submittedWeek === state.currentWeek - 1 && r.submittedSeason === state.currentSeason) {
+        return true;
+      }
+      // Cross-season boundary: week 1 should also check last week of previous season
+      if (state.currentWeek === 1 && r.submittedWeek === seasonLength && r.submittedSeason === state.currentSeason - 1) {
+        return true;
+      }
+      return false;
+    },
   );
 
   if (recentReports.length === 0) return 0;
@@ -988,6 +1004,7 @@ function processNPCScouts(
         state.players,
         state.currentWeek,
         state.currentSeason,
+        state.clubs,
       );
 
       results.push({
@@ -1285,9 +1302,11 @@ export function advanceWeek(
   }
 
   // Apply new injuries
+  const newlyInjuredPlayerIds = new Set<string>();
   for (const injury of tickResult.injuries) {
     const player = updatedPlayers[injury.playerId];
     if (!player) continue;
+    newlyInjuredPlayerIds.add(injury.playerId);
     updatedPlayers[injury.playerId] = {
       ...player,
       injured: true,
@@ -1303,6 +1322,8 @@ export function advanceWeek(
 
   for (const transfer of tickResult.transfers) {
     if (processedPlayerIds.has(transfer.playerId)) continue;
+    // Skip transfers for players who were injured this same tick
+    if (newlyInjuredPlayerIds.has(transfer.playerId)) continue;
     processedPlayerIds.add(transfer.playerId);
 
     const player = updatedPlayers[transfer.playerId];
@@ -1394,6 +1415,16 @@ export function advanceWeek(
     }
   }
 
+  // ---- Youth aging: apply pool updates and retirements every tick ----
+  if (tickResult.youthAgingResult) {
+    for (const [id, youth] of Object.entries(tickResult.youthAgingResult.updatedUnsignedYouth)) {
+      youthPool[id] = youth;
+    }
+    for (const rid of tickResult.youthAgingResult.retired) {
+      delete youthPool[rid];
+    }
+  }
+
   // ---- Gut feelings ----
   const updatedGutFeelings = [
     ...state.gutFeelings,
@@ -1440,25 +1471,13 @@ export function advanceWeek(
       updatedPlayers[id] = { ...player, age: player.age + 1 };
     }
 
-    // Age unsigned youth at season end
-    const updatedUnsignedYouth = { ...youthPool };
-    if (tickResult.youthAgingResult) {
-      // Apply the youth engine's results
-      for (const [id, youth] of Object.entries(tickResult.youthAgingResult.updatedUnsignedYouth)) {
-        updatedUnsignedYouth[id] = youth;
-      }
-      // Remove retired youth
-      for (const rid of tickResult.youthAgingResult.retired) {
-        delete updatedUnsignedYouth[rid];
-      }
-    } else {
-      // Age unsigned youth +1 year
-      for (const [id, youth] of Object.entries(updatedUnsignedYouth)) {
-        updatedUnsignedYouth[id] = {
-          ...youth,
-          player: { ...youth.player, age: youth.player.age + 1 },
-        };
-      }
+    // Age unsigned youth +1 year at season end
+    // (youthAgingResult pool updates and retirements were already applied above)
+    for (const [id, youth] of Object.entries(youthPool)) {
+      youthPool[id] = {
+        ...youth,
+        player: { ...youth.player, age: youth.player.age + 1 },
+      };
     }
 
     // Update season in all leagues
@@ -1487,7 +1506,8 @@ export function advanceWeek(
         activities: Array(7).fill(null) as null[],
         completed: false,
       },
-      unsignedYouth: updatedUnsignedYouth,
+      unsignedYouth: youthPool,
+      seasonEvents: generateSeasonEvents(nextSeason),
       gutFeelings: updatedGutFeelings,
       retiredPlayerIds: updatedRetiredPlayerIds,
       alumniRecords: updatedAlumniRecords,

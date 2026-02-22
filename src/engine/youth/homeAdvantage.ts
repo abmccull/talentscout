@@ -75,18 +75,28 @@ const VENUE_TYPE_LABELS: readonly string[] = [
 // =============================================================================
 
 /**
+ * Normalize a country name for consistent map lookups.
+ * Converts to lowercase and strips all whitespace so that multi-word names
+ * like "United States" match NEIGHBOR_MAP slug keys like "unitedstates".
+ */
+function normalizeCountry(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "");
+}
+
+/**
  * Returns true if the scout considers the given country their home.
  *
  * A scout is considered home if:
- *  - Their nationality field contains the country name (case-insensitive), or
+ *  - Their nationality field exactly matches the country name (case-insensitive,
+ *    whitespace-normalized), or
  *  - Their countryReputations entry for that country has familiarity > 70
  *    (adopted home through extensive time spent in that country).
  */
 export function isHomeCountry(scout: Scout, country: string): boolean {
-  const normalizedCountry = country.toLowerCase();
+  const normalizedCountry = normalizeCountry(country);
 
   if (scout.nationality !== undefined) {
-    if (scout.nationality.toLowerCase().includes(normalizedCountry)) {
+    if (normalizeCountry(scout.nationality) === normalizedCountry) {
       return true;
     }
   }
@@ -126,11 +136,11 @@ export function generatePassiveYouthEvents(
   season: number,
 ): InboxMessage[] {
   // Check eligibility: scout must have a connection to the home country.
-  const normalizedCountry = homeCountry.toLowerCase();
+  const normalizedCountry = normalizeCountry(homeCountry);
 
   const hasNationalityMatch =
     scout.nationality !== undefined &&
-    scout.nationality.toLowerCase().includes(normalizedCountry);
+    normalizeCountry(scout.nationality) === normalizedCountry;
 
   const rep = scout.countryReputations[homeCountry];
   const hasFamiliarityMatch = rep !== undefined && rep.familiarity > 50;
@@ -244,8 +254,8 @@ export function getTravelCostOverride(
   destination: string,
   homeCountry: string,
 ): { slotCost: number; fatigueCost: number } {
-  const normalizedDestination = destination.toLowerCase();
-  const normalizedHome = homeCountry.toLowerCase();
+  const normalizedDestination = normalizeCountry(destination);
+  const normalizedHome = normalizeCountry(homeCountry);
 
   // Home country: no travel cost.
   if (normalizedDestination === normalizedHome) {

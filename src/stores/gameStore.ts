@@ -321,6 +321,9 @@ export interface ClubStanding {
   points: number;
 }
 
+// Module-level flag to prevent autosave race condition (Fix #24)
+let _autosavePending = false;
+
 export const useGameStore = create<GameStore>((set, get) => ({
   // Navigation
   currentScreen: "mainMenu",
@@ -574,16 +577,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (state) => {
+    // Deep-spread to avoid mutating the caller's object (Fix #23)
+    const migrated = {
+      ...state,
+      scout: { ...state.scout, skills: { ...state.scout.skills } },
+      finances: state.finances ? { ...state.finances } : state.finances,
+    };
     // Migration: add new scout skills if loading an older save
-    if (state.scout.skills.playerJudgment === undefined) {
-      state.scout.skills.playerJudgment = 5;
-      state.scout.skills.potentialAssessment = 5;
+    if (migrated.scout.skills.playerJudgment === undefined) {
+      migrated.scout.skills.playerJudgment = 5;
+      migrated.scout.skills.potentialAssessment = 5;
     }
     // Migration: convert old equipmentLevel to new equipment loadout system
-    if (state.finances && !state.finances.equipment) {
-      state.finances.equipment = migrateEquipmentLevel(state.finances.equipmentLevel);
+    if (migrated.finances && !migrated.finances.equipment) {
+      migrated.finances.equipment = migrateEquipmentLevel(migrated.finances.equipmentLevel);
     }
-    set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
+    set({ gameState: migrated, isLoaded: true, currentScreen: "dashboard" });
   },
 
   saveGame: () => {
@@ -591,6 +600,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState) return null;
     const saved = { ...gameState, lastSaved: Date.now() };
     set({ gameState: saved });
+    // Persist to IndexedDB (autosave slot 0) — fire and forget (Fix #4)
+    dbSaveGame(AUTOSAVE_SLOT, "autosave", saved).catch((err) => {
+      console.warn("saveGame: IndexedDB persist failed:", err);
+    });
     return saved;
   },
 
@@ -745,6 +758,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         meetingRng,
         stateWithScheduleApplied.scout,
         stateWithScheduleApplied.scout.managerRelationship,
+        gameState.currentWeek,
       );
       stateWithScheduleApplied = {
         ...stateWithScheduleApplied,
@@ -2335,7 +2349,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           newFixtures[f.id] = f;
         }
       }
-      newState = { ...newState, fixtures: newFixtures };
+      newState = { ...newState, fixtures: { ...newState.fixtures, ...newFixtures } };
 
       const newSeasonEvents = generateSeasonEvents(newState.currentSeason);
       const newTransferWindows = initializeTransferWindows(newState.currentSeason);
@@ -2511,9 +2525,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newState = { ...newState, transferWindow: updatedTransferWindow };
     }
 
-    // Prune inbox to keep the most recent 200 messages
+    // Prune inbox to keep most recent messages, but never drop unread action-required ones (Fix #57)
     if (newState.inbox.length > 200) {
-      newState = { ...newState, inbox: newState.inbox.slice(-200) };
+      const priority = newState.inbox.filter((m) => m.actionRequired && !m.read);
+      const rest = newState.inbox.filter((m) => !(m.actionRequired && !m.read));
+      const trimmedRest = rest.slice(-Math.max(0, 200 - priority.length));
+      newState = { ...newState, inbox: [...trimmedRest, ...priority] };
     }
 
     // Issue 17: Prune old acknowledged narrative events (keep last 10 weeks)
@@ -2552,13 +2569,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
 
     set({ gameState: newState, lastWeekSummary: weekSummary });
-    // Autosave after each week advance
+    // Autosave after each week advance — guard against race condition (Fix #24)
     set({ autosaveError: null });
-    dbAutosave(newState).catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn("Autosave failed:", err);
-      set({ autosaveError: message });
-    });
+    if (!_autosavePending) {
+      _autosavePending = true;
+      dbAutosave(newState)
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          console.warn("Autosave failed:", err);
+          set({ autosaveError: message });
+        })
+        .finally(() => {
+          _autosavePending = false;
+        });
+    }
   },
 
   // Match
@@ -2603,7 +2627,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   advancePhase: () => {
     const { activeMatch } = get();
     if (!activeMatch) return;
-    if (activeMatch.currentPhase >= activeMatch.phases.length) return;
+    if (activeMatch.currentPhase >= activeMatch.phases.length - 1) return;
     set({
       activeMatch: {
         ...activeMatch,
@@ -2622,7 +2646,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ...activeMatch,
           focusSelections: activeMatch.focusSelections.map((f) =>
             f.playerId === playerId
-              ? { ...f, lens, phases: [...f.phases, activeMatch.currentPhase] }
+              ? {
+                  ...f,
+                  lens,
+                  // Guard against duplicate phase indices (Fix #59)
+                  phases: f.phases.includes(activeMatch.currentPhase)
+                    ? f.phases
+                    : [...f.phases, activeMatch.currentPhase],
+                }
               : f
           ),
         },
@@ -3019,6 +3050,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rng,
       gameState.scout,
       managerRelationship,
+      gameState.currentWeek,
     );
 
     set({

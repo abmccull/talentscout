@@ -20,6 +20,7 @@ import type {
   NPCScoutReport,
   Territory,
   Player,
+  Club,
   Scout,
   Specialization,
 } from "@/engine/core/types";
@@ -269,6 +270,7 @@ export function assignTerritory(
  * @param players   All players in the world, keyed by ID.
  * @param week      Current game week.
  * @param season    Current season year.
+ * @param clubs     All clubs in the world, keyed by ID (used to resolve player → league).
  * @returns Updated npcScout (new fatigue) and the reports generated this week.
  */
 export function processNPCScoutingWeek(
@@ -278,24 +280,18 @@ export function processNPCScoutingWeek(
   players: Record<string, Player>,
   week: number,
   season: number,
+  clubs: Record<string, Club>,
 ): { npcScout: NPCScout; reports: NPCScoutReport[] } {
-  // Collect players in territory leagues
+  // Collect players whose club's league is in this territory.
+  // Resolve player → club → leagueId, then check against territory.leagueIds.
   const territoryLeagueSet = new Set(territory.leagueIds);
-  const eligiblePlayers = Object.values(players).filter(
-    (p) => territoryLeagueSet.has(p.clubId) || isPlayerInTerritoryLeague(p, players, territory),
-  );
+  const eligiblePlayers = Object.values(players).filter((p) => {
+    const club = clubs[p.clubId];
+    return club !== undefined && territoryLeagueSet.has(club.leagueId);
+  });
 
-  // Actually filter by players whose club's league is in the territory
-  // (We need to look up the club → league mapping — use the player's club
-  // which is keyed by clubId; since we don't have direct club→league here
-  // we use the leagueIds against a player's club. The game state stores
-  // league memberships via League.clubIds, but that isn't passed here.
-  // Convention: players carry clubId; territories hold leagueIds.
-  // We cannot resolve club→league without extra data, so we scout from
-  // all players whose clubId appears in territory's relevant leagues.
-  // Since we only receive `players`, we fall back to all players and
-  // use territory.leagueIds as a hint — if eligible list is empty, scout
-  // a random sample from all players.)
+  // Fall back to the full player pool if no eligible players are found
+  // (e.g. clubs map is empty during tests or early world-gen).
   const pool = eligiblePlayers.length > 0 ? eligiblePlayers : Object.values(players);
 
   if (pool.length === 0) {
@@ -485,26 +481,6 @@ function specializationMatchesPlayer(
   }
 }
 
-/**
- * Determine if a player is in one of the territory's leagues.
- * Without club→league lookup data, this always returns false and the
- * outer `processNPCScoutingWeek` falls back to the full pool.
- *
- * This stub exists so that callers who CAN supply enriched player data
- * (e.g. player.leagueId field if added in future) benefit automatically.
- */
-function isPlayerInTerritoryLeague(
-  player: Player,
-  _players: Record<string, Player>,
-  territory: Territory,
-): boolean {
-  // Players don't carry leagueId directly — club → league resolution requires
-  // the Club and League records which are not passed here. Always false; the
-  // outer function falls back to the full player pool.
-  void player;
-  void territory;
-  return false;
-}
 
 /**
  * Generate simplified attribute readings for an NPC report (3–6 attributes).

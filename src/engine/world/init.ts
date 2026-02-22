@@ -194,8 +194,9 @@ export async function initializeWorld(
   const territories: Record<string, Territory> = {};
 
   // Combine user-selected core countries with all secondary countries.
+  // Use a Set to deduplicate in case a country appears in both lists.
   const secondaryKeys = getSecondaryCountries();
-  const allCountryKeys = [...countries, ...secondaryKeys];
+  const allCountryKeys = [...new Set([...countries, ...secondaryKeys])];
 
   // Load all country data in parallel, then process sequentially so that the
   // RNG advances in a deterministic order regardless of I/O timing.

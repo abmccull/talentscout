@@ -217,6 +217,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     supabase.auth.getSession().then(({ data: { session } }) => {
       get()._applySession(session);
       set({ isLoading: false });
+    }).catch(() => {
+      set({ isLoading: false });
     });
 
     // 2. Register the real-time auth state listener (once only).

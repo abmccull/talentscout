@@ -594,7 +594,7 @@ export function generateJobOffers(
   const offerCount =
     targetTier >= 4 ? 1 :
     targetTier === 3 ? rng.nextInt(1, 2) :
-    rng.nextInt(1, Math.min(3, Math.ceil(scout.reputation / 30)));
+    rng.nextInt(1, Math.max(1, Math.ceil(scout.reputation / 30)));
 
   const shuffled = rng.shuffle(candidateClubs).slice(0, offerCount);
 
@@ -684,12 +684,12 @@ function buildJobOffer(
  * Apply an accepted job offer to the scout and return the updated Scout.
  * Does not mutate the input.
  */
-export function acceptJobOffer(scout: Scout, offer: JobOffer): Scout {
+export function acceptJobOffer(scout: Scout, offer: JobOffer, currentSeason: number): Scout {
   return {
     ...scout,
     careerTier: offer.tier,
     currentClubId: offer.clubId,
-    contractEndSeason: (scout.specializationLevel /* proxy for current season */ + offer.contractLength),
+    contractEndSeason: (currentSeason + offer.contractLength),
     salary: offer.salary,
     clubTrust: 50, // Start with neutral trust at a new employer
     // Reset season-specific stats on new job

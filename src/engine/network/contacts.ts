@@ -364,6 +364,7 @@ export function generateStartingContacts(
       // Data scouts have journalist contacts who share statistical stories
       contacts.push(generateContact(rng, "journalist", startingRelationship));
       contacts.push(generateContact(rng, "journalist", startingRelationship));
+      contacts.push(generateContact(rng, "agent", startingRelationship));
       break;
   }
 
@@ -666,7 +667,7 @@ export function processRelationshipDecay(
 ): Record<string, Contact> {
   const result: Record<string, Contact> = {};
   for (const [id, contact] of Object.entries(contacts)) {
-    const weeksSinceInteraction = currentWeek - (contact.lastInteractionWeek ?? 0);
+    const weeksSinceInteraction = Math.max(0, currentWeek - (contact.lastInteractionWeek ?? currentWeek));
     if (weeksSinceInteraction > 8 && contact.relationship > 5) {
       const decay = Math.min(3, contact.relationship - 5);
       result[id] = { ...contact, relationship: contact.relationship - decay };

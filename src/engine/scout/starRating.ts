@@ -236,7 +236,8 @@ export function generateAbilityReading(
 
   // Ensure PA range is >= perceived CA
   const paLow = Math.max(pa.low, ca.perceivedCA);
-  const paHigh = Math.max(pa.high, paLow);
+  // Ensure minimum range width of 5 to prevent division issues
+  const paHigh = Math.max(pa.high, paLow + 5);
 
   return {
     perceivedCA: ca.perceivedCA,

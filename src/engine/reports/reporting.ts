@@ -474,10 +474,18 @@ function mergeReadingsIntoAssessments(
 
   for (const [attribute, data] of readingMap) {
     const totalWeight = data.confidences.reduce((s, c) => s + c, 0);
-    const estimatedValue = Math.round(
-      data.values.reduce((s, v, i) => s + v * data.confidences[i], 0) /
-        totalWeight,
-    );
+    let estimatedValue: number;
+    if (totalWeight === 0) {
+      // Use unweighted average when all confidences are zero
+      estimatedValue = Math.round(
+        data.values.reduce((sum, v) => sum + v, 0) / (data.values.length || 1),
+      );
+    } else {
+      estimatedValue = Math.round(
+        data.values.reduce((s, v, i) => s + v * data.confidences[i], 0) /
+          totalWeight,
+      );
+    }
 
     const lowerBound = Math.round(
       data.ranges.reduce((s, r) => s + r[0], 0) / data.ranges.length,
@@ -673,7 +681,7 @@ function getRelevantAttributes(position: Position): PlayerAttribute[] {
     ST: ["shooting", "composure", "heading", "firstTouch", "strength", "offTheBall"],
   };
 
-  return [...base, ...(positionSpecific[position] ?? [])];
+  return [...new Set([...base, ...(positionSpecific[position] ?? [])])];
 }
 
 function clamp(value: number, min: number, max: number): number {

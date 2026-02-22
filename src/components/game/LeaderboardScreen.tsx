@@ -176,6 +176,7 @@ export function LeaderboardScreen() {
   const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Load local leaderboard on mount — must be before early return
@@ -227,6 +228,7 @@ export function LeaderboardScreen() {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await submitToLeaderboard();
 
@@ -247,6 +249,8 @@ export function LeaderboardScreen() {
           }
         }
       }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to submit score");
     } finally {
       setIsSubmitting(false);
     }
@@ -295,6 +299,9 @@ export function LeaderboardScreen() {
             >
               Score Submitted
             </Badge>
+          )}
+          {submitError && (
+            <p className="text-sm text-red-400">{submitError}</p>
           )}
         </div>
 

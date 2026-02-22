@@ -317,7 +317,7 @@ export function formatGutFeelingWithPA(
   }
 
   const pa = youth.player.potentialAbility;
-  const low = pa - 5;
+  const low = Math.max(1, pa - 5);
   const high = pa + 5;
 
   return `${gutFeeling.narrative} My best guess? Somewhere between ${low} and ${high} potential ability.`;

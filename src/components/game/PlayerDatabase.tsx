@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Search, ChevronUp, ChevronDown, Users, FileText, Star } from "lucide-react";
 import type { Player, Position } from "@/engine/core/types";
 
-type SortKey = "name" | "age" | "position" | "club" | "observations" | "reports" | "lastSeen";
+type SortKey = "name" | "age" | "position" | "club" | "league" | "observations" | "reports" | "lastSeen";
 type SortDir = "asc" | "desc";
 
 const POSITIONS: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
@@ -126,6 +126,9 @@ export function PlayerDatabase() {
           break;
         case "club":
           cmp = a.clubName.localeCompare(b.clubName);
+          break;
+        case "league":
+          cmp = a.leagueName.localeCompare(b.leagueName);
           break;
         case "observations":
           cmp = a.observationCount - b.observationCount;
@@ -288,7 +291,7 @@ export function PlayerDatabase() {
                         ["age", "Age"],
                         ["position", "Pos"],
                         ["club", "Club"],
-                        ["club", "League"],
+                        ["league", "League"],
                         ["observations", "Obs"],
                         ["reports", "Rep"],
                         ["lastSeen", "Last Seen"],

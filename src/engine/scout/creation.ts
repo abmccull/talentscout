@@ -236,7 +236,7 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
 
     primarySpecialization: specialization,
     specializationLevel: 1,
-    unlockedPerks: STARTING_PERKS[specialization],
+    unlockedPerks: [...STARTING_PERKS[specialization]],
 
     careerTier,
     reputation: 10,

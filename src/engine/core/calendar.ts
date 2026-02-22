@@ -354,9 +354,11 @@ export function removeActivity(
 
   const updatedActivities = [...schedule.activities] as (Activity | null)[];
 
-  // Clear every slot that contains this same activity instance
+  // Clear every slot that contains this same activity.
+  // isSameActivity is used instead of === so that post-serialisation objects
+  // (which are distinct instances with identical data) are matched correctly.
   for (let i = 0; i < TOTAL_WEEK_SLOTS; i++) {
-    if (updatedActivities[i] === activity) {
+    if (isSameActivity(updatedActivities[i], activity)) {
       updatedActivities[i] = null;
     }
   }
@@ -716,6 +718,39 @@ export function processCompletedWeek(
   scout: Scout,
   rng: RNG,
 ): WeekProcessingResult {
+  // Guard against double-processing: if the schedule is already marked
+  // completed, return a zero-effect result so XP and fatigue are not doubled.
+  if (schedule.completed) {
+    return {
+      fatigueChange: 0,
+      skillXpGained: {},
+      attributeXpGained: {},
+      matchesAttended: [],
+      reportsWritten: [],
+      meetingsHeld: [],
+      npcReportsReviewed: [],
+      managerMeetingExecuted: false,
+      boardPresentationExecuted: false,
+      academyVisitsExecuted: 0,
+      youthTournamentsExecuted: 0,
+      trainingVisitsExecuted: 0,
+      videoSessionsExecuted: 0,
+      reserveMatchesExecuted: 0,
+      scoutingMissionsExecuted: 0,
+      oppositionAnalysesExecuted: 0,
+      agentShowcasesExecuted: 0,
+      trialMatchesExecuted: 0,
+      contractNegotiationsExecuted: 0,
+      databaseQueriesExecuted: 0,
+      deepVideoAnalysesExecuted: 0,
+      statsBriefingsExecuted: 0,
+      dataConferencesExecuted: 0,
+      algorithmCalibrationsExecuted: 0,
+      marketInefficienciesExecuted: 0,
+      analyticsTeamMeetingsExecuted: 0,
+    };
+  }
+
   const seenActivities = new Set<Activity>();
   let fatigueChange = 0;
   const skillXpGained: Partial<Record<ScoutSkill, number>> = {};
@@ -894,9 +929,10 @@ export function processCompletedWeek(
     }
   }
 
-  // High fatigue suppresses skill XP gains (bad conditions, tired scouts)
-  const newFatigue = clamp(scout.fatigue + fatigueChange, 0, MAX_FATIGUE);
-  if (newFatigue > ACCURACY_PENALTY_FATIGUE_THRESHOLD) {
+  // High fatigue suppresses skill XP gains (bad conditions, tired scouts).
+  // We check scout.fatigue (fatigue at the START of the week) so that scouts
+  // are not penalised for fatigue they haven't accumulated yet.
+  if (scout.fatigue > ACCURACY_PENALTY_FATIGUE_THRESHOLD) {
     // Reduce all XP by 30 % when exhausted
     for (const key of Object.keys(skillXpGained) as ScoutSkill[]) {
       skillXpGained[key] = Math.round((skillXpGained[key] ?? 0) * 0.7);
@@ -1012,4 +1048,20 @@ export function applyWeekResults(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Compare two Activity values by their logical identity (type + targetId +
+ * description) rather than by object reference.  This is necessary because
+ * JSON round-trips (save / load) produce distinct instances for equal data,
+ * which would cause `===` comparisons to always return false.
+ */
+function isSameActivity(a: Activity | null, b: Activity | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.type === b.type &&
+    a.targetId === b.targetId &&
+    a.description === b.description
+  );
 }

@@ -111,7 +111,7 @@ export async function autosave(state: GameState): Promise<void> {
  * not engine logic, so we don't need the immutability guarantees of the
  * pure engine functions.
  */
-function migrateSaveState(raw: unknown): GameState {
+export function migrateSaveState(raw: unknown): GameState {
   if (
     typeof raw !== "object" ||
     raw === null ||

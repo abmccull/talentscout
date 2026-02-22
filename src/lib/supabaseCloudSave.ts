@@ -25,6 +25,7 @@
 
 import { supabase } from "./supabase";
 import type { GameState } from "@/engine/core/types";
+import { migrateSaveState } from "./db";
 import type {
   CloudSaveProvider,
   CloudSaveSlot,
@@ -115,7 +116,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
     if (error) throw new Error(`Cloud load failed: ${error.message}`);
     if (!data) return null;
 
-    return data.state as unknown as GameState;
+    return migrateSaveState(data.state);
   }
 
   /**

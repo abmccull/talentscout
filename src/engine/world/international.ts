@@ -584,21 +584,24 @@ export interface InternationalWeekResult {
  * Runs two operations:
  *  1. Every ASSIGNMENT_REFRESH_INTERVAL weeks, generate up to
  *     MAX_ACTIVE_ASSIGNMENTS new assignments for the scout.
- *  2. Expire assignments whose weekAvailable is more than one week old
- *     (the scout had one week to accept them).
+ *  2. Expire assignments whose weekAvailable < currentWeek - 1 (the scout had
+ *     one week to accept them). The IDs of expired assignments are returned so
+ *     the caller can remove them from game state.
  *
  * Returns a result object describing what changed. Callers are responsible
  * for applying these changes to the game state.
  *
- * @param rng       - Seeded RNG instance (mutated in place).
- * @param scout     - The player's scout.
- * @param gameState - Current game state (provides countries and existing data).
- * @returns         - InternationalWeekResult describing new and expired assignments.
+ * @param rng                - Seeded RNG instance (mutated in place).
+ * @param scout              - The player's scout.
+ * @param gameState          - Current game state (provides countries and existing data).
+ * @param existingAssignments - The scout's current active assignment list.
+ * @returns                  - InternationalWeekResult describing new and expired assignments.
  */
 export function processInternationalWeek(
   rng: RNG,
   scout: Scout,
   gameState: GameState,
+  existingAssignments: InternationalAssignment[] = [],
 ): InternationalWeekResult {
   const currentWeek = gameState.currentWeek;
   const countries: string[] = gameState.countries.length > 0
@@ -632,29 +635,15 @@ export function processInternationalWeek(
   }
 
   // --- Expire stale assignments ---
-  // Assignments expire after their weekAvailable + 1 (scout had one week to act).
-  // The caller holds the current list of assignments; we compute which IDs to
-  // remove based on the currentWeek, but since we don't have the list here we
-  // return a computed threshold for callers to filter on.
-  //
-  // To keep this function self-contained and pure, we derive expiry from
-  // the refresh cycle: any assignment from before the previous refresh window
-  // is considered stale.
-  const staleThreshold = currentWeek - ASSIGNMENT_REFRESH_INTERVAL - 1;
-
-  // We cannot expire specific IDs without access to the existing assignment list.
-  // The caller must apply the expiredAssignmentIds by filtering assignments
-  // where weekAvailable <= staleThreshold. We signal this via a sentinel entry.
-  // In practice, the store/reducer will use the threshold to purge old entries.
-  //
-  // For the return type contract, we return an empty array here —
-  // expiry filtering should be done by the caller using the staleThreshold
-  // embedded in the result. We document this convention clearly.
-  void staleThreshold; // acknowledged — callers filter by weekAvailable
+  // An assignment is expired when its weekAvailable is more than one week old:
+  // weekAvailable < currentWeek - 1 (the scout had exactly one week to accept).
+  const expiredAssignmentIds = existingAssignments
+    .filter((a) => a.weekAvailable < currentWeek - 1)
+    .map((a) => a.id);
 
   return {
     newAssignments,
-    expiredAssignmentIds: [], // Caller filters: remove assignments where weekAvailable < currentWeek - 1
+    expiredAssignmentIds,
   };
 }
 
