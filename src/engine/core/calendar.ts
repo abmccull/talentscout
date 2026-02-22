@@ -65,6 +65,38 @@ export interface WeekProcessingResult {
   trainingVisitsExecuted: number;
   /** Number of video analysis sessions executed this week */
   videoSessionsExecuted: number;
+
+  // --- First-team exclusive ---
+
+  /** Number of reserve match observations this week */
+  reserveMatchesExecuted: number;
+  /** Number of scouting missions completed */
+  scoutingMissionsExecuted: number;
+  /** Number of opposition analysis sessions */
+  oppositionAnalysesExecuted: number;
+  /** Number of agent showcase events attended */
+  agentShowcasesExecuted: number;
+  /** Number of trial matches observed */
+  trialMatchesExecuted: number;
+  /** Number of contract negotiation assists */
+  contractNegotiationsExecuted: number;
+
+  // --- Data-exclusive ---
+
+  /** Number of database queries run */
+  databaseQueriesExecuted: number;
+  /** Number of deep video analysis sessions */
+  deepVideoAnalysesExecuted: number;
+  /** Number of stats briefings reviewed */
+  statsBriefingsExecuted: number;
+  /** Number of data conferences attended */
+  dataConferencesExecuted: number;
+  /** Number of algorithm calibration sessions */
+  algorithmCalibrationsExecuted: number;
+  /** Number of market inefficiency scans */
+  marketInefficienciesExecuted: number;
+  /** Number of analytics team meetings held */
+  analyticsTeamMeetingsExecuted: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +128,21 @@ const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   followUpSession:    1,
   parentCoachMeeting: 1,
   writePlacementReport:1,
+  // First-team exclusive
+  reserveMatch:       2,
+  scoutingMission:    3,
+  oppositionAnalysis: 2,
+  agentShowcase:      2,
+  trialMatch:         2,
+  contractNegotiation:1,
+  // Data-exclusive
+  databaseQuery:      1,
+  deepVideoAnalysis:  2,
+  statsBriefing:      1,
+  dataConference:     3,
+  algorithmCalibration:1,
+  marketInefficiency: 1,
+  analyticsTeamMeeting:1,
 };
 
 /** Fatigue cost per activity type */
@@ -123,6 +170,21 @@ const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   followUpSession:    5,
   parentCoachMeeting: 3,
   writePlacementReport:4,
+  // First-team exclusive
+  reserveMatch:       8,
+  scoutingMission:    12,
+  oppositionAnalysis: 6,
+  agentShowcase:      5,
+  trialMatch:         10,
+  contractNegotiation:4,
+  // Data-exclusive
+  databaseQuery:      3,
+  deepVideoAnalysis:  6,
+  statsBriefing:      3,
+  dataConference:     8,
+  algorithmCalibration:4,
+  marketInefficiency: 3,
+  analyticsTeamMeeting:3,
 };
 
 /** Skills that each activity type directly develops */
@@ -143,6 +205,21 @@ const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill,
   followUpSession:    { technicalEye: 3, psychologicalRead: 2 },
   parentCoachMeeting: { psychologicalRead: 3 },
   writePlacementReport: { dataLiteracy: 3 },
+  // First-team exclusive
+  reserveMatch:        { technicalEye: 2, physicalAssessment: 2, playerJudgment: 3 },
+  scoutingMission:     { technicalEye: 2, tacticalUnderstanding: 3, playerJudgment: 2, physicalAssessment: 1 },
+  oppositionAnalysis:  { tacticalUnderstanding: 4, playerJudgment: 2 },
+  agentShowcase:       { playerJudgment: 3, psychologicalRead: 2 },
+  trialMatch:          { technicalEye: 2, physicalAssessment: 2, tacticalUnderstanding: 2, playerJudgment: 3 },
+  contractNegotiation: { psychologicalRead: 2 },
+  // Data-exclusive
+  databaseQuery:       { dataLiteracy: 4 },
+  deepVideoAnalysis:   { technicalEye: 2, tacticalUnderstanding: 2, dataLiteracy: 3 },
+  statsBriefing:       { dataLiteracy: 3, playerJudgment: 1 },
+  dataConference:      { dataLiteracy: 4, tacticalUnderstanding: 2 },
+  algorithmCalibration:{ dataLiteracy: 5 },
+  marketInefficiency:  { dataLiteracy: 3, playerJudgment: 2 },
+  analyticsTeamMeeting:{ dataLiteracy: 2, psychologicalRead: 1 },
 };
 
 /** Scout attributes that each activity type develops */
@@ -164,6 +241,21 @@ const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<ScoutAt
   followUpSession:    { intuition: 3, memory: 2 },
   parentCoachMeeting: { persuasion: 3, networking: 2 },
   writePlacementReport: { persuasion: 2, memory: 1 },
+  // First-team exclusive
+  reserveMatch:        { memory: 2, endurance: 1 },
+  scoutingMission:     { endurance: 3, adaptability: 2, networking: 1 },
+  oppositionAnalysis:  { memory: 3 },
+  agentShowcase:       { networking: 3, persuasion: 2 },
+  trialMatch:          { memory: 2, intuition: 2 },
+  contractNegotiation: { persuasion: 4, networking: 2 },
+  // Data-exclusive
+  databaseQuery:       { memory: 2 },
+  deepVideoAnalysis:   { memory: 3, intuition: 1 },
+  statsBriefing:       { memory: 2 },
+  dataConference:      { networking: 3, memory: 2 },
+  algorithmCalibration:{ memory: 3, intuition: 2 },
+  marketInefficiency:  { intuition: 3, memory: 1 },
+  analyticsTeamMeeting:{ networking: 1, persuasion: 1 },
 };
 
 const TOTAL_WEEK_SLOTS = 7;
@@ -484,6 +576,125 @@ export function getAvailableActivities(
     });
   }
 
+  // ── First-team exclusive activities ─────────────────────────────────────────
+
+  if (scout.primarySpecialization === "firstTeam") {
+    // Reserve match — observe fringe/reserve players at scout's club
+    if (scout.currentClubId) {
+      activities.push({
+        type: "reserveMatch",
+        slots: ACTIVITY_SLOT_COSTS.reserveMatch,
+        description: "Watch a reserve team match — evaluate fringe players and loanees up close",
+      });
+    }
+
+    // Scouting mission — multi-day deep dive into a league/region
+    if (scout.careerTier >= 2) {
+      activities.push({
+        type: "scoutingMission",
+        slots: ACTIVITY_SLOT_COSTS.scoutingMission,
+        description: "Embark on a scouting mission — multi-day deep dive across multiple matches in a region",
+      });
+    }
+
+    // Opposition analysis — study upcoming opponents' players
+    if (scout.currentClubId) {
+      activities.push({
+        type: "oppositionAnalysis",
+        slots: ACTIVITY_SLOT_COSTS.oppositionAnalysis,
+        description: "Analyze the opposition — evaluate players from upcoming opponents for potential recruitment",
+      });
+    }
+
+    // Agent showcase — networking event with agents presenting their clients
+    if (scout.careerTier >= 3) {
+      activities.push({
+        type: "agentShowcase",
+        slots: ACTIVITY_SLOT_COSTS.agentShowcase,
+        description: "Attend an agent showcase — agents present their top clients for your evaluation",
+      });
+    }
+
+    // Trial match — arrange for a shortlisted player to train with the club
+    if (scout.currentClubId && scout.careerTier >= 3) {
+      activities.push({
+        type: "trialMatch",
+        slots: ACTIVITY_SLOT_COSTS.trialMatch,
+        description: "Observe a trial match — watch a shortlisted player perform in your club's training setup",
+      });
+    }
+
+    // Contract negotiation — assist in transfer deal closure
+    if (scout.currentClubId && scout.careerTier >= 4) {
+      activities.push({
+        type: "contractNegotiation",
+        slots: ACTIVITY_SLOT_COSTS.contractNegotiation,
+        description: "Assist in contract negotiations — leverage your player knowledge to help close a deal",
+      });
+    }
+  }
+
+  // ── Data-exclusive activities ───────────────────────────────────────────────
+
+  if (scout.primarySpecialization === "data") {
+    // Database query — search statistical databases for matching players
+    activities.push({
+      type: "databaseQuery",
+      slots: ACTIVITY_SLOT_COSTS.databaseQuery,
+      description: "Query the statistical database — filter players by position, age, and performance metrics",
+    });
+
+    // Deep video analysis — frame-by-frame breakdown with statistical overlay
+    activities.push({
+      type: "deepVideoAnalysis",
+      slots: ACTIVITY_SLOT_COSTS.deepVideoAnalysis,
+      description: "Run deep video analysis — systematic clip tagging with statistical overlay for precision reads",
+    });
+
+    // Stats briefing — review league-wide statistical summary
+    activities.push({
+      type: "statsBriefing",
+      slots: ACTIVITY_SLOT_COSTS.statsBriefing,
+      description: "Review a stats briefing — weekly statistical summary highlighting anomalies and trends",
+    });
+
+    // Data conference — attend an analytics conference (networking + learning)
+    if (scout.careerTier >= 2) {
+      activities.push({
+        type: "dataConference",
+        slots: ACTIVITY_SLOT_COSTS.dataConference,
+        description: "Attend a data conference — learn cutting-edge analytical methods and network with peers",
+      });
+    }
+
+    // Algorithm calibration — improve your analytical models
+    if (scout.specializationLevel >= 3) {
+      activities.push({
+        type: "algorithmCalibration",
+        slots: ACTIVITY_SLOT_COSTS.algorithmCalibration,
+        description: "Calibrate your algorithms — refine your statistical models for sharper predictions",
+      });
+    }
+
+    // Market inefficiency scan — find undervalued players
+    if (scout.specializationLevel >= 5) {
+      activities.push({
+        type: "marketInefficiency",
+        slots: ACTIVITY_SLOT_COSTS.marketInefficiency,
+        description: "Scan for market inefficiencies — identify players whose stats outstrip their transfer value",
+      });
+    }
+
+    // Analytics team meeting — manage your data analysts
+    if (scout.careerTier >= 3) {
+      activities.push({
+        type: "analyticsTeamMeeting",
+        slots: ACTIVITY_SLOT_COSTS.analyticsTeamMeeting,
+        description: "Hold an analytics team meeting — review analyst reports and adjust monitoring assignments",
+      });
+    }
+  }
+
   return activities;
 }
 
@@ -519,6 +730,23 @@ export function processCompletedWeek(
   let youthTournamentsExecuted = 0;
   let trainingVisitsExecuted = 0;
   let videoSessionsExecuted = 0;
+
+  // First-team exclusive
+  let reserveMatchesExecuted = 0;
+  let scoutingMissionsExecuted = 0;
+  let oppositionAnalysesExecuted = 0;
+  let agentShowcasesExecuted = 0;
+  let trialMatchesExecuted = 0;
+  let contractNegotiationsExecuted = 0;
+
+  // Data-exclusive
+  let databaseQueriesExecuted = 0;
+  let deepVideoAnalysesExecuted = 0;
+  let statsBriefingsExecuted = 0;
+  let dataConferencesExecuted = 0;
+  let algorithmCalibrationsExecuted = 0;
+  let marketInefficienciesExecuted = 0;
+  let analyticsTeamMeetingsExecuted = 0;
 
   const endurance = scout.attributes.endurance; // 1–20
 
@@ -616,6 +844,51 @@ export function processCompletedWeek(
         // processing is needed here.
         break;
 
+      // ---- First-team exclusive activities ----
+
+      case "reserveMatch":
+        reserveMatchesExecuted++;
+        break;
+      case "scoutingMission":
+        scoutingMissionsExecuted++;
+        break;
+      case "oppositionAnalysis":
+        oppositionAnalysesExecuted++;
+        break;
+      case "agentShowcase":
+        agentShowcasesExecuted++;
+        break;
+      case "trialMatch":
+        trialMatchesExecuted++;
+        break;
+      case "contractNegotiation":
+        contractNegotiationsExecuted++;
+        break;
+
+      // ---- Data-exclusive activities ----
+
+      case "databaseQuery":
+        databaseQueriesExecuted++;
+        break;
+      case "deepVideoAnalysis":
+        deepVideoAnalysesExecuted++;
+        break;
+      case "statsBriefing":
+        statsBriefingsExecuted++;
+        break;
+      case "dataConference":
+        dataConferencesExecuted++;
+        break;
+      case "algorithmCalibration":
+        algorithmCalibrationsExecuted++;
+        break;
+      case "marketInefficiency":
+        marketInefficienciesExecuted++;
+        break;
+      case "analyticsTeamMeeting":
+        analyticsTeamMeetingsExecuted++;
+        break;
+
       default:
         break;
     }
@@ -647,6 +920,21 @@ export function processCompletedWeek(
     youthTournamentsExecuted,
     trainingVisitsExecuted,
     videoSessionsExecuted,
+    // First-team exclusive
+    reserveMatchesExecuted,
+    scoutingMissionsExecuted,
+    oppositionAnalysesExecuted,
+    agentShowcasesExecuted,
+    trialMatchesExecuted,
+    contractNegotiationsExecuted,
+    // Data-exclusive
+    databaseQueriesExecuted,
+    deepVideoAnalysesExecuted,
+    statsBriefingsExecuted,
+    dataConferencesExecuted,
+    algorithmCalibrationsExecuted,
+    marketInefficienciesExecuted,
+    analyticsTeamMeetingsExecuted,
   };
 }
 

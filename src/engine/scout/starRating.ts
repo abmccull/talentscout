@@ -63,6 +63,15 @@ const CA_CONTEXT_NOISE: Record<ObservationContext, number> = {
   youthFestival: 1.1,
   followUpSession: 0.9,
   parentCoachMeeting: 2.0,
+  // First-team exclusive — good for reading current ability
+  reserveMatch: 0.85,
+  oppositionAnalysis: 1.0,
+  agentShowcase: 1.1,
+  trialMatch: 0.7,        // best first-team context for CA reads
+  // Data-exclusive — stats-based CA estimation
+  databaseQuery: 1.5,
+  statsBriefing: 1.4,
+  deepVideoAnalysis: 1.0,
 };
 
 const PA_CONTEXT_NOISE: Record<ObservationContext, number> = {
@@ -78,6 +87,15 @@ const PA_CONTEXT_NOISE: Record<ObservationContext, number> = {
   youthFestival: 0.85,
   followUpSession: 0.85,
   parentCoachMeeting: 2.0,
+  // First-team exclusive — PA reads less reliable (focus is current readiness)
+  reserveMatch: 1.2,
+  oppositionAnalysis: 1.4,
+  agentShowcase: 1.3,
+  trialMatch: 1.1,
+  // Data-exclusive — trend data helps with PA estimation
+  databaseQuery: 1.3,
+  statsBriefing: 1.2,
+  deepVideoAnalysis: 1.1,
 };
 
 // ---------------------------------------------------------------------------

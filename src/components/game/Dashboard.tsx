@@ -23,6 +23,10 @@ import {
   Trophy,
   BarChart3,
   GraduationCap,
+  Target,
+  ArrowRight,
+  Users,
+  Brain,
 } from "lucide-react";
 import { isBroke } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
@@ -58,6 +62,30 @@ function threatLabel(quality: number): string {
   if (quality >= 3) return "Medium";
   if (quality >= 2) return "Low";
   return "Minimal";
+}
+
+// ─── Specialization widget helpers ────────────────────────────────────────────
+
+function priorityBadgeClass(priority: string): string {
+  switch (priority) {
+    case "critical": return "border-red-500/50 bg-red-500/10 text-red-400";
+    case "high":     return "border-amber-500/50 bg-amber-500/10 text-amber-400";
+    case "medium":   return "border-blue-500/50 bg-blue-500/10 text-blue-400";
+    default:         return "border-zinc-600 bg-zinc-800 text-zinc-400";
+  }
+}
+
+function performanceRatingColor(rating: number): string {
+  if (rating >= 70) return "text-emerald-400";
+  if (rating >= 40) return "text-amber-400";
+  return "text-red-400";
+}
+
+function moraleEmoji(morale: number): string {
+  if (morale >= 75) return "😊";
+  if (morale >= 50) return "😐";
+  if (morale >= 25) return "😕";
+  return "😞";
 }
 
 // ─── component ────────────────────────────────────────────────────────────────
@@ -116,6 +144,44 @@ export function Dashboard() {
   // Phase 2: rival scouts
   const rivalScouts = Object.values(gameState.rivalScouts);
   const hasRivals = rivalScouts.length > 0;
+
+  // Specialization-specific data
+  const specialization = scout.primarySpecialization;
+
+  // firstTeam: active (unfulfilled) directives
+  const activeDirectives = specialization === "firstTeam"
+    ? gameState.managerDirectives.filter((d) => !d.fulfilled).slice(0, 4)
+    : [];
+
+  // firstTeam: recent transfer records (max 3)
+  const recentTransfers = specialization === "firstTeam"
+    ? [...gameState.transferRecords]
+        .sort((a, b) => b.season - a.season || b.week - a.week)
+        .slice(0, 3)
+    : [];
+
+  // data: prediction accuracy summary
+  const allPredictions = specialization === "data" ? gameState.predictions : [];
+  const resolvedPredictions = allPredictions.filter((p) => p.resolved);
+  const correctPredictions = resolvedPredictions.filter((p) => p.wasCorrect === true);
+  const predictionAccuracy = resolvedPredictions.length > 0
+    ? Math.round((correctPredictions.length / resolvedPredictions.length) * 100)
+    : 0;
+  const currentStreak = (() => {
+    if (specialization !== "data") return 0;
+    let streak = 0;
+    const sorted = [...resolvedPredictions].sort((a, b) => b.madeInSeason - a.madeInSeason || b.madeInWeek - a.madeInWeek);
+    for (const p of sorted) {
+      if (p.wasCorrect === true) streak++;
+      else break;
+    }
+    return streak;
+  })();
+  const oracleBadge = predictionAccuracy >= 70 && resolvedPredictions.length >= 10;
+  const unresolvedPredictions = allPredictions.filter((p) => !p.resolved).slice(0, 3);
+
+  // data: analysts
+  const dataAnalysts = specialization === "data" ? gameState.dataAnalysts : [];
 
   // Observed player IDs for shared-target detection
   const myTargetIds = new Set(
@@ -673,6 +739,267 @@ export function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* ── First-Team Scout Widgets ─────────────────────────────────────── */}
+        {specialization === "firstTeam" && (activeDirectives.length > 0 || recentTransfers.length > 0) && (
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Active Directives */}
+            {activeDirectives.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Target size={14} className="text-blue-400" aria-hidden="true" />
+                    Active Directives
+                    <Badge variant="secondary" className="ml-auto text-[10px]">
+                      {gameState.managerDirectives.filter((d) => !d.fulfilled).length}
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {activeDirectives.map((directive) => (
+                    <div
+                      key={directive.id}
+                      className="rounded-md border border-[#27272a] p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] capitalize shrink-0 ${priorityBadgeClass(directive.priority)}`}
+                          >
+                            {directive.priority}
+                          </Badge>
+                          <span className="text-sm font-semibold text-white">{directive.position}</span>
+                        </div>
+                        <span className="shrink-0 text-[10px] text-zinc-500">
+                          {directive.submittedReportIds.length} report{directive.submittedReportIds.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-zinc-400">
+                        <span>Age {directive.ageRange[0]}–{directive.ageRange[1]}</span>
+                        <span className="text-zinc-600">·</span>
+                        <span>{directive.minCAStars}★ min</span>
+                        <span className="text-zinc-600">·</span>
+                        <span className="text-emerald-400">
+                          {directive.budgetAllocation >= 1_000_000
+                            ? `£${(directive.budgetAllocation / 1_000_000).toFixed(1)}M`
+                            : `£${(directive.budgetAllocation / 1_000).toFixed(0)}K`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  {gameState.managerDirectives.filter((d) => !d.fulfilled).length > 4 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs text-zinc-400 hover:text-white"
+                      onClick={() => setScreen("career")}
+                    >
+                      View All
+                      <ArrowRight size={12} className="ml-1" aria-hidden="true" />
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Transfer Tracker */}
+            {recentTransfers.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <TrendingUp size={14} className="text-emerald-400" aria-hidden="true" />
+                    Transfer Tracker
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {recentTransfers.map((record) => {
+                    const player = gameState.players[record.playerId];
+                    const fromClub = gameState.clubs[record.fromClubId];
+                    const toClub = gameState.clubs[record.toClubId];
+                    const latestPerf = record.seasonPerformance.length > 0
+                      ? record.seasonPerformance[record.seasonPerformance.length - 1]
+                      : null;
+                    return (
+                      <div key={record.id} className="rounded-md border border-[#27272a] p-3">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="text-sm font-semibold text-white">
+                            {player ? `${player.firstName} ${player.lastName}` : "Unknown Player"}
+                          </p>
+                          {record.outcome && (
+                            <Badge
+                              variant="outline"
+                              className={`shrink-0 text-[10px] ${
+                                record.outcome === "hit"
+                                  ? "border-emerald-500/50 text-emerald-400"
+                                  : record.outcome === "decent"
+                                  ? "border-amber-500/50 text-amber-400"
+                                  : record.outcome === "flop"
+                                  ? "border-red-500/50 text-red-400"
+                                  : "border-zinc-600 text-zinc-500"
+                              }`}
+                            >
+                              {record.outcome}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-zinc-500">
+                          {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"}
+                        </p>
+                        {latestPerf && (
+                          <p className={`mt-1 text-xs font-semibold ${performanceRatingColor(latestPerf.rating)}`}>
+                            S{latestPerf.season}: {latestPerf.rating}/100
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        {/* ── Data Scout Widgets ────────────────────────────────────────────── */}
+        {specialization === "data" && (
+          <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Prediction Tracker */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Brain size={14} className="text-violet-400" aria-hidden="true" />
+                  Prediction Tracker
+                  {oracleBadge && (
+                    <Badge
+                      variant="outline"
+                      className="ml-auto border-violet-500/50 bg-violet-500/10 text-violet-400 text-[10px]"
+                    >
+                      Oracle
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-md border border-[#27272a] p-2 text-center">
+                    <p className="text-lg font-bold text-white">{allPredictions.length}</p>
+                    <p className="text-[10px] text-zinc-500">Total</p>
+                  </div>
+                  <div className="rounded-md border border-[#27272a] p-2 text-center">
+                    <p className="text-lg font-bold text-emerald-400">{correctPredictions.length}</p>
+                    <p className="text-[10px] text-zinc-500">Correct</p>
+                  </div>
+                  <div className="rounded-md border border-[#27272a] p-2 text-center">
+                    <p className={`text-lg font-bold ${predictionAccuracy >= 70 ? "text-emerald-400" : predictionAccuracy >= 50 ? "text-amber-400" : "text-red-400"}`}>
+                      {resolvedPredictions.length > 0 ? `${predictionAccuracy}%` : "—"}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">Accuracy</p>
+                  </div>
+                </div>
+                {currentStreak > 0 && (
+                  <p className="text-xs text-amber-400 font-medium">
+                    {currentStreak} correct in a row
+                  </p>
+                )}
+
+                {/* Recent unresolved predictions */}
+                {unresolvedPredictions.length > 0 && (
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Pending</p>
+                    {unresolvedPredictions.map((pred) => {
+                      const player = gameState.players[pred.playerId];
+                      return (
+                        <div key={pred.id} className="rounded-md border border-[#27272a] p-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-white truncate">
+                              {player ? `${player.firstName} ${player.lastName}` : "Unknown"}
+                            </span>
+                            <Badge variant="outline" className="shrink-0 text-[9px] capitalize">
+                              {pred.type}
+                            </Badge>
+                          </div>
+                          <p className="mt-0.5 text-[10px] text-zinc-500 line-clamp-1">{pred.statement}</p>
+                          <p className="text-[9px] text-zinc-600">Resolves S{pred.resolveBySeason}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs text-zinc-400 hover:text-white"
+                  onClick={() => setScreen("career")}
+                >
+                  View All
+                  <ArrowRight size={12} className="ml-1" aria-hidden="true" />
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Analytics Team */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Users size={14} className="text-blue-400" aria-hidden="true" />
+                  Analytics Team
+                  <Badge variant="secondary" className="ml-auto text-[10px]">
+                    {dataAnalysts.length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {dataAnalysts.length === 0 ? (
+                  <p className="text-xs text-zinc-500">No analysts hired. Recruit analysts to generate passive reports.</p>
+                ) : (
+                  dataAnalysts.map((analyst) => {
+                    const assignedLeague = analyst.assignedLeagueId
+                      ? gameState.leagues[analyst.assignedLeagueId]
+                      : undefined;
+                    return (
+                      <div key={analyst.id} className="rounded-md border border-[#27272a] p-3">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="text-sm font-medium text-white">{analyst.name}</span>
+                          <span
+                            className="text-base"
+                            role="img"
+                            aria-label={`Morale: ${analyst.morale}/100`}
+                          >
+                            {moraleEmoji(analyst.morale)}
+                          </span>
+                        </div>
+                        <div className="mb-1 flex items-center justify-between text-[10px]">
+                          <span className="text-zinc-500">Skill {analyst.skill}/20</span>
+                          <span className="text-zinc-500 capitalize">{analyst.focus}</span>
+                        </div>
+                        <div className="h-1 w-full overflow-hidden rounded-full bg-[#27272a]">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all"
+                            style={{ width: `${(analyst.skill / 20) * 100}%` }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[10px] text-zinc-500">
+                          {assignedLeague ? assignedLeague.name : "Unassigned"}
+                        </p>
+                      </div>
+                    );
+                  })
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-xs text-zinc-400 hover:text-white"
+                  onClick={() => setScreen("career")}
+                >
+                  Manage
+                  <ArrowRight size={12} className="ml-1" aria-hidden="true" />
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Issue 13: Quick Links */}
         <div className="mt-6">

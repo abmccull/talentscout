@@ -30,6 +30,11 @@ const MESSAGE_TYPE_CONFIG: Record<
   news: { label: "News", icon: Newspaper, color: "text-zinc-400" },
   jobOffer: { label: "Job Offer", icon: Briefcase, color: "text-emerald-400" },
   event: { label: "Event", icon: Bell, color: "text-purple-400" },
+  directive: { label: "Directive", icon: ClipboardList, color: "text-rose-400" },
+  clubResponse: { label: "Club Response", icon: Star, color: "text-emerald-400" },
+  transferUpdate: { label: "Transfer Update", icon: Newspaper, color: "text-sky-400" },
+  analystReport: { label: "Analyst Report", icon: ClipboardList, color: "text-cyan-400" },
+  predictionResult: { label: "Prediction Result", icon: Zap, color: "text-amber-400" },
 };
 
 // ─── Narrative event type config ─────────────────────────────────────────────

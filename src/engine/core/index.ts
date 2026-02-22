@@ -80,6 +80,20 @@ export type {
   GameState,
   NewGameConfig,
   StandingEntry,
+
+  // First-team scouting
+  ManagerDirective,
+  ClubResponseType,
+  ClubResponse,
+  TransferRecord,
+  SystemFitResult,
+
+  // Data scouting
+  Prediction,
+  DataAnalyst,
+  StatisticalProfile,
+  AnomalyFlag,
+  AnalystReport,
 } from "./types";
 
 // Runtime constants (values, not just types)

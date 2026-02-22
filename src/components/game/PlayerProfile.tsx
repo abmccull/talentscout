@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap } from "lucide-react";
-import type { AttributeReading, HiddenIntel, Observation, AbilityReading } from "@/engine/core/types";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
+import type { AttributeReading, HiddenIntel, Observation, AbilityReading, SystemFitResult, StatisticalProfile, AnomalyFlag } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 
@@ -59,6 +59,271 @@ function ReliabilityDots({ reliability }: { reliability: number }) {
     </div>
   );
 }
+
+// ─── System Fit Card (firstTeam scouts) ────────────────────────────────────
+
+function fitColor(score: number): string {
+  if (score >= 70) return "bg-emerald-500";
+  if (score >= 40) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function fitTextColor(score: number): string {
+  if (score >= 70) return "text-emerald-400";
+  if (score >= 40) return "text-amber-400";
+  return "text-red-400";
+}
+
+interface SystemFitCardProps {
+  fit: SystemFitResult | undefined;
+}
+
+function SystemFitCard({ fit }: SystemFitCardProps) {
+  if (!fit) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Target size={14} className="text-blue-400" aria-hidden="true" />
+            System Fit
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-zinc-500">
+            Schedule an observation to generate fit analysis.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const circumference = 2 * Math.PI * 28;
+  const dashOffset = circumference * (1 - fit.overallFit / 100);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Target size={14} className="text-blue-400" aria-hidden="true" />
+          System Fit
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Circular overall fit */}
+        <div className="flex items-center gap-4">
+          <div className="relative shrink-0" aria-label={`Overall fit: ${fit.overallFit}%`}>
+            <svg width="72" height="72" viewBox="0 0 72 72" className="-rotate-90">
+              <circle cx="36" cy="36" r="28" fill="none" stroke="#27272a" strokeWidth="6" />
+              <circle
+                cx="36" cy="36" r="28" fill="none"
+                strokeWidth="6"
+                strokeDasharray={circumference}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="round"
+                className={
+                  fit.overallFit >= 70
+                    ? "stroke-emerald-500"
+                    : fit.overallFit >= 40
+                    ? "stroke-amber-500"
+                    : "stroke-red-500"
+                }
+              />
+            </svg>
+            <span className={`absolute inset-0 flex items-center justify-center text-base font-bold ${fitTextColor(fit.overallFit)}`}>
+              {fit.overallFit}%
+            </span>
+          </div>
+          <div className="flex-1 space-y-2">
+            {/* Position fit */}
+            <div>
+              <div className="mb-0.5 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Position</span>
+                <span className={`font-mono font-semibold ${fitTextColor(fit.positionFit)}`}>{fit.positionFit}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#27272a]">
+                <div className={`h-full rounded-full transition-all ${fitColor(fit.positionFit)}`} style={{ width: `${fit.positionFit}%` }} />
+              </div>
+            </div>
+            {/* Style fit */}
+            <div>
+              <div className="mb-0.5 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Style</span>
+                <span className={`font-mono font-semibold ${fitTextColor(fit.styleFit)}`}>{fit.styleFit}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#27272a]">
+                <div className={`h-full rounded-full transition-all ${fitColor(fit.styleFit)}`} style={{ width: `${fit.styleFit}%` }} />
+              </div>
+            </div>
+            {/* Age fit */}
+            <div>
+              <div className="mb-0.5 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Age</span>
+                <span className={`font-mono font-semibold ${fitTextColor(fit.ageFit)}`}>{fit.ageFit}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#27272a]">
+                <div className={`h-full rounded-full transition-all ${fitColor(fit.ageFit)}`} style={{ width: `${fit.ageFit}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Strengths */}
+        {fit.fitStrengths.length > 0 && (
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Strengths</p>
+            <ul className="space-y-0.5">
+              {fit.fitStrengths.map((s, i) => (
+                <li key={i} className="text-xs text-emerald-400">+ {s}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Weaknesses */}
+        {fit.fitWeaknesses.length > 0 && (
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Concerns</p>
+            <ul className="space-y-0.5">
+              {fit.fitWeaknesses.map((w, i) => (
+                <li key={i} className="text-xs text-red-400">- {w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Statistical Profile Card (data scouts) ────────────────────────────────
+
+const STAT_LABELS: Record<string, string> = {
+  goals: "Goals",
+  assists: "Assists",
+  passCompletion: "Pass Completion",
+  tacklesWon: "Tackles Won",
+  interceptions: "Interceptions",
+  aerialDuelsWon: "Aerial Duels Won",
+  dribbleSuccess: "Dribble Success",
+  shotsOnTarget: "Shots on Target",
+};
+
+function percentileBarColor(p: number): string {
+  if (p > 75) return "bg-emerald-500";
+  if (p >= 50) return "bg-zinc-400";
+  if (p >= 25) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function TrendArrow({ trend }: { trend: "rising" | "stable" | "falling" | undefined }) {
+  if (trend === "rising") return <TrendingUp size={12} className="text-emerald-400" aria-label="Rising" />;
+  if (trend === "falling") return <TrendingDown size={12} className="text-red-400" aria-label="Falling" />;
+  return <Minus size={12} className="text-zinc-500" aria-label="Stable" />;
+}
+
+interface StatProfileCardProps {
+  profile: StatisticalProfile | undefined;
+  anomalies: AnomalyFlag[];
+}
+
+function StatisticalProfileCard({ profile, anomalies }: StatProfileCardProps) {
+  if (!profile) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <TrendingUp size={14} className="text-blue-400" aria-hidden="true" />
+            Statistical Profile
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-zinc-500">
+            No statistical profile available. Generate one via the data analysis system.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const statKeys = Object.keys(STAT_LABELS) as Array<keyof typeof profile.per90>;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <TrendingUp size={14} className="text-blue-400" aria-hidden="true" />
+          Statistical Profile
+          <span className="ml-auto text-[10px] font-normal text-zinc-500">
+            S{profile.season} W{profile.lastUpdated}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Per-90 stats grid */}
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {statKeys.map((key) => {
+            const per90Val = profile.per90[key as keyof typeof profile.per90];
+            const pct = profile.percentiles[key as keyof typeof profile.percentiles];
+            const trend = profile.trends[key as keyof typeof profile.trends];
+            return (
+              <div key={key} className="rounded-md border border-[#27272a] p-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-400">{STAT_LABELS[key]}</span>
+                  <div className="flex items-center gap-1">
+                    <TrendArrow trend={trend} />
+                    <span className="font-mono text-xs font-semibold text-white">
+                      {typeof per90Val === "number" ? per90Val.toFixed(2) : "—"}
+                    </span>
+                  </div>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-[#27272a]">
+                  <div
+                    className={`h-full rounded-full transition-all ${percentileBarColor(pct)}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="mt-0.5 text-[9px] text-zinc-600">{pct}th percentile</p>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Anomaly flags */}
+        {anomalies.length > 0 && (
+          <div>
+            <p className="mb-1.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider text-amber-400">
+              <AlertTriangle size={10} aria-hidden="true" />
+              Anomalies Detected
+            </p>
+            <div className="space-y-1.5">
+              {anomalies.map((flag) => (
+                <div
+                  key={flag.id}
+                  className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-medium text-amber-400 capitalize">
+                      {flag.stat.replace(/([A-Z])/g, " $1").trim()} — {flag.direction}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="border-amber-500/40 text-amber-400 text-[9px]"
+                    >
+                      {flag.severity.toFixed(1)}σ
+                    </Badge>
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-zinc-400">{flag.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── ObservationsSidebar ────────────────────────────────────────────────────
 
 function ObservationsSidebar({ observations }: { observations: Observation[] }) {
   const [compareMode, setCompareMode] = useState(false);
@@ -298,6 +563,20 @@ export function PlayerProfile() {
 
   // Unsigned youth detection
   const unsignedYouthRecord = gameState.unsignedYouth[selectedPlayerId] ?? null;
+
+  // Specialization-specific data
+  const specialization = gameState.scout.primarySpecialization;
+  const clubId = gameState.scout.currentClubId ?? "";
+  const fitCacheKey = `${selectedPlayerId}:${clubId}`;
+  const systemFit = specialization === "firstTeam"
+    ? (gameState.systemFitCache[fitCacheKey] ?? undefined)
+    : undefined;
+  const statisticalProfile = specialization === "data"
+    ? (gameState.statisticalProfiles[selectedPlayerId] ?? undefined)
+    : undefined;
+  const playerAnomalies = specialization === "data"
+    ? gameState.anomalyFlags.filter((f) => f.playerId === selectedPlayerId)
+    : [];
 
   const convictionVariant = (c: string) => {
     if (c === "tablePound") return "default" as const;
@@ -613,6 +892,18 @@ export function PlayerProfile() {
             {/* Observation history */}
             <ObservationsSidebar observations={observations} />
 
+            {/* First-team: System Fit */}
+            {specialization === "firstTeam" && (
+              <SystemFitCard fit={systemFit} />
+            )}
+
+            {/* Data scout: Statistical Profile */}
+            {specialization === "data" && (
+              <StatisticalProfileCard
+                profile={statisticalProfile}
+                anomalies={playerAnomalies}
+              />
+            )}
 
             {/* Reports */}
             <Card>

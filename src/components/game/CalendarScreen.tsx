@@ -69,6 +69,21 @@ const ACTIVITY_CONFIG: Record<
   followUpSession: { label: "Follow-Up Session", icon: Eye, slots: 1, color: "text-teal-400" },
   parentCoachMeeting: { label: "Parent/Coach Meeting", icon: Users, slots: 1, color: "text-purple-400" },
   writePlacementReport: { label: "Write Placement Report", icon: FileText, slots: 1, color: "text-amber-400" },
+  // First-team exclusive
+  reserveMatch: { label: "Reserve Match", icon: Eye, slots: 2, color: "text-emerald-400" },
+  scoutingMission: { label: "Scouting Mission", icon: ChevronRight, slots: 3, color: "text-sky-400" },
+  oppositionAnalysis: { label: "Opposition Analysis", icon: Eye, slots: 2, color: "text-rose-400" },
+  agentShowcase: { label: "Agent Showcase", icon: Users, slots: 2, color: "text-purple-400" },
+  trialMatch: { label: "Trial Match", icon: Eye, slots: 2, color: "text-emerald-400" },
+  contractNegotiation: { label: "Contract Negotiation", icon: Users, slots: 1, color: "text-amber-400" },
+  // Data-exclusive
+  databaseQuery: { label: "Database Query", icon: Book, slots: 1, color: "text-cyan-400" },
+  deepVideoAnalysis: { label: "Deep Video Analysis", icon: Video, slots: 2, color: "text-blue-400" },
+  statsBriefing: { label: "Stats Briefing", icon: FileText, slots: 1, color: "text-teal-400" },
+  dataConference: { label: "Data Conference", icon: Users, slots: 3, color: "text-indigo-400" },
+  algorithmCalibration: { label: "Algorithm Calibration", icon: Book, slots: 1, color: "text-cyan-400" },
+  marketInefficiency: { label: "Market Scan", icon: Book, slots: 1, color: "text-lime-400" },
+  analyticsTeamMeeting: { label: "Analytics Meeting", icon: Users, slots: 1, color: "text-purple-400" },
 };
 
 function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {

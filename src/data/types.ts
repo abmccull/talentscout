@@ -61,4 +61,9 @@ export interface CountryData {
   foreignNamePools: Record<string, NamePool>;
   /** Nationality distribution per league tier. */
   nationalitiesByTier: Record<number, NationalityWeight[]>;
+  /**
+   * Secondary countries generate clubs and players but do NOT simulate
+   * fixtures or offer career positions. Undefined/false = core country.
+   */
+  secondary?: boolean;
 }

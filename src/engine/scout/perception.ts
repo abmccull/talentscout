@@ -60,6 +60,15 @@ const CONTEXT_NOISE: Record<ObservationContext, number> = {
   youthFestival: 1.2,
   followUpSession: 0.85,
   parentCoachMeeting: 2.0,
+  // First-team exclusive
+  reserveMatch: 0.9,         // controlled environment, good accuracy
+  oppositionAnalysis: 1.1,   // studying from distance, slightly noisy
+  agentShowcase: 1.2,        // players performing under agent pressure
+  trialMatch: 0.75,          // best first-team context — close controlled observation
+  // Data-exclusive
+  databaseQuery: 1.8,        // pure stats, no live observation
+  statsBriefing: 1.6,        // summary data, limited direct reads
+  deepVideoAnalysis: 1.1,    // enhanced video with statistical overlay
 };
 
 /** Bonus visibility: attributes only detectable by skilled scouts. */
@@ -189,6 +198,15 @@ const CONTEXT_VISIBLE_ATTRIBUTES: Record<ObservationContext, PlayerAttribute[]> 
   youthFestival: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "passing"],
   followUpSession: ["firstTouch", "passing", "composure", "workRate", "agility", "decisionMaking"],
   parentCoachMeeting: [],
+  // First-team exclusive
+  reserveMatch: ["firstTouch", "passing", "shooting", "pace", "strength", "composure", "positioning", "workRate", "offTheBall"],
+  oppositionAnalysis: ["positioning", "decisionMaking", "pressing", "defensiveAwareness", "offTheBall"],
+  agentShowcase: ["dribbling", "shooting", "pace", "agility", "composure", "firstTouch"],
+  trialMatch: ["firstTouch", "passing", "dribbling", "shooting", "pace", "strength", "stamina", "composure", "positioning", "workRate", "offTheBall", "pressing"],
+  // Data-exclusive
+  databaseQuery: ["shooting", "passing", "crossing"],  // limited to stats-derivable attributes
+  statsBriefing: ["shooting", "passing"],               // summary-level insight
+  deepVideoAnalysis: ["passing", "shooting", "crossing", "positioning", "decisionMaking", "offTheBall", "pressing", "defensiveAwareness", "composure"],
 };
 
 // ---------------------------------------------------------------------------
@@ -267,12 +285,20 @@ export function observePlayerLight(
   }
 
   const suffix = rng.nextInt(100000, 999999).toString(16);
-  const contextLabel =
-    context === "trainingGround" ? "training" :
-    context === "videoAnalysis" ? "video analysis" :
-    context === "youthTournament" ? "a youth tournament" :
-    context === "academyVisit" ? "an academy visit" :
-    "observation";
+  const CONTEXT_LABELS: Partial<Record<ObservationContext, string>> = {
+    trainingGround: "training",
+    videoAnalysis: "video analysis",
+    youthTournament: "a youth tournament",
+    academyVisit: "an academy visit",
+    reserveMatch: "a reserve match",
+    oppositionAnalysis: "opposition analysis",
+    agentShowcase: "an agent showcase",
+    trialMatch: "a trial match",
+    databaseQuery: "a database query",
+    statsBriefing: "a stats briefing",
+    deepVideoAnalysis: "deep video analysis",
+  };
+  const contextLabel = CONTEXT_LABELS[context] ?? "observation";
   const notes = [`Observed ${player.firstName} ${player.lastName} during ${contextLabel} — ${attributeReadings.length} attributes assessed.`];
 
   const abilityReading = generateAbilityReading(

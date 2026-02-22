@@ -28,7 +28,24 @@ import type {
   ScoutPerformanceSnapshot,
   HiddenIntel,
   UnsignedYouth,
+  ManagerDirective,
 } from "@/engine/core/types";
+import {
+  generateDirectives,
+  evaluateReportAgainstDirectives,
+  generateClubResponse,
+  processTrialOutcome,
+  updateTransferRecords,
+} from "@/engine/firstTeam";
+import {
+  executeDatabaseQuery,
+  executeDeepVideoAnalysis,
+  generateStatsBriefing,
+  resolvePredictions,
+  generateAnalystReport,
+  updateAnalystMorale,
+  generateAnalystCandidate,
+} from "@/engine/data";
 import { createRNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
@@ -415,6 +432,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       subRegions: {},
       retiredPlayerIds: [],
+      // First-Team Scouting System
+      managerDirectives: [],
+      clubResponses: [],
+      transferRecords: [],
+      systemFitCache: {},
+      // Data Scouting System
+      predictions: [],
+      dataAnalysts: [],
+      statisticalProfiles: {},
+      anomalyFlags: [],
+      analystReports: {},
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -435,6 +463,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // 4. Check for any starting tools the scout might already qualify for
     const startingTools = checkToolUnlocks(scout, []);
+
+    // 5. Generate initial manager directives for first-team scouts
+    let initialDirectives: ManagerDirective[] = [];
+    if (config.specialization === "firstTeam" && scout.currentClubId) {
+      const directiveRng = createRNG(`${config.worldSeed}-directives-s1`);
+      const club = clubs[scout.currentClubId];
+      const manager = managerProfiles[scout.currentClubId];
+      if (club && manager) {
+        initialDirectives = generateDirectives(
+          directiveRng,
+          club,
+          manager,
+          players,
+          1,
+        );
+      }
+    }
 
     const specializationLabel =
       config.specialization === "youth" ? "Youth Scout"
@@ -489,6 +534,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rivalScouts,
       managerProfiles,
       unlockedTools: startingTools,
+      managerDirectives: initialDirectives,
     };
 
     set({
@@ -1128,6 +1174,593 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
+      // --- Reserve Match: observe 2-4 fringe players from scout's own club ---
+      if (weekResult.reserveMatchesExecuted > 0) {
+        const qr = qualityMap.get("reserveMatch");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(2, 4, discMod);
+        const clubId = currentScout.currentClubId;
+        const candidatePool = clubId
+          ? allPlayers.filter((p) => p.clubId === clubId && !observedPlayerIds.has(p.id))
+          : allPlayers.filter((p) => !observedPlayerIds.has(p.id));
+        const pool = candidatePool.length > 0 ? [...candidatePool] : [...allPlayers.filter((p) => !observedPlayerIds.has(p.id))];
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "reserveMatch", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-reserve-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Reserve Match${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You observed ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} in a reserve fixture. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Scouting Mission: observe 4-6 players across one league ---
+      if (weekResult.scoutingMissionsExecuted > 0) {
+        const qr = qualityMap.get("scoutingMission");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(4, 6, discMod);
+        // Pick players from a random league's clubs (prefer scout's territory)
+        const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
+        const targetLeagueId = leagueIds.length > 0
+          ? leagueIds[actObsRng.nextInt(0, leagueIds.length - 1)]
+          : null;
+        const targetLeague = targetLeagueId ? stateWithScheduleApplied.leagues[targetLeagueId] : null;
+        const leagueClubIds = targetLeague ? new Set(targetLeague.clubIds) : new Set<string>();
+        const pool = (targetLeague && leagueClubIds.size > 0
+          ? allPlayers.filter((p) => leagueClubIds.has(p.clubId) && !observedPlayerIds.has(p.id))
+          : allPlayers.filter((p) => !observedPlayerIds.has(p.id))
+        ).slice();
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "liveMatch", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-mission-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Scouting Mission${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You spotted ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} during a scouting mission. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Opposition Analysis: observe 2-3 players from an opposing team ---
+      if (weekResult.oppositionAnalysesExecuted > 0) {
+        const qr = qualityMap.get("oppositionAnalysis");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(2, 3, discMod);
+        // Pick a random opposing club (any club that is not the scout's own)
+        const clubIds = Object.keys(stateWithScheduleApplied.clubs).filter(
+          (id) => id !== currentScout.currentClubId,
+        );
+        const targetClubId = clubIds.length > 0
+          ? clubIds[actObsRng.nextInt(0, clubIds.length - 1)]
+          : null;
+        const pool = (targetClubId
+          ? allPlayers.filter((p) => p.clubId === targetClubId && !observedPlayerIds.has(p.id))
+          : allPlayers.filter((p) => !observedPlayerIds.has(p.id))
+        ).slice();
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "oppositionAnalysis", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-opposition-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Opposition Analysis${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You analysed ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} ahead of a fixture. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Agent Showcase: observe 2-3 players presented by agents ---
+      if (weekResult.agentShowcasesExecuted > 0) {
+        const qr = qualityMap.get("agentShowcase");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(2, 3, discMod);
+        const pool = allPlayers.filter((p) => !observedPlayerIds.has(p.id)).slice();
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "agentShowcase", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-showcase-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Agent Showcase${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}An agent presented ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} to you directly. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Trial Match: observe 1-2 players in a controlled trial ---
+      if (weekResult.trialMatchesExecuted > 0) {
+        const qr = qualityMap.get("trialMatch");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(1, 2, discMod);
+        const pool = allPlayers.filter((p) => !observedPlayerIds.has(p.id)).slice();
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "trialMatch", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          // Resolve trial outcome for any pending trial responses
+          if (currentScout.currentClubId) {
+            const trialRng = createRNG(
+              `${gameState.seed}-trial-${player.id}-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+            );
+            const trialClub = stateWithScheduleApplied.clubs[currentScout.currentClubId];
+            if (trialClub) {
+              const trialOutcome = processTrialOutcome(
+                trialRng,
+                player,
+                trialClub,
+                stateWithScheduleApplied.players,
+              );
+              // Update any pending trial ClubResponse with the resolved outcome
+              const updatedClubResponses = stateWithScheduleApplied.clubResponses.map((resp) =>
+                resp.response === "trial" && !resp.directiveId
+                  ? { ...resp, response: trialOutcome }
+                  : resp,
+              );
+              stateWithScheduleApplied = {
+                ...stateWithScheduleApplied,
+                clubResponses: updatedClubResponses,
+              };
+            }
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-trial-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Trial Match${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} participated in a trial match. Closely assessed under controlled conditions. ${obs.attributeReadings.length} attributes recorded. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Contract Negotiations: no observations — just XP and inbox message ---
+      if (weekResult.contractNegotiationsExecuted > 0) {
+        actObsMessages.push({
+          id: `obs-negotiation-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: "Contract Negotiation Assistance",
+          body: `You assisted the club's negotiation team this week. Your insight into the player's strengths and market value helped structure the offer. XP gained in persuasion and network skills.`,
+          read: false,
+          actionRequired: false,
+        });
+      }
+
+      // --- Database Query: generate statistical profiles for league players ---
+      if (weekResult.databaseQueriesExecuted > 0) {
+        const dbRng = createRNG(
+          `${gameState.seed}-dbquery-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
+        if (leagueIds.length > 0) {
+          const targetLeagueId = leagueIds[dbRng.nextInt(0, leagueIds.length - 1)];
+          const targetLeague = stateWithScheduleApplied.leagues[targetLeagueId];
+          if (targetLeague) {
+            const queryResult = executeDatabaseQuery(
+              dbRng,
+              currentScout,
+              targetLeague,
+              stateWithScheduleApplied.players,
+              {},
+              stateWithScheduleApplied.currentSeason,
+              stateWithScheduleApplied.currentWeek,
+            );
+            const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
+            for (const profile of queryResult.profiles) {
+              updatedProfiles[profile.playerId] = profile;
+            }
+            stateWithScheduleApplied = {
+              ...stateWithScheduleApplied,
+              statisticalProfiles: updatedProfiles,
+            };
+            const playerNames = queryResult.playerIds
+              .slice(0, 5)
+              .map((id) => {
+                const p = stateWithScheduleApplied.players[id];
+                return p ? `${p.firstName} ${p.lastName}` : id;
+              })
+              .join(", ");
+            actObsMessages.push({
+              id: `obs-dbquery-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+              type: "feedback" as const,
+              title: `Database Query: ${targetLeague.name}`,
+              body: `Your database query returned ${queryResult.playerIds.length} player${queryResult.playerIds.length !== 1 ? "s" : ""} in ${targetLeague.name}. Statistical profiles generated. Key finds: ${playerNames || "none"}.`,
+              read: false,
+              actionRequired: false,
+            });
+          }
+        }
+      }
+
+      // --- Deep Video Analysis: enhanced statistical profile + observation ---
+      if (weekResult.deepVideoAnalysesExecuted > 0) {
+        const deepVideoRng = createRNG(
+          `${gameState.seed}-deepvideo-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const previouslyObserved = allPlayers.filter((p) => observedPlayerIds.has(p.id));
+        const pool = previouslyObserved.length > 0 ? [...previouslyObserved] : [...allPlayers];
+        if (pool.length > 0) {
+          const player = pool[deepVideoRng.nextInt(0, pool.length - 1)];
+          const existingProfile = stateWithScheduleApplied.statisticalProfiles[player.id];
+          const deepProfile = executeDeepVideoAnalysis(
+            deepVideoRng,
+            currentScout,
+            player,
+            stateWithScheduleApplied.currentSeason,
+            stateWithScheduleApplied.currentWeek,
+            existingProfile,
+          );
+          const updatedProfiles = {
+            ...stateWithScheduleApplied.statisticalProfiles,
+            [player.id]: deepProfile,
+          };
+
+          const obs = observePlayerLight(deepVideoRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          weekObservationsGenerated++;
+
+          stateWithScheduleApplied = {
+            ...stateWithScheduleApplied,
+            statisticalProfiles: updatedProfiles,
+          };
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          actObsMessages.push({
+            id: `obs-deepvideo-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Deep Video Analysis: ${player.firstName} ${player.lastName}`,
+            body: `You conducted an intensive video analysis session on ${player.firstName} ${player.lastName} (${player.position}). Statistical profile ${existingProfile ? "refined" : "created"}. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Stats Briefing: generate anomaly flags and highlights ---
+      if (weekResult.statsBriefingsExecuted > 0) {
+        const briefingRng = createRNG(
+          `${gameState.seed}-briefing-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
+        if (leagueIds.length > 0) {
+          const targetLeagueId = leagueIds[briefingRng.nextInt(0, leagueIds.length - 1)];
+          const targetLeague = stateWithScheduleApplied.leagues[targetLeagueId];
+          if (targetLeague) {
+            const briefing = generateStatsBriefing(
+              briefingRng,
+              currentScout,
+              targetLeague,
+              stateWithScheduleApplied.players,
+              stateWithScheduleApplied.currentSeason,
+              stateWithScheduleApplied.currentWeek,
+            );
+            const updatedAnomalyFlags = [
+              ...stateWithScheduleApplied.anomalyFlags,
+              ...briefing.anomalies,
+            ];
+            stateWithScheduleApplied = {
+              ...stateWithScheduleApplied,
+              anomalyFlags: updatedAnomalyFlags,
+            };
+            actObsMessages.push({
+              id: `obs-briefing-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+              type: "feedback" as const,
+              title: `Stats Briefing: ${targetLeague.name}`,
+              body: briefing.highlights.join("\n"),
+              read: false,
+              actionRequired: false,
+            });
+          }
+        }
+      }
+
+      // --- Data Conference: no observations — XP and networking ---
+      if (weekResult.dataConferencesExecuted > 0) {
+        actObsMessages.push({
+          id: `obs-conference-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: "Data Conference Attended",
+          body: `You attended a data analytics conference this week. Networking with analysts and data scientists from across football expanded your professional network and sharpened your statistical toolkit. XP gained in data literacy.`,
+          read: false,
+          actionRequired: false,
+        });
+      }
+
+      // --- Algorithm Calibration: improve accuracy of statistical profiles ---
+      if (weekResult.algorithmCalibrationsExecuted > 0) {
+        const calibrationRng = createRNG(
+          `${gameState.seed}-calibration-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        // Reduce noise in existing profiles by re-running deep analysis on a sample
+        const profiledPlayerIds = Object.keys(stateWithScheduleApplied.statisticalProfiles);
+        const calibrated = Math.min(3, profiledPlayerIds.length);
+        const sampleIds = calibrationRng.shuffle(profiledPlayerIds).slice(0, calibrated);
+        if (sampleIds.length > 0) {
+          const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
+          for (const playerId of sampleIds) {
+            const player = stateWithScheduleApplied.players[playerId];
+            const existingProfile = updatedProfiles[playerId];
+            if (player && existingProfile) {
+              updatedProfiles[playerId] = executeDeepVideoAnalysis(
+                calibrationRng,
+                currentScout,
+                player,
+                stateWithScheduleApplied.currentSeason,
+                stateWithScheduleApplied.currentWeek,
+                existingProfile,
+              );
+            }
+          }
+          stateWithScheduleApplied = {
+            ...stateWithScheduleApplied,
+            statisticalProfiles: updatedProfiles,
+          };
+        }
+        actObsMessages.push({
+          id: `obs-calibration-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: "Algorithm Calibration Complete",
+          body: `You recalibrated your statistical models this week. ${calibrated} player profile${calibrated !== 1 ? "s" : ""} refined with improved accuracy. Future database queries will return more reliable data.`,
+          read: false,
+          actionRequired: false,
+        });
+      }
+
+      // --- Market Inefficiency Scan: identify undervalued players ---
+      if (weekResult.marketInefficienciesExecuted > 0) {
+        const marketRng = createRNG(
+          `${gameState.seed}-market-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        // Find players whose CA significantly exceeds their market value expectations
+        const undervalued = allPlayers
+          .filter((p) => {
+            const caExpectedValue = p.currentAbility * 50000;
+            return p.marketValue < caExpectedValue * 0.7;
+          })
+          .slice();
+        const sampleSize = Math.min(5, undervalued.length);
+        const finds = marketRng.shuffle(undervalued).slice(0, sampleSize);
+        const findsText = finds.length > 0
+          ? finds.map((p) => {
+              const club = p.clubId ? stateWithScheduleApplied.clubs[p.clubId] : undefined;
+              return `${p.firstName} ${p.lastName} (${p.position}, ${club?.name ?? "Unknown"})`;
+            }).join("; ")
+          : "No significant inefficiencies found this week.";
+        actObsMessages.push({
+          id: `obs-market-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: "Market Inefficiency Scan",
+          body: `Your scan identified ${finds.length} potentially undervalued player${finds.length !== 1 ? "s" : ""} this week.\n\n${findsText}`,
+          read: false,
+          actionRequired: false,
+        });
+      }
+
+      // --- Analytics Team Meeting: generate analyst reports and update morale ---
+      if (weekResult.analyticsTeamMeetingsExecuted > 0) {
+        const meetingRng = createRNG(
+          `${gameState.seed}-analystmeeting-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const updatedAnalysts = [...stateWithScheduleApplied.dataAnalysts];
+        const updatedAnalystReports = { ...stateWithScheduleApplied.analystReports };
+
+        for (let analystIdx = 0; analystIdx < updatedAnalysts.length; analystIdx++) {
+          const analyst = updatedAnalysts[analystIdx];
+          if (!analyst.assignedLeagueId) continue;
+          const analystLeague = stateWithScheduleApplied.leagues[analyst.assignedLeagueId];
+          if (!analystLeague) continue;
+
+          const reportId = `analyst-report-${analyst.id}-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`;
+          const report = generateAnalystReport(
+            meetingRng,
+            analyst,
+            analystLeague,
+            stateWithScheduleApplied.players,
+            stateWithScheduleApplied.currentSeason,
+            stateWithScheduleApplied.currentWeek,
+            reportId,
+          );
+          updatedAnalystReports[reportId] = report;
+
+          // Morale improves when a meeting is held
+          updatedAnalysts[analystIdx] = updateAnalystMorale(analyst, { hadMeeting: true });
+        }
+
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          dataAnalysts: updatedAnalysts,
+          analystReports: updatedAnalystReports,
+        };
+
+        actObsMessages.push({
+          id: `obs-analystmeeting-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback" as const,
+          title: "Analytics Team Meeting",
+          body: `You held a team meeting with your data analysts this week. ${updatedAnalysts.length > 0 ? `${updatedAnalysts.length} analyst${updatedAnalysts.length !== 1 ? "s" : ""} reported in. Reports are available in your analytics dashboard.` : "No analysts are currently assigned to your team."}`,
+          read: false,
+          actionRequired: false,
+        });
+      }
+
       if (actObsMessages.length > 0 || Object.keys(updatedObservations).length !== Object.keys(stateWithScheduleApplied.observations).length) {
         stateWithScheduleApplied = {
           ...stateWithScheduleApplied,
@@ -1403,6 +2036,108 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
+    // ── First-Team Weekly System Processing ─────────────────────────────────
+
+    if (stateWithPhase2.scout.primarySpecialization === "firstTeam") {
+      // Process any pending trial ClubResponses that need resolution this week
+      const pendingTrials = stateWithPhase2.clubResponses.filter(
+        (resp) => resp.response === "trial",
+      );
+      if (pendingTrials.length > 0 && stateWithPhase2.scout.currentClubId) {
+        const trialResolutionRng = createRNG(
+          `${gameState.seed}-trialresolve-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const trialClub = stateWithPhase2.clubs[stateWithPhase2.scout.currentClubId];
+        if (trialClub) {
+          const resolvedResponses = stateWithPhase2.clubResponses.map((resp) => {
+            if (resp.response !== "trial") return resp;
+            // Only resolve trials that have been pending for at least 1 week
+            const player = stateWithPhase2.players[resp.reportId] ??
+              Object.values(stateWithPhase2.players).find((p) =>
+                stateWithPhase2.reports[resp.reportId]?.playerId === p.id,
+              );
+            if (!player) return resp;
+            const outcome = processTrialOutcome(
+              trialResolutionRng,
+              player,
+              trialClub,
+              stateWithPhase2.players,
+            );
+            return { ...resp, response: outcome };
+          });
+          stateWithPhase2 = { ...stateWithPhase2, clubResponses: resolvedResponses };
+        }
+      }
+    }
+
+    // ── Data Scout Weekly System Processing ─────────────────────────────────
+
+    if (stateWithPhase2.scout.primarySpecialization === "data") {
+      // 1. Generate passive analyst reports for assigned analysts
+      if (stateWithPhase2.dataAnalysts.length > 0) {
+        const passiveReportRng = createRNG(
+          `${gameState.seed}-passivereports-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const updatedAnalysts = [...stateWithPhase2.dataAnalysts];
+        const updatedAnalystReports = { ...stateWithPhase2.analystReports };
+        const hadMeetingThisWeek = weekResult.analyticsTeamMeetingsExecuted > 0;
+
+        for (let i = 0; i < updatedAnalysts.length; i++) {
+          const analyst = updatedAnalysts[i];
+          if (!analyst.assignedLeagueId) {
+            // Analyst is unassigned — apply idle morale decay
+            updatedAnalysts[i] = updateAnalystMorale(analyst, { ignored: true });
+            continue;
+          }
+          const analystLeague = stateWithPhase2.leagues[analyst.assignedLeagueId];
+          if (!analystLeague) continue;
+
+          const reportId = `passive-${analyst.id}-w${stateWithPhase2.currentWeek}-s${stateWithPhase2.currentSeason}`;
+          // Only generate if no meeting report was already created for this analyst this week
+          if (!updatedAnalystReports[reportId]) {
+            const report = generateAnalystReport(
+              passiveReportRng,
+              analyst,
+              analystLeague,
+              stateWithPhase2.players,
+              stateWithPhase2.currentSeason,
+              stateWithPhase2.currentWeek,
+              reportId,
+            );
+            updatedAnalystReports[reportId] = report;
+          }
+
+          // Update morale: decay if no meeting held this week
+          if (!hadMeetingThisWeek) {
+            updatedAnalysts[i] = updateAnalystMorale(analyst, { ignored: false });
+          }
+        }
+
+        stateWithPhase2 = {
+          ...stateWithPhase2,
+          dataAnalysts: updatedAnalysts,
+          analystReports: updatedAnalystReports,
+        };
+      }
+
+      // 2. Resolve predictions whose deadline season has passed
+      if (stateWithPhase2.predictions.length > 0) {
+        const predRng = createRNG(
+          `${gameState.seed}-predresolve-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const resolvedPredictions = resolvePredictions(
+          stateWithPhase2.predictions,
+          stateWithPhase2.players,
+          stateWithPhase2.currentSeason,
+          stateWithPhase2.currentWeek,
+          predRng,
+        );
+        if (resolvedPredictions.some((p, i) => p !== stateWithPhase2.predictions[i])) {
+          stateWithPhase2 = { ...stateWithPhase2, predictions: resolvedPredictions };
+        }
+      }
+    }
+
     // ── Core game loop tick ─────────────────────────────────────────────────
 
     const tickResult = processWeeklyTick(stateWithPhase2, rng);
@@ -1638,6 +2373,84 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
         newState = { ...newState, players: updatedPlayers, clubs: updatedClubs };
+      }
+
+      // ── First-team season-end: regenerate directives and update transfer records ──
+      if (newState.scout.primarySpecialization === "firstTeam") {
+        // Generate new manager directives for the new season
+        if (newState.scout.currentClubId) {
+          const newSeasonDirectiveRng = createRNG(
+            `${gameState.seed}-directives-s${newState.currentSeason}`,
+          );
+          const scoutClub = newState.clubs[newState.scout.currentClubId];
+          const scoutManager = newState.managerProfiles[newState.scout.currentClubId];
+          if (scoutClub && scoutManager) {
+            const newDirectives = generateDirectives(
+              newSeasonDirectiveRng,
+              scoutClub,
+              scoutManager,
+              newState.players,
+              newState.currentSeason,
+            );
+            newState = { ...newState, managerDirectives: newDirectives };
+          }
+        }
+
+        // Update transfer records with end-of-season performance
+        if (newState.transferRecords.length > 0) {
+          const transferRecordRng = createRNG(
+            `${gameState.seed}-transferrecords-s${completedSeason}`,
+          );
+          const updatedTransferRecords = updateTransferRecords(
+            transferRecordRng,
+            newState.transferRecords,
+            newState.players,
+            completedSeason,
+          );
+          newState = { ...newState, transferRecords: updatedTransferRecords };
+        }
+      }
+
+      // ── Data scout season-end: resolve predictions and generate new analyst candidates ──
+      if (newState.scout.primarySpecialization === "data") {
+        // Resolve all outstanding predictions for the completed season
+        if (newState.predictions.length > 0) {
+          const endSeasonPredRng = createRNG(
+            `${gameState.seed}-predend-s${completedSeason}`,
+          );
+          const resolvedAtSeasonEnd = resolvePredictions(
+            newState.predictions,
+            newState.players,
+            completedSeason,
+            newState.currentWeek,
+            endSeasonPredRng,
+          );
+          newState = { ...newState, predictions: resolvedAtSeasonEnd };
+        }
+
+        // Generate a new analyst candidate as an end-of-season event
+        const analystCandidateRng = createRNG(
+          `${gameState.seed}-analystcandidate-s${newState.currentSeason}`,
+        );
+        const candidate = generateAnalystCandidate(
+          analystCandidateRng,
+          newState.currentSeason,
+          `season-${newState.currentSeason}`,
+        );
+        const candidateMsg: InboxMessage = {
+          id: `analyst-candidate-s${newState.currentSeason}`,
+          week: newState.currentWeek,
+          season: newState.currentSeason,
+          type: "event" as const,
+          title: "New Analyst Candidate Available",
+          body: `A data analyst has expressed interest in joining your team. ${candidate.name} (Skill: ${candidate.skill}/20, Focus: ${candidate.focus}) is available for £${candidate.salary}/week. Review their profile in your analytics dashboard.`,
+          read: false,
+          actionRequired: false,
+        };
+        newState = {
+          ...newState,
+          inbox: [...newState.inbox, candidateMsg],
+        };
       }
     } else {
       // Keep season events as-is; update transfer window open/closed state
@@ -1940,12 +2753,78 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ? [...gameState.discoveryRecords, newDiscoveryRecord]
       : gameState.discoveryRecords;
 
+    // First-team: evaluate report against directives and generate club response
+    let updatedClubResponses = gameState.clubResponses;
+    let responseInboxMessage: InboxMessage | null = null;
+    let updatedScoutAfterResponse = updatedScout;
+
+    if (
+      gameState.scout.primarySpecialization === "firstTeam" &&
+      gameState.scout.currentClubId
+    ) {
+      const responseRng = createRNG(
+        `${gameState.seed}-response-${scoredReport.id}`,
+      );
+      const responsePlayer = gameState.players[selectedPlayerId];
+      const responseClub = gameState.clubs[gameState.scout.currentClubId];
+      const responseManager = gameState.managerProfiles[gameState.scout.currentClubId];
+
+      if (responsePlayer && responseClub && responseManager) {
+        const directiveMatch = evaluateReportAgainstDirectives(
+          scoredReport,
+          gameState.managerDirectives,
+          responsePlayer,
+          responseClub,
+        );
+        const matchedDirective = directiveMatch
+          ? gameState.managerDirectives.find((d) => d.id === directiveMatch.directiveId)
+          : undefined;
+        const clubResponse = generateClubResponse(
+          responseRng,
+          scoredReport,
+          responsePlayer,
+          responseClub,
+          responseManager,
+          matchedDirective,
+          updatedScout,
+        );
+        updatedClubResponses = [...gameState.clubResponses, clubResponse];
+
+        // Apply reputation delta from club response
+        const repAfterResponse = Math.max(
+          0,
+          Math.min(100, updatedScoutAfterResponse.reputation + clubResponse.reputationDelta),
+        );
+        updatedScoutAfterResponse = {
+          ...updatedScoutAfterResponse,
+          reputation: repAfterResponse,
+        };
+
+        responseInboxMessage = {
+          id: `club-response-${scoredReport.id}`,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+          type: "feedback" as const,
+          title: `Club Response: ${responsePlayer.firstName} ${responsePlayer.lastName}`,
+          body: `${clubResponse.feedback}\n\nReputation change: ${clubResponse.reputationDelta >= 0 ? "+" : ""}${clubResponse.reputationDelta}`,
+          read: false,
+          actionRequired: false,
+          relatedId: selectedPlayerId,
+          relatedEntityType: "player" as const,
+        };
+      }
+    }
+
     set({
       gameState: {
         ...gameState,
         reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
-        scout: updatedScout,
+        scout: updatedScoutAfterResponse,
         discoveryRecords: updatedDiscoveryRecords,
+        clubResponses: updatedClubResponses,
+        inbox: responseInboxMessage
+          ? [...gameState.inbox, responseInboxMessage]
+          : gameState.inbox,
       },
       currentScreen: "reportHistory",
     });

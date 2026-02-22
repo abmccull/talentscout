@@ -16,6 +16,11 @@ import {
   UserCheck,
   Wrench,
   Lock,
+  Target,
+  Brain,
+  ArrowRight,
+  TrendingDown,
+  Minus,
 } from "lucide-react";
 import type {
   JobOffer,
@@ -210,6 +215,39 @@ export function CareerScreen() {
     finances !== null &&
     finances.equipmentLevel < 5 &&
     purchaseEquipmentUpgrade(finances, 0, 0) !== null;
+
+  // Specialization career details — derive before early return
+  const specialization = scout?.primarySpecialization;
+  const transferRecords = gameState?.transferRecords ?? [];
+  const predictions = gameState?.predictions ?? [];
+
+  // firstTeam: hit rate
+  const completedTransfers = transferRecords.filter(
+    (r) => r.outcome === "hit" || r.outcome === "decent" || r.outcome === "flop",
+  );
+  const hitCount = transferRecords.filter((r) => r.outcome === "hit").length;
+  const hitRate = completedTransfers.length > 0
+    ? Math.round((hitCount / completedTransfers.length) * 100)
+    : null;
+
+  // data: prediction oracle status
+  const resolvedPredictions = predictions.filter((p) => p.resolved);
+  const correctPredictions = resolvedPredictions.filter((p) => p.wasCorrect === true);
+  const predictionAccuracy = resolvedPredictions.length > 0
+    ? Math.round((correctPredictions.length / resolvedPredictions.length) * 100)
+    : null;
+  const oracleStreak = (() => {
+    let streak = 0;
+    const sorted = [...resolvedPredictions].sort(
+      (a, b) => b.madeInSeason - a.madeInSeason || b.madeInWeek - a.madeInWeek,
+    );
+    for (const p of sorted) {
+      if (p.wasCorrect === true) streak++;
+      else break;
+    }
+    return streak;
+  })();
+  const isOracle = predictionAccuracy !== null && predictionAccuracy >= 70 && resolvedPredictions.length >= 10;
 
   if (!gameState || !scout) return null;
 
@@ -965,6 +1003,235 @@ export function CareerScreen() {
             )}
           </div>
         </div>
+
+        {/* ── First-Team: Transfer Career Section ──────────────────────────── */}
+        {specialization === "firstTeam" && transferRecords.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+              <Target size={13} className="text-blue-400" aria-hidden="true" />
+              Transfer Career
+            </h2>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Hit rate summary */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Scout Hit Rate</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-end gap-2">
+                    <p className="text-3xl font-bold text-white">{hitCount}</p>
+                    <p className="mb-1 text-sm text-zinc-500">
+                      hits / {completedTransfers.length} rated
+                    </p>
+                  </div>
+                  {hitRate !== null && (
+                    <>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-[#27272a]">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            hitRate >= 60 ? "bg-emerald-500" : hitRate >= 40 ? "bg-amber-500" : "bg-red-500"
+                          }`}
+                          style={{ width: `${hitRate}%` }}
+                        />
+                      </div>
+                      <p className={`text-sm font-semibold ${hitRate >= 60 ? "text-emerald-400" : hitRate >= 40 ? "text-amber-400" : "text-red-400"}`}>
+                        {hitRate}% hit rate
+                      </p>
+                    </>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-1.5">
+                      <p className="font-bold text-emerald-400">{hitCount}</p>
+                      <p className="text-zinc-500">Hits</p>
+                    </div>
+                    <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-1.5">
+                      <p className="font-bold text-amber-400">{transferRecords.filter((r) => r.outcome === "decent").length}</p>
+                      <p className="text-zinc-500">Decent</p>
+                    </div>
+                    <div className="rounded-md border border-red-500/20 bg-red-500/5 p-1.5">
+                      <p className="font-bold text-red-400">{transferRecords.filter((r) => r.outcome === "flop").length}</p>
+                      <p className="text-zinc-500">Flops</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Transfer record list */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Transfer Records ({transferRecords.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {[...transferRecords]
+                        .sort((a, b) => b.season - a.season || b.week - a.week)
+                        .map((record) => {
+                          const player = gameState.players[record.playerId];
+                          const fromClub = gameState.clubs[record.fromClubId];
+                          const toClub = gameState.clubs[record.toClubId];
+                          const latestPerf = record.seasonPerformance.length > 0
+                            ? record.seasonPerformance[record.seasonPerformance.length - 1]
+                            : null;
+                          return (
+                            <div key={record.id} className="rounded-md border border-[#27272a] p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-semibold text-white">
+                                    {player ? `${player.firstName} ${player.lastName}` : "Unknown Player"}
+                                  </p>
+                                  <p className="text-xs text-zinc-500">
+                                    {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"} · S{record.season}
+                                    {record.isLoan && <span className="ml-1 text-zinc-600">(Loan)</span>}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {latestPerf && (
+                                    <span className={`text-xs font-semibold ${
+                                      latestPerf.rating >= 70 ? "text-emerald-400" : latestPerf.rating >= 40 ? "text-amber-400" : "text-red-400"
+                                    }`}>
+                                      {latestPerf.rating}/100
+                                    </span>
+                                  )}
+                                  {record.outcome && (
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[10px] ${
+                                        record.outcome === "hit"
+                                          ? "border-emerald-500/50 text-emerald-400"
+                                          : record.outcome === "decent"
+                                          ? "border-amber-500/50 text-amber-400"
+                                          : record.outcome === "flop"
+                                          ? "border-red-500/50 text-red-400"
+                                          : "border-zinc-600 text-zinc-500"
+                                      }`}
+                                    >
+                                      {record.outcome}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Data Scout: Oracle Career Section ────────────────────────────── */}
+        {specialization === "data" && predictions.length > 0 && (
+          <div className="mt-6">
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+              <Brain size={13} className="text-violet-400" aria-hidden="true" />
+              Prediction Career
+            </h2>
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Oracle status summary */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    Oracle Status
+                    {isOracle && (
+                      <Badge
+                        variant="outline"
+                        className="ml-auto border-violet-500/50 bg-violet-500/10 text-violet-400 text-[10px]"
+                      >
+                        Oracle
+                      </Badge>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-end gap-2">
+                    <p className="text-3xl font-bold text-white">
+                      {predictionAccuracy !== null ? `${predictionAccuracy}%` : "—"}
+                    </p>
+                    <p className="mb-1 text-sm text-zinc-500">accuracy</p>
+                  </div>
+                  {predictionAccuracy !== null && (
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-[#27272a]">
+                      <div
+                        className={`h-full rounded-full transition-all ${
+                          predictionAccuracy >= 70 ? "bg-emerald-500" : predictionAccuracy >= 50 ? "bg-amber-500" : "bg-red-500"
+                        }`}
+                        style={{ width: `${predictionAccuracy}%` }}
+                      />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div className="rounded-md border border-[#27272a] p-1.5">
+                      <p className="font-bold text-white">{predictions.length}</p>
+                      <p className="text-zinc-500">Total</p>
+                    </div>
+                    <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-1.5">
+                      <p className="font-bold text-emerald-400">{correctPredictions.length}</p>
+                      <p className="text-zinc-500">Correct</p>
+                    </div>
+                    <div className="rounded-md border border-[#27272a] p-1.5">
+                      <p className="font-bold text-amber-400">{oracleStreak}</p>
+                      <p className="text-zinc-500">Streak</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Recent predictions list */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm">Predictions ({predictions.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {[...predictions]
+                        .sort((a, b) => b.madeInSeason - a.madeInSeason || b.madeInWeek - a.madeInWeek)
+                        .map((pred) => {
+                          const player = gameState.players[pred.playerId];
+                          return (
+                            <div key={pred.id} className="rounded-md border border-[#27272a] p-3">
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-semibold text-white truncate">
+                                      {player ? `${player.firstName} ${player.lastName}` : "Unknown"}
+                                    </span>
+                                    <Badge variant="outline" className="shrink-0 text-[9px] capitalize">
+                                      {pred.type}
+                                    </Badge>
+                                  </div>
+                                  <p className="mt-0.5 text-[10px] text-zinc-400 line-clamp-2">{pred.statement}</p>
+                                </div>
+                                <div className="shrink-0 ml-2">
+                                  {pred.resolved ? (
+                                    pred.wasCorrect === true ? (
+                                      <CheckCircle size={16} className="text-emerald-400" aria-label="Correct" />
+                                    ) : (
+                                      <AlertTriangle size={16} className="text-red-400" aria-label="Incorrect" />
+                                    )
+                                  ) : (
+                                    <div className="h-4 w-4 rounded-full border border-zinc-600" aria-label="Pending" />
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3 text-[9px] text-zinc-600">
+                                <span>S{pred.madeInSeason} W{pred.madeInWeek}</span>
+                                <span>Resolves S{pred.resolveBySeason}</span>
+                                <span>{Math.round(pred.confidence * 100)}% confidence</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </GameLayout>
   );

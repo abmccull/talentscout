@@ -35,6 +35,10 @@ export interface ReportDraft {
   estimatedValue: number;
   perceivedCAStars?: number;
   perceivedPARange?: [number, number];
+  /** System fit score for first-team scouts (0-100). */
+  systemFitScore?: number;
+  /** Statistical highlights for data scouts. */
+  statisticalHighlights?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -387,6 +391,8 @@ export function finalizeReport(
 
     perceivedCAStars: draft.perceivedCAStars,
     perceivedPARange: draft.perceivedPARange,
+    systemFitScore: draft.systemFitScore,
+    statisticalHighlights: draft.statisticalHighlights,
   };
 }
 

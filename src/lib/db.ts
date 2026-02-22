@@ -179,6 +179,19 @@ function migrateSaveState(raw: unknown): GameState {
     state.scout.skills.potentialAssessment = 5;
   }
 
+  // First-Team Scouting System defaults
+  if (!state.managerDirectives) state.managerDirectives = [];
+  if (!state.clubResponses) state.clubResponses = [];
+  if (!state.transferRecords) state.transferRecords = [];
+  if (!state.systemFitCache) state.systemFitCache = {};
+
+  // Data Scouting System defaults
+  if (!state.predictions) state.predictions = [];
+  if (!state.dataAnalysts) state.dataAnalysts = [];
+  if (!state.statisticalProfiles) state.statisticalProfiles = {};
+  if (!state.anomalyFlags) state.anomalyFlags = [];
+  if (!state.analystReports) state.analystReports = {};
+
   return state;
 }
 
