@@ -162,6 +162,14 @@ function migrateSaveState(raw: unknown): GameState {
   if (!state.scout.attributeXp)
     state.scout.attributeXp = {} as Partial<Record<ScoutAttribute, number>>;
 
+  // New scout skills — playerJudgment and potentialAssessment
+  if (state.scout.skills.playerJudgment === undefined) {
+    state.scout.skills.playerJudgment = 5;
+  }
+  if (state.scout.skills.potentialAssessment === undefined) {
+    state.scout.skills.potentialAssessment = 5;
+  }
+
   return state;
 }
 

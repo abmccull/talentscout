@@ -160,6 +160,9 @@ interface MessageItemProps {
   currentWeek: number;
   currentSeason: number;
   onClick: () => void;
+  onViewPlayer?: (playerId: string) => void;
+  onWriteReport?: (playerId: string) => void;
+  onViewCareer?: () => void;
 }
 
 function MessageItem({
@@ -168,6 +171,9 @@ function MessageItem({
   currentWeek,
   currentSeason,
   onClick,
+  onViewPlayer,
+  onWriteReport,
+  onViewCareer,
 }: MessageItemProps) {
   const config = MESSAGE_TYPE_CONFIG[message.type];
   const Icon = config.icon;
@@ -230,9 +236,67 @@ function MessageItem({
           </div>
 
           {isExpanded ? (
-            <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
-              {message.body}
-            </p>
+            <>
+              <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
+                {message.body}
+              </p>
+              {message.relatedId && message.relatedEntityType === "player" && (
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onViewPlayer?.(message.relatedId!); }}
+                  >
+                    View Player
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onWriteReport?.(message.relatedId!); }}
+                  >
+                    Write Report
+                  </Button>
+                </div>
+              )}
+              {message.relatedEntityType === "jobOffer" && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onViewCareer?.(); }}
+                  >
+                    View in Career
+                  </Button>
+                </div>
+              )}
+              {message.relatedEntityType === "contact" && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onViewCareer?.(); }}
+                  >
+                    View Network
+                  </Button>
+                </div>
+              )}
+              {message.relatedEntityType === "tool" && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onViewCareer?.(); }}
+                  >
+                    View Tools
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
             <p className="text-xs text-zinc-500 line-clamp-2">{message.body}</p>
           )}
@@ -259,6 +323,9 @@ export function InboxScreen() {
     markMessageRead,
     acknowledgeNarrativeEvent,
     resolveNarrativeEventChoice,
+    selectPlayer,
+    setScreen,
+    startReport,
   } = useGameStore();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<InboxMessageType | "all">("all");
@@ -409,6 +476,18 @@ export function InboxScreen() {
                   currentWeek={currentWeek}
                   currentSeason={currentSeason}
                   onClick={() => handleExpand(message)}
+                  onViewPlayer={(playerId) => {
+                    selectPlayer(playerId);
+                    setScreen("playerProfile");
+                  }}
+                  onWriteReport={(playerId) => {
+                    startReport(playerId);
+                  }}
+                  onViewCareer={() => {
+                    if (message.relatedEntityType === "contact") setScreen("network");
+                    else if (message.relatedEntityType === "tool") setScreen("career");
+                    else setScreen("career");
+                  }}
                 />
               </div>
             ))}

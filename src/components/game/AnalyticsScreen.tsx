@@ -19,6 +19,8 @@ const SKILL_LABELS: Record<ScoutSkill, string> = {
   psychologicalRead: "Psychological Read",
   tacticalUnderstanding: "Tactical Understanding",
   dataLiteracy: "Data Literacy",
+  playerJudgment: "Player Judgment",
+  potentialAssessment: "Potential Assessment",
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

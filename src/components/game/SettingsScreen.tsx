@@ -159,13 +159,13 @@ export function SettingsScreen() {
                     aria-checked={cloudSaveEnabled}
                     aria-label="Toggle cloud saves"
                     onClick={() => toggleCloudSave(!cloudSaveEnabled)}
-                    className={`relative h-5 w-9 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                       cloudSaveEnabled ? "bg-emerald-500" : "bg-zinc-700"
                     }`}
                   >
                     <span
-                      className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
-                        cloudSaveEnabled ? "translate-x-4" : "translate-x-0.5"
+                      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                        cloudSaveEnabled ? "translate-x-5" : "translate-x-0"
                       }`}
                     />
                   </button>

@@ -21,6 +21,7 @@ import {
   ATTRIBUTE_DOMAINS,
   HIDDEN_ATTRIBUTES,
 } from "@/engine/core/types";
+import { generateAbilityReading } from "@/engine/scout/starRating";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -164,6 +165,126 @@ export function calculateConfidenceRange(
 }
 
 // ---------------------------------------------------------------------------
+// Context-specific attribute visibility (for non-match observations)
+// ---------------------------------------------------------------------------
+
+/** Attributes naturally observable per non-match context. */
+const CONTEXT_VISIBLE_ATTRIBUTES: Record<ObservationContext, PlayerAttribute[]> = {
+  trainingGround: ["firstTouch", "passing", "dribbling", "shooting", "pace", "strength", "stamina", "agility", "composure", "workRate"],
+  videoAnalysis: ["passing", "shooting", "crossing", "positioning", "decisionMaking", "offTheBall", "pressing", "defensiveAwareness"],
+  youthTournament: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "strength"],
+  academyVisit: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate"],
+  liveMatch: [], // not used by light observation — full pipeline uses PHASE_VISIBLE_ATTRIBUTES
+};
+
+// ---------------------------------------------------------------------------
+// Light Observation Pipeline (non-match contexts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate an observation without match phases.
+ * Used by calendar activities: academy visits, youth tournaments,
+ * training visits, and video analysis.
+ */
+export function observePlayerLight(
+  rng: RNG,
+  player: Player,
+  scout: Scout,
+  context: ObservationContext,
+  existingObservations: Observation[],
+): Observation {
+  // Count prior readings for this player
+  const priorCounts = new Map<PlayerAttribute, number>();
+  for (const obs of existingObservations) {
+    if (obs.playerId === player.id) {
+      for (const r of obs.attributeReadings) {
+        priorCounts.set(r.attribute, (priorCounts.get(r.attribute) ?? 0) + r.observationCount);
+      }
+    }
+  }
+
+  // Context diversity
+  const contextDiversity = Math.min(1, existingObservations.filter((o) => o.playerId === player.id).length / 10);
+
+  // Build visible attribute set from context + scout skill bonuses
+  const baseVisible = new Set<PlayerAttribute>(CONTEXT_VISIBLE_ATTRIBUTES[context]);
+
+  for (const { attribute, skill, minLevel } of BONUS_VISIBILITY) {
+    if (!baseVisible.has(attribute) && scout.skills[skill] >= minLevel) {
+      baseVisible.add(attribute);
+    }
+  }
+
+  // Remove hidden attributes
+  for (const attr of HIDDEN_SET) {
+    baseVisible.delete(attr as PlayerAttribute);
+  }
+
+  const visibleArray = Array.from(baseVisible);
+
+  // Select 4–7 attributes to observe (fewer than a full match)
+  const attrCount = Math.min(visibleArray.length, rng.nextInt(4, 7));
+  const selected: PlayerAttribute[] = [];
+  const pool = [...visibleArray];
+  for (let i = 0; i < attrCount && pool.length > 0; i++) {
+    const idx = rng.nextInt(0, pool.length - 1);
+    selected.push(pool[idx]);
+    pool.splice(idx, 1);
+  }
+
+  // Generate readings
+  const sessionReadings = new Map<PlayerAttribute, { values: number[]; confidences: number[] }>();
+  for (const attr of selected) {
+    addReading(rng, sessionReadings, attr, player.attributes[attr], scout, priorCounts.get(attr) ?? 0, contextDiversity, player.form, context, 1.0);
+  }
+
+  // Convert to AttributeReading[]
+  const attributeReadings: AttributeReading[] = [];
+  for (const [attr, bucket] of sessionReadings) {
+    const avgPerceived = Math.round(bucket.values.reduce((s, v) => s + v, 0) / bucket.values.length);
+    const avgConfidence = bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length;
+    const totalCount = (priorCounts.get(attr) ?? 0) + bucket.values.length;
+    attributeReadings.push({
+      attribute: attr,
+      perceivedValue: avgPerceived,
+      confidence: avgConfidence,
+      observationCount: totalCount,
+    });
+  }
+
+  const suffix = rng.nextInt(100000, 999999).toString(16);
+  const contextLabel =
+    context === "trainingGround" ? "training" :
+    context === "videoAnalysis" ? "video analysis" :
+    context === "youthTournament" ? "a youth tournament" :
+    context === "academyVisit" ? "an academy visit" :
+    "observation";
+  const notes = [`Observed ${player.firstName} ${player.lastName} during ${contextLabel} — ${attributeReadings.length} attributes assessed.`];
+
+  const abilityReading = generateAbilityReading(
+    rng,
+    player,
+    scout,
+    existingObservations,
+    context,
+  );
+
+  return {
+    id: `obs_${player.id.slice(0, 8)}_${suffix}`,
+    playerId: player.id,
+    scoutId: scout.id,
+    matchId: undefined,
+    week: 0, // Set by caller
+    season: 0, // Set by caller
+    context,
+    attributeReadings,
+    notes,
+    flaggedMoments: [],
+    abilityReading,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Full Observation Pipeline
 // ---------------------------------------------------------------------------
 
@@ -248,6 +369,14 @@ export function observePlayer(
     if (neg > 0) notes.push(`${neg} concern${neg > 1 ? "s" : ""}.`);
   }
 
+  const abilityReading = generateAbilityReading(
+    rng,
+    player,
+    scout,
+    existingObservations,
+    context,
+  );
+
   return {
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
@@ -259,6 +388,7 @@ export function observePlayer(
     attributeReadings,
     notes,
     flaggedMoments,
+    abilityReading,
   };
 }
 

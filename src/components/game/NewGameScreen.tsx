@@ -4,8 +4,14 @@ import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { Specialization, NewGameConfig } from "@/engine/core/types";
+import type { Specialization, NewGameConfig, ScoutSkill } from "@/engine/core/types";
 import { getCountryOptions } from "@/data/index";
+import {
+  BASE_SKILLS,
+  SKILL_MINIMUMS,
+  ALLOCATION_MAX,
+  BONUS_POINTS,
+} from "@/engine/scout/creation";
 
 // ---------------------------------------------------------------------------
 // Static data
@@ -211,7 +217,14 @@ export function NewGameScreen() {
   const [nationality, setNationality] = useState<string>("English");
 
   // Specialization
-  const [specialization, setSpecialization] = useState<Specialization>("youth");
+  const [specialization, setSpecializationRaw] = useState<Specialization>("youth");
+  const setSpecialization = (spec: Specialization) => {
+    setSpecializationRaw(spec);
+    setSkillAllocations({});
+  };
+
+  // Skill allocations
+  const [skillAllocations, setSkillAllocations] = useState<Partial<Record<ScoutSkill, number>>>({});
 
   // Starting position
   const [startingPosition, setStartingPosition] = useState<"freelance" | "club">("freelance");
@@ -266,6 +279,7 @@ export function NewGameScreen() {
       nationality,
       ...(specialization === "regional" && { startingCountry }),
       ...(startingPosition === "club" && startingClubId && { startingClubId }),
+      ...(Object.keys(skillAllocations).length > 0 && { skillAllocations }),
     };
     startNewGame(config);
   };
@@ -448,6 +462,130 @@ export function NewGameScreen() {
                 </div>
               </button>
             ))}
+          </CardContent>
+        </Card>
+
+        {/* ── Skill Allocation ─────────────────────────────────────────── */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Customize Your Skills</CardTitle>
+            <CardDescription>
+              Allocate {BONUS_POINTS} bonus points across your scouting skills. Your specialization
+              sets the baseline — bonus points let you shape your strengths.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const base = BASE_SKILLS[specialization];
+              const mins = SKILL_MINIMUMS[specialization];
+              const totalUsed = Object.values(skillAllocations).reduce(
+                (s, v) => s + (v ?? 0),
+                0,
+              );
+              const remaining = BONUS_POINTS - totalUsed;
+
+              const SKILL_DESCRIPTIONS: Record<ScoutSkill, string> = {
+                technicalEye: "Reading technical attributes",
+                physicalAssessment: "Evaluating physical traits",
+                psychologicalRead: "Assessing mental and hidden attributes",
+                tacticalUnderstanding: "Analysing tactical attributes",
+                dataLiteracy: "Interpreting statistics",
+                playerJudgment: "Gauging overall current ability",
+                potentialAssessment: "Projecting a player's ceiling",
+              };
+
+              const skills = Object.keys(base) as ScoutSkill[];
+
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-zinc-500">Remaining Points</span>
+                    <span
+                      className={`text-sm font-bold ${
+                        remaining > 0 ? "text-amber-400" : "text-emerald-400"
+                      }`}
+                    >
+                      {remaining} / {BONUS_POINTS}
+                    </span>
+                  </div>
+
+                  {skills.map((skill) => {
+                    const baseVal = base[skill];
+                    const bonus = skillAllocations[skill] ?? 0;
+                    const current = baseVal + bonus;
+                    const canDecrease = bonus > 0 && current - 1 >= mins[skill];
+                    const canIncrease = remaining > 0 && current < ALLOCATION_MAX;
+
+                    return (
+                      <div key={skill} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm text-zinc-300">
+                              {SKILL_DESCRIPTIONS[skill].split(" ")[0] === "Reading"
+                                ? skill.replace(/([A-Z])/g, " $1").trim().replace(/^\w/, (c) => c.toUpperCase())
+                                : skill.replace(/([A-Z])/g, " $1").trim().replace(/^\w/, (c) => c.toUpperCase())}
+                            </span>
+                            <span className="ml-2 text-[10px] text-zinc-500">
+                              {SKILL_DESCRIPTIONS[skill]}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() =>
+                                setSkillAllocations((prev) => ({
+                                  ...prev,
+                                  [skill]: Math.max(0, bonus - 1),
+                                }))
+                              }
+                              disabled={!canDecrease}
+                              className={`w-6 h-6 rounded text-xs font-bold border transition ${
+                                canDecrease
+                                  ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                                  : "border-zinc-800 text-zinc-700 cursor-not-allowed"
+                              }`}
+                              aria-label={`Decrease ${skill}`}
+                            >
+                              −
+                            </button>
+                            <span className="w-8 text-center text-sm font-mono font-bold text-white">
+                              {current}
+                            </span>
+                            <button
+                              onClick={() =>
+                                setSkillAllocations((prev) => ({
+                                  ...prev,
+                                  [skill]: bonus + 1,
+                                }))
+                              }
+                              disabled={!canIncrease}
+                              className={`w-6 h-6 rounded text-xs font-bold border transition ${
+                                canIncrease
+                                  ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800 cursor-pointer"
+                                  : "border-zinc-800 text-zinc-700 cursor-not-allowed"
+                              }`}
+                              aria-label={`Increase ${skill}`}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-emerald-500 transition-all"
+                              style={{ width: `${(current / 20) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-zinc-600 w-16 shrink-0">
+                            (base {baseVal}{bonus > 0 ? ` +${bonus}` : ""})
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 

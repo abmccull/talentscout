@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -74,6 +75,8 @@ const SKILL_LABELS: Record<string, string> = {
   psychologicalRead: "Psychological Read",
   tacticalUnderstanding: "Tactical Understanding",
   dataLiteracy: "Data Literacy",
+  playerJudgment: "Player Judgment",
+  potentialAssessment: "Potential Assessment",
 };
 
 const ATTR_LABELS: Record<string, string> = {
@@ -114,8 +117,16 @@ export function CalendarScreen() {
   const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
   const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
 
+  // League filter for fixture activities
+  const allLeagues = Object.values(gameState.leagues);
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
+  const filteredFixtures = selectedLeagueId === "all"
+    ? upcomingFixtures
+    : upcomingFixtures.filter((f) => f.leagueId === selectedLeagueId);
+  const displayFixtures = filteredFixtures.slice(0, 8);
+
   const availableActivities: Array<{ activity: Activity; label: string }> = [
-    ...upcomingFixtures.map((f) => {
+    ...displayFixtures.map((f) => {
       const home = getClub(f.homeClubId);
       const away = getClub(f.awayClubId);
       const league = getLeague(f.leagueId);
@@ -125,9 +136,9 @@ export function CalendarScreen() {
           type: "attendMatch" as ActivityType,
           slots: 2,
           targetId: f.id,
-          description: `${home?.shortName ?? "?"} vs ${away?.shortName ?? "?"} (${league?.shortName ?? "?"})${weatherStr}`,
+          description: `${home?.name ?? "?"} vs ${away?.name ?? "?"} (${league?.shortName ?? "?"})${weatherStr}`,
         } satisfies Activity,
-        label: `${home?.shortName ?? "?"} vs ${away?.shortName ?? "?"}`,
+        label: `${home?.name ?? "?"} vs ${away?.name ?? "?"}`,
       };
     }),
     {
@@ -195,11 +206,43 @@ export function CalendarScreen() {
         {/* Week Summary Overlay */}
         {lastWeekSummary && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <Card className="w-full max-w-md">
+            <Card className="w-full max-w-md max-h-[85vh] overflow-y-auto">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Week Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {/* Activity Results */}
+                {lastWeekSummary.activityQualities.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">Activity Results</p>
+                    <div className="space-y-2">
+                      {lastWeekSummary.activityQualities.map((aq, i) => {
+                        const cfg = ACTIVITY_CONFIG[aq.activityType as ActivityType];
+                        const label = cfg?.label ?? aq.activityType;
+                        const tierColors: Record<string, string> = {
+                          poor: "bg-red-500/15 text-red-400 border-red-500/30",
+                          average: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+                          good: "bg-blue-500/15 text-blue-400 border-blue-500/30",
+                          excellent: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+                          exceptional: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+                        };
+                        const tierClass = tierColors[aq.tier] ?? tierColors.average;
+                        return (
+                          <div key={i} className="rounded-md border border-[#27272a] px-3 py-2">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-medium text-white">{label}</span>
+                              <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tierClass}`}>
+                                {aq.tier.charAt(0).toUpperCase() + aq.tier.slice(1)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 leading-snug">{aq.narrative}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* Stats grid */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
                     <span className="text-zinc-500">Fatigue</span>
@@ -227,6 +270,18 @@ export function CalendarScreen() {
                     <div className="flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2">
                       <span className="text-amber-400">Rival Alerts</span>
                       <span className="text-amber-400 font-semibold">{lastWeekSummary.rivalAlerts}</span>
+                    </div>
+                  )}
+                  {lastWeekSummary.playersDiscovered > 0 && (
+                    <div className="flex items-center justify-between rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2">
+                      <span className="text-emerald-400">Players Discovered</span>
+                      <span className="text-emerald-400 font-semibold">{lastWeekSummary.playersDiscovered}</span>
+                    </div>
+                  )}
+                  {lastWeekSummary.observationsGenerated > 0 && (
+                    <div className="flex items-center justify-between rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2">
+                      <span className="text-blue-400">New Observations</span>
+                      <span className="text-blue-400 font-semibold">{lastWeekSummary.observationsGenerated}</span>
                     </div>
                   )}
                 </div>
@@ -425,7 +480,21 @@ export function CalendarScreen() {
         {/* Available activities */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Available Activities</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Available Activities</CardTitle>
+              <select
+                value={selectedLeagueId}
+                onChange={(e) => setSelectedLeagueId(e.target.value)}
+                className="rounded-md border border-[#27272a] bg-[#141414] px-2 py-1 text-xs text-zinc-300"
+              >
+                <option value="all">All Leagues</option>
+                {allLeagues.map((league) => (
+                  <option key={league.id} value={league.id}>
+                    {league.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">

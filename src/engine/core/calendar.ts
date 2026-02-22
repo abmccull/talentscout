@@ -54,6 +54,14 @@ export interface WeekProcessingResult {
    * The caller should apply a reputation boost if the scout is tier 5.
    */
   boardPresentationExecuted: boolean;
+  /** Number of academy visit activities executed this week */
+  academyVisitsExecuted: number;
+  /** Number of youth tournament activities executed this week */
+  youthTournamentsExecuted: number;
+  /** Number of training visit activities executed this week */
+  trainingVisitsExecuted: number;
+  /** Number of video analysis sessions executed this week */
+  videoSessionsExecuted: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,14 +108,14 @@ const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
 
 /** Skills that each activity type directly develops */
 const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill, number>>>> = {
-  attendMatch:    { technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 2 },
-  watchVideo:     { technicalEye: 2, tacticalUnderstanding: 3, dataLiteracy: 1 },
-  writeReport:    { dataLiteracy: 3 },
+  attendMatch:    { technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 2, playerJudgment: 2 },
+  watchVideo:     { technicalEye: 2, tacticalUnderstanding: 3, dataLiteracy: 1, playerJudgment: 1 },
+  writeReport:    { dataLiteracy: 3, playerJudgment: 1, potentialAssessment: 1 },
   networkMeeting: { psychologicalRead: 2 },
-  trainingVisit:  { physicalAssessment: 3, psychologicalRead: 2 },
-  academyVisit:   { technicalEye: 2, physicalAssessment: 2, dataLiteracy: 1 },
-  youthTournament:{ technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 1 },
-  study:          { dataLiteracy: 4, tacticalUnderstanding: 2 },
+  trainingVisit:  { physicalAssessment: 3, psychologicalRead: 2, playerJudgment: 1 },
+  academyVisit:   { technicalEye: 2, physicalAssessment: 2, dataLiteracy: 1, potentialAssessment: 2 },
+  youthTournament:{ technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 1, potentialAssessment: 3 },
+  study:          { dataLiteracy: 4, tacticalUnderstanding: 2, potentialAssessment: 1 },
 };
 
 /** Scout attributes that each activity type develops */
@@ -375,6 +383,10 @@ export function processCompletedWeek(
   const npcReportsReviewed: string[] = [];
   let managerMeetingExecuted = false;
   let boardPresentationExecuted = false;
+  let academyVisitsExecuted = 0;
+  let youthTournamentsExecuted = 0;
+  let trainingVisitsExecuted = 0;
+  let videoSessionsExecuted = 0;
 
   const endurance = scout.attributes.endurance; // 1–20
 
@@ -448,6 +460,22 @@ export function processCompletedWeek(
         boardPresentationExecuted = true;
         break;
 
+      case "academyVisit":
+        academyVisitsExecuted++;
+        break;
+
+      case "youthTournament":
+        youthTournamentsExecuted++;
+        break;
+
+      case "trainingVisit":
+        trainingVisitsExecuted++;
+        break;
+
+      case "watchVideo":
+        videoSessionsExecuted++;
+        break;
+
       case "assignTerritory":
       case "internationalTravel":
         // These activities are handled entirely through store actions that
@@ -483,6 +511,10 @@ export function processCompletedWeek(
     npcReportsReviewed,
     managerMeetingExecuted,
     boardPresentationExecuted,
+    academyVisitsExecuted,
+    youthTournamentsExecuted,
+    trainingVisitsExecuted,
+    videoSessionsExecuted,
   };
 }
 

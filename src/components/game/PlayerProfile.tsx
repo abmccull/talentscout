@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
 import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle } from "lucide-react";
-import type { AttributeReading, HiddenIntel, Observation } from "@/engine/core/types";
+import type { AttributeReading, HiddenIntel, Observation, AbilityReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
+import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 
 const DOMAIN_LABELS: Record<string, string> = {
   technical: "Technical",
@@ -270,6 +271,29 @@ export function PlayerProfile() {
     byDomain.get(domain)!.push([attr, merged.get(attr)]);
   }
 
+  // Aggregate ability readings from up to 3 most recent observations
+  const abilityReadings: AbilityReading[] = observations
+    .filter((o) => o.abilityReading)
+    .slice(-3)
+    .map((o) => o.abilityReading!);
+
+  const aggregatedAbility = abilityReadings.length > 0
+    ? {
+        ca: abilityReadings.reduce((s, r) => s + r.perceivedCA, 0) / abilityReadings.length,
+        caConfidence: abilityReadings.reduce((s, r) => s + r.caConfidence, 0) / abilityReadings.length,
+        paLow: abilityReadings.reduce((s, r) => s + r.perceivedPALow, 0) / abilityReadings.length,
+        paHigh: abilityReadings.reduce((s, r) => s + r.perceivedPAHigh, 0) / abilityReadings.length,
+        paConfidence: abilityReadings.reduce((s, r) => s + r.paConfidence, 0) / abilityReadings.length,
+      }
+    : null;
+
+  // Snap aggregated values to nearest 0.5
+  if (aggregatedAbility) {
+    aggregatedAbility.ca = Math.round(aggregatedAbility.ca * 2) / 2;
+    aggregatedAbility.paLow = Math.round(aggregatedAbility.paLow * 2) / 2;
+    aggregatedAbility.paHigh = Math.round(aggregatedAbility.paHigh * 2) / 2;
+  }
+
   const contactIntel: HiddenIntel[] = gameState.contactIntel[selectedPlayerId] ?? [];
 
   const convictionVariant = (c: string) => {
@@ -365,6 +389,51 @@ export function PlayerProfile() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Ability Assessment */}
+        {aggregatedAbility && (
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-zinc-500">Current Ability</p>
+                  <div
+                    className={`h-2 w-2 rounded-full ${confidenceColor(aggregatedAbility.caConfidence)}`}
+                    title={`${confidenceLabel(aggregatedAbility.caConfidence)} confidence`}
+                  />
+                </div>
+                <StarRating
+                  rating={aggregatedAbility.ca}
+                  confidence={aggregatedAbility.caConfidence}
+                  size="lg"
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-zinc-500">Potential</p>
+                  <div
+                    className={`h-2 w-2 rounded-full ${confidenceColor(aggregatedAbility.paConfidence)}`}
+                    title={`${confidenceLabel(aggregatedAbility.paConfidence)} confidence`}
+                  />
+                </div>
+                <StarRatingRange
+                  low={aggregatedAbility.paLow}
+                  high={aggregatedAbility.paHigh}
+                  confidence={aggregatedAbility.paConfidence}
+                  size="lg"
+                />
+                {player.age <= 21 &&
+                  aggregatedAbility.paHigh - aggregatedAbility.paLow > 1.0 && (
+                    <p className="mt-2 text-[10px] text-zinc-500">
+                      More observations will narrow this range
+                    </p>
+                  )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Attribute table */}

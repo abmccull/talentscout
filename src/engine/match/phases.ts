@@ -16,6 +16,7 @@ import {
   type MatchEvent,
   type MatchEventType,
   type PlayerAttribute,
+  type Position,
 } from "@/engine/core/types";
 
 export interface MatchContext {
@@ -62,6 +63,27 @@ const WEATHER_NOISE: Record<Weather, number> = {
   heavyRain: 1.6,
   snow: 1.8,
   windy: 1.4,
+};
+
+// ---------------------------------------------------------------------------
+// Position eligibility — which positions can realistically perform each event
+// ---------------------------------------------------------------------------
+
+const EVENT_ELIGIBLE_POSITIONS: Record<MatchEventType, readonly Position[]> = {
+  goal:        ["ST", "LW", "RW", "CAM", "CM", "CDM", "CB", "LB", "RB"],
+  assist:      ["CAM", "CM", "LW", "RW", "ST", "LB", "RB", "CDM", "CB"],
+  shot:        ["ST", "LW", "RW", "CAM", "CM", "CDM", "CB", "LB", "RB"],
+  pass:        ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  dribble:     ["LW", "RW", "ST", "CAM", "CM", "LB", "RB"],
+  tackle:      ["CB", "LB", "RB", "CDM", "CM"],
+  header:      ["CB", "ST", "CDM", "CM", "CAM", "LB", "RB"],
+  save:        ["GK"],
+  foul:        ["CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  cross:       ["LB", "RB", "LW", "RW", "CM"],
+  sprint:      ["LW", "RW", "ST", "CAM", "CM", "CDM", "CB", "LB", "RB"],
+  positioning: ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  error:       ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  leadership:  ["GK", "CB", "CDM", "CM", "CAM", "ST"],
 };
 
 // ---------------------------------------------------------------------------
@@ -210,8 +232,47 @@ function selectInvolvedPlayers(
   awayPlayers: Player[],
 ): string[] {
   const count = rng.nextInt(3, 6);
-  const all = rng.shuffle([...homePlayers, ...awayPlayers]);
-  return all.slice(0, count).map((p) => p.id);
+  const all = [...homePlayers, ...awayPlayers];
+  const selected = new Set<string>();
+
+  // Weight GKs much lower — they're rarely the focus of general play
+  const pool = all.map((p) => ({
+    item: p,
+    weight: p.position === "GK" ? 1 : 10,
+  }));
+
+  for (let i = 0; i < count && selected.size < all.length; i++) {
+    const remaining = pool.filter((w) => !selected.has(w.item.id));
+    if (remaining.length === 0) break;
+    const pick = rng.pickWeighted(remaining);
+    selected.add(pick.id);
+  }
+
+  return [...selected];
+}
+
+/**
+ * Select a player whose position is eligible for the given event type.
+ * Tries involved players first, then falls back to any eligible player.
+ */
+function pickEligiblePlayer(
+  rng: RNG,
+  eventType: MatchEventType,
+  involved: Player[],
+  allPlayers: Map<string, Player>,
+): Player {
+  const eligible = new Set(EVENT_ELIGIBLE_POSITIONS[eventType]);
+
+  // Try involved players whose position fits
+  const eligibleInvolved = involved.filter((p) => eligible.has(p.position));
+  if (eligibleInvolved.length > 0) return rng.pick(eligibleInvolved);
+
+  // Fall back to any eligible player in the match
+  const allEligible = [...allPlayers.values()].filter((p) => eligible.has(p.position));
+  if (allEligible.length > 0) return rng.pick(allEligible);
+
+  // Last resort: any involved player
+  return involved.length > 0 ? rng.pick(involved) : rng.pick([...allPlayers.values()]);
 }
 
 // Collect observable attributes for a phase from its events
@@ -272,7 +333,7 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
         .map((id) => allPlayers.get(id))
         .filter((p): p is Player => !!p);
 
-      const primary = involved.length > 0 ? rng.pick(involved) : rng.pick([...allPlayers.values()]);
+      const primary = pickEligiblePlayer(rng, eventType, involved, allPlayers);
       const secondary = involved.find((p) => p.id !== primary.id);
 
       const phaseWidth = Math.max(1, endMinute - minute);

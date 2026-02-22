@@ -433,10 +433,10 @@ export function Dashboard() {
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">
-                              {homeClub?.shortName || "?"}
+                              {homeClub?.name || "?"}
                               {homePos > 0 && <span className="text-zinc-500 text-xs"> ({homePos}{homePos === 1 ? "st" : homePos === 2 ? "nd" : homePos === 3 ? "rd" : "th"})</span>}
                               {" vs "}
-                              {awayClub?.shortName || "?"}
+                              {awayClub?.name || "?"}
                               {awayPos > 0 && <span className="text-zinc-500 text-xs"> ({awayPos}{awayPos === 1 ? "st" : awayPos === 2 ? "nd" : awayPos === 3 ? "rd" : "th"})</span>}
                             </span>
                             {weather && (

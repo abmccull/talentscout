@@ -29,13 +29,15 @@ import { RNG } from "@/engine/rng";
  */
 type SkillProfile = Record<ScoutSkill, number>;
 
-const BASE_SKILLS: Record<Specialization, SkillProfile> = {
+export const BASE_SKILLS: Record<Specialization, SkillProfile> = {
   youth: {
     technicalEye: 7,
     physicalAssessment: 5,
     psychologicalRead: 6,
     tacticalUnderstanding: 5,
     dataLiteracy: 4,
+    playerJudgment: 5,
+    potentialAssessment: 7,
   },
   firstTeam: {
     technicalEye: 6,
@@ -43,6 +45,8 @@ const BASE_SKILLS: Record<Specialization, SkillProfile> = {
     psychologicalRead: 5,
     tacticalUnderstanding: 7,
     dataLiteracy: 5,
+    playerJudgment: 7,
+    potentialAssessment: 4,
   },
   regional: {
     technicalEye: 6,
@@ -50,6 +54,8 @@ const BASE_SKILLS: Record<Specialization, SkillProfile> = {
     psychologicalRead: 6,
     tacticalUnderstanding: 5,
     dataLiteracy: 5,
+    playerJudgment: 5,
+    potentialAssessment: 5,
   },
   data: {
     technicalEye: 4,
@@ -57,8 +63,52 @@ const BASE_SKILLS: Record<Specialization, SkillProfile> = {
     psychologicalRead: 4,
     tacticalUnderstanding: 5,
     dataLiteracy: 8,
+    playerJudgment: 5,
+    potentialAssessment: 4,
   },
 };
+
+export const SKILL_MINIMUMS: Record<Specialization, SkillProfile> = {
+  youth: {
+    technicalEye: 5,
+    physicalAssessment: 3,
+    psychologicalRead: 4,
+    tacticalUnderstanding: 3,
+    dataLiteracy: 2,
+    playerJudgment: 3,
+    potentialAssessment: 5,
+  },
+  firstTeam: {
+    technicalEye: 4,
+    physicalAssessment: 4,
+    psychologicalRead: 3,
+    tacticalUnderstanding: 5,
+    dataLiteracy: 3,
+    playerJudgment: 5,
+    potentialAssessment: 2,
+  },
+  regional: {
+    technicalEye: 4,
+    physicalAssessment: 3,
+    psychologicalRead: 4,
+    tacticalUnderstanding: 3,
+    dataLiteracy: 3,
+    playerJudgment: 3,
+    potentialAssessment: 3,
+  },
+  data: {
+    technicalEye: 2,
+    physicalAssessment: 2,
+    psychologicalRead: 2,
+    tacticalUnderstanding: 3,
+    dataLiteracy: 6,
+    playerJudgment: 3,
+    potentialAssessment: 2,
+  },
+};
+
+export const ALLOCATION_MAX = 12;
+export const BONUS_POINTS = 8;
 
 // ---------------------------------------------------------------------------
 // Base personal attribute profiles per specialization
@@ -147,14 +197,14 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
   const baseSkills = BASE_SKILLS[specialization];
   const baseAttrs = BASE_ATTRIBUTES[specialization];
 
-  // Vary each skill by σ = 0.8 (small — keeps values close to the spec profile)
-  const skills: Record<ScoutSkill, number> = {
-    technicalEye:          varyAttribute(baseSkills.technicalEye, 0.8, rng),
-    physicalAssessment:    varyAttribute(baseSkills.physicalAssessment, 0.8, rng),
-    psychologicalRead:     varyAttribute(baseSkills.psychologicalRead, 0.8, rng),
-    tacticalUnderstanding: varyAttribute(baseSkills.tacticalUnderstanding, 0.8, rng),
-    dataLiteracy:          varyAttribute(baseSkills.dataLiteracy, 0.8, rng),
-  };
+  // Apply player allocations before Gaussian noise
+  const alloc = config.skillAllocations ?? {};
+  const skills: Record<ScoutSkill, number> = {} as Record<ScoutSkill, number>;
+  for (const key of Object.keys(baseSkills) as ScoutSkill[]) {
+    const allocated = baseSkills[key] + (alloc[key] ?? 0);
+    const capped = Math.min(ALLOCATION_MAX, allocated);
+    skills[key] = varyAttribute(capped, 0.8, rng);
+  }
 
   // Personality attributes vary a little more (σ = 1.0)
   const attributes: Record<ScoutAttribute, number> = {
@@ -256,4 +306,45 @@ export function deriveStartingPositionAffinities(
 
   // Regional: broad coverage — one from each end of the pitch
   return [rng.pick(defensivePositions), rng.pick(attackingPositions)];
+}
+
+// ---------------------------------------------------------------------------
+// Skill allocation validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Validate a player's bonus skill allocations against the rules:
+ * - Total bonus points must equal BONUS_POINTS (8)
+ * - No individual bonus may be negative
+ * - Base + bonus must not drop below the specialization minimum
+ * - Base + bonus must not exceed ALLOCATION_MAX (12)
+ */
+export function validateSkillAllocations(
+  specialization: Specialization,
+  allocations: Partial<Record<ScoutSkill, number>>,
+): { valid: boolean; reason?: string } {
+  const base = BASE_SKILLS[specialization];
+  const mins = SKILL_MINIMUMS[specialization];
+
+  let totalUsed = 0;
+  for (const key of Object.keys(base) as ScoutSkill[]) {
+    const bonus = allocations[key] ?? 0;
+    if (bonus < 0) {
+      return { valid: false, reason: `Negative bonus for ${key}` };
+    }
+    const result = base[key] + bonus;
+    if (result < mins[key]) {
+      return { valid: false, reason: `${key} (${result}) below minimum (${mins[key]})` };
+    }
+    if (result > ALLOCATION_MAX) {
+      return { valid: false, reason: `${key} (${result}) exceeds maximum (${ALLOCATION_MAX})` };
+    }
+    totalUsed += bonus;
+  }
+
+  if (totalUsed > BONUS_POINTS) {
+    return { valid: false, reason: `Used ${totalUsed} points, max is ${BONUS_POINTS}` };
+  }
+
+  return { valid: true };
 }

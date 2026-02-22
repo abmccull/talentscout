@@ -29,6 +29,8 @@ import type {
   HiddenIntel,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
+import { rollActivityQuality } from "@/engine/core/activityQuality";
+import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import {
   generateSeasonEvents,
   getActiveSeasonEvents,
@@ -45,6 +47,7 @@ import { createScout } from "@/engine/scout/creation";
 import { processWeeklyTick, advanceWeek } from "@/engine/core/gameLoop";
 import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases";
 import { processFocusedObservations } from "@/engine/match/focus";
+import { observePlayerLight } from "@/engine/scout/perception";
 import { generateReportContent, finalizeReport, calculateReportQuality, trackPostTransfer } from "@/engine/reports/reporting";
 import { updateReputation, generateJobOffers, calculatePerformanceReview, type TierReviewContext } from "@/engine/career/progression";
 import { generateStartingContacts, meetContact, generateContactForType } from "@/engine/network/contacts";
@@ -259,6 +262,16 @@ export interface WeekSummary {
   newMessages: number;
   rivalAlerts: number;
   financeSummary?: { income: number; expenses: number } | null;
+  /** Activity quality outcomes for this week */
+  activityQualities: Array<{
+    activityType: string;
+    tier: string;
+    narrative: string;
+  }>;
+  /** Players discovered this week through scouting activities */
+  playersDiscovered: number;
+  /** Total observations generated this week (all activities) */
+  observationsGenerated: number;
 }
 
 export interface ClubStanding {
@@ -469,6 +482,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (state) => {
+    // Migration: add new scout skills if loading an older save
+    if (state.scout.skills.playerJudgment === undefined) {
+      state.scout.skills.playerJudgment = 5;
+      state.scout.skills.potentialAssessment = 5;
+    }
     set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
   },
 
@@ -500,6 +518,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       const state = await dbLoadGame(slot);
       if (state) {
+        // Migration: add new scout skills if loading an older save
+        if (state.scout.skills.playerJudgment === undefined) {
+          state.scout.skills.playerJudgment = 5;
+          state.scout.skills.potentialAssessment = 5;
+        }
         set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
       }
     } finally {
@@ -552,6 +575,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Process scheduled activities → fatigue, skill XP, attribute XP
     const weekResult = processCompletedWeek(gameState.schedule, gameState.scout, rng);
+
+    // ── Roll activity quality for each unique activity type ─────────────────
+    const qualityRng = createRNG(
+      `${gameState.seed}-quality-${gameState.currentWeek}-${gameState.currentSeason}`,
+    );
+    const qualityRolls: ActivityQualityResult[] = [];
+    const qualitySeenTypes = new Set<string>();
+    for (const act of gameState.schedule.activities) {
+      if (!act || qualitySeenTypes.has(act.type)) continue;
+      // Skip rest/travel — no quality dimension
+      if (act.type === "rest" || act.type === "travel" || act.type === "internationalTravel") continue;
+      qualitySeenTypes.add(act.type);
+      qualityRolls.push(rollActivityQuality(qualityRng, act.type, gameState.scout));
+    }
+
+    // Apply blended XP multiplier from quality rolls
+    if (qualityRolls.length > 0) {
+      const avgMultiplier =
+        qualityRolls.reduce((sum, q) => sum + q.multiplier, 0) / qualityRolls.length;
+      for (const skill of Object.keys(weekResult.skillXpGained) as Array<keyof typeof weekResult.skillXpGained>) {
+        const val = weekResult.skillXpGained[skill];
+        if (val) weekResult.skillXpGained[skill] = Math.round(val * avgMultiplier);
+      }
+      for (const attr of Object.keys(weekResult.attributeXpGained) as Array<keyof typeof weekResult.attributeXpGained>) {
+        const val = weekResult.attributeXpGained[attr];
+        if (val) weekResult.attributeXpGained[attr] = Math.round(val * avgMultiplier);
+      }
+    }
+
     let updatedScout = applyWeekResults(gameState.scout, weekResult);
 
     // Issue 5c+5d: Apply tool fatigue reduction bonuses
@@ -754,7 +806,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           body: `Your scouting report on ${player.firstName} ${player.lastName} has been filed.\nQuality: ${quality}/100 | Reputation ${repDelta >= 0 ? "+" : ""}${repDelta}`,
           read: false,
           actionRequired: false,
-          relatedId: scoredReport.id,
+          relatedId: playerId,
+          relatedEntityType: "player" as const,
         });
       }
 
@@ -767,28 +820,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
-    // f) Activity XP feedback — generate inbox messages for silent activities
+    // f) Activity feedback — narrative-driven feedback using quality rolls
+    //    Scouting activities (academy/tournament/training/video) skip here;
+    //    their narratives are prepended to observation messages in section (g).
     {
-      const activityFeedbackTypes: Record<string, string> = {
-        watchVideo: "Video Analysis Complete",
-        trainingVisit: "Training Visit Complete",
-        study: "Study Session Complete",
+      const SCOUTING_TYPES = new Set(["academyVisit", "youthTournament", "trainingVisit", "watchVideo"]);
+      const ACTIVITY_LABELS: Record<string, string> = {
+        attendMatch: "Match Attendance",
+        watchVideo: "Video Analysis",
+        writeReport: "Report Writing",
+        networkMeeting: "Network Meeting",
+        trainingVisit: "Training Visit",
+        study: "Study Session",
+        academyVisit: "Academy Visit",
+        youthTournament: "Youth Tournament",
       };
-      const seenTypes = new Set<string>();
-      const feedbackMessages: InboxMessage[] = [];
-      for (const act of stateWithScheduleApplied.schedule.activities) {
-        if (!act || seenTypes.has(act.type) || !(act.type in activityFeedbackTypes)) continue;
-        seenTypes.add(act.type);
+      const SKILL_LABELS_MAP: Record<string, string> = {
+        technicalEye: "Technical Eye", physicalAssessment: "Physical Assessment",
+        psychologicalRead: "Psychological Read", tacticalUnderstanding: "Tactical Understanding",
+        dataLiteracy: "Data Literacy", playerJudgment: "Player Judgment",
+        potentialAssessment: "Potential Assessment",
+      };
+      const TIER_LABELS: Record<string, string> = {
+        poor: "Poor", average: "Average", good: "Good",
+        excellent: "Excellent", exceptional: "Exceptional",
+      };
 
+      const feedbackMessages: InboxMessage[] = [];
+      for (const qr of qualityRolls) {
+        // Skip scouting types — they get narratives prepended in section (g)
+        if (SCOUTING_TYPES.has(qr.activityType)) continue;
+
+        const label = ACTIVITY_LABELS[qr.activityType] ?? qr.activityType;
+        const tierLabel = TIER_LABELS[qr.tier] ?? qr.tier;
+
+        const parts: string[] = [qr.narrative, ""];
         const skillXp = weekResult.skillXpGained;
         const attrXp = weekResult.attributeXpGained;
-        const parts: string[] = [];
-        // Show XP from this specific activity type
-        const SKILL_LABELS_MAP: Record<string, string> = {
-          technicalEye: "Technical Eye", physicalAssessment: "Physical Assessment",
-          psychologicalRead: "Psychological Read", tacticalUnderstanding: "Tactical Understanding",
-          dataLiteracy: "Data Literacy",
-        };
         for (const [skill, val] of Object.entries(skillXp)) {
           if (val && val > 0) parts.push(`${SKILL_LABELS_MAP[skill] ?? skill} +${val} XP`);
         }
@@ -798,12 +866,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         parts.push(`Fatigue ${weekResult.fatigueChange >= 0 ? "+" : ""}${weekResult.fatigueChange}.`);
 
         feedbackMessages.push({
-          id: `activity-${act.type}-w${stateWithScheduleApplied.currentWeek}`,
+          id: `activity-${qr.activityType}-w${stateWithScheduleApplied.currentWeek}`,
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
-          title: activityFeedbackTypes[act.type],
-          body: parts.join(", "),
+          title: `${label} (${tierLabel})`,
+          body: parts.join("\n"),
           read: false,
           actionRequired: false,
         });
@@ -816,7 +884,244 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // g) New contact generation — every 8th week, 30% chance
+    // g) Activity-based observations — academy visits, youth tournaments,
+    //    training visits, and video analysis generate player observations.
+    //    Quality rolls modify discovery counts and prepend narratives.
+    let weekPlayersDiscovered = 0;
+    let weekObservationsGenerated = 0;
+    {
+      const actObsRng = createRNG(
+        `${gameState.seed}-actobs-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+      const updatedObservations = { ...stateWithScheduleApplied.observations };
+      let actDiscoveries = [...(stateWithScheduleApplied.discoveryRecords ?? [])];
+      const actObsMessages: InboxMessage[] = [];
+      const allPlayers = Object.values(stateWithScheduleApplied.players);
+      const existingObs = Object.values(updatedObservations);
+      const observedPlayerIds = new Set(existingObs.map((o) => o.playerId));
+      const currentScout = stateWithScheduleApplied.scout;
+
+      // Lookup quality roll for a given activity type
+      const qualityMap = new Map(qualityRolls.map((q) => [q.activityType, q]));
+
+      const TIER_LABELS: Record<string, string> = {
+        poor: "Poor", average: "Average", good: "Good",
+        excellent: "Excellent", exceptional: "Exceptional",
+      };
+
+      // Helper: apply discovery modifier to base range, clamped to min 1
+      function adjustedRange(baseMin: number, baseMax: number, mod: number): [number, number] {
+        return [Math.max(1, baseMin + mod), Math.max(1, baseMax + mod)];
+      }
+
+      // --- Academy Visit: base 2-3, modified by quality ---
+      if (weekResult.academyVisitsExecuted > 0) {
+        const qr = qualityMap.get("academyVisit");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(2, 3, discMod);
+        const youthPool = allPlayers.filter(
+          (p) => p.age <= 21 && !observedPlayerIds.has(p.id),
+        );
+        const count = Math.min(youthPool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && youthPool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, youthPool.length - 1);
+          const player = youthPool[idx];
+          youthPool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "academyVisit", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-academy-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Academy Visit${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You observed ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} during an academy visit. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Youth Tournament: base 3-5, modified by quality ---
+      if (weekResult.youthTournamentsExecuted > 0) {
+        const qr = qualityMap.get("youthTournament");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(3, 5, discMod);
+        const youthPool = allPlayers.filter(
+          (p) => p.age <= 21 && !observedPlayerIds.has(p.id),
+        );
+        const count = Math.min(youthPool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && youthPool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, youthPool.length - 1);
+          const player = youthPool[idx];
+          youthPool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "youthTournament", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-tournament-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Youth Tournament${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You spotted ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} at a youth tournament. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Training Visit: base 1-2, modified by quality ---
+      if (weekResult.trainingVisitsExecuted > 0) {
+        const qr = qualityMap.get("trainingVisit");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(1, 2, discMod);
+        const clubId = currentScout.currentClubId;
+        const candidatePool = clubId
+          ? allPlayers.filter((p) => p.clubId === clubId)
+          : allPlayers;
+        const pool = candidatePool.length > 0 ? [...candidatePool] : [...allPlayers];
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "trainingGround", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          observedPlayerIds.add(player.id);
+          weekObservationsGenerated++;
+
+          const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === player.id);
+          if (!alreadyDiscovered) {
+            actDiscoveries = [...actDiscoveries, recordDiscovery(player, currentScout, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason)];
+            weekPlayersDiscovered++;
+          }
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const club = player.clubId ? stateWithScheduleApplied.clubs[player.clubId] : undefined;
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-training-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Training Visit${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You observed ${player.firstName} ${player.lastName} (age ${player.age}, ${player.position}) from ${club?.name ?? "Unknown"} during training. ${obs.attributeReadings.length} attributes assessed with high accuracy. Notable: ${topAttrs}.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      // --- Video Analysis: base 1-2, modified by quality ---
+      if (weekResult.videoSessionsExecuted > 0) {
+        const qr = qualityMap.get("watchVideo");
+        const discMod = qr?.discoveryModifier ?? 0;
+        const [rangeMin, rangeMax] = adjustedRange(1, 2, discMod);
+        const previouslyObserved = allPlayers.filter((p) => observedPlayerIds.has(p.id));
+        const pool = previouslyObserved.length > 0 ? [...previouslyObserved] : [...allPlayers];
+        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
+
+        for (let i = 0; i < count && pool.length > 0; i++) {
+          const idx = actObsRng.nextInt(0, pool.length - 1);
+          const player = pool[idx];
+          pool.splice(idx, 1);
+
+          const obs = observePlayerLight(actObsRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations));
+          obs.week = stateWithScheduleApplied.currentWeek;
+          obs.season = stateWithScheduleApplied.currentSeason;
+          updatedObservations[obs.id] = obs;
+          weekObservationsGenerated++;
+
+          const topAttrs = obs.attributeReadings
+            .sort((a, b) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+          const narrativePrefix = qr && i === 0 ? `${qr.narrative}\n\n` : "";
+          actObsMessages.push({
+            id: `obs-video-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Video Analysis${tierLabel ? ` (${tierLabel})` : ""}: ${player.firstName} ${player.lastName}`,
+            body: `${narrativePrefix}You reviewed video footage of ${player.firstName} ${player.lastName} (${player.position}). ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}. This supplements your existing observations.`,
+            read: false,
+            actionRequired: false,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
+          });
+        }
+      }
+
+      if (actObsMessages.length > 0 || Object.keys(updatedObservations).length !== Object.keys(stateWithScheduleApplied.observations).length) {
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          observations: updatedObservations,
+          discoveryRecords: actDiscoveries,
+          inbox: [...stateWithScheduleApplied.inbox, ...actObsMessages],
+        };
+      }
+    }
+
+    // h) New contact generation — every 8th week, 30% chance
     if (stateWithScheduleApplied.currentWeek % 8 === 0) {
       const contactRng = createRNG(
         `${gameState.seed}-newcontact-${gameState.currentWeek}-${gameState.currentSeason}`,
@@ -848,6 +1153,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           read: false,
           actionRequired: false,
           relatedId: newContact.id,
+          relatedEntityType: "contact" as const,
         };
         stateWithScheduleApplied = {
           ...stateWithScheduleApplied,
@@ -970,6 +1276,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           read: false,
           actionRequired: true,
           relatedId: urgent.playerId,
+          relatedEntityType: "player" as const,
         };
         stateWithPhase2 = {
           ...stateWithPhase2,
@@ -1018,6 +1325,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           read: false,
           actionRequired: false,
           relatedId: warning.playerId,
+          relatedEntityType: "player" as const,
         };
       });
     }
@@ -1043,6 +1351,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         read: false,
         actionRequired: (narrativeEvent.choices?.length ?? 0) > 0,
         relatedId: narrativeEvent.id,
+        relatedEntityType: "narrative" as const,
       };
       stateWithPhase2 = {
         ...stateWithPhase2,
@@ -1068,6 +1377,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         read: false,
         actionRequired: false,
         relatedId: toolId,
+        relatedEntityType: "tool" as const,
       }));
       stateWithPhase2 = {
         ...stateWithPhase2,
@@ -1179,6 +1489,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             read: false,
             actionRequired: true,
             relatedId: offer.id,
+            relatedEntityType: "jobOffer" as const,
           });
         }
       }
@@ -1205,7 +1516,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             type: "feedback" as const,
             read: false,
             actionRequired: false,
-            relatedId: report.id,
+            relatedId: player.id,
+            relatedEntityType: "player" as const,
           });
         }
         newState = { ...newState, reports: updatedReports };
@@ -1287,6 +1599,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
             expenses: Object.values(gameState.finances.expenses).reduce((s, v) => s + v, 0),
           }
         : null,
+      activityQualities: qualityRolls.map((q) => ({
+        activityType: q.activityType,
+        tier: q.tier,
+        narrative: q.narrative,
+      })),
+      playersDiscovered: weekPlayersDiscovered,
+      observationsGenerated: weekObservationsGenerated,
     };
 
     set({ gameState: newState, lastWeekSummary: weekSummary });

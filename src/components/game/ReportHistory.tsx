@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { ScoutReport, ConvictionLevel } from "@/engine/core/types";
+import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 
 const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
   note: "Note",
@@ -65,10 +66,26 @@ function ReportDetailModal({ report, playerName, onClose }: ReportDetailModalPro
 
         <div className="p-5 space-y-5">
           {/* Conviction & quality */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Badge variant={CONVICTION_VARIANT[report.conviction]}>
               {CONVICTION_LABELS[report.conviction]}
             </Badge>
+            {report.perceivedCAStars != null && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-zinc-500">CA:</span>
+                <StarRating rating={report.perceivedCAStars} size="sm" />
+              </div>
+            )}
+            {report.perceivedPARange && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-zinc-500">PA:</span>
+                <StarRatingRange
+                  low={report.perceivedPARange[0]}
+                  high={report.perceivedPARange[1]}
+                  size="sm"
+                />
+              </div>
+            )}
             <span className={`text-sm font-semibold ${qualityColor(report.qualityScore)}`}>
               Quality: {report.qualityScore}/100
             </span>

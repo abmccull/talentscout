@@ -21,6 +21,7 @@ import type {
   Position,
 } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS as ATTR_DOMAINS } from "@/engine/core/types";
+import { starsToAbility } from "@/engine/scout/starRating";
 
 // ---------------------------------------------------------------------------
 // Report draft type
@@ -32,6 +33,8 @@ export interface ReportDraft {
   suggestedWeaknesses: string[];
   comparisonSuggestions: string[];
   estimatedValue: number;
+  perceivedCAStars?: number;
+  perceivedPARange?: [number, number];
 }
 
 // ---------------------------------------------------------------------------
@@ -250,12 +253,40 @@ export function generateReportContent(
 
   const estimatedValue = estimateMarketValue(attributeAssessments, player, scout);
 
+  // Aggregate ability readings from the 3 most recent observations
+  const recentWithAbility = observations
+    .filter((o) => o.abilityReading)
+    .slice(-3);
+
+  let perceivedCAStars: number | undefined;
+  let perceivedPARange: [number, number] | undefined;
+
+  if (recentWithAbility.length > 0) {
+    const avgCA =
+      recentWithAbility.reduce((s, o) => s + o.abilityReading!.perceivedCA, 0) /
+      recentWithAbility.length;
+    perceivedCAStars = Math.round(avgCA * 2) / 2;
+
+    const avgPALow =
+      recentWithAbility.reduce((s, o) => s + o.abilityReading!.perceivedPALow, 0) /
+      recentWithAbility.length;
+    const avgPAHigh =
+      recentWithAbility.reduce((s, o) => s + o.abilityReading!.perceivedPAHigh, 0) /
+      recentWithAbility.length;
+    perceivedPARange = [
+      Math.round(avgPALow * 2) / 2,
+      Math.round(avgPAHigh * 2) / 2,
+    ];
+  }
+
   return {
     attributeAssessments,
     suggestedStrengths,
     suggestedWeaknesses,
     comparisonSuggestions,
     estimatedValue,
+    perceivedCAStars,
+    perceivedPARange,
   };
 }
 
@@ -297,8 +328,10 @@ export function calculateReportQuality(
   const coverageScore =
     (assessedRelevant / Math.max(1, relevantAttributes.length)) * 100;
 
-  // Conviction appropriateness
-  const perceivedCa = estimatePerceivedCA(report.attributeAssessments);
+  // Conviction appropriateness — use star-based CA when available
+  const perceivedCa = report.perceivedCAStars != null
+    ? starsToAbility(report.perceivedCAStars)
+    : estimatePerceivedCA(report.attributeAssessments);
   const convictionScore = scoreConvictionAppropriateness(
     perceivedCa,
     player.currentAbility,
@@ -351,6 +384,9 @@ export function finalizeReport(
     // qualityScore starts at 0; updated by the engine once true values are
     // compared. This is intentional — the scout does not know their own quality.
     qualityScore: 0,
+
+    perceivedCAStars: draft.perceivedCAStars,
+    perceivedPARange: draft.perceivedPARange,
   };
 }
 

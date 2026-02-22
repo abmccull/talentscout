@@ -170,7 +170,7 @@ export function FixtureBrowser() {
                       >
                         <td className="px-4 py-3 text-zinc-400 tabular-nums">{f.week}</td>
                         <td className="px-4 py-3 font-medium text-white">
-                          {home?.shortName ?? "?"}
+                          {home?.name ?? "?"}
                         </td>
                         <td className="px-4 py-3 text-center tabular-nums">
                           {f.played ? (
@@ -182,7 +182,7 @@ export function FixtureBrowser() {
                           )}
                         </td>
                         <td className="px-4 py-3 font-medium text-white">
-                          {away?.shortName ?? "?"}
+                          {away?.name ?? "?"}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant="outline" className="text-[10px]">

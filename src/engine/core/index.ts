@@ -45,6 +45,7 @@ export type {
   ObservationContext,
   FlaggedMoment,
   AttributeReading,
+  AbilityReading,
   Observation,
 
   // Reports
@@ -112,3 +113,10 @@ export {
   isInternationalBreak,
   getSeasonPhase,
 } from "./seasonEvents";
+
+// Activity quality system
+export { rollActivityQuality } from "./activityQuality";
+export type {
+  ActivityQualityTier,
+  ActivityQualityResult,
+} from "./activityQuality";
