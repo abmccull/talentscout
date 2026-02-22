@@ -75,6 +75,12 @@ export function CalendarScreen() {
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
 
+  // Stable callback for resolving club IDs to names in ActivityPanel
+  const resolveClubName = useCallback(
+    (id: string) => getClub(id)?.name ?? id,
+    [getClub],
+  );
+
   if (!gameState) return null;
 
   const { schedule, currentWeek, currentSeason, scout } = gameState;
@@ -104,12 +110,6 @@ export function CalendarScreen() {
     if (!canScheduleAt(activity, dayIndex)) return;
     scheduleActivity(activity, dayIndex);
   };
-
-  // Stable callback for resolving club IDs to names in ActivityPanel
-  const resolveClubName = useCallback(
-    (id: string) => getClub(id)?.name ?? id,
-    [getClub],
-  );
 
   return (
     <GameLayout>
