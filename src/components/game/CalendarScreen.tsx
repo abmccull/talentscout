@@ -124,6 +124,9 @@ export function CalendarScreen() {
     dismissWeekSummary,
   } = useGameStore();
 
+  // League filter for fixture activities — must be called before early return
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
+
   if (!gameState) return null;
 
   const { schedule, currentWeek, currentSeason, scout } = gameState;
@@ -140,9 +143,7 @@ export function CalendarScreen() {
   const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
   const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
 
-  // League filter for fixture activities
   const allLeagues = Object.values(gameState.leagues);
-  const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
   const filteredFixtures = selectedLeagueId === "all"
     ? upcomingFixtures
     : upcomingFixtures.filter((f) => f.leagueId === selectedLeagueId);
