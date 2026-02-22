@@ -1,6 +1,8 @@
 # TalentScout Monetization Strategies
 
-Analysis of viable monetization approaches across three platforms: browser, Steam, and mobile.
+## Strategic Vision
+
+**Browser → Steam → Mobile** — a phased platform strategy where the browser version serves as the core development and playtesting vehicle, Steam Early Access is the first paid launch with a clear roadmap to full release, and mobile follows as the final expansion.
 
 ## Current State
 
@@ -8,206 +10,260 @@ TalentScout is a football scouting career simulator with a rich in-game economy 
 
 ---
 
-## 1. Browser-Based (Current Platform)
+## Phase 1: Browser as Development Vehicle
 
-Browser games face tight monetization constraints: no native payment infrastructure, high bounce rates, and users who expect free experiences.
+The browser version is not primarily a revenue channel — it's a **development platform, playtesting environment, and community builder**. The goal is to polish the game, gather feedback, and build an audience before the paid Steam launch.
 
-### Viable Strategies
+### Strategy: Free-to-Play, Community-First
 
-#### A. Supporter Tier / Voluntary Premium
-- One-time or monthly unlock (~$3–5/mo)
-- Quality-of-life perks: extra save slots, cloud sync, cosmetic profile badges, leaderboard flair
-- Keep the core game 100% free
-- **Implementation**: Stripe or Paddle checkout, Supabase for entitlement storage (aligns with existing SERVICES_PLAN.md)
-- **Revenue potential**: Low–Medium
-- **Player goodwill**: High
+#### Core Approach
+- Game is **100% free** on browser — no paywalls, no ads during active development
+- Use the browser audience as your playtest community
+- Collect feedback through bug reports, feature requests, and gameplay data
+- Iterate rapidly using the web deployment pipeline (Vercel = instant updates)
 
-#### B. Cosmetic Microtransactions
-- Custom scout avatars, notebook skins, office themes, badge/flair for leaderboards
-- No gameplay impact — purely visual
-- **Implementation**: Stripe/Paddle + cosmetics inventory in game state
-- **Revenue potential**: Low–Medium
-- **Player goodwill**: High
+#### Low-Effort Revenue (Optional)
+- **Tip Jar** (Ko-fi / Buy Me a Coffee / Patreon) — let early supporters contribute voluntarily
+- **Supporter Badge** on leaderboards for donors — visible recognition, zero gameplay impact
+- **Discord / community access** for supporters — builds the core community that will drive Steam launch
 
-#### C. Ad-Supported with Ad-Free Unlock
-- Non-intrusive ads at natural pause points (between seasons, during loading, end-of-week transitions)
-- $3–5 one-time purchase to remove ads permanently
-- Simulation games have natural breaks that reduce ad intrusiveness
-- **Implementation**: Google AdSense or Carbon Ads + ad-free flag in user profile
-- **Revenue potential**: Medium
-- **Player goodwill**: Medium
+#### Browser-Specific Features to Build
+1. **Cloud saves via Supabase** (already planned) — makes the browser version feel premium
+2. **Global leaderboards** (infrastructure exists) — creates competition and retention
+3. **Analytics dashboard** (planned) — track play patterns to inform Steam content priorities
+4. **Expansion content** — new regions, scenarios, equipment — developed here first, bundled into Steam later
 
-#### D. Expansion Packs (DLC-Style)
-- New leagues/regions to scout (e.g., South America, Asia, Africa — beyond the current 23 countries)
-- Historical scenarios ("Scout the Class of '92", "Find the Next Messi")
-- Specialized career paths (youth academy director, chief scout)
-- $2–5 per pack
-- **Implementation**: Content gating via entitlement flags
-- **Revenue potential**: Medium
-- **Player goodwill**: High (if base game feels complete)
-
-#### E. Tip Jar / Ko-fi / Patreon
-- Lowest friction, lowest revenue
-- Pairs well with a free-to-play model
-- Good starting point before building payment infrastructure
-- **Revenue potential**: Low
-- **Player goodwill**: Very High
-
-### What to Avoid (Browser)
-- Aggressive gacha/lootboxes — audience for simulation games skews older and strategy-minded
-- Pay-to-win equipment gating — undermines the existing in-game economy progression
-- Hard content paywalls — browser users will leave rather than pay
+#### What the Browser Phase Accomplishes
+- Validates core gameplay loop with real players before charging money
+- Builds a wishlist/following for the Steam launch
+- Generates content (regions, features, balance tuning) that ships with Steam
+- Creates word-of-mouth and community ambassadors
+- Identifies what players value most (informs DLC/roadmap priorities)
 
 ---
 
-## 2. Steam
+## Phase 2: Steam Early Access Launch
 
-Steam provides a paying audience that expects upfront pricing. Simulation/management games perform well on the platform (Football Manager is direct market validation).
+Steam is the **primary monetization platform**. Early Access is the right model — it aligns with the game's active development state, and the simulation genre has proven EA success stories (Dwarf Fortress, Rimworld, Football Manager started as Championship Manager shareware).
 
-### Viable Strategies
+### Pricing Model: Early Access → Full Release
 
-#### A. Premium Price ($9.99–$19.99)
-- The most straightforward model for this genre
-- TalentScout has enough depth to justify $14.99: 5 equipment slots, 30+ items, 5 career tiers, 4 specializations, NPC scout management, financial simulation, youth scouting, rival system
-- Football Manager sells at $39.99 with a narrower simulation focus (club management vs. scouting career)
-- **Revenue potential**: High
-- **Player goodwill**: High
+| Stage | Price | Content |
+|---|---|---|
+| **Early Access Launch** | **$14.99–$19.99** | Core game: 4 specializations, 5 career tiers, 23 countries, equipment system, NPC scouts, youth scouting, financial simulation, rival system |
+| **Major EA Updates** (free) | — | New regions, features, balance patches, community-requested content |
+| **Full Release (v1.0)** | **$29.99–$39.99** | All EA content + expanded regions, narrative events, polished UI, full transfer window system, historical scenarios |
+| **Post-Launch DLC** | $4.99–$9.99 each | Major expansions (see roadmap below) |
 
-#### B. Paid DLC / Expansions (Post-Launch)
-- New league/region packs ($3.99–$6.99)
-- "Advanced Career" expansion with new mechanics ($7.99–$9.99) — e.g., managing a scouting department, international tournaments
-- Historical/scenario packs ($2.99–$4.99)
-- **Revenue potential**: Medium–High
-- **Player goodwill**: High (if base game is complete)
+### Why Early Access at $14.99–$19.99 Works
 
-#### C. Steam Workshop Integration
-- Community-created custom leagues, player databases, scenarios
-- Extends game longevity at zero cost to you
-- Drives base game sales through community engagement
-- **Revenue potential**: Indirect (drives base game + DLC sales)
-- **Player goodwill**: Very High
+1. **Price anchoring** — Players who buy at $14.99 feel they got a deal when v1.0 hits $29.99+. This builds goodwill and positive reviews ("bought this for $15 and it's already worth $30").
 
-#### D. Seasonal Updates + Annual Editions
-- Free content updates to retain players during the year
-- Annual edition with updated databases, new mechanics ($14.99–$19.99/year)
-- Follows the Football Manager model
-- Only viable once the game has an established audience
-- **Revenue potential**: Very High (long-term)
-- **Player goodwill**: Medium (annual purchase fatigue)
+2. **Genre precedent** — Successful EA simulation games follow this exact pattern:
+   - Rimworld: $30 EA → $35 full release
+   - Dwarf Fortress (Steam): $30 from day one
+   - Software Inc: $11 EA → ongoing development
+   - Prison Architect: $30 EA → full release + DLC
+   - Football Manager itself started as affordable shareware
 
-### What to Avoid (Steam)
-- Free-to-play with microtransactions — Steam simulation audiences will review-bomb this
-- Subscription model — not standard for this genre on Steam
-- Cosmetic-only DLC at launch — Steam players expect substantive content for money
-- Early Access without a clear roadmap — only launch EA with a concrete feature plan
+3. **Revenue during development** — EA sales fund continued development without needing outside investment or ad revenue. Every copy sold is reinvested into the game.
+
+4. **Community co-development** — EA buyers are invested stakeholders. Their feedback shapes the roadmap. This is especially powerful for a simulation game where depth matters more than polish.
+
+5. **Review momentum** — Positive EA reviews compound over time. By v1.0 launch, you have hundreds of reviews saying "great value, active development, devs listen to feedback."
+
+### $14.99 vs $19.99 Entry Point
+
+| Factor | $14.99 | $19.99 |
+|---|---|---|
+| Volume | Higher — lower barrier, more impulse buys | Moderate — still accessible but slightly filtered |
+| Revenue per unit | Lower | Higher |
+| Perceived value | "Steal" when full game hits $29.99+ | Fair price, still feels like a deal at v1.0 |
+| Audience signal | Casts wider net, more casual buyers | Slightly more committed buyers, better feedback |
+| Price increase room | Can bump to $19.99 mid-EA as content grows | Already at ceiling for EA |
+| **Recommendation** | **Start here** — maximize volume and reviews early | Move here mid-EA after 2-3 major updates |
+
+**Recommended approach**: Launch EA at **$14.99**, raise to **$19.99** after 2-3 major content updates, then **$29.99** at v1.0 full release. Each price increase drives a sales spike as players rush to buy before the next increase.
+
+### Steam Early Access Roadmap
+
+This roadmap should be public on the Steam store page — transparency is critical for EA trust.
+
+#### EA Launch Content (Day 1)
+- 4 specializations (Youth Scout, First Team Scout, Regional Expert, Data Scout)
+- 5 career tiers with progression
+- 23 countries with leagues and clubs
+- Full equipment system (30+ items across 5 slots)
+- NPC scout management
+- Youth scouting and academy system
+- Financial simulation
+- Rival scout system
+- Local and cloud leaderboards
+
+#### EA Update 1: Transfer Windows & Narratives (Free)
+- Full transfer window system with deadline-day pressure
+- Narrative event system (media scandals, hot streaks, injury crises)
+- Improved match simulation with richer observation mechanics
+- New equipment items
+
+#### EA Update 2: Expanded World (Free)
+- 10+ new countries/regions (South America, Africa, Asia expansion)
+- Regional scouting specialties and cultural mechanics
+- Cross-continental transfer dynamics
+- New contacts and network types per region
+
+#### EA Update 3: Advanced Career (Free)
+- Scouting department management (hire/fire/manage a team of scouts)
+- International tournament scouting (World Cup, continental championships)
+- Media interactions and press conferences
+- Scout reputation visible to other clubs (get headhunted)
+
+#### v1.0 Full Release
+- All EA content polished and balanced
+- Full tutorial and onboarding experience
+- Achievement system
+- Historical scenarios ("Scout the Class of '92")
+- Mod support / Steam Workshop foundation
+
+### Post-v1.0 Paid DLC Strategy
+
+Once v1.0 establishes the full-price baseline, DLC extends the game's revenue tail:
+
+| DLC | Price | Content |
+|---|---|---|
+| **Region Packs** | $4.99 each | Deep-dive into specific regions: MLS & South America, J-League & K-League & A-League, African football, Scandinavian leagues |
+| **Historical Scenarios** | $4.99–$6.99 | "The Class of '92", "Brazil's Golden Generation", "Ajax Youth Revolution", "Leicester's Miracle" |
+| **Advanced Careers** | $7.99–$9.99 | Chief Scout career path, Academy Director mode, International Scout for national teams |
+| **Annual Database Update** | $9.99/year | Updated real-world-inspired player databases, new clubs, league restructuring |
+
+### Steam Workshop Integration
+
+- Community-created leagues, player databases, and scenarios
+- Extends game longevity indefinitely
+- Drives base game + DLC sales through community engagement
+- **Free to implement, massive return on investment**
+
+### Steam-Specific Marketing
+
+- **Wishlists are everything** — drive browser players to wishlist before EA launch
+- **Steam Next Fest** — submit a demo (the browser version IS the demo)
+- **Launch discount** — 10% off for launch week drives volume and visibility
+- **Regular dev updates** — Steam rewards active EA developers with algorithm visibility
 
 ---
 
-## 3. Mobile (iOS / Android)
+## Phase 3: Mobile Port
 
-Mobile has the highest revenue potential but also the most competitive landscape and significant design adaptation requirements.
+Mobile comes **after** Steam establishes the game and generates revenue to fund the port. The turn-based weekly cycle is a natural fit for mobile sessions.
 
-### Viable Strategies
+### Pricing Model: Free Trial → Premium Unlock
 
-#### A. Free-to-Play with Premium Unlock ($4.99–$9.99)
-- Let players experience the first 2–3 seasons for free
-- One-time purchase to unlock the full game
-- Proven model for quality simulation games (Mini Motorways, Pocket City, Retro Bowl)
-- **Implementation**: App Store / Google Play IAP
-- **Revenue potential**: High
-- **Player goodwill**: High
+| Tier | Price | Content |
+|---|---|---|
+| **Free** | $0 | First 3 seasons, 1 specialization, limited countries |
+| **Premium Unlock** | $6.99–$9.99 | Full game (all specializations, all countries, unlimited seasons) |
+| **Expansion IAP** | $2.99–$4.99 each | Region packs, historical scenarios (mirrors Steam DLC) |
 
-#### B. Cosmetic IAP + Ad Removal Bundle
-- Free with non-intrusive ads (between weeks/seasons)
-- $2.99–$4.99 to remove ads permanently
-- Optional cosmetic packs ($0.99–$2.99) for scout customization, office themes
-- **Revenue potential**: Medium–High
-- **Player goodwill**: Medium–High
+### Why Free-to-Try on Mobile
 
-#### C. Season Pass Model
-- $1.99–$3.99/month or $9.99/year
-- Ongoing content drops: new leagues, equipment items, scenarios, exclusive cosmetics
-- The equipment catalog system already supports new item additions easily
-- **Revenue potential**: High (recurring)
-- **Player goodwill**: Medium
+- App store discovery requires a free download — premium-only games are nearly invisible
+- 3 seasons is enough to hook simulation players but short enough to leave them wanting more
+- The unlock price ($6.99–$9.99) is premium for mobile but justified by the game's depth
+- Proven model: Retro Bowl, Pocket City, Mini Motorways all follow this pattern
 
-#### D. Apple Arcade / Google Play Pass Submission
-- Paid per engagement rather than direct sales
-- Good discovery channel for indie games
-- No ads or IAP required (subscription services prohibit them)
-- Removes monetization complexity — you just make the best game possible
-- **Revenue potential**: Medium (depends on engagement metrics)
-- **Player goodwill**: Very High
+### Alternative: Apple Arcade / Google Play Pass
 
-#### E. Energy System (Cautious Approach)
-- The existing fatigue mechanic could map to a real-time energy system
-- Activities cost energy that refills over time (or can be refilled with IAP)
-- **Warning**: This is the most revenue-generating but most player-hostile option
-- Only viable if implemented subtly — aggressive gating will drive users away from a simulation game
-- **Revenue potential**: Very High
-- **Player goodwill**: Low
+- Submit to subscription services for guaranteed per-engagement revenue
+- Removes all monetization complexity — no ads, no IAP, just make the best game
+- Good discovery channel for indie titles
+- Can run alongside the direct App Store/Play Store listing
 
-### What to Avoid (Mobile)
-- Upfront premium price with no free trial — discovery is too difficult on app stores
-- Lootbox mechanics — increasingly regulated (illegal in Belgium/Netherlands, restricted in many markets)
-- Aggressive notification-driven engagement loops — scouting sim players want depth, not casual hooks
-- Multiple premium currencies — adds confusion and feels manipulative
+### Mobile-Specific Considerations
+
+- **UI adaptation**: Current web UI will need touch-friendly redesign (larger tap targets, swipe navigation, simplified menus)
+- **Session length**: Mobile players have shorter sessions — ensure the weekly cycle can be completed in 5-10 minutes
+- **Offline play**: The IndexedDB/offline-first architecture translates well to mobile
+- **Notifications**: Optional "your week is ready" reminders — tasteful, not aggressive
+- **Cross-platform saves**: Cloud sync via Supabase enables play on browser/mobile with the same save
+
+### What to Avoid on Mobile
+- Energy/stamina systems that gate play time — hostile to the simulation audience
+- Lootbox mechanics — increasingly regulated globally
+- Aggressive ad frequency — one interstitial per session maximum
+- Multiple premium currencies — confusing and predatory
+
+---
+
+## Revenue Projections (Conservative)
+
+These are rough estimates based on indie simulation game benchmarks, not promises.
+
+### Steam Early Access
+
+| Metric | Conservative | Moderate | Optimistic |
+|---|---|---|---|
+| EA units (year 1) | 2,000 | 8,000 | 25,000 |
+| Avg price (after Steam cut) | $10.50 | $10.50 | $10.50 |
+| EA revenue (year 1) | $21,000 | $84,000 | $262,500 |
+| v1.0 launch spike | 1.5x EA sales | 2x EA sales | 3x EA sales |
+| DLC attach rate | 15% | 25% | 40% |
+
+*Steam takes a 30% cut (drops to 25% after $10M, 20% after $50M). Net revenue per $14.99 sale = ~$10.50.*
+
+### Mobile (Year 1 Post-Launch)
+
+| Metric | Conservative | Moderate | Optimistic |
+|---|---|---|---|
+| Downloads | 10,000 | 50,000 | 200,000 |
+| Free → paid conversion | 5% | 8% | 12% |
+| Avg revenue per paying user | $7.99 | $9.99 | $12.99 |
+| Mobile revenue (year 1) | $4,000 | $40,000 | $312,000 |
+
+*Apple/Google take a 30% cut (15% for small developers under $1M/year via Small Business Program).*
 
 ---
 
 ## Platform Comparison Matrix
 
-| Strategy | Revenue | Effort | Goodwill | Best Platform |
+| Factor | Browser | Steam EA | Steam v1.0 | Mobile |
 |---|---|---|---|---|
-| Supporter tier + cosmetics | Low–Med | Low | High | Browser |
-| Ads + ad-free unlock | Medium | Low | Medium | Browser, Mobile |
-| Premium price ($14.99) | High | Medium | High | Steam |
-| Paid DLC / expansions | Med–High | Medium | High | Steam, Mobile |
-| Free trial + premium unlock | High | High | High | Mobile |
-| Season pass (recurring) | High | High | Medium | Mobile |
-| Apple Arcade / Play Pass | Medium | Low | Very High | Mobile |
-| Workshop / community content | Indirect | Medium | Very High | Steam |
+| **Price** | Free | $14.99–$19.99 | $29.99–$39.99 | Free + $6.99–$9.99 |
+| **Primary purpose** | Development & community | First revenue + co-development | Full monetization | Audience expansion |
+| **Revenue** | Tips only | Medium–High | High | Medium–High |
+| **Effort** | Current stack | Medium (Electron/Tauri wrap) | Continuation of EA | High (UI redesign) |
+| **Timeline** | Now | After browser polish | 12-18 months post-EA | After Steam v1.0 |
+| **Key metric** | Player count & feedback | Units sold & reviews | Review score & DLC attach | Conversion rate |
 
 ---
 
-## Recommended Approach (Multi-Platform)
+## Phased Timeline
 
-A tiered strategy that respects each platform's norms:
-
-### Phase 1: Browser (Now)
-1. Launch the game for free as-is
-2. Add a **tip jar** (Ko-fi / Buy Me a Coffee) for immediate low-effort revenue
-3. Implement **Supabase cloud sync** (already planned) as a free feature to build user base
-4. Add a **Supporter badge** on leaderboards for donors
-
-### Phase 2: Browser Monetization + Steam Prep
-1. Add **expansion packs** (new regions/scenarios) as paid content ($2–5 via Stripe)
-2. Implement **cosmetic options** for supporters
-3. Prepare Steam build — the game's offline-first architecture suits Steam well
-4. Consider an **ad-supported tier** with ad-free unlock
-
-### Phase 3: Steam Launch
-1. Launch at **$14.99** with all current content
-2. Include browser expansion packs in the base price
-3. Plan **DLC roadmap** (new regions, career modes, historical scenarios)
-4. Add **Steam Workshop** support for community content
-
-### Phase 4: Mobile Port
-1. Adapt UI for touch (the turn-based nature suits mobile well)
-2. Launch **free-to-play with premium unlock** ($6.99 for full game)
-3. Submit to **Apple Arcade / Google Play Pass** for discovery
-4. Add **cosmetic IAP** and optional **season pass** for ongoing content
+```
+Browser (Now)                Steam EA                    Steam v1.0              Mobile
+─────────────────────────────────────────────────────────────────────────────────────────
+ Polish gameplay              $14.99 launch               $29.99-$39.99           Free + $6.99
+ Build community              Free content updates         DLC strategy            IAP expansions
+ Gather feedback              Raise to $19.99             Workshop support         Apple Arcade
+ Drive wishlists              Build review count           Annual updates           Cross-platform saves
+─────────────────────────────────────────────────────────────────────────────────────────
+ Revenue: Tips               Revenue: EA Sales            Revenue: Full Price     Revenue: Premium Unlock
+ Goal: Validate & Build      Goal: Fund Development       Goal: Maximize          Goal: Expand Reach
+```
 
 ---
 
 ## Key Principles
 
-1. **Never gate existing mechanics behind paywalls** — The in-game economy (equipment shop, salary progression) is core gameplay. Real-money monetization should add _new_ content, not lock existing content.
+1. **Browser is the lab, not the cash register** — Use it to build, test, and grow a community. Don't optimize for browser revenue.
 
-2. **Respect the audience** — Simulation game players are strategy-minded adults who will reject exploitative mechanics and reward fair pricing with loyalty and word-of-mouth.
+2. **Early Access is a partnership with players** — Be transparent about the roadmap, deliver regular updates, and respond to feedback. EA buyers are your most valuable asset.
 
-3. **Match platform expectations** — Browser = free/cheap, Steam = premium upfront, Mobile = free trial then convert.
+3. **Price increases reward early believers** — Players who bought at $14.99 become evangelists when the game reaches $29.99. They feel smart, not cheated.
 
-4. **Build community first, monetize second** — A loyal player base that trusts you will support fair monetization. Aggressive early monetization kills growth.
+4. **Never gate existing mechanics behind paywalls** — The in-game economy (equipment shop, salary progression) is core gameplay. Real-money monetization adds _new_ content on top.
 
-5. **Lean on the game's depth** — TalentScout's 22 attributes, 4 specializations, 5 career tiers, equipment system, and NPC management provide genuine value. Let the game sell itself.
+5. **Each platform funds the next** — Browser is free (low cost to run). Steam EA revenue funds continued development and the mobile port. Mobile revenue extends the long tail.
+
+6. **Respect the audience** — Simulation game players are strategy-minded adults who will reject exploitative mechanics and reward fair pricing with loyalty, positive reviews, and word-of-mouth.
+
+7. **Ship the roadmap, not just the game** — On Steam, the public roadmap IS part of the product. Players buy into the vision as much as the current state. Deliver on promises consistently.
