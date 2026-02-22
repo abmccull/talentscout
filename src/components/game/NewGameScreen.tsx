@@ -25,6 +25,8 @@ const SPECIALIZATIONS: {
   playstyle: string;
   exclusiveFeatures: string[];
   exclusiveActivities: string[];
+  /** For specs whose depth comes from systemic bonuses rather than unique activities. */
+  systemBonuses?: string[];
   keyStrength: string;
 }[] = [
   {
@@ -41,7 +43,17 @@ const SPECIALIZATIONS: {
       "Venue discovery — find hidden training grounds",
       "Home country scouting advantage",
     ],
-    exclusiveActivities: ["Academy Visit", "Youth Tournament", "Training Visit"],
+    exclusiveActivities: [
+      "Academy Visit",
+      "Youth Tournament",
+      "School Match",
+      "Grassroots Tournament",
+      "Academy Trial Day",
+      "Youth Festival",
+      "Follow-Up Session",
+      "Parent Coach Meeting",
+      "Write Placement Report",
+    ],
     keyStrength: "Potential Assessment — the best at projecting a player's ceiling",
   },
   {
@@ -75,7 +87,14 @@ const SPECIALIZATIONS: {
       "Cross-league transfer insights",
       "Cultural scouting expertise",
     ],
-    exclusiveActivities: ["Match Attendance", "Networking", "Study"],
+    exclusiveActivities: [],
+    systemBonuses: [
+      "Scouting accuracy +25% in your home region",
+      "Contact relationships build 2x faster locally",
+      "Sub-region familiarity unlocks hidden venues",
+      "Higher hidden gem discovery rate",
+      "Cross-league intel from regional contacts",
+    ],
     keyStrength: "Balanced skills — strong generalist with deep regional knowledge",
   },
   {
@@ -671,14 +690,34 @@ export function NewGameScreen() {
                                 ))}
                               </ul>
                             </div>
-                            <div>
-                              <p className="text-xs font-semibold text-zinc-300 mb-1.5">Exclusive activities</p>
-                              <div className="flex flex-wrap gap-1">
-                                {spec.exclusiveActivities.map((a) => (
-                                  <span key={a} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{a}</span>
-                                ))}
+                            {spec.exclusiveActivities.length > 0 && (
+                              <div>
+                                <p className="text-xs font-semibold text-zinc-300 mb-1.5">
+                                  Exclusive activities
+                                  {spec.exclusiveActivities.length > 5 && (
+                                    <span className="ml-1.5 font-normal text-zinc-500">— some unlock with progression</span>
+                                  )}
+                                </p>
+                                <div className="flex flex-wrap gap-1">
+                                  {spec.exclusiveActivities.map((a) => (
+                                    <span key={a} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{a}</span>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            )}
+                            {spec.systemBonuses && (
+                              <div>
+                                <p className="text-xs font-semibold text-zinc-300 mb-1.5">System bonuses</p>
+                                <ul className="space-y-1">
+                                  {spec.systemBonuses.map((b) => (
+                                    <li key={b} className="flex items-start gap-1.5 text-xs text-zinc-400">
+                                      <span className="mt-1 w-1 h-1 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
+                                      {b}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
                             <div className="rounded bg-emerald-950/40 border border-emerald-900/30 px-2.5 py-1.5">
                               <p className="text-[10px] text-emerald-400">
                                 <span className="font-semibold">Key strength:</span>{" "}
@@ -690,14 +729,27 @@ export function NewGameScreen() {
 
                         {!isSelected && (
                           <div className="flex flex-wrap gap-1.5">
-                            {spec.exclusiveActivities.slice(0, 3).map((a) => (
-                              <span key={a} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{a}</span>
-                            ))}
-                            {spec.exclusiveActivities.length > 3 && (
-                              <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
-                                +{spec.exclusiveActivities.length - 3} more
-                              </span>
-                            )}
+                            {spec.exclusiveActivities.length > 0 ? (
+                              <>
+                                {spec.exclusiveActivities.slice(0, 3).map((a) => (
+                                  <span key={a} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{a}</span>
+                                ))}
+                                {spec.exclusiveActivities.length > 3 && (
+                                  <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
+                                    +{spec.exclusiveActivities.length - 3} more
+                                  </span>
+                                )}
+                              </>
+                            ) : spec.systemBonuses ? (
+                              <>
+                                {spec.systemBonuses.slice(0, 2).map((b) => (
+                                  <span key={b} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{b}</span>
+                                ))}
+                                <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
+                                  +{spec.systemBonuses.length - 2} more
+                                </span>
+                              </>
+                            ) : null}
                           </div>
                         )}
                       </button>
