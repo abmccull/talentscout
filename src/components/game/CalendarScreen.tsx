@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,17 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
-  Eye,
-  Video,
-  FileText,
-  Users,
-  Book,
-  Moon,
-  GraduationCap,
-  Trophy,
   X,
   AlertTriangle,
-  ChevronRight,
   Info,
   CalendarDays,
 } from "lucide-react";
@@ -28,6 +19,8 @@ import {
   isInternationalBreak,
   getSeasonPhase,
 } from "@/engine/core/seasonEvents";
+import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
+import { ActivityPanel } from "./calendar/ActivityPanel";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -40,50 +33,6 @@ const SEASON_PHASE_CONFIG: Record<
   midseason:   { label: "Midseason",    className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
   lateseason:  { label: "Late Season",  className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
   endseason:   { label: "End of Season", className: "bg-red-500/15 text-red-400 border-red-500/30" },
-};
-
-const ACTIVITY_CONFIG: Record<
-  ActivityType,
-  { label: string; icon: React.ElementType; slots: number; color: string }
-> = {
-  attendMatch: { label: "Attend Match", icon: Eye, slots: 2, color: "text-emerald-400" },
-  watchVideo: { label: "Watch Video", icon: Video, slots: 1, color: "text-blue-400" },
-  writeReport: { label: "Write Report", icon: FileText, slots: 1, color: "text-amber-400" },
-  networkMeeting: { label: "Network Meeting", icon: Users, slots: 1, color: "text-purple-400" },
-  trainingVisit: { label: "Training Visit", icon: Eye, slots: 2, color: "text-orange-400" },
-  travel: { label: "Travel", icon: ChevronRight, slots: 1, color: "text-zinc-400" },
-  study: { label: "Study", icon: Book, slots: 1, color: "text-cyan-400" },
-  rest: { label: "Rest", icon: Moon, slots: 1, color: "text-zinc-400" },
-  academyVisit: { label: "Academy Visit", icon: GraduationCap, slots: 2, color: "text-pink-400" },
-  youthTournament: { label: "Youth Tournament", icon: Trophy, slots: 2, color: "text-yellow-400" },
-  reviewNPCReport: { label: "Review NPC Report", icon: FileText, slots: 1, color: "text-teal-400" },
-  managerMeeting: { label: "Manager Meeting", icon: Users, slots: 1, color: "text-rose-400" },
-  boardPresentation: { label: "Board Presentation", icon: Users, slots: 2, color: "text-indigo-400" },
-  assignTerritory: { label: "Assign Territory", icon: ChevronRight, slots: 1, color: "text-lime-400" },
-  internationalTravel: { label: "International Travel", icon: ChevronRight, slots: 2, color: "text-sky-400" },
-  schoolMatch: { label: "School Match", icon: Eye, slots: 2, color: "text-green-400" },
-  grassrootsTournament: { label: "Grassroots Tournament", icon: Trophy, slots: 3, color: "text-lime-400" },
-  streetFootball: { label: "Street Football", icon: Eye, slots: 2, color: "text-orange-400" },
-  academyTrialDay: { label: "Academy Trial Day", icon: GraduationCap, slots: 2, color: "text-pink-400" },
-  youthFestival: { label: "Youth Festival", icon: Trophy, slots: 3, color: "text-yellow-400" },
-  followUpSession: { label: "Follow-Up Session", icon: Eye, slots: 1, color: "text-teal-400" },
-  parentCoachMeeting: { label: "Parent/Coach Meeting", icon: Users, slots: 1, color: "text-purple-400" },
-  writePlacementReport: { label: "Write Placement Report", icon: FileText, slots: 1, color: "text-amber-400" },
-  // First-team exclusive
-  reserveMatch: { label: "Reserve Match", icon: Eye, slots: 2, color: "text-emerald-400" },
-  scoutingMission: { label: "Scouting Mission", icon: ChevronRight, slots: 3, color: "text-sky-400" },
-  oppositionAnalysis: { label: "Opposition Analysis", icon: Eye, slots: 2, color: "text-rose-400" },
-  agentShowcase: { label: "Agent Showcase", icon: Users, slots: 2, color: "text-purple-400" },
-  trialMatch: { label: "Trial Match", icon: Eye, slots: 2, color: "text-emerald-400" },
-  contractNegotiation: { label: "Contract Negotiation", icon: Users, slots: 1, color: "text-amber-400" },
-  // Data-exclusive
-  databaseQuery: { label: "Database Query", icon: Book, slots: 1, color: "text-cyan-400" },
-  deepVideoAnalysis: { label: "Deep Video Analysis", icon: Video, slots: 2, color: "text-blue-400" },
-  statsBriefing: { label: "Stats Briefing", icon: FileText, slots: 1, color: "text-teal-400" },
-  dataConference: { label: "Data Conference", icon: Users, slots: 3, color: "text-indigo-400" },
-  algorithmCalibration: { label: "Algorithm Calibration", icon: Book, slots: 1, color: "text-cyan-400" },
-  marketInefficiency: { label: "Market Scan", icon: Book, slots: 1, color: "text-lime-400" },
-  analyticsTeamMeeting: { label: "Analytics Meeting", icon: Users, slots: 1, color: "text-purple-400" },
 };
 
 function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {
@@ -117,11 +66,10 @@ export function CalendarScreen() {
     scheduleActivity,
     unscheduleActivity,
     advanceWeek,
-    getUpcomingFixtures,
     getClub,
-    getLeague,
     lastWeekSummary,
     dismissWeekSummary,
+    getAvailableCalendarActivities,
   } = useGameStore();
 
   // League filter for fixture activities — must be called before early return
@@ -135,81 +83,14 @@ export function CalendarScreen() {
   const maxSlots = 7;
   const severity = fatigueSeverity(scout.fatigue);
 
-  const upcomingFixtures = getUpcomingFixtures(currentWeek, 10).filter(
-    (f) => f.week === currentWeek
-  );
-
   const seasonPhase = getSeasonPhase(currentWeek);
   const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
   const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
 
   const allLeagues = Object.values(gameState.leagues);
-  const filteredFixtures = selectedLeagueId === "all"
-    ? upcomingFixtures
-    : upcomingFixtures.filter((f) => f.leagueId === selectedLeagueId);
-  const displayFixtures = filteredFixtures.slice(0, 8);
 
-  const availableActivities: Array<{ activity: Activity; label: string }> = [
-    ...displayFixtures.map((f) => {
-      const home = getClub(f.homeClubId);
-      const away = getClub(f.awayClubId);
-      const league = getLeague(f.leagueId);
-      const weatherStr = f.weather ? ` — ${f.weather.replace(/([A-Z])/g, " $1").trim()}` : "";
-      return {
-        activity: {
-          type: "attendMatch" as ActivityType,
-          slots: 2,
-          targetId: f.id,
-          description: `${home?.name ?? "?"} vs ${away?.name ?? "?"} (${league?.shortName ?? "?"})${weatherStr}`,
-        } satisfies Activity,
-        label: `${home?.name ?? "?"} vs ${away?.name ?? "?"}`,
-      };
-    }),
-    {
-      activity: { type: "watchVideo", slots: 1, description: "Review video footage" },
-      label: "Watch Video",
-    },
-    {
-      activity: { type: "writeReport", slots: 1, description: "Write a scouting report" },
-      label: "Write Report",
-    },
-    {
-      activity: { type: "networkMeeting", slots: 1, description: "Meet with a contact" },
-      label: "Network Meeting",
-    },
-    {
-      activity: { type: "study", slots: 1, description: "Study tactics and improve skills" },
-      label: "Study",
-    },
-    {
-      activity: { type: "rest", slots: 1, description: "Rest and recover fatigue" },
-      label: "Rest",
-    },
-    {
-      activity: { type: "trainingVisit", slots: 2, description: "Visit training ground" },
-      label: "Training Visit (2 slots)",
-    },
-    {
-      activity: { type: "academyVisit", slots: 2, description: "Visit youth academy" },
-      label: "Academy Visit (2 slots)",
-    },
-    {
-      activity: { type: "youthTournament", slots: 2, description: "Attend youth tournament" },
-      label: "Youth Tournament (2 slots)",
-    },
-    ...(scout.careerTier >= 5
-      ? [
-          {
-            activity: {
-              type: "boardPresentation" as ActivityType,
-              slots: 2,
-              description: "Present scouting strategy to the board",
-            } satisfies Activity,
-            label: "Board Presentation (2 slots)",
-          },
-        ]
-      : []),
-  ];
+  // Engine-driven activities — specialization-aware, properly gated
+  const engineActivities = getAvailableCalendarActivities();
 
   const canScheduleAt = (activity: Activity, dayIndex: number): boolean => {
     if (dayIndex + activity.slots > maxSlots) return false;
@@ -223,6 +104,12 @@ export function CalendarScreen() {
     if (!canScheduleAt(activity, dayIndex)) return;
     scheduleActivity(activity, dayIndex);
   };
+
+  // Stable callback for resolving club IDs to names in ActivityPanel
+  const resolveClubName = useCallback(
+    (id: string) => getClub(id)?.name ?? id,
+    [getClub],
+  );
 
   return (
     <GameLayout>
@@ -241,7 +128,7 @@ export function CalendarScreen() {
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">Activity Results</p>
                     <div className="space-y-2">
                       {lastWeekSummary.activityQualities.map((aq, i) => {
-                        const cfg = ACTIVITY_CONFIG[aq.activityType as ActivityType];
+                        const cfg = ACTIVITY_DISPLAY[aq.activityType as ActivityType];
                         const label = cfg?.label ?? aq.activityType;
                         const tierColors: Record<string, string> = {
                           poor: "bg-red-500/15 text-red-400 border-red-500/30",
@@ -461,8 +348,8 @@ export function CalendarScreen() {
         <div className="mb-6 grid grid-cols-7 gap-2">
           {DAY_LABELS.map((day, i) => {
             const activity = activities[i];
-            const config = activity ? ACTIVITY_CONFIG[activity.type] : null;
-            const Icon = config?.icon;
+            const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
+            const Icon = display?.icon;
             return (
               <div key={day} className="flex flex-col gap-1">
                 <p className="text-center text-xs font-semibold text-zinc-500">{day}</p>
@@ -473,18 +360,18 @@ export function CalendarScreen() {
                       : "border-[#27272a] bg-[#141414]"
                   }`}
                 >
-                  {activity && config && Icon ? (
+                  {activity && display && Icon ? (
                     <div className="relative flex h-full flex-col gap-1">
                       <button
                         onClick={() => unscheduleActivity(i)}
                         className="absolute right-0 top-0 text-zinc-600 hover:text-red-400 transition"
-                        aria-label={`Remove ${config.label} from ${day}`}
+                        aria-label={`Remove ${display.label} from ${day}`}
                       >
                         <X size={12} />
                       </button>
-                      <Icon size={16} className={config.color} aria-hidden="true" />
-                      <p className={`text-xs font-medium leading-tight ${config.color}`}>
-                        {config.label}
+                      <Icon size={16} className={display.color} aria-hidden="true" />
+                      <p className={`text-xs font-medium leading-tight ${display.color}`}>
+                        {display.label}
                       </p>
                       {activity.description && (
                         <p className="text-[10px] text-zinc-500 leading-tight line-clamp-2">
@@ -501,70 +388,17 @@ export function CalendarScreen() {
           })}
         </div>
 
-        {/* Available activities */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm">Available Activities</CardTitle>
-              <select
-                value={selectedLeagueId}
-                onChange={(e) => setSelectedLeagueId(e.target.value)}
-                className="rounded-md border border-[#27272a] bg-[#141414] px-2 py-1 text-xs text-zinc-300"
-              >
-                <option value="all">All Leagues</option>
-                {allLeagues.map((league) => (
-                  <option key={league.id} value={league.id}>
-                    {league.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-              {availableActivities.map((item, idx) => {
-                const config = ACTIVITY_CONFIG[item.activity.type];
-                const Icon = config.icon;
-                return (
-                  <div
-                    key={`${item.activity.type}-${idx}`}
-                    className="rounded-md border border-[#27272a] bg-[#141414] p-3"
-                  >
-                    <div className="mb-2 flex items-start justify-between">
-                      <Icon size={14} className={config.color} aria-hidden="true" />
-                      <Badge variant="outline" className="text-[10px]">
-                        {item.activity.slots} slot{item.activity.slots > 1 ? "s" : ""}
-                      </Badge>
-                    </div>
-                    <p className={`mb-2 text-xs font-medium ${config.color}`}>
-                      {item.label}
-                    </p>
-                    <div className="flex flex-wrap gap-1">
-                      {DAY_LABELS.map((day, dayIdx) => {
-                        const canPlace = canScheduleAt(item.activity, dayIdx);
-                        return (
-                          <button
-                            key={day}
-                            disabled={!canPlace}
-                            onClick={() => handleSchedule(item.activity, dayIdx)}
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
-                              !canPlace
-                                ? "cursor-not-allowed bg-[#27272a] text-zinc-600"
-                                : "bg-[#27272a] text-zinc-300 hover:bg-emerald-500/20 hover:text-emerald-400"
-                            }`}
-                            aria-label={`Schedule ${item.label} on ${day}`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Available activities — grouped by category, specialization-aware */}
+        <ActivityPanel
+          activities={engineActivities}
+          specialization={scout.primarySpecialization}
+          canScheduleAt={canScheduleAt}
+          onSchedule={handleSchedule}
+          leagueFilter={selectedLeagueId}
+          allLeagues={allLeagues}
+          onLeagueFilterChange={setSelectedLeagueId}
+          resolveClubName={resolveClubName}
+        />
       </div>
     </GameLayout>
   );

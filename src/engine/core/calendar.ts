@@ -104,7 +104,7 @@ export interface WeekProcessingResult {
 // ---------------------------------------------------------------------------
 
 /** Slot cost per activity type */
-const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
+export const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   attendMatch:        2,
   watchVideo:         1,
   writeReport:        1,
@@ -146,7 +146,7 @@ const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
 };
 
 /** Fatigue cost per activity type */
-const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
+export const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   attendMatch:        10,
   watchVideo:         5,
   writeReport:        5,
@@ -188,7 +188,7 @@ const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
 };
 
 /** Skills that each activity type directly develops */
-const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill, number>>>> = {
+export const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill, number>>>> = {
   attendMatch:    { technicalEye: 3, physicalAssessment: 2, tacticalUnderstanding: 2, playerJudgment: 2 },
   watchVideo:     { technicalEye: 2, tacticalUnderstanding: 3, dataLiteracy: 1, playerJudgment: 1 },
   writeReport:    { dataLiteracy: 3, playerJudgment: 1, potentialAssessment: 1 },
@@ -223,7 +223,7 @@ const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<ScoutSkill,
 };
 
 /** Scout attributes that each activity type develops */
-const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<ScoutAttribute, number>>>> = {
+export const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<ScoutAttribute, number>>>> = {
   attendMatch:    { memory: 2, endurance: 1 },
   watchVideo:     { memory: 3 },
   writeReport:    { memory: 2, intuition: 1 },

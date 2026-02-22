@@ -128,6 +128,23 @@ export {
   getSeasonPhase,
 } from "./seasonEvents";
 
+// Calendar data tables (used by UI for activity previews)
+export {
+  ACTIVITY_SLOT_COSTS,
+  ACTIVITY_FATIGUE_COSTS,
+  ACTIVITY_SKILL_XP,
+  ACTIVITY_ATTRIBUTE_XP,
+  getAvailableActivities,
+} from "./calendar";
+
+// Activity metadata (categories, specialization themes)
+export {
+  ACTIVITY_CATEGORIES,
+  ACTIVITY_CATEGORY_CONFIG,
+  SPECIALIZATION_THEMES,
+} from "./activityMetadata";
+export type { ActivityCategory, SpecializationTheme } from "./activityMetadata";
+
 // Activity quality system
 export { rollActivityQuality } from "./activityQuality";
 export type {

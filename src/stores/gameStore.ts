@@ -283,6 +283,7 @@ interface GameStore {
   getActiveSeasonEvents: () => SeasonEvent[];
   getDiscoveryRecords: () => DiscoveryRecord[];
   getPerformanceHistory: () => ScoutPerformanceSnapshot[];
+  getAvailableCalendarActivities: () => Activity[];
 }
 
 export interface WeekSummary {
@@ -3363,6 +3364,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { gameState } = get();
     if (!gameState) return [];
     return gameState.performanceHistory;
+  },
+
+  getAvailableCalendarActivities: () => {
+    const { gameState } = get();
+    if (!gameState) return [];
+    return getAvailableActivities(
+      gameState.scout,
+      gameState.currentWeek,
+      Object.values(gameState.fixtures).filter(
+        (f) => f.week === gameState.currentWeek && !f.played,
+      ),
+      Object.values(gameState.contacts),
+      gameState.subRegions,
+      gameState.observations,
+      gameState.unsignedYouth,
+    );
   },
 
   submitToLeaderboard: async () => {
