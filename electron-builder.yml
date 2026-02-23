@@ -50,9 +50,6 @@ nsis:
   allowToChangeInstallationDirectory: true
   # Install for all users by default (requires admin elevation).
   perMachine: true
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
-  installerHeaderIcon: build/icon.ico
   # Omitting `license` key — no LICENSE file exists in the repo yet.
   # Add `license: LICENSE` once a LICENSE file is committed.
   menuCategory: Games
