@@ -30,6 +30,12 @@ export interface SteamInterface {
 
   /** Returns the Steam player's display name, or null if unavailable. */
   getPlayerName(): string | null;
+
+  /** Set Steam Rich Presence key/value pair. */
+  setRichPresence(key: string, value: string): void;
+
+  /** Reset all Steam achievements (development only). */
+  resetAllAchievements(): void;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +61,14 @@ class NoopSteamInterface implements SteamInterface {
 
   getPlayerName(): string | null {
     return null;
+  }
+
+  setRichPresence(_key: string, _value: string): void {
+    // No-op in web builds
+  }
+
+  resetAllAchievements(): void {
+    // No-op in web builds
   }
 }
 

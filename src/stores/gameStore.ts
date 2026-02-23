@@ -176,6 +176,7 @@ import {
 } from "@/engine/scenarios";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
+import { updateRichPresence } from "@/lib/steam/richPresence";
 
 export type GameScreen =
   | "mainMenu"
@@ -404,7 +405,27 @@ let _autosavePending = false;
 export const useGameStore = create<GameStore>((set, get) => ({
   // Navigation
   currentScreen: "mainMenu",
-  setScreen: (screen) => set({ currentScreen: screen }),
+  setScreen: (screen) => {
+    set({ currentScreen: screen });
+    const gs = get().gameState;
+    const activeMatch = get().activeMatch;
+    let matchFixture: string | undefined;
+    if (screen === "match" && activeMatch && gs) {
+      const fixture = gs.fixtures[activeMatch.fixtureId];
+      if (fixture) {
+        const home = gs.clubs[fixture.homeClubId]?.name ?? fixture.homeClubId;
+        const away = gs.clubs[fixture.awayClubId]?.name ?? fixture.awayClubId;
+        matchFixture = `${home} vs ${away}`;
+      }
+    }
+    updateRichPresence(screen, {
+      currentCountry: gs?.countries?.[0],
+      currentSeason: gs?.currentSeason,
+      currentWeek: gs?.currentWeek,
+      matchFixture,
+      activeScenarioId: gs?.activeScenarioId,
+    });
+  },
 
   // State
   gameState: null,

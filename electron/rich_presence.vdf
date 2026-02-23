@@ -1,0 +1,10 @@
+"richpresence"
+{
+	"tokens"
+	{
+		"#StatusScouting"	"Scouting in %country% — Season %season%, Week %week%"
+		"#StatusWatching"	"Watching %fixture% — Season %season%, Week %week%"
+		"#StatusReporting"	"Writing a scouting report — Season %season%, Week %week%"
+		"#StatusPlaying"	"Season %season%, Week %week%"
+	}
+}

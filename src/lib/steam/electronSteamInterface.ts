@@ -92,4 +92,22 @@ export class ElectronSteamInterface implements SteamInterface {
   getPlayerName(): string | null {
     return this._playerName;
   }
+
+  setRichPresence(key: string, value: string): void {
+    if (!hasElectronAPI()) return;
+    // Fire-and-forget — the interface contract is void, not Promise<void>.
+    api().steam.setRichPresence(key, value).catch((err: unknown) => {
+      console.warn("[ElectronSteam] setRichPresence failed:", err);
+    });
+  }
+
+  resetAllAchievements(): void {
+    if (!hasElectronAPI()) return;
+    // Fire-and-forget — IPC handler may not yet exist in main.js; fails silently.
+    (api().steam as unknown as { resetAllAchievements?: () => Promise<void> })
+      .resetAllAchievements?.()
+      ?.catch((err: unknown) => {
+        console.warn("[ElectronSteam] resetAllAchievements failed:", err);
+      });
+  }
 }
