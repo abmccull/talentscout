@@ -108,6 +108,14 @@ export interface TutorialState {
    * the preference to localStorage.  No further sequences will ever start.
    */
   dismissForever: () => void;
+
+  /**
+   * Check if the current step should auto-advance based on a condition string.
+   * Called by game actions (scheduleActivity, setFocus, submitReport) when the
+   * corresponding action completes.  If the current step's `nextStep` matches
+   * the provided condition, the tutorial advances automatically.
+   */
+  checkAutoAdvance: (condition: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -189,5 +197,18 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       currentStep: 0,
       tutorialActive: false,
     });
+  },
+
+  checkAutoAdvance(condition) {
+    const { currentSequence, currentStep, tutorialActive } = get();
+    if (!tutorialActive || !currentSequence) return;
+
+    const sequence = getSequenceById(currentSequence);
+    if (!sequence) return;
+
+    const step = sequence.steps[currentStep];
+    if (step?.nextStep === condition) {
+      get().nextStep();
+    }
   },
 }));

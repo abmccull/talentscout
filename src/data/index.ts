@@ -7,6 +7,7 @@
 
 import type { CountryData } from "@/data/types";
 import { ENGLAND_DATA } from "@/data/england";
+import { getModdedCountryData } from "@/lib/modLoader";
 
 export type { ClubData, LeagueData, CountryData, NamePool, NationalityWeight } from "@/data/types";
 
@@ -93,9 +94,17 @@ export function getCountryDataSync(key: string): CountryData | undefined {
 
 /**
  * Load and cache country data. Returns the CountryData for the given key.
+ * Checks for modded data first, then falls back to built-in data.
  * Throws if the country key is not registered.
  */
 export async function getCountryData(key: string): Promise<CountryData> {
+  // Check for user-imported mod data first
+  const modded = await getModdedCountryData(key);
+  if (modded) {
+    SYNC_REGISTRY[key] = modded;
+    return modded;
+  }
+
   if (SYNC_REGISTRY[key]) return SYNC_REGISTRY[key];
 
   const loader = COUNTRY_LOADERS[key];

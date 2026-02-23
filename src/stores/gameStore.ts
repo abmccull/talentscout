@@ -166,6 +166,8 @@ import {
   AUTOSAVE_SLOT,
   MAX_MANUAL_SLOTS,
 } from "@/lib/db";
+import { useTutorialStore } from "@/stores/tutorialStore";
+import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
 
 export type GameScreen =
   | "mainMenu"
@@ -194,7 +196,8 @@ export type GameScreen =
   | "handbook"
   | "achievements"
   | "scenarioSelect"
-  | "hallOfFame";
+  | "hallOfFame"
+  | "demoEnd";
 
 interface GameStore {
   // Navigation
@@ -738,6 +741,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState) return;
     const schedule = addActivity(gameState.schedule, activity, dayIndex);
     set({ gameState: { ...gameState, schedule } });
+    // Tutorial auto-advance: step expects "activityScheduled"
+    useTutorialStore.getState().checkAutoAdvance("activityScheduled");
   },
 
   unscheduleActivity: (dayIndex) => {
@@ -750,6 +755,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   advanceWeek: () => {
     const { gameState } = get();
     if (!gameState) return;
+
+    // ── Demo limit gate ────────────────────────────────────────────────────
+    if (isDemoLimitReached(gameState.currentSeason)) {
+      set({ currentScreen: "demoEnd" as GameScreen });
+      return;
+    }
 
     // ── Gate: play all scheduled attendMatch fixtures interactively first ───
     // Find every attendMatch activity in this week's schedule that has a
@@ -2863,6 +2874,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         },
       });
     }
+    // Tutorial auto-advance: step expects "playerFocused"
+    useTutorialStore.getState().checkAutoAdvance("playerFocused");
   },
 
   endMatch: () => {
@@ -3101,6 +3114,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       currentScreen: "reportHistory",
     });
+    // Tutorial auto-advance: step expects "reportSubmitted"
+    useTutorialStore.getState().checkAutoAdvance("reportSubmitted");
   },
 
   // Career

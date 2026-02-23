@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Specialization, NewGameConfig, ScoutSkill } from "@/engine/core/types";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
+import { IS_DEMO, DEMO_ALLOWED_SPECS } from "@/lib/demo";
 import {
   BASE_SKILLS,
   SKILL_MINIMUMS,
@@ -654,17 +655,26 @@ export function NewGameScreen() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-4">
+                  {IS_DEMO && (
+                    <div className="col-span-2 rounded-lg border border-amber-800/40 bg-amber-950/20 px-4 py-2.5 text-xs text-amber-300">
+                      Demo version — full game includes 4 specializations and 10 scenarios.
+                    </div>
+                  )}
                   {SPECIALIZATIONS.map((spec) => {
                     const isSelected = specialization === spec.id;
+                    const isDemoLocked = IS_DEMO && !DEMO_ALLOWED_SPECS.includes(spec.id);
                     return (
                       <button
                         key={spec.id}
-                        onClick={() => setSpecialization(spec.id)}
+                        onClick={() => !isDemoLocked && setSpecialization(spec.id)}
                         aria-pressed={isSelected}
+                        disabled={isDemoLocked}
                         className={`cursor-pointer rounded-lg border p-4 text-left transition ${
-                          isSelected
-                            ? "border-emerald-500 bg-emerald-500/10"
-                            : "border-[var(--border)] hover:border-zinc-600"
+                          isDemoLocked
+                            ? "cursor-not-allowed border-zinc-800 opacity-40"
+                            : isSelected
+                              ? "border-emerald-500 bg-emerald-500/10"
+                              : "border-[var(--border)] hover:border-zinc-600"
                         }`}
                       >
                         <div className="flex items-center justify-between mb-1">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
 import { AuthModal } from "./AuthModal";
@@ -8,6 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Trash2, LogOut } from "lucide-react";
 import type { SaveRecord } from "@/lib/db";
+
+// Session flag — splash only shown once per browser session.
+let splashShownThisSession = false;
 
 export function MainMenu() {
   const {
@@ -23,10 +26,19 @@ export function MainMenu() {
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showSplash, setShowSplash] = useState(!splashShownThisSession);
+  const splashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     refreshSaveSlots();
   }, [refreshSaveSlots]);
+
+  useEffect(() => {
+    if (!showSplash) return;
+    splashShownThisSession = true;
+    splashTimerRef.current = setTimeout(() => setShowSplash(false), 2200);
+    return () => clearTimeout(splashTimerRef.current);
+  }, [showSplash]);
 
   const autosave = saveSlots.find((s) => s.slot === 0);
   const manualSaves = saveSlots.filter((s) => s.slot > 0);
@@ -58,6 +70,27 @@ export function MainMenu() {
   };
 
   const hasSaves = saveSlots.length > 0;
+
+  if (showSplash) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+        <div className="animate-[splashFadeIn_800ms_ease-out_both] text-center">
+          <h1 className="mb-3 text-7xl font-bold tracking-tight text-white">
+            Talent<span className="text-emerald-500 drop-shadow-[0_0_24px_rgba(16,185,129,0.5)]">Scout</span>
+          </h1>
+          <p className="text-lg tracking-wide text-zinc-500 animate-[splashFadeIn_1000ms_ease-out_400ms_both]">
+            The scout&apos;s eye sees what others miss
+          </p>
+        </div>
+        <style>{`
+          @keyframes splashFadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+      </div>
+    );
+  }
 
   if (isLoadingSave) {
     return (

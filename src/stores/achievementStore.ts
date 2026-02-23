@@ -9,6 +9,8 @@
 import { create } from "zustand";
 import type { GameState } from "@/engine/core/types";
 import { ACHIEVEMENTS, checkAchievements } from "@/lib/achievements";
+import { getSteam } from "@/lib/steam/steamInterface";
+import { getSteamAchievementName } from "@/lib/steam/achievementMap";
 
 // =============================================================================
 // CONSTANTS
@@ -104,6 +106,15 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
 
     // Persist to localStorage.
     writePersistedAchievements(next);
+
+    // Sync with Steam (no-op in web builds).
+    const steam = getSteam();
+    for (const id of newlyUnlocked) {
+      const steamName = getSteamAchievementName(id);
+      if (steamName) {
+        steam.unlockAchievement(steamName);
+      }
+    }
 
     set((prev) => ({
       unlockedAchievements: next,

@@ -291,12 +291,18 @@ export function TutorialOverlay() {
             </button>
           </div>
 
-          <button
-            onClick={nextStep}
-            className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-          >
-            {currentStep + 1 >= totalSteps ? "Done" : "Next"}
-          </button>
+          {step.nextStep ? (
+            <span className="text-xs italic text-emerald-400/70">
+              Complete the action to continue
+            </span>
+          ) : (
+            <button
+              onClick={nextStep}
+              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+            >
+              {currentStep + 1 >= totalSteps ? "Done" : "Next"}
+            </button>
+          )}
         </div>
       </div>
     </>

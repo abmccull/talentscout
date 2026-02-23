@@ -31,6 +31,7 @@ import { HandbookScreen } from "@/components/game/HandbookScreen";
 import { AchievementScreen } from "@/components/game/AchievementScreen";
 import { ScenarioSelect } from "@/components/game/ScenarioSelect";
 import { HallOfFame } from "@/components/game/HallOfFame";
+import { DemoEndScreen } from "@/components/game/DemoEndScreen";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
@@ -116,6 +117,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <ScenarioSelect />;
     case "hallOfFame":
       return <HallOfFameWrapper />;
+    case "demoEnd":
+      return <DemoEndScreen />;
     default:
       return <MainMenu />;
   }

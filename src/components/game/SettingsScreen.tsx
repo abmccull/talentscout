@@ -31,6 +31,13 @@ import {
 import { MAX_MANUAL_SLOTS } from "@/lib/db";
 import { useAudio } from "@/lib/audio/useAudio";
 import type { AudioChannel } from "@/lib/audio/audioEngine";
+import {
+  exportGameData,
+  importGameData,
+  resetModData,
+  getModdedKeys,
+} from "@/lib/modLoader";
+import { getCountryData, getAvailableCountries } from "@/data/index";
 
 // ---------------------------------------------------------------------------
 // Small reusable primitives used only within SettingsScreen
@@ -129,11 +136,14 @@ export function SettingsScreen() {
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [moddedKeys, setModdedKeys] = useState<string[]>([]);
+  const [modStatus, setModStatus] = useState<string | null>(null);
 
   const { volumes, setVolume, toggleMute } = useAudio();
 
   useEffect(() => {
     refreshSaveSlots();
+    void getModdedKeys().then(setModdedKeys);
   }, [refreshSaveSlots]);
 
   if (!gameState) return null;
@@ -550,6 +560,102 @@ export function SettingsScreen() {
                 ]}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Data Mods ──────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Download size={18} className="text-emerald-500" aria-hidden="true" />
+              Data Mods
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-zinc-500">
+              Export game data as JSON, edit club/league names and attributes,
+              then re-import to play with custom data. Changes apply to new
+              games only.
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void exportGameData(getCountryData, getAvailableCountries());
+                }}
+              >
+                <Download size={12} className="mr-1" aria-hidden="true" />
+                Export Game Data
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const input = document.createElement("input");
+                  input.type = "file";
+                  input.accept = ".json";
+                  input.onchange = () => {
+                    const file = input.files?.[0];
+                    if (!file) return;
+                    void importGameData(file).then((result) => {
+                      if (result.imported.length > 0) {
+                        setModStatus(
+                          `Imported ${result.imported.length} country data file(s)`,
+                        );
+                        void getModdedKeys().then(setModdedKeys);
+                      }
+                      if (result.errors.length > 0) {
+                        setModStatus(result.errors.join(", "));
+                      }
+                      setTimeout(() => setModStatus(null), 4000);
+                    });
+                  };
+                  input.click();
+                }}
+              >
+                <Save size={12} className="mr-1" aria-hidden="true" />
+                Import Custom Data
+              </Button>
+
+              {moddedKeys.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void resetModData().then(() => {
+                      setModdedKeys([]);
+                      setModStatus("Reset to default data");
+                      setTimeout(() => setModStatus(null), 3000);
+                    });
+                  }}
+                >
+                  <Trash2 size={12} className="mr-1" aria-hidden="true" />
+                  Reset to Default
+                </Button>
+              )}
+            </div>
+
+            {modStatus && (
+              <p className="text-xs text-emerald-400">{modStatus}</p>
+            )}
+
+            {moddedKeys.length > 0 && (
+              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
+                <p className="text-xs font-medium text-zinc-300 mb-1">
+                  Active Mods
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {moddedKeys.map((key) => (
+                    <Badge key={key} variant="secondary" className="text-xs">
+                      {key}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

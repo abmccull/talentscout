@@ -12,6 +12,8 @@ import type {
   ScoutSkill,
   ScoutAttribute,
 } from "@/engine/core/types";
+import type { CountryData } from "@/data/types";
+import { getSteam } from "@/lib/steam/steamInterface";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -35,9 +37,16 @@ export interface SaveRecord {
  */
 export type LeaderboardRecord = LeaderboardEntry;
 
+export interface ModRecord {
+  countryKey: string;
+  data: CountryData;
+  importedAt: number;
+}
+
 const db = new Dexie("TalentScoutDB") as Dexie & {
   saves: EntityTable<SaveRecord, "slot">;
   leaderboard: EntityTable<LeaderboardRecord, "id">;
+  mods: EntityTable<ModRecord, "countryKey">;
 };
 
 db.version(1).stores({
@@ -49,6 +58,13 @@ db.version(1).stores({
 db.version(2).stores({
   saves: "slot",
   leaderboard: "++id, score, season, scoutName, submittedAt",
+});
+
+// Version 3: add mods table for user-imported country data.
+db.version(3).stores({
+  saves: "slot",
+  leaderboard: "++id, score, season, scoutName, submittedAt",
+  mods: "countryKey",
 });
 
 // ---------------------------------------------------------------------------
@@ -75,6 +91,16 @@ export async function saveGame(
     state,
   };
   await db.saves.put(record);
+
+  // Sync to Steam Cloud (no-op in web builds).
+  const steam = getSteam();
+  if (steam.isAvailable()) {
+    try {
+      await steam.setCloudSave(slot, JSON.stringify(record));
+    } catch {
+      // Steam cloud save failure is non-fatal.
+    }
+  }
 }
 
 export async function loadGame(slot: number): Promise<GameState | null> {
