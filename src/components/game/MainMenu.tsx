@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Trash2, LogOut } from "lucide-react";
 import type { SaveRecord } from "@/lib/db";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
@@ -73,12 +74,13 @@ export function MainMenu() {
 
   if (showSplash) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
-        <div className="animate-[splashFadeIn_800ms_ease-out_both] text-center">
-          <h1 className="mb-3 text-7xl font-bold tracking-tight text-white">
+      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+        <ScreenBackground src="/images/backgrounds/loading.png" opacity={0.6} />
+        <div className="relative z-10 animate-[splashFadeIn_800ms_ease-out_both] text-center">
+          <h1 className="mb-3 text-7xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
             Talent<span className="text-emerald-500 drop-shadow-[0_0_24px_rgba(16,185,129,0.5)]">Scout</span>
           </h1>
-          <p className="text-lg tracking-wide text-zinc-500 animate-[splashFadeIn_1000ms_ease-out_400ms_both]">
+          <p className="text-lg tracking-wide text-zinc-400 animate-[splashFadeIn_1000ms_ease-out_400ms_both] drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
             The scout&apos;s eye sees what others miss
           </p>
         </div>
@@ -94,25 +96,29 @@ export function MainMenu() {
 
   if (isLoadingSave) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#0a0a0a] to-[#0f1a0f]">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
-        <p className="mt-4 text-zinc-400">Loading save...</p>
+      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+        <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.8} />
+        <div className="relative z-10">
+          <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
+          <p className="mt-4 text-zinc-400">Loading save...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#0a0a0a] to-[#0f1a0f]">
+    <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+      <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.65} />
       {/* Title */}
-      <div className="mb-16 text-center">
-        <h1 className="mb-2 text-6xl font-bold tracking-tight text-white">
+      <div className="relative z-10 mb-16 text-center">
+        <h1 className="mb-2 text-6xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
           Talent<span className="text-emerald-500">Scout</span>
         </h1>
-        <p className="text-lg text-zinc-400">Football Scout Career Simulator</p>
+        <p className="text-lg text-zinc-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">Football Scout Career Simulator</p>
       </div>
 
       {!showLoadPicker ? (
-        <div className="flex w-64 flex-col gap-3">
+        <div className="relative z-10 flex w-64 flex-col gap-3">
           <Button
             size="lg"
             className="w-full text-base"
@@ -174,7 +180,7 @@ export function MainMenu() {
           </div>
         </div>
       ) : (
-        <div className="w-full max-w-md space-y-3 px-4">
+        <div className="relative z-10 w-full max-w-md space-y-3 px-4">
           <h2 className="text-center text-lg font-semibold text-white">
             Load Game
           </h2>

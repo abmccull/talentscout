@@ -2,6 +2,7 @@
 
 import { useGameStore } from "@/stores/gameStore";
 import type { LegacyScore, Scout, GameState } from "@/engine/core/types";
+import { ScreenBackground } from "@/components/ui/screen-background";
 import {
   Trophy,
   Star,
@@ -218,8 +219,9 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
     : gameState.currentSeason - 2024;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0a0a08] via-[#0a100a] to-[#0a0a0a] px-4 py-10">
-      <div className="mx-auto max-w-3xl">
+    <div className="relative min-h-screen bg-[#0a0a0a] px-4 py-10">
+      <ScreenBackground src="/images/backgrounds/season-end.png" opacity={0.7} position="center top" />
+      <div className="relative z-10 mx-auto max-w-3xl">
 
         {/* Header */}
         <div className="mb-10 text-center">
