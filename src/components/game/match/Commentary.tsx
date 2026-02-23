@@ -2,7 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import type { MatchEvent } from "@/engine/core/types";
-import { getCommentary } from "@/engine/match/commentary";
+import {
+  getCommentary,
+  getScoreStatePrefix,
+  getWeatherInterjection,
+  getChainCommentary,
+  getMomentumCommentary,
+  type ScoreContext,
+} from "@/engine/match/commentary";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,6 +30,17 @@ export interface CommentaryProps {
   players: Record<string, CommentaryPlayer>;
   clubs: Record<string, CommentaryClub>;
   focusedPlayerIds?: Set<string>;
+  /** Current weather condition for interjections */
+  weather?: string;
+  /** Running score for contextual prefixes */
+  homeGoals?: number;
+  awayGoals?: number;
+  /** Set of home team player IDs (for score-state direction) */
+  homePlayerIds?: Set<string>;
+  /** Current phase momentum (0-100) */
+  momentum?: number;
+  /** Previous phase momentum (0-100) for shift detection */
+  prevMomentum?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +85,12 @@ export function Commentary({
   players,
   clubs,
   focusedPlayerIds = new Set(),
+  weather,
+  homeGoals = 0,
+  awayGoals = 0,
+  homePlayerIds,
+  momentum = 50,
+  prevMomentum = 50,
 }: CommentaryProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -89,6 +113,9 @@ export function Commentary({
     );
   }
 
+  // Build recent player ID list for chain detection (original order)
+  const recentPlayerIds = events.map((e) => e.playerId);
+
   return (
     <div
       ref={scrollContainerRef}
@@ -104,13 +131,46 @@ export function Commentary({
         const club = player?.clubId ? clubs[player.clubId] : undefined;
         const clubName = club?.name ?? "";
 
-        const commentary = getCommentary(
+        // Base commentary from quality-aware templates
+        let commentary = getCommentary(
           event.type,
           event.quality,
           playerName,
           clubName,
           event.minute,
         );
+
+        // Enrich: score-state prefix (only on first event shown)
+        if (i === displayEvents.length - 1 && homePlayerIds) {
+          const scoreCtx: ScoreContext = {
+            homeGoals,
+            awayGoals,
+            minute: event.minute,
+            isHome: homePlayerIds.has(event.playerId),
+          };
+          const prefix = getScoreStatePrefix(scoreCtx, event.minute);
+          if (prefix) commentary = prefix + commentary;
+        }
+
+        // Enrich: momentum commentary (only on first event)
+        if (i === displayEvents.length - 1) {
+          const momComment = getMomentumCommentary(momentum, prevMomentum, event.minute);
+          if (momComment) commentary = momComment + commentary;
+        }
+
+        // Enrich: weather interjection
+        if (weather) {
+          const weatherText = getWeatherInterjection(weather, event.minute);
+          if (weatherText) commentary = commentary + weatherText;
+        }
+
+        // Enrich: chain commentary (same player in consecutive events)
+        const eventOriginalIndex = events.length - 1 - i;
+        if (eventOriginalIndex > 0) {
+          const preceding = recentPlayerIds.slice(0, eventOriginalIndex);
+          const chain = getChainCommentary(event.playerId, preceding, playerName, event.minute);
+          if (chain) commentary = commentary + chain;
+        }
 
         const isFocused = focusedPlayerIds.has(event.playerId);
         const icon = EVENT_TYPE_ICONS[event.type] ?? "•";

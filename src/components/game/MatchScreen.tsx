@@ -7,11 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Plus, X, ChevronRight, Trophy, ChevronDown, BarChart3 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { MatchPhase } from "@/engine/core/types";
 import { PitchCanvas } from "./match/PitchCanvas";
 import { Commentary } from "./match/Commentary";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
+import { useTranslations } from "next-intl";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -19,13 +19,7 @@ import { useAudio } from "@/lib/audio/useAudio";
 
 type FocusLens = "technical" | "physical" | "mental" | "tactical" | "general";
 
-const LENS_LABELS: Record<FocusLens, string> = {
-  technical: "Technical",
-  physical:  "Physical",
-  mental:    "Mental",
-  tactical:  "Tactical",
-  general:   "General",
-};
+const LENS_KEYS: FocusLens[] = ["technical", "physical", "mental", "tactical", "general"];
 
 const LENS_COLORS: Record<FocusLens, string> = {
   technical: "text-blue-400",
@@ -34,18 +28,6 @@ const LENS_COLORS: Record<FocusLens, string> = {
   tactical:  "text-yellow-400",
   general:   "text-zinc-400",
 };
-
-function phaseTypeLabel(type: MatchPhase["type"]): string {
-  const labels: Record<MatchPhase["type"], string> = {
-    buildUp:          "Build-Up",
-    transition:       "Transition",
-    setpiece:         "Set Piece",
-    pressingSequence: "Pressing",
-    counterAttack:    "Counter",
-    possession:       "Possession",
-  };
-  return labels[type];
-}
 
 // ---------------------------------------------------------------------------
 // MatchScreen
@@ -63,6 +45,7 @@ export function MatchScreen() {
   } = useGameStore();
 
   const { playSFX } = useAudio();
+  const t = useTranslations("match");
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
   // Track which player was clicked on the canvas (used to open focus picker)
   const [canvasClickedPlayerId, setCanvasClickedPlayerId] = useState<string | null>(null);
@@ -270,7 +253,7 @@ export function MatchScreen() {
             aria-label="Toggle match stats"
           >
             <BarChart3 size={10} aria-hidden="true" />
-            Stats
+            {t("stats")}
             <ChevronDown
               size={10}
               className={`transition-transform ${showStats ? "rotate-180" : ""}`}
@@ -285,19 +268,19 @@ export function MatchScreen() {
                   <div className="bg-white/60 h-full rounded-full" style={{ width: `${matchStats.homePossession}%` }} />
                 </div>
                 <span className="text-zinc-600 tabular-nums">{matchStats.awayPossession}%</span>
-                <span className="text-zinc-700 text-[9px]">Poss</span>
+                <span className="text-zinc-700 text-[9px]">{t("possession")}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-zinc-400 tabular-nums">{matchStats.homeShots}</span>
                 <span className="text-zinc-700">-</span>
                 <span className="text-zinc-600 tabular-nums">{matchStats.awayShots}</span>
-                <span className="text-zinc-700 text-[9px]">Shots</span>
+                <span className="text-zinc-700 text-[9px]">{t("shots")}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-zinc-400 tabular-nums">{matchStats.homeFouls}</span>
                 <span className="text-zinc-700">-</span>
                 <span className="text-zinc-600 tabular-nums">{matchStats.awayFouls}</span>
-                <span className="text-zinc-700 text-[9px]">Fouls</span>
+                <span className="text-zinc-700 text-[9px]">{t("fouls")}</span>
               </div>
             </div>
           )}
@@ -317,7 +300,7 @@ export function MatchScreen() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
-                      {phaseTypeLabel(currentPhase.type)}
+                      {t(`phaseTypes.${currentPhase.type}`)}
                     </Badge>
                     {descExpanded && (
                       <p className="text-xs text-zinc-400 leading-snug truncate">
@@ -363,7 +346,7 @@ export function MatchScreen() {
                   />
                 ) : (
                   <div className="flex h-full items-center justify-center text-zinc-700 text-sm">
-                    Awaiting next phase…
+                    {t("awaitingPhase")}
                   </div>
                 )}
               </div>
@@ -375,7 +358,7 @@ export function MatchScreen() {
               >
                 <div className="shrink-0 px-4 pt-2.5 pb-1.5">
                   <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
-                    Commentary
+                    {t("commentary")}
                   </h3>
                 </div>
                 <div className="flex-1 min-h-0 px-4 pb-3 overflow-hidden">
@@ -385,9 +368,19 @@ export function MatchScreen() {
                       players={playerMap}
                       clubs={clubMap}
                       focusedPlayerIds={focusedIds}
+                      weather={weather}
+                      homeGoals={homeGoals}
+                      awayGoals={awayGoals}
+                      homePlayerIds={homePlayerIdSet}
+                      momentum={currentPhase.momentum ?? 50}
+                      prevMomentum={
+                        activeMatch.currentPhase > 0
+                          ? (activeMatch.phases[activeMatch.currentPhase - 1]?.momentum ?? 50)
+                          : 50
+                      }
                     />
                   ) : (
-                    <p className="text-xs text-zinc-600 py-4 text-center">No events yet.</p>
+                    <p className="text-xs text-zinc-600 py-4 text-center">{t("noEvents")}</p>
                   )}
                 </div>
               </div>
@@ -401,12 +394,12 @@ export function MatchScreen() {
             <div className="flex-1 overflow-y-auto p-4">
               <div className="mb-3 flex items-center justify-between">
                 <Tooltip
-                  content="Choose which attribute domain to observe more closely during this match."
+                  content={t("lensTooltips.general")}
                   side="left"
                 >
                   <h3 className="text-sm font-semibold">
                     <Eye size={14} className="mr-2 inline-block text-emerald-500" aria-hidden="true" />
-                    Focus Players
+                    {t("focusPlayers")}
                   </h3>
                 </Tooltip>
                 <span className="text-xs text-zinc-500">
@@ -442,17 +435,7 @@ export function MatchScreen() {
                         <span className="text-xs text-zinc-500">{fs.phases.length} ph</span>
                       </div>
                       <Tooltip
-                        content={
-                          fs.lens === "technical"
-                            ? "Technical attributes: passing, dribbling, shooting, crossing"
-                            : fs.lens === "physical"
-                            ? "Physical: pace, strength, stamina, agility"
-                            : fs.lens === "mental"
-                            ? "Mental: composure, positioning, work rate, decision making"
-                            : fs.lens === "tactical"
-                            ? "Tactical: off the ball, pressing, defensive awareness"
-                            : "Choose which attribute domain to observe more closely during this match."
-                        }
+                        content={t(`lensTooltips.${fs.lens}`)}
                         side="left"
                       >
                         <select
@@ -466,9 +449,9 @@ export function MatchScreen() {
                           aria-label={`Focus lens for ${player?.firstName ?? "player"}`}
                           data-tutorial-id="match-focus-lens"
                         >
-                          {(Object.keys(LENS_LABELS) as FocusLens[]).map((lens) => (
+                          {LENS_KEYS.map((lens) => (
                             <option key={lens} value={lens}>
-                              {LENS_LABELS[lens]}
+                              {t(`lenses.${lens}`)}
                             </option>
                           ))}
                         </select>
@@ -486,8 +469,8 @@ export function MatchScreen() {
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-xs font-medium text-zinc-400">
                           {canvasClickedPlayerId
-                            ? "Add this player to focus?"
-                            : "Select player to focus"}
+                            ? t("addThisPlayer")
+                            : t("selectPlayer")}
                         </span>
                         <button
                           onClick={() => {
@@ -502,7 +485,7 @@ export function MatchScreen() {
                       </div>
                       {availableToFocus.length === 0 ? (
                         <p className="text-xs text-zinc-500">
-                          All involved players already focused.
+                          {t("allFocused")}
                         </p>
                       ) : (
                         <div className="space-y-1">
@@ -553,7 +536,7 @@ export function MatchScreen() {
                       }}
                     >
                       <Plus size={14} className="mr-1" aria-hidden="true" />
-                      Add Focus Player
+                      {t("addFocusPlayer")}
                     </Button>
                   )}
                 </div>
@@ -563,7 +546,7 @@ export function MatchScreen() {
               {currentPhase && allInvolvedPlayerIds.length > 0 && (
                 <div className="mt-4 border-t border-[#27272a] pt-3" data-tutorial-id="match-involved-players">
                   <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
-                    Involved This Phase
+                    {t("involvedThisPhase")}
                   </h4>
                   <div className="space-y-1">
                     {allInvolvedPlayerIds.map((id) => {
@@ -601,12 +584,12 @@ export function MatchScreen() {
               {isLastPhase ? (
                 <Button className="w-full" onClick={endMatch}>
                   <Trophy size={14} className="mr-2" aria-hidden="true" />
-                  End Match
+                  {t("endMatch")}
                 </Button>
               ) : (
                 <Button className="w-full" onClick={advancePhase}>
                   <ChevronRight size={14} className="mr-2" aria-hidden="true" />
-                  Next Phase
+                  {t("nextPhase")}
                 </Button>
               )}
             </div>

@@ -12,33 +12,9 @@ import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
+import { useTranslations } from "next-intl";
 
-const CONVICTION_OPTIONS: Array<{
-  value: ConvictionLevel;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "note",
-    label: "Note",
-    description: "Worth keeping an eye on — no commitment implied.",
-  },
-  {
-    value: "recommend",
-    label: "Recommend",
-    description: "I would consider signing this player.",
-  },
-  {
-    value: "strongRecommend",
-    label: "Strong Recommend",
-    description: "I strongly recommend pursuing this player.",
-  },
-  {
-    value: "tablePound",
-    label: "Table Pound",
-    description: "Sign this player — I stake my reputation on it.",
-  },
-];
+const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
 const SUGGESTED_STRENGTHS = [
   "Exceptional technical quality",
@@ -87,6 +63,8 @@ export function ReportWriter() {
   } = useGameStore();
 
   const { playSFX } = useAudio();
+  const t = useTranslations("report");
+  const tc = useTranslations("common");
   const [isDirty, setIsDirty] = useState(false);
   const [conviction, setConviction] = useState<ConvictionLevel>("note");
   const [summary, setSummary] = useState("");
@@ -150,7 +128,7 @@ export function ReportWriter() {
   if (!gameState || !selectedPlayerId || !player) return null;
 
   const handleBack = () => {
-    if (isDirty && !window.confirm("You have unsaved changes. Are you sure you want to leave?")) {
+    if (isDirty && !window.confirm(t("unsavedWarning"))) {
       return;
     }
     setScreen("playerProfile");
@@ -192,7 +170,7 @@ export function ReportWriter() {
           aria-label="Back to player profile"
         >
           <ArrowLeft size={14} />
-          Back to Profile
+          {t("backToProfile")}
         </button>
 
         <div className="mb-6 flex items-center gap-4">
@@ -202,7 +180,7 @@ export function ReportWriter() {
             size={64}
           />
           <div>
-            <h1 className="text-2xl font-bold">Write Scouting Report</h1>
+            <h1 className="text-2xl font-bold">{t("title")}</h1>
             <p className="text-sm text-zinc-400 mt-1">
               {player.firstName} {player.lastName} — {player.position}, Age {player.age}
               {club ? ` — ${club.name}` : ""}
@@ -214,8 +192,7 @@ export function ReportWriter() {
           <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
             <p className="flex items-center gap-2 text-sm text-red-400">
               <AlertTriangle size={16} aria-hidden="true" />
-              No observations recorded. Attend a match and focus on this player before writing a
-              report.
+              {t("noObservations")}
             </p>
           </div>
         )}
@@ -224,19 +201,19 @@ export function ReportWriter() {
           {/* Observation summary */}
           <Card data-tutorial-id="report-observation-summary">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Observation Summary</CardTitle>
+              <CardTitle className="text-sm">{t("observationSummary")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-4">
               <div>
-                <p className="text-xs text-zinc-500">Sessions</p>
+                <p className="text-xs text-zinc-500">{t("sessions")}</p>
                 <p className="text-xl font-bold text-emerald-400">{observations.length}</p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Attributes Read</p>
+                <p className="text-xs text-zinc-500">{t("attributesRead")}</p>
                 <p className="text-xl font-bold">{merged.size}</p>
               </div>
               <div>
-                <p className="text-xs text-zinc-500">Contexts</p>
+                <p className="text-xs text-zinc-500">{t("contexts")}</p>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {contexts.map((ctx) => (
                     <Badge key={ctx} variant="secondary" className="text-[10px] capitalize">
@@ -252,7 +229,7 @@ export function ReportWriter() {
           {merged.size > 0 && (
             <Card data-tutorial-id="report-attributes">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Attribute Assessments</CardTitle>
+                <CardTitle className="text-sm">{t("attributeAssessments")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -294,11 +271,11 @@ export function ReportWriter() {
           {/* Player comparison */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Player Comparison</CardTitle>
+              <CardTitle className="text-sm">{t("playerComparison")}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-zinc-500 mb-2">
-                Who does this player remind you of? A comparison helps clubs understand your vision.
+                {t("comparisonHint")}
               </p>
               <label htmlFor="comparison" className="sr-only">
                 Player comparison
@@ -308,7 +285,7 @@ export function ReportWriter() {
                 type="text"
                 value={comparison}
                 onChange={(e) => { setIsDirty(true); setComparison(e.target.value.slice(0, 100)); }}
-                placeholder="e.g. A young N'Golo Kanté..."
+                placeholder={t("comparisonPlaceholder")}
                 maxLength={100}
                 className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
@@ -319,7 +296,7 @@ export function ReportWriter() {
           <Card data-tutorial-id="report-strengths">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">
-                Strengths ({selectedStrengths.length} selected)
+                {t("strengths")} ({selectedStrengths.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -383,7 +360,7 @@ export function ReportWriter() {
                       setCustomStrength("");
                     }
                   }}
-                  placeholder="Add custom strength..."
+                  placeholder={t("addCustomStrength")}
                   maxLength={100}
                   className="flex-1 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
@@ -400,7 +377,7 @@ export function ReportWriter() {
                   disabled={!customStrength.trim()}
                   className="text-xs"
                 >
-                  Add
+                  {t("add")}
                 </Button>
               </div>
             </CardContent>
@@ -410,7 +387,7 @@ export function ReportWriter() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">
-                Weaknesses ({selectedWeaknesses.length} selected)
+                {t("weaknesses")} ({selectedWeaknesses.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -474,7 +451,7 @@ export function ReportWriter() {
                       setCustomWeakness("");
                     }
                   }}
-                  placeholder="Add custom weakness..."
+                  placeholder={t("addCustomWeakness")}
                   maxLength={100}
                   className="flex-1 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500"
                 />
@@ -491,7 +468,7 @@ export function ReportWriter() {
                   disabled={!customWeakness.trim()}
                   className="text-xs"
                 >
-                  Add
+                  {t("add")}
                 </Button>
               </div>
             </CardContent>
@@ -500,7 +477,7 @@ export function ReportWriter() {
           {/* Written summary */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Scout&apos;s Summary</CardTitle>
+              <CardTitle className="text-sm">{t("scoutSummary")}</CardTitle>
             </CardHeader>
             <CardContent>
               <label htmlFor="summary" className="sr-only">
@@ -510,7 +487,7 @@ export function ReportWriter() {
                 id="summary"
                 value={summary}
                 onChange={(e) => { setIsDirty(true); setSummary(e.target.value.slice(0, 2000)); }}
-                placeholder="Write your assessment of this player..."
+                placeholder={t("summaryPlaceholder")}
                 rows={5}
                 maxLength={2000}
                 className="w-full rounded-md border border-[#27272a] bg-[#141414] p-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
@@ -524,8 +501,8 @@ export function ReportWriter() {
           <Card data-tutorial-id="report-conviction">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">
-                <Tooltip content="How strongly you believe in this player. Higher conviction carries more weight but more risk to your reputation." side="top">
-                  <span>Conviction Level</span>
+                <Tooltip content={t("convictionTooltip")} side="top">
+                  <span>{t("convictionLevel")}</span>
                 </Tooltip>
               </CardTitle>
             </CardHeader>
@@ -535,17 +512,17 @@ export function ReportWriter() {
                 role="radiogroup"
                 aria-label="Conviction level"
               >
-                {CONVICTION_OPTIONS.map((opt) => (
+                {CONVICTION_KEYS.map((key) => (
                   <button
-                    key={opt.value}
-                    onClick={() => { setIsDirty(true); setConviction(opt.value); playSFX("page-turn"); }}
+                    key={key}
+                    onClick={() => { setIsDirty(true); setConviction(key); playSFX("page-turn"); }}
                     role="radio"
-                    aria-checked={conviction === opt.value}
+                    aria-checked={conviction === key}
                     className={`rounded-lg border p-3 text-left transition ${
-                      conviction === opt.value
-                        ? opt.value === "tablePound"
+                      conviction === key
+                        ? key === "tablePound"
                           ? "border-red-500 bg-red-500/10"
-                          : opt.value === "strongRecommend"
+                          : key === "strongRecommend"
                           ? "border-emerald-500 bg-emerald-500/10"
                           : "border-zinc-500 bg-zinc-500/10"
                         : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
@@ -553,22 +530,22 @@ export function ReportWriter() {
                   >
                     <p
                       className={`text-sm font-semibold mb-1 ${
-                        opt.value === "tablePound" && conviction === opt.value
+                        key === "tablePound" && conviction === key
                           ? "text-red-400"
-                          : opt.value === "strongRecommend" && conviction === opt.value
+                          : key === "strongRecommend" && conviction === key
                           ? "text-emerald-400"
                           : "text-white"
                       }`}
                     >
-                      {opt.value === "tablePound" ? (
-                        <Tooltip content="A 'Table Pound' comes from the tradition of scouts banging the table to convince a manager to sign a player. It's your highest conviction — staking your career reputation on this player." side="top">
-                          <span className="underline decoration-dotted underline-offset-2 cursor-help">{opt.label}</span>
+                      {key === "tablePound" ? (
+                        <Tooltip content={t("tablePoundTooltip")} side="top">
+                          <span className="underline decoration-dotted underline-offset-2 cursor-help">{t(`convictions.${key}`)}</span>
                         </Tooltip>
                       ) : (
-                        opt.label
+                        t(`convictions.${key}`)
                       )}
                     </p>
-                    <p className="text-xs text-zinc-500 leading-tight">{opt.description}</p>
+                    <p className="text-xs text-zinc-500 leading-tight">{t(`convictions.${key}Desc`)}</p>
                   </button>
                 ))}
               </div>
@@ -581,10 +558,9 @@ export function ReportWriter() {
                     aria-hidden="true"
                   />
                   <div>
-                    <p className="text-sm font-semibold text-red-400">Reputation on the line</p>
+                    <p className="text-sm font-semibold text-red-400">{t("reputationOnLine")}</p>
                     <p className="text-xs text-red-400/80 mt-0.5">
-                      A Table Pound is your strongest possible recommendation. If this player fails
-                      to deliver, your reputation will take a significant hit. Use sparingly.
+                      {t("tablePoundWarning")}
                     </p>
                   </div>
                 </div>
@@ -595,7 +571,7 @@ export function ReportWriter() {
           {/* Submit */}
           <div className="flex items-center justify-end gap-3" data-tutorial-id="report-submit">
             <Button variant="ghost" onClick={handleBack}>
-              Cancel
+              {tc("cancel")}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -603,7 +579,7 @@ export function ReportWriter() {
               className={isTablePound ? "bg-red-600 hover:bg-red-700" : ""}
             >
               <FileText size={14} className="mr-2" />
-              Submit Report
+              {t("submitReport")}
             </Button>
           </div>
         </div>

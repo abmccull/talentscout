@@ -1,41 +1,110 @@
 appId: com.talentscout.game
 productName: TalentScout
+
 directories:
   output: dist
   buildResources: build
+
+# Bundle the app into an asar archive for faster startup and tamper resistance.
+asar: true
+
+# Maximum compression for production distribution size.
+compression: maximum
+
+# Run notarization after signing on macOS. The script skips automatically
+# when APPLE_ID / APPLE_TEAM_ID are not set (local / non-Apple builds).
+afterSign: scripts/notarize.js
+
 files:
   - electron/**/*
   - out/**/*
   - "!node_modules/**/*"
+
+# steam_appid.txt is required on every platform so Steamworks can locate the
+# app. Keep it in extraResources (bundled inside the app package).
 extraResources:
   - from: steam_appid.txt
     to: .
-    filter:
-      - "**/*"
-extraFiles:
-  - from: steam_api64.dll
-    to: steam_api64.dll
-    filter:
-      - "**/*"
-  - from: libsteam_api.dylib
-    to: libsteam_api.dylib
-    filter:
-      - "**/*"
-  - from: libsteam_api.so
-    to: libsteam_api.so
-    filter:
-      - "**/*"
+
+# ---------------------------------------------------------------------------
+# Publish — generic provider wired for electron-updater auto-update support.
+# Replace the placeholder URL with the real CDN / S3 bucket before shipping.
+# ---------------------------------------------------------------------------
+publish:
+  provider: generic
+  url: https://releases.talentscout.game/latest
+
+# ---------------------------------------------------------------------------
+# Windows
+# ---------------------------------------------------------------------------
 win:
-  target: nsis
   icon: build/icon.ico
-mac:
-  target: dmg
-  icon: build/icon.icns
-  category: public.app-category.games
-linux:
-  target: AppImage
-  icon: build/icon.png
-  category: Game
+  target: nsis
+  # Platform-specific Steamworks redistributable (64-bit Windows DLL).
+  extraFiles:
+    - from: steam_api64.dll
+      to: steam_api64.dll
+
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # Install for all users by default (requires admin elevation).
+  perMachine: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  # Omitting `license` key — no LICENSE file exists in the repo yet.
+  # Add `license: LICENSE` once a LICENSE file is committed.
+  menuCategory: Games
+  shortcutName: TalentScout
+  artifactName: "TalentScout-Setup-${version}.${ext}"
+
+# ---------------------------------------------------------------------------
+# macOS
+# ---------------------------------------------------------------------------
+mac:
+  icon: build/icon.icns
+  category: public.app-category.games
+  # Both dmg (primary distribution) and zip (required by electron-updater for
+  # auto-update delta support on macOS).
+  target:
+    - target: dmg
+    - target: zip
+  # identity: null — signing is handled externally (CI with Apple certificate).
+  # Set to a real Developer ID Application identity string for local signing.
+  identity: null
+  type: distribution
+  # Required for Apple notarization submission.
+  hardenedRuntime: true
+  # Do not run Gatekeeper assessment locally during build — notarization
+  # handles this on the final artifact.
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  artifactName: "TalentScout-${version}-${arch}.${ext}"
+  # Platform-specific Steamworks redistributable (macOS dylib).
+  extraFiles:
+    - from: libsteam_api.dylib
+      to: libsteam_api.dylib
+
+dmg:
+  # No additional dmg-specific overrides needed beyond mac-level settings.
+
+# ---------------------------------------------------------------------------
+# Linux
+# ---------------------------------------------------------------------------
+linux:
+  icon: build/icon.png
+  category: Game
+  target:
+    - target: AppImage
+    - target: deb
+  synopsis: "Football Scouting Simulation"
+  description: "Build your career as a football talent scout"
+  desktop:
+    StartupWMClass: TalentScout
+  artifactName: "TalentScout-${version}-${arch}.${ext}"
+  # Platform-specific Steamworks redistributable (Linux shared object).
+  extraFiles:
+    - from: libsteam_api.so
+      to: libsteam_api.so

@@ -1,0 +1,148 @@
+{
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "save": "Save",
+    "continue": "Continue",
+    "close": "Close",
+    "loading": "Loading…",
+    "error": "Error",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "match": {
+    "scoreboard": "{home} vs {away}",
+    "phase": "Phase {current} / {total}",
+    "nextPhase": "Next Phase",
+    "endMatch": "End Match",
+    "focusPlayers": "Focus Players",
+    "addFocusPlayer": "Add Focus Player",
+    "selectPlayer": "Select player to focus",
+    "addThisPlayer": "Add this player to focus?",
+    "allFocused": "All involved players already focused.",
+    "involvedThisPhase": "Involved This Phase",
+    "commentary": "Commentary",
+    "noEvents": "No events yet.",
+    "awaitingPhase": "Awaiting next phase…",
+    "stats": "Stats",
+    "possession": "Poss",
+    "shots": "Shots",
+    "fouls": "Fouls",
+    "phaseTypes": {
+      "buildUp": "Build-Up",
+      "transition": "Transition",
+      "setpiece": "Set Piece",
+      "pressingSequence": "Pressing",
+      "counterAttack": "Counter",
+      "possession": "Possession"
+    },
+    "lenses": {
+      "technical": "Technical",
+      "physical": "Physical",
+      "mental": "Mental",
+      "tactical": "Tactical",
+      "general": "General"
+    },
+    "lensTooltips": {
+      "technical": "Technical attributes: passing, dribbling, shooting, crossing",
+      "physical": "Physical: pace, strength, stamina, agility",
+      "mental": "Mental: composure, positioning, work rate, decision making",
+      "tactical": "Tactical: off the ball, pressing, defensive awareness",
+      "general": "Choose which attribute domain to observe more closely during this match."
+    }
+  },
+  "report": {
+    "title": "Write Scouting Report",
+    "observationSummary": "Observation Summary",
+    "sessions": "Sessions",
+    "attributesRead": "Attributes Read",
+    "contexts": "Contexts",
+    "attributeAssessments": "Attribute Assessments",
+    "playerComparison": "Player Comparison",
+    "comparisonHint": "Who does this player remind you of? A comparison helps clubs understand your vision.",
+    "comparisonPlaceholder": "e.g. A young N'Golo Kanté…",
+    "strengths": "Strengths",
+    "weaknesses": "Weaknesses",
+    "addCustomStrength": "Add custom strength...",
+    "addCustomWeakness": "Add custom weakness...",
+    "add": "Add",
+    "scoutSummary": "Scout's Summary",
+    "summaryPlaceholder": "Write your assessment of this player...",
+    "convictionLevel": "Conviction Level",
+    "convictionTooltip": "How strongly you believe in this player. Higher conviction carries more weight but more risk to your reputation.",
+    "submitReport": "Submit Report",
+    "noObservations": "No observations recorded. Attend a match and focus on this player before writing a report.",
+    "unsavedWarning": "You have unsaved changes. Are you sure you want to leave?",
+    "backToProfile": "Back to Profile",
+    "reputationOnLine": "Reputation on the line",
+    "tablePoundWarning": "A Table Pound is your strongest possible recommendation. If this player fails to deliver, your reputation will take a significant hit. Use sparingly.",
+    "tablePoundTooltip": "A 'Table Pound' comes from the tradition of scouts banging the table to convince a manager to sign a player. It's your highest conviction — staking your career reputation on this player.",
+    "convictions": {
+      "note": "Note",
+      "noteDesc": "Worth keeping an eye on — no commitment implied.",
+      "recommend": "Recommend",
+      "recommendDesc": "I would consider signing this player.",
+      "strongRecommend": "Strong Recommend",
+      "strongRecommendDesc": "I strongly recommend pursuing this player.",
+      "tablePound": "Table Pound",
+      "tablePoundDesc": "Sign this player — I stake my reputation on it."
+    }
+  },
+  "dashboard": {
+    "welcome": "Welcome back, {name}",
+    "reputation": "Reputation",
+    "fatigue": "Fatigue",
+    "budget": "Budget",
+    "week": "Week {number}",
+    "season": "Season {number}",
+    "upcomingFixtures": "Upcoming Fixtures",
+    "recentReports": "Recent Reports",
+    "inbox": "Inbox",
+    "noFixtures": "No upcoming fixtures",
+    "noReports": "No reports submitted yet",
+    "noMessages": "No messages"
+  },
+  "calendar": {
+    "planYourWeek": "Plan Your Week",
+    "advanceWeek": "Advance Week",
+    "weekSummary": "Week Summary",
+    "dismiss": "Dismiss",
+    "dayLabels": {
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri",
+      "sat": "Sat",
+      "sun": "Sun"
+    },
+    "seasonPhases": {
+      "preseason": "Preseason",
+      "earlyseason": "Early Season",
+      "midseason": "Midseason",
+      "lateseason": "Late Season",
+      "endseason": "End of Season"
+    },
+    "fatigueWarning": "Fatigue is high. Consider scheduling rest days.",
+    "pendingMatches": "You have scheduled matches to play before advancing.",
+    "skills": {
+      "technicalEye": "Technical Eye",
+      "physicalAssessment": "Physical Assessment",
+      "psychologicalRead": "Psychological Read",
+      "tacticalUnderstanding": "Tactical Understanding",
+      "dataLiteracy": "Data Literacy",
+      "playerJudgment": "Player Judgment",
+      "potentialAssessment": "Potential Assessment"
+    },
+    "attributes": {
+      "networking": "Networking",
+      "persuasion": "Persuasion",
+      "endurance": "Endurance",
+      "adaptability": "Adaptability",
+      "memory": "Memory",
+      "intuition": "Intuition"
+    }
+  }
+}

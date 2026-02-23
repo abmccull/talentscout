@@ -1,0 +1,223 @@
+name: Build Desktop App
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      skip_signing:
+        description: "Skip code signing (for test builds)"
+        required: false
+        default: "false"
+        type: boolean
+
+# Cancel in-progress runs for the same ref
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: "22"
+
+permissions:
+  contents: read
+
+jobs:
+  # ------------------------------------------------------------------
+  # Quality gate — must pass before any build starts
+  # ------------------------------------------------------------------
+  quality:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+  # ------------------------------------------------------------------
+  # Windows build
+  # ------------------------------------------------------------------
+  build-windows:
+    name: Build Windows
+    needs: quality
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # The Steam SDK redistribution binaries are gitignored (proprietary).
+      # electron-builder.yml references steam_api64.dll from the project root via
+      # extraFiles. Create a placeholder so the build does not fail — the resulting
+      # installer will have non-functional Steam integration, but the artifact is
+      # otherwise valid for CI verification. Real binaries must be supplied via a
+      # separate secure channel (e.g., a private artifact store or manual depot upload).
+      - name: Prepare Steam SDK files
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "steam_api64.dll")) {
+            Write-Host "::warning::steam_api64.dll not found — creating placeholder. Steam features will not function in this build."
+            New-Item -ItemType File -Path "steam_api64.dll" -Force | Out-Null
+          } else {
+            Write-Host "steam_api64.dll present."
+          }
+
+      - name: Build Next.js (static export)
+        run: npm run build
+
+      - name: Build Electron (Windows)
+        env:
+          # Code signing — omitted if secrets are not configured; build succeeds unsigned.
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win --publish never
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: windows-build
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+          retention-days: 30
+
+  # ------------------------------------------------------------------
+  # macOS build
+  # ------------------------------------------------------------------
+  build-macos:
+    name: Build macOS
+    needs: quality
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # libsteam_api.dylib is gitignored; create placeholder so electron-builder
+      # can copy the extraFiles entry without erroring.
+      - name: Prepare Steam SDK files
+        run: |
+          if [ ! -f "libsteam_api.dylib" ]; then
+            echo "::warning::libsteam_api.dylib not found — creating placeholder. Steam features will not function in this build."
+            touch libsteam_api.dylib
+          else
+            echo "libsteam_api.dylib present."
+          fi
+
+      - name: Build Next.js (static export)
+        run: npm run build
+
+      - name: Build Electron (macOS)
+        env:
+          # Code signing — omitted if secrets are not configured; build succeeds unsigned.
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          # Notarization — omitted if secrets are not configured.
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --publish never
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: macos-build
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+            dist/*.zip
+          retention-days: 30
+
+  # ------------------------------------------------------------------
+  # Linux build
+  # ------------------------------------------------------------------
+  build-linux:
+    name: Build Linux
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      # libsteam_api.so is gitignored; create placeholder so electron-builder
+      # can copy the extraFiles entry without erroring.
+      - name: Prepare Steam SDK files
+        run: |
+          if [ ! -f "libsteam_api.so" ]; then
+            echo "::warning::libsteam_api.so not found — creating placeholder. Steam features will not function in this build."
+            touch libsteam_api.so
+          else
+            echo "libsteam_api.so present."
+          fi
+
+      - name: Build Next.js (static export)
+        run: npm run build
+
+      - name: Build Electron (Linux)
+        run: npx electron-builder --linux --publish never
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: linux-build
+          path: |
+            dist/*.AppImage
+            dist/*.deb
+          retention-days: 30
+
+  # ------------------------------------------------------------------
+  # Create GitHub Release (only on tag push)
+  # ------------------------------------------------------------------
+  release:
+    name: Create Release
+    needs: [build-windows, build-macos, build-linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444306b7f26b6a5f78a12c4d # v4.1.8
+        with:
+          path: release-artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            release-artifacts/windows-build/*
+            release-artifacts/macos-build/*
+            release-artifacts/linux-build/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
