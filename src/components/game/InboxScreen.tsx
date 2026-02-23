@@ -376,14 +376,8 @@ export function InboxScreen() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<InboxMessageType | "all">("all");
 
-  if (!gameState) return null;
-
-  const { inbox, currentWeek, currentSeason, narrativeEvents } = gameState;
-
-  // Active (unacknowledged) narrative events
-  const activeNarrativeEvents = narrativeEvents.filter((e) => !e.acknowledged);
-
-  // Play tension music when dramatic narrative events are present
+  // Play tension music when dramatic narrative events are present.
+  // Must be above the early return so hooks are called unconditionally.
   const DRAMATIC_TYPES = new Set([
     "boardroomCoup", "budgetCut", "scoutingDeptRestructure", "rivalClubPoach",
     "managerSacked", "clubFinancialTrouble", "playerControversy", "wonderkidPressure",
@@ -391,16 +385,21 @@ export function InboxScreen() {
     "healthScare", "familyEmergency", "youthAcademyScandal", "rivalPoach",
     "rivalRecruitment", "agentDeception",
   ]);
+  const activeNarrativeEvents = gameState?.narrativeEvents.filter((e) => !e.acknowledged) ?? [];
   const hasDramaticEvent = activeNarrativeEvents.some((e) => DRAMATIC_TYPES.has(e.type));
   useEffect(() => {
+    if (!gameState) return;
     const audio = AudioEngine.getInstance();
     if (hasDramaticEvent) {
       audio.playMusic("tension");
     } else {
-      // Revert to default in-game music
       audio.playMusic("scouting");
     }
-  }, [hasDramaticEvent]);
+  }, [hasDramaticEvent, gameState]);
+
+  if (!gameState) return null;
+
+  const { inbox, currentWeek, currentSeason, narrativeEvents } = gameState;
 
   // Sort messages by most recent (week desc, season desc)
   const sorted = [...inbox].sort((a, b) => {
