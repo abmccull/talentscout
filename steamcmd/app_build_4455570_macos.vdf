@@ -1,0 +1,13 @@
+"appbuild"
+{
+	"appid"		"4455570"
+	"desc"		"TalentScout macOS build"
+	"buildoutput"	"../steam_build_output"
+	"contentroot"	""
+	"setlive"	""
+
+	"depots"
+	{
+		"4455572"	"depot_build_4455572_macos.vdf"
+	}
+}

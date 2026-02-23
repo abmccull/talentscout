@@ -54,30 +54,53 @@ function createWindow() {
     },
   });
 
-  // ----- CSP via response headers (allows file:// protocol) -----
-  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        "Content-Security-Policy": [
-          "default-src 'self' file: data: blob:; " +
-            "script-src 'self' 'unsafe-inline' file:; " +
-            "style-src 'self' 'unsafe-inline' file:; " +
-            "img-src 'self' file: data: blob:; " +
-            "font-src 'self' file: data:; " +
-            "connect-src 'self' file: https: wss:;",
-        ],
-      },
+  // ----- CSP via response headers -----
+  // In dev mode, set CSP headers on HTTP responses.
+  // In production (file://), Electron's webRequest doesn't intercept file:// loads,
+  // so we disable the default CSP entirely — the app is sandboxed by Electron already.
+  if (isDev) {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Content-Security-Policy": [
+            "default-src 'self' file: data: blob:; " +
+              "script-src 'self' 'unsafe-inline' file:; " +
+              "style-src 'self' 'unsafe-inline' file:; " +
+              "img-src 'self' file: data: blob:; " +
+              "font-src 'self' file: data:; " +
+              "connect-src 'self' file: https: wss:;",
+          ],
+        },
+      });
     });
-  });
+  }
 
   // ----- Load URL -----
   if (isDev) {
     mainWindow.loadURL("http://localhost:3000/play");
     mainWindow.webContents.openDevTools();
   } else {
-    const indexPath = path.join(__dirname, "..", "out", "play.html");
-    mainWindow.loadURL("file://" + indexPath);
+    const outDir = path.join(__dirname, "..", "out");
+    const indexPath = path.join(outDir, "play.html");
+
+    // Intercept file:// requests so that absolute paths like /_next/...
+    // resolve relative to the out/ directory instead of the filesystem root.
+    const { protocol } = require("electron");
+    protocol.interceptFileProtocol("file", (request, callback) => {
+      let url = request.url.replace("file://", "");
+      url = decodeURIComponent(url);
+
+      // If the path doesn't exist on disk and starts with /_next or /images etc.,
+      // resolve it relative to the out/ directory.
+      if (!fs.existsSync(url) && (url.startsWith("/_next") || url.startsWith("/images") || url.startsWith("/audio"))) {
+        callback(path.join(outDir, url));
+      } else {
+        callback(url);
+      }
+    });
+
+    mainWindow.loadFile(indexPath);
   }
 
   // ----- F11 fullscreen toggle -----

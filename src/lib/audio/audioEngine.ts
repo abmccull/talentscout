@@ -74,8 +74,9 @@ export class AudioEngine {
     if (!this.isBrowserEnv()) return;
     if (this.musicId === trackId && this.currentMusic?.playing()) return;
 
-    const { getHowl } = this.getAssets();
-    const nextHowl = getHowl(trackId, "music");
+    const assets = this.getAssets();
+    if (!assets) return;
+    const nextHowl = assets.getHowl(trackId, "music");
     this.crossfade(this.currentMusic, nextHowl);
     this.currentMusic = nextHowl;
     this.musicId = trackId;
@@ -83,8 +84,9 @@ export class AudioEngine {
 
   playSFX(sfxId: string): void {
     if (!this.isBrowserEnv()) return;
-    const { getHowl } = this.getAssets();
-    const howl = getHowl(sfxId, "sfx");
+    const assets = this.getAssets();
+    if (!assets) return;
+    const howl = assets.getHowl(sfxId, "sfx");
     const vol = this.effectiveVolume("sfx");
     howl.volume(vol);
     howl.play();
@@ -94,8 +96,9 @@ export class AudioEngine {
     if (!this.isBrowserEnv()) return;
     if (this.ambienceId === ambienceId && this.currentAmbience?.playing()) return;
 
-    const { getHowl } = this.getAssets();
-    const nextHowl = getHowl(ambienceId, "ambience");
+    const assets = this.getAssets();
+    if (!assets) return;
+    const nextHowl = assets.getHowl(ambienceId, "ambience");
     this.crossfade(this.currentAmbience, nextHowl);
     this.currentAmbience = nextHowl;
     this.ambienceId = ambienceId;
@@ -240,24 +243,24 @@ export class AudioEngine {
   }
 
   /**
-   * Returns the audioAssets module. Using a dynamic import-like pattern so that
-   * audioAssets.ts (which statically imports "howler") is never evaluated during
-   * SSR. All call sites already guard with isBrowserEnv(), but this provides an
-   * extra layer of isolation.
-   *
-   * The `Function` constructor trick bypasses static analysis so bundlers don't
-   * trace through to howler at build time on the server side.
+   * Lazy-cached reference to the getHowl function from audioAssets.
+   * Loaded via dynamic import() on first use — works in both browser and Electron.
    */
+  private _getHowlFn: ((id: string, channel: "music" | "sfx" | "ambience") => HowlType) | null = null;
+  private _assetsLoading: Promise<void> | null = null;
+
   private getAssets(): {
     getHowl: (id: string, channel: "music" | "sfx" | "ambience") => HowlType;
-  } {
-    // new Function avoids static bundler tracing while staying synchronous.
-    // This is intentional — audioAssets.ts must not be included in the SSR bundle.
-    const dynamicRequire = new Function("modulePath", "return require(modulePath)") as (
-      p: string
-    ) => unknown;
-    return dynamicRequire("./audioAssets") as {
-      getHowl: (id: string, channel: "music" | "sfx" | "ambience") => HowlType;
-    };
+  } | null {
+    if (this._getHowlFn) {
+      return { getHowl: this._getHowlFn };
+    }
+    // Kick off lazy load if not started
+    if (!this._assetsLoading) {
+      this._assetsLoading = import("./audioAssets").then((mod) => {
+        this._getHowlFn = mod.getHowl;
+      });
+    }
+    return null; // Not ready yet — callers silently skip
   }
 }

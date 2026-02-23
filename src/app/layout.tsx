@@ -33,7 +33,7 @@ export default async function RootLayout({
       <head>
         <meta
           http-equiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' data:; font-src 'self'"
+          content="default-src 'self' file: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' file:; style-src 'self' 'unsafe-inline' file:; connect-src 'self' file: https://*.supabase.co https: wss:; img-src 'self' file: data: blob:; font-src 'self' file: data:; media-src 'self' file: blob:"
         />
       </head>
       <body className="min-h-screen antialiased">

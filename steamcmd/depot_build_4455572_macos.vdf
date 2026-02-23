@@ -1,7 +1,7 @@
 "DepotBuildConfig"
 {
 	"DepotID"	"4455572"
-	"contentroot"	"../dist/mac"
+	"contentroot"	"../dist/mac-arm64"
 	"FileMapping"
 	{
 		"LocalPath"	"TalentScout.app/*"
