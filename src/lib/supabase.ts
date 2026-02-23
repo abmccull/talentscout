@@ -10,13 +10,17 @@
  * game and does not perform any server-side rendering of authenticated pages.
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase env vars: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set");
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+/**
+ * The Supabase client singleton, or `null` when the env vars are not
+ * configured.  All consumers MUST null-check before use so the game can
+ * run in offline / Steam mode without a .env.local file.
+ */
+export const supabase: SupabaseClient | null =
+  supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : null;

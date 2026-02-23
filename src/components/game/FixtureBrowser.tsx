@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, Eye, ArrowLeft } from "lucide-react";
 import type { Fixture } from "@/engine/core/types";
+import { ClubCrest } from "@/components/game/ClubCrest";
 
 export function FixtureBrowser() {
   const { gameState, startMatch, getClub, getLeague, setScreen } = useGameStore();
@@ -170,7 +171,16 @@ export function FixtureBrowser() {
                       >
                         <td className="px-4 py-3 text-zinc-400 tabular-nums">{f.week}</td>
                         <td className="px-4 py-3 font-medium text-white">
-                          {home?.name ?? "?"}
+                          <div className="flex items-center gap-1.5">
+                            {home && (
+                              <ClubCrest
+                                clubId={home.id}
+                                clubName={home.name}
+                                size={32}
+                              />
+                            )}
+                            {home?.name ?? "?"}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-center tabular-nums">
                           {f.played ? (
@@ -182,7 +192,16 @@ export function FixtureBrowser() {
                           )}
                         </td>
                         <td className="px-4 py-3 font-medium text-white">
-                          {away?.name ?? "?"}
+                          <div className="flex items-center gap-1.5">
+                            {away && (
+                              <ClubCrest
+                                clubId={away.id}
+                                clubName={away.name}
+                                size={32}
+                              />
+                            )}
+                            {away?.name ?? "?"}
+                          </div>
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant="outline" className="text-[10px]">

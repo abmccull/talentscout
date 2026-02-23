@@ -125,8 +125,9 @@ function ScenarioCard({
 
 export function ScenarioSelect() {
   const setScreen = useGameStore((s) => s.setScreen);
+  const setSelectedScenario = useGameStore((s) => s.setSelectedScenario);
   const [activeTab, setActiveTab] = useState<CategoryTab>("all");
-  const [selectedScenario, setSelectedScenario] = useState<ScenarioDef | null>(
+  const [selectedScenario, setLocalSelectedScenario] = useState<ScenarioDef | null>(
     null,
   );
 
@@ -136,14 +137,13 @@ export function ScenarioSelect() {
       : SCENARIOS.filter((s) => s.category === activeTab);
 
   const handleSelect = (scenario: ScenarioDef) => {
-    setSelectedScenario(scenario);
+    setLocalSelectedScenario(scenario);
   };
 
   const handleConfirm = () => {
     if (selectedScenario === null) return;
-    // Navigate to new game screen — the NewGameScreen will read the selected
-    // scenario from a transient store field (not implemented here — placeholder).
-    // For now, navigate to newGame and carry the scenario id in state.
+    // Store the scenario ID in the game store so startNewGame can apply it.
+    setSelectedScenario(selectedScenario.id);
     setScreen("newGame");
   };
 
@@ -154,7 +154,7 @@ export function ScenarioSelect() {
         <ConfirmOverlay
           scenario={selectedScenario}
           onConfirm={handleConfirm}
-          onCancel={() => setSelectedScenario(null)}
+          onCancel={() => setLocalSelectedScenario(null)}
         />
       )}
 

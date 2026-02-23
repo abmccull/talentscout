@@ -59,6 +59,7 @@ export async function submitCloudLeaderboardEntry(
   userId: string,
   entry: LeaderboardEntry,
 ): Promise<void> {
+  if (!supabase) return;
   const { error } = await supabase.from("leaderboard_entries").insert({
     id: entry.id,
     user_id: userId,
@@ -86,6 +87,7 @@ export async function submitCloudLeaderboardEntry(
 export async function getCloudLeaderboard(
   limit: number = 20,
 ): Promise<LeaderboardEntry[]> {
+  if (!supabase) return [];
   const { data, error } = await supabase
     .from("leaderboard_entries")
     .select(

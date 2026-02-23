@@ -11,3 +11,5 @@ export {
   isScenarioFailed,
 } from "./scenarioEngine";
 export type { ScenarioProgress, ObjectiveStatus, FailCheck } from "./scenarioEngine";
+
+export { applyScenarioSetup, applyScenarioOverrides } from "./scenarioSetup";

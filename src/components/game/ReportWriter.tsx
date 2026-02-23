@@ -10,6 +10,7 @@ import { AlertTriangle, FileText, ArrowLeft, X } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
+import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 
 const CONVICTION_OPTIONS: Array<{
   value: ConvictionLevel;
@@ -191,12 +192,19 @@ export function ReportWriter() {
           Back to Profile
         </button>
 
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Write Scouting Report</h1>
-          <p className="text-sm text-zinc-400 mt-1">
-            {player.firstName} {player.lastName} — {player.position}, Age {player.age}
-            {club ? ` — ${club.name}` : ""}
-          </p>
+        <div className="mb-6 flex items-center gap-4">
+          <PlayerAvatar
+            playerId={player.id}
+            nationality={player.nationality}
+            size={64}
+          />
+          <div>
+            <h1 className="text-2xl font-bold">Write Scouting Report</h1>
+            <p className="text-sm text-zinc-400 mt-1">
+              {player.firstName} {player.lastName} — {player.position}, Age {player.age}
+              {club ? ` — ${club.name}` : ""}
+            </p>
+          </div>
         </div>
 
         {observations.length === 0 && (

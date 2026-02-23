@@ -213,6 +213,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Restore persisted cloud-save preference first (synchronous).
     set({ cloudSaveEnabled: readCloudSavePref() });
 
+    // When Supabase is not configured (no env vars), skip auth entirely
+    // so the game works in offline / Steam mode.
+    if (!supabase) {
+      set({ isLoading: false });
+      return;
+    }
+
     // 1. Restore any existing session (e.g. from a previous page load).
     supabase.auth.getSession().then(({ data: { session } }) => {
       get()._applySession(session);
@@ -242,6 +249,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signInWithEmail: async (email, password) => {
+    if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -255,6 +263,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signUpWithEmail: async (email, password) => {
+    if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
   },
@@ -264,6 +273,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signInWithOAuth: async (provider) => {
+    if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signInWithOAuth({ provider });
     if (error) throw new Error(error.message);
     // Browser will redirect to provider; no further action needed here.
@@ -274,6 +284,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signOut: async () => {
+    if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) throw new Error(error.message);
     // onAuthStateChange will fire SIGNED_OUT and call _applySession(null).

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Globe, Plane, MapPin, Star } from "lucide-react";
 import { getCountryOptions } from "@/data/index";
 import type { CountryReputation, TravelBooking } from "@/engine/core/types";
+import { WorldMap } from "@/components/game/WorldMap";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -224,6 +226,7 @@ function CountryCard({
 
 export function InternationalScreen() {
   const { gameState, bookInternationalTravel } = useGameStore();
+  const countryCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   if (!gameState) return null;
 
@@ -245,6 +248,21 @@ export function InternationalScreen() {
     : booking
       ? `Travel to ${getCountryMeta(booking.destinationCountry).name} booked — departing week ${booking.departureWeek}`
       : "Based at home — book travel to scout abroad";
+
+  // Build familiarity levels map from scout.countryReputations
+  const familiarityLevels: Record<string, number> = {};
+  for (const [key, rep] of Object.entries(scout.countryReputations)) {
+    familiarityLevels[key] = rep.familiarity;
+  }
+
+  // Handle map country click: scroll to that country's card and briefly highlight
+  const handleMapCountryClick = (countryKey: string) => {
+    const el = countryCardRefs.current[countryKey];
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus();
+    }
+  };
 
   return (
     <GameLayout>
@@ -268,6 +286,18 @@ export function InternationalScreen() {
           </div>
         )}
 
+        {/* World Map */}
+        {countries.length > 0 && (
+          <div className="mb-6">
+            <WorldMap
+              countries={countries}
+              familiarityLevels={familiarityLevels}
+              currentLocation={currentCountry ?? undefined}
+              onCountryClick={handleMapCountryClick}
+            />
+          </div>
+        )}
+
         {/* Country grid */}
         {countries.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -287,15 +317,23 @@ export function InternationalScreen() {
                 const isCurrentLocation = countryKey === currentCountry;
 
                 return (
-                  <CountryCard
+                  <div
                     key={countryKey}
-                    countryKey={countryKey}
-                    reputation={reputation}
-                    isHome={isHome}
-                    isCurrentLocation={isCurrentLocation}
-                    hasActiveBooking={hasActiveBooking}
-                    onBookTravel={() => bookInternationalTravel(countryKey)}
-                  />
+                    ref={(el) => {
+                      countryCardRefs.current[countryKey] = el;
+                    }}
+                    tabIndex={-1}
+                    className="outline-none focus:ring-2 focus:ring-emerald-500 rounded-lg"
+                  >
+                    <CountryCard
+                      countryKey={countryKey}
+                      reputation={reputation}
+                      isHome={isHome}
+                      isCurrentLocation={isCurrentLocation}
+                      hasActiveBooking={hasActiveBooking}
+                      onBookTravel={() => bookInternationalTravel(countryKey)}
+                    />
+                  </div>
                 );
               })}
             </div>

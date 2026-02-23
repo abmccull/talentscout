@@ -972,6 +972,9 @@ export interface GameState {
 
   // --- Phase 4 extensions (stubbed) ---
 
+  /** The ID of the active scenario, if any. Null/undefined for freeplay. */
+  activeScenarioId?: string;
+
   /** Records of player discoveries and their career trajectories. */
   discoveryRecords: DiscoveryRecord[];
   /** Historical performance snapshots for analytics. */

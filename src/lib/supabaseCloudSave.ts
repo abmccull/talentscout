@@ -82,6 +82,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * detection downstream always reflects the most recent upload time.
    */
   async uploadSave(slot: number, state: GameState): Promise<void> {
+    if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.from("save_slots").upsert(
       {
         user_id: this.userId,
@@ -106,6 +107,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * Returns null when the slot is empty or does not exist for this user.
    */
   async downloadSave(slot: number): Promise<GameState | null> {
+    if (!supabase) return null;
     const { data, error } = await supabase
       .from("save_slots")
       .select("state")
@@ -124,6 +126,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * user, ordered by most recently saved first.
    */
   async listCloudSaves(): Promise<CloudSaveSlot[]> {
+    if (!supabase) return [];
     const { data, error } = await supabase
       .from("save_slots")
       .select("slot, scout_name, season, week, reputation, saved_at")
@@ -148,6 +151,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * to only affect rows owned by this user).
    */
   async deleteCloudSave(slot: number): Promise<void> {
+    if (!supabase) return;
     const { error } = await supabase
       .from("save_slots")
       .delete()
@@ -169,6 +173,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
     slot: number,
     localTimestamp: number,
   ): Promise<ConflictResult> {
+    if (!supabase) return { hasConflict: false };
     const { data, error } = await supabase
       .from("save_slots")
       .select("saved_at")

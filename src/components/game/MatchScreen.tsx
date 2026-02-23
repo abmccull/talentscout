@@ -10,6 +10,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { MatchPhase } from "@/engine/core/types";
 import { PitchCanvas } from "./match/PitchCanvas";
 import { Commentary } from "./match/Commentary";
+import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -322,13 +323,20 @@ export function MatchScreen() {
                       className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3"
                     >
                       <div className="mb-2 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium">
-                            {player
-                              ? `${player.firstName} ${player.lastName}`
-                              : "Unknown"}
-                          </p>
-                          <p className="text-xs text-zinc-500">{player?.position}</p>
+                        <div className="flex items-center gap-2">
+                          <PlayerAvatar
+                            playerId={fs.playerId}
+                            nationality={player?.nationality}
+                            size={48}
+                          />
+                          <div>
+                            <p className="text-sm font-medium">
+                              {player
+                                ? `${player.firstName} ${player.lastName}`
+                                : "Unknown"}
+                            </p>
+                            <p className="text-xs text-zinc-500">{player?.position}</p>
+                          </div>
                         </div>
                         <span className="text-xs text-zinc-500">{fs.phases.length} ph</span>
                       </div>

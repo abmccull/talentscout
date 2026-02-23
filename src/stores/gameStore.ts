@@ -168,6 +168,14 @@ import {
 } from "@/lib/db";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
+import {
+  applyScenarioSetup,
+  applyScenarioOverrides,
+  checkScenarioObjectives,
+  isScenarioFailed,
+} from "@/engine/scenarios";
+import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
+import type { ScenarioProgress } from "@/engine/scenarios";
 
 export type GameScreen =
   | "mainMenu"
@@ -240,6 +248,17 @@ interface GameStore {
 
   // Autosave error state
   autosaveError: string | null;
+
+  // Scenario transient state
+  selectedScenarioId: string | null;
+  setSelectedScenario: (id: string | null) => void;
+  scenarioProgress: ScenarioProgress | null;
+  scenarioOutcome: "victory" | "failure" | null;
+  dismissScenarioOutcome: () => void;
+
+  // Celebration transient state
+  pendingCelebration: { tier: "minor" | "major" | "epic"; title: string; description: string } | null;
+  dismissCelebration: () => void;
 
   // Actions
   startNewGame: (config: NewGameConfig) => Promise<void>;
@@ -401,15 +420,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
   isLoadingSave: false,
   autosaveError: null,
 
+  // Scenario transient state
+  selectedScenarioId: null,
+  setSelectedScenario: (id) => set({ selectedScenarioId: id }),
+  scenarioProgress: null,
+  scenarioOutcome: null,
+  dismissScenarioOutcome: () => set({ scenarioOutcome: null }),
+
+  // Celebration transient state
+  pendingCelebration: null,
+  dismissCelebration: () => set({ pendingCelebration: null }),
+
   // Start new game
   startNewGame: async (config) => {
-    const selectedCountries = config.selectedCountries ?? ["england"];
-    const rng = createRNG(config.worldSeed);
+    // Apply scenario config overrides before world generation
+    const scenarioId = get().selectedScenarioId;
+    const scenario = scenarioId ? getScenarioById(scenarioId) : undefined;
+    const effectiveConfig = scenario ? applyScenarioSetup(config, scenario) : config;
+
+    const selectedCountries = effectiveConfig.selectedCountries ?? ["england"];
+    const rng = createRNG(effectiveConfig.worldSeed);
     const { leagues, clubs, players, fixtures, territories } = await initializeWorld(
       rng,
       selectedCountries,
     );
-    const scout = createScout(config, rng);
+    const scout = createScout(effectiveConfig, rng);
     const contacts: Record<string, Contact> = {};
     const startingContacts = generateStartingContacts(rng, scout);
 
@@ -480,7 +515,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Build a temporary state object so Phase 2 generators can read world data
     const tempState: GameState = {
-      seed: config.worldSeed,
+      seed: effectiveConfig.worldSeed,
       currentWeek: 1,
       currentSeason: 1,
       scout,
@@ -552,11 +587,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const finances = initializeFinances(scout);
 
     // 2. Generate rival scouts (uses a dedicated seed)
-    const rivalRng = createRNG(`${config.worldSeed}-rivals-init`);
+    const rivalRng = createRNG(`${effectiveConfig.worldSeed}-rivals-init`);
     const rivalScouts = generateRivalScouts(rivalRng, tempState);
 
     // 3. Generate manager profiles for all clubs
-    const managerRng = createRNG(`${config.worldSeed}-managers-init`);
+    const managerRng = createRNG(`${effectiveConfig.worldSeed}-managers-init`);
     const managerProfiles = generateManagerProfiles(managerRng, clubs);
 
     // 4. Check for any starting tools the scout might already qualify for
@@ -564,8 +599,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // 5. Generate initial manager directives for first-team scouts
     let initialDirectives: ManagerDirective[] = [];
-    if (config.specialization === "firstTeam" && scout.currentClubId) {
-      const directiveRng = createRNG(`${config.worldSeed}-directives-s1`);
+    if (effectiveConfig.specialization === "firstTeam" && scout.currentClubId) {
+      const directiveRng = createRNG(`${effectiveConfig.worldSeed}-directives-s1`);
       const club = clubs[scout.currentClubId];
       const manager = managerProfiles[scout.currentClubId];
       if (club && manager) {
@@ -580,9 +615,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const specializationLabel =
-      config.specialization === "youth" ? "Youth Scout"
-      : config.specialization === "firstTeam" ? "First Team Scout"
-      : config.specialization === "regional" ? "Regional Expert"
+      effectiveConfig.specialization === "youth" ? "Youth Scout"
+      : effectiveConfig.specialization === "firstTeam" ? "First Team Scout"
+      : effectiveConfig.specialization === "regional" ? "Regional Expert"
       : "Data Scout";
 
     const employmentIntro = scout.currentClubId
@@ -635,11 +670,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       managerDirectives: initialDirectives,
     };
 
+    // Apply scenario GameState overrides (week, season, reputation, tier, activeScenarioId)
+    const finalGameState = scenario ? applyScenarioOverrides(gameState, scenario) : gameState;
+
     set({
-      gameState,
+      gameState: finalGameState,
       isLoaded: true,
       currentScreen: "dashboard",
+      selectedScenarioId: null,
+      scenarioProgress: null,
+      scenarioOutcome: null,
     });
+
+    // Trigger first-week tutorial
+    useTutorialStore.getState().startSequence("firstWeek");
   },
 
   loadGame: (state) => {
@@ -2772,7 +2816,84 @@ export const useGameStore = create<GameStore>((set, get) => ({
       observationsGenerated: weekObservationsGenerated,
     };
 
-    set({ gameState: newState, lastWeekSummary: weekSummary });
+    // ── Scenario objective checking ─────────────────────────────────────────
+    const scenarioId = newState.activeScenarioId;
+    let scenarioOutcomeUpdate: "victory" | "failure" | null = null;
+    let scenarioProgressUpdate: ScenarioProgress | null = null;
+    if (scenarioId) {
+      const progress = checkScenarioObjectives(newState, scenarioId);
+      const failCheck = isScenarioFailed(newState, scenarioId);
+      scenarioProgressUpdate = progress;
+      if (progress.allRequiredComplete) {
+        scenarioOutcomeUpdate = "victory";
+      } else if (failCheck.failed) {
+        scenarioOutcomeUpdate = "failure";
+      }
+    }
+
+    // ── Celebration detection (highest priority wins per week) ──────────────
+    type CelebrationPayload = { tier: "minor" | "major" | "epic"; title: string; description: string };
+    let pendingCelebration: CelebrationPayload | null = null;
+
+    // Epic: new wonderkid discovery this week
+    const prevDiscoveryIds = new Set(gameState.discoveryRecords.map((d) => d.playerId));
+    const newWonderkidDiscoveries = newState.discoveryRecords.filter(
+      (d) => d.wasWonderkid && !prevDiscoveryIds.has(d.playerId),
+    );
+    if (newWonderkidDiscoveries.length > 0) {
+      const first = newWonderkidDiscoveries[0];
+      const wkPlayer = first ? newState.players[first.playerId] : undefined;
+      const wkName = wkPlayer ? `${wkPlayer.firstName} ${wkPlayer.lastName}` : "a player";
+      pendingCelebration = {
+        tier: "epic",
+        title: "Wonderkid Discovered!",
+        description: `You've uncovered a generational talent: ${wkName}. This could be the find of your career.`,
+      };
+    }
+
+    // Major: tier promotion (overrides minor, but not epic)
+    const tierPromoted = newState.scout.careerTier > gameState.scout.careerTier;
+    if (!pendingCelebration && tierPromoted) {
+      pendingCelebration = {
+        tier: "major",
+        title: "Career Promotion!",
+        description: `You've been promoted to Tier ${newState.scout.careerTier}. New opportunities await.`,
+      };
+    }
+
+    // Major: scenario victory
+    if (!pendingCelebration && scenarioOutcomeUpdate === "victory") {
+      const victoryScenario = scenarioId ? getScenarioById(scenarioId) : undefined;
+      pendingCelebration = {
+        tier: "major",
+        title: "Scenario Complete!",
+        description: victoryScenario
+          ? `You completed "${victoryScenario.name}". All objectives achieved.`
+          : "All scenario objectives achieved!",
+      };
+    }
+
+    // Minor: new tool unlocked (perk-equivalent trigger)
+    if (!pendingCelebration && newlyUnlocked.length > 0) {
+      pendingCelebration = {
+        tier: "minor",
+        title: "New Tool Unlocked",
+        description: `You unlocked a new scouting tool: ${newlyUnlocked[0]}.`,
+      };
+    }
+
+    // ── Tutorial trigger: career progression ─────────────────────────────────
+    if (tierPromoted) {
+      useTutorialStore.getState().startSequence("careerProgression");
+    }
+
+    set({
+      gameState: newState,
+      lastWeekSummary: weekSummary,
+      ...(scenarioProgressUpdate !== null ? { scenarioProgress: scenarioProgressUpdate } : {}),
+      ...(scenarioOutcomeUpdate !== null ? { scenarioOutcome: scenarioOutcomeUpdate } : {}),
+      ...(pendingCelebration !== null ? { pendingCelebration } : {}),
+    });
     // Autosave after each week advance — guard against race condition (Fix #24)
     set({ autosaveError: null });
     if (!_autosavePending) {
@@ -2991,6 +3112,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Reports
   startReport: (playerId) => {
     set({ selectedPlayerId: playerId, currentScreen: "reportWriter" });
+    useTutorialStore.getState().startSequence("firstReport");
   },
 
   submitReport: (conviction, summary, strengths, weaknesses) => {

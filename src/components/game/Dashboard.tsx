@@ -31,11 +31,13 @@ import {
   Monitor,
   Plane,
 } from "lucide-react";
+import { ClubCrest } from "@/components/game/ClubCrest";
 import { Tooltip } from "@/components/ui/tooltip";
 import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS } from "@/engine/finance";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { SeasonTimeline } from "./SeasonTimeline";
+import { ConnectedScenarioProgressPanel } from "./ScenarioProgressPanel";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -227,8 +229,24 @@ export function Dashboard() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
+                <ClubCrest
+                  clubId={scout.currentClubId}
+                  clubName={gameState.clubs[scout.currentClubId]!.name}
+                  size={48}
+                />
+              )}
+              <div>
+                <h1 className="text-2xl font-bold">Dashboard</h1>
+                {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
+                  <p className="text-xs text-zinc-500">
+                    {gameState.clubs[scout.currentClubId]!.name}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="mt-1 flex items-center gap-2">
               <Tooltip content="The current simulation week. Each week, you schedule activities and advance." side="bottom">
                 <p className="text-sm text-zinc-400">
                   Week {currentWeek} — Season {currentSeason}
@@ -257,6 +275,9 @@ export function Dashboard() {
             currentWeek={currentWeek}
           />
         )}
+
+        {/* Scenario Progress — only shown when a scenario is active */}
+        <ConnectedScenarioProgressPanel />
 
         {/* Quick Stats */}
         <div className="mb-6 grid grid-cols-4 gap-4">

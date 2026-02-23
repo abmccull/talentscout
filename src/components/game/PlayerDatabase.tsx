@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, ChevronUp, ChevronDown, Users, FileText, Star } from "lucide-react";
 import type { Player, Position } from "@/engine/core/types";
+import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { ClubCrest } from "@/components/game/ClubCrest";
 
 type SortKey = "name" | "age" | "position" | "club" | "league" | "observations" | "reports" | "lastSeen";
 type SortDir = "asc" | "desc";
@@ -16,6 +18,7 @@ const POSITIONS: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW",
 
 interface PlayerRow {
   player: Player;
+  clubId: string;
   clubName: string;
   leagueName: string;
   observationCount: number;
@@ -70,6 +73,7 @@ export function PlayerDatabase() {
         observations.length > 0 ? Math.max(...observations.map((o) => o.week)) : null;
       return {
         player,
+        clubId: club?.id ?? "",
         clubName: club?.shortName ?? "?",
         leagueName: league?.shortName ?? "?",
         observationCount: observations.length,
@@ -349,6 +353,11 @@ export function PlayerDatabase() {
                               }
                             />
                           </button>
+                          <PlayerAvatar
+                            playerId={row.player.id}
+                            nationality={row.player.nationality}
+                            size={48}
+                          />
                           <span className="font-medium text-white">
                             {row.player.firstName} {row.player.lastName}
                           </span>
@@ -360,7 +369,18 @@ export function PlayerDatabase() {
                           {row.player.position}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-zinc-400">{row.clubName}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5 text-zinc-400">
+                          {row.clubId && (
+                            <ClubCrest
+                              clubId={row.clubId}
+                              clubName={row.clubName}
+                              size={32}
+                            />
+                          )}
+                          {row.clubName}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-zinc-500">{row.leagueName}</td>
                       <td className="px-4 py-3">
                         <span

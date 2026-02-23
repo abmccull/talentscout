@@ -11,6 +11,8 @@ import type { AttributeReading, HiddenIntel, Observation, AbilityReading, System
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { Tooltip } from "@/components/ui/tooltip";
+import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { ClubCrest } from "@/components/game/ClubCrest";
 
 const DOMAIN_LABELS: Record<string, string> = {
   technical: "Technical",
@@ -603,41 +605,49 @@ export function PlayerProfile() {
 
         {/* Header */}
         <div className="mb-6 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">
-                {player.firstName} {player.lastName}
-              </h1>
-              <button
-                onClick={() => toggleWatchlist(selectedPlayerId)}
-                className="p-1 rounded hover:bg-zinc-800 transition"
-                aria-label={gameState.watchlist.includes(selectedPlayerId) ? "Remove from watchlist" : "Add to watchlist"}
-              >
-                <Star
-                  size={18}
-                  className={
-                    gameState.watchlist.includes(selectedPlayerId)
-                      ? "text-amber-400 fill-amber-400"
-                      : "text-zinc-600"
-                  }
-                />
-              </button>
-            </div>
-            <div className="mt-1 flex items-center gap-2 flex-wrap">
-              <Badge variant="secondary">{player.position}</Badge>
-              <span className="text-sm text-zinc-400">
-                Age {player.age} — {player.nationality}
-              </span>
-              {unsignedYouthRecord ? (
-                <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400">
-                  Unsigned
-                </Badge>
-              ) : club ? (
+          <div className="flex items-start gap-4">
+            <PlayerAvatar
+              playerId={player.id}
+              nationality={player.nationality}
+              size={96}
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold">
+                  {player.firstName} {player.lastName}
+                </h1>
+                <button
+                  onClick={() => toggleWatchlist(selectedPlayerId)}
+                  className="p-1 rounded hover:bg-zinc-800 transition"
+                  aria-label={gameState.watchlist.includes(selectedPlayerId) ? "Remove from watchlist" : "Add to watchlist"}
+                >
+                  <Star
+                    size={18}
+                    className={
+                      gameState.watchlist.includes(selectedPlayerId)
+                        ? "text-amber-400 fill-amber-400"
+                        : "text-zinc-600"
+                    }
+                  />
+                </button>
+              </div>
+              <div className="mt-1 flex items-center gap-2 flex-wrap">
+                <Badge variant="secondary">{player.position}</Badge>
                 <span className="text-sm text-zinc-400">
-                  {club.name}
-                  {league ? ` (${league.shortName})` : ""}
+                  Age {player.age} — {player.nationality}
                 </span>
-              ) : null}
+                {unsignedYouthRecord ? (
+                  <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400">
+                    Unsigned
+                  </Badge>
+                ) : club ? (
+                  <span className="flex items-center gap-1.5 text-sm text-zinc-400">
+                    <ClubCrest clubId={club.id} clubName={club.name} size={32} />
+                    {club.name}
+                    {league ? ` (${league.shortName})` : ""}
+                  </span>
+                ) : null}
+              </div>
             </div>
           </div>
           <Button onClick={() => startReport(selectedPlayerId)} disabled={observations.length === 0}>
