@@ -53,6 +53,8 @@ export function MatchScreen() {
   const [descExpanded, setDescExpanded] = useState(true);
   // Track previous goal count to detect new goals
   const prevGoalCountRef = useRef(0);
+  // Track previous shot count to detect shots (for crowd-miss SFX)
+  const prevShotCountRef = useRef(0);
   // Play whistle on match start (once)
   const whistlePlayed = useRef(false);
   // Match stats bar collapsed state
@@ -124,6 +126,20 @@ export function MatchScreen() {
     prevGoalCountRef.current = totalGoals;
   }
 
+  // Detect shots that didn't result in goals → play crowd-miss
+  let totalShots = 0;
+  for (let i = 0; i <= activeMatch.currentPhase && i < activeMatch.phases.length; i++) {
+    for (const ev of activeMatch.phases[i].events) {
+      if (ev.type === "shot") totalShots++;
+    }
+  }
+  if (totalShots > prevShotCountRef.current) {
+    prevShotCountRef.current = totalShots;
+    playSFX("crowd-miss");
+  } else {
+    prevShotCountRef.current = totalShots;
+  }
+
   const allInvolvedPlayerIds = currentPhase
     ? [...new Set(currentPhase.involvedPlayerIds)]
     : [];
@@ -135,6 +151,7 @@ export function MatchScreen() {
 
   const handleAddFocus = (playerId: string) => {
     setFocus(playerId, "general");
+    playSFX("camera-shutter");
     setShowPlayerPicker(false);
     setCanvasClickedPlayerId(null);
   };
@@ -587,7 +604,14 @@ export function MatchScreen() {
                   {t("endMatch")}
                 </Button>
               ) : (
-                <Button className="w-full" onClick={advancePhase}>
+                <Button className="w-full" onClick={() => {
+                  advancePhase();
+                  // Play crowd chant occasionally during attacking phases
+                  const next = activeMatch.phases[activeMatch.currentPhase + 1];
+                  if (next && (next.type === "counterAttack" || next.type === "setpiece")) {
+                    playSFX("crowd-chant");
+                  }
+                }}>
                   <ChevronRight size={14} className="mr-2" aria-hidden="true" />
                   {t("nextPhase")}
                 </Button>

@@ -22,18 +22,20 @@ import {
 } from "@/engine/core/seasonEvents";
 import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
+import { useTranslations } from "next-intl";
+import { useAudio } from "@/lib/audio/useAudio";
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
-const SEASON_PHASE_CONFIG: Record<
+const SEASON_PHASE_CLASSES: Record<
   "preseason" | "earlyseason" | "midseason" | "lateseason" | "endseason",
-  { label: string; className: string }
+  string
 > = {
-  preseason:   { label: "Preseason",    className: "bg-sky-500/15 text-sky-400 border-sky-500/30" },
-  earlyseason: { label: "Early Season", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
-  midseason:   { label: "Midseason",    className: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
-  lateseason:  { label: "Late Season",  className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
-  endseason:   { label: "End of Season", className: "bg-red-500/15 text-red-400 border-red-500/30" },
+  preseason:   "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  earlyseason: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  midseason:   "bg-blue-500/15 text-blue-400 border-blue-500/30",
+  lateseason:  "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  endseason:   "bg-red-500/15 text-red-400 border-red-500/30",
 };
 
 function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {
@@ -42,24 +44,6 @@ function fatigueSeverity(fatigue: number): "ok" | "warn" | "danger" {
   return "ok";
 }
 
-const SKILL_LABELS: Record<string, string> = {
-  technicalEye: "Technical Eye",
-  physicalAssessment: "Physical Assessment",
-  psychologicalRead: "Psychological Read",
-  tacticalUnderstanding: "Tactical Understanding",
-  dataLiteracy: "Data Literacy",
-  playerJudgment: "Player Judgment",
-  potentialAssessment: "Potential Assessment",
-};
-
-const ATTR_LABELS: Record<string, string> = {
-  networking: "Networking",
-  persuasion: "Persuasion",
-  endurance: "Endurance",
-  adaptability: "Adaptability",
-  memory: "Memory",
-  intuition: "Intuition",
-};
 
 export function CalendarScreen() {
   const {
@@ -72,6 +56,9 @@ export function CalendarScreen() {
     dismissWeekSummary,
     getAvailableCalendarActivities,
   } = useGameStore();
+
+  const t = useTranslations("calendar");
+  const { playSFX } = useAudio();
 
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
@@ -204,7 +191,7 @@ export function CalendarScreen() {
                     <div className="flex flex-wrap gap-1">
                       {Object.entries(lastWeekSummary.skillXpGained).map(([skill, xp]) => (
                         <Badge key={skill} variant="secondary" className="text-[10px]">
-                          {SKILL_LABELS[skill] ?? skill} +{xp}
+                          {t(`skills.${skill}` as Parameters<typeof t>[0])} +{xp}
                         </Badge>
                       ))}
                     </div>
@@ -216,7 +203,7 @@ export function CalendarScreen() {
                     <div className="flex flex-wrap gap-1">
                       {Object.entries(lastWeekSummary.attributeXpGained).map(([attr, xp]) => (
                         <Badge key={attr} variant="secondary" className="text-[10px]">
-                          {ATTR_LABELS[attr] ?? attr} +{xp}
+                          {t(`attributes.${attr}` as Parameters<typeof t>[0])} +{xp}
                         </Badge>
                       ))}
                     </div>
@@ -248,9 +235,9 @@ export function CalendarScreen() {
             <div className="mb-1 flex items-center gap-2">
               <h1 className="text-2xl font-bold">Weekly Planner</h1>
               <span
-                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SEASON_PHASE_CONFIG[seasonPhase].className}`}
+                className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SEASON_PHASE_CLASSES[seasonPhase]}`}
               >
-                {SEASON_PHASE_CONFIG[seasonPhase].label}
+                {t(`seasonPhases.${seasonPhase}`)}
               </span>
             </div>
             <p className="text-sm text-zinc-400">
@@ -258,7 +245,7 @@ export function CalendarScreen() {
             </p>
           </div>
           <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
-            <Button onClick={advanceWeek} data-tutorial-id="advance-week">Advance Week</Button>
+            <Button onClick={() => { playSFX("calendar-slide"); advanceWeek(); }} data-tutorial-id="advance-week">Advance Week</Button>
           </Tooltip>
         </div>
 
@@ -349,13 +336,13 @@ export function CalendarScreen() {
 
         {/* 7-day grid */}
         <div className="mb-6 grid grid-cols-7 gap-2" data-tutorial-id="calendar-grid">
-          {DAY_LABELS.map((day, i) => {
+          {DAY_KEYS.map((dayKey, i) => {
             const activity = activities[i];
             const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
             const Icon = display?.icon;
             return (
-              <div key={day} className="flex flex-col gap-1">
-                <p className="text-center text-xs font-semibold text-zinc-500">{day}</p>
+              <div key={dayKey} className="flex flex-col gap-1">
+                <p className="text-center text-xs font-semibold text-zinc-500">{t(`dayLabels.${dayKey}`)}</p>
                 <Tooltip content="Drag or click to assign an activity for this day." side="top">
                 <div
                   className={`min-h-[80px] rounded-lg border p-2 transition ${
@@ -369,7 +356,7 @@ export function CalendarScreen() {
                       <button
                         onClick={() => unscheduleActivity(i)}
                         className="absolute right-0 top-0 text-zinc-600 hover:text-red-400 transition"
-                        aria-label={`Remove ${display.label} from ${day}`}
+                        aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
                       >
                         <X size={12} />
                       </button>

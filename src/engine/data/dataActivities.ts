@@ -19,6 +19,7 @@ import type {
   Position,
   StatisticalProfile,
   AnomalyFlag,
+  Observation,
 } from "@/engine/core/types";
 
 // =============================================================================
@@ -653,4 +654,55 @@ export function generateStatsBriefing(
   }
 
   return { highlights, anomalies, topPerformers };
+}
+
+// =============================================================================
+// ANOMALY VALIDATION
+// =============================================================================
+
+/**
+ * Check if a match observation validates or refutes a flagged anomaly.
+ *
+ * When a data scout attends a match to investigate a flagged player, the live
+ * observations either confirm or reject the statistical signal:
+ *   - Positive anomaly: validated if avg perceived attribute value > 12
+ *   - Negative anomaly: validated if avg perceived attribute value < 8
+ *
+ * Regardless of validation outcome, the anomaly is marked as investigated.
+ *
+ * @param anomaly      - The anomaly flag to check.
+ * @param _player      - The flagged player (reserved for future use).
+ * @param observations - Observations from the match for this player.
+ */
+export function validateAnomalyFromObservation(
+  anomaly: AnomalyFlag,
+  _player: Player,
+  observations: Observation[],
+): { validated: boolean; updatedAnomaly: AnomalyFlag } {
+  // Find observations for this player
+  const playerObs = observations.filter((o) => o.playerId === anomaly.playerId);
+  if (playerObs.length === 0) {
+    return { validated: false, updatedAnomaly: anomaly };
+  }
+
+  // Check if the observed attributes align with the anomaly direction
+  const readings = playerObs.flatMap((o) => o.attributeReadings);
+  if (readings.length === 0) {
+    return { validated: false, updatedAnomaly: anomaly };
+  }
+
+  // For positive anomalies, if avg perceived value > 12 → validated
+  // For negative anomalies, if avg perceived value < 8 → validated
+  const avgValue =
+    readings.reduce((s, r) => s + r.perceivedValue, 0) / readings.length;
+  const validated =
+    anomaly.direction === "positive" ? avgValue > 12 : avgValue < 8;
+
+  return {
+    validated,
+    updatedAnomaly: {
+      ...anomaly,
+      investigated: true,
+    },
+  };
 }

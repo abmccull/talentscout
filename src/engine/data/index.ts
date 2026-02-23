@@ -16,6 +16,7 @@ export {
   executeDatabaseQuery,
   executeDeepVideoAnalysis,
   generateStatsBriefing,
+  validateAnomalyFromObservation,
 } from "./dataActivities";
 
 // Prediction tracker — create, resolve, and evaluate predictions

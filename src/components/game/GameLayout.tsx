@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
+import { useAudio } from "@/lib/audio/useAudio";
 import {
   LayoutDashboard,
   Calendar,
@@ -124,6 +125,7 @@ function getNavVisibility(
 export function GameLayout({ children }: { children: React.ReactNode }) {
   const { currentScreen, setScreen, gameState } = useGameStore();
   const autosaveError = useGameStore((s) => s.autosaveError);
+  const { playSFX } = useAudio();
 
   // All hooks must be called before any early return
   const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
@@ -147,6 +149,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   );
 
   function handleNavClick(screen: GameScreen): void {
+    if (screen !== currentScreen) playSFX("click");
     if (!seenNav.has(screen)) {
       const next = new Set(seenNav);
       next.add(screen);

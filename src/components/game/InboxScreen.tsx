@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { useAudio } from "@/lib/audio/useAudio";
+import { AudioEngine } from "@/lib/audio/audioEngine";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -370,6 +372,7 @@ export function InboxScreen() {
     setScreen,
     startReport,
   } = useGameStore();
+  const { playSFX } = useAudio();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<InboxMessageType | "all">("all");
 
@@ -379,6 +382,25 @@ export function InboxScreen() {
 
   // Active (unacknowledged) narrative events
   const activeNarrativeEvents = narrativeEvents.filter((e) => !e.acknowledged);
+
+  // Play tension music when dramatic narrative events are present
+  const DRAMATIC_TYPES = new Set([
+    "boardroomCoup", "budgetCut", "scoutingDeptRestructure", "rivalClubPoach",
+    "managerSacked", "clubFinancialTrouble", "playerControversy", "wonderkidPressure",
+    "injurySetback", "contactBetrayal", "agentDoubleDealing", "burnout",
+    "healthScare", "familyEmergency", "youthAcademyScandal", "rivalPoach",
+    "rivalRecruitment", "agentDeception",
+  ]);
+  const hasDramaticEvent = activeNarrativeEvents.some((e) => DRAMATIC_TYPES.has(e.type));
+  useEffect(() => {
+    const audio = AudioEngine.getInstance();
+    if (hasDramaticEvent) {
+      audio.playMusic("tension");
+    } else {
+      // Revert to default in-game music
+      audio.playMusic("scouting");
+    }
+  }, [hasDramaticEvent]);
 
   // Sort messages by most recent (week desc, season desc)
   const sorted = [...inbox].sort((a, b) => {
@@ -396,6 +418,7 @@ export function InboxScreen() {
     setExpandedId(isExpanding ? message.id : null);
     if (isExpanding && !message.read) {
       markMessageRead(message.id);
+      playSFX(message.type === "jobOffer" ? "job-offer" : "notification");
     }
   };
 

@@ -97,6 +97,11 @@ export interface WeekProcessingResult {
   marketInefficienciesExecuted: number;
   /** Number of analytics team meetings held */
   analyticsTeamMeetingsExecuted: number;
+
+  // --- Youth-exclusive ---
+
+  /** Number of placement reports written this week */
+  writePlacementReportsExecuted: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -748,6 +753,7 @@ export function processCompletedWeek(
       algorithmCalibrationsExecuted: 0,
       marketInefficienciesExecuted: 0,
       analyticsTeamMeetingsExecuted: 0,
+      writePlacementReportsExecuted: 0,
     };
   }
 
@@ -782,6 +788,9 @@ export function processCompletedWeek(
   let algorithmCalibrationsExecuted = 0;
   let marketInefficienciesExecuted = 0;
   let analyticsTeamMeetingsExecuted = 0;
+
+  // Youth-exclusive
+  let writePlacementReportsExecuted = 0;
 
   const endurance = scout.attributes.endurance; // 1–20
 
@@ -924,6 +933,12 @@ export function processCompletedWeek(
         analyticsTeamMeetingsExecuted++;
         break;
 
+      // ---- Youth-exclusive activities ----
+
+      case "writePlacementReport":
+        writePlacementReportsExecuted++;
+        break;
+
       default:
         break;
     }
@@ -971,6 +986,8 @@ export function processCompletedWeek(
     algorithmCalibrationsExecuted,
     marketInefficienciesExecuted,
     analyticsTeamMeetingsExecuted,
+    // Youth-exclusive
+    writePlacementReportsExecuted,
   };
 }
 

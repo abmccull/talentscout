@@ -48,6 +48,7 @@ import {
   executeDatabaseQuery,
   executeDeepVideoAnalysis,
   generateStatsBriefing,
+  validateAnomalyFromObservation,
   resolvePredictions,
   generateAnalystReport,
   updateAnalystMorale,
@@ -155,6 +156,11 @@ import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import { generateManagerProfiles } from "@/engine/analytics";
 import { generateRegionalYouth, generateAcademyIntake } from "@/engine/youth/generation";
+import {
+  calculateClubAcceptanceChance,
+  processPlacementOutcome,
+  createAlumniRecord,
+} from "@/engine/youth";
 import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
 import {
   saveGame as dbSaveGame,
@@ -2002,6 +2008,135 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // ── Youth placement resolution ────────────────────────────────────────
+    // When a writePlacementReport activity was completed, process pending
+    // placement reports: roll acceptance chance, convert youth to signed
+    // players on success, create alumni records, and send inbox notifications.
+    if (weekResult.writePlacementReportsExecuted > 0) {
+      const placementRng = createRNG(
+        `${gameState.seed}-placement-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+      const pendingReports = Object.values(stateWithScheduleApplied.placementReports).filter(
+        (r) => r.clubResponse === "pending",
+      );
+
+      if (pendingReports.length > 0) {
+        let updatedPlacementReports = { ...stateWithScheduleApplied.placementReports };
+        let updatedUnsignedYouth = { ...stateWithScheduleApplied.unsignedYouth };
+        let updatedPlayers = { ...stateWithScheduleApplied.players };
+        let updatedClubs = { ...stateWithScheduleApplied.clubs };
+        let updatedAlumniRecords = [...stateWithScheduleApplied.alumniRecords];
+        const placementMessages: InboxMessage[] = [];
+        const currentScoutForPlacement = stateWithScheduleApplied.scout;
+
+        // Check if this is the scout's first-ever placement report (for first-outcome guarantee)
+        const hasAnyPriorOutcome = Object.values(gameState.placementReports).some(
+          (r) => r.clubResponse === "accepted" || r.clubResponse === "rejected",
+        );
+
+        for (const report of pendingReports) {
+          const youth = updatedUnsignedYouth[report.unsignedYouthId];
+          const club = updatedClubs[report.targetClubId];
+          if (!youth || !club) continue;
+
+          let chance = calculateClubAcceptanceChance(
+            report,
+            youth,
+            club,
+            currentScoutForPlacement,
+          );
+
+          // First-outcome guarantee: youth scout's first-ever placement gets 95% chance
+          if (
+            !hasAnyPriorOutcome &&
+            currentScoutForPlacement.primarySpecialization === "youth"
+          ) {
+            chance = 0.95;
+          }
+
+          const outcome = processPlacementOutcome(
+            placementRng,
+            report,
+            chance,
+            youth,
+            club,
+          );
+
+          if (outcome.success && outcome.newPlayer) {
+            // Update placement report as accepted
+            updatedPlacementReports[report.id] = {
+              ...report,
+              clubResponse: "accepted",
+              placementType: outcome.placementType ?? undefined,
+            };
+
+            // Mark youth as placed
+            updatedUnsignedYouth[report.unsignedYouthId] = outcome.updatedYouth;
+
+            // Add the new signed player
+            updatedPlayers[outcome.newPlayer.id] = outcome.newPlayer;
+
+            // Add player to club roster
+            updatedClubs[report.targetClubId] = {
+              ...club,
+              playerIds: [...club.playerIds, outcome.newPlayer.id],
+            };
+
+            // Create alumni record
+            const alumniRecord = createAlumniRecord(
+              youth,
+              club.id,
+              stateWithScheduleApplied.currentWeek,
+              stateWithScheduleApplied.currentSeason,
+            );
+            updatedAlumniRecords = [...updatedAlumniRecords, alumniRecord];
+
+            placementMessages.push({
+              id: `placement-accepted-${report.id}`,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+              type: "event" as const,
+              title: `Placement Accepted: ${youth.player.firstName} ${youth.player.lastName}`,
+              body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. You can track their career progress in your alumni records.`,
+              read: false,
+              actionRequired: false,
+              relatedId: outcome.newPlayer.id,
+              relatedEntityType: "player" as const,
+            });
+          } else {
+            // Update placement report as rejected
+            updatedPlacementReports[report.id] = {
+              ...report,
+              clubResponse: "rejected",
+            };
+
+            placementMessages.push({
+              id: `placement-rejected-${report.id}`,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+              type: "event" as const,
+              title: `Placement Declined: ${youth.player.firstName} ${youth.player.lastName}`,
+              body: `${club.name} has declined your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}. Consider building more observations or targeting a different club.`,
+              read: false,
+              actionRequired: false,
+              relatedId: youth.player.id,
+              relatedEntityType: "player" as const,
+            });
+          }
+        }
+
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          placementReports: updatedPlacementReports,
+          unsignedYouth: updatedUnsignedYouth,
+          players: updatedPlayers,
+          clubs: updatedClubs,
+          alumniRecords: updatedAlumniRecords,
+          inbox: [...stateWithScheduleApplied.inbox, ...placementMessages],
+        };
+      }
+    }
+
     // h) New contact generation — every 8th week, 30% chance
     if (stateWithScheduleApplied.currentWeek % 8 === 0) {
       const contactRng = createRNG(
@@ -2933,12 +3068,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // ── Aha moment triggers ────────────────────────────────────────────────
     const tutorialState = useTutorialStore.getState();
 
-    // Youth aha: first writePlacementReport activity completed this week
+    // Youth aha: first placement accepted this week
+    const hadAcceptedBefore = Object.values(gameState.placementReports).some(
+      (r) => r.clubResponse === "accepted",
+    );
+    const hasAcceptedNow = Object.values(newState.placementReports).some(
+      (r) => r.clubResponse === "accepted",
+    );
     if (
       newState.scout.primarySpecialization === "youth" &&
       !tutorialState.completedSequences.has("ahaMoment:youth") &&
-      gameState.schedule.activities.some((a) => a?.type === "writePlacementReport") &&
-      Object.keys(gameState.placementReports).length === 0
+      !hadAcceptedBefore &&
+      hasAcceptedNow
     ) {
       tutorialState.queueSequence("ahaMoment:youth");
     }
@@ -3149,12 +3290,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ? gameState.playedFixtures
       : [...gameState.playedFixtures, activeMatch.fixtureId];
 
-    const updatedGameState: GameState = {
+    let updatedGameState: GameState = {
       ...gameState,
       observations: newObservations,
       fixtures: { ...gameState.fixtures, [fixture.id]: updatedFixture },
       playedFixtures: updatedPlayedFixtures,
     };
+
+    // --- Data anomaly validation ---
+    // When a data scout attends a match where a flagged player is observed,
+    // validate/refute the anomaly using the live observations.
+    let anyAnomalyValidated = false;
+    if (
+      gameState.scout.primarySpecialization === "data" &&
+      gameState.anomalyFlags.length > 0
+    ) {
+      const uninvestigated = gameState.anomalyFlags.filter((a) => !a.investigated);
+      const observedPlayerIds = new Set(
+        activeMatch.focusSelections.map((f) => f.playerId),
+      );
+
+      let updatedAnomalyFlags = [...gameState.anomalyFlags];
+
+      for (const anomaly of uninvestigated) {
+        if (!observedPlayerIds.has(anomaly.playerId)) continue;
+
+        const playerObs = Object.values(newObservations).filter(
+          (o) => o.playerId === anomaly.playerId,
+        );
+        const player = gameState.players[anomaly.playerId];
+        if (!player) continue;
+
+        const result = validateAnomalyFromObservation(anomaly, player, playerObs);
+
+        updatedAnomalyFlags = updatedAnomalyFlags.map((a) =>
+          a.id === anomaly.id ? result.updatedAnomaly : a,
+        );
+
+        if (result.validated) anyAnomalyValidated = true;
+      }
+
+      updatedGameState = { ...updatedGameState, anomalyFlags: updatedAnomalyFlags };
+    }
 
     // Determine where to navigate when the user dismisses the summary screen.
     // If this match was launched from the advanceWeek() gate (i.e., it was a
@@ -3194,6 +3371,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           useTutorialStore.getState().queueSequence("ahaMoment:regional");
         }
       }
+    }
+
+    // Data aha: first anomaly validated via live observation
+    if (
+      anyAnomalyValidated &&
+      !useTutorialStore.getState().completedSequences.has("ahaMoment:data")
+    ) {
+      useTutorialStore.getState().queueSequence("ahaMoment:data");
     }
   },
 

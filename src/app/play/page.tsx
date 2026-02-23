@@ -128,7 +128,13 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
 
 function ActiveScreen() {
   const currentScreen = useGameStore((s) => s.currentScreen);
-  useScreenMusic(currentScreen);
+  // Derive match weather for weather-aware ambience in useScreenMusic
+  const matchWeather = useGameStore((s) => {
+    if (s.currentScreen !== "match" || !s.activeMatch || !s.gameState) return undefined;
+    const fixture = s.gameState.fixtures[s.activeMatch.fixtureId];
+    return fixture?.weather;
+  });
+  useScreenMusic(currentScreen, matchWeather);
 
   return (
     <AnimatePresence mode="wait">

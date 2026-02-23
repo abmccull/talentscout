@@ -2,6 +2,7 @@
 
 import { useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -226,6 +227,7 @@ function CountryCard({
 
 export function InternationalScreen() {
   const { gameState, bookInternationalTravel } = useGameStore();
+  const { playSFX } = useAudio();
   const countryCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   if (!gameState) return null;
@@ -331,7 +333,7 @@ export function InternationalScreen() {
                       isHome={isHome}
                       isCurrentLocation={isCurrentLocation}
                       hasActiveBooking={hasActiveBooking}
-                      onBookTravel={() => bookInternationalTravel(countryKey)}
+                      onBookTravel={() => { playSFX("travel"); bookInternationalTravel(countryKey); }}
                     />
                   </div>
                 );

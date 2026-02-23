@@ -13,3 +13,19 @@ export {
   processYouthAging,
   processPlayerRetirement,
 } from "./generation";
+
+// Placement pipeline — placing unsigned youth at clubs
+export {
+  generatePlacementReport,
+  calculateClubAcceptanceChance,
+  processPlacementOutcome,
+  getEligibleClubsForPlacement,
+} from "./placement";
+
+// Alumni tracking — long-term payoff loop for placed youth
+export {
+  createAlumniRecord,
+  processAlumniWeek,
+  calculateLegacyScore,
+  calculateAlumniReputationBonus,
+} from "./alumni";

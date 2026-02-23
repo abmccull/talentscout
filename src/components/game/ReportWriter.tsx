@@ -487,6 +487,7 @@ export function ReportWriter() {
                 id="summary"
                 value={summary}
                 onChange={(e) => { setIsDirty(true); setSummary(e.target.value.slice(0, 2000)); }}
+                onFocus={() => playSFX("pen-scribble")}
                 placeholder={t("summaryPlaceholder")}
                 rows={5}
                 maxLength={2000}
