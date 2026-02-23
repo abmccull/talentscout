@@ -201,7 +201,7 @@ export function MatchSummaryScreen() {
 
           {/* Per-player cards */}
           {playerRows.length > 0 && (
-            <section aria-label="Observed players">
+            <section aria-label="Observed players" data-tutorial-id="match-summary-accuracy">
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                 Observations Recorded
               </h2>

@@ -91,6 +91,7 @@ export function TutorialOverlay() {
   const sequence = currentSequence ? getSequenceById(currentSequence) : null;
   const step: TutorialStep | null = sequence?.steps[currentStep] ?? null;
   const totalSteps = sequence?.steps.length ?? 0;
+  const isAhaMoment = currentSequence?.startsWith("ahaMoment:") ?? false;
 
   /**
    * Re-measure the target element and recompute the popup position.
@@ -183,7 +184,7 @@ export function TutorialOverlay() {
             // Large outer shadow fills the rest of the screen.
             `0 0 0 9999px rgba(0,0,0,0.72)`,
             // Inset glow traces the target boundary.
-            `inset 0 0 0 2px rgba(16,185,129,0.6)`,
+            `inset 0 0 0 2px ${isAhaMoment ? "rgba(245,158,11,0.6)" : "rgba(16,185,129,0.6)"}`,
           ].join(", "),
           position: "fixed",
           top: targetRect.top - 4,
@@ -234,12 +235,12 @@ export function TutorialOverlay() {
           zIndex: 9999,
           transition: "top 150ms ease, left 150ms ease",
         }}
-        className="rounded-xl border border-zinc-700 bg-zinc-900 p-5 shadow-2xl"
+        className={`rounded-xl border ${isAhaMoment ? "border-amber-700/50" : "border-zinc-700"} bg-zinc-900 p-5 shadow-2xl`}
       >
         {/* Step counter */}
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-emerald-500">
-            Tutorial
+          <span className={`text-xs font-semibold uppercase tracking-wider ${isAhaMoment ? "text-amber-400" : "text-emerald-500"}`}>
+            {isAhaMoment ? "Milestone" : "Tutorial"}
           </span>
           <span className="text-xs text-zinc-500">
             {currentStep + 1}/{totalSteps}
@@ -262,9 +263,9 @@ export function TutorialOverlay() {
               aria-hidden="true"
               className={`h-1.5 rounded-full transition-all ${
                 i === currentStep
-                  ? "w-4 bg-emerald-500"
+                  ? `w-4 ${isAhaMoment ? "bg-amber-400" : "bg-emerald-500"}`
                   : i < currentStep
-                    ? "w-1.5 bg-emerald-700"
+                    ? `w-1.5 ${isAhaMoment ? "bg-amber-700" : "bg-emerald-700"}`
                     : "w-1.5 bg-zinc-700"
               }`}
             />
@@ -292,15 +293,19 @@ export function TutorialOverlay() {
           </div>
 
           {step.nextStep ? (
-            <span className="text-xs italic text-emerald-400/70">
+            <span className={`text-xs italic ${isAhaMoment ? "text-amber-400/70" : "text-emerald-400/70"}`}>
               Complete the action to continue
             </span>
           ) : (
             <button
               onClick={nextStep}
-              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white transition hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+              className={`rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition focus-visible:outline focus-visible:outline-2 ${
+                isAhaMoment
+                  ? "bg-amber-600 hover:bg-amber-500 focus-visible:outline-amber-400"
+                  : "bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-emerald-400"
+              }`}
             >
-              {currentStep + 1 >= totalSteps ? "Done" : "Next"}
+              {currentStep + 1 >= totalSteps ? (isAhaMoment ? "Awesome!" : "Done") : "Next"}
             </button>
           )}
         </div>

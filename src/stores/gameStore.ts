@@ -166,7 +166,7 @@ import {
   AUTOSAVE_SLOT,
   MAX_MANUAL_SLOTS,
 } from "@/lib/db";
-import { useTutorialStore } from "@/stores/tutorialStore";
+import { useTutorialStore, resolveOnboardingSequence } from "@/stores/tutorialStore";
 import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
 import {
   applyScenarioSetup,
@@ -703,8 +703,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       scenarioOutcome: null,
     });
 
-    // Trigger first-week tutorial
-    useTutorialStore.getState().startSequence("firstWeek");
+    // Trigger specialization-aware onboarding tutorial
+    const onboardingId = resolveOnboardingSequence(
+      effectiveConfig.specialization,
+      !!effectiveConfig.startingClubId,
+    );
+    useTutorialStore.getState().startSequence(onboardingId);
   },
 
   loadGame: (state) => {
@@ -806,8 +810,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState) return;
     const schedule = addActivity(gameState.schedule, activity, dayIndex);
     set({ gameState: { ...gameState, schedule } });
-    // Tutorial auto-advance: step expects "activityScheduled"
-    useTutorialStore.getState().checkAutoAdvance("activityScheduled");
+
+    // Tutorial auto-advance — generic and specialization-specific conditions.
+    const tutorial = useTutorialStore.getState();
+    tutorial.checkAutoAdvance("activityScheduled");
+
+    const YOUTH_ACTIVITIES = new Set([
+      "schoolMatch", "grassrootsTournament", "streetFootball",
+      "academyTrialDay", "youthFestival", "youthTournament",
+    ]);
+    if (YOUTH_ACTIVITIES.has(activity.type)) {
+      tutorial.checkAutoAdvance("youthActivityScheduled");
+    }
+
+    const DATA_ACTIVITIES = new Set([
+      "databaseQuery", "deepVideoAnalysis", "statsBriefing",
+      "algorithmCalibration", "marketInefficiency",
+    ]);
+    if (DATA_ACTIVITIES.has(activity.type)) {
+      tutorial.checkAutoAdvance("dataActivityScheduled");
+    }
   },
 
   unscheduleActivity: (dayIndex) => {
@@ -2908,6 +2930,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
       useTutorialStore.getState().startSequence("careerProgression");
     }
 
+    // ── Aha moment triggers ────────────────────────────────────────────────
+    const tutorialState = useTutorialStore.getState();
+
+    // Youth aha: first writePlacementReport activity completed this week
+    if (
+      newState.scout.primarySpecialization === "youth" &&
+      !tutorialState.completedSequences.has("ahaMoment:youth") &&
+      gameState.schedule.activities.some((a) => a?.type === "writePlacementReport") &&
+      Object.keys(gameState.placementReports).length === 0
+    ) {
+      tutorialState.queueSequence("ahaMoment:youth");
+    }
+
+    // Data aha: first anomaly flags generated this week
+    if (
+      newState.scout.primarySpecialization === "data" &&
+      !tutorialState.completedSequences.has("ahaMoment:data") &&
+      gameState.anomalyFlags.length === 0 &&
+      newState.anomalyFlags.length > 0
+    ) {
+      tutorialState.queueSequence("ahaMoment:data");
+    }
+
     set({
       gameState: newState,
       lastWeekSummary: weekSummary,
@@ -3133,6 +3178,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       currentScreen: "matchSummary",
     });
+
+    // Regional aha moment: first match in a region where the scout has familiarity >= 20
+    if (
+      gameState.scout.primarySpecialization === "regional" &&
+      !useTutorialStore.getState().completedSequences.has("ahaMoment:regional")
+    ) {
+      const fixtureLeague = gameState.leagues[fixture.leagueId];
+      if (fixtureLeague) {
+        const matchCountry = fixtureLeague.country;
+        const hasRegionalFamiliarity = Object.values(gameState.subRegions).some(
+          (sr) => sr.country === matchCountry && sr.familiarity >= 20,
+        );
+        if (hasRegionalFamiliarity) {
+          useTutorialStore.getState().queueSequence("ahaMoment:regional");
+        }
+      }
+    }
   },
 
   // Reports
@@ -3192,6 +3254,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let updatedClubResponses = gameState.clubResponses;
     let responseInboxMessage: InboxMessage | null = null;
     let updatedScoutAfterResponse = updatedScout;
+    let firstTeamAhaTriggered = false;
 
     if (
       gameState.scout.primarySpecialization === "firstTeam" &&
@@ -3214,7 +3277,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const matchedDirective = directiveMatch
           ? gameState.managerDirectives.find((d) => d.id === directiveMatch.directiveId)
           : undefined;
-        const clubResponse = generateClubResponse(
+        let clubResponse = generateClubResponse(
           responseRng,
           scoredReport,
           responsePlayer,
@@ -3223,7 +3286,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
           matchedDirective,
           updatedScout,
         );
+
+        // First-outcome guarantee: first report with conviction >= recommend
+        // always gets at least "interested" to ensure the aha moment fires early.
+        const GUARANTEED_CONVICTIONS = new Set(["recommend", "strongRecommend", "tablePound"]);
+        const hasNoPriorResponses = gameState.clubResponses.length === 0;
+        const NEGATIVE_RESPONSES = new Set(["ignored", "doesNotFit", "tooExpensive"]);
+        if (
+          hasNoPriorResponses &&
+          GUARANTEED_CONVICTIONS.has(conviction) &&
+          NEGATIVE_RESPONSES.has(clubResponse.response)
+        ) {
+          clubResponse = {
+            ...clubResponse,
+            response: "interested",
+            feedback: `The manager has added ${responsePlayer.firstName} ${responsePlayer.lastName} to the shortlist based on your report. Keep scouting — this is a promising start.`,
+            reputationDelta: Math.max(clubResponse.reputationDelta, 2),
+          };
+        }
+
         updatedClubResponses = [...gameState.clubResponses, clubResponse];
+
+        // Check for first-team aha moment: first positive response
+        const POSITIVE_RESPONSES = new Set(["interested", "trial", "signed", "loanSigned"]);
+        if (
+          POSITIVE_RESPONSES.has(clubResponse.response) &&
+          !gameState.clubResponses.some((r) => POSITIVE_RESPONSES.has(r.response))
+        ) {
+          firstTeamAhaTriggered = true;
+        }
 
         // Apply reputation delta from club response
         const repAfterResponse = Math.max(
@@ -3264,7 +3355,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       currentScreen: "reportHistory",
     });
     // Tutorial auto-advance: step expects "reportSubmitted"
-    useTutorialStore.getState().checkAutoAdvance("reportSubmitted");
+    const tutorialAfterReport = useTutorialStore.getState();
+    tutorialAfterReport.checkAutoAdvance("reportSubmitted");
+
+    // First-team aha moment: first positive club response
+    if (firstTeamAhaTriggered) {
+      tutorialAfterReport.queueSequence("ahaMoment:firstTeam");
+    }
   },
 
   // Career

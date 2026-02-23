@@ -38,6 +38,7 @@ import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { SeasonTimeline } from "./SeasonTimeline";
 import { ConnectedScenarioProgressPanel } from "./ScenarioProgressPanel";
+import { useTranslations } from "next-intl";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,6 +123,8 @@ export function Dashboard() {
   } = useGameStore();
   const [expandedRivals, setExpandedRivals] = useState<Set<string>>(new Set());
   const [expandedExpenses, setExpandedExpenses] = useState(false);
+  const t = useTranslations("dashboard");
+  const tCal = useTranslations("calendar");
 
   const toggleRival = (rivalId: string) => {
     setExpandedRivals((prev) => {
@@ -208,13 +211,8 @@ export function Dashboard() {
 
   // Issue 9: season phase badge
   const seasonPhase = getSeasonPhase(currentWeek);
-  const phaseLabel: Record<typeof seasonPhase, string> = {
-    preseason: "Preseason",
-    earlyseason: "Early Season",
-    midseason: "Midseason",
-    lateseason: "Late Season",
-    endseason: "End of Season",
-  };
+  // Season phase labels are only used once, so no need for a constant — but
+  // keeping a record satisfies the exhaustiveness check and reads clearly.
   const phaseClass: Record<typeof seasonPhase, string> = {
     preseason: "bg-blue-500/15 text-blue-400 border-blue-500/30",
     earlyseason: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
@@ -229,7 +227,7 @@ export function Dashboard() {
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
               {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
                 <ClubCrest
                   clubId={scout.currentClubId}
@@ -249,13 +247,13 @@ export function Dashboard() {
             <div className="mt-1 flex items-center gap-2">
               <Tooltip content="The current simulation week. Each week, you schedule activities and advance." side="bottom">
                 <p className="text-sm text-zinc-400">
-                  Week {currentWeek} — Season {currentSeason}
+                  {t("week", { number: currentWeek })} — {t("season", { number: currentSeason })}
                 </p>
               </Tooltip>
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${phaseClass[seasonPhase]}`}
               >
-                {phaseLabel[seasonPhase]}
+                {tCal(`seasonPhases.${seasonPhase}` as Parameters<typeof tCal>[0])}
               </span>
             </div>
           </div>
@@ -286,7 +284,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <Tooltip content="Your standing in the scouting world. Higher reputation unlocks better job offers and contact access." side="bottom">
-                    <p className="text-xs text-zinc-500">Reputation</p>
+                    <p className="text-xs text-zinc-500">{t("reputation")}</p>
                   </Tooltip>
                   <p className="text-2xl font-bold text-emerald-400">
                     {Math.round(scout.reputation)}
@@ -323,7 +321,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <Tooltip content="Physical and mental exhaustion. High fatigue reduces observation accuracy and increases injury risk." side="bottom">
-                    <p className="text-xs text-zinc-500">Fatigue</p>
+                    <p className="text-xs text-zinc-500">{t("fatigue")}</p>
                   </Tooltip>
                   <p className="text-2xl font-bold">
                     {Math.round(scout.fatigue)}%
@@ -348,6 +346,7 @@ export function Dashboard() {
         {finances && (
           <div className="mb-6">
             <Card
+              data-tutorial-id="dashboard-finances"
               className={
                 broke
                   ? "border-red-500/40 bg-red-500/5"
@@ -601,7 +600,7 @@ export function Dashboard() {
                 <CardTitle className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
                     <Mail size={16} aria-hidden="true" />
-                    Inbox
+                    {t("inbox")}
                   </span>
                   {unreadMessages.length > 0 && (
                     <Badge>{unreadMessages.length}</Badge>
@@ -644,11 +643,11 @@ export function Dashboard() {
             {/* Recent Reports */}
             <Card>
               <CardHeader>
-                <CardTitle>Recent Reports</CardTitle>
+                <CardTitle>{t("recentReports")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {recentReports.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No reports filed yet.</p>
+                  <p className="text-sm text-zinc-500">{t("noReports")}</p>
                 ) : (
                   <div className="space-y-2">
                     {recentReports.map((report) => {
@@ -803,7 +802,7 @@ export function Dashboard() {
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Active Directives */}
             {activeDirectives.length > 0 && (
-              <Card>
+              <Card data-tutorial-id="dashboard-directives">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Target size={14} className="text-blue-400" aria-hidden="true" />
@@ -922,7 +921,7 @@ export function Dashboard() {
         {specialization === "data" && (
           <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Prediction Tracker */}
-            <Card>
+            <Card data-tutorial-id="dashboard-predictions">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Brain size={14} className="text-violet-400" aria-hidden="true" />
@@ -998,7 +997,7 @@ export function Dashboard() {
             </Card>
 
             {/* Analytics Team */}
-            <Card>
+            <Card data-tutorial-id="dashboard-data-analysts">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Users size={14} className="text-blue-400" aria-hidden="true" />

@@ -8,6 +8,7 @@
 
 import { create } from "zustand";
 import { getSequenceById } from "@/components/game/tutorial/tutorialSteps";
+import type { Specialization } from "@/engine/core/types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -19,16 +20,47 @@ const STORAGE_KEY = "talentscout_tutorial";
 // Types
 // ---------------------------------------------------------------------------
 
+export type OnboardingSequenceId =
+  | "onboarding:youth:club"
+  | "onboarding:youth:freelance"
+  | "onboarding:firstTeam:club"
+  | "onboarding:firstTeam:freelance"
+  | "onboarding:regional:club"
+  | "onboarding:regional:freelance"
+  | "onboarding:data:club"
+  | "onboarding:data:freelance";
+
+export type AhaMomentSequenceId =
+  | "ahaMoment:youth"
+  | "ahaMoment:firstTeam"
+  | "ahaMoment:regional"
+  | "ahaMoment:data";
+
 export type TutorialSequenceId =
   | "firstWeek"
   | "firstReport"
   | "careerProgression"
   | "firstMatch"
-  | "firstReportWriting";
+  | "firstReportWriting"
+  | OnboardingSequenceId
+  | AhaMomentSequenceId;
 
 interface PersistedTutorialData {
   completedSequences: string[];
   dismissed: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Resolver
+// ---------------------------------------------------------------------------
+
+/** Returns the correct onboarding sequence ID for a given specialization and career path. */
+export function resolveOnboardingSequence(
+  specialization: Specialization,
+  hasClub: boolean,
+): OnboardingSequenceId {
+  const career = hasClub ? "club" : "freelance";
+  return `onboarding:${specialization}:${career}` as OnboardingSequenceId;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,6 +114,9 @@ export interface TutorialState {
    */
   dismissed: boolean;
 
+  /** Sequence queued to start after the current one completes. */
+  pendingSequence: TutorialSequenceId | null;
+
   // -------------------------------------------------------------------------
   // Actions
   // -------------------------------------------------------------------------
@@ -93,9 +128,15 @@ export interface TutorialState {
   startSequence: (id: TutorialSequenceId) => void;
 
   /**
+   * Queue a sequence. Starts immediately if no tutorial is active,
+   * otherwise waits until the current sequence completes.
+   */
+  queueSequence: (id: TutorialSequenceId) => void;
+
+  /**
    * Advance to the next step in the current sequence.
    * Marks the sequence as completed and deactivates when the last step is
-   * acknowledged.
+   * acknowledged. If a pendingSequence exists, auto-starts it.
    */
   nextStep: () => void;
 
@@ -134,13 +175,29 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   completedSequences: new Set(persisted.completedSequences),
   tutorialActive: false,
   dismissed: persisted.dismissed,
+  pendingSequence: null,
 
   startSequence(id) {
     const { dismissed, completedSequences } = get();
 
     // Respect permanent opt-out and skip already-seen sequences.
     if (dismissed) return;
+
+    // Backward compat: "firstWeek" is replaced by onboarding sequences.
+    // If called with "firstWeek", no-op — onboarding is started via the resolver.
+    if (id === "firstWeek") return;
+
     if (completedSequences.has(id)) return;
+
+    // If any onboarding sequence was completed, skip all onboarding sequences.
+    // This handles old saves that completed "firstWeek" — they shouldn't see new onboarding.
+    if (
+      id.startsWith("onboarding:") &&
+      (completedSequences.has("firstWeek") ||
+        Array.from(completedSequences).some((s) => s.startsWith("onboarding:")))
+    ) {
+      return;
+    }
 
     set({
       currentSequence: id,
@@ -149,8 +206,20 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     });
   },
 
+  queueSequence(id) {
+    const { dismissed, completedSequences, tutorialActive } = get();
+    if (dismissed) return;
+    if (completedSequences.has(id)) return;
+
+    if (!tutorialActive) {
+      get().startSequence(id);
+    } else {
+      set({ pendingSequence: id });
+    }
+  },
+
   nextStep() {
-    const { currentStep, currentSequence, completedSequences } = get();
+    const { currentStep, currentSequence, completedSequences, pendingSequence } = get();
     if (!currentSequence) return;
 
     const sequence = getSequenceById(currentSequence);
@@ -171,7 +240,13 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
         currentSequence: null,
         currentStep: 0,
         tutorialActive: false,
+        pendingSequence: null,
       });
+
+      // Auto-start pending sequence if one was queued.
+      if (pendingSequence) {
+        get().startSequence(pendingSequence);
+      }
     } else {
       set({ currentStep: currentStep + 1 });
     }
@@ -182,6 +257,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       currentSequence: null,
       currentStep: 0,
       tutorialActive: false,
+      pendingSequence: null,
     });
   },
 
@@ -198,6 +274,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       currentSequence: null,
       currentStep: 0,
       tutorialActive: false,
+      pendingSequence: null,
     });
   },
 

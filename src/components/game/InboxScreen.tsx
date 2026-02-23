@@ -510,7 +510,7 @@ export function InboxScreen() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2" role="list">
+          <div className="space-y-2" role="list" data-tutorial-id="inbox-latest">
             {filtered.map((message) => (
               <div key={message.id} role="listitem">
                 <MessageItem

@@ -315,7 +315,7 @@ function UnsignedYouthTab({
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" data-tutorial-id="youth-pipeline-list">
           {sorted.map((y) => (
             <YouthCard
               key={y.id}
@@ -504,7 +504,7 @@ export function YouthScoutingScreen() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card data-tutorial-id="youth-legacy-score">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
