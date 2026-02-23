@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { SCENARIOS, type ScenarioDef } from "@/engine/scenarios";
 import { ArrowLeft, Clock, Target, ChevronRight, CheckCircle2, Circle } from "lucide-react";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
 // CONSTANTS
@@ -148,7 +149,8 @@ export function ScenarioSelect() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0a0a0a] to-[#0c140c] px-4 py-8">
+    <div className="relative min-h-screen bg-gradient-to-b from-[#0a0a0a] to-[#0c140c] px-4 py-8">
+      <ScreenBackground src="/images/backgrounds/menu-bg-2.png" opacity={0.78} />
       {/* Confirm overlay */}
       {selectedScenario !== null && (
         <ConfirmOverlay
@@ -158,7 +160,7 @@ export function ScenarioSelect() {
         />
       )}
 
-      <div className="mx-auto max-w-5xl">
+      <div className="relative z-10 mx-auto max-w-5xl">
         {/* Back */}
         <button
           onClick={() => setScreen("mainMenu")}

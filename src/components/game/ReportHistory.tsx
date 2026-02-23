@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { FileText, X, ChevronDown, ChevronUp } from "lucide-react";
 import type { ScoutReport, ConvictionLevel } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
   note: "Note",
@@ -211,7 +212,9 @@ export function ReportHistory() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative min-h-full p-6">
+        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+        <div className="relative z-10">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Report History</h1>
           <p className="text-sm text-zinc-400">All submitted scouting reports</p>
@@ -341,6 +344,7 @@ export function ReportHistory() {
           </CardContent>
         </Card>
       </div>
+        </div>
 
       {selectedReport && (
         <ReportDetailModal

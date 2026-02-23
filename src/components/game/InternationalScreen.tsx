@@ -12,6 +12,7 @@ import { Globe, Plane, MapPin, Star } from "lucide-react";
 import { getCountryOptions } from "@/data/index";
 import type { CountryReputation, TravelBooking } from "@/engine/core/types";
 import { WorldMap } from "@/components/game/WorldMap";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -268,7 +269,9 @@ export function InternationalScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative min-h-full p-6">
+        <ScreenBackground src="/images/backgrounds/international.png" opacity={0.82} />
+        <div className="relative z-10">
         {/* Header */}
         <div className="mb-6">
           <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -341,6 +344,7 @@ export function InternationalScreen() {
             </div>
           </>
         )}
+        </div>
       </div>
     </GameLayout>
   );

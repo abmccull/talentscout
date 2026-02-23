@@ -11,6 +11,7 @@ import { PitchCanvas } from "./match/PitchCanvas";
 import { Commentary } from "./match/Commentary";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
+import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 
 // ---------------------------------------------------------------------------
@@ -232,7 +233,8 @@ export function MatchScreen() {
 
   return (
     <GameLayout>
-      <div className="flex h-full flex-col">
+      <div className="relative flex h-full flex-col">
+        <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.85} />
 
         {/* ── Top scoreboard bar ──────────────────────────────────────────── */}
         <div className="border-b border-[#27272a] bg-[#0c0c0c] px-4 py-2.5 shrink-0" data-tutorial-id="match-scoreboard">

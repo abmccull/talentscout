@@ -13,6 +13,7 @@ import {
   ALLOCATION_MAX,
   BONUS_POINTS,
 } from "@/engine/scout/creation";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ---------------------------------------------------------------------------
 // Static data
@@ -481,7 +482,9 @@ export function NewGameScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex flex-col">
+    <div className="relative min-h-screen bg-[var(--background)] flex flex-col">
+      <ScreenBackground src="/images/backgrounds/menu-bg-2.png" opacity={0.8} />
+      <div className="relative z-10 flex flex-1 flex-col">
       {/* Top bar */}
       <div className="px-8 pt-6">
         <div className="mx-auto max-w-4xl">
@@ -1255,6 +1258,7 @@ export function NewGameScreen() {
           to { opacity: 1; transform: translateX(0); }
         }
       `}</style>
+      </div>
     </div>
   );
 }

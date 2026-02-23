@@ -12,6 +12,7 @@ import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
+import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
@@ -163,7 +164,9 @@ export function ReportWriter() {
 
   return (
     <GameLayout>
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="relative min-h-full p-6">
+        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+        <div className="relative z-10 max-w-4xl mx-auto">
         <button
           onClick={handleBack}
           className="mb-4 flex items-center gap-1 text-sm text-zinc-500 hover:text-white transition"
@@ -583,6 +586,7 @@ export function ReportWriter() {
               {t("submitReport")}
             </Button>
           </div>
+        </div>
         </div>
       </div>
     </GameLayout>
