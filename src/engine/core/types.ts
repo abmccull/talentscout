@@ -835,6 +835,8 @@ export interface MatchEvent {
   attributesRevealed: PlayerAttribute[];
 }
 
+export type SetPieceVariant = "corner" | "freeKick" | "penalty" | "throwIn";
+
 export interface MatchPhase {
   minute: number;
   type: MatchPhaseType;
@@ -843,6 +845,10 @@ export interface MatchPhase {
   events: MatchEvent[];
   /** Attributes that are generally observable during this phase type. */
   observableAttributes: PlayerAttribute[];
+  /** Momentum value 0–100 computed from recent event quality. */
+  momentum?: number;
+  /** For setpiece phases, the specific variant. */
+  setPieceVariant?: SetPieceVariant;
 }
 
 // =============================================================================

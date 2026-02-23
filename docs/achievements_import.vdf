@@ -1,0 +1,723 @@
+"achievements"
+{
+	"1"
+	{
+		"name"		"FIRST_OBSERVATION"
+		"display"
+		{
+			"name"
+			{
+				"english"		"First Glance"
+			}
+			"desc"
+			{
+				"english"		"Submit your first observation."
+			}
+		}
+		"hidden"		"0"
+	}
+	"2"
+	{
+		"name"		"FIRST_REPORT"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Ink on Paper"
+			}
+			"desc"
+			{
+				"english"		"Write your first scouting report."
+			}
+		}
+		"hidden"		"0"
+	}
+	"3"
+	{
+		"name"		"FIRST_WEEK"
+		"display"
+		{
+			"name"
+			{
+				"english"		"The Journey Begins"
+			}
+			"desc"
+			{
+				"english"		"Advance your first week."
+			}
+		}
+		"hidden"		"0"
+	}
+	"4"
+	{
+		"name"		"FIRST_MATCH"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Matchday"
+			}
+			"desc"
+			{
+				"english"		"Attend your first live match."
+			}
+		}
+		"hidden"		"0"
+	}
+	"5"
+	{
+		"name"		"FIRST_CONTACT"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Networking"
+			}
+			"desc"
+			{
+				"english"		"Meet your first contact."
+			}
+		}
+		"hidden"		"0"
+	}
+	"6"
+	{
+		"name"		"FIRST_PERK"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Specializing"
+			}
+			"desc"
+			{
+				"english"		"Unlock your first perk."
+			}
+		}
+		"hidden"		"0"
+	}
+	"7"
+	{
+		"name"		"FIRST_EQUIPMENT"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Tools of the Trade"
+			}
+			"desc"
+			{
+				"english"		"Purchase your first piece of equipment."
+			}
+		}
+		"hidden"		"0"
+	}
+	"8"
+	{
+		"name"		"FIRST_YOUTH"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Future Stars"
+			}
+			"desc"
+			{
+				"english"		"Scout your first youth player."
+			}
+		}
+		"hidden"		"0"
+	}
+	"9"
+	{
+		"name"		"REACH_TIER_2"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Rising Scout"
+			}
+			"desc"
+			{
+				"english"		"Reach Career Tier 2."
+			}
+		}
+		"hidden"		"0"
+	}
+	"10"
+	{
+		"name"		"REACH_TIER_3"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Established"
+			}
+			"desc"
+			{
+				"english"		"Reach Career Tier 3."
+			}
+		}
+		"hidden"		"0"
+	}
+	"11"
+	{
+		"name"		"REACH_TIER_4"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Elite Scout"
+			}
+			"desc"
+			{
+				"english"		"Reach Career Tier 4."
+			}
+		}
+		"hidden"		"0"
+	}
+	"12"
+	{
+		"name"		"REACH_TIER_5"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Legend"
+			}
+			"desc"
+			{
+				"english"		"Reach Career Tier 5."
+			}
+		}
+		"hidden"		"0"
+	}
+	"13"
+	{
+		"name"		"SEASON_1"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Survived"
+			}
+			"desc"
+			{
+				"english"		"Complete your first season."
+			}
+		}
+		"hidden"		"0"
+	}
+	"14"
+	{
+		"name"		"SEASON_3"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Veteran"
+			}
+			"desc"
+			{
+				"english"		"Complete 3 seasons."
+			}
+		}
+		"hidden"		"0"
+	}
+	"15"
+	{
+		"name"		"SEASON_5"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Dedicated"
+			}
+			"desc"
+			{
+				"english"		"Complete 5 seasons."
+			}
+		}
+		"hidden"		"0"
+	}
+	"16"
+	{
+		"name"		"SEASON_10"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Lifer"
+			}
+			"desc"
+			{
+				"english"		"Complete 10 seasons."
+			}
+		}
+		"hidden"		"0"
+	}
+	"17"
+	{
+		"name"		"REPORTS_10"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Prolific Reporter"
+			}
+			"desc"
+			{
+				"english"		"Submit 10 scouting reports."
+			}
+		}
+		"hidden"		"0"
+	}
+	"18"
+	{
+		"name"		"REPORTS_25"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Seasoned Analyst"
+			}
+			"desc"
+			{
+				"english"		"Submit 25 scouting reports."
+			}
+		}
+		"hidden"		"0"
+	}
+	"19"
+	{
+		"name"		"REPORTS_50"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Report Machine"
+			}
+			"desc"
+			{
+				"english"		"Submit 50 scouting reports."
+			}
+		}
+		"hidden"		"0"
+	}
+	"20"
+	{
+		"name"		"REPORTS_100"
+		"display"
+		{
+			"name"
+			{
+				"english"		"The Archive"
+			}
+			"desc"
+			{
+				"english"		"Submit 100 scouting reports."
+			}
+		}
+		"hidden"		"0"
+	}
+	"21"
+	{
+		"name"		"TABLE_POUND"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Table Pounder"
+			}
+			"desc"
+			{
+				"english"		"Submit a report with a Table Pound conviction."
+			}
+		}
+		"hidden"		"0"
+	}
+	"22"
+	{
+		"name"		"WONDERKID_FOUND"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Diamond in the Rough"
+			}
+			"desc"
+			{
+				"english"		"Discover a wonderkid."
+			}
+		}
+		"hidden"		"0"
+	}
+	"23"
+	{
+		"name"		"ALUMNI_5"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Talent Pipeline"
+			}
+			"desc"
+			{
+				"english"		"Have 5 alumni debuts."
+			}
+		}
+		"hidden"		"0"
+	}
+	"24"
+	{
+		"name"		"ALUMNI_INTERNATIONAL"
+		"display"
+		{
+			"name"
+			{
+				"english"		"International Talent"
+			}
+			"desc"
+			{
+				"english"		"Have an alumni earn an international call-up."
+			}
+		}
+		"hidden"		"0"
+	}
+	"25"
+	{
+		"name"		"HIGH_ACCURACY"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Eagle Eye"
+			}
+			"desc"
+			{
+				"english"		"Achieve a report quality score above 85."
+			}
+		}
+		"hidden"		"0"
+	}
+	"26"
+	{
+		"name"		"GENERATIONAL_TALENT"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Once in a Generation"
+			}
+			"desc"
+			{
+				"english"		"Discover a generational talent."
+			}
+		}
+		"hidden"		"0"
+	}
+	"27"
+	{
+		"name"		"MAX_SPEC"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Master of One"
+			}
+			"desc"
+			{
+				"english"		"Max out any specialization."
+			}
+		}
+		"hidden"		"0"
+	}
+	"28"
+	{
+		"name"		"ALL_PERKS_TREE"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Complete Tree"
+			}
+			"desc"
+			{
+				"english"		"Unlock all perks in one specialization tree."
+			}
+		}
+		"hidden"		"0"
+	}
+	"29"
+	{
+		"name"		"MASTERY_PERK"
+		"display"
+		{
+			"name"
+			{
+				"english"		"True Mastery"
+			}
+			"desc"
+			{
+				"english"		"Unlock a mastery-tier perk."
+			}
+		}
+		"hidden"		"0"
+	}
+	"30"
+	{
+		"name"		"DUAL_MASTERY"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Renaissance Scout"
+			}
+			"desc"
+			{
+				"english"		"Earn mastery in 2 different skills."
+			}
+		}
+		"hidden"		"0"
+	}
+	"31"
+	{
+		"name"		"EQUIPMENT_MAXED"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Fully Equipped"
+			}
+			"desc"
+			{
+				"english"		"Have all equipment slots at maximum tier."
+			}
+		}
+		"hidden"		"0"
+	}
+	"32"
+	{
+		"name"		"SECONDARY_SPEC"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Dual Threat"
+			}
+			"desc"
+			{
+				"english"		"Unlock a secondary specialization."
+			}
+		}
+		"hidden"		"0"
+	}
+	"33"
+	{
+		"name"		"ALL_ACTIVITIES"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Jack of All Trades"
+			}
+			"desc"
+			{
+				"english"		"Perform every activity type at least once."
+			}
+		}
+		"hidden"		"0"
+	}
+	"34"
+	{
+		"name"		"REP_50"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Well Known"
+			}
+			"desc"
+			{
+				"english"		"Reach 50 reputation."
+			}
+		}
+		"hidden"		"0"
+	}
+	"35"
+	{
+		"name"		"COUNTRIES_3"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Frequent Flyer"
+			}
+			"desc"
+			{
+				"english"		"Scout in 3 countries."
+			}
+		}
+		"hidden"		"0"
+	}
+	"36"
+	{
+		"name"		"COUNTRIES_6"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Globetrotter"
+			}
+			"desc"
+			{
+				"english"		"Scout in 6 countries."
+			}
+		}
+		"hidden"		"0"
+	}
+	"37"
+	{
+		"name"		"COUNTRIES_10"
+		"display"
+		{
+			"name"
+			{
+				"english"		"World Scout"
+			}
+			"desc"
+			{
+				"english"		"Scout in 10 countries."
+			}
+		}
+		"hidden"		"0"
+	}
+	"38"
+	{
+		"name"		"COUNTRIES_15"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Global Network"
+			}
+			"desc"
+			{
+				"english"		"Scout in 15 countries."
+			}
+		}
+		"hidden"		"0"
+	}
+	"39"
+	{
+		"name"		"HOME_MASTERY"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Home Turf"
+			}
+			"desc"
+			{
+				"english"		"Achieve full familiarity in your home country."
+			}
+		}
+		"hidden"		"0"
+	}
+	"40"
+	{
+		"name"		"ALL_CONTINENTS"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Continental"
+			}
+			"desc"
+			{
+				"english"		"Submit a report on a player from every continent."
+			}
+		}
+		"hidden"		"0"
+	}
+	"41"
+	{
+		"name"		"BLIND_FAITH"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Blind Faith"
+			}
+			"desc"
+			{
+				"english"		"Submit a report on a player with 0 observations."
+			}
+		}
+		"hidden"		"1"
+	}
+	"42"
+	{
+		"name"		"TRIPLE_STORYLINE"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Drama Magnet"
+			}
+			"desc"
+			{
+				"english"		"Have 3 active narrative events in the same season."
+			}
+		}
+		"hidden"		"1"
+	}
+	"43"
+	{
+		"name"		"SURVIVED_FIRING"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Comeback Kid"
+			}
+			"desc"
+			{
+				"english"		"Continue playing after being fired."
+			}
+		}
+		"hidden"		"1"
+	}
+	"44"
+	{
+		"name"		"WATCHLIST_10"
+		"display"
+		{
+			"name"
+			{
+				"english"		"The Shortlist"
+			}
+			"desc"
+			{
+				"english"		"Have 10 players on your watchlist."
+			}
+		}
+		"hidden"		"1"
+	}
+	"45"
+	{
+		"name"		"MARATHON"
+		"display"
+		{
+			"name"
+			{
+				"english"		"Marathon Scout"
+			}
+			"desc"
+			{
+				"english"		"Play for 50 or more weeks total."
+			}
+		}
+		"hidden"		"1"
+	}
+}

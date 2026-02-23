@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAchievementStore } from "@/stores/achievementStore";
 import { ACHIEVEMENTS } from "@/lib/achievements";
+import { useAudio } from "@/lib/audio/useAudio";
 
 // =============================================================================
 // CONSTANTS
@@ -30,14 +31,16 @@ interface ToastContentProps {
 function ToastCard({ achievementId, onDismiss }: ToastContentProps) {
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { playSFX } = useAudio();
 
   const achievement = ACHIEVEMENTS.find((a) => a.id === achievementId);
 
-  // Trigger slide-in after mount (next tick so CSS transition fires).
+  // Trigger slide-in after mount and play achievement SFX.
   useEffect(() => {
+    playSFX("achievement");
     const id = window.requestAnimationFrame(() => setVisible(true));
     return () => window.cancelAnimationFrame(id);
-  }, []);
+  }, [playSFX]);
 
   // Auto-dismiss after AUTO_DISMISS_MS.
   useEffect(() => {

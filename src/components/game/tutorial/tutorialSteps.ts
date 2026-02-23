@@ -217,6 +217,138 @@ const careerProgression: TutorialSequence = {
   ],
 };
 
+const firstMatch: TutorialSequence = {
+  id: "firstMatch",
+  name: "Your First Match",
+  steps: [
+    {
+      id: "fm-1",
+      screen: "match",
+      targetSelector: "match-scoreboard",
+      title: "Scoreboard",
+      description:
+        "This is the match scoreboard. Track the score and current minute as the match unfolds.",
+      position: "bottom",
+    },
+    {
+      id: "fm-2",
+      screen: "match",
+      targetSelector: "match-phase-desc",
+      title: "Phase Description",
+      description:
+        "Each match is broken into 12\u201318 phases. Read the tactical context \u2014 it tells you what kind of play is happening.",
+      position: "bottom",
+    },
+    {
+      id: "fm-3",
+      screen: "match",
+      targetSelector: "match-pitch",
+      title: "Pitch View",
+      description:
+        "Players are shown on the pitch. Larger dots indicate players involved in the current phase.",
+      position: "right",
+    },
+    {
+      id: "fm-4",
+      screen: "match",
+      targetSelector: "match-commentary",
+      title: "Commentary",
+      description:
+        "Events appear here as the phase unfolds. Quality dots next to each event show how well the player performed.",
+      position: "top",
+    },
+    {
+      id: "fm-5",
+      screen: "match",
+      targetSelector: "match-focus-panel",
+      title: "Focus a Player",
+      description:
+        "Click a player on the pitch or use 'Add Focus' to track up to 3 players. Focused players reveal more attributes with better accuracy.",
+      position: "left",
+    },
+    {
+      id: "fm-6",
+      screen: "match",
+      targetSelector: "match-focus-lens",
+      title: "Choose a Lens",
+      description:
+        "Choose a lens to focus your observation: Technical, Physical, Mental, Tactical, or General. The lens determines which attributes are deepened.",
+      position: "left",
+    },
+    {
+      id: "fm-7",
+      screen: "match",
+      targetSelector: "match-involved-players",
+      title: "Involved Players",
+      description:
+        "These are the players involved in the current phase. Focused players appear in green \u2014 they get bonus accuracy on their readings.",
+      position: "left",
+    },
+    {
+      id: "fm-8",
+      screen: "match",
+      targetSelector: "match-advance-btn",
+      title: "Advance the Match",
+      description:
+        "Click 'Next Phase' when you\u2019re ready to move on. At the end of the match, all your observations are saved automatically.",
+      position: "top",
+    },
+  ],
+};
+
+const firstReportWriting: TutorialSequence = {
+  id: "firstReportWriting",
+  name: "Writing Your First Report",
+  steps: [
+    {
+      id: "frw-1",
+      screen: "reportWriter",
+      targetSelector: "report-observation-summary",
+      title: "Select a Player",
+      description:
+        "This shows how many times you\u2019ve observed this player and from which contexts. More sessions mean higher confidence.",
+      position: "bottom",
+    },
+    {
+      id: "frw-2",
+      screen: "reportWriter",
+      targetSelector: "report-attributes",
+      title: "Confidence Display",
+      description:
+        "These bars show your confidence in each attribute reading. Green means reliable data, amber is moderate, red is uncertain.",
+      position: "bottom",
+    },
+    {
+      id: "frw-3",
+      screen: "reportWriter",
+      targetSelector: "report-conviction",
+      title: "Conviction Level",
+      description:
+        "Choose your conviction. Higher conviction means bigger reputation stakes \u2014 a Table Pound is your career on the line.",
+      position: "right",
+    },
+    {
+      id: "frw-4",
+      screen: "reportWriter",
+      targetSelector: "report-strengths",
+      title: "Strengths & Weaknesses",
+      description:
+        "Highlight what stood out from your observations. Clubs read these to understand your assessment beyond raw numbers.",
+      position: "top",
+    },
+    {
+      id: "frw-5",
+      screen: "reportWriter",
+      targetSelector: "report-submit",
+      title: "Submit Your Report",
+      description:
+        "Your report goes to the club. Their response depends on report quality, your reputation, and conviction level.",
+      position: "top",
+      nextStep: "reportSubmitted",
+    },
+  ],
+};
+
 // ---------------------------------------------------------------------------
 // Exported collection
 // ---------------------------------------------------------------------------
@@ -225,6 +357,8 @@ export const TUTORIAL_SEQUENCES: TutorialSequence[] = [
   firstWeek,
   firstReport,
   careerProgression,
+  firstMatch,
+  firstReportWriting,
 ];
 
 /** Look up a sequence by its id. Returns undefined if not found. */

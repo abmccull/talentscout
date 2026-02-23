@@ -16,6 +16,7 @@ export function useScreenMusic(screen: string): void {
 
     if (screen === "mainMenu" || screen === "newGame") {
       audio.playMusic("menu");
+      audio.stopAmbience();
     } else if (screen === "match") {
       audio.playMusic("matchday");
       audio.playAmbience("stadium-crowd");
@@ -23,8 +24,9 @@ export function useScreenMusic(screen: string): void {
       // Keep match music playing; only stop ambience crowd noise.
       audio.stopAmbience();
     } else {
+      // In-game screens (dashboard, calendar, reports, etc.) get office ambience
       audio.playMusic("scouting");
-      audio.stopAmbience();
+      audio.playAmbience("office");
     }
   }, [screen]);
 }

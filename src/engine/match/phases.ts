@@ -17,6 +17,7 @@ import {
   type MatchEventType,
   type PlayerAttribute,
   type Position,
+  type SetPieceVariant,
 } from "@/engine/core/types";
 
 export interface MatchContext {
@@ -202,6 +203,47 @@ const PHASE_DESCRIPTIONS: Record<MatchPhaseType, string[]> = {
 };
 
 // ---------------------------------------------------------------------------
+// 4c. Set piece variants
+// ---------------------------------------------------------------------------
+
+const SET_PIECE_VARIANT_POOL: SetPieceVariant[] = [
+  "corner", "corner", "corner",
+  "freeKick", "freeKick", "freeKick",
+  "penalty",
+  "throwIn", "throwIn",
+];
+
+const SET_PIECE_DESCRIPTIONS: Record<SetPieceVariant, string[]> = {
+  corner: [
+    "Corner kick. The box fills with bodies \u2014 every set piece is a chance.",
+    "In-swinging corner from the right. Six players attack the near post.",
+    "Short corner routine \u2014 a rehearsed move from the training ground.",
+  ],
+  freeKick: [
+    "Free kick from 25 yards. The wall lines up nervously.",
+    "A dead-ball specialist stands over this one. The crowd holds its breath.",
+    "Free kick in a dangerous position \u2014 just outside the box, central.",
+  ],
+  penalty: [
+    "PENALTY! The referee points to the spot. A huge moment in this match.",
+    "A penalty kick \u2014 the defender's challenge was reckless and the decision looks correct.",
+    "Penalty awarded. The taker places the ball on the spot. Silence falls.",
+  ],
+  throwIn: [
+    "Long throw into the danger area \u2014 this side have made this a weapon.",
+    "A long throw from deep. The goalkeeper looks uncertain about coming for it.",
+    "Throw-in close to the corner flag \u2014 practically a set piece.",
+  ],
+};
+
+const SET_PIECE_EVENT_WEIGHTS: Record<SetPieceVariant, Partial<Record<MatchEventType, number>>> = {
+  corner:  { header: 7, shot: 3, cross: 2, goal: 2, tackle: 1 },
+  freeKick: { shot: 7, cross: 3, goal: 2, header: 2, save: 1 },
+  penalty: { goal: 7, save: 3 },
+  throwIn: { header: 5, tackle: 3, positioning: 3, cross: 2, shot: 1 },
+};
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -317,16 +359,36 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
 
   const phases: MatchPhase[] = [];
 
+  // Track recent event qualities for momentum computation
+  const recentQualities: number[] = [];
+
   for (let i = 0; i < phaseCount; i++) {
     const minute = startMinutes[i];
     const endMinute = i < phaseCount - 1 ? startMinutes[i + 1] - 1 : 90;
     const phaseType = rng.pick(phaseTypePool);
     const involvedPlayerIds = selectInvolvedPlayers(rng, homePlayers, awayPlayers);
-    const eventCount = rng.nextInt(2, 4);
+
+    // Set piece variant selection
+    let setPieceVariant: SetPieceVariant | undefined;
+    if (phaseType === "setpiece") {
+      setPieceVariant = rng.pick(SET_PIECE_VARIANT_POOL);
+    }
+
+    // Use variant-specific event weights for set pieces
+    const effectiveWeights = setPieceVariant
+      ? SET_PIECE_EVENT_WEIGHTS[setPieceVariant]
+      : PHASE_EVENT_WEIGHTS[phaseType];
+
+    // Penalties have fewer events
+    const eventCount = setPieceVariant === "penalty" ? 1 : rng.nextInt(2, 4);
     const events: MatchEvent[] = [];
 
     for (let e = 0; e < eventCount; e++) {
-      const eventType = pickEventType(rng, phaseType);
+      // Use effective weights for event type selection
+      const weightItems = (Object.entries(effectiveWeights) as [MatchEventType, number][])
+        .filter(([, w]) => w > 0)
+        .map(([type, weight]) => ({ item: type, weight }));
+      const eventType = rng.pickWeighted(weightItems);
       const revealed = EVENT_REVEALED[eventType];
 
       const involved = involvedPlayerIds
@@ -340,6 +402,7 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
       const eventMinute = minute + Math.floor((phaseWidth / eventCount) * e);
 
       const quality = computeEventQuality(rng, primary, revealed, weather);
+      recentQualities.push(quality);
 
       const templates = COMMENTARY[eventType];
       const template = rng.pick(templates);
@@ -358,13 +421,27 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
       });
     }
 
+    // Compute momentum from recent event qualities (last ~8 events)
+    const recentSlice = recentQualities.slice(-8);
+    const avgQuality = recentSlice.length > 0
+      ? recentSlice.reduce((s, v) => s + v, 0) / recentSlice.length
+      : 5;
+    const momentum = Math.round(Math.min(100, Math.max(0, (avgQuality / 10) * 100)));
+
+    // Use variant-specific description for set pieces
+    const phaseDescription = setPieceVariant
+      ? rng.pick(SET_PIECE_DESCRIPTIONS[setPieceVariant])
+      : rng.pick(PHASE_DESCRIPTIONS[phaseType]);
+
     phases.push({
       minute,
       type: phaseType,
-      description: rng.pick(PHASE_DESCRIPTIONS[phaseType]),
+      description: phaseDescription,
       involvedPlayerIds,
       events,
       observableAttributes: collectObservableAttributes(events),
+      momentum,
+      setPieceVariant,
     });
   }
 

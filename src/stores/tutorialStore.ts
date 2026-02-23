@@ -22,7 +22,9 @@ const STORAGE_KEY = "talentscout_tutorial";
 export type TutorialSequenceId =
   | "firstWeek"
   | "firstReport"
-  | "careerProgression";
+  | "careerProgression"
+  | "firstMatch"
+  | "firstReportWriting";
 
 interface PersistedTutorialData {
   completedSequences: string[];

@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Plus, X, ChevronRight, Trophy, ChevronDown } from "lucide-react";
+import { Eye, Plus, X, ChevronRight, Trophy, ChevronDown, BarChart3 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { MatchPhase } from "@/engine/core/types";
 import { PitchCanvas } from "./match/PitchCanvas";
 import { Commentary } from "./match/Commentary";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { useAudio } from "@/lib/audio/useAudio";
 
 // ---------------------------------------------------------------------------
 // Local types
@@ -61,11 +62,18 @@ export function MatchScreen() {
     getClub,
   } = useGameStore();
 
+  const { playSFX } = useAudio();
   const [showPlayerPicker, setShowPlayerPicker] = useState(false);
   // Track which player was clicked on the canvas (used to open focus picker)
   const [canvasClickedPlayerId, setCanvasClickedPlayerId] = useState<string | null>(null);
   // Collapsed state for the phase description on small screens
   const [descExpanded, setDescExpanded] = useState(true);
+  // Track previous goal count to detect new goals
+  const prevGoalCountRef = useRef(0);
+  // Play whistle on match start (once)
+  const whistlePlayed = useRef(false);
+  // Match stats bar collapsed state
+  const [showStats, setShowStats] = useState(false);
 
   // Compute isComplete before any early return (Rules of Hooks — optional chaining
   // makes this safe when activeMatch is null).
@@ -78,12 +86,21 @@ export function MatchScreen() {
     setDescExpanded(true);
   }, [activeMatch?.currentPhase]);
 
+  // Play kick-off whistle once when the match screen mounts
+  useEffect(() => {
+    if (activeMatch && !whistlePlayed.current) {
+      whistlePlayed.current = true;
+      playSFX("whistle");
+    }
+  }, [activeMatch, playSFX]);
+
   // Navigate to MatchSummaryScreen when all phases are done.
   useEffect(() => {
     if (isComplete) {
+      playSFX("season-end-whistle");
       endMatch();
     }
-  }, [isComplete, endMatch]);
+  }, [isComplete, endMatch, playSFX]);
 
   // ── Guard clauses (all hooks called above) ──────────────────────────────
 
@@ -113,6 +130,15 @@ export function MatchScreen() {
         else awayGoals++;
       }
     }
+  }
+
+  // Detect new goals and play crowd reaction SFX
+  const totalGoals = homeGoals + awayGoals;
+  if (totalGoals > prevGoalCountRef.current) {
+    prevGoalCountRef.current = totalGoals;
+    playSFX("crowd-goal");
+  } else {
+    prevGoalCountRef.current = totalGoals;
   }
 
   const allInvolvedPlayerIds = currentPhase
@@ -171,6 +197,37 @@ export function MatchScreen() {
   // Weather string from fixture (may be undefined)
   const weather = fixture.weather;
 
+  // ── Match stats (derived from accumulated events) ─────────────────────
+  const homePlayerIdSet = new Set(homeClub?.playerIds ?? []);
+  const matchStats = (() => {
+    let homePoss = 0, awayPoss = 0;
+    let homeShots = 0, awayShots = 0;
+    let homeFouls = 0, awayFouls = 0;
+    for (let pi = 0; pi <= activeMatch.currentPhase && pi < activeMatch.phases.length; pi++) {
+      for (const ev of activeMatch.phases[pi].events) {
+        const isHomePlayer = homePlayerIdSet.has(ev.playerId);
+        if (ev.type === "pass" || ev.type === "positioning") {
+          if (isHomePlayer) homePoss++; else awayPoss++;
+        }
+        if (ev.type === "shot" || ev.type === "goal") {
+          if (isHomePlayer) homeShots++; else awayShots++;
+        }
+        if (ev.type === "foul") {
+          if (isHomePlayer) homeFouls++; else awayFouls++;
+        }
+      }
+    }
+    const totalPoss = homePoss + awayPoss || 1;
+    return {
+      homePossession: Math.round((homePoss / totalPoss) * 100),
+      awayPossession: Math.round((awayPoss / totalPoss) * 100),
+      homeShots,
+      awayShots,
+      homeFouls,
+      awayFouls,
+    };
+  })();
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -178,7 +235,7 @@ export function MatchScreen() {
       <div className="flex h-full flex-col">
 
         {/* ── Top scoreboard bar ──────────────────────────────────────────── */}
-        <div className="border-b border-[#27272a] bg-[#0c0c0c] px-4 py-2.5 shrink-0">
+        <div className="border-b border-[#27272a] bg-[#0c0c0c] px-4 py-2.5 shrink-0" data-tutorial-id="match-scoreboard">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <span className="text-base font-bold">{homeClub?.shortName ?? "HOME"}</span>
@@ -204,6 +261,48 @@ export function MatchScreen() {
           </div>
         </div>
 
+        {/* ── Match stats bar (collapsible) ─────────────────────────────── */}
+        <div className="shrink-0 border-b border-[#27272a] bg-[#0a0a0a]">
+          <button
+            onClick={() => setShowStats((v) => !v)}
+            className="flex w-full items-center justify-center gap-1.5 px-4 py-1 text-[10px] text-zinc-600 hover:text-zinc-400 transition"
+            aria-expanded={showStats}
+            aria-label="Toggle match stats"
+          >
+            <BarChart3 size={10} aria-hidden="true" />
+            Stats
+            <ChevronDown
+              size={10}
+              className={`transition-transform ${showStats ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+          {showStats && (
+            <div className="px-4 pb-2 flex items-center justify-center gap-6 text-[11px]">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-400 tabular-nums">{matchStats.homePossession}%</span>
+                <div className="w-20 h-1.5 bg-[#27272a] rounded-full overflow-hidden flex">
+                  <div className="bg-white/60 h-full rounded-full" style={{ width: `${matchStats.homePossession}%` }} />
+                </div>
+                <span className="text-zinc-600 tabular-nums">{matchStats.awayPossession}%</span>
+                <span className="text-zinc-700 text-[9px]">Poss</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-zinc-400 tabular-nums">{matchStats.homeShots}</span>
+                <span className="text-zinc-700">-</span>
+                <span className="text-zinc-600 tabular-nums">{matchStats.awayShots}</span>
+                <span className="text-zinc-700 text-[9px]">Shots</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-zinc-400 tabular-nums">{matchStats.homeFouls}</span>
+                <span className="text-zinc-700">-</span>
+                <span className="text-zinc-600 tabular-nums">{matchStats.awayFouls}</span>
+                <span className="text-zinc-700 text-[9px]">Fouls</span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* ── Main body ───────────────────────────────────────────────────── */}
         <div
           className="flex flex-1 overflow-hidden"
@@ -214,7 +313,7 @@ export function MatchScreen() {
 
             {/* Phase description banner (collapsible) */}
             {currentPhase && (
-              <div className="shrink-0 border-b border-[#27272a] bg-[#0f0f0f] px-4 py-2">
+              <div className="shrink-0 border-b border-[#27272a] bg-[#0f0f0f] px-4 py-2" data-tutorial-id="match-phase-desc">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
                     <Badge variant="secondary" className="shrink-0 text-[10px]">
@@ -249,6 +348,7 @@ export function MatchScreen() {
                 className="shrink-0 bg-[#0a0a0a]"
                 style={{ height: "55%" }}
                 aria-label="Pitch view"
+                data-tutorial-id="match-pitch"
               >
                 {currentPhase ? (
                   <PitchCanvas
@@ -271,6 +371,7 @@ export function MatchScreen() {
               {/* Commentary panel — scrollable, takes remaining height */}
               <div
                 className="flex-1 min-h-0 overflow-hidden border-t border-[#27272a] bg-[#0c0c0c] flex flex-col"
+                data-tutorial-id="match-commentary"
               >
                 <div className="shrink-0 px-4 pt-2.5 pb-1.5">
                   <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
@@ -294,7 +395,7 @@ export function MatchScreen() {
           </div>
 
           {/* ── Right sidebar: Focus panel (40%) ─────────────────────────── */}
-          <div className="w-72 shrink-0 border-l border-[#27272a] bg-[#0c0c0c] flex flex-col overflow-hidden">
+          <div className="w-72 shrink-0 border-l border-[#27272a] bg-[#0c0c0c] flex flex-col overflow-hidden" data-tutorial-id="match-focus-panel">
 
             {/* Focus players section */}
             <div className="flex-1 overflow-y-auto p-4">
@@ -363,6 +464,7 @@ export function MatchScreen() {
                             LENS_COLORS[fs.lens as FocusLens]
                           } focus:outline-none focus:ring-1 focus:ring-emerald-500`}
                           aria-label={`Focus lens for ${player?.firstName ?? "player"}`}
+                          data-tutorial-id="match-focus-lens"
                         >
                           {(Object.keys(LENS_LABELS) as FocusLens[]).map((lens) => (
                             <option key={lens} value={lens}>
@@ -459,7 +561,7 @@ export function MatchScreen() {
 
               {/* Involved players legend */}
               {currentPhase && allInvolvedPlayerIds.length > 0 && (
-                <div className="mt-4 border-t border-[#27272a] pt-3">
+                <div className="mt-4 border-t border-[#27272a] pt-3" data-tutorial-id="match-involved-players">
                   <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
                     Involved This Phase
                   </h4>
@@ -495,7 +597,7 @@ export function MatchScreen() {
             </div>
 
             {/* Advance / end match buttons — pinned to bottom */}
-            <div className="shrink-0 border-t border-[#27272a] p-4 space-y-2">
+            <div className="shrink-0 border-t border-[#27272a] p-4 space-y-2" data-tutorial-id="match-advance-btn">
               {isLastPhase ? (
                 <Button className="w-full" onClick={endMatch}>
                   <Trophy size={14} className="mr-2" aria-hidden="true" />

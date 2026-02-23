@@ -2968,6 +2968,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       currentScreen: "match",
     });
+
+    // Trigger first-match tutorial if the scout has never attended a match
+    if (gameState.playedFixtures.length === 0) {
+      useTutorialStore.getState().startSequence("firstMatch");
+    }
   },
 
   advancePhase: () => {
@@ -3133,7 +3138,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Reports
   startReport: (playerId) => {
     set({ selectedPlayerId: playerId, currentScreen: "reportWriter" });
-    useTutorialStore.getState().startSequence("firstReport");
+    // Use the more detailed firstReportWriting tutorial for first-timers
+    useTutorialStore.getState().startSequence("firstReportWriting");
   },
 
   submitReport: (conviction, summary, strengths, weaknesses) => {

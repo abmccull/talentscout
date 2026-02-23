@@ -11,6 +11,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
+import { useAudio } from "@/lib/audio/useAudio";
 
 const CONVICTION_OPTIONS: Array<{
   value: ConvictionLevel;
@@ -85,6 +86,7 @@ export function ReportWriter() {
     getClub,
   } = useGameStore();
 
+  const { playSFX } = useAudio();
   const [isDirty, setIsDirty] = useState(false);
   const [conviction, setConviction] = useState<ConvictionLevel>("note");
   const [summary, setSummary] = useState("");
@@ -174,6 +176,7 @@ export function ReportWriter() {
       ? `${summary.trim()}\n\nPlayer comparison: ${comparison.trim()}`
       : summary.trim();
     setIsDirty(false);
+    playSFX("report-submit");
     submitReport(conviction, fullSummary, selectedStrengths, selectedWeaknesses);
   };
 
@@ -219,7 +222,7 @@ export function ReportWriter() {
 
         <div className="space-y-6">
           {/* Observation summary */}
-          <Card>
+          <Card data-tutorial-id="report-observation-summary">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Observation Summary</CardTitle>
             </CardHeader>
@@ -247,7 +250,7 @@ export function ReportWriter() {
 
           {/* Attribute assessments */}
           {merged.size > 0 && (
-            <Card>
+            <Card data-tutorial-id="report-attributes">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Attribute Assessments</CardTitle>
               </CardHeader>
@@ -313,7 +316,7 @@ export function ReportWriter() {
           </Card>
 
           {/* Strengths */}
-          <Card>
+          <Card data-tutorial-id="report-strengths">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">
                 Strengths ({selectedStrengths.length} selected)
@@ -518,7 +521,7 @@ export function ReportWriter() {
           </Card>
 
           {/* Conviction level */}
-          <Card>
+          <Card data-tutorial-id="report-conviction">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">
                 <Tooltip content="How strongly you believe in this player. Higher conviction carries more weight but more risk to your reputation." side="top">
@@ -535,7 +538,7 @@ export function ReportWriter() {
                 {CONVICTION_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
-                    onClick={() => { setIsDirty(true); setConviction(opt.value); }}
+                    onClick={() => { setIsDirty(true); setConviction(opt.value); playSFX("page-turn"); }}
                     role="radio"
                     aria-checked={conviction === opt.value}
                     className={`rounded-lg border p-3 text-left transition ${
@@ -557,7 +560,13 @@ export function ReportWriter() {
                           : "text-white"
                       }`}
                     >
-                      {opt.label}
+                      {opt.value === "tablePound" ? (
+                        <Tooltip content="A 'Table Pound' comes from the tradition of scouts banging the table to convince a manager to sign a player. It's your highest conviction — staking your career reputation on this player." side="top">
+                          <span className="underline decoration-dotted underline-offset-2 cursor-help">{opt.label}</span>
+                        </Tooltip>
+                      ) : (
+                        opt.label
+                      )}
                     </p>
                     <p className="text-xs text-zinc-500 leading-tight">{opt.description}</p>
                   </button>
@@ -584,7 +593,7 @@ export function ReportWriter() {
           </Card>
 
           {/* Submit */}
-          <div className="flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3" data-tutorial-id="report-submit">
             <Button variant="ghost" onClick={handleBack}>
               Cancel
             </Button>

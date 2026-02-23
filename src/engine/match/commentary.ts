@@ -386,3 +386,209 @@ export function getCommentary(
 // Export template data for testing
 export { COMMENTARY_TEMPLATES };
 export type { QualityBand, CommentaryTemplate };
+
+// ---------------------------------------------------------------------------
+// 4a. Score-state commentary prefixes
+// ---------------------------------------------------------------------------
+
+export interface ScoreContext {
+  homeGoals: number;
+  awayGoals: number;
+  minute: number;
+  /** Is the acting player on the home team? */
+  isHome: boolean;
+}
+
+const SCORE_STATE_PREFIXES: Record<string, string[]> = {
+  leading: [
+    "With the hosts firmly in control...",
+    "Leading comfortably now...",
+    "Pressing for another, and...",
+    "Protecting their advantage...",
+  ],
+  trailing: [
+    "Desperate for an equalizer...",
+    "Trailing and running out of time...",
+    "Chasing the game now...",
+    "With the deficit growing...",
+  ],
+  drawn: [
+    "Level and tense...",
+    "Neither side able to break the deadlock...",
+    "With the scores level...",
+    "All square and neither side willing to blink...",
+  ],
+  closeGame: [
+    "A single goal separating the sides...",
+    "The tension is palpable...",
+    "Razor-thin margins now...",
+    "With so little between the two sides...",
+  ],
+  blowout: [
+    "The contest all but over...",
+    "This has become a rout...",
+    "With the result beyond doubt...",
+    "A damage-limitation exercise now...",
+  ],
+  lateEqualizer: [
+    "The equalizer still fresh in the memory...",
+    "Momentum has completely shifted...",
+    "The stadium is alive after that goal...",
+    "Galvanized by the equaliser...",
+  ],
+};
+
+function getScoreState(ctx: ScoreContext): string | null {
+  const { homeGoals, awayGoals, minute, isHome } = ctx;
+  const diff = homeGoals - awayGoals;
+  const playerLeading = isHome ? diff > 0 : diff < 0;
+  const playerTrailing = isHome ? diff < 0 : diff > 0;
+  const absDiff = Math.abs(diff);
+
+  if (absDiff >= 3) return "blowout";
+  if (absDiff === 1) return "closeGame";
+  if (diff === 0 && minute > 75) return "drawn";
+  if (diff === 0) return "drawn";
+  if (playerLeading) return "leading";
+  if (playerTrailing) return "trailing";
+  return null;
+}
+
+/**
+ * Returns a score-state prefix ~40% of the time, or empty string.
+ */
+export function getScoreStatePrefix(ctx: ScoreContext, minute: number): string {
+  const state = getScoreState(ctx);
+  if (!state) return "";
+  const prefixes = SCORE_STATE_PREFIXES[state];
+  if (!prefixes || prefixes.length === 0) return "";
+  // Only prepend ~40% of the time
+  if ((minute * 7 + ctx.homeGoals * 13) % 10 >= 4) return "";
+  return prefixes[minute % prefixes.length] + " ";
+}
+
+// ---------------------------------------------------------------------------
+// 4d. Weather commentary interjections
+// ---------------------------------------------------------------------------
+
+const WEATHER_INTERJECTIONS: Record<string, string[]> = {
+  rain: [
+    "The ball skids off the wet surface...",
+    "Tricky conditions with the drizzle making the pitch slick.",
+    "The rain is making handling difficult.",
+    "Wet underfoot, and it shows in the touch.",
+    "The ball zips across the damp turf.",
+  ],
+  heavyRain: [
+    "Conditions are becoming almost unplayable in this downpour.",
+    "The heavy rain is turning the pitch into a quagmire.",
+    "Players are struggling to keep their footing in this deluge.",
+    "Visibility is poor \u2014 even the linesman is squinting through the rain.",
+    "The ball holds up in the standing water near the touchline.",
+  ],
+  snow: [
+    "The snow is making footing treacherous.",
+    "An orange ball today \u2014 the white one disappeared ten minutes ago.",
+    "The groundsman will have his work cut out after this.",
+    "Players leaving deep prints in the snow as they chase every ball.",
+    "Freezing conditions \u2014 you can see the breath of every player on the pitch.",
+  ],
+  windy: [
+    "Gusty conditions make that cross almost impossible to judge.",
+    "The wind is playing havoc with long passes.",
+    "A swirling wind wreaks havoc with the flight of the ball.",
+    "The conditions are favouring neither side \u2014 the wind is brutal today.",
+    "That was heading for the top corner until the wind took it.",
+  ],
+};
+
+/**
+ * Returns a weather interjection string ~25% of the time in adverse weather.
+ */
+export function getWeatherInterjection(weather: string, minute: number): string {
+  const templates = WEATHER_INTERJECTIONS[weather];
+  if (!templates || templates.length === 0) return "";
+  // Only interject ~25% of the time
+  if ((minute * 11 + 3) % 4 !== 0) return "";
+  return " " + templates[minute % templates.length];
+}
+
+// ---------------------------------------------------------------------------
+// 4e. Contextual commentary chains (same player in consecutive events)
+// ---------------------------------------------------------------------------
+
+const CHAIN_TEMPLATES: string[] = [
+  "It's all {playerName} right now.",
+  "{playerName} again \u2014 their second involvement in as many minutes.",
+  "The same man, demanding the ball once more.",
+  "{playerName} is everywhere on this pitch.",
+  "Back-to-back involvements for {playerName}.",
+  "There's no escaping {playerName} today.",
+  "{playerName} refuses to let anyone else take control of this match.",
+  "Once again it's {playerName} at the centre of the action.",
+  "{playerName} \u2014 involved in everything of note right now.",
+  "Another touch, another moment of quality from {playerName}.",
+  "They can't get the ball off {playerName} at the moment.",
+  "{playerName} making their presence felt once more.",
+];
+
+/**
+ * Returns a chain commentary string if the player appeared in recent events.
+ */
+export function getChainCommentary(
+  currentPlayerId: string,
+  recentPlayerIds: string[],
+  playerName: string,
+  minute: number,
+): string {
+  const consecutiveCount = recentPlayerIds.filter(id => id === currentPlayerId).length;
+  if (consecutiveCount < 1) return "";
+  const template = CHAIN_TEMPLATES[minute % CHAIN_TEMPLATES.length];
+  return " " + template.replace(/\{playerName\}/g, playerName);
+}
+
+// ---------------------------------------------------------------------------
+// 4b. Momentum commentary (used by phases.ts when momentum is extreme)
+// ---------------------------------------------------------------------------
+
+export const MOMENTUM_COMMENTARY = {
+  high: [
+    "Complete dominance from one side.",
+    "The crowd senses blood \u2014 waves of pressure now.",
+    "It's been one-way traffic for the last ten minutes.",
+    "The momentum is irresistible right now.",
+    "All the energy, all the intent \u2014 flowing in one direction.",
+  ],
+  low: [
+    "A scrappy spell with neither side able to build any rhythm.",
+    "The game has lost its shape completely.",
+    "Neither side able to gain a foothold in this passage.",
+    "Disjointed play \u2014 the quality has dropped off a cliff.",
+    "Ugly, stop-start football with no flow whatsoever.",
+  ],
+  shift: [
+    "The momentum has shifted dramatically.",
+    "A complete swing in the flow of the match.",
+    "Something has changed \u2014 the energy is different now.",
+    "A turning point, perhaps.",
+    "The tide is turning before our eyes.",
+  ],
+} as const;
+
+export function getMomentumCommentary(momentum: number, prevMomentum: number, minute: number): string {
+  // Detect big momentum shift
+  if (Math.abs(momentum - prevMomentum) > 30) {
+    const templates = MOMENTUM_COMMENTARY.shift;
+    return templates[minute % templates.length] + " ";
+  }
+  if (momentum > 70) {
+    const templates = MOMENTUM_COMMENTARY.high;
+    // Only ~30% of the time
+    if ((minute * 3 + 7) % 10 < 3) return templates[minute % templates.length] + " ";
+  }
+  if (momentum < 30) {
+    const templates = MOMENTUM_COMMENTARY.low;
+    if ((minute * 3 + 7) % 10 < 3) return templates[minute % templates.length] + " ";
+  }
+  return "";
+}

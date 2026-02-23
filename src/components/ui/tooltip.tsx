@@ -54,7 +54,7 @@ export function Tooltip({ content, side = "top", children }: TooltipProps) {
       <span
         role="tooltip"
         className={[
-          "absolute z-50 w-max max-w-[240px] pointer-events-none",
+          "absolute z-50 w-max max-w-xs pointer-events-none",
           "bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-3 py-2 shadow-xl",
           "transition-opacity duration-150",
           visible ? "opacity-100" : "opacity-0",

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useAudio } from "@/lib/audio/useAudio";
 
 // =============================================================================
 // TYPES
@@ -262,7 +263,19 @@ function EpicCelebration({
  *
  * All confetti is pure CSS — no libraries.
  */
+const CELEBRATION_SFX: Record<CelebrationTier, string> = {
+  minor: "notification",
+  major: "level-up",
+  epic: "promotion",
+};
+
 export function Celebration({ tier, title, description, onDismiss }: CelebrationProps) {
+  const { playSFX } = useAudio();
+
+  React.useEffect(() => {
+    playSFX(CELEBRATION_SFX[tier]);
+  }, [tier, playSFX]);
+
   return (
     <>
       <style>{CONFETTI_KEYFRAMES}</style>

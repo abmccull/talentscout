@@ -371,6 +371,12 @@ const CHAPTERS: HandbookChapter[] = [
                 ["Table Pound", "I stake my reputation — sign now", "High (limited per season)"],
               ]}
             />
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-3 mt-2">
+              <p className="mb-1 text-xs font-semibold text-rose-400">What is a &ldquo;Table Pound&rdquo;?</p>
+              <p className="text-xs text-zinc-400">
+                The term comes from the tradition of scouts physically banging the table to convince a manager to sign a player. It&apos;s your highest conviction level — you&apos;re staking your career reputation on this recommendation. Use sparingly.
+              </p>
+            </div>
             <Para>
               Table Pounds are a scarce resource. Each season you have a limited
               number. Using one incorrectly damages your reputation significantly.
@@ -1199,7 +1205,7 @@ const CHAPTERS: HandbookChapter[] = [
                 <Tag color="amber">Strong Recommend</Tag> — Three or more sessions across different contexts, confidence intervals narrowed
               </li>
               <li>
-                <Tag color="rose">Table Pound</Tag> — Five or more sessions, training visit if possible, near-certainty on key attributes
+                <Tag color="rose">Table Pound</Tag> — Five or more sessions, training visit if possible, near-certainty on key attributes. (Named for the tradition of scouts banging the table to convince the manager — your strongest possible recommendation.)
               </li>
             </ul>
             <Para>
