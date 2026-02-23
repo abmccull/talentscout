@@ -1,0 +1,15 @@
+"appbuild"
+{
+	"appid"		"4455570"
+	"desc"		"TalentScout build"
+	"buildoutput"	"../steam_build_output"
+	"contentroot"	""
+	"setlive"	""
+
+	"depots"
+	{
+		"4455571"	"depot_build_4455571_windows.vdf"
+		"4455572"	"depot_build_4455572_macos.vdf"
+		"4455573"	"depot_build_4455573_linux.vdf"
+	}
+}

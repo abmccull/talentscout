@@ -1,0 +1,11 @@
+"DepotBuildConfig"
+{
+	"DepotID"	"4455572"
+	"contentroot"	"../dist/mac"
+	"FileMapping"
+	{
+		"LocalPath"	"TalentScout.app/*"
+		"DepotPath"	"TalentScout.app/"
+		"recursive"	"1"
+	}
+}
