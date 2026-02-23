@@ -6,6 +6,7 @@ interface ElectronAPI {
     getCloudSave: (slot: string) => Promise<string | null>;
     getPlayerName: () => Promise<string>;
     setRichPresence: (key: string, value: string) => Promise<void>;
+    resetAllAchievements: () => Promise<void>;
   };
   dialog: {
     saveFile: (data: string, filename: string) => Promise<boolean>;

@@ -30,3 +30,9 @@ next-env.d.ts
 # Electron
 dist/
 steam_appid.txt
+
+# Steamworks SDK redistribution binaries (proprietary)
+steam_api64.dll
+steam_api64.lib
+libsteam_api.dylib
+libsteam_api.so

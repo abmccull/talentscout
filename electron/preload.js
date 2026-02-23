@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     /** Set Steam rich presence key/value pair. */
     setRichPresence: (key, value) =>
       ipcRenderer.invoke("steam:setRichPresence", key, value),
+
+    /** Reset all Steam achievements (dev only). */
+    resetAllAchievements: () =>
+      ipcRenderer.invoke("steam:resetAllAchievements"),
   },
 
   dialog: {

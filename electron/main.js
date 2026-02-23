@@ -12,6 +12,28 @@ const isDev =
   process.argv.includes("--dev") || process.env.ELECTRON_DEV === "1";
 
 // ---------------------------------------------------------------------------
+// Steamworks SDK initialization
+// ---------------------------------------------------------------------------
+
+const APP_ID = 4455570;
+
+let steamClient = null;
+let steamAvailable = false;
+
+function initSteam() {
+  try {
+    const steamworks = require("steamworks.js");
+    steamClient = steamworks.init(APP_ID);
+    steamAvailable = true;
+    console.log("[Steam] Initialized successfully — App ID:", APP_ID);
+  } catch (err) {
+    steamClient = null;
+    steamAvailable = false;
+    console.warn("[Steam] Failed to initialize (Steam client may not be running):", err.message);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Window management
 // ---------------------------------------------------------------------------
 
@@ -71,54 +93,100 @@ function createWindow() {
 }
 
 // ---------------------------------------------------------------------------
-// Steam app ID (dev only — loads from project root for future Steamworks)
-// ---------------------------------------------------------------------------
-
-function tryLoadSteamAppId() {
-  if (!isDev) return;
-  const candidates = [
-    path.join(__dirname, "..", "steam_appid.txt"),
-    path.join(process.cwd(), "steam_appid.txt"),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) {
-      const appId = fs.readFileSync(candidate, "utf8").trim();
-      console.log("[Steam] Found steam_appid.txt — App ID:", appId);
-      return;
-    }
-  }
-  console.log("[Steam] No steam_appid.txt found (expected in dev).");
-}
-
-// ---------------------------------------------------------------------------
-// IPC — Steam API stubs
+// IPC — Steam API (real SDK when available, graceful fallbacks otherwise)
 // ---------------------------------------------------------------------------
 
 ipcMain.handle("steam:isAvailable", () => {
-  console.log("[IPC] steam:isAvailable");
-  return false;
+  return steamAvailable;
 });
 
 ipcMain.handle("steam:unlockAchievement", (_event, name) => {
-  console.log("[IPC] steam:unlockAchievement:", name);
+  if (!steamClient) return;
+  try {
+    steamClient.achievement.activate(name);
+    console.log("[Steam] Achievement unlocked:", name);
+  } catch (err) {
+    console.warn("[Steam] Failed to unlock achievement:", name, err.message);
+  }
 });
 
 ipcMain.handle("steam:setCloudSave", (_event, slot, data) => {
-  console.log("[IPC] steam:setCloudSave slot=%s length=%d", slot, String(data).length);
+  if (!steamClient) return;
+  try {
+    const filename = `talentscout_${slot}.json`;
+    steamClient.cloud.writeFile(filename, data);
+    console.log("[Steam] Cloud save written: %s (%d bytes)", filename, data.length);
+  } catch (err) {
+    console.warn("[Steam] Cloud save write failed:", err.message);
+  }
 });
 
 ipcMain.handle("steam:getCloudSave", (_event, slot) => {
-  console.log("[IPC] steam:getCloudSave slot=%s", slot);
-  return null;
+  if (!steamClient) return null;
+  try {
+    const filename = `talentscout_${slot}.json`;
+    if (!steamClient.cloud.isFileExists(filename)) {
+      return null;
+    }
+    const data = steamClient.cloud.readFile(filename);
+    console.log("[Steam] Cloud save read: %s (%d bytes)", filename, data.length);
+    return data;
+  } catch (err) {
+    console.warn("[Steam] Cloud save read failed:", err.message);
+    return null;
+  }
 });
 
 ipcMain.handle("steam:getPlayerName", () => {
-  console.log("[IPC] steam:getPlayerName");
-  return "Player";
+  if (!steamClient) return "Player";
+  try {
+    return steamClient.localplayer.getName();
+  } catch (err) {
+    console.warn("[Steam] Failed to get player name:", err.message);
+    return "Player";
+  }
 });
 
 ipcMain.handle("steam:setRichPresence", (_event, key, value) => {
-  console.log("[IPC] steam:setRichPresence %s=%s", key, value);
+  if (!steamClient) return;
+  try {
+    steamClient.localplayer.setRichPresence(key, value);
+  } catch (err) {
+    console.warn("[Steam] Rich Presence failed:", key, err.message);
+  }
+});
+
+ipcMain.handle("steam:resetAllAchievements", () => {
+  if (!steamClient) return;
+  if (!isDev) {
+    console.warn("[Steam] resetAllAchievements blocked — not in dev mode");
+    return;
+  }
+  try {
+    // steamworks.js exposes clearAchievement per-achievement;
+    // iterate all known achievements
+    const achievements = [
+      "FIRST_OBSERVATION", "FIRST_REPORT", "FIRST_WEEK", "FIRST_MATCH",
+      "FIRST_CONTACT", "FIRST_PERK", "FIRST_EQUIPMENT", "FIRST_YOUTH",
+      "REACH_TIER_2", "REACH_TIER_3", "REACH_TIER_4", "REACH_TIER_5",
+      "SEASON_1", "SEASON_3", "SEASON_5", "SEASON_10",
+      "REPORTS_10", "REPORTS_25", "REPORTS_50", "REPORTS_100",
+      "TABLE_POUND", "WONDERKID_FOUND", "ALUMNI_5", "ALUMNI_INTERNATIONAL",
+      "HIGH_ACCURACY", "GENERATIONAL_TALENT",
+      "MAX_SPEC", "ALL_PERKS_TREE", "MASTERY_PERK", "DUAL_MASTERY",
+      "EQUIPMENT_MAXED", "SECONDARY_SPEC", "ALL_ACTIVITIES", "REP_50",
+      "COUNTRIES_3", "COUNTRIES_6", "COUNTRIES_10", "COUNTRIES_15",
+      "HOME_MASTERY", "ALL_CONTINENTS",
+      "BLIND_FAITH", "TRIPLE_STORYLINE", "SURVIVED_FIRING",
+      "WATCHLIST_10", "MARATHON",
+    ];
+    for (const name of achievements) {
+      steamClient.achievement.clear(name);
+    }
+    console.log("[Steam] All %d achievements reset", achievements.length);
+  } catch (err) {
+    console.warn("[Steam] resetAllAchievements failed:", err.message);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -170,7 +238,7 @@ ipcMain.handle("dialog:openFile", async () => {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(() => {
-  tryLoadSteamAppId();
+  initSteam();
   createWindow();
 
   app.on("activate", () => {

@@ -12,6 +12,19 @@ extraResources:
     to: .
     filter:
       - "**/*"
+extraFiles:
+  - from: steam_api64.dll
+    to: steam_api64.dll
+    filter:
+      - "**/*"
+  - from: libsteam_api.dylib
+    to: libsteam_api.dylib
+    filter:
+      - "**/*"
+  - from: libsteam_api.so
+    to: libsteam_api.so
+    filter:
+      - "**/*"
 win:
   target: nsis
   icon: build/icon.ico
