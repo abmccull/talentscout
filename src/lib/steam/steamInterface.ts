@@ -4,9 +4,12 @@
  * Provides a clean interface for Steam features (achievements, cloud saves,
  * player identity) with a no-op implementation for web/dev builds.
  *
- * When building for Steam via Electron/Tauri, replace the factory function
- * to return a real Steamworks SDK implementation.
+ * When running inside Electron (desktop/Steam builds), the factory
+ * automatically returns an ElectronSteamInterface that bridges to the
+ * native IPC layer exposed by the preload script.
  */
+
+import { ElectronSteamInterface } from "./electronSteamInterface";
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -63,12 +66,23 @@ let instance: SteamInterface | null = null;
 
 /**
  * Returns the active Steam interface instance.
- * Currently returns the no-op implementation.
- * Replace with real Steamworks SDK integration when building for Steam.
+ *
+ * Selection priority:
+ *  1. Electron desktop build — window.electronAPI.steam is present → ElectronSteamInterface
+ *  2. All other environments (web, SSR) → NoopSteamInterface
  */
 export function getSteam(): SteamInterface {
   if (!instance) {
-    instance = new NoopSteamInterface();
+    const isElectron =
+      typeof window !== "undefined" &&
+      (window as { electronAPI?: { steam?: unknown } }).electronAPI?.steam !==
+        undefined;
+
+    if (isElectron) {
+      instance = new ElectronSteamInterface();
+    } else {
+      instance = new NoopSteamInterface();
+    }
   }
   return instance;
 }

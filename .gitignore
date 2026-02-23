@@ -26,3 +26,7 @@ npm-debug.log*
 
 # next-env
 next-env.d.ts
+
+# Electron
+dist/
+steam_appid.txt

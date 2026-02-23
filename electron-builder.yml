@@ -1,0 +1,28 @@
+appId: com.talentscout.game
+productName: TalentScout
+directories:
+  output: dist
+  buildResources: build
+files:
+  - electron/**/*
+  - out/**/*
+  - "!node_modules/**/*"
+extraResources:
+  - from: steam_appid.txt
+    to: .
+    filter:
+      - "**/*"
+win:
+  target: nsis
+  icon: build/icon.ico
+mac:
+  target: dmg
+  icon: build/icon.icns
+  category: public.app-category.games
+linux:
+  target: AppImage
+  icon: build/icon.png
+  category: Game
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
