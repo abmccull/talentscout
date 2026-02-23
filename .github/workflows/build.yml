@@ -77,6 +77,9 @@ jobs:
           } else {
             Write-Host "steam_api64.dll present."
           }
+          if (-not (Test-Path "steam_appid.txt")) {
+            Set-Content -Path "steam_appid.txt" -Value "4455570"
+          }
 
       - name: Build Next.js (static export)
         run: npm run build
@@ -124,6 +127,7 @@ jobs:
           else
             echo "libsteam_api.dylib present."
           fi
+          [ ! -f "steam_appid.txt" ] && echo "4455570" > steam_appid.txt
 
       - name: Build Next.js (static export)
         run: npm run build
@@ -176,6 +180,7 @@ jobs:
           else
             echo "libsteam_api.so present."
           fi
+          [ ! -f "steam_appid.txt" ] && echo "4455570" > steam_appid.txt
 
       - name: Build Next.js (static export)
         run: npm run build

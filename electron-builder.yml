@@ -101,16 +101,6 @@ linux:
     - target: deb
   synopsis: "Football Scouting Simulation"
   description: "Build your career as a football talent scout"
-  desktop:
-    entry: |
-      [Desktop Entry]
-      Name=TalentScout
-      Exec=talentscout %U
-      Terminal=false
-      Type=Application
-      Icon=talentscout
-      StartupWMClass=TalentScout
-      Categories=Game;
   artifactName: "TalentScout-${version}-${arch}.${ext}"
   # Platform-specific Steamworks redistributable (Linux shared object).
   extraFiles:
