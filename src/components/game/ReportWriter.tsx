@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, FileText, ArrowLeft, X } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 
@@ -511,7 +512,11 @@ export function ReportWriter() {
           {/* Conviction level */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Conviction Level</CardTitle>
+              <CardTitle className="text-sm">
+                <Tooltip content="How strongly you believe in this player. Higher conviction carries more weight but more risk to your reputation." side="top">
+                  <span>Conviction Level</span>
+                </Tooltip>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div

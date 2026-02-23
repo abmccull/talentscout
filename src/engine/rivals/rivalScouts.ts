@@ -17,6 +17,7 @@
 import type { RNG } from "@/engine/rng";
 import type {
   RivalScout,
+  RivalPersonality,
   GameState,
   Scout,
   Specialization,
@@ -86,6 +87,13 @@ const ALL_SPECIALIZATIONS: readonly Specialization[] = [
   "data",
 ] as const;
 
+const ALL_PERSONALITIES: readonly RivalPersonality[] = [
+  "aggressive",
+  "methodical",
+  "connected",
+  "lucky",
+] as const;
+
 /**
  * First-name pool. Broadly international — rivals come from every footballing
  * culture, so the pool mirrors the NPC scout first-name roster.
@@ -142,17 +150,19 @@ export function generateRivalScouts(
   }
 
   const rivals: Record<string, RivalScout> = {};
+  const rivalIds: string[] = [];
 
   for (let i = 0; i < count; i++) {
     const idSuffix = rng.nextInt(100_000, 999_999).toString(16);
     const id = `rival_${idSuffix}`;
 
-    const firstName = rng.pick(FIRST_NAMES);
-    const lastName  = rng.pick(LAST_NAMES);
-    const quality   = rng.pickWeighted(QUALITY_WEIGHTS);
-    const spec      = rng.pick(ALL_SPECIALIZATIONS);
-    const club      = rng.pick(eligibleClubs);
+    const firstName  = rng.pick(FIRST_NAMES);
+    const lastName   = rng.pick(LAST_NAMES);
+    const quality    = rng.pickWeighted(QUALITY_WEIGHTS);
+    const spec       = rng.pick(ALL_SPECIALIZATIONS);
+    const club       = rng.pick(eligibleClubs);
     const reputation = rng.nextInt(REPUTATION_MIN, REPUTATION_MAX);
+    const personality = rng.pick(ALL_PERSONALITIES);
 
     const initialTargets = pickInitialTargets(rng, club, state);
 
@@ -164,7 +174,27 @@ export function generateRivalScouts(
       clubId: club.id,
       targetPlayerIds: initialTargets,
       reputation,
+      personality,
+      isNemesis: false,
+      competingForPlayers: [],
     };
+    rivalIds.push(id);
+  }
+
+  // Mark the highest-quality (or highest-rep on tie) rival as the nemesis
+  if (rivalIds.length > 0) {
+    let nemesisId = rivalIds[0]!;
+    for (const id of rivalIds) {
+      const r = rivals[id]!;
+      const n = rivals[nemesisId]!;
+      if (
+        r.quality > n.quality ||
+        (r.quality === n.quality && r.reputation > n.reputation)
+      ) {
+        nemesisId = id;
+      }
+    }
+    rivals[nemesisId] = { ...rivals[nemesisId]!, isNemesis: true };
   }
 
   return rivals;
@@ -228,14 +258,16 @@ export function processRivalWeek(
       }
     }
 
+    // --- Update competing players (shared targets) ---
+    const competingForPlayers = updatedRival.targetPlayerIds.filter((pid) =>
+      reportedPlayerIds.has(pid),
+    );
+    updatedRival = { ...updatedRival, competingForPlayers };
+
     // --- Poach check ---
     if (rng.chance(POACH_CHANCE)) {
-      // Find any player the rival is tracking that the scout has reported on
-      const sharedIds = updatedRival.targetPlayerIds.filter((pid) =>
-        reportedPlayerIds.has(pid),
-      );
-      if (sharedIds.length > 0) {
-        const targetId = rng.pick(sharedIds);
+      if (competingForPlayers.length > 0) {
+        const targetId = rng.pick(competingForPlayers);
         poachWarnings.push({ rivalId: rival.id, playerId: targetId });
       }
     }

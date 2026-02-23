@@ -353,8 +353,13 @@ export function calculateReportQuality(
     convictionScore * 0.20 +
     tightnessScore * 0.10;
 
+  // Personality depth bonus: +5 quality points per revealed trait included in
+  // the report (the report was written while knowing these traits, so it
+  // demonstrates deeper insight beyond raw attribute numbers).
+  const personalityBonus = (player.personalityRevealed?.length ?? 0) * 5;
+
   // Apply equipment report quality bonus (additive, capped at 100)
-  const quality = baseQuality + (reportQualityBonus ?? 0) * 100;
+  const quality = baseQuality + personalityBonus + (reportQualityBonus ?? 0) * 100;
 
   return Math.round(Math.max(0, Math.min(100, quality)));
 }

@@ -39,3 +39,29 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--muted-foreground);
 }
+
+/* ── Accessibility & QoL settings ─────────────────────────────────────────── */
+
+/* Font size scaling */
+html.font-small { font-size: 14px; }
+html.font-medium { font-size: 16px; }
+html.font-large { font-size: 18px; }
+
+/* Colorblind SVG filters — applied via SettingsApplier */
+html.cb-protanopia  { filter: url('#protanopia-filter');  }
+html.cb-deuteranopia { filter: url('#deuteranopia-filter'); }
+html.cb-tritanopia  { filter: url('#tritanopia-filter');  }
+
+/* Reduced motion — collapses all animations/transitions to near-instant */
+html.reduced-motion *,
+html.reduced-motion *::before,
+html.reduced-motion *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* ── Handwritten font utility ─────────────────────────────────────────────── */
+/* Use .font-handwritten on report titles, handbook headings, etc. */
+.font-handwritten {
+  font-family: var(--font-caveat), cursive;
+}

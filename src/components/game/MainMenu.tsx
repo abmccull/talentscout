@@ -105,6 +105,14 @@ export function MainMenu() {
           >
             Load Game
           </Button>
+          <Button
+            variant="outline"
+            size="lg"
+            className="w-full text-base"
+            onClick={() => setScreen("scenarioSelect")}
+          >
+            Scenarios
+          </Button>
 
           {/* Auth status indicator */}
           <div className="mt-2 flex flex-col items-center gap-1.5">

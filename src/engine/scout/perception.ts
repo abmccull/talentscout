@@ -22,6 +22,7 @@ import {
   HIDDEN_ATTRIBUTES,
 } from "@/engine/core/types";
 import { generateAbilityReading } from "@/engine/scout/starRating";
+import { checkPersonalityReveal } from "@/engine/players/personalityReveal";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -317,6 +318,21 @@ export function observePlayerLight(
     context,
   );
 
+  // Personality reveal check — uses scout skills as raw numbers (Record<ScoutSkill, number>)
+  const revealedPersonalityTrait = checkPersonalityReveal(
+    rng,
+    {
+      skills: scout.skills as unknown as Record<string, number>,
+      primarySpecialization: scout.primarySpecialization,
+    },
+    player,
+    { activityType: context },
+  ) ?? undefined;
+
+  if (revealedPersonalityTrait !== undefined) {
+    notes.push(`Personality insight: "${revealedPersonalityTrait}" — noted in the scout's journal.`);
+  }
+
   return {
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
@@ -329,6 +345,7 @@ export function observePlayerLight(
     notes,
     flaggedMoments: [],
     abilityReading,
+    revealedPersonalityTrait,
   };
 }
 
@@ -425,6 +442,21 @@ export function observePlayer(
     context,
   );
 
+  // Personality reveal check — match contexts expose character under pressure
+  const revealedPersonalityTrait = checkPersonalityReveal(
+    rng,
+    {
+      skills: scout.skills as unknown as Record<string, number>,
+      primarySpecialization: scout.primarySpecialization,
+    },
+    player,
+    { activityType: context },
+  ) ?? undefined;
+
+  if (revealedPersonalityTrait !== undefined) {
+    notes.push(`Personality insight: "${revealedPersonalityTrait}" — noted in the scout's journal.`);
+  }
+
   return {
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
@@ -437,6 +469,7 @@ export function observePlayer(
     notes,
     flaggedMoments,
     abilityReading,
+    revealedPersonalityTrait,
   };
 }
 

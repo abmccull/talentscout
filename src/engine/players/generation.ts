@@ -13,6 +13,7 @@ import type {
   PlayerAttribute,
 } from "@/engine/core/types";
 import { ALL_ATTRIBUTES, ATTRIBUTE_DOMAINS } from "@/engine/core/types";
+import { generatePersonalityTraits } from "./personality";
 import type { ClubData, LeagueData, NamePool, NationalityWeight } from "@/data/types";
 import type { CountryData } from "@/data/types";
 // England data is imported only to supply backward-compatible defaults.
@@ -349,6 +350,8 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     morale: rng.nextInt(5, 8),
     injured: false,
     injuryWeeksRemaining: 0,
+    personalityTraits: generatePersonalityTraits(rng, { position, age, developmentProfile }),
+    personalityRevealed: [],
   };
 }
 

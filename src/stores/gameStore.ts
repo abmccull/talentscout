@@ -144,6 +144,8 @@ import {
   generateEconomicEvent,
   applyEconomicEvent,
   expireEconomicEvents,
+  checkStorylineTriggers,
+  processActiveStorylines,
 } from "@/engine/events";
 import {
   generateRivalScouts,
@@ -188,7 +190,11 @@ export type GameScreen =
   | "fixtureBrowser"
   | "youthScouting"
   | "alumniDashboard"
-  | "finances";
+  | "finances"
+  | "handbook"
+  | "achievements"
+  | "scenarioSelect"
+  | "hallOfFame";
 
 interface GameStore {
   // Navigation
@@ -491,6 +497,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       territories,
       countries: [...selectedCountries, ...getSecondaryCountries()],
       narrativeEvents: [],
+      activeStorylines: [],
       rivalScouts: {},
       unlockedTools: [],
       managerProfiles: {},
@@ -510,6 +517,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         firstTeamBreakthroughs: 0,
         internationalCapsFromFinds: 0,
         totalScore: 0,
+        clubsWorkedAt: 0,
+        countriesScouted: 0,
+        careerHighTier: 0,
+        totalSeasons: 0,
+        bestDiscoveryName: "",
+        bestDiscoveryPA: 0,
+        scenariosCompleted: 0,
       },
       subRegions: {},
       retiredPlayerIds: [],
@@ -696,6 +710,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         // Migration: economics revamp
         if (state.finances && state.finances.careerPath === undefined) {
           state.finances = migrateFinancialRecord(state.finances, state.scout);
+        }
+        // Migration: storyline system
+        if (!Array.isArray(state.activeStorylines)) {
+          state.activeStorylines = [];
         }
         set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
       }
@@ -2193,6 +2211,48 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
+    // 3b. Storyline system — trigger new storylines and advance active ones
+    const storylineRng = createRNG(
+      `${gameState.seed}-storylines-${gameState.currentWeek}-${gameState.currentSeason}`,
+    );
+
+    // Attempt to start a new storyline (5% weekly chance, max 2 active)
+    const newStoryline = checkStorylineTriggers(stateWithPhase2, storylineRng);
+    if (newStoryline) {
+      stateWithPhase2 = {
+        ...stateWithPhase2,
+        activeStorylines: [...stateWithPhase2.activeStorylines, newStoryline],
+      };
+    }
+
+    // Advance all active storylines that are due this week
+    const { events: storylineEvents, updatedStorylines } = processActiveStorylines(
+      stateWithPhase2,
+      storylineRng,
+    );
+
+    if (updatedStorylines !== stateWithPhase2.activeStorylines || storylineEvents.length > 0) {
+      const storylineInboxMessages: InboxMessage[] = storylineEvents.map((evt) => ({
+        id: `narrative-${evt.id}`,
+        week: stateWithPhase2.currentWeek,
+        season: stateWithPhase2.currentSeason,
+        type: "event" as const,
+        title: evt.title,
+        body: evt.description,
+        read: false,
+        actionRequired: (evt.choices?.length ?? 0) > 0,
+        relatedId: evt.id,
+        relatedEntityType: "narrative" as const,
+      }));
+
+      stateWithPhase2 = {
+        ...stateWithPhase2,
+        narrativeEvents: [...stateWithPhase2.narrativeEvents, ...storylineEvents],
+        inbox: [...stateWithPhase2.inbox, ...storylineInboxMessages],
+        activeStorylines: updatedStorylines,
+      };
+    }
+
     // 4. Check for newly unlocked tools
     const toolRng = createRNG(
       `${gameState.seed}-tools-${gameState.currentWeek}-${gameState.currentSeason}`,
@@ -3293,11 +3353,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
       Math.max(0, gameState.scout.reputation + result.reputationChange),
     );
 
+    const newFatigue = Math.min(
+      100,
+      Math.max(0, gameState.scout.fatigue + result.fatigueChange),
+    );
+
     set({
       gameState: {
         ...gameState,
         narrativeEvents: updatedEvents,
-        scout: { ...gameState.scout, reputation: newReputation },
+        scout: {
+          ...gameState.scout,
+          reputation: newReputation,
+          fatigue: newFatigue,
+        },
         inbox: [...gameState.inbox, ...result.messages],
       },
     });

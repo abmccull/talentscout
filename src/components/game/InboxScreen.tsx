@@ -43,14 +43,52 @@ const NARRATIVE_TYPE_CONFIG: Record<
   NarrativeEventType,
   { label: string; color: string }
 > = {
-  rivalPoach:              { label: "Rival Activity", color: "text-red-400" },
-  managerFired:            { label: "Management Change", color: "text-amber-400" },
-  exclusiveTip:            { label: "Exclusive Tip", color: "text-emerald-400" },
-  debutHatTrick:           { label: "Player Form", color: "text-blue-400" },
-  targetInjured:           { label: "Injury Alert", color: "text-red-400" },
-  reportCitedInBoardMeeting: { label: "Board Recognition", color: "text-purple-400" },
-  rivalRecruitment:        { label: "Rival Recruitment", color: "text-orange-400" },
-  agentDeception:          { label: "Agent Intel", color: "text-zinc-400" },
+  // Original 8
+  rivalPoach:                  { label: "Rival Activity",      color: "text-red-400" },
+  managerFired:                { label: "Management Change",   color: "text-amber-400" },
+  exclusiveTip:                { label: "Exclusive Tip",       color: "text-emerald-400" },
+  debutHatTrick:               { label: "Player Form",         color: "text-blue-400" },
+  targetInjured:               { label: "Injury Alert",        color: "text-red-400" },
+  reportCitedInBoardMeeting:   { label: "Board Recognition",   color: "text-purple-400" },
+  rivalRecruitment:            { label: "Rival Recruitment",   color: "text-orange-400" },
+  agentDeception:              { label: "Agent Intel",         color: "text-zinc-400" },
+  // Scout Personal Life
+  burnout:                     { label: "Personal Wellbeing",  color: "text-yellow-400" },
+  familyEmergency:             { label: "Personal Life",       color: "text-rose-400" },
+  scoutingConference:          { label: "Industry Event",      color: "text-sky-400" },
+  mentorOffer:                 { label: "Career Opportunity",  color: "text-emerald-400" },
+  mediaInterview:              { label: "Media",               color: "text-cyan-400" },
+  healthScare:                 { label: "Personal Wellbeing",  color: "text-red-400" },
+  // Club Drama
+  boardroomCoup:               { label: "Club Politics",       color: "text-amber-400" },
+  budgetCut:                   { label: "Club Finance",        color: "text-orange-400" },
+  scoutingDeptRestructure:     { label: "Department News",     color: "text-amber-400" },
+  rivalClubPoach:              { label: "Career Opportunity",  color: "text-emerald-400" },
+  managerSacked:               { label: "Management Change",   color: "text-red-400" },
+  clubFinancialTrouble:        { label: "Club Finance",        color: "text-orange-400" },
+  // Player Stories
+  wonderkidPressure:           { label: "Player Story",        color: "text-blue-400" },
+  playerHomesick:              { label: "Player Welfare",      color: "text-sky-400" },
+  hiddenGemVindication:        { label: "Scout Vindicated",    color: "text-emerald-400" },
+  playerControversy:           { label: "Player Story",        color: "text-red-400" },
+  youthProdigyDilemma:         { label: "Youth Dilemma",       color: "text-purple-400" },
+  injurySetback:               { label: "Injury Alert",        color: "text-red-400" },
+  debutBrilliance:             { label: "Player Milestone",    color: "text-blue-400" },
+  lateBloomingSurprise:        { label: "Player Story",        color: "text-emerald-400" },
+  // Network Events
+  contactBetrayal:             { label: "Network Alert",       color: "text-red-400" },
+  exclusiveAccess:             { label: "Network Opportunity", color: "text-emerald-400" },
+  agentDoubleDealing:          { label: "Agent Intel",         color: "text-zinc-400" },
+  journalistExpose:            { label: "Media",               color: "text-cyan-400" },
+  networkExpansion:            { label: "Network Growth",      color: "text-emerald-400" },
+  contactRetirement:           { label: "Network Change",      color: "text-zinc-400" },
+  // Industry Events
+  transferRuleChange:          { label: "Industry News",       color: "text-sky-400" },
+  dataRevolution:              { label: "Industry News",       color: "text-cyan-400" },
+  youthAcademyScandal:         { label: "Industry Scandal",    color: "text-red-400" },
+  internationalTournament:     { label: "Tournament",          color: "text-blue-400" },
+  scoutingAwardNomination:     { label: "Award",               color: "text-purple-400" },
+  financialFairPlayImpact:     { label: "Industry News",       color: "text-amber-400" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

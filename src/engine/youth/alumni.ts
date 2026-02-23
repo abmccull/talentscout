@@ -335,6 +335,15 @@ export function calculateLegacyScore(alumniRecords: AlumniRecord[]): LegacyScore
     firstTeamBreakthroughs,
     internationalCapsFromFinds,
     totalScore,
+    // Extended fields — populated with defaults here; richer values are
+    // computed and stored separately (e.g., in the HallOfFame screen).
+    clubsWorkedAt: 0,
+    countriesScouted: 0,
+    careerHighTier: 0,
+    totalSeasons: 0,
+    bestDiscoveryName: "",
+    bestDiscoveryPA: 0,
+    scenariosCompleted: 0,
   };
 }
 

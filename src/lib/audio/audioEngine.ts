@@ -1,0 +1,263 @@
+/**
+ * AudioEngine — singleton managing music, SFX, and ambience channels via Howler.js.
+ *
+ * SSR-safe: all Howler access is guarded by `typeof window !== "undefined"`.
+ * Volume state is persisted to localStorage under STORAGE_KEY.
+ */
+
+// Howler is a client-only library. Import the type only so SSR bundles stay clean.
+import type { Howl as HowlType } from "howler";
+
+export type AudioChannel = "music" | "sfx" | "ambience";
+
+export interface VolumeState {
+  master: number;
+  music: number;
+  sfx: number;
+  ambience: number;
+  muted: boolean;
+}
+
+type ChangeListener = (volumes: VolumeState) => void;
+
+const STORAGE_KEY = "talentscout_audio";
+
+const DEFAULT_VOLUMES: VolumeState = {
+  master: 0.8,
+  music: 0.6,
+  sfx: 1.0,
+  ambience: 0.4,
+  muted: false,
+};
+
+const CROSSFADE_DURATION_MS = 1000;
+
+export class AudioEngine {
+  private static instance: AudioEngine;
+
+  private volumes: VolumeState;
+  private currentMusic: HowlType | null = null;
+  private currentAmbience: HowlType | null = null;
+  /** Track IDs so we can skip re-loading the same track. */
+  private musicId: string | null = null;
+  private ambienceId: string | null = null;
+
+  private listeners = new Set<ChangeListener>();
+
+  private constructor() {
+    this.volumes = this.loadVolumes();
+  }
+
+  static getInstance(): AudioEngine {
+    if (!AudioEngine.instance) {
+      AudioEngine.instance = new AudioEngine();
+    }
+    return AudioEngine.instance;
+  }
+
+  // ── Subscription (for React useSyncExternalStore) ──────────────────────────
+
+  subscribe(listener: ChangeListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(): void {
+    this.listeners.forEach((l) => l(this.volumes));
+  }
+
+  // ── Playback ───────────────────────────────────────────────────────────────
+
+  playMusic(trackId: string): void {
+    if (!this.isBrowserEnv()) return;
+    if (this.musicId === trackId && this.currentMusic?.playing()) return;
+
+    const { getHowl } = this.getAssets();
+    const nextHowl = getHowl(trackId, "music");
+    this.crossfade(this.currentMusic, nextHowl);
+    this.currentMusic = nextHowl;
+    this.musicId = trackId;
+  }
+
+  playSFX(sfxId: string): void {
+    if (!this.isBrowserEnv()) return;
+    const { getHowl } = this.getAssets();
+    const howl = getHowl(sfxId, "sfx");
+    const vol = this.effectiveVolume("sfx");
+    howl.volume(vol);
+    howl.play();
+  }
+
+  playAmbience(ambienceId: string): void {
+    if (!this.isBrowserEnv()) return;
+    if (this.ambienceId === ambienceId && this.currentAmbience?.playing()) return;
+
+    const { getHowl } = this.getAssets();
+    const nextHowl = getHowl(ambienceId, "ambience");
+    this.crossfade(this.currentAmbience, nextHowl);
+    this.currentAmbience = nextHowl;
+    this.ambienceId = ambienceId;
+  }
+
+  stopMusic(): void {
+    if (!this.isBrowserEnv()) return;
+    if (this.currentMusic) {
+      this.fadeOut(this.currentMusic);
+      this.currentMusic = null;
+      this.musicId = null;
+    }
+  }
+
+  stopAmbience(): void {
+    if (!this.isBrowserEnv()) return;
+    if (this.currentAmbience) {
+      this.fadeOut(this.currentAmbience);
+      this.currentAmbience = null;
+      this.ambienceId = null;
+    }
+  }
+
+  // ── Volume control ─────────────────────────────────────────────────────────
+
+  setVolume(channel: AudioChannel | "master", value: number): void {
+    const clamped = Math.max(0, Math.min(1, value));
+    this.volumes = { ...this.volumes, [channel]: clamped };
+    this.applyVolumes();
+    this.persistVolumes();
+    this.notify();
+  }
+
+  getVolumes(): VolumeState {
+    return { ...this.volumes };
+  }
+
+  mute(): void {
+    this.volumes = { ...this.volumes, muted: true };
+    this.applyVolumes();
+    this.persistVolumes();
+    this.notify();
+  }
+
+  unmute(): void {
+    this.volumes = { ...this.volumes, muted: false };
+    this.applyVolumes();
+    this.persistVolumes();
+    this.notify();
+  }
+
+  toggleMute(): void {
+    if (this.volumes.muted) {
+      this.unmute();
+    } else {
+      this.mute();
+    }
+  }
+
+  // ── Crossfade ──────────────────────────────────────────────────────────────
+
+  crossfade(
+    fromHowl: HowlType | null,
+    toHowl: HowlType,
+    durationMs = CROSSFADE_DURATION_MS,
+  ): void {
+    if (!this.isBrowserEnv()) return;
+
+    // Determine which channel toHowl belongs to for correct volume calculation.
+    const channel: AudioChannel =
+      toHowl === this.currentAmbience ? "ambience" : "music";
+    const targetVol = this.effectiveVolume(channel);
+
+    if (fromHowl && fromHowl !== toHowl) {
+      fromHowl.fade(fromHowl.volume(), 0, durationMs);
+      setTimeout(() => {
+        fromHowl.stop();
+      }, durationMs);
+    }
+
+    // Start new track at 0 and fade in to target volume.
+    toHowl.volume(0);
+    if (!toHowl.playing()) {
+      toHowl.play();
+    }
+    toHowl.fade(0, targetVol, durationMs);
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────────
+
+  private fadeOut(howl: HowlType, durationMs = CROSSFADE_DURATION_MS): void {
+    howl.fade(howl.volume(), 0, durationMs);
+    setTimeout(() => howl.stop(), durationMs);
+  }
+
+  /** Returns the effective (possibly muted) volume for a given channel. */
+  private effectiveVolume(channel: AudioChannel): number {
+    if (this.volumes.muted) return 0;
+    return this.volumes.master * this.volumes[channel];
+  }
+
+  /** Re-apply current volume state to live Howl instances. */
+  private applyVolumes(): void {
+    if (!this.isBrowserEnv()) return;
+    if (this.currentMusic) {
+      this.currentMusic.volume(this.effectiveVolume("music"));
+    }
+    if (this.currentAmbience) {
+      this.currentAmbience.volume(this.effectiveVolume("ambience"));
+    }
+  }
+
+  private persistVolumes(): void {
+    if (!this.isBrowserEnv()) return;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.volumes));
+    } catch {
+      // localStorage may be unavailable in some environments — ignore silently.
+    }
+  }
+
+  private loadVolumes(): VolumeState {
+    if (!this.isBrowserEnv()) return { ...DEFAULT_VOLUMES };
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return { ...DEFAULT_VOLUMES };
+      const parsed = JSON.parse(raw) as Partial<VolumeState>;
+      return {
+        master: parsed.master ?? DEFAULT_VOLUMES.master,
+        music: parsed.music ?? DEFAULT_VOLUMES.music,
+        sfx: parsed.sfx ?? DEFAULT_VOLUMES.sfx,
+        ambience: parsed.ambience ?? DEFAULT_VOLUMES.ambience,
+        muted: parsed.muted ?? DEFAULT_VOLUMES.muted,
+      };
+    } catch {
+      return { ...DEFAULT_VOLUMES };
+    }
+  }
+
+  private isBrowserEnv(): boolean {
+    return typeof window !== "undefined";
+  }
+
+  /**
+   * Returns the audioAssets module. Using a dynamic import-like pattern so that
+   * audioAssets.ts (which statically imports "howler") is never evaluated during
+   * SSR. All call sites already guard with isBrowserEnv(), but this provides an
+   * extra layer of isolation.
+   *
+   * The `Function` constructor trick bypasses static analysis so bundlers don't
+   * trace through to howler at build time on the server side.
+   */
+  private getAssets(): {
+    getHowl: (id: string, channel: "music" | "sfx" | "ambience") => HowlType;
+  } {
+    // new Function avoids static bundler tracing while staying synchronous.
+    // This is intentional — audioAssets.ts must not be included in the SSR bundle.
+    const dynamicRequire = new Function("modulePath", "return require(modulePath)") as (
+      p: string
+    ) => unknown;
+    return dynamicRequire("./audioAssets") as {
+      getHowl: (id: string, channel: "music" | "sfx" | "ambience") => HowlType;
+    };
+  }
+}

@@ -31,6 +31,7 @@ import {
   Monitor,
   Plane,
 } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS } from "@/engine/finance";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
@@ -222,15 +223,17 @@ export function Dashboard() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="p-6" data-tutorial-id="dashboard-overview">
         {/* Header */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Dashboard</h1>
             <div className="flex items-center gap-2">
-              <p className="text-sm text-zinc-400">
-                Week {currentWeek} — Season {currentSeason}
-              </p>
+              <Tooltip content="The current simulation week. Each week, you schedule activities and advance." side="bottom">
+                <p className="text-sm text-zinc-400">
+                  Week {currentWeek} — Season {currentSeason}
+                </p>
+              </Tooltip>
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${phaseClass[seasonPhase]}`}
               >
@@ -257,11 +260,13 @@ export function Dashboard() {
 
         {/* Quick Stats */}
         <div className="mb-6 grid grid-cols-4 gap-4">
-          <Card>
+          <Card data-tutorial-id="dashboard-reputation">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Reputation</p>
+                  <Tooltip content="Your standing in the scouting world. Higher reputation unlocks better job offers and contact access." side="bottom">
+                    <p className="text-xs text-zinc-500">Reputation</p>
+                  </Tooltip>
                   <p className="text-2xl font-bold text-emerald-400">
                     {Math.round(scout.reputation)}
                   </p>
@@ -292,11 +297,13 @@ export function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card data-tutorial-id="dashboard-fatigue">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Fatigue</p>
+                  <Tooltip content="Physical and mental exhaustion. High fatigue reduces observation accuracy and increases injury risk." side="bottom">
+                    <p className="text-xs text-zinc-500">Fatigue</p>
+                  </Tooltip>
                   <p className="text-2xl font-bold">
                     {Math.round(scout.fatigue)}%
                   </p>

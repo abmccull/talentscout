@@ -1,72 +1,90 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Plus, X, ChevronRight, Trophy } from "lucide-react";
+import { Eye, Plus, X, ChevronRight, Trophy, ChevronDown } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { MatchPhase } from "@/engine/core/types";
-import { EVENT_REVEALED } from "@/engine/match/phases";
+import { PitchCanvas } from "./match/PitchCanvas";
+import { Commentary } from "./match/Commentary";
+
+// ---------------------------------------------------------------------------
+// Local types
+// ---------------------------------------------------------------------------
 
 type FocusLens = "technical" | "physical" | "mental" | "tactical" | "general";
 
 const LENS_LABELS: Record<FocusLens, string> = {
   technical: "Technical",
-  physical: "Physical",
-  mental: "Mental",
-  tactical: "Tactical",
-  general: "General",
+  physical:  "Physical",
+  mental:    "Mental",
+  tactical:  "Tactical",
+  general:   "General",
 };
 
 const LENS_COLORS: Record<FocusLens, string> = {
   technical: "text-blue-400",
-  physical: "text-orange-400",
-  mental: "text-purple-400",
-  tactical: "text-yellow-400",
-  general: "text-zinc-400",
+  physical:  "text-orange-400",
+  mental:    "text-purple-400",
+  tactical:  "text-yellow-400",
+  general:   "text-zinc-400",
 };
-
-function qualityColor(quality: number): string {
-  if (quality >= 7) return "bg-emerald-500";
-  if (quality >= 4) return "bg-amber-500";
-  return "bg-red-500";
-}
 
 function phaseTypeLabel(type: MatchPhase["type"]): string {
   const labels: Record<MatchPhase["type"], string> = {
-    buildUp: "Build-Up",
-    transition: "Transition",
-    setpiece: "Set Piece",
+    buildUp:          "Build-Up",
+    transition:       "Transition",
+    setpiece:         "Set Piece",
     pressingSequence: "Pressing",
-    counterAttack: "Counter",
-    possession: "Possession",
+    counterAttack:    "Counter",
+    possession:       "Possession",
   };
   return labels[type];
 }
 
-export function MatchScreen() {
-  const { gameState, activeMatch, advancePhase, setFocus, endMatch, getPlayer, getClub } =
-    useGameStore();
-  const [showPlayerPicker, setShowPlayerPicker] = useState(false);
+// ---------------------------------------------------------------------------
+// MatchScreen
+// ---------------------------------------------------------------------------
 
-  // Compute isComplete before the early returns so the useEffect below is
-  // always called unconditionally (Rules of Hooks). Optional chaining makes
-  // this safe even when activeMatch is null.
+export function MatchScreen() {
+  const {
+    gameState,
+    activeMatch,
+    advancePhase,
+    setFocus,
+    endMatch,
+    getPlayer,
+    getClub,
+  } = useGameStore();
+
+  const [showPlayerPicker, setShowPlayerPicker] = useState(false);
+  // Track which player was clicked on the canvas (used to open focus picker)
+  const [canvasClickedPlayerId, setCanvasClickedPlayerId] = useState<string | null>(null);
+  // Collapsed state for the phase description on small screens
+  const [descExpanded, setDescExpanded] = useState(true);
+
+  // Compute isComplete before any early return (Rules of Hooks — optional chaining
+  // makes this safe when activeMatch is null).
   const isComplete =
     activeMatch != null &&
     activeMatch.currentPhase >= activeMatch.phases.length;
 
-  // When all phases have been advanced through, navigate to MatchSummaryScreen.
-  // This handles the edge case where currentPhase overshoots phases.length
-  // (e.g. rapid clicks). endMatch() is called via useEffect to avoid
-  // triggering a state update during render.
+  // Expand description whenever phase changes
+  useEffect(() => {
+    setDescExpanded(true);
+  }, [activeMatch?.currentPhase]);
+
+  // Navigate to MatchSummaryScreen when all phases are done.
   useEffect(() => {
     if (isComplete) {
       endMatch();
     }
   }, [isComplete, endMatch]);
+
+  // ── Guard clauses (all hooks called above) ──────────────────────────────
 
   if (!gameState || !activeMatch) return null;
 
@@ -75,19 +93,21 @@ export function MatchScreen() {
 
   if (isComplete) return null;
 
+  // ── Derived data ────────────────────────────────────────────────────────
+
   const homeClub = getClub(fixture.homeClubId);
   const awayClub = getClub(fixture.awayClubId);
   const currentPhase = activeMatch.phases[activeMatch.currentPhase];
   const isLastPhase = activeMatch.currentPhase >= activeMatch.phases.length - 1;
 
-  // Compute running score from past phases' goal events
+  // Running score from all phases up to and including current
   let homeGoals = 0;
   let awayGoals = 0;
   for (let i = 0; i <= activeMatch.currentPhase && i < activeMatch.phases.length; i++) {
     const phase = activeMatch.phases[i];
     for (const event of phase.events) {
       if (event.type === "goal") {
-        const homePlayerIds = (homeClub?.playerIds ?? []);
+        const homePlayerIds = homeClub?.playerIds ?? [];
         if (homePlayerIds.includes(event.playerId)) homeGoals++;
         else awayGoals++;
       }
@@ -100,231 +120,382 @@ export function MatchScreen() {
   const focusedIds = new Set(activeMatch.focusSelections.map((f) => f.playerId));
 
   const availableToFocus = allInvolvedPlayerIds.filter(
-    (id) => !focusedIds.has(id) && activeMatch.focusSelections.length < 3
+    (id) => !focusedIds.has(id) && activeMatch.focusSelections.length < 3,
   );
 
   const handleAddFocus = (playerId: string) => {
     setFocus(playerId, "general");
     setShowPlayerPicker(false);
+    setCanvasClickedPlayerId(null);
   };
+
+  // When a player dot is clicked on the canvas, treat it like opening the
+  // focus picker pre-selected to that player — if they are available to focus.
+  const handleCanvasPlayerClick = (playerId: string) => {
+    if (activeMatch.focusSelections.length >= 3) return;
+    if (focusedIds.has(playerId)) return; // already focused
+    if (!currentPhase?.involvedPlayerIds.includes(playerId)) return;
+    setCanvasClickedPlayerId(playerId);
+    setShowPlayerPicker(true);
+  };
+
+  // Build pitch player lists from club roster data
+  const homePlayers = (homeClub?.playerIds ?? []).flatMap((id) => {
+    const p = getPlayer(id);
+    if (!p) return [];
+    return [{ id: p.id, name: `${p.firstName} ${p.lastName}`, position: p.position }];
+  });
+
+  const awayPlayers = (awayClub?.playerIds ?? []).flatMap((id) => {
+    const p = getPlayer(id);
+    if (!p) return [];
+    return [{ id: p.id, name: `${p.firstName} ${p.lastName}`, position: p.position }];
+  });
+
+  // Build player/club maps for Commentary component
+  const playerMap: Record<string, { firstName: string; lastName: string; clubId: string }> = {};
+  const clubMap: Record<string, { name: string }> = {};
+
+  for (const id of [...(homeClub?.playerIds ?? []), ...(awayClub?.playerIds ?? [])]) {
+    const p = getPlayer(id);
+    if (p) playerMap[id] = { firstName: p.firstName, lastName: p.lastName, clubId: p.clubId };
+  }
+
+  if (homeClub) clubMap[homeClub.id] = { name: homeClub.name };
+  if (awayClub) clubMap[awayClub.id] = { name: awayClub.name };
+
+  // The first focused player id — shown as the pulsing emerald ring on canvas
+  const primaryFocusedId = activeMatch.focusSelections[0]?.playerId;
+
+  // Weather string from fixture (may be undefined)
+  const weather = fixture.weather;
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <GameLayout>
       <div className="flex h-full flex-col">
-        {/* Top bar */}
-        <div className="border-b border-[#27272a] bg-[#0c0c0c] px-6 py-3">
+
+        {/* ── Top scoreboard bar ──────────────────────────────────────────── */}
+        <div className="border-b border-[#27272a] bg-[#0c0c0c] px-4 py-2.5 shrink-0">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <span className="text-lg font-bold">{homeClub?.shortName ?? "HOME"}</span>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl font-bold tabular-nums">
-                  {homeGoals} – {awayGoals}
-                </span>
-              </div>
-              <span className="text-lg font-bold">{awayClub?.shortName ?? "AWAY"}</span>
+            <div className="flex items-center gap-4">
+              <span className="text-base font-bold">{homeClub?.shortName ?? "HOME"}</span>
+              <span className="text-xl font-bold tabular-nums">
+                {homeGoals} – {awayGoals}
+              </span>
+              <span className="text-base font-bold">{awayClub?.shortName ?? "AWAY"}</span>
             </div>
-            <div className="flex items-center gap-3">
-              <Badge variant="outline" className="tabular-nums">
-                {currentPhase ? `${currentPhase.minute}&apos;` : "FT"}
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="tabular-nums text-xs">
+                {currentPhase ? `${currentPhase.minute}'` : "FT"}
               </Badge>
-              <Badge variant="secondary">
-                Phase {activeMatch.currentPhase + 1} / {activeMatch.phases.length}
+              <Badge variant="secondary" className="text-xs">
+                {activeMatch.currentPhase + 1} / {activeMatch.phases.length}
               </Badge>
             </div>
           </div>
-          <div className="mt-1 text-xs text-zinc-500">
+          <div className="mt-0.5 text-[11px] text-zinc-500">
             {homeClub?.name} vs {awayClub?.name}
+            {weather && weather !== "clear" && weather !== "cloudy" && (
+              <span className="ml-2 text-zinc-600 capitalize">· {weather}</span>
+            )}
           </div>
         </div>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Main phase area */}
-          <div className="flex-1 overflow-auto p-6">
+        {/* ── Main body ───────────────────────────────────────────────────── */}
+        <div
+          className="flex flex-1 overflow-hidden"
+          data-tutorial-id="match-phases"
+        >
+          {/* ── Left: Pitch + Commentary (60%) ──────────────────────────── */}
+          <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+
+            {/* Phase description banner (collapsible) */}
             {currentPhase && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{phaseTypeLabel(currentPhase.type)}</Badge>
-                  <span className="text-sm text-zinc-400">{currentPhase.minute}&apos;</span>
-                </div>
-
-                <Card>
-                  <CardContent className="p-4">
-                    <p className="text-sm leading-relaxed text-zinc-300">
-                      {currentPhase.description}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <div className="space-y-2">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-                    Events
-                  </h3>
-                  {currentPhase.events.map((event, i) => {
-                    const eventPlayer = getPlayer(event.playerId);
-                    return (
-                      <div
-                        key={i}
-                        className="flex items-start gap-3 rounded-md border border-[#27272a] bg-[#141414] p-3"
-                      >
-                        <span className="shrink-0 text-xs tabular-nums text-zinc-500 pt-0.5">
-                          {event.minute}&apos;
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-white">
-                              {eventPlayer
-                                ? `${eventPlayer.firstName} ${eventPlayer.lastName}`
-                                : "Unknown"}
-                            </span>
-                            <span className="text-xs text-zinc-500 capitalize">{event.type}</span>
-                          </div>
-                          <p className="text-xs text-zinc-400 leading-relaxed">
-                            {event.description}
-                          </p>
-                          {/* Attribute pills showing what this event reveals */}
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {event.attributesRevealed.map((attr) => {
-                              const isFocused = focusedIds.has(event.playerId);
-                              return (
-                                <span
-                                  key={attr}
-                                  className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                                    isFocused
-                                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
-                                      : "bg-zinc-800 text-zinc-500 border border-zinc-700"
-                                  }`}
-                                >
-                                  {attr.replace(/([A-Z])/g, " $1").trim()}
-                                  {isFocused && (
-                                    <span className="text-[9px] text-emerald-500">+obs</span>
-                                  )}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <div
-                            className={`h-2 w-2 rounded-full ${qualityColor(event.quality)}`}
-                            title={`Quality: ${event.quality}/10`}
-                          />
-                          <span className="text-xs text-zinc-500">{event.quality}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right sidebar: Focus panel */}
-          <div className="w-72 shrink-0 border-l border-[#27272a] bg-[#0c0c0c] p-4">
-            <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                <Eye size={14} className="mr-2 inline-block text-emerald-500" />
-                Focus Players
-              </h3>
-              <span className="text-xs text-zinc-500">
-                {activeMatch.focusSelections.length}/3
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              {activeMatch.focusSelections.map((fs) => {
-                const player = getPlayer(fs.playerId);
-                return (
-                  <div
-                    key={fs.playerId}
-                    className="rounded-md border border-[#27272a] bg-[#141414] p-3"
-                  >
-                    <div className="mb-2 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {player ? `${player.firstName} ${player.lastName}` : "Unknown"}
-                        </p>
-                        <p className="text-xs text-zinc-500">{player?.position}</p>
-                      </div>
-                      <span className="text-xs text-zinc-500">
-                        {fs.phases.length} ph
-                      </span>
-                    </div>
-                    <select
-                      value={fs.lens}
-                      onChange={(e) => setFocus(fs.playerId, e.target.value as FocusLens)}
-                      className={`w-full rounded bg-[#0a0a0a] border border-[#27272a] px-2 py-1 text-xs ${LENS_COLORS[fs.lens as FocusLens]} focus:outline-none focus:ring-1 focus:ring-emerald-500`}
-                      aria-label={`Focus lens for ${player?.firstName ?? "player"}`}
-                    >
-                      {(Object.keys(LENS_LABELS) as FocusLens[]).map((lens) => (
-                        <option key={lens} value={lens}>
-                          {LENS_LABELS[lens]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-
-            {activeMatch.focusSelections.length < 3 && currentPhase && (
-              <div className="mt-3">
-                {showPlayerPicker ? (
-                  <div className="rounded-md border border-[#27272a] bg-[#141414] p-2">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-medium text-zinc-400">Select player</span>
-                      <button
-                        onClick={() => setShowPlayerPicker(false)}
-                        className="text-zinc-500 hover:text-white transition"
-                        aria-label="Close player picker"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                    {availableToFocus.length === 0 ? (
-                      <p className="text-xs text-zinc-500">All involved players already focused.</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {availableToFocus.map((id) => {
-                          const p = getPlayer(id);
-                          return (
-                            <button
-                              key={id}
-                              onClick={() => handleAddFocus(id)}
-                              className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-[#27272a] transition"
-                            >
-                              <span>
-                                {p ? `${p.firstName} ${p.lastName}` : id}
-                              </span>
-                              <span className="text-zinc-500">{p?.position}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+              <div className="shrink-0 border-b border-[#27272a] bg-[#0f0f0f] px-4 py-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Badge variant="secondary" className="shrink-0 text-[10px]">
+                      {phaseTypeLabel(currentPhase.type)}
+                    </Badge>
+                    {descExpanded && (
+                      <p className="text-xs text-zinc-400 leading-snug truncate">
+                        {currentPhase.description}
+                      </p>
                     )}
                   </div>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setShowPlayerPicker(true)}
+                  <button
+                    onClick={() => setDescExpanded((v) => !v)}
+                    className="shrink-0 text-zinc-600 hover:text-zinc-400 transition"
+                    aria-label={descExpanded ? "Collapse phase description" : "Expand phase description"}
                   >
-                    <Plus size={14} className="mr-1" />
-                    Add Focus Player
-                  </Button>
-                )}
+                    <ChevronDown
+                      size={14}
+                      className={`transition-transform ${descExpanded ? "rotate-180" : "rotate-0"}`}
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
               </div>
             )}
 
-            <div className="mt-6 border-t border-[#27272a] pt-4 space-y-2">
+            {/* Split: pitch canvas (top) + commentary panel (bottom) */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+
+              {/* Pitch canvas — takes ~55% of the remaining height */}
+              <div
+                className="shrink-0 bg-[#0a0a0a]"
+                style={{ height: "55%" }}
+                aria-label="Pitch view"
+              >
+                {currentPhase ? (
+                  <PitchCanvas
+                    phase={currentPhase}
+                    homeTeamName={homeClub?.name ?? "Home"}
+                    awayTeamName={awayClub?.name ?? "Away"}
+                    homePlayers={homePlayers}
+                    awayPlayers={awayPlayers}
+                    focusedPlayerId={primaryFocusedId}
+                    weather={weather}
+                    onPlayerClick={handleCanvasPlayerClick}
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-zinc-700 text-sm">
+                    Awaiting next phase…
+                  </div>
+                )}
+              </div>
+
+              {/* Commentary panel — scrollable, takes remaining height */}
+              <div
+                className="flex-1 min-h-0 overflow-hidden border-t border-[#27272a] bg-[#0c0c0c] flex flex-col"
+              >
+                <div className="shrink-0 px-4 pt-2.5 pb-1.5">
+                  <h3 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                    Commentary
+                  </h3>
+                </div>
+                <div className="flex-1 min-h-0 px-4 pb-3 overflow-hidden">
+                  {currentPhase ? (
+                    <Commentary
+                      events={currentPhase.events}
+                      players={playerMap}
+                      clubs={clubMap}
+                      focusedPlayerIds={focusedIds}
+                    />
+                  ) : (
+                    <p className="text-xs text-zinc-600 py-4 text-center">No events yet.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Right sidebar: Focus panel (40%) ─────────────────────────── */}
+          <div className="w-72 shrink-0 border-l border-[#27272a] bg-[#0c0c0c] flex flex-col overflow-hidden">
+
+            {/* Focus players section */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <Tooltip
+                  content="Choose which attribute domain to observe more closely during this match."
+                  side="left"
+                >
+                  <h3 className="text-sm font-semibold">
+                    <Eye size={14} className="mr-2 inline-block text-emerald-500" aria-hidden="true" />
+                    Focus Players
+                  </h3>
+                </Tooltip>
+                <span className="text-xs text-zinc-500">
+                  {activeMatch.focusSelections.length}/3
+                </span>
+              </div>
+
+              {/* Active focus selections */}
+              <div className="space-y-2">
+                {activeMatch.focusSelections.map((fs) => {
+                  const player = getPlayer(fs.playerId);
+                  return (
+                    <div
+                      key={fs.playerId}
+                      className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-3"
+                    >
+                      <div className="mb-2 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {player
+                              ? `${player.firstName} ${player.lastName}`
+                              : "Unknown"}
+                          </p>
+                          <p className="text-xs text-zinc-500">{player?.position}</p>
+                        </div>
+                        <span className="text-xs text-zinc-500">{fs.phases.length} ph</span>
+                      </div>
+                      <Tooltip
+                        content={
+                          fs.lens === "technical"
+                            ? "Technical attributes: passing, dribbling, shooting, crossing"
+                            : fs.lens === "physical"
+                            ? "Physical: pace, strength, stamina, agility"
+                            : fs.lens === "mental"
+                            ? "Mental: composure, positioning, work rate, decision making"
+                            : fs.lens === "tactical"
+                            ? "Tactical: off the ball, pressing, defensive awareness"
+                            : "Choose which attribute domain to observe more closely during this match."
+                        }
+                        side="left"
+                      >
+                        <select
+                          value={fs.lens}
+                          onChange={(e) =>
+                            setFocus(fs.playerId, e.target.value as FocusLens)
+                          }
+                          className={`w-full rounded bg-[#0a0a0a] border border-[#27272a] px-2 py-1 text-xs ${
+                            LENS_COLORS[fs.lens as FocusLens]
+                          } focus:outline-none focus:ring-1 focus:ring-emerald-500`}
+                          aria-label={`Focus lens for ${player?.firstName ?? "player"}`}
+                        >
+                          {(Object.keys(LENS_LABELS) as FocusLens[]).map((lens) => (
+                            <option key={lens} value={lens}>
+                              {LENS_LABELS[lens]}
+                            </option>
+                          ))}
+                        </select>
+                      </Tooltip>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add focus player UI */}
+              {activeMatch.focusSelections.length < 3 && currentPhase && (
+                <div className="mt-3">
+                  {showPlayerPicker ? (
+                    <div className="rounded-md border border-[#27272a] bg-[#141414] p-2">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-xs font-medium text-zinc-400">
+                          {canvasClickedPlayerId
+                            ? "Add this player to focus?"
+                            : "Select player to focus"}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setShowPlayerPicker(false);
+                            setCanvasClickedPlayerId(null);
+                          }}
+                          className="text-zinc-500 hover:text-white transition"
+                          aria-label="Close player picker"
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
+                      </div>
+                      {availableToFocus.length === 0 ? (
+                        <p className="text-xs text-zinc-500">
+                          All involved players already focused.
+                        </p>
+                      ) : (
+                        <div className="space-y-1">
+                          {/* If canvas click pre-selected a player, show them first */}
+                          {(canvasClickedPlayerId
+                            ? [
+                                canvasClickedPlayerId,
+                                ...availableToFocus.filter(
+                                  (id) => id !== canvasClickedPlayerId,
+                                ),
+                              ]
+                            : availableToFocus
+                          )
+                            .filter((id) => availableToFocus.includes(id))
+                            .map((id) => {
+                              const p = getPlayer(id);
+                              const isPreSelected = id === canvasClickedPlayerId;
+                              return (
+                                <button
+                                  key={id}
+                                  onClick={() => handleAddFocus(id)}
+                                  className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs transition ${
+                                    isPreSelected
+                                      ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                                      : "hover:bg-[#27272a] text-zinc-300"
+                                  }`}
+                                >
+                                  <span>
+                                    {p
+                                      ? `${p.firstName} ${p.lastName}`
+                                      : id}
+                                  </span>
+                                  <span className="text-zinc-500">{p?.position}</span>
+                                </button>
+                              );
+                            })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        setCanvasClickedPlayerId(null);
+                        setShowPlayerPicker(true);
+                      }}
+                    >
+                      <Plus size={14} className="mr-1" aria-hidden="true" />
+                      Add Focus Player
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Involved players legend */}
+              {currentPhase && allInvolvedPlayerIds.length > 0 && (
+                <div className="mt-4 border-t border-[#27272a] pt-3">
+                  <h4 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                    Involved This Phase
+                  </h4>
+                  <div className="space-y-1">
+                    {allInvolvedPlayerIds.map((id) => {
+                      const p = getPlayer(id);
+                      const isFocusedPlayer = focusedIds.has(id);
+                      const isHome = homeClub?.playerIds?.includes(id) ?? false;
+                      return (
+                        <div
+                          key={id}
+                          className={`flex items-center justify-between text-xs px-1.5 py-0.5 rounded ${
+                            isFocusedPlayer ? "text-emerald-400" : "text-zinc-400"
+                          }`}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {/* Team colour dot */}
+                            <span
+                              className={`inline-block w-1.5 h-1.5 rounded-full ${
+                                isHome ? "bg-white" : "bg-[#8b2252]"
+                              }`}
+                              aria-hidden="true"
+                            />
+                            {p ? `${p.firstName} ${p.lastName}` : id}
+                          </span>
+                          <span className="text-zinc-600">{p?.position}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Advance / end match buttons — pinned to bottom */}
+            <div className="shrink-0 border-t border-[#27272a] p-4 space-y-2">
               {isLastPhase ? (
                 <Button className="w-full" onClick={endMatch}>
-                  <Trophy size={14} className="mr-2" />
+                  <Trophy size={14} className="mr-2" aria-hidden="true" />
                   End Match
                 </Button>
               ) : (
                 <Button className="w-full" onClick={advancePhase}>
-                  <ChevronRight size={14} className="mr-2" />
+                  <ChevronRight size={14} className="mr-2" aria-hidden="true" />
                   Next Phase
                 </Button>
               )}

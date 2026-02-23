@@ -32,6 +32,7 @@ import type {
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
 import { EquipmentPanel } from "./EquipmentPanel";
+import { Tooltip } from "@/components/ui/tooltip";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
@@ -315,7 +316,9 @@ export function CareerScreen() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
-                    <span className="text-zinc-500">Tier: </span>
+                    <Tooltip content="Your scouting career level. Higher tiers unlock new activities, contacts, and responsibilities." side="top">
+                      <span className="text-zinc-500">Tier: </span>
+                    </Tooltip>
                     <span className="text-white font-medium">{scout.careerTier}</span>
                   </div>
                   <div>
@@ -342,7 +345,9 @@ export function CareerScreen() {
                 {/* Reputation */}
                 <div>
                   <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-zinc-500">Reputation</span>
+                    <Tooltip content="Reputation grows from accurate reports and successful player placements." side="top">
+                      <span className="text-zinc-500">Reputation</span>
+                    </Tooltip>
                     <span className="text-emerald-400 font-semibold">
                       {Math.round(scout.reputation)}/100
                     </span>

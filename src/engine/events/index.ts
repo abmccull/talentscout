@@ -27,3 +27,17 @@ export {
   expireEconomicEvents,
   getActiveEconomicMultiplier,
 } from "./economicEvents";
+
+// Storyline system
+export type {
+  Storyline,
+  StorylineStage,
+  SimpleRNG,
+  StorylineTickResult,
+  StorylineChoiceResult,
+} from "./storylines";
+export {
+  checkStorylineTriggers,
+  processActiveStorylines,
+  resolveStorylineChoice,
+} from "./storylines";

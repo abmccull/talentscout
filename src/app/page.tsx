@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
 import { MainMenu } from "@/components/game/MainMenu";
@@ -26,18 +27,40 @@ import { FixtureBrowser } from "@/components/game/FixtureBrowser";
 import { YouthScoutingScreen } from "@/components/game/YouthScoutingScreen";
 import { AlumniDashboard } from "@/components/game/AlumniDashboard";
 import { FinancialDashboard } from "@/components/game/FinancialDashboard";
+import { HandbookScreen } from "@/components/game/HandbookScreen";
+import { AchievementScreen } from "@/components/game/AchievementScreen";
+import { ScenarioSelect } from "@/components/game/ScenarioSelect";
+import { HallOfFame } from "@/components/game/HallOfFame";
+import { AchievementToast } from "@/components/game/AchievementToast";
+import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
+import { SettingsApplier } from "@/components/game/SettingsApplier";
+import { useAchievementStore } from "@/stores/achievementStore";
+import { useScreenMusic } from "@/lib/audio/useScreenMusic";
+import { useKeyboardNav } from "@/lib/useKeyboardNav";
 
-export default function Home() {
-  const currentScreen = useGameStore((s) => s.currentScreen);
-  const initialize = useAuthStore((s) => s.initialize);
+/**
+ * Null-safe wrapper for HallOfFame.
+ * Redirects to mainMenu when there is no active game state.
+ */
+function HallOfFameWrapper() {
+  const gameState = useGameStore((s) => s.gameState);
+  const setScreen = useGameStore((s) => s.setScreen);
 
-  // Check for an existing Supabase session once on mount.
-  // initialize() is a no-op if the auth store has not yet been wired to
-  // Supabase — safe to call unconditionally.
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
+  if (!gameState) {
+    setScreen("mainMenu");
+    return null;
+  }
 
+  return (
+    <HallOfFame
+      legacyScore={gameState.legacyScore}
+      scout={gameState.scout}
+      gameState={gameState}
+    />
+  );
+}
+
+function ScreenContent({ currentScreen }: { currentScreen: string }) {
   switch (currentScreen) {
     case "mainMenu":
       return <MainMenu />;
@@ -85,7 +108,75 @@ export default function Home() {
       return <AlumniDashboard />;
     case "finances":
       return <FinancialDashboard />;
+    case "handbook":
+      return <HandbookScreen />;
+    case "achievements":
+      return <AchievementScreen />;
+    case "scenarioSelect":
+      return <ScenarioSelect />;
+    case "hallOfFame":
+      return <HallOfFameWrapper />;
     default:
       return <MainMenu />;
   }
+}
+
+function ActiveScreen() {
+  const currentScreen = useGameStore((s) => s.currentScreen);
+  useScreenMusic(currentScreen);
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={currentScreen}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.15 }}
+      >
+        <ScreenContent currentScreen={currentScreen} />
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+export default function Home() {
+  const initialize = useAuthStore((s) => s.initialize);
+  const gameState = useGameStore((s) => s.gameState);
+  const checkAndUnlock = useAchievementStore((s) => s.checkAndUnlock);
+
+  // Check for an existing Supabase session once on mount.
+  // initialize() is a no-op if the auth store has not yet been wired to
+  // Supabase — safe to call unconditionally.
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
+  // Register global keyboard shortcuts (Esc, 1-8, Space, ?).
+  // Called here — at the root — so the listener is active on every screen.
+  useKeyboardNav();
+
+  // Re-run achievement checks whenever the game state changes.
+  // This catches achievements unlocked by advanceWeek(), report submission,
+  // career progression, or any other game-loop mutation.
+  useEffect(() => {
+    if (gameState) {
+      checkAndUnlock(gameState);
+    }
+  }, [gameState, checkAndUnlock]);
+
+  return (
+    <>
+      {/* SettingsApplier applies CSS classes to <html> for font size,
+          colorblind filters, and reduced motion. Renders no visible UI. */}
+      <SettingsApplier />
+      <ActiveScreen />
+      {/* TutorialOverlay is a fixed overlay; it renders null when no tutorial
+          is active, so it is safe to include unconditionally on every screen. */}
+      <TutorialOverlay />
+      {/* AchievementToast is a fixed overlay; it renders null when there are
+          no pending achievement notifications. */}
+      <AchievementToast />
+    </>
+  );
 }

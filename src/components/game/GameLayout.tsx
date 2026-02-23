@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 import {
   LayoutDashboard,
   Calendar,
+  CalendarDays,
   Users,
   FileText,
   Briefcase,
@@ -18,6 +20,8 @@ import {
   BarChart3,
   GraduationCap,
   Wallet,
+  Book,
+  Medal,
   X,
 } from "lucide-react";
 
@@ -25,24 +29,104 @@ const NAV_ITEMS: { screen: GameScreen; label: string; icon: React.ElementType }[
   { screen: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { screen: "calendar", label: "Calendar", icon: Calendar },
   { screen: "playerDatabase", label: "Players", icon: Users },
+  { screen: "leaderboard", label: "Leaderboard", icon: Award },
+  { screen: "fixtureBrowser", label: "Fixtures", icon: CalendarDays },
   { screen: "reportHistory", label: "Reports", icon: FileText },
   { screen: "career", label: "Career", icon: Briefcase },
-  { screen: "finances", label: "Finances", icon: Wallet },
-  { screen: "network", label: "Network", icon: Network },
   { screen: "inbox", label: "Inbox", icon: Mail },
-  { screen: "npcManagement", label: "Scouts", icon: UserCheck },
-  { screen: "internationalView", label: "International", icon: Globe },
+  { screen: "network", label: "Network", icon: Network },
+  { screen: "finances", label: "Finances", icon: Wallet },
   { screen: "discoveries", label: "Discoveries", icon: Trophy },
-  { screen: "leaderboard", label: "Leaderboard", icon: Award },
   { screen: "analytics", label: "Analytics", icon: BarChart3 },
   { screen: "youthScouting", label: "Youth", icon: GraduationCap },
   { screen: "alumniDashboard", label: "Alumni", icon: Award },
+  { screen: "npcManagement", label: "Scouts", icon: UserCheck },
+  { screen: "internationalView", label: "International", icon: Globe },
+  { screen: "achievements", label: "Achievements", icon: Medal },
+  { screen: "handbook", label: "Handbook", icon: Book },
   { screen: "settings", label: "Settings", icon: Settings },
 ];
+
+// Screens that are always visible regardless of tier or week
+const ALWAYS_VISIBLE = new Set<GameScreen>([
+  "dashboard",
+  "calendar",
+  "playerDatabase",
+  "leaderboard",
+  "fixtureBrowser",
+  "achievements",
+  "handbook",
+  "settings",
+]);
+
+const SEEN_NAV_KEY = "talentscout_seen_nav";
+
+function loadSeenNav(): Set<GameScreen> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(SEEN_NAV_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as GameScreen[]);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveSeenNav(seen: Set<GameScreen>): void {
+  try {
+    localStorage.setItem(SEEN_NAV_KEY, JSON.stringify([...seen]));
+  } catch {
+    // localStorage unavailable — silently ignore
+  }
+}
+
+/** Returns true if the nav item should be shown given current tier, week, and country count. */
+function getNavVisibility(
+  screen: GameScreen,
+  tier: number,
+  effectiveWeek: number,
+  countryCount: number,
+): boolean {
+  if (ALWAYS_VISIBLE.has(screen)) return true;
+
+  switch (screen) {
+    // Week 3+ items
+    case "reportHistory":
+    case "career":
+    case "inbox":
+      return effectiveWeek >= 3;
+
+    // Tier 2+ items
+    case "network":
+    case "finances":
+      return tier >= 2;
+
+    // Tier 3+ items
+    case "discoveries":
+    case "analytics":
+    case "youthScouting":
+    case "alumniDashboard":
+      return tier >= 3;
+
+    // Tier 4+ item
+    case "npcManagement":
+      return tier >= 4;
+
+    // Country-gated item
+    case "internationalView":
+      return countryCount > 1;
+
+    default:
+      return true;
+  }
+}
 
 export function GameLayout({ children }: { children: React.ReactNode }) {
   const { currentScreen, setScreen, gameState } = useGameStore();
   const autosaveError = useGameStore((s) => s.autosaveError);
+
+  // All hooks must be called before any early return
+  const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
 
   if (!gameState) return null;
 
@@ -51,11 +135,26 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     (r) => !r.reviewed,
   ).length;
 
-  const visibleNavItems = NAV_ITEMS.filter(({ screen }) => {
-    if (screen === "npcManagement") return gameState.scout.careerTier >= 4;
-    if (screen === "internationalView") return gameState.countries.length > 1;
-    return true;
-  });
+  const tier = gameState.scout.careerTier;
+  const countryCount = gameState.countries.length;
+  // effectiveWeek accumulates across seasons so week-gated items stay visible
+  // after season 1 ends (season 2+ means week >= 53, unlocking everything)
+  const effectiveWeek =
+    (gameState.currentSeason - 1) * 52 + gameState.currentWeek;
+
+  const visibleNavItems = NAV_ITEMS.filter(({ screen }) =>
+    getNavVisibility(screen, tier, effectiveWeek, countryCount),
+  );
+
+  function handleNavClick(screen: GameScreen): void {
+    if (!seenNav.has(screen)) {
+      const next = new Set(seenNav);
+      next.add(screen);
+      setSeenNav(next);
+      saveSeenNav(next);
+    }
+    setScreen(screen);
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -70,31 +169,40 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           </p>
         </div>
 
-        <nav className="flex-1 p-2">
-          {visibleNavItems.map(({ screen, label, icon: Icon }) => (
-            <button
-              key={screen}
-              onClick={() => setScreen(screen)}
-              className={`mb-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                currentScreen === screen
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : "text-zinc-400 hover:bg-[var(--secondary)] hover:text-white"
-              }`}
-            >
-              <Icon size={16} />
-              <span className="flex-1 text-left">{label}</span>
-              {screen === "inbox" && unreadCount > 0 && (
-                <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                  {unreadCount}
-                </span>
-              )}
-              {screen === "npcManagement" && unreviewedNpcReportCount > 0 && (
-                <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                  {unreviewedNpcReportCount}
-                </span>
-              )}
-            </button>
-          ))}
+        <nav className="flex-1 p-2" data-tutorial-id="sidebar-nav">
+          {visibleNavItems.map(({ screen, label, icon: Icon }) => {
+            const isNew = !seenNav.has(screen);
+            return (
+              <button
+                key={screen}
+                data-tutorial-id={`nav-${screen}`}
+                onClick={() => handleNavClick(screen)}
+                className={`mb-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                  currentScreen === screen
+                    ? "bg-emerald-500/10 text-emerald-400"
+                    : "text-zinc-400 hover:bg-[var(--secondary)] hover:text-white"
+                }`}
+              >
+                <Icon size={16} />
+                <span className="flex-1 text-left">{label}</span>
+                {isNew && (
+                  <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                    New
+                  </span>
+                )}
+                {screen === "inbox" && !isNew && unreadCount > 0 && (
+                  <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                    {unreadCount}
+                  </span>
+                )}
+                {screen === "npcManagement" && !isNew && unreviewedNpcReportCount > 0 && (
+                  <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                    {unreviewedNpcReportCount}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </nav>
 
         {/* Scout Info */}

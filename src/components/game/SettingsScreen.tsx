@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useSettingsStore } from "@/stores/settingsStore";
+import type { AppSettings } from "@/stores/settingsStore";
 import { GameLayout } from "./GameLayout";
 import { AuthModal } from "./AuthModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,8 +21,89 @@ import {
   Cloud,
   LogOut,
   LogIn,
+  Volume2,
+  VolumeX,
+  Monitor,
+  Accessibility,
+  Gamepad2,
+  Bell,
 } from "lucide-react";
 import { MAX_MANUAL_SLOTS } from "@/lib/db";
+import { useAudio } from "@/lib/audio/useAudio";
+import type { AudioChannel } from "@/lib/audio/audioEngine";
+
+// ---------------------------------------------------------------------------
+// Small reusable primitives used only within SettingsScreen
+// ---------------------------------------------------------------------------
+
+/** Emerald pill toggle — matches the Cloud Saves and Mute toggles above. */
+function PillToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+        checked ? "bg-emerald-500" : "bg-zinc-700"
+      }`}
+    >
+      <span
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
+      />
+    </button>
+  );
+}
+
+/** Three-option radio row (Small/Medium/Large, Slow/Normal/Fast, etc.). */
+function RadioGroup<T extends string>({
+  name,
+  options,
+  value,
+  onChange,
+}: {
+  name: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex gap-2" role="radiogroup" aria-label={name}>
+      {options.map((opt) => (
+        <label
+          key={opt.value}
+          className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition ${
+            value === opt.value
+              ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
+              : "border-[#27272a] text-zinc-400 hover:border-zinc-600 hover:text-white"
+          }`}
+        >
+          <input
+            type="radio"
+            name={name}
+            value={opt.value}
+            checked={value === opt.value}
+            onChange={() => onChange(opt.value)}
+            className="sr-only"
+          />
+          {opt.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 export function SettingsScreen() {
   const {
@@ -42,8 +125,12 @@ export function SettingsScreen() {
     toggleCloudSave,
   } = useAuthStore();
 
+  const { setSetting, ...settings } = useSettingsStore();
+
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  const { volumes, setVolume, toggleMute } = useAudio();
 
   useEffect(() => {
     refreshSaveSlots();
@@ -186,6 +273,283 @@ export function SettingsScreen() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        {/* ── Audio ───────────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              {volumes.muted ? (
+                <VolumeX
+                  size={18}
+                  className="text-emerald-500"
+                  aria-hidden="true"
+                />
+              ) : (
+                <Volume2
+                  size={18}
+                  className="text-emerald-500"
+                  aria-hidden="true"
+                />
+              )}
+              Audio
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Mute toggle */}
+            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <VolumeX
+                  size={14}
+                  className="text-zinc-400"
+                  aria-hidden="true"
+                />
+                <p className="text-sm font-medium">Mute All Audio</p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={volumes.muted}
+                aria-label="Mute all audio"
+                onClick={toggleMute}
+                className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  volumes.muted ? "bg-emerald-500" : "bg-zinc-700"
+                }`}
+              >
+                <span
+                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    volumes.muted ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Volume sliders */}
+            {(
+              [
+                { channel: "master" as const, label: "Master Volume" },
+                { channel: "music" as const, label: "Music" },
+                { channel: "sfx" as const, label: "SFX" },
+                { channel: "ambience" as const, label: "Ambience" },
+              ] satisfies { channel: AudioChannel | "master"; label: string }[]
+            ).map(({ channel, label }) => {
+              const value =
+                channel === "master"
+                  ? volumes.master
+                  : volumes[channel as AudioChannel];
+              const pct = Math.round(value * 100);
+              const inputId = `audio-volume-${channel}`;
+              return (
+                <div key={channel} className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label
+                      htmlFor={inputId}
+                      className="text-sm font-medium text-zinc-300"
+                    >
+                      {label}
+                    </label>
+                    <span
+                      className="w-10 text-right text-xs tabular-nums text-zinc-400"
+                      aria-live="polite"
+                      aria-atomic="true"
+                    >
+                      {pct}%
+                    </span>
+                  </div>
+                  <input
+                    id={inputId}
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={pct}
+                    onChange={(e) =>
+                      setVolume(channel, Number(e.target.value) / 100)
+                    }
+                    disabled={volumes.muted && channel !== "master"}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={pct}
+                    aria-valuetext={`${pct} percent`}
+                    className={`h-2 w-full cursor-pointer appearance-none rounded-full bg-zinc-700 outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-emerald-500 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-emerald-500 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-emerald-500 ${
+                      volumes.muted && channel !== "master"
+                        ? "opacity-40"
+                        : "opacity-100"
+                    }`}
+                  />
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+
+        {/* ── Display ─────────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Monitor size={18} className="text-emerald-500" aria-hidden="true" />
+              Display
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Font Size */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-zinc-300">Font Size</p>
+              <RadioGroup<AppSettings["fontSize"]>
+                name="fontSize"
+                value={settings.fontSize}
+                onChange={(v) => setSetting("fontSize", v)}
+                options={[
+                  { value: "small", label: "Small" },
+                  { value: "medium", label: "Medium" },
+                  { value: "large", label: "Large" },
+                ]}
+              />
+            </div>
+
+            {/* Colorblind Mode */}
+            <div className="space-y-2">
+              <label
+                htmlFor="colorblind-mode"
+                className="text-sm font-medium text-zinc-300"
+              >
+                Colorblind Mode
+              </label>
+              <select
+                id="colorblind-mode"
+                value={settings.colorblindMode}
+                onChange={(e) =>
+                  setSetting(
+                    "colorblindMode",
+                    e.target.value as AppSettings["colorblindMode"],
+                  )
+                }
+                className="w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                <option value="none">None</option>
+                <option value="protanopia">Protanopia (red deficiency)</option>
+                <option value="deuteranopia">Deuteranopia (green deficiency)</option>
+                <option value="tritanopia">Tritanopia (blue deficiency)</option>
+              </select>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Accessibility ────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Accessibility size={18} className="text-emerald-500" aria-hidden="true" />
+              Accessibility
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Reduced Motion */}
+            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium">Reduce Motion</p>
+                <p className="text-xs text-zinc-500">
+                  Minimise animations and transitions
+                </p>
+              </div>
+              <PillToggle
+                checked={settings.reducedMotion}
+                onChange={(v) => setSetting("reducedMotion", v)}
+                label="Toggle reduced motion"
+              />
+            </div>
+
+            {/* Keyboard shortcuts reference */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-zinc-300">
+                Keyboard Shortcuts
+              </p>
+              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
+                <ul className="space-y-1.5 text-xs text-zinc-400" aria-label="Keyboard shortcut reference">
+                  {(
+                    [
+                      ["Esc", "Back to Dashboard"],
+                      ["1", "Dashboard"],
+                      ["2", "Calendar"],
+                      ["3", "Players"],
+                      ["4", "Reports"],
+                      ["5", "Career"],
+                      ["6", "Inbox"],
+                      ["7", "Network"],
+                      ["8", "Settings"],
+                      ["Space", "Advance week (Calendar screen)"],
+                      ["?", "Open Settings"],
+                    ] as [string, string][]
+                  ).map(([key, desc]) => (
+                    <li key={key} className="flex items-center gap-3">
+                      <kbd className="inline-flex min-w-[2.25rem] items-center justify-center rounded border border-[#3f3f46] bg-[#1c1c1e] px-1.5 py-0.5 font-mono text-[11px] text-zinc-300">
+                        {key}
+                      </kbd>
+                      <span>{desc}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2.5 text-xs text-zinc-600">
+                  Shortcuts are disabled while typing in any text field.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── Gameplay ─────────────────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Gamepad2 size={18} className="text-emerald-500" aria-hidden="true" />
+              Gameplay
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {/* Auto-Advance Speed */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-zinc-300">Auto-Advance Speed</p>
+              <RadioGroup<AppSettings["autoAdvanceSpeed"]>
+                name="autoAdvanceSpeed"
+                value={settings.autoAdvanceSpeed}
+                onChange={(v) => setSetting("autoAdvanceSpeed", v)}
+                options={[
+                  { value: "slow", label: "Slow" },
+                  { value: "normal", label: "Normal" },
+                  { value: "fast", label: "Fast" },
+                ]}
+              />
+            </div>
+
+            {/* Confirm Before Advance */}
+            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
+              <div>
+                <p className="text-sm font-medium">Confirm Before Advancing</p>
+                <p className="text-xs text-zinc-500">
+                  Show a prompt before advancing the week
+                </p>
+              </div>
+              <PillToggle
+                checked={settings.confirmBeforeAdvance}
+                onChange={(v) => setSetting("confirmBeforeAdvance", v)}
+                label="Toggle confirm before advance"
+              />
+            </div>
+
+            {/* Notification Level */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-zinc-300">Notification Level</p>
+              <RadioGroup<AppSettings["notificationLevel"]>
+                name="notificationLevel"
+                value={settings.notificationLevel}
+                onChange={(v) => setSetting("notificationLevel", v)}
+                options={[
+                  { value: "all", label: "All" },
+                  { value: "important", label: "Important Only" },
+                  { value: "critical", label: "Critical Only" },
+                ]}
+              />
+            </div>
           </CardContent>
         </Card>
 

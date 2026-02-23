@@ -157,7 +157,15 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.placementReports) state.placementReports = {};
   if (!state.gutFeelings) state.gutFeelings = [];
   if (!state.alumniRecords) state.alumniRecords = [];
-  if (!state.legacyScore) state.legacyScore = { youthFound: 0, firstTeamBreakthroughs: 0, internationalCapsFromFinds: 0, totalScore: 0 };
+  if (!state.legacyScore) state.legacyScore = { youthFound: 0, firstTeamBreakthroughs: 0, internationalCapsFromFinds: 0, totalScore: 0, clubsWorkedAt: 0, countriesScouted: 0, careerHighTier: 0, totalSeasons: 0, bestDiscoveryName: "", bestDiscoveryPA: 0, scenariosCompleted: 0 };
+  // Backfill extended LegacyScore fields on saves that predate them
+  if (state.legacyScore.clubsWorkedAt === undefined) state.legacyScore.clubsWorkedAt = 0;
+  if (state.legacyScore.countriesScouted === undefined) state.legacyScore.countriesScouted = 0;
+  if (state.legacyScore.careerHighTier === undefined) state.legacyScore.careerHighTier = 0;
+  if (state.legacyScore.totalSeasons === undefined) state.legacyScore.totalSeasons = 0;
+  if (state.legacyScore.bestDiscoveryName === undefined) state.legacyScore.bestDiscoveryName = "";
+  if (state.legacyScore.bestDiscoveryPA === undefined) state.legacyScore.bestDiscoveryPA = 0;
+  if (state.legacyScore.scenariosCompleted === undefined) state.legacyScore.scenariosCompleted = 0;
   if (!state.subRegions) state.subRegions = {};
   if (!state.retiredPlayerIds) state.retiredPlayerIds = [];
 

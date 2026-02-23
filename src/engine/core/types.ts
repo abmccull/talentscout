@@ -148,6 +148,36 @@ export const ALL_ATTRIBUTES: readonly PlayerAttribute[] = [
 ] as const;
 
 // =============================================================================
+// PERSONALITY TRAITS
+// =============================================================================
+
+/**
+ * Personality traits describe the behavioural and psychological makeup of a
+ * player. Each player has 2–4 true traits (hidden) and a separate set of
+ * traits that have been revealed through scouting observations.
+ *
+ * Traits influence report quality but are never directly visible as numeric
+ * attributes — they are qualitative descriptors discovered over time.
+ */
+export type PersonalityTrait =
+  | "ambitious"
+  | "loyal"
+  | "professional"
+  | "temperamental"
+  | "determined"
+  | "easygoing"
+  | "leader"
+  | "introvert"
+  | "flair"
+  | "controversialCharacter"
+  | "modelCitizen"
+  | "pressurePlayer"
+  | "bigGamePlayer"
+  | "inconsistent"
+  | "injuryProne"
+  | "lateDeveloper";
+
+// =============================================================================
 // PLAYER
 // =============================================================================
 
@@ -243,6 +273,17 @@ export interface Player {
   morale: number;
   injured: boolean;
   injuryWeeksRemaining: number;
+
+  /**
+   * The player's true personality traits (2–4).
+   * Hidden from the scout; revealed incrementally through observation.
+   */
+  personalityTraits: PersonalityTrait[];
+  /**
+   * Subset of personalityTraits that the scout has discovered so far.
+   * Populated by the perception engine during observation sessions.
+   */
+  personalityRevealed: PersonalityTrait[];
 }
 
 // =============================================================================
@@ -505,6 +546,12 @@ export interface Observation {
   notes: string[];
   flaggedMoments: FlaggedMoment[];
   abilityReading?: AbilityReading;
+  /**
+   * A personality trait uncovered during this observation session.
+   * Set by the perception engine when the reveal roll succeeds.
+   * Callers should add this to player.personalityRevealed in game state.
+   */
+  revealedPersonalityTrait?: PersonalityTrait;
 }
 
 export interface AbilityReading {
@@ -832,6 +879,30 @@ export interface InboxMessage {
 }
 
 // =============================================================================
+// STORYLINES (forward declaration to avoid circular import)
+// =============================================================================
+
+/**
+ * A multi-week narrative storyline instance.
+ * Defined in full in engine/events/storylines.ts — this minimal interface
+ * is embedded here so GameState can reference it without a circular dep.
+ */
+export interface StorylineState {
+  id: string;
+  templateId: string;
+  name: string;
+  /** Opaque stage array — typed as unknown[] to avoid pulling in engine deps. */
+  stages: unknown[];
+  currentStage: number;
+  nextStageWeek: number;
+  nextStageSeason: number;
+  startedWeek: number;
+  startedSeason: number;
+  resolved: boolean;
+  context: Record<string, unknown>;
+}
+
+// =============================================================================
 // GAME STATE
 // =============================================================================
 
@@ -881,6 +952,8 @@ export interface GameState {
   finances?: FinancialRecord;
   /** Narrative events that have occurred. */
   narrativeEvents: NarrativeEvent[];
+  /** Active multi-week storylines. */
+  activeStorylines: StorylineState[];
   /** Rival scouts competing with the player. */
   rivalScouts: Record<string, RivalScout>;
   /** Tools unlocked by the player. */
@@ -1342,6 +1415,7 @@ export interface EconomicEvent {
 // =============================================================================
 
 export type NarrativeEventType =
+  // Original 8
   | "rivalPoach"
   | "managerFired"
   | "exclusiveTip"
@@ -1349,7 +1423,44 @@ export type NarrativeEventType =
   | "targetInjured"
   | "reportCitedInBoardMeeting"
   | "rivalRecruitment"
-  | "agentDeception";
+  | "agentDeception"
+  // Scout Personal Life (6)
+  | "burnout"
+  | "familyEmergency"
+  | "scoutingConference"
+  | "mentorOffer"
+  | "mediaInterview"
+  | "healthScare"
+  // Club Drama (6)
+  | "boardroomCoup"
+  | "budgetCut"
+  | "scoutingDeptRestructure"
+  | "rivalClubPoach"
+  | "managerSacked"
+  | "clubFinancialTrouble"
+  // Player Stories (8)
+  | "wonderkidPressure"
+  | "playerHomesick"
+  | "hiddenGemVindication"
+  | "playerControversy"
+  | "youthProdigyDilemma"
+  | "injurySetback"
+  | "debutBrilliance"
+  | "lateBloomingSurprise"
+  // Network Events (6)
+  | "contactBetrayal"
+  | "exclusiveAccess"
+  | "agentDoubleDealing"
+  | "journalistExpose"
+  | "networkExpansion"
+  | "contactRetirement"
+  // Industry Events (6)
+  | "transferRuleChange"
+  | "dataRevolution"
+  | "youthAcademyScandal"
+  | "internationalTournament"
+  | "scoutingAwardNomination"
+  | "financialFairPlayImpact";
 
 export interface NarrativeEvent {
   id: string;
@@ -1451,6 +1562,8 @@ export type ExpenseType =
   | "courseFees"
   | "insurance";
 
+export type RivalPersonality = "aggressive" | "methodical" | "connected" | "lucky";
+
 export interface RivalScout {
   id: string;
   name: string;
@@ -1464,6 +1577,12 @@ export interface RivalScout {
   targetPlayerIds: string[];
   /** Reputation 0–100. */
   reputation: number;
+  /** Personality archetype affecting how the rival behaves. */
+  personality: RivalPersonality;
+  /** Whether this rival is the player's primary nemesis. */
+  isNemesis: boolean;
+  /** Player IDs that both this rival and the player-scout are competing for. */
+  competingForPlayers: string[];
 }
 
 export type ToolId =
@@ -1690,6 +1809,14 @@ export interface LegacyScore {
   firstTeamBreakthroughs: number;
   internationalCapsFromFinds: number;
   totalScore: number;
+  // Extended legacy fields
+  clubsWorkedAt: number;
+  countriesScouted: number;
+  careerHighTier: number;
+  totalSeasons: number;
+  bestDiscoveryName: string;
+  bestDiscoveryPA: number;
+  scenariosCompleted: number;
 }
 
 export interface SubRegion {

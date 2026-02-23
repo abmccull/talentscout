@@ -13,6 +13,7 @@ import {
   Info,
   CalendarDays,
 } from "lucide-react";
+import { Tooltip } from "@/components/ui/tooltip";
 import type { Activity, ActivityType } from "@/engine/core/types";
 import {
   getUpcomingSeasonEvents,
@@ -256,7 +257,9 @@ export function CalendarScreen() {
               Week {currentWeek} — Season {currentSeason}
             </p>
           </div>
-          <Button onClick={advanceWeek}>Advance Week</Button>
+          <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
+            <Button onClick={advanceWeek} data-tutorial-id="advance-week">Advance Week</Button>
+          </Tooltip>
         </div>
 
         {/* International break banner */}
@@ -345,7 +348,7 @@ export function CalendarScreen() {
         </div>
 
         {/* 7-day grid */}
-        <div className="mb-6 grid grid-cols-7 gap-2">
+        <div className="mb-6 grid grid-cols-7 gap-2" data-tutorial-id="calendar-grid">
           {DAY_LABELS.map((day, i) => {
             const activity = activities[i];
             const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
@@ -353,6 +356,7 @@ export function CalendarScreen() {
             return (
               <div key={day} className="flex flex-col gap-1">
                 <p className="text-center text-xs font-semibold text-zinc-500">{day}</p>
+                <Tooltip content="Drag or click to assign an activity for this day." side="top">
                 <div
                   className={`min-h-[80px] rounded-lg border p-2 transition ${
                     activity
@@ -383,12 +387,14 @@ export function CalendarScreen() {
                     <p className="text-center text-xs text-zinc-600 mt-2">Empty</p>
                   )}
                 </div>
+                </Tooltip>
               </div>
             );
           })}
         </div>
 
         {/* Available activities — grouped by category, specialization-aware */}
+        <div data-tutorial-id="calendar-activities">
         <ActivityPanel
           activities={engineActivities}
           specialization={scout.primarySpecialization}
@@ -399,6 +405,7 @@ export function CalendarScreen() {
           onLeagueFilterChange={setSelectedLeagueId}
           resolveClubName={resolveClubName}
         />
+        </div>
       </div>
     </GameLayout>
   );

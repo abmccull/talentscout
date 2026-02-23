@@ -10,6 +10,7 @@ import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircl
 import type { AttributeReading, HiddenIntel, Observation, AbilityReading, SystemFitResult, StatisticalProfile, AnomalyFlag } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
+import { Tooltip } from "@/components/ui/tooltip";
 
 const DOMAIN_LABELS: Record<string, string> = {
   technical: "Technical",
@@ -367,7 +368,9 @@ function ObservationsSidebar({ observations }: { observations: Observation[] }) 
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between text-sm">
-            <span>Observations ({observations.length})</span>
+            <Tooltip content="Number of times you've observed this player. More observations improve reading accuracy." side="top">
+              <span>Observations ({observations.length})</span>
+            </Tooltip>
             {observations.length >= 2 && (
               <Button
                 size="sm"
@@ -815,9 +818,11 @@ export function PlayerProfile() {
                     <div className="space-y-2">
                       {domainAttrs.map(([attr, reading]) => (
                         <div key={attr} className="flex items-center gap-3">
-                          <span className="w-32 shrink-0 text-xs capitalize text-zinc-400">
-                            {attr.replace(/([A-Z])/g, " $1").trim()}
-                          </span>
+                          <Tooltip content="Your estimated reading of this attribute. Accuracy depends on observations, lens focus, and scout skills." side="right">
+                            <span className="w-32 shrink-0 text-xs capitalize text-zinc-400">
+                              {attr.replace(/([A-Z])/g, " $1").trim()}
+                            </span>
+                          </Tooltip>
                           {reading ? (
                             <>
                               <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">

@@ -9,3 +9,8 @@ export {
   resolveNamePool,
 } from './generation';
 export type { PlayerGenConfig } from './generation';
+
+export { generatePersonalityTraits } from './personality';
+
+export { checkPersonalityReveal } from './personalityReveal';
+export type { RevealContext } from './personalityReveal';
