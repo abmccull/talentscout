@@ -57,7 +57,7 @@ import {
   generateAnalystCandidate,
 } from "@/engine/data";
 import { createRNG } from "@/engine/rng";
-import { rollActivityQuality } from "@/engine/core/activityQuality";
+import { rollActivityQuality, MULTI_DAY_CONTINUATIONS } from "@/engine/core/activityQuality";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import {
   generateSeasonEvents,
@@ -2163,6 +2163,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // These use the proper youth venue system (getYouthVenuePool + processVenueObservation)
       // which draws from unsignedYouth rather than signed professionals.
 
+      // Check for pre-computed results from week simulation
+      const simYouthResults = get().weekSimulation?.youthVenueResults;
+      if (simYouthResults) {
+        // Apply pre-computed youth venue results (avoids double-processing)
+        Object.assign(updatedObservations, simYouthResults.newObservations);
+        const dedupedNewDiscoveries = simYouthResults.newDiscoveries.filter(
+          (nd) => !actDiscoveries.some((d) => d.playerId === nd.playerId),
+        );
+        actDiscoveries = [...actDiscoveries, ...dedupedNewDiscoveries];
+        weekObservationsGenerated += simYouthResults.totalObservations;
+        weekPlayersDiscovered += simYouthResults.totalDiscoveries;
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          unsignedYouth: { ...stateWithScheduleApplied.unsignedYouth, ...simYouthResults.updatedUnsignedYouth },
+          observations: updatedObservations,
+          discoveryRecords: actDiscoveries,
+        };
+      } else {
+      // Fallback: process youth venues (for old saves without youthVenueResults)
+
       let updatedUnsignedYouthObs = { ...stateWithScheduleApplied.unsignedYouth };
 
       // Helper for youth venue observation processing
@@ -2386,6 +2406,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           inbox: [...stateWithScheduleApplied.inbox, ...actObsMessages],
         };
       }
+      } // end else (fallback for old saves)
     }
 
     // ── Youth placement resolution ────────────────────────────────────────
@@ -3547,8 +3568,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rng = createRNG(`${gameState.seed}-daysim-${gameState.currentWeek}-${gameState.currentSeason}`);
     const qualityRng = createRNG(`${gameState.seed}-dayquality-${gameState.currentWeek}-${gameState.currentSeason}`);
 
+    // Pre-scan schedule to build activity spans for multi-day XP splitting
+    const activitySpans = new Map<string, number[]>();
+    for (let i = 0; i < 7; i++) {
+      const act = gameState.schedule.activities[i];
+      if (!act) continue;
+      const key = `${act.type}-${act.targetId ?? ""}-${act.description}`;
+      const existing = activitySpans.get(key);
+      if (existing) {
+        existing.push(i);
+      } else {
+        activitySpans.set(key, [i]);
+      }
+    }
+
     const dayResults: DayResult[] = [];
-    const seenActivityTypes = new Set<string>();
+    const rolledQualities = new Map<string, { narrative: string }>();
 
     for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
       const activity = gameState.schedule.activities[dayIndex];
@@ -3571,46 +3606,57 @@ export const useGameStore = create<GameStore>((set, get) => ({
         continue;
       }
 
-      // Skip duplicate multi-slot activities (they occupy >1 slot but process once)
-      if (seenActivityTypes.has(`${activity.type}-${activity.targetId ?? ""}-${activity.description}`)) {
-        dayResults.push({
-          dayIndex,
-          dayName: DAY_NAMES[dayIndex],
-          activity,
-          observations: [],
-          playersDiscovered: 0,
-          reportsWritten: [],
-          profilesGenerated: 0,
-          anomaliesFound: 0,
-          xpGained: {},
-          fatigueChange: 0,
-          narrative: `Continuing ${activity.type}...`,
-          inboxMessages: [],
-        });
-        continue;
-      }
-      seenActivityTypes.add(`${activity.type}-${activity.targetId ?? ""}-${activity.description}`);
+      const actKey = `${activity.type}-${activity.targetId ?? ""}-${activity.description}`;
+      const span = activitySpans.get(actKey) ?? [dayIndex];
+      const totalDays = span.length;
+      const occurrenceIndex = span.indexOf(dayIndex);
 
-      // Roll quality for this activity type
+      // Roll quality only on the first occurrence
       let narrative = "";
-      let xpGained: Partial<Record<string, number>> = {};
-      if (activity.type !== "rest" && activity.type !== "travel" && activity.type !== "internationalTravel") {
-        const qr = rollActivityQuality(qualityRng, activity.type, gameState.scout);
-        narrative = qr.narrative;
+      if (occurrenceIndex === 0) {
+        if (activity.type !== "rest" && activity.type !== "travel" && activity.type !== "internationalTravel") {
+          const qr = rollActivityQuality(qualityRng, activity.type, gameState.scout);
+          narrative = qr.narrative;
+          rolledQualities.set(actKey, { narrative: qr.narrative });
+        }
+      } else {
+        // Continuation day — pick a continuation narrative
+        const contTemplates = MULTI_DAY_CONTINUATIONS[activity.type];
+        if (contTemplates && contTemplates.length > 0) {
+          narrative = contTemplates[Math.min(occurrenceIndex - 1, contTemplates.length - 1)];
+        } else {
+          const label = activity.type.replace(/([A-Z])/g, " $1").toLowerCase().trim();
+          narrative = `You continue your ${label} activity.`;
+        }
       }
 
-      // Get XP from the activity type
+      // Get total XP from the activity type, then split across days
       const skillXp = ACTIVITY_SKILL_XP_MAP[activity.type];
-      if (skillXp) {
+      let xpGained: Partial<Record<string, number>> = {};
+      if (skillXp && totalDays > 1) {
+        // Split XP: first day gets ceil, subsequent get floor
+        const split: Partial<Record<string, number>> = {};
+        for (const [skill, xp] of Object.entries(skillXp)) {
+          if (occurrenceIndex === 0) {
+            split[skill] = Math.ceil(xp / totalDays);
+          } else {
+            split[skill] = Math.floor(xp / totalDays);
+          }
+        }
+        xpGained = split;
+      } else if (skillXp) {
         xpGained = { ...skillXp };
       }
 
-      // Get fatigue from the activity type
+      // Get fatigue from the activity type, split across days
       const rawFatigue = ACTIVITY_FATIGUE_COSTS_MAP[activity.type] ?? 0;
       const endurance = gameState.scout.attributes.endurance;
-      const fatigueCost = rawFatigue < 0
+      const totalFatigue = rawFatigue < 0
         ? rawFatigue
         : Math.round(rawFatigue * (1 - Math.min(0.75, endurance / 40)));
+      const fatigueCost = totalDays > 1
+        ? Math.round(totalFatigue / totalDays)
+        : totalFatigue;
 
       if (!narrative && activity.type === "rest") {
         narrative = "You take a well-deserved rest day to recover your energy.";
@@ -3622,7 +3668,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         dayIndex,
         dayName: DAY_NAMES[dayIndex],
         activity,
-        observations: [], // Populated when the actual advanceWeek runs
+        observations: [], // Populated by youth discovery pre-computation below
         playersDiscovered: 0,
         reportsWritten: activity.type === "writeReport" && activity.targetId ? [activity.targetId] : [],
         profilesGenerated: 0,
@@ -3634,11 +3680,123 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
     }
 
+    // ── Youth venue discovery pre-computation ───────────────────────────
+    // Process youth venues now so players see discoveries during the simulation.
+    const YOUTH_VENUE_TYPES = ["schoolMatch", "grassrootsTournament", "streetFootball", "academyTrialDay", "youthFestival"] as const;
+    type YouthVenueType = typeof YOUTH_VENUE_TYPES[number];
+
+    const currentScout = gameState.scout;
+    let youthVenueResults: WeekSimulationState["youthVenueResults"] | undefined;
+
+    if (currentScout.primarySpecialization === "youth") {
+      const obsRng = createRNG(`${gameState.seed}-simobs-${gameState.currentWeek}-${gameState.currentSeason}`);
+      const updatedUnsignedYouth = { ...gameState.unsignedYouth };
+      const newObservations: Record<string, Observation> = {};
+      const newDiscoveries: DiscoveryRecord[] = [];
+      let totalObservations = 0;
+      let totalDiscoveries = 0;
+
+      // Deduplicate: process each unique youth venue activity once
+      const processedVenueKeys = new Set<string>();
+
+      for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
+        const act = gameState.schedule.activities[dayIndex];
+        if (!act) continue;
+        if (!(YOUTH_VENUE_TYPES as readonly string[]).includes(act.type)) continue;
+        const venueKey = `${act.type}-${act.targetId ?? ""}-${act.description}`;
+        if (processedVenueKeys.has(venueKey)) continue;
+        processedVenueKeys.add(venueKey);
+
+        const venueType = act.type as YouthVenueType;
+        const equipBonuses = gameState.finances?.equipment
+          ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+          : { youthDiscoveryBonus: 0 };
+        const youthBonus = equipBonuses.youthDiscoveryBonus ?? 0;
+
+        const pool = getYouthVenuePool(
+          obsRng,
+          venueType,
+          updatedUnsignedYouth,
+          currentScout,
+          undefined,
+          undefined,
+          youthBonus,
+        );
+
+        const observations: DayResult["observations"] = [];
+
+        for (const youth of pool) {
+          const existingObs = [
+            ...Object.values(newObservations),
+            ...Object.values(gameState.observations),
+          ].filter((o) => o.playerId === youth.player.id);
+
+          const result = processVenueObservation(
+            obsRng,
+            currentScout,
+            youth,
+            mapVenueTypeToContext(venueType),
+            existingObs,
+            gameState.currentWeek,
+            gameState.currentSeason,
+          );
+
+          newObservations[result.observation.id] = result.observation;
+          updatedUnsignedYouth[youth.id] = result.updatedYouth;
+          totalObservations++;
+
+          const alreadyDiscovered = newDiscoveries.some((r) => r.playerId === youth.player.id)
+            || (gameState.discoveryRecords ?? []).some((r: DiscoveryRecord) => r.playerId === youth.player.id);
+          if (!alreadyDiscovered) {
+            newDiscoveries.push(recordDiscovery(
+              youth.player,
+              currentScout,
+              gameState.currentWeek,
+              gameState.currentSeason,
+            ));
+            totalDiscoveries++;
+          }
+
+          const topAttrs = result.observation.attributeReadings
+            .sort((a: { perceivedValue: number }, b: { perceivedValue: number }) => b.perceivedValue - a.perceivedValue)
+            .slice(0, 3)
+            .map((r: { attribute: string; perceivedValue: number }) => `${r.attribute} ${r.perceivedValue}`)
+            .join(", ");
+
+          observations.push({
+            playerId: youth.player.id,
+            playerName: `${youth.player.firstName} ${youth.player.lastName}`,
+            topAttributes: topAttrs,
+          });
+        }
+
+        // Assign observations and discovery counts to the first day of this activity
+        if (observations.length > 0) {
+          const dayResult = dayResults[dayIndex];
+          dayResult.observations = observations;
+          dayResult.playersDiscovered = observations.filter((obs) =>
+            newDiscoveries.some((d) => d.playerId === obs.playerId),
+          ).length;
+        }
+      }
+
+      if (totalObservations > 0) {
+        youthVenueResults = {
+          updatedUnsignedYouth,
+          newObservations,
+          newDiscoveries,
+          totalObservations,
+          totalDiscoveries,
+        };
+      }
+    }
+
     set({
       weekSimulation: {
         dayResults,
         currentDay: 0,
         pendingWorldTick: false,
+        youthVenueResults,
       },
       currentScreen: "weekSimulation",
     });
@@ -3662,7 +3820,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
       // Trigger the actual week advancement
       get().advanceWeek();
-      set({ weekSimulation: null });
+      set({ weekSimulation: null, currentScreen: "calendar" });
     } else {
       set({
         weekSimulation: {
@@ -3680,6 +3838,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Skip to end and run the full advanceWeek
     set({ weekSimulation: null });
     get().advanceWeek();
+    set({ currentScreen: "calendar" });
   },
 
   // Match scheduling (calendar-based)

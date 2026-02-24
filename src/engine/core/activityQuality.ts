@@ -255,6 +255,116 @@ const NARRATIVES: Partial<
       "Remarkable tournament! You discovered a talent so impressive you've already mentally drafted the report.",
     ],
   },
+  schoolMatch: {
+    poor: [
+      "A disappointing school match — the pitch was waterlogged and the standard was low.",
+      "You struggle to see any real quality. The match is disjointed and scrappy.",
+    ],
+    average: [
+      "A decent school match. A couple of players show flashes of raw talent.",
+      "The standard is typical for this level. You make notes on two or three lads.",
+    ],
+    good: [
+      "A good school match. One youngster stands out with confident close control under pressure.",
+      "Competitive match with good tempo. Several boys play beyond their years.",
+    ],
+    excellent: [
+      "An excellent school match! One player's movement and awareness are far ahead of his peers.",
+      "Outstanding game. A midfielder dictates the tempo with composure you rarely see at this age.",
+    ],
+    exceptional: [
+      "A remarkable school match — one boy dominates with a maturity that stops you mid-note.",
+      "Extraordinary display. A young player moves like he's played at this level for years. You can't look away.",
+    ],
+  },
+  grassrootsTournament: {
+    poor: [
+      "A poorly organized tournament. Late kick-offs and short matches left little time for proper assessment.",
+      "Disappointing grassroots event. Defensive football and nervous coaches made for slim pickings.",
+    ],
+    average: [
+      "A typical grassroots tournament. Mixed quality across the teams but a few names worth noting.",
+      "Standard community tournament. You spot a couple of raw athletes but nothing jumps off the page.",
+    ],
+    good: [
+      "A well-run tournament with competitive matches. Several youngsters show genuine promise.",
+      "Good grassroots event. The knockout stages bring the best out of two or three standout performers.",
+    ],
+    excellent: [
+      "An excellent grassroots tournament! A young striker's instincts in the box are genuinely exciting.",
+      "Highly competitive event. One team's centre-back reads the game like a seasoned professional.",
+    ],
+    exceptional: [
+      "An extraordinary grassroots tournament! One player elevates every match he plays — a genuine prospect.",
+      "Remarkable event. A young talent displays technique, intelligence, and composure that could fast-track his career.",
+    ],
+  },
+  streetFootball: {
+    poor: [
+      "A quiet session at the cages. Most of the regulars didn't show and the quality was thin.",
+      "Not much to see today. The weather kept numbers down and the football was unremarkable.",
+    ],
+    average: [
+      "A routine street session. Quick feet and sharp one-twos, but nobody truly stood out.",
+      "Decent session. The lads play with freedom but lack the decision-making you're looking for.",
+    ],
+    good: [
+      "A good street session. One kid's close control in tight spaces is eye-catching.",
+      "Productive visit. A young player's creativity and flair are exactly what structured football misses.",
+    ],
+    excellent: [
+      "An excellent street session! A youngster's improvisation and body feints are completely self-taught — pure instinct.",
+      "Outstanding session. One player embarrasses older kids with a mix of skill and fearlessness.",
+    ],
+    exceptional: [
+      "A session you'll talk about. A young street footballer plays with a joy and ingenuity that can't be coached.",
+      "Extraordinary talent spotted in the cages. This kid's spatial awareness and dribbling are off the charts.",
+    ],
+  },
+  academyTrialDay: {
+    poor: [
+      "A frustrating trial day. Nerves got the better of most trialists and the standard disappointed.",
+      "Below-par trial day. The academy coaches seemed unimpressed and you struggled to find a standout.",
+    ],
+    average: [
+      "A standard academy trial. A few boys show potential but none separate themselves from the pack.",
+      "Routine trial day. The drills are well-structured but the talent pool is ordinary.",
+    ],
+    good: [
+      "A productive trial day. Two or three youngsters look comfortable in the academy environment.",
+      "Good trial day. One player's composure during the match portion catches the coaches' attention.",
+    ],
+    excellent: [
+      "An excellent trial day! A trialist adapts to the academy's style of play with remarkable speed.",
+      "Highly productive trial. One boy's technical level is clearly above the rest — coaches exchange knowing looks.",
+    ],
+    exceptional: [
+      "An outstanding trial day! A youngster performs so well the head of youth asks you where you found him.",
+      "Extraordinary trial. A player's combination of ability and attitude is exactly what the academy needs.",
+    ],
+  },
+  youthFestival: {
+    poor: [
+      "A chaotic youth festival. Overcrowded pitches and short match times hampered your assessment.",
+      "Disappointing festival. The emphasis was on participation over competition, limiting scouting value.",
+    ],
+    average: [
+      "A standard youth festival. Lots of matches to watch but the overall standard was middling.",
+      "Routine festival viewing. You cast a wide net but the talent density was lower than hoped.",
+    ],
+    good: [
+      "A well-organized youth festival. The variety of opposition brings out different qualities in the players.",
+      "Good festival. Playing against unfamiliar teams reveals which youngsters can adapt on the fly.",
+    ],
+    excellent: [
+      "An excellent youth festival! The intensity of back-to-back games separates the mentally tough from the rest.",
+      "Highly productive festival. A young goalkeeper's shot-stopping and distribution are exceptional for his age.",
+    ],
+    exceptional: [
+      "An unforgettable youth festival! One player is head and shoulders above everyone — scouts from three clubs are watching.",
+      "Extraordinary festival. A young talent's performances improve with each match, suggesting enormous upside.",
+    ],
+  },
   writeReport: {
     poor: [
       "A struggle to compile your report. Your notes were disorganized and the analysis feels shallow.",
@@ -339,3 +449,48 @@ export function rollActivityQuality(
     discoveryModifier: config.discoveryModifier,
   };
 }
+
+// =============================================================================
+// MULTI-DAY CONTINUATION NARRATIVES
+// =============================================================================
+
+/** Day-2+ narratives for multi-slot activities. Keyed by activity type. */
+export const MULTI_DAY_CONTINUATIONS: Partial<Record<ActivityType, string[]>> = {
+  schoolMatch: [
+    "You return for the second half of the school match, watching with fresh eyes.",
+    "Another look at the same group — you notice details you missed yesterday.",
+  ],
+  grassrootsTournament: [
+    "Day two of the tournament. The knockout rounds reveal more about each player's character.",
+    "Back at the tournament grounds. Fatigue is setting in and you can see who's mentally tough.",
+    "Final day of the grassroots tournament. The best players have risen to the top.",
+  ],
+  streetFootball: [
+    "You return to the cages for another look at the local talent.",
+  ],
+  academyTrialDay: [
+    "Second day of trials. The boys are more relaxed and their true ability shows through.",
+  ],
+  youthFestival: [
+    "Day two of the festival. You've narrowed your focus to a handful of standout players.",
+    "Final day of the festival. Back-to-back games have sorted the wheat from the chaff.",
+  ],
+  attendMatch: [
+    "You review your notes and settle in for continued observation.",
+  ],
+  trainingVisit: [
+    "A second session gives you a fuller picture of the squad's dynamics.",
+  ],
+  scoutingMission: [
+    "You continue your scouting mission, following up on yesterday's initial impressions.",
+  ],
+  travel: [
+    "The journey continues. You review your notes and prepare for arrival.",
+  ],
+  internationalTravel: [
+    "Still in transit. You use the downtime to organize your scouting plans.",
+  ],
+  dataConference: [
+    "Day two of the conference. The breakout sessions offer more hands-on insights.",
+  ],
+};

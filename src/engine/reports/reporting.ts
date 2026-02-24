@@ -156,7 +156,7 @@ const POSITION_AVERAGES: Record<Position, Partial<Record<PlayerAttribute, number
 // Strength/weakness descriptor templates
 // ---------------------------------------------------------------------------
 
-const STRENGTH_DESCRIPTORS: Partial<Record<PlayerAttribute, string>> = {
+export const STRENGTH_DESCRIPTORS: Partial<Record<PlayerAttribute, string>> = {
   shooting:           "Clinical in front of goal — rarely squanders clear opportunities",
   dribbling:          "Exceptional ball-carrier who can take on defenders in tight areas",
   crossing:           "Delivers dangerous, well-weighted crosses from wide positions",
@@ -177,7 +177,7 @@ const STRENGTH_DESCRIPTORS: Partial<Record<PlayerAttribute, string>> = {
   defensiveAwareness: "Reads the game exceptionally well — anticipates danger before it develops",
 };
 
-const WEAKNESS_DESCRIPTORS: Partial<Record<PlayerAttribute, string>> = {
+export const WEAKNESS_DESCRIPTORS: Partial<Record<PlayerAttribute, string>> = {
   shooting:           "Wasteful in front of goal — misses opportunities a player of his level should convert",
   dribbling:          "Struggles to beat a man in tight areas; loses the ball under pressure too often",
   crossing:           "Delivery from wide positions is inconsistent; rarely finds the target man",

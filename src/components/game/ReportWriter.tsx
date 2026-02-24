@@ -1,15 +1,21 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft, X } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, X, Sparkles } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { ConvictionLevel, AttributeReading } from "@/engine/core/types";
+import type { ConvictionLevel, AttributeReading, PlayerAttribute } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
+import {
+  generateReportContent,
+  STRENGTH_DESCRIPTORS,
+  WEAKNESS_DESCRIPTORS,
+} from "@/engine/reports";
+import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -17,40 +23,20 @@ import { useTranslations } from "next-intl";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
-const SUGGESTED_STRENGTHS = [
-  "Exceptional technical quality",
-  "Elite physical attributes",
-  "Strong leadership presence",
-  "Excellent positioning",
-  "Clinical finishing",
-  "Creative vision",
-  "Dominant aerial ability",
-  "High work rate",
-  "Composed under pressure",
-  "Strong tactical awareness",
-  "Consistent performer",
-  "Versatile positionally",
-];
-
-const SUGGESTED_WEAKNESSES = [
-  "Below-par pace",
-  "Weak off the ball",
-  "Poor composure under pressure",
-  "Lack of aerial threat",
-  "Inconsistent decision-making",
-  "Limited with weak foot",
-  "Injury concerns",
-  "Limited stamina",
-  "Struggles defensively",
-  "Lacks leadership",
-  "Untested at higher level",
-  "Poor set-piece delivery",
-];
-
 function confidenceColor(confidence: number): string {
   if (confidence >= 0.7) return "text-emerald-400";
   if (confidence >= 0.4) return "text-amber-400";
   return "text-red-400";
+}
+
+function formatValue(n: number): string {
+  if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `£${(n / 1_000).toFixed(0)}K`;
+  return `£${n}`;
+}
+
+function attrLabel(attr: string): string {
+  return attr.replace(/([A-Z])/g, " $1").trim();
 }
 
 export function ReportWriter() {
@@ -74,8 +60,9 @@ export function ReportWriter() {
   const [customStrength, setCustomStrength] = useState("");
   const [customWeakness, setCustomWeakness] = useState("");
   const [comparison, setComparison] = useState("");
+  const draftApplied = useRef(false);
 
-  // Derive data before any early return — use optional chaining for safety
+  // Derive data before any early return
   const player = gameState && selectedPlayerId ? gameState.players[selectedPlayerId] : undefined;
   const club = player ? getClub(player.clubId) : undefined;
   const observations = useMemo(
@@ -113,6 +100,44 @@ export function ReportWriter() {
     [observations]
   );
 
+  // Generate the engine draft
+  const draft = useMemo(() => {
+    if (!player || !gameState || observations.length === 0) return null;
+    return generateReportContent(player, observations, gameState.scout);
+  }, [player, gameState, observations]);
+
+  // Build reverse-lookup maps: descriptor string → attribute name
+  const strengthToAttribute = useMemo(() => {
+    const map = new Map<string, PlayerAttribute>();
+    for (const [attr, desc] of Object.entries(STRENGTH_DESCRIPTORS)) {
+      if (desc) map.set(desc, attr as PlayerAttribute);
+    }
+    return map;
+  }, []);
+
+  const weaknessToAttribute = useMemo(() => {
+    const map = new Map<string, PlayerAttribute>();
+    for (const [attr, desc] of Object.entries(WEAKNESS_DESCRIPTORS)) {
+      if (desc) map.set(desc, attr as PlayerAttribute);
+    }
+    return map;
+  }, []);
+
+  // Pre-populate form state from draft (one-shot)
+  useEffect(() => {
+    if (!draft || draftApplied.current) return;
+    draftApplied.current = true;
+    if (draft.suggestedStrengths.length > 0) {
+      setSelectedStrengths(draft.suggestedStrengths);
+    }
+    if (draft.suggestedWeaknesses.length > 0) {
+      setSelectedWeaknesses(draft.suggestedWeaknesses);
+    }
+    if (draft.comparisonSuggestions.length > 0) {
+      setComparison(draft.comparisonSuggestions[0]);
+    }
+  }, [draft]);
+
   // Warn the user if they try to close/reload the tab while the form is dirty
   useEffect(() => {
     if (!isDirty) return;
@@ -149,6 +174,32 @@ export function ReportWriter() {
     );
   };
 
+  const handleGenerateDraft = () => {
+    if (!draft) return;
+    const lines: string[] = [];
+    lines.push(
+      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player.firstName} ${player.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"} ${player.position}.`
+    );
+    if (selectedStrengths.length > 0) {
+      lines.push(`Key strengths include ${selectedStrengths.slice(0, 2).map(s => {
+        const attr = strengthToAttribute.get(s);
+        return attr ? attrLabel(attr).toLowerCase() : s.toLowerCase().split(" — ")[0];
+      }).join(" and ")}.`);
+    }
+    if (selectedWeaknesses.length > 0) {
+      lines.push(`Areas of concern: ${selectedWeaknesses.slice(0, 2).map(w => {
+        const attr = weaknessToAttribute.get(w);
+        return attr ? attrLabel(attr).toLowerCase() : w.toLowerCase().split(" — ")[0];
+      }).join(" and ")}.`);
+    }
+    if (draft.perceivedPARange) {
+      lines.push(`Potential ceiling estimated at ${draft.perceivedPARange[0]}–${draft.perceivedPARange[1]} stars.`);
+    }
+    setSummary(lines.join(" "));
+    setIsDirty(true);
+    playSFX("pen-scribble");
+  };
+
   const handleSubmit = () => {
     if (!summary.trim()) return;
     const fullSummary = comparison.trim()
@@ -162,10 +213,16 @@ export function ReportWriter() {
   const isTablePound = conviction === "tablePound";
   const canSubmit = summary.trim().length > 0 && observations.length > 0;
 
+  // Determine which suggestions come from the engine vs custom
+  const engineStrengths = draft?.suggestedStrengths ?? [];
+  const engineWeaknesses = draft?.suggestedWeaknesses ?? [];
+  const customStrengthTags = selectedStrengths.filter((s) => !engineStrengths.includes(s));
+  const customWeaknessTags = selectedWeaknesses.filter((w) => !engineWeaknesses.includes(w));
+
   return (
     <GameLayout>
       <div className="relative min-h-full p-6">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+        <ScreenBackground src="/images/backgrounds/report-writer.png" opacity={0.82} />
         <div className="relative z-10 max-w-4xl mx-auto">
         <button
           onClick={handleBack}
@@ -228,6 +285,47 @@ export function ReportWriter() {
             </CardContent>
           </Card>
 
+          {/* Ability Overview */}
+          {draft && (draft.perceivedCAStars != null || draft.estimatedValue > 0) && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Ability Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-6">
+                  {draft.perceivedCAStars != null && (
+                    <div>
+                      <p className="text-xs text-zinc-500 mb-1.5">Current Ability</p>
+                      <StarRating rating={draft.perceivedCAStars} size="lg" />
+                    </div>
+                  )}
+                  {draft.perceivedPARange && (
+                    <div>
+                      <Tooltip content="Estimated potential ceiling based on observed raw attributes and age profile" side="top">
+                        <p className="text-xs text-zinc-500 mb-1.5 cursor-help underline decoration-dotted underline-offset-2">
+                          Potential Range
+                        </p>
+                      </Tooltip>
+                      <StarRatingRange
+                        low={draft.perceivedPARange[0]}
+                        high={draft.perceivedPARange[1]}
+                        size="lg"
+                      />
+                    </div>
+                  )}
+                  {draft.estimatedValue > 0 && (
+                    <div>
+                      <p className="text-xs text-zinc-500 mb-1.5">Est. Market Value</p>
+                      <p className="text-lg font-bold text-emerald-400">
+                        {formatValue(draft.estimatedValue)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Attribute assessments */}
           {merged.size > 0 && (
             <Card data-tutorial-id="report-attributes">
@@ -245,7 +343,7 @@ export function ReportWriter() {
                         {attrs.map(([attr, reading]) => (
                           <div key={attr} className="flex items-center gap-3">
                             <span className="w-32 shrink-0 text-xs capitalize text-zinc-400">
-                              {attr.replace(/([A-Z])/g, " $1").trim()}
+                              {attrLabel(attr)}
                             </span>
                             <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
                               <div
@@ -253,14 +351,19 @@ export function ReportWriter() {
                                 style={{ width: `${(reading.perceivedValue / 20) * 100}%` }}
                               />
                             </div>
-                            <span className="w-6 shrink-0 text-right text-xs font-mono font-bold text-white">
-                              {reading.perceivedValue}
+                            <span className="w-10 shrink-0 text-right text-xs font-mono font-bold text-white">
+                              {reading.perceivedValue}/20
                             </span>
-                            <span
-                              className={`shrink-0 text-xs ${confidenceColor(reading.confidence)}`}
+                            <Tooltip
+                              content="Confidence based on number and quality of observations for this attribute"
+                              side="top"
                             >
-                              {Math.round(reading.confidence * 100)}%
-                            </span>
+                              <span
+                                className={`shrink-0 text-xs cursor-help ${confidenceColor(reading.confidence)}`}
+                              >
+                                {Math.round(reading.confidence * 100)}% certainty
+                              </span>
+                            </Tooltip>
                           </div>
                         ))}
                       </div>
@@ -271,30 +374,6 @@ export function ReportWriter() {
             </Card>
           )}
 
-          {/* Player comparison */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{t("playerComparison")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-zinc-500 mb-2">
-                {t("comparisonHint")}
-              </p>
-              <label htmlFor="comparison" className="sr-only">
-                Player comparison
-              </label>
-              <input
-                id="comparison"
-                type="text"
-                value={comparison}
-                onChange={(e) => { setIsDirty(true); setComparison(e.target.value.slice(0, 100)); }}
-                placeholder={t("comparisonPlaceholder")}
-                maxLength={100}
-                className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
-            </CardContent>
-          </Card>
-
           {/* Strengths */}
           <Card data-tutorial-id="report-strengths">
             <CardHeader className="pb-3">
@@ -303,45 +382,65 @@ export function ReportWriter() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Select strengths">
-                {SUGGESTED_STRENGTHS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => toggleStrength(s)}
-                    aria-pressed={selectedStrengths.includes(s)}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      selectedStrengths.includes(s)
-                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-                        : "border-[#27272a] bg-[#141414] text-zinc-400 hover:border-zinc-500 hover:text-white"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              {engineStrengths.length > 0 ? (
+                <div className="space-y-2" role="group" aria-label="Select strengths">
+                  {engineStrengths.map((s) => {
+                    const attr = strengthToAttribute.get(s);
+                    const selected = selectedStrengths.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => toggleStrength(s)}
+                        aria-pressed={selected}
+                        className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition ${
+                          selected
+                            ? "border-emerald-500/50 bg-emerald-500/10"
+                            : "border-[#27272a] bg-[#141414] hover:border-zinc-600 opacity-60"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs leading-snug ${selected ? "text-emerald-300" : "text-zinc-400"}`}>
+                            {s}
+                          </p>
+                        </div>
+                        {attr && (
+                          <Badge
+                            variant="secondary"
+                            className={`shrink-0 text-[10px] ${selected ? "bg-emerald-500/20 text-emerald-400" : ""}`}
+                          >
+                            {attrLabel(attr)}
+                          </Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-600 mb-2">
+                  No standout strengths detected from observations. Add custom strengths below.
+                </p>
+              )}
 
               {/* Custom strength tags */}
-              {selectedStrengths.filter((s) => !SUGGESTED_STRENGTHS.includes(s)).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {selectedStrengths
-                    .filter((s) => !SUGGESTED_STRENGTHS.includes(s))
-                    .map((s) => (
-                      <span
-                        key={s}
-                        className="inline-flex items-center gap-1 rounded-full border border-emerald-500 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400"
+              {customStrengthTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {customStrengthTags.map((s) => (
+                    <span
+                      key={s}
+                      className="inline-flex items-center gap-1 rounded-full border border-emerald-500 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400"
+                    >
+                      {s}
+                      <button
+                        onClick={() =>
+                          setSelectedStrengths((prev) => prev.filter((x) => x !== s))
+                        }
+                        className="hover:text-white transition"
+                        aria-label={`Remove ${s}`}
                       >
-                        {s}
-                        <button
-                          onClick={() =>
-                            setSelectedStrengths((prev) => prev.filter((x) => x !== s))
-                          }
-                          className="hover:text-white transition"
-                          aria-label={`Remove ${s}`}
-                        >
-                          <X size={12} aria-hidden="true" />
-                        </button>
-                      </span>
-                    ))}
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               )}
 
@@ -394,45 +493,65 @@ export function ReportWriter() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Select weaknesses">
-                {SUGGESTED_WEAKNESSES.map((w) => (
-                  <button
-                    key={w}
-                    onClick={() => toggleWeakness(w)}
-                    aria-pressed={selectedWeaknesses.includes(w)}
-                    className={`rounded-full border px-3 py-1 text-xs transition ${
-                      selectedWeaknesses.includes(w)
-                        ? "border-red-500 bg-red-500/20 text-red-400"
-                        : "border-[#27272a] bg-[#141414] text-zinc-400 hover:border-zinc-500 hover:text-white"
-                    }`}
-                  >
-                    {w}
-                  </button>
-                ))}
-              </div>
+              {engineWeaknesses.length > 0 ? (
+                <div className="space-y-2" role="group" aria-label="Select weaknesses">
+                  {engineWeaknesses.map((w) => {
+                    const attr = weaknessToAttribute.get(w);
+                    const selected = selectedWeaknesses.includes(w);
+                    return (
+                      <button
+                        key={w}
+                        onClick={() => toggleWeakness(w)}
+                        aria-pressed={selected}
+                        className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition ${
+                          selected
+                            ? "border-red-500/50 bg-red-500/10"
+                            : "border-[#27272a] bg-[#141414] hover:border-zinc-600 opacity-60"
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-xs leading-snug ${selected ? "text-red-300" : "text-zinc-400"}`}>
+                            {w}
+                          </p>
+                        </div>
+                        {attr && (
+                          <Badge
+                            variant="secondary"
+                            className={`shrink-0 text-[10px] ${selected ? "bg-red-500/20 text-red-400" : ""}`}
+                          >
+                            {attrLabel(attr)}
+                          </Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-600 mb-2">
+                  No notable weaknesses detected from observations. Add custom weaknesses below.
+                </p>
+              )}
 
               {/* Custom weakness tags */}
-              {selectedWeaknesses.filter((w) => !SUGGESTED_WEAKNESSES.includes(w)).length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {selectedWeaknesses
-                    .filter((w) => !SUGGESTED_WEAKNESSES.includes(w))
-                    .map((w) => (
-                      <span
-                        key={w}
-                        className="inline-flex items-center gap-1 rounded-full border border-red-500 bg-red-500/20 px-3 py-1 text-xs text-red-400"
+              {customWeaknessTags.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {customWeaknessTags.map((w) => (
+                    <span
+                      key={w}
+                      className="inline-flex items-center gap-1 rounded-full border border-red-500 bg-red-500/20 px-3 py-1 text-xs text-red-400"
+                    >
+                      {w}
+                      <button
+                        onClick={() =>
+                          setSelectedWeaknesses((prev) => prev.filter((x) => x !== w))
+                        }
+                        className="hover:text-white transition"
+                        aria-label={`Remove ${w}`}
                       >
-                        {w}
-                        <button
-                          onClick={() =>
-                            setSelectedWeaknesses((prev) => prev.filter((x) => x !== w))
-                          }
-                          className="hover:text-white transition"
-                          aria-label={`Remove ${w}`}
-                        >
-                          <X size={12} aria-hidden="true" />
-                        </button>
-                      </span>
-                    ))}
+                        <X size={12} aria-hidden="true" />
+                      </button>
+                    </span>
+                  ))}
                 </div>
               )}
 
@@ -477,12 +596,64 @@ export function ReportWriter() {
             </CardContent>
           </Card>
 
+          {/* Player comparison */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">{t("playerComparison")}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {draft && draft.comparisonSuggestions.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {draft.comparisonSuggestions.map((sug) => (
+                    <button
+                      key={sug}
+                      onClick={() => { setIsDirty(true); setComparison(sug); }}
+                      className={`rounded-lg border px-3 py-1.5 text-xs text-left transition ${
+                        comparison === sug
+                          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+                          : "border-[#27272a] bg-[#141414] text-zinc-400 hover:border-zinc-500 hover:text-white"
+                      }`}
+                    >
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-zinc-500 mb-2">
+                {t("comparisonHint")}
+              </p>
+              <label htmlFor="comparison" className="sr-only">
+                Player comparison
+              </label>
+              <input
+                id="comparison"
+                type="text"
+                value={comparison}
+                onChange={(e) => { setIsDirty(true); setComparison(e.target.value.slice(0, 200)); }}
+                placeholder={t("comparisonPlaceholder")}
+                maxLength={200}
+                className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </CardContent>
+          </Card>
+
           {/* Written summary */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">{t("scoutSummary")}</CardTitle>
             </CardHeader>
             <CardContent>
+              {!summary.trim() && draft && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateDraft}
+                  className="mb-3 text-xs"
+                >
+                  <Sparkles size={12} className="mr-1.5" />
+                  Generate draft summary
+                </Button>
+              )}
               <label htmlFor="summary" className="sr-only">
                 Written summary
               </label>

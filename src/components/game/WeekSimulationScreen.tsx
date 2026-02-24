@@ -5,6 +5,8 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ScreenBackground } from "@/components/ui/screen-background";
+import { motion, AnimatePresence } from "framer-motion";
 import type { DayResult, ScoutSkill } from "@/engine/core/types";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +48,59 @@ const ACTIVITY_LABELS: Record<string, string> = {
   analyticsTeamMeeting:   "Analytics Team Meeting",
   travel:                 "Travel",
   internationalTravel:    "International Travel",
+};
+
+// ---------------------------------------------------------------------------
+// Activity → background image mapping
+// ---------------------------------------------------------------------------
+
+const FREE_DAY_BG = "/images/backgrounds/activities/free-day.png";
+
+const ACTIVITY_BACKGROUNDS: Record<string, string> = {
+  // Matches → stadium atmosphere
+  attendMatch:            "/images/backgrounds/match-atmosphere.png",
+  reserveMatch:           "/images/backgrounds/match-atmosphere.png",
+  trialMatch:             "/images/backgrounds/match-atmosphere.png",
+  // Youth scouting venues
+  schoolMatch:            "/images/backgrounds/activities/school-match.png",
+  grassrootsTournament:   "/images/backgrounds/activities/grassroots.png",
+  streetFootball:         "/images/backgrounds/activities/street-football.png",
+  youthFestival:          "/images/backgrounds/activities/youth-festival.png",
+  youthTournament:        "/images/backgrounds/activities/youth-festival.png",
+  // Academy
+  academyVisit:           "/images/backgrounds/activities/academy.png",
+  academyTrialDay:        "/images/backgrounds/activities/academy.png",
+  followUpSession:        "/images/backgrounds/activities/academy.png",
+  // Training
+  trainingVisit:          "/images/backgrounds/activities/training.png",
+  scoutingMission:        "/images/backgrounds/activities/training.png",
+  // Video analysis
+  watchVideo:             "/images/backgrounds/activities/video-room.png",
+  deepVideoAnalysis:      "/images/backgrounds/activities/video-room.png",
+  oppositionAnalysis:     "/images/backgrounds/activities/video-room.png",
+  // Meetings
+  networkMeeting:         "/images/backgrounds/activities/meeting.png",
+  parentCoachMeeting:     "/images/backgrounds/activities/meeting.png",
+  agentShowcase:          "/images/backgrounds/activities/meeting.png",
+  contractNegotiation:    "/images/backgrounds/activities/meeting.png",
+  // Data & analytics
+  databaseQuery:          "/images/backgrounds/activities/data-room.png",
+  statsBriefing:          "/images/backgrounds/activities/data-room.png",
+  algorithmCalibration:   "/images/backgrounds/activities/data-room.png",
+  marketInefficiency:     "/images/backgrounds/activities/data-room.png",
+  analyticsTeamMeeting:   "/images/backgrounds/activities/data-room.png",
+  // Conferences
+  dataConference:         "/images/backgrounds/activities/conference.png",
+  boardPresentation:      "/images/backgrounds/activities/conference.png",
+  // Reports & study → existing desk
+  writeReport:            "/images/backgrounds/reports-desk.png",
+  writePlacementReport:   "/images/backgrounds/reports-desk.png",
+  study:                  "/images/backgrounds/reports-desk.png",
+  // Travel → existing international
+  travel:                 "/images/backgrounds/international.png",
+  internationalTravel:    "/images/backgrounds/international.png",
+  // Rest
+  rest:                   "/images/backgrounds/activities/rest.png",
 };
 
 const SKILL_SHORT_LABELS: Record<ScoutSkill, string> = {
@@ -99,8 +154,8 @@ function TimelineDay({ dayName, activityLabel, status, dayIndex }: TimelineDayPr
     status === "current"
       ? "flex items-center gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-2.5"
       : status === "past"
-        ? "flex items-center gap-3 rounded-lg border border-[#27272a] bg-[#141414] px-3 py-2.5"
-        : "flex items-center gap-3 rounded-lg border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5 opacity-50";
+        ? "flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2.5"
+        : "flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 opacity-50";
 
   const dayLabelClass =
     status === "current"
@@ -179,7 +234,7 @@ function DayCard({ dayResult }: DayCardProps) {
   const fatigue = formatFatigueChange(dayResult.fatigueChange);
 
   return (
-    <Card className="h-full">
+    <Card className="h-full bg-zinc-900 border-zinc-800">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -197,7 +252,7 @@ function DayCard({ dayResult }: DayCardProps) {
       <CardContent className="space-y-5">
         {/* Narrative */}
         {dayResult.narrative ? (
-          <p className="text-sm leading-relaxed text-gray-300">{dayResult.narrative}</p>
+          <p className="text-sm leading-relaxed text-zinc-300">{dayResult.narrative}</p>
         ) : (
           <p className="text-sm text-zinc-500 italic">No activity scheduled for this day.</p>
         )}
@@ -270,7 +325,7 @@ function DayCard({ dayResult }: DayCardProps) {
               {dayResult.inboxMessages.map((msg) => (
                 <div
                   key={msg.id}
-                  className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2"
+                  className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2"
                 >
                   <p className="text-xs font-medium text-white">{msg.title}</p>
                   <p className="mt-0.5 text-[11px] leading-snug text-zinc-400 line-clamp-2">
@@ -292,7 +347,7 @@ function DayCard({ dayResult }: DayCardProps) {
               {dayResult.observations.map((obs) => (
                 <div
                   key={obs.playerId}
-                  className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-1.5"
+                  className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-950 px-3 py-1.5"
                 >
                   <span className="text-xs font-medium text-white">{obs.playerName}</span>
                   <span className="text-[11px] text-zinc-500">{obs.topAttributes}</span>
@@ -308,7 +363,7 @@ function DayCard({ dayResult }: DayCardProps) {
 
 function FreeDayCard({ dayName }: { dayName: string }) {
   return (
-    <Card className="h-full">
+    <Card className="h-full bg-zinc-900 border-zinc-800">
       <CardHeader className="pb-3">
         <CardTitle className="text-xl">{dayName}</CardTitle>
         <p className="mt-0.5 text-sm text-zinc-400">Free Day</p>
@@ -343,9 +398,15 @@ export function WeekSimulationScreen() {
   const isLastDay = currentDay >= dayResults.length - 1;
   const isComplete = currentDay >= 7;
 
+  const currentBg = currentDayResult?.activity?.type
+    ? ACTIVITY_BACKGROUNDS[currentDayResult.activity.type] ?? FREE_DAY_BG
+    : FREE_DAY_BG;
+
   return (
     <GameLayout>
-      <div className="flex h-full min-h-screen flex-col bg-slate-900 p-6">
+      <div className="relative flex h-full min-h-screen flex-col bg-zinc-950 p-6">
+        <ScreenBackground src={currentBg} opacity={0.82} />
+        <div className="relative z-10 flex flex-1 flex-col">
         {/* Header */}
         <header className="mb-6">
           <h1 className="text-2xl font-bold text-white">Week in Progress</h1>
@@ -372,7 +433,7 @@ export function WeekSimulationScreen() {
                   : "Free Day";
 
                 let status: "past" | "current" | "future";
-                if (i < currentDay) {
+                if (isComplete || i < currentDay) {
                   status = "past";
                 } else if (i === currentDay) {
                   status = "current";
@@ -395,36 +456,69 @@ export function WeekSimulationScreen() {
 
           {/* Center: current day card */}
           <main className="flex-1 min-w-0" aria-live="polite" aria-label="Current day details">
-            {isComplete ? (
-              <Card className="flex flex-col items-center justify-center p-10 text-center">
-                <p className="text-4xl mb-4" aria-hidden="true">--</p>
-                <p className="text-xl font-bold text-white">Week Complete</p>
-                <p className="mt-2 text-sm text-zinc-400">
-                  All days have been processed. Head to your dashboard to review this week&apos;s results.
-                </p>
-              </Card>
-            ) : currentDayResult ? (
-              <DayCard dayResult={currentDayResult} />
-            ) : (
-              <FreeDayCard dayName={DAY_NAMES[currentDay] ?? "Day"} />
-            )}
+            <AnimatePresence mode="wait">
+              {isComplete ? (
+                <motion.div
+                  key="complete"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Card className="flex flex-col items-center justify-center p-10 text-center bg-zinc-900 border-zinc-800">
+                    <p className="text-4xl mb-4" aria-hidden="true">--</p>
+                    <p className="text-xl font-bold text-white">Week Complete</p>
+                    <p className="mt-2 text-sm text-zinc-400">
+                      All days have been processed. Head to your calendar to review this week&apos;s results.
+                    </p>
+                  </Card>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key={currentDay}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {currentDayResult ? (
+                    <DayCard dayResult={currentDayResult} />
+                  ) : (
+                    <FreeDayCard dayName={DAY_NAMES[currentDay] ?? "Day"} />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </main>
         </div>
 
         {/* Footer: action buttons */}
-        <footer className="mt-6 flex items-center justify-between border-t border-[#27272a] pt-5">
+        <footer className="mt-6 flex items-center justify-between border-t border-zinc-800 pt-5">
           <div className="flex items-center gap-3">
             {isComplete ? (
-              <Button size="lg" onClick={() => setScreen("dashboard")}>
-                View Dashboard
+              <Button
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => setScreen("calendar")}
+              >
+                View Calendar
+              </Button>
+            ) : isLastDay ? (
+              <Button
+                size="lg"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={advanceDay}
+                aria-label="Complete the week and process results"
+              >
+                Complete Week
               </Button>
             ) : (
               <>
                 <Button
                   size="lg"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={advanceDay}
-                  disabled={isLastDay}
-                  aria-label={isLastDay ? "All days have been shown" : "Advance to next day"}
+                  aria-label="Advance to next day"
                 >
                   Next Day
                 </Button>
@@ -434,7 +528,7 @@ export function WeekSimulationScreen() {
                   onClick={fastForwardWeek}
                   aria-label="Skip remaining days and complete the week"
                 >
-                  Fast Forward
+                  Skip to Results
                 </Button>
               </>
             )}
@@ -446,16 +540,17 @@ export function WeekSimulationScreen() {
               <div
                 key={name}
                 className={`h-1.5 w-7 rounded-full transition-colors ${
-                  i < currentDay
+                  isComplete || i < currentDay
                     ? "bg-emerald-500"
                     : i === currentDay
                       ? "bg-amber-400"
-                      : "bg-[#27272a]"
+                      : "bg-zinc-800"
                 }`}
               />
             ))}
           </div>
         </footer>
+        </div>
       </div>
     </GameLayout>
   );

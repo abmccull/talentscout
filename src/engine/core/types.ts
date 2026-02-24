@@ -2116,4 +2116,12 @@ export interface WeekSimulationState {
   currentDay: number;
   /** True when all days are done but the world tick hasn't run yet. */
   pendingWorldTick: boolean;
+  /** Pre-computed youth venue results — applied during advanceWeek to avoid double-processing. */
+  youthVenueResults?: {
+    updatedUnsignedYouth: Record<string, UnsignedYouth>;
+    newObservations: Record<string, Observation>;
+    newDiscoveries: DiscoveryRecord[];
+    totalObservations: number;
+    totalDiscoveries: number;
+  };
 }

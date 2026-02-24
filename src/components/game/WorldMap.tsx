@@ -28,8 +28,10 @@ export interface WorldMapProps {
 // GEOGRAPHIC DATA
 // =============================================================================
 
+// Coordinates use population centers (not geographic centers) for large countries
+// so markers land on recognizable city-light clusters in the night-view background.
 const COUNTRY_COORDS: Record<string, { lat: number; lon: number; label: string; abbr: string }> = {
-  // Europe
+  // Europe — small countries, coords are fine as-is
   england:     { lat: 52.5,  lon: -1.5,   label: "England",      abbr: "ENG" },
   scotland:    { lat: 56.5,  lon: -4.0,   label: "Scotland",     abbr: "SCO" },
   france:      { lat: 46.6,  lon: 2.3,    label: "France",       abbr: "FRA" },
@@ -41,29 +43,29 @@ const COUNTRY_COORDS: Record<string, { lat: number; lon: number; label: string; 
   switzerland: { lat: 46.8,  lon: 8.2,    label: "Switzerland",  abbr: "SWI" },
   italy:       { lat: 41.9,  lon: 12.5,   label: "Italy",        abbr: "ITA" },
   turkey:      { lat: 39.9,  lon: 32.9,   label: "Turkey",       abbr: "TUR" },
-  // Africa
+  // Africa — capitals/population centers
   nigeria:     { lat: 9.1,   lon: 7.5,    label: "Nigeria",      abbr: "NGA" },
   ghana:       { lat: 7.9,   lon: -1.0,   label: "Ghana",        abbr: "GHA" },
   ivorycoast:  { lat: 7.5,   lon: -5.5,   label: "Ivory Coast",  abbr: "CIV" },
   senegal:     { lat: 14.7,  lon: -17.4,  label: "Senegal",      abbr: "SEN" },
   cameroon:    { lat: 7.4,   lon: 12.4,   label: "Cameroon",     abbr: "CMR" },
   egypt:       { lat: 30.0,  lon: 31.2,   label: "Egypt",        abbr: "EGY" },
-  southafrica: { lat: -30.6, lon: 22.9,   label: "South Africa", abbr: "RSA" },
-  // Americas
-  usa:         { lat: 39.8,  lon: -98.6,  label: "USA",          abbr: "USA" },
-  canada:      { lat: 56.1,  lon: -106.3, label: "Canada",       abbr: "CAN" },
-  mexico:      { lat: 23.6,  lon: -102.6, label: "Mexico",       abbr: "MEX" },
-  brazil:      { lat: -14.2, lon: -51.9,  label: "Brazil",       abbr: "BRA" },
-  argentina:   { lat: -38.4, lon: -63.6,  label: "Argentina",    abbr: "ARG" },
-  colombia:    { lat: 4.6,   lon: -74.3,  label: "Colombia",     abbr: "COL" },
-  // Asia
+  southafrica: { lat: -26.2, lon: 28.0,   label: "South Africa", abbr: "RSA" }, // Johannesburg
+  // Americas — population centers (geographic centers fall on dark/ocean areas)
+  usa:         { lat: 38.9,  lon: -77.0,  label: "USA",          abbr: "USA" }, // Washington DC
+  canada:      { lat: 43.7,  lon: -79.4,  label: "Canada",       abbr: "CAN" }, // Toronto
+  mexico:      { lat: 19.4,  lon: -99.1,  label: "Mexico",       abbr: "MEX" }, // Mexico City
+  brazil:      { lat: -15.8, lon: -47.9,  label: "Brazil",       abbr: "BRA" }, // Brasília
+  argentina:   { lat: -34.6, lon: -58.4,  label: "Argentina",    abbr: "ARG" }, // Buenos Aires
+  colombia:    { lat: 4.7,   lon: -74.1,  label: "Colombia",     abbr: "COL" }, // Bogotá
+  // Asia — population centers for large countries
   japan:       { lat: 36.2,  lon: 138.3,  label: "Japan",        abbr: "JPN" },
   southkorea:  { lat: 35.9,  lon: 127.8,  label: "S. Korea",     abbr: "KOR" },
-  china:       { lat: 35.9,  lon: 104.2,  label: "China",        abbr: "CHN" },
-  saudiarabia: { lat: 23.9,  lon: 45.1,   label: "Saudi Arabia", abbr: "KSA" },
-  // Oceania
-  australia:   { lat: -25.3, lon: 133.8,  label: "Australia",    abbr: "AUS" },
-  newzealand:  { lat: -40.9, lon: 174.9,  label: "New Zealand",  abbr: "NZL" },
+  china:       { lat: 39.9,  lon: 116.4,  label: "China",        abbr: "CHN" }, // Beijing
+  saudiarabia: { lat: 24.7,  lon: 46.7,   label: "Saudi Arabia", abbr: "KSA" }, // Riyadh
+  // Oceania — population centers
+  australia:   { lat: -33.9, lon: 151.2,  label: "Australia",    abbr: "AUS" }, // Sydney
+  newzealand:  { lat: -41.3, lon: 174.8,  label: "New Zealand",  abbr: "NZL" }, // Wellington
 };
 
 /** European countries — smaller markers by default to avoid crowding. */
