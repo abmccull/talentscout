@@ -55,6 +55,8 @@ import {
   generateAnalystReport,
   updateAnalystMorale,
   generateAnalystCandidate,
+  createPrediction,
+  generatePredictionSuggestions,
 } from "@/engine/data";
 import { createRNG } from "@/engine/rng";
 import { rollActivityQuality, MULTI_DAY_CONTINUATIONS } from "@/engine/core/activityQuality";
@@ -117,7 +119,6 @@ import { generateSeasonFixtures } from "@/engine/world/fixtures";
 import {
   initializeFinances,
   processWeeklyFinances,
-  purchaseEquipmentUpgrade,
   purchaseEquipmentItem,
   sellEquipmentItem,
   equipItem,
@@ -345,8 +346,6 @@ interface GameStore {
   // Phase 2 actions
   acknowledgeNarrativeEvent: (eventId: string) => void;
   resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
-  /** @deprecated Use purchaseEquipItem/sellEquipItem/equipEquipItem instead. */
-  purchaseEquipment: () => void;
 
   // Equipment loadout actions
   purchaseEquipItem: (itemId: EquipmentItemId) => void;
@@ -2617,10 +2616,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
             playerIds: [...toClub.playerIds, transfer.playerId],
           };
         }
+        // Generate transfer update inbox messages for scouted players
+        const scoutedPlayerIds = new Set(
+          Object.values(stateWithScheduleApplied.reports).map((r) => r.playerId),
+        );
+        const transferInboxMessages: typeof stateWithScheduleApplied.inbox = [];
+        for (const transfer of transferResults) {
+          if (!scoutedPlayerIds.has(transfer.playerId)) continue;
+          const player = updatedPlayers[transfer.playerId];
+          if (!player) continue;
+          const fromClub = updatedClubs[transfer.fromClubId] ?? stateWithScheduleApplied.clubs[transfer.fromClubId];
+          const toClub = updatedClubs[transfer.toClubId] ?? stateWithScheduleApplied.clubs[transfer.toClubId];
+          const playerName = `${player.firstName} ${player.lastName}`;
+          const fee = transfer.fee >= 1_000_000
+            ? `£${(transfer.fee / 1_000_000).toFixed(1)}M`
+            : `£${Math.round(transfer.fee / 1_000)}K`;
+          transferInboxMessages.push({
+            id: `transfer_${transfer.playerId}_${stateWithScheduleApplied.currentWeek}_${stateWithScheduleApplied.currentSeason}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "transferUpdate",
+            title: `Transfer: ${playerName}`,
+            body: `${playerName} has completed a move from ${fromClub?.shortName ?? transfer.fromClubId} to ${toClub?.shortName ?? transfer.toClubId} for ${fee}. You previously submitted a scouting report on this player.`,
+            read: false,
+            actionRequired: false,
+            relatedId: transfer.playerId,
+            relatedEntityType: "player",
+          });
+        }
+
         stateWithScheduleApplied = {
           ...stateWithScheduleApplied,
           players: updatedPlayers,
           clubs: updatedClubs,
+          inbox: [...stateWithScheduleApplied.inbox, ...transferInboxMessages],
         };
       }
     }
@@ -4289,6 +4318,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // Data scout: auto-generate prediction when submitting strong-conviction reports
+    let updatedPredictions = gameState.predictions;
+    if (
+      gameState.scout.primarySpecialization === "data" &&
+      (conviction === "strongRecommend" || conviction === "tablePound")
+    ) {
+      const predRng = createRNG(`${gameState.seed}-pred-${scoredReport.id}`);
+      const suggestions = generatePredictionSuggestions(
+        predRng,
+        gameState.scout,
+        player,
+        gameState.currentSeason,
+      );
+      if (suggestions.length > 0) {
+        const top = suggestions[0];
+        const prediction = createPrediction(
+          `pred_${scoredReport.id}`,
+          selectedPlayerId,
+          gameState.scout.id,
+          top.type,
+          top.statement,
+          top.suggestedConfidence,
+          gameState.currentSeason,
+          gameState.currentWeek,
+        );
+        updatedPredictions = [...gameState.predictions, prediction];
+      }
+    }
+
     set({
       gameState: {
         ...gameState,
@@ -4296,6 +4354,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         scout: updatedScoutAfterResponse,
         discoveryRecords: updatedDiscoveryRecords,
         clubResponses: updatedClubResponses,
+        predictions: updatedPredictions,
         inbox: responseInboxMessage
           ? [...gameState.inbox, responseInboxMessage]
           : gameState.inbox,
@@ -4579,21 +4638,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         inbox: [...gameState.inbox, ...result.messages],
       },
     });
-  },
-
-  purchaseEquipment: () => {
-    const { gameState } = get();
-    if (!gameState || !gameState.finances) return;
-
-    const updatedFinances = purchaseEquipmentUpgrade(
-      gameState.finances,
-      gameState.currentWeek,
-      gameState.currentSeason,
-    );
-
-    if (!updatedFinances) return; // Cannot afford or already at max level
-
-    set({ gameState: { ...gameState, finances: updatedFinances } });
   },
 
   purchaseEquipItem: (itemId: EquipmentItemId) => {

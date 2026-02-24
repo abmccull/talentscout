@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +24,9 @@ import {
   ChevronRight,
   TrendingDown,
   Minus,
+  BarChart3,
+  Shield,
+  Megaphone,
 } from "lucide-react";
 import type {
   JobOffer,
@@ -36,6 +40,8 @@ import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/eng
 // EquipmentPanel now has its own dedicated screen
 import { Tooltip } from "@/components/ui/tooltip";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
+import { calculatePreferenceAlignment } from "@/engine/analytics/dataTension";
+import { calculateManagerSatisfaction } from "@/engine/career/management";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
 
@@ -184,6 +190,7 @@ export function CareerScreen() {
     setScreen,
     unlockSecondarySpecialization,
     meetManager,
+    presentToBoard,
   } = useGameStore();
 
   const { scout, currentSeason, jobOffers, performanceReviews } = gameState ?? {
@@ -255,6 +262,30 @@ export function CareerScreen() {
     return streak;
   })();
   const isOracle = predictionAccuracy !== null && predictionAccuracy >= 70 && resolvedPredictions.length >= 10;
+
+  // Manager alignment (data tension) — derive before early return
+  const currentClubManager = scout?.currentClubId
+    ? gameState?.managerProfiles?.[scout.currentClubId]
+    : undefined;
+  const managerAlignment = scout && currentClubManager
+    ? calculatePreferenceAlignment(scout, currentClubManager)
+    : null;
+
+  // Manager satisfaction — derive before early return
+  // Note: passing empty directives array gives neutral 15/30 on that component
+  const managerSatisfaction = scout?.managerRelationship
+    ? calculateManagerSatisfaction(
+        scout.managerRelationship,
+        Object.values(gameState?.reports ?? {}),
+        [],
+      )
+    : null;
+
+  // Board directives
+  const boardDirectives = scout?.boardDirectives ?? [];
+
+  // Present to board state
+  const [boardPresented, setBoardPresented] = useState(false);
 
   if (!gameState || !scout) return null;
 
@@ -497,6 +528,71 @@ export function CareerScreen() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Manager Alignment (Data Tension) */}
+            {managerAlignment !== null && currentClubManager && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <BarChart3 size={14} className="text-cyan-400" aria-hidden="true" />
+                    Manager Alignment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-zinc-500">
+                      {currentClubManager.managerName}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] capitalize ${
+                        managerAlignment >= 80
+                          ? "border-emerald-500/50 text-emerald-400"
+                          : managerAlignment >= 50
+                            ? "border-amber-500/50 text-amber-400"
+                            : "border-red-500/50 text-red-400"
+                      }`}
+                    >
+                      {currentClubManager.preference.replace(/([A-Z])/g, " $1").trim()}
+                    </Badge>
+                  </div>
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Alignment</span>
+                      <span
+                        className={`font-semibold ${
+                          managerAlignment >= 80
+                            ? "text-emerald-400"
+                            : managerAlignment >= 50
+                              ? "text-amber-400"
+                              : "text-red-400"
+                        }`}
+                      >
+                        {managerAlignment}/100
+                      </span>
+                    </div>
+                    <Progress
+                      value={managerAlignment}
+                      max={100}
+                      indicatorClassName={
+                        managerAlignment >= 80
+                          ? "bg-emerald-500"
+                          : managerAlignment >= 50
+                            ? "bg-amber-500"
+                            : "bg-red-500"
+                      }
+                    />
+                  </div>
+                  <p className="text-[10px] text-zinc-600">
+                    {managerAlignment >= 80
+                      ? "Your approach aligns well — reports carry extra weight."
+                      : managerAlignment >= 50
+                        ? "Reasonable fit — your reports are fairly valued."
+                        : "Style clash — your reports may be discounted."}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* ── Center column ────────────────────────────────────────────── */}
@@ -962,6 +1058,102 @@ export function CareerScreen() {
                   >
                     Meet Manager
                   </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Board Relations — tier 5 (Director of Football) */}
+            {scout.careerTier >= 5 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Shield size={14} className="text-indigo-400" aria-hidden="true" />
+                    Board Relations
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Satisfaction meter */}
+                  {managerSatisfaction !== null && (
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Board Satisfaction</span>
+                        <span
+                          className={`font-semibold ${
+                            managerSatisfaction >= 70
+                              ? "text-emerald-400"
+                              : managerSatisfaction >= 40
+                                ? "text-amber-400"
+                                : "text-red-400"
+                          }`}
+                        >
+                          {managerSatisfaction}/100
+                        </span>
+                      </div>
+                      <Progress
+                        value={managerSatisfaction}
+                        max={100}
+                        indicatorClassName={
+                          managerSatisfaction >= 70
+                            ? "bg-emerald-500"
+                            : managerSatisfaction >= 40
+                              ? "bg-amber-500"
+                              : "bg-red-500"
+                        }
+                      />
+                    </div>
+                  )}
+
+                  {/* Active board directives */}
+                  {boardDirectives.length > 0 && (
+                    <div>
+                      <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold">
+                        Active Directives
+                      </p>
+                      <div className="space-y-1.5">
+                        {boardDirectives.map((d) => (
+                          <div
+                            key={d.id}
+                            className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
+                              d.completed
+                                ? "border-emerald-500/20 bg-emerald-500/5"
+                                : "border-[#27272a]"
+                            }`}
+                          >
+                            <span className={d.completed ? "text-emerald-400" : "text-zinc-300"}>
+                              {d.description}
+                            </span>
+                            {d.completed ? (
+                              <CheckCircle size={12} className="shrink-0 text-emerald-400" />
+                            ) : (
+                              <span className="text-zinc-600 shrink-0">
+                                S{d.deadline}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Present to Board */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      presentToBoard();
+                      setBoardPresented(true);
+                      setTimeout(() => setBoardPresented(false), 3000);
+                    }}
+                  >
+                    <Megaphone size={14} className="mr-2" />
+                    Present to Board
+                  </Button>
+                  {boardPresented && (
+                    <p className="text-xs text-emerald-400 text-center">
+                      Presentation delivered — reputation boosted!
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             )}

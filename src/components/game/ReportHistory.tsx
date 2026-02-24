@@ -6,8 +6,8 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, X, ChevronDown, ChevronUp } from "lucide-react";
-import type { ScoutReport, ConvictionLevel } from "@/engine/core/types";
+import { FileText, X, ChevronDown, ChevronUp, DollarSign } from "lucide-react";
+import type { ScoutReport, ConvictionLevel, ReportListing } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
@@ -179,11 +179,131 @@ function ReportDetailModal({ report, playerName, onClose }: ReportDetailModalPro
   );
 }
 
+interface ListForSaleModalProps {
+  reportId: string;
+  playerName: string;
+  onConfirm: (price: number, isExclusive: boolean) => void;
+  onClose: () => void;
+}
+
+function ListForSaleModal({ reportId: _reportId, playerName, onConfirm, onClose }: ListForSaleModalProps) {
+  const [priceInput, setPriceInput] = useState("");
+  const [isExclusive, setIsExclusive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function handleConfirm() {
+    const parsed = parseInt(priceInput, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      setError("Enter a valid price greater than 0.");
+      return;
+    }
+    onConfirm(parsed, isExclusive);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="list-for-sale-title"
+    >
+      <div className="w-full max-w-sm rounded-xl border border-[#27272a] bg-[#0a0a0a] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#27272a] p-5">
+          <div>
+            <h2 id="list-for-sale-title" className="text-base font-bold flex items-center gap-2">
+              <DollarSign size={16} className="text-emerald-400" aria-hidden="true" />
+              List Report for Sale
+            </h2>
+            <p className="text-xs text-zinc-500 mt-0.5">{playerName}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 text-zinc-500 hover:bg-[#27272a] hover:text-white transition"
+            aria-label="Cancel listing"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div>
+            <label htmlFor="listing-price" className="block text-xs font-medium text-zinc-400 mb-1.5">
+              Asking price (£)
+            </label>
+            <input
+              id="listing-price"
+              type="number"
+              min={1}
+              value={priceInput}
+              onChange={(e) => {
+                setPriceInput(e.target.value);
+                setError(null);
+              }}
+              placeholder="e.g. 500"
+              className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              aria-describedby={error ? "price-error" : undefined}
+              aria-invalid={error != null}
+            />
+            {error && (
+              <p id="price-error" className="mt-1 text-xs text-red-400" role="alert">
+                {error}
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              id="listing-exclusive"
+              type="checkbox"
+              checked={isExclusive}
+              onChange={(e) => setIsExclusive(e.target.checked)}
+              className="h-4 w-4 rounded border-[#27272a] bg-[#141414] accent-emerald-500"
+            />
+            <label htmlFor="listing-exclusive" className="text-xs text-zinc-400 cursor-pointer">
+              Exclusive listing (sold to one club only)
+            </label>
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onClose}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirm}
+              className="flex-1"
+            >
+              List for Sale
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ReportHistory() {
-  const { gameState, selectPlayer, setScreen } = useGameStore();
+  const { gameState, selectPlayer, setScreen, listReportForSale, withdrawReportListing } = useGameStore();
   const [selectedReport, setSelectedReport] = useState<ScoutReport | null>(null);
+  const [listingReport, setListingReport] = useState<ScoutReport | null>(null);
 
   if (!gameState) return null;
+
+  const hasFinances = gameState.finances != null;
+  const reportListings: ReportListing[] = gameState.finances?.reportListings ?? [];
+
+  // Build a lookup: reportId -> active listing (most recent non-withdrawn/expired)
+  const listingByReportId = reportListings.reduce<Record<string, ReportListing>>((acc, listing) => {
+    if (listing.status === "active" || listing.status === "sold") {
+      acc[listing.reportId] = listing;
+    }
+    return acc;
+  }, {});
 
   const reports = Object.values(gameState.reports).sort(
     (a, b) => b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason
@@ -209,6 +329,19 @@ export function ReportHistory() {
         return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
       })()
     : "";
+
+  const listingPlayerName = listingReport
+    ? (() => {
+        const p = gameState.players[listingReport.playerId];
+        return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
+      })()
+    : "";
+
+  function handleConfirmListing(price: number, isExclusive: boolean) {
+    if (!listingReport) return;
+    listReportForSale(listingReport.id, price, isExclusive);
+    setListingReport(null);
+  }
 
   return (
     <GameLayout>
@@ -275,6 +408,7 @@ export function ReportHistory() {
                       const playerName = player
                         ? `${player.firstName} ${player.lastName}`
                         : "Unknown";
+                      const listing = listingByReportId[report.id];
                       return (
                         <tr
                           key={report.id}
@@ -325,14 +459,53 @@ export function ReportHistory() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setSelectedReport(report)}
-                              aria-label={`View full report for ${playerName}`}
-                            >
-                              View
-                            </Button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setSelectedReport(report)}
+                                aria-label={`View full report for ${playerName}`}
+                              >
+                                View
+                              </Button>
+                              {hasFinances && (
+                                <>
+                                  {listing?.status === "active" && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => withdrawReportListing(listing.id)}
+                                      className="text-zinc-400 hover:text-red-400"
+                                      aria-label={`Withdraw listing for ${playerName} report`}
+                                    >
+                                      Withdraw
+                                    </Button>
+                                  )}
+                                  {listing?.status === "sold" && (
+                                    <Badge variant="success" className="text-[10px]">
+                                      Sold
+                                    </Badge>
+                                  )}
+                                  {listing == null && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setListingReport(report)}
+                                      className="text-zinc-400 hover:text-emerald-400"
+                                      aria-label={`List report for ${playerName} for sale`}
+                                    >
+                                      <DollarSign size={13} aria-hidden="true" />
+                                      List
+                                    </Button>
+                                  )}
+                                  {listing?.status === "active" && (
+                                    <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-800">
+                                      Listed
+                                    </Badge>
+                                  )}
+                                </>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -351,6 +524,15 @@ export function ReportHistory() {
           report={selectedReport}
           playerName={selectedPlayerName}
           onClose={() => setSelectedReport(null)}
+        />
+      )}
+
+      {listingReport && (
+        <ListForSaleModal
+          reportId={listingReport.id}
+          playerName={listingPlayerName}
+          onConfirm={handleConfirmListing}
+          onClose={() => setListingReport(null)}
         />
       )}
     </GameLayout>

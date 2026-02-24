@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Users, UserCheck, Newspaper, GraduationCap, Eye, ChevronRight, X } from "lucide-react";
-import type { Contact, ContactType, Activity } from "@/engine/core/types";
+import type { Contact, ContactType, Activity, HiddenIntel } from "@/engine/core/types";
+import { getHiddenAttributeIntel } from "@/engine/network/contacts";
+import { RNG } from "@/engine/rng";
 
 const CONTACT_TYPE_CONFIG: Record<
   ContactType,
@@ -42,14 +44,42 @@ function relationshipColor(rel: number): string {
   return "bg-zinc-500";
 }
 
+interface IntelEntry {
+  playerName: string;
+  intel: HiddenIntel;
+}
+
 interface ContactDetailProps {
   contact: Contact;
   knownPlayerNames: string[];
+  intelEntries: IntelEntry[];
   onScheduleMeeting: () => void;
   onClose: () => void;
 }
 
-function ContactDetail({ contact, knownPlayerNames, onScheduleMeeting, onClose }: ContactDetailProps) {
+function reliabilityColor(reliability: number): string {
+  if (reliability >= 0.8) return "text-emerald-400";
+  if (reliability >= 0.5) return "text-amber-400";
+  return "text-red-400";
+}
+
+function reliabilityLabel(reliability: number): string {
+  if (reliability >= 0.8) return "High";
+  if (reliability >= 0.5) return "Medium";
+  return "Low";
+}
+
+function formatAttributeLabel(attribute: string): string {
+  const labels: Record<string, string> = {
+    injuryProneness: "Injury Proneness",
+    consistency: "Consistency",
+    bigGameTemperament: "Big-Game Temperament",
+    professionalism: "Professionalism",
+  };
+  return labels[attribute] ?? attribute;
+}
+
+function ContactDetail({ contact, knownPlayerNames, intelEntries, onScheduleMeeting, onClose }: ContactDetailProps) {
   const config = CONTACT_TYPE_CONFIG[contact.type];
   const Icon = config.icon;
 
@@ -138,6 +168,40 @@ function ContactDetail({ contact, knownPlayerNames, onScheduleMeeting, onClose }
           </div>
         )}
 
+        {/* Available intel */}
+        {intelEntries.length > 0 && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1">
+              <Eye size={11} aria-hidden="true" />
+              Available Intel ({intelEntries.length})
+            </p>
+            <ul className="space-y-3" aria-label="Available player intel">
+              {intelEntries.map((entry, i) => (
+                <li
+                  key={`${entry.intel.playerId}-${i}`}
+                  className="rounded-md border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-medium text-white">{entry.playerName}</span>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Badge variant="secondary" className="text-[10px] py-0">
+                        {formatAttributeLabel(entry.intel.attribute)}
+                      </Badge>
+                      <span
+                        className={`text-[10px] font-medium ${reliabilityColor(entry.intel.reliability)}`}
+                        aria-label={`Reliability: ${reliabilityLabel(entry.intel.reliability)}`}
+                      >
+                        {reliabilityLabel(entry.intel.reliability)}
+                      </span>
+                    </div>
+                  </div>
+                  <p className="text-zinc-400 leading-relaxed">{entry.intel.hint}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <Button size="sm" className="w-full" onClick={onScheduleMeeting}>
           Schedule Meeting
         </Button>
@@ -150,6 +214,35 @@ export function NetworkScreen() {
   const { gameState, scheduleActivity, getPlayer } = useGameStore();
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [scheduledId, setScheduledId] = useState<string | null>(null);
+
+  // Pre-compute intel for all contacts using stable per-contact RNG seeds.
+  // Memoised so it only re-runs when gameState changes.
+  const contactIntelMap = useMemo<Map<string, IntelEntry[]>>(() => {
+    const map = new Map<string, IntelEntry[]>();
+    if (!gameState) return map;
+
+    for (const contact of Object.values(gameState.contacts)) {
+      if (contact.relationship < 35 || contact.knownPlayerIds.length === 0) {
+        map.set(contact.id, []);
+        continue;
+      }
+      const rng = new RNG(`intel-${contact.id}`);
+      const entries: IntelEntry[] = [];
+      for (const playerId of contact.knownPlayerIds) {
+        const player = getPlayer(playerId);
+        if (!player) continue;
+        const intel = getHiddenAttributeIntel(rng, contact, playerId, player);
+        if (intel) {
+          entries.push({
+            playerName: `${player.firstName} ${player.lastName}`,
+            intel,
+          });
+        }
+      }
+      map.set(contact.id, entries);
+    }
+    return map;
+  }, [gameState, getPlayer]);
 
   if (!gameState) return null;
 
@@ -252,6 +345,12 @@ export function NetworkScreen() {
                           indicatorClassName={relationshipColor(contact.relationship)}
                         />
                       </div>
+                      {(contactIntelMap.get(contact.id)?.length ?? 0) > 0 && (
+                        <p className="mt-2 flex items-center gap-1 text-xs text-cyan-400">
+                          <Eye size={11} aria-hidden="true" />
+                          Intel Available
+                        </p>
+                      )}
                       {wasScheduled && (
                         <p className="mt-2 text-xs text-emerald-400">Meeting scheduled</p>
                       )}
@@ -267,6 +366,7 @@ export function NetworkScreen() {
                 <ContactDetail
                   contact={selectedContact}
                   knownPlayerNames={getKnownPlayerNames(selectedContact)}
+                  intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
                   onScheduleMeeting={() => handleScheduleMeeting(selectedContact)}
                   onClose={() => setSelectedContact(null)}
                 />
