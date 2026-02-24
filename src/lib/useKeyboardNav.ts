@@ -54,6 +54,7 @@ export function useKeyboardNav(): void {
   const setScreen = useGameStore((s) => s.setScreen);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const advanceWeek = useGameStore((s) => s.advanceWeek);
+  const advancePhase = useGameStore((s) => s.advancePhase);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -106,11 +107,14 @@ export function useKeyboardNav(): void {
         return;
       }
 
-      // ── Space: advance week on calendar screen ─────────────────────────────
+      // ── Space: advance week on calendar / advance phase on match ──────────
       if (key === " " || key === "Spacebar") {
         if (currentScreen === "calendar") {
           e.preventDefault();
           void advanceWeek();
+        } else if (currentScreen === "match") {
+          e.preventDefault();
+          advancePhase();
         }
         return;
       }
@@ -130,5 +134,5 @@ export function useKeyboardNav(): void {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [setScreen, currentScreen, advanceWeek]);
+  }, [setScreen, currentScreen, advanceWeek, advancePhase]);
 }

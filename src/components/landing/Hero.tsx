@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 
-const STEAM_URL = "#"; // TODO: Replace with actual Steam store URL
+const STEAM_URL = "https://store.steampowered.com/app/talentscout";
 
 export function Hero() {
   return (
@@ -47,6 +47,8 @@ export function Hero() {
         >
           <a
             href={STEAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex h-12 items-center rounded-lg bg-emerald-600 px-8 text-base font-semibold text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
           >
             Wishlist on Steam

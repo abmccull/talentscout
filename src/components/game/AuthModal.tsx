@@ -51,11 +51,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  const resetForm = () => {
+  const resetForm = (options?: { clearSuccess?: boolean }) => {
+    const clearSuccess = options?.clearSuccess ?? true;
     setEmail("");
     setPassword("");
     setError(null);
-    setSuccessMessage(null);
+    if (clearSuccess) {
+      setSuccessMessage(null);
+    }
   };
 
   const switchTab = (tab: AuthTab) => {
@@ -94,10 +97,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
         onClose();
       } else {
         await signUpWithEmail(email, password);
+        resetForm({ clearSuccess: false });
         setSuccessMessage(
           "Account created! Check your email to confirm your account.",
         );
-        resetForm();
       }
     } catch (err: unknown) {
       const message =

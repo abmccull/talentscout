@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import type { DayResult, ScoutSkill } from "@/engine/core/types";
 // ---------------------------------------------------------------------------
 
 const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const EMPTY_DAY_RESULTS: DayResult[] = [];
 
 const ACTIVITY_LABELS: Record<string, string> = {
   attendMatch:            "Match Attendance",
@@ -223,15 +225,39 @@ function TimelineDay({ dayName, activityLabel, status, dayIndex }: TimelineDayPr
 
 interface DayCardProps {
   dayResult: DayResult;
+  focusCandidates?: DayResult["observations"];
+  onChooseInteraction?: (choiceId: string, focusedPlayerIds?: string[]) => void;
 }
 
-function DayCard({ dayResult }: DayCardProps) {
+function DayCard({ dayResult, focusCandidates = [], onChooseInteraction }: DayCardProps) {
   const activityLabel = dayResult.activity
     ? getActivityLabel(dayResult.activity.type)
     : "Free Day";
 
   const xpEntries = Object.entries(dayResult.xpGained) as [ScoutSkill, number][];
   const fatigue = formatFatigueChange(dayResult.fatigueChange);
+  const [isSelectingFocus, setIsSelectingFocus] = useState(false);
+  const [pendingFocusIds, setPendingFocusIds] = useState<string[]>([]);
+
+  const availableFocusCandidates = useMemo(() => {
+    const byId = new Map<string, DayResult["observations"][number]>();
+    for (const obs of focusCandidates.length > 0 ? focusCandidates : dayResult.observations) {
+      if (!byId.has(obs.playerId)) {
+        byId.set(obs.playerId, obs);
+      }
+    }
+    return [...byId.values()].slice(0, 8);
+  }, [dayResult.observations, focusCandidates]);
+
+  const maxFocusPlayers = dayResult.interaction?.maxFocusPlayers ?? 3;
+
+  const toggleFocusCandidate = (playerId: string) => {
+    setPendingFocusIds((prev) => {
+      if (prev.includes(playerId)) return prev.filter((id) => id !== playerId);
+      if (prev.length >= maxFocusPlayers) return prev;
+      return [...prev, playerId];
+    });
+  };
 
   return (
     <Card className="h-full bg-zinc-900 border-zinc-800">
@@ -304,6 +330,119 @@ function DayCard({ dayResult }: DayCardProps) {
                 </span>
               ))}
             </div>
+          </section>
+        )}
+
+        {/* Interactive choice */}
+        {dayResult.interaction && (
+          <section aria-label="Day interaction choice">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Decision
+            </p>
+            <p className="mb-2 text-xs text-zinc-400">{dayResult.interaction.prompt}</p>
+            {dayResult.interaction.selectedOptionId ? (
+              <div className="space-y-2">
+                <Badge variant="outline" className="text-[11px]">
+                  Selected: {
+                    dayResult.interaction.options.find(
+                      (opt) => opt.id === dayResult.interaction?.selectedOptionId,
+                    )?.label ?? dayResult.interaction.selectedOptionId
+                  }
+                </Badge>
+                {dayResult.interaction.selectedOptionId === "focus" && (
+                  <p className="text-[11px] text-zinc-400">
+                    Focus targets: {Math.max(
+                      dayResult.interaction.focusedPlayerIds?.length ?? 0,
+                      dayResult.interaction.focusedPlayerId ? 1 : 0,
+                    )}
+                  </p>
+                )}
+              </div>
+            ) : (
+              isSelectingFocus ? (
+                <div className="space-y-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                  <p className="text-[11px] text-zinc-400">
+                    Pick 1-{maxFocusPlayers} players. Fewer targets means deeper scouting reads.
+                  </p>
+                  {availableFocusCandidates.length > 0 ? (
+                    <div className="space-y-2">
+                      {availableFocusCandidates.map((candidate) => {
+                        const active = pendingFocusIds.includes(candidate.playerId);
+                        return (
+                          <button
+                            key={candidate.playerId}
+                            type="button"
+                            className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${
+                              active
+                                ? "border-amber-400/60 bg-amber-400/10"
+                                : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+                            }`}
+                            onClick={() => toggleFocusCandidate(candidate.playerId)}
+                          >
+                            <p className="text-xs font-medium text-white">{candidate.playerName}</p>
+                            <p className="text-[11px] text-zinc-400">{candidate.topAttributes}</p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-zinc-500">
+                      No clear candidate yet. Confirm focus to lock onto your best available lead.
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white"
+                      onClick={() => onChooseInteraction?.("focus", pendingFocusIds)}
+                      disabled={availableFocusCandidates.length > 0 && pendingFocusIds.length === 0}
+                    >
+                      Confirm Focus
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setIsSelectingFocus(false);
+                        setPendingFocusIds([]);
+                      }}
+                    >
+                      Back
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {dayResult.interaction.options.map((option) => (
+                    <Button
+                      key={option.id}
+                      variant="outline"
+                      size="sm"
+                      className="h-auto justify-start px-3 py-2 text-left"
+                      onClick={() => {
+                        if (option.id === "focus") {
+                          if (availableFocusCandidates.length > 0) {
+                            setIsSelectingFocus(true);
+                            setPendingFocusIds((prev) =>
+                              prev.length > 0 ? prev : [availableFocusCandidates[0].playerId],
+                            );
+                            return;
+                          }
+                          onChooseInteraction?.("focus");
+                          return;
+                        }
+                        onChooseInteraction?.(option.id);
+                      }}
+                    >
+                      <div>
+                        <div className="text-xs font-medium text-white">{option.label}</div>
+                        <div className="text-[11px] text-zinc-400">{option.description}</div>
+                      </div>
+                    </Button>
+                  ))}
+                </div>
+              )
+            )}
           </section>
         )}
 
@@ -385,18 +524,34 @@ function FreeDayCard({ dayName }: { dayName: string }) {
 export function WeekSimulationScreen() {
   const weekSimulation = useGameStore((s) => s.weekSimulation);
   const advanceDay = useGameStore((s) => s.advanceDay);
+  const chooseSimulationInteraction = useGameStore((s) => s.chooseSimulationInteraction);
   const fastForwardWeek = useGameStore((s) => s.fastForwardWeek);
   const setScreen = useGameStore((s) => s.setScreen);
 
   // All hooks must be called before any early return
   const currentDay = weekSimulation?.currentDay ?? 0;
-  const dayResults = weekSimulation?.dayResults ?? [];
+  const dayResults = weekSimulation?.dayResults ?? EMPTY_DAY_RESULTS;
+  const focusCandidates = useMemo(() => {
+    const merged = new Map<string, DayResult["observations"][number]>();
+    const upperBound = Math.min(dayResults.length - 1, currentDay);
+    for (let i = 0; i <= upperBound; i++) {
+      const day = dayResults[i];
+      if (!day) continue;
+      for (const obs of day.observations) {
+        if (!merged.has(obs.playerId)) {
+          merged.set(obs.playerId, obs);
+        }
+      }
+    }
+    return [...merged.values()].slice(0, 8);
+  }, [currentDay, dayResults]);
 
   if (!weekSimulation) return null;
 
   const currentDayResult: DayResult | undefined = dayResults[currentDay];
   const isLastDay = currentDay >= dayResults.length - 1;
   const isComplete = currentDay >= 7;
+  const interactionPending = !!currentDayResult?.interaction && !currentDayResult.interaction.selectedOptionId;
 
   const currentBg = currentDayResult?.activity?.type
     ? ACTIVITY_BACKGROUNDS[currentDayResult.activity.type] ?? FREE_DAY_BG
@@ -482,7 +637,11 @@ export function WeekSimulationScreen() {
                   transition={{ duration: 0.2 }}
                 >
                   {currentDayResult ? (
-                    <DayCard dayResult={currentDayResult} />
+                    <DayCard
+                      dayResult={currentDayResult}
+                      focusCandidates={focusCandidates}
+                      onChooseInteraction={chooseSimulationInteraction}
+                    />
                   ) : (
                     <FreeDayCard dayName={DAY_NAMES[currentDay] ?? "Day"} />
                   )}
@@ -504,24 +663,26 @@ export function WeekSimulationScreen() {
                 View Calendar
               </Button>
             ) : isLastDay ? (
-              <Button
-                size="lg"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                onClick={advanceDay}
-                aria-label="Complete the week and process results"
-              >
-                Complete Week
-              </Button>
-            ) : (
-              <>
                 <Button
                   size="lg"
                   className="bg-emerald-600 hover:bg-emerald-700 text-white"
                   onClick={advanceDay}
-                  aria-label="Advance to next day"
+                  aria-label="Complete the week and process results"
+                  disabled={interactionPending}
                 >
-                  Next Day
+                  Complete Week
                 </Button>
+              ) : (
+                <>
+                <Button
+                  size="lg"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={advanceDay}
+                    aria-label="Advance to next day"
+                    disabled={interactionPending}
+                  >
+                    Next Day
+                  </Button>
                 <Button
                   size="lg"
                   variant="outline"

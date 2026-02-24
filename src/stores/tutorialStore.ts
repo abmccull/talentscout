@@ -68,6 +68,9 @@ export function resolveOnboardingSequence(
 // ---------------------------------------------------------------------------
 
 function readPersisted(): PersistedTutorialData {
+  if (typeof window === "undefined") {
+    return { completedSequences: [], dismissed: false };
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { completedSequences: [], dismissed: false };
@@ -84,6 +87,7 @@ function readPersisted(): PersistedTutorialData {
 }
 
 function writePersisted(data: PersistedTutorialData): void {
+  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch {

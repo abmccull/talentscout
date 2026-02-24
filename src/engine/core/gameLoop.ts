@@ -722,6 +722,9 @@ function maybeGenerateAssignment(
 ): InboxMessage | null {
   // Only employed scouts receive assignments
   if (!state.scout.currentClubId) return null;
+  // Youth scouts discover talent organically — they don't receive
+  // club-driven scouting assignments for signed players.
+  if (state.scout.primarySpecialization === "youth") return null;
   // ~30% chance per week of receiving a new assignment
   if (!rng.chance(0.3)) return null;
 
@@ -736,14 +739,9 @@ function maybeGenerateAssignment(
   let unreported = allPlayerIds.filter((id) => !alreadyReported.has(id));
   if (unreported.length === 0) return null;
 
-  // Filter candidates by scout specialization
+  // Filter candidates by scout specialization (youth scouts early-return above)
   const spec = state.scout.primarySpecialization;
-  if (spec === "youth") {
-    unreported = unreported.filter((id) => {
-      const p = state.players[id];
-      return p && p.age <= 21;
-    });
-  } else if (spec === "firstTeam") {
+  if (spec === "firstTeam") {
     unreported = unreported.filter((id) => {
       const p = state.players[id];
       return p && p.age >= 20;

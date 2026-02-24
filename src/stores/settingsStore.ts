@@ -53,6 +53,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 // ---------------------------------------------------------------------------
 
 function readPersisted(): AppSettings {
+  if (typeof window === "undefined") {
+    return { ...DEFAULT_SETTINGS };
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
@@ -100,6 +103,7 @@ function readPersisted(): AppSettings {
 }
 
 function writePersisted(settings: AppSettings): void {
+  if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
   } catch {

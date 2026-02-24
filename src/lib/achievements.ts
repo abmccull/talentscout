@@ -151,7 +151,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Build your network by meeting a contact.",
     category: "gettingStarted",
     icon: "🤝",
-    check: (state) => Object.keys(state.contacts).length >= 1,
+    check: (state) =>
+      Object.values(state.contacts).some((c) => c.relationship > 20),
   },
   {
     id: "first-perk",
@@ -179,7 +180,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "gettingStarted",
     icon: "🌟",
     check: (state) =>
-      Object.keys(state.unsignedYouth).length >= 1 ||
+      state.discoveryRecords.length >= 1 ||
       Object.keys(state.placementReports).length >= 1,
   },
 
@@ -487,7 +488,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Expand your reach to 3 different countries.",
     category: "worldExplorer",
     icon: "✈️",
-    check: (state) => state.countries.length >= 3,
+    check: (state) => Object.keys(state.scout.countryReputations).length >= 3,
   },
   {
     id: "countries-6",
@@ -496,7 +497,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Build a presence across 6 countries.",
     category: "worldExplorer",
     icon: "🗺️",
-    check: (state) => state.countries.length >= 6,
+    check: (state) => Object.keys(state.scout.countryReputations).length >= 6,
   },
   {
     id: "countries-10",
@@ -505,7 +506,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Establish yourself in 10 countries around the world.",
     category: "worldExplorer",
     icon: "🌐",
-    check: (state) => state.countries.length >= 10,
+    check: (state) => Object.keys(state.scout.countryReputations).length >= 10,
   },
   {
     id: "countries-15",
@@ -514,7 +515,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Build a truly global scouting network across 15 countries.",
     category: "worldExplorer",
     icon: "🛸",
-    check: (state) => state.countries.length >= 15,
+    check: (state) => Object.keys(state.scout.countryReputations).length >= 15,
   },
   {
     id: "home-mastery",

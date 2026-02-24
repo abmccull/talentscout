@@ -18,6 +18,7 @@ interface ActivityPanelProps {
   onSchedule: (activity: Activity, dayIndex: number) => void;
   leagueFilter: string;
   allLeagues: League[];
+  fixtureLeagueById: Record<string, string>;
   onLeagueFilterChange: (leagueId: string) => void;
   /** Resolve club IDs to display names for match descriptions */
   resolveClubName: (id: string) => string;
@@ -30,6 +31,7 @@ export function ActivityPanel({
   onSchedule,
   leagueFilter,
   allLeagues,
+  fixtureLeagueById,
   onLeagueFilterChange,
   resolveClubName,
 }: ActivityPanelProps) {
@@ -63,15 +65,16 @@ export function ActivityPanel({
       const category = ACTIVITY_CATEGORIES[activity.type] ?? "scouting";
       // Apply league filter only to match activities
       if (category === "matches" && activity.type === "attendMatch" && leagueFilter !== "all") {
-        // The engine provides targetId as fixture ID — we can't filter by league here
-        // without fixture data. Let the match activities through and filter at a higher level
-        // if needed. For now, include all matches.
+        const fixtureLeagueId = activity.targetId ? fixtureLeagueById[activity.targetId] : undefined;
+        if (!fixtureLeagueId || fixtureLeagueId !== leagueFilter) {
+          continue;
+        }
       }
       groups[category].push(activity);
     }
 
     return groups;
-  }, [enrichedActivities, leagueFilter]);
+  }, [enrichedActivities, fixtureLeagueById, leagueFilter]);
 
   // Sorted category keys (skip empty ones; hide specialist for regional if empty)
   const sortedCategories = useMemo(() => {
@@ -131,15 +134,15 @@ export function ActivityPanel({
                   </select>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-                {sectionActivities.map((activity, idx) => (
-                  <ActivityCard
-                    key={`${activity.type}-${activity.targetId ?? idx}`}
-                    activity={activity}
-                    canScheduleAt={canScheduleAt}
-                    onSchedule={onSchedule}
-                  />
-                ))}
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {sectionActivities.map((activity, idx) => (
+                    <ActivityCard
+                      key={`${activity.instanceId ?? activity.type}-${activity.targetId ?? "none"}-${idx}`}
+                      activity={activity}
+                      canScheduleAt={canScheduleAt}
+                      onSchedule={onSchedule}
+                    />
+                  ))}
               </div>
             </div>
           );

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ScrollReveal } from "./ScrollReveal";
 
-const STEAM_URL = "#"; // TODO: Replace with actual Steam store URL
+const STEAM_URL = "https://store.steampowered.com/app/talentscout";
 
 export function FinalCTA() {
   return (
@@ -31,6 +31,8 @@ export function FinalCTA() {
           <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
             <a
               href={STEAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex h-14 items-center rounded-lg bg-emerald-600 px-10 text-lg font-semibold text-white transition hover:bg-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]"
             >
               Wishlist on Steam

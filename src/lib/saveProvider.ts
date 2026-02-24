@@ -256,17 +256,9 @@ class SaveProviderImpl implements SaveProvider {
     const saveName = slotName === "autosave" ? "Autosave" : `Save ${slot}`;
     await saveGame(slot, saveName, state);
     // IndexedDB succeeded — from here on, secondary writes are fire-and-forget.
-
-    // ---- Secondary write: Steam Cloud -------------------------------------
-    const steam = getSteam();
-    if (steam.isAvailable()) {
-      steam.setCloudSave(slot, data).catch((err: unknown) => {
-        console.warn(
-          `SaveProvider: Steam Cloud write failed for slot "${slotName}":`,
-          err,
-        );
-      });
-    }
+    // Note: db.saveGame() already mirrors the canonical SaveRecord envelope to
+    // Steam Cloud when Steam is available. Avoid writing `data` again here,
+    // which may not include `savedAt` metadata expected by cloud reads.
 
     // ---- Secondary write: Supabase ----------------------------------------
     if (supabase && this.userId) {

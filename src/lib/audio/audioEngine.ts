@@ -41,6 +41,9 @@ export class AudioEngine {
   /** Track IDs so we can skip re-loading the same track. */
   private musicId: string | null = null;
   private ambienceId: string | null = null;
+  /** Deferred playback requests while audio assets are still lazy-loading. */
+  private pendingMusicId: string | null = null;
+  private pendingAmbienceId: string | null = null;
 
   private listeners = new Set<ChangeListener>();
 
@@ -75,9 +78,24 @@ export class AudioEngine {
     if (this.musicId === trackId && this.currentMusic?.playing()) return;
 
     const assets = this.getAssets();
-    if (!assets) return;
+    if (!assets) {
+      this.pendingMusicId = trackId;
+      this._assetsLoading
+        ?.then(() => {
+          // Only honor the latest pending request.
+          if (this.pendingMusicId === trackId) {
+            this.pendingMusicId = null;
+            this.playMusic(trackId);
+          }
+        })
+        .catch((err) => {
+          console.warn("[AudioEngine] Failed to load audio assets:", err);
+        });
+      return;
+    }
+    this.pendingMusicId = null;
     const nextHowl = assets.getHowl(trackId, "music");
-    this.crossfade(this.currentMusic, nextHowl);
+    this.crossfade(this.currentMusic, nextHowl, "music");
     this.currentMusic = nextHowl;
     this.musicId = trackId;
   }
@@ -97,15 +115,31 @@ export class AudioEngine {
     if (this.ambienceId === ambienceId && this.currentAmbience?.playing()) return;
 
     const assets = this.getAssets();
-    if (!assets) return;
+    if (!assets) {
+      this.pendingAmbienceId = ambienceId;
+      this._assetsLoading
+        ?.then(() => {
+          // Only honor the latest pending request.
+          if (this.pendingAmbienceId === ambienceId) {
+            this.pendingAmbienceId = null;
+            this.playAmbience(ambienceId);
+          }
+        })
+        .catch((err) => {
+          console.warn("[AudioEngine] Failed to load audio assets:", err);
+        });
+      return;
+    }
+    this.pendingAmbienceId = null;
     const nextHowl = assets.getHowl(ambienceId, "ambience");
-    this.crossfade(this.currentAmbience, nextHowl);
+    this.crossfade(this.currentAmbience, nextHowl, "ambience");
     this.currentAmbience = nextHowl;
     this.ambienceId = ambienceId;
   }
 
   stopMusic(): void {
     if (!this.isBrowserEnv()) return;
+    this.pendingMusicId = null;
     if (this.currentMusic) {
       this.fadeOut(this.currentMusic);
       this.currentMusic = null;
@@ -115,6 +149,7 @@ export class AudioEngine {
 
   stopAmbience(): void {
     if (!this.isBrowserEnv()) return;
+    this.pendingAmbienceId = null;
     if (this.currentAmbience) {
       this.fadeOut(this.currentAmbience);
       this.currentAmbience = null;
@@ -167,13 +202,10 @@ export class AudioEngine {
   crossfade(
     fromHowl: HowlType | null,
     toHowl: HowlType,
+    channel: "music" | "ambience",
     durationMs = CROSSFADE_DURATION_MS,
   ): void {
     if (!this.isBrowserEnv()) return;
-
-    // Determine which channel toHowl belongs to for correct volume calculation.
-    const channel: AudioChannel =
-      toHowl === this.currentAmbience ? "ambience" : "music";
     const targetVol = this.effectiveVolume(channel);
 
     if (fromHowl && fromHowl !== toHowl) {

@@ -21,6 +21,7 @@ import type {
   SubRegion,
   Observation,
   UnsignedYouth,
+  Player,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 
@@ -285,6 +286,110 @@ const MAX_FATIGUE = 100;
 const FORCED_REST_FATIGUE_THRESHOLD = 90;
 const ACCURACY_PENALTY_FATIGUE_THRESHOLD = 70;
 
+export interface ScheduledActivityInstance {
+  /** Stable key for this scheduled instance (instanceId-backed or legacy chunk key). */
+  key: string;
+  /** Activity payload for this instance. */
+  activity: Activity;
+  /** First day index this instance occupies. */
+  dayIndex: number;
+  /** Every day-slot index occupied by this instance. */
+  slotIndexes: number[];
+}
+
+function activityBaseKey(activity: Activity): string {
+  return `${activity.type}|${activity.targetId ?? ""}|${activity.description}|${activity.slots}`;
+}
+
+function isLegacyEquivalent(a: Activity | null, b: Activity | null): boolean {
+  if (a === null || b === null) return false;
+  if (a.instanceId || b.instanceId) return false;
+  return (
+    a.type === b.type &&
+    a.targetId === b.targetId &&
+    a.description === b.description &&
+    a.slots === b.slots
+  );
+}
+
+function getLegacyChunkKey(
+  activities: (Activity | null)[],
+  dayIndex: number,
+  activity: Activity,
+): { key: string; start: number; endExclusive: number } {
+  let runStart = dayIndex;
+  while (runStart > 0 && isLegacyEquivalent(activities[runStart - 1], activity)) {
+    runStart--;
+  }
+
+  const chunkSize = Math.max(1, activity.slots);
+  const chunkIndex = Math.floor((dayIndex - runStart) / chunkSize);
+  const chunkStart = runStart + chunkIndex * chunkSize;
+  const chunkEndExclusive = Math.min(TOTAL_WEEK_SLOTS, chunkStart + chunkSize);
+  const key = `legacy:${activityBaseKey(activity)}:${chunkStart}`;
+  return { key, start: chunkStart, endExclusive: chunkEndExclusive };
+}
+
+function getActivityInstanceKey(
+  activities: (Activity | null)[],
+  dayIndex: number,
+  activity: Activity,
+): string {
+  if (activity.instanceId) return `id:${activity.instanceId}`;
+  return getLegacyChunkKey(activities, dayIndex, activity).key;
+}
+
+function allocateInstanceId(
+  schedule: WeekSchedule,
+  activity: Activity,
+  dayIndex: number,
+): string {
+  const existingIds = new Set(
+    schedule.activities
+      .map((a) => a?.instanceId)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
+  const base = `${activity.type}-s${schedule.season}-w${schedule.week}-d${dayIndex}`;
+  let candidate = base;
+  let suffix = 1;
+  while (existingIds.has(candidate)) {
+    candidate = `${base}-${suffix}`;
+    suffix++;
+  }
+  return candidate;
+}
+
+/**
+ * Returns unique scheduled activity instances for this week.
+ * Multi-slot blocks are emitted once with all occupied day indexes.
+ */
+export function getScheduledActivityInstances(
+  schedule: WeekSchedule,
+): ScheduledActivityInstance[] {
+  const byKey = new Map<string, ScheduledActivityInstance>();
+
+  for (let dayIndex = 0; dayIndex < TOTAL_WEEK_SLOTS; dayIndex++) {
+    const activity = schedule.activities[dayIndex];
+    if (!activity) continue;
+
+    const key = getActivityInstanceKey(schedule.activities, dayIndex, activity);
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.slotIndexes.push(dayIndex);
+      continue;
+    }
+
+    byKey.set(key, {
+      key,
+      activity,
+      dayIndex,
+      slotIndexes: [dayIndex],
+    });
+  }
+
+  return [...byKey.values()].sort((a, b) => a.dayIndex - b.dayIndex);
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -349,10 +454,13 @@ export function addActivity(
   }
 
   const updatedActivities = [...schedule.activities] as (Activity | null)[];
+  const scheduledActivity: Activity = activity.instanceId
+    ? { ...activity }
+    : { ...activity, instanceId: allocateInstanceId(schedule, activity, dayIndex) };
 
   // Fill all slots the activity occupies
   for (let i = dayIndex; i < dayIndex + activity.slots; i++) {
-    updatedActivities[i] = activity;
+    updatedActivities[i] = scheduledActivity;
   }
 
   return { ...schedule, activities: updatedActivities };
@@ -376,16 +484,60 @@ export function removeActivity(
 
   const updatedActivities = [...schedule.activities] as (Activity | null)[];
 
-  // Clear every slot that contains this same activity.
-  // isSameActivity is used instead of === so that post-serialisation objects
-  // (which are distinct instances with identical data) are matched correctly.
-  for (let i = 0; i < TOTAL_WEEK_SLOTS; i++) {
-    if (isSameActivity(updatedActivities[i], activity)) {
-      updatedActivities[i] = null;
+  if (activity.instanceId) {
+    for (let i = 0; i < TOTAL_WEEK_SLOTS; i++) {
+      if (updatedActivities[i]?.instanceId === activity.instanceId) {
+        updatedActivities[i] = null;
+      }
+    }
+  } else {
+    // Legacy save fallback: remove only this logical chunk (based on slot size),
+    // not every matching activity in the week.
+    const chunk = getLegacyChunkKey(updatedActivities, dayIndex, activity);
+    for (let i = chunk.start; i < chunk.endExclusive; i++) {
+      if (isLegacyEquivalent(updatedActivities[i], activity)) {
+        updatedActivities[i] = null;
+      }
     }
   }
 
   return { ...schedule, activities: updatedActivities };
+}
+
+function collectObservedPlayerCounts(
+  observations?: Record<string, Observation>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const obs of Object.values(observations ?? {})) {
+    counts.set(obs.playerId, (counts.get(obs.playerId) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function topObservedPlayers(
+  observedCounts: Map<string, number>,
+  maxCount: number,
+): Array<{ playerId: string; observations: number }> {
+  return [...observedCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, maxCount)
+    .map(([playerId, observations]) => ({ playerId, observations }));
+}
+
+function topObservedUnsignedYouth(
+  observedCounts: Map<string, number>,
+  unsignedYouth?: Record<string, UnsignedYouth>,
+  maxCount = 5,
+): Array<{ youth: UnsignedYouth; observations: number }> {
+  const results = Object.values(unsignedYouth ?? {})
+    .filter((y) => !y.placed && !y.retired)
+    .map((y) => ({
+      youth: y,
+      observations: observedCounts.get(y.player.id) ?? 0,
+    }))
+    .filter((entry) => entry.observations > 0)
+    .sort((a, b) => b.observations - a.observations);
+  return results.slice(0, maxCount);
 }
 
 /**
@@ -417,8 +569,16 @@ export function getAvailableActivities(
   subRegions?: Record<string, SubRegion>,
   observations?: Record<string, Observation>,
   unsignedYouth?: Record<string, UnsignedYouth>,
+  players?: Record<string, Player>,
 ): Activity[] {
   const activities: Activity[] = [];
+  const observedCounts = collectObservedPlayerCounts(observations);
+  const reportCandidates = topObservedPlayers(
+    new Map(
+      [...observedCounts.entries()].filter(([playerId]) => players?.[playerId] !== undefined),
+    ),
+    8,
+  );
 
   // Forced rest when exhausted
   if (scout.fatigue > FORCED_REST_FATIGUE_THRESHOLD) {
@@ -472,12 +632,19 @@ export function getAvailableActivities(
     });
   }
 
-  // Write report
-  activities.push({
-    type: "writeReport",
-    slots: ACTIVITY_SLOT_COSTS.writeReport,
-    description: "Write up a scouting report from your observations",
-  });
+  // Write report (targeted)
+  for (const candidate of reportCandidates) {
+    const player = players?.[candidate.playerId];
+    const playerLabel = player
+      ? `${player.firstName} ${player.lastName}`
+      : `Player ${candidate.playerId.slice(0, 6)}`;
+    activities.push({
+      type: "writeReport",
+      slots: ACTIVITY_SLOT_COSTS.writeReport,
+      targetId: candidate.playerId,
+      description: `Write report: ${playerLabel} (${candidate.observations} observation${candidate.observations !== 1 ? "s" : ""})`,
+    });
+  }
 
   // Network meetings
   if (contacts.length > 0) {
@@ -597,30 +764,29 @@ export function getAvailableActivities(
 
   // followUpSession / parentCoachMeeting / writePlacementReport:
   // requires at least 1 observation of an unsigned (unplaced) youth player
-  const unsignedYouthIds = new Set(
-    Object.values(unsignedYouth ?? {})
-      .filter((y) => !y.placed && !y.retired)
-      .map((y) => y.player.id),
-  );
-  const hasUnsignedYouthObservation =
-    observations !== undefined &&
-    Object.values(observations).some((obs) => unsignedYouthIds.has(obs.playerId));
+  const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, 5);
 
-  if (hasUnsignedYouthObservation) {
+  for (const entry of targetedYouth) {
+    const player = entry.youth.player;
+    const label = `${player.firstName} ${player.lastName}`;
+
     activities.push({
       type: "followUpSession",
       slots: ACTIVITY_SLOT_COSTS.followUpSession,
-      description: "Run a follow-up session with a youth prospect — deepen your assessment",
+      targetId: player.id,
+      description: `Follow-up: ${label} (${entry.observations} observation${entry.observations !== 1 ? "s" : ""})`,
     });
     activities.push({
       type: "parentCoachMeeting",
       slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
-      description: "Meet with a prospect's parents or coach — build trust and gather context",
+      targetId: player.id,
+      description: `Parent/Coach meeting: ${label}`,
     });
     activities.push({
       type: "writePlacementReport",
       slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
-      description: "Write a placement report — formally recommend a youth player to a club",
+      targetId: player.id,
+      description: `Placement report: ${label}`,
     });
   }
 
@@ -805,8 +971,12 @@ export function processCompletedWeek(
     };
   }
 
-  const seenActivities = new Set<Activity>();
   let fatigueChange = 0;
+  for (const slot of schedule.activities) {
+    if (slot === null) fatigueChange += EMPTY_DAY_FATIGUE_RECOVERY;
+  }
+
+  const instances = getScheduledActivityInstances(schedule);
   const skillXpGained: Partial<Record<ScoutSkill, number>> = {};
   const attributeXpGained: Partial<Record<ScoutAttribute, number>> = {};
   const matchesAttended: string[] = [];
@@ -849,14 +1019,7 @@ export function processCompletedWeek(
 
   const endurance = scout.attributes.endurance; // 1–20
 
-  for (const activity of schedule.activities) {
-    if (activity === null) {
-      fatigueChange += EMPTY_DAY_FATIGUE_RECOVERY;
-      continue;
-    }
-    if (seenActivities.has(activity)) continue;
-    seenActivities.add(activity);
-
+  for (const { activity } of instances) {
     // Fatigue cost, modulated by endurance
     const rawFatigueCost = ACTIVITY_FATIGUE_COSTS[activity.type];
     let actualFatigueCost: number;
@@ -1151,20 +1314,4 @@ export function applyWeekResults(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-/**
- * Compare two Activity values by their logical identity (type + targetId +
- * description) rather than by object reference.  This is necessary because
- * JSON round-trips (save / load) produce distinct instances for equal data,
- * which would cause `===` comparisons to always return false.
- */
-function isSameActivity(a: Activity | null, b: Activity | null): boolean {
-  if (a === b) return true;
-  if (a === null || b === null) return false;
-  return (
-    a.type === b.type &&
-    a.targetId === b.targetId &&
-    a.description === b.description
-  );
 }

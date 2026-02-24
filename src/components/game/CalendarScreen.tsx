@@ -106,6 +106,10 @@ export function CalendarScreen() {
   const isDeadlineDay = currentWindow ? isDeadlineDayPressure(currentWindow, currentWeek) : false;
 
   const allLeagues = Object.values(gameState.leagues);
+  const fixtureLeagueById: Record<string, string> = {};
+  for (const fixture of Object.values(gameState.fixtures)) {
+    fixtureLeagueById[fixture.id] = fixture.leagueId;
+  }
 
   // Engine-driven activities — specialization-aware, properly gated
   const engineActivities = getAvailableCalendarActivities();
@@ -444,6 +448,7 @@ export function CalendarScreen() {
           onSchedule={handleSchedule}
           leagueFilter={selectedLeagueId}
           allLeagues={allLeagues}
+          fixtureLeagueById={fixtureLeagueById}
           onLeagueFilterChange={setSelectedLeagueId}
           resolveClubName={resolveClubName}
         />

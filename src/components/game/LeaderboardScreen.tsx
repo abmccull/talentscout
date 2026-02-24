@@ -230,7 +230,10 @@ export function LeaderboardScreen() {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      await submitToLeaderboard();
+      const submittedEntry = await submitToLeaderboard();
+      if (!submittedEntry) {
+        throw new Error("No active game state to submit");
+      }
 
       // Refresh local entries
       const updatedLocal = await getLeaderboard(20);
@@ -239,14 +242,11 @@ export function LeaderboardScreen() {
 
       // Also submit to cloud if authenticated
       if (isAuthenticated && userId) {
-        const latestEntry = updatedLocal[0];
-        if (latestEntry) {
-          await submitCloudLeaderboardEntry(userId, latestEntry);
-          // Refresh global entries if on that tab
-          if (activeTab === "global") {
-            const updatedGlobal = await getCloudLeaderboard(20);
-            setGlobalEntries(updatedGlobal);
-          }
+        await submitCloudLeaderboardEntry(userId, submittedEntry);
+        // Refresh global entries if on that tab
+        if (activeTab === "global") {
+          const updatedGlobal = await getCloudLeaderboard(20);
+          setGlobalEntries(updatedGlobal);
         }
       }
     } catch (err) {

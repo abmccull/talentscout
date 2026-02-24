@@ -449,8 +449,9 @@ export function processDailyTick(
       ? getCurrentTransferWindow(windows, state.currentWeek)
       : undefined);
 
-  // Roll for urgent assessment — only when inside a window
-  if (activeWindow && rng.chance(URGENT_ASSESSMENT_DAILY_CHANCE)) {
+  // Roll for urgent assessment — only when inside a window.
+  // Youth scouts discover talent organically and don't receive these.
+  if (activeWindow && state.scout.primarySpecialization !== "youth" && rng.chance(URGENT_ASSESSMENT_DAILY_CHANCE)) {
     const assessment = generateUrgentAssessment(rng, state);
     if (assessment) {
       // Anchor the deadline to the absolute day parameter

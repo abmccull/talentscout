@@ -1,4 +1,4 @@
-const STEAM_URL = "#"; // TODO: Replace with actual Steam store URL
+const STEAM_URL = "https://store.steampowered.com/app/talentscout";
 
 export function Footer() {
   return (
@@ -7,6 +7,8 @@ export function Footer() {
         <div className="flex flex-wrap items-center justify-center gap-6 text-sm text-zinc-500">
           <a
             href={STEAM_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="transition hover:text-white"
           >
             Steam

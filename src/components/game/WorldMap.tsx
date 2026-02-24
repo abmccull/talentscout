@@ -74,73 +74,62 @@ const EUROPE_KEYS = new Set([
   "germany", "netherlands", "belgium", "switzerland", "italy", "turkey",
 ]);
 
-/**
- * Direct SVG positions hand-calibrated against the AI-generated background.
- * The background doesn't follow a standard projection, so hardcoded positions
- * are more accurate than any linear lon/lat formula.
- */
+// =============================================================================
+// SVG POSITIONS — hand-calibrated against the AI-generated background image
+// =============================================================================
+
+// The background image (1376×768) is rendered into viewBox 800×450 with
+// preserveAspectRatio="xMidYMid slice". Positions are traced from visible
+// landmasses and city-light clusters on the actual image.
 const COUNTRY_SVG_POS: Record<string, { x: number; y: number }> = {
-  // Europe
-  england:     { x: 302, y: 104 },
-  scotland:    { x: 293, y: 94 },
-  france:      { x: 311, y: 116 },
-  spain:       { x: 300, y: 128 },
-  portugal:    { x: 288, y: 128 },
-  germany:     { x: 323, y: 106 },
-  netherlands: { x: 314, y: 100 },
-  belgium:     { x: 314, y: 108 },
-  switzerland: { x: 320, y: 117 },
-  italy:       { x: 326, y: 123 },
-  turkey:      { x: 362, y: 124 },
+  // Europe — calibrated from rendered screenshot against visible landmasses
+  england:     { x: 382, y: 142 },  // London/SE England
+  scotland:    { x: 377, y: 132 },  // Central Scotland
+  france:      { x: 388, y: 150 },  // Paris region
+  spain:       { x: 378, y: 162 },  // Central Iberia
+  portugal:    { x: 370, y: 161 },  // Western Iberia
+  germany:     { x: 400, y: 140 },  // Central Germany
+  netherlands: { x: 394, y: 135 },  // Dutch coast
+  belgium:     { x: 394, y: 142 },  // Between FR/NL
+  switzerland: { x: 399, y: 150 },  // Alpine region
+  italy:       { x: 406, y: 156 },  // Rome area
+  turkey:      { x: 435, y: 155 },  // Ankara area
   // Africa
-  nigeria:     { x: 323, y: 178 },
-  ghana:       { x: 311, y: 180 },
-  ivorycoast:  { x: 304, y: 180 },
-  senegal:     { x: 288, y: 166 },
-  cameroon:    { x: 332, y: 180 },
-  egypt:       { x: 364, y: 142 },
-  southafrica: { x: 362, y: 254 },
+  senegal:     { x: 365, y: 194 },  // Dakar / western tip
+  ivorycoast:  { x: 378, y: 200 },  // Abidjan coast
+  ghana:       { x: 385, y: 200 },  // Accra coast
+  nigeria:     { x: 397, y: 200 },  // Lagos / Gulf of Guinea
+  cameroon:    { x: 406, y: 202 },  // Douala / Yaoundé
+  egypt:       { x: 433, y: 170 },  // Cairo / Nile delta
+  southafrica: { x: 420, y: 250 },  // Johannesburg
   // Americas
-  usa:         { x: 177, y: 128 },
-  canada:      { x: 174, y: 118 },
-  mexico:      { x: 140, y: 168 },
-  brazil:      { x: 224, y: 230 },
-  argentina:   { x: 210, y: 250 },
-  colombia:    { x: 180, y: 180 },
+  usa:         { x: 237, y: 158 },  // Washington DC / east coast
+  canada:      { x: 228, y: 148 },  // Toronto / Great Lakes
+  mexico:      { x: 196, y: 178 },  // Mexico City
+  brazil:      { x: 270, y: 243 },  // São Paulo / Brasília
+  argentina:   { x: 255, y: 272 },  // Buenos Aires
+  colombia:    { x: 220, y: 198 },  // Bogotá
   // Asia
-  japan:       { x: 668, y: 122 },
-  southkorea:  { x: 650, y: 124 },
-  china:       { x: 632, y: 120 },
-  saudiarabia: { x: 384, y: 152 },
+  china:       { x: 635, y: 145 },  // Beijing
+  southkorea:  { x: 648, y: 148 },  // Seoul
+  japan:       { x: 660, y: 150 },  // Tokyo
+  saudiarabia: { x: 450, y: 175 },  // Riyadh
   // Oceania
-  australia:   { x: 686, y: 262 },
-  newzealand:  { x: 716, y: 280 },
+  australia:   { x: 685, y: 262 },  // Sydney / east coast
+  newzealand:  { x: 720, y: 278 },  // Wellington
 };
 
-// =============================================================================
-// PROJECTION — calibrated to the AI-generated background image
-// =============================================================================
-
-// Calibrated against reference points on the background image:
-//   UK (lon=0)     → x≈397   Japan (lon=138)  → x≈672
-//   UK (lat=52.5)  → y≈97    Australia (lat=-34) → y≈280
-const PROJ_LEFT_PAD = 30;
-const PROJ_MAP_WIDTH = 740;
-const PROJ_TOP_PAD = 8;
-const PROJ_MAP_HEIGHT = 410;
-const PROJ_TOP_LAT = 83;
-const PROJ_LAT_RANGE = 150; // 83 - (-67) = 150°
-
+// Fallback projection for countries without hand-calibrated positions
 function lonLatToSvg(lon: number, lat: number): { x: number; y: number } {
-  const x = PROJ_LEFT_PAD + ((lon + 180) / 360) * PROJ_MAP_WIDTH;
-  const y = PROJ_TOP_PAD + ((PROJ_TOP_LAT - lat) / PROJ_LAT_RANGE) * PROJ_MAP_HEIGHT;
+  const x = -2 + ((lon + 180) / 360) * 770;
+  const y = 8 + ((80 - lat) / 148) * 400;
   return { x, y };
 }
 
-/** Get SVG coords for a country (hardcoded position, or projection fallback). */
+/** Get SVG coords for a country (hand-calibrated, or projection fallback). */
 function getCountryPos(key: string): { x: number; y: number } | null {
   const direct = COUNTRY_SVG_POS[key];
-  if (direct) return { x: direct.x, y: direct.y };
+  if (direct) return direct;
   const coords = COUNTRY_COORDS[key];
   if (!coords) return null;
   return lonLatToSvg(coords.lon, coords.lat);
