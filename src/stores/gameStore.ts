@@ -3682,6 +3682,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().advanceWeek();
   },
 
+  // Match scheduling (calendar-based)
+  scheduleMatch: (fixtureId) => {
+    const { gameState } = get();
+    if (!gameState) return false;
+    // Youth scouts cannot attend first-team matches
+    if (gameState.scout.primarySpecialization === "youth") return false;
+
+    const fixture = gameState.fixtures[fixtureId];
+    if (!fixture) return false;
+
+    // Guard: already scheduled
+    const alreadyScheduled = gameState.schedule.activities.some(
+      (a) => a !== null && a.type === "attendMatch" && a.targetId === fixtureId,
+    );
+    if (alreadyScheduled) return false;
+
+    const slotCost = ACTIVITY_SLOT_COSTS.attendMatch;
+    const homeClub = gameState.clubs[fixture.homeClubId];
+    const awayClub = gameState.clubs[fixture.awayClubId];
+    const activity: Activity = {
+      type: "attendMatch",
+      slots: slotCost,
+      targetId: fixture.id,
+      description: `Scout: ${homeClub?.shortName ?? "?"} vs ${awayClub?.shortName ?? "?"}`,
+    };
+
+    // Find first available consecutive slot window
+    for (let dayIndex = 0; dayIndex <= 7 - slotCost; dayIndex++) {
+      if (canAddActivity(gameState.schedule, activity, dayIndex)) {
+        get().scheduleActivity(activity, dayIndex);
+        return true;
+      }
+    }
+
+    return false; // no room
+  },
+
   // Match
   startMatch: (fixtureId) => {
     const { gameState } = get();

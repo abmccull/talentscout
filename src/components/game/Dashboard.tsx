@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   Calendar,
+  CalendarPlus,
   Eye,
   FileText,
   TrendingUp,
@@ -117,7 +118,7 @@ export function Dashboard() {
     getUpcomingFixtures,
     getLeagueStandings,
     advanceWeek,
-    startMatch,
+    scheduleMatch,
     markMessageRead,
     selectPlayer,
   } = useGameStore();
@@ -571,16 +572,31 @@ export function Dashboard() {
                             </Badge>
                           </div>
                         </div>
-                        {scout.primarySpecialization !== "youth" && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => startMatch(fixture.id)}
-                          >
-                            <Eye size={14} className="mr-1" aria-hidden="true" />
-                            Scout
-                          </Button>
-                        )}
+                        {scout.primarySpecialization !== "youth" && (() => {
+                          const scheduled = gameState.schedule.activities.some(
+                            (a) => a !== null && a.type === "attendMatch" && a.targetId === fixture.id,
+                          );
+                          if (scheduled) {
+                            return (
+                              <Badge variant="outline" className="text-emerald-400 border-emerald-500/40">
+                                Scheduled
+                              </Badge>
+                            );
+                          }
+                          return (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                const ok = scheduleMatch(fixture.id);
+                                if (!ok) { /* calendar full — button state will reflect on re-render */ }
+                              }}
+                            >
+                              <CalendarPlus size={14} className="mr-1" aria-hidden="true" />
+                              Schedule
+                            </Button>
+                          );
+                        })()}
                       </div>
                     );
                   })}

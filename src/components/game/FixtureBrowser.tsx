@@ -6,12 +6,12 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Eye, ArrowLeft } from "lucide-react";
+import { Search, CalendarPlus, ArrowLeft } from "lucide-react";
 import type { Fixture } from "@/engine/core/types";
 import { ClubCrest } from "@/components/game/ClubCrest";
 
 export function FixtureBrowser() {
-  const { gameState, startMatch, getClub, getLeague, setScreen, pendingFixtureClubFilter, setPendingFixtureClubFilter } = useGameStore();
+  const { gameState, scheduleMatch, getClub, getLeague, setScreen, pendingFixtureClubFilter, setPendingFixtureClubFilter } = useGameStore();
 
   const [leagueFilter, setLeagueFilter] = useState("");
   const [weekMin, setWeekMin] = useState("");
@@ -223,16 +223,28 @@ export function FixtureBrowser() {
                             : "—"}
                         </td>
                         <td className="px-4 py-3">
-                          {!f.played && f.week === gameState.currentWeek && gameState.scout.primarySpecialization !== "youth" && (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => startMatch(f.id)}
-                            >
-                              <Eye size={14} className="mr-1" aria-hidden="true" />
-                              Scout
-                            </Button>
-                          )}
+                          {!f.played && f.week === gameState.currentWeek && gameState.scout.primarySpecialization !== "youth" && (() => {
+                            const scheduled = gameState.schedule.activities.some(
+                              (a) => a !== null && a.type === "attendMatch" && a.targetId === f.id,
+                            );
+                            if (scheduled) {
+                              return (
+                                <Badge variant="outline" className="text-emerald-400 border-emerald-500/40">
+                                  Scheduled
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => scheduleMatch(f.id)}
+                              >
+                                <CalendarPlus size={14} className="mr-1" aria-hidden="true" />
+                                Schedule
+                              </Button>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
