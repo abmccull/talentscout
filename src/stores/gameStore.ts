@@ -28,6 +28,7 @@ import type {
   ScoutPerformanceSnapshot,
   HiddenIntel,
   UnsignedYouth,
+  AnomalyFlag,
   ManagerDirective,
   RetainerContract,
   ConsultingContract,
@@ -37,7 +38,6 @@ import type {
   LifestyleLevel,
   CareerPath,
   DayResult,
-  DayInteractionOption,
   WeekSimulationState,
   LeaderboardEntry,
 } from "@/engine/core/types";
@@ -63,6 +63,12 @@ import {
 import { createRNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
+import {
+  buildActivityInteractionState,
+  getActivityDefaultChoice,
+  getActivityInteractionEffect,
+  type ActivityChoiceId,
+} from "@/engine/core/activityInteractions";
 import {
   generateSeasonEvents,
   getActiveSeasonEvents,
@@ -443,48 +449,7 @@ export interface ClubStanding {
   points: number;
 }
 
-type SimulationChoiceId = "scan" | "focus" | "network";
-
-const INTERACTIVE_SCOUTING_TYPES = new Set<Activity["type"]>([
-  "academyVisit",
-  "youthTournament",
-  "trainingVisit",
-  "watchVideo",
-  "schoolMatch",
-  "grassrootsTournament",
-  "streetFootball",
-  "academyTrialDay",
-  "youthFestival",
-  "followUpSession",
-  "parentCoachMeeting",
-]);
-
-const SIMULATION_CHOICE_OPTIONS: DayInteractionOption[] = [
-  {
-    id: "scan",
-    label: "Cast Wide Net",
-    description: "Prioritize finding more players at the cost of depth.",
-  },
-  {
-    id: "focus",
-    label: "Focus Prospect",
-    description: "Reduce volume and deepen reads on one promising player.",
-  },
-  {
-    id: "network",
-    label: "Build Context",
-    description: "Trade some scouting volume for relational and character context.",
-  },
-];
-
-const SIMULATION_CHOICE_EFFECTS: Record<
-  SimulationChoiceId,
-  { discoveryModifier: number; focusWeight: number }
-> = {
-  scan: { discoveryModifier: 1, focusWeight: 0 },
-  focus: { discoveryModifier: -1, focusWeight: 2 },
-  network: { discoveryModifier: 0, focusWeight: 1 },
-};
+type SimulationChoiceId = ActivityChoiceId;
 
 function buildDaySpanInfo(
   schedule: WeekSchedule,
@@ -503,13 +468,7 @@ function buildDaySpanInfo(
 }
 
 function buildDayInteraction(activity: Activity | null): DayResult["interaction"] | undefined {
-  if (!activity) return undefined;
-  if (!INTERACTIVE_SCOUTING_TYPES.has(activity.type)) return undefined;
-  return {
-    prompt: "Choose your scouting approach for today.",
-    options: SIMULATION_CHOICE_OPTIONS,
-    maxFocusPlayers: 3,
-  };
+  return buildActivityInteractionState(activity);
 }
 
 function isDayInteractionPending(dayResult: DayResult | undefined): boolean {
@@ -1067,6 +1026,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     const choiceDiscoveryModifiers = new Map<Activity["type"], number>();
+    const choiceProfileModifiers = new Map<Activity["type"], number>();
+    const choiceAnomalyModifiers = new Map<Activity["type"], number>();
+    const choiceRelationshipModifiers = new Map<Activity["type"], number>();
+    const choiceReportQualityModifiers = new Map<Activity["type"], number>();
     const choiceFocusDepthByType = new Map<Activity["type"], number>();
     const choiceFocusedPlayersByType = new Map<Activity["type"], string[]>();
     const simChoices = get().weekSimulation;
@@ -1076,10 +1039,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (!activity) continue;
         const choiceId = getDayChoiceId(day);
         if (!choiceId) continue;
-        const effect = SIMULATION_CHOICE_EFFECTS[choiceId];
+        const effect = getActivityInteractionEffect(activity.type, choiceId);
         choiceDiscoveryModifiers.set(
           activity.type,
-          (choiceDiscoveryModifiers.get(activity.type) ?? 0) + effect.discoveryModifier,
+          (choiceDiscoveryModifiers.get(activity.type) ?? 0) + (effect.discoveryModifier ?? 0),
+        );
+        choiceProfileModifiers.set(
+          activity.type,
+          (choiceProfileModifiers.get(activity.type) ?? 0) + (effect.profileModifier ?? 0),
+        );
+        choiceAnomalyModifiers.set(
+          activity.type,
+          (choiceAnomalyModifiers.get(activity.type) ?? 0) + (effect.anomalyModifier ?? 0),
+        );
+        choiceRelationshipModifiers.set(
+          activity.type,
+          (choiceRelationshipModifiers.get(activity.type) ?? 0) + (effect.relationshipModifier ?? 0),
+        );
+        choiceReportQualityModifiers.set(
+          activity.type,
+          (choiceReportQualityModifiers.get(activity.type) ?? 0) + (effect.reportQualityModifier ?? 0),
         );
         if (choiceId === "focus") {
           const selectedFocusIds = Array.from(
@@ -1203,7 +1182,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const result = meetContact(meetingRng, stateWithScheduleApplied.scout, contact);
 
         // Issue 5b: Apply relationship gain bonus from tools + equipment
-        const relBonus = (meetingToolBonuses.relationshipGainBonus ?? 0) + (meetingEquipBonuses?.relationshipGainBonus ?? 0);
+        const interactionRelBonus = (choiceRelationshipModifiers.get("networkMeeting") ?? 0) * 0.05;
+        const relBonus =
+          (meetingToolBonuses.relationshipGainBonus ?? 0)
+          + (meetingEquipBonuses?.relationshipGainBonus ?? 0)
+          + interactionRelBonus;
         const adjustedChange = result.relationshipChange >= 0
           ? Math.round(result.relationshipChange * (1 + relBonus))
           : result.relationshipChange;
@@ -1333,7 +1316,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           stateWithScheduleApplied.currentSeason,
           playerId,
         );
-        const quality = calculateReportQuality(report, player);
+        const qualityMod = choiceReportQualityModifiers.get("writeReport") ?? 0;
+        const quality = Math.max(0, Math.min(100, calculateReportQuality(report, player) + qualityMod));
         const scoredReport = { ...report, qualityScore: quality };
         updatedReports[scoredReport.id] = scoredReport;
 
@@ -1477,6 +1461,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return choiceDiscoveryModifiers.get(activityType) ?? 0;
       }
 
+      function choiceProfileMod(activityType: Activity["type"]): number {
+        return choiceProfileModifiers.get(activityType) ?? 0;
+      }
+
+      function choiceAnomalyMod(activityType: Activity["type"]): number {
+        return choiceAnomalyModifiers.get(activityType) ?? 0;
+      }
+
+      function choiceRelationshipMod(activityType: Activity["type"]): number {
+        return choiceRelationshipModifiers.get(activityType) ?? 0;
+      }
+
+      function choiceReportQualityMod(activityType: Activity["type"]): number {
+        return choiceReportQualityModifiers.get(activityType) ?? 0;
+      }
+
       function focusDepth(activityType: Activity["type"]): number {
         return choiceFocusDepthByType.get(activityType) ?? 0;
       }
@@ -1512,6 +1512,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
         focused.sort((a, b) => {
           const aOrder = orderMap.get(a.player.id) ?? Number.MAX_SAFE_INTEGER;
           const bOrder = orderMap.get(b.player.id) ?? Number.MAX_SAFE_INTEGER;
+          return aOrder - bOrder;
+        });
+        return [...focused, ...rest];
+      }
+
+      function prioritizeFocusedPlayers(
+        pool: Player[],
+        activityType: Activity["type"],
+      ): Player[] {
+        const targetIds = focusPlayers(activityType);
+        if (targetIds.length === 0) return pool;
+
+        const orderMap = new Map(targetIds.map((id, idx) => [id, idx]));
+        const focused: Player[] = [];
+        const rest: Player[] = [];
+        for (const player of pool) {
+          if (orderMap.has(player.id)) {
+            focused.push(player);
+          } else {
+            rest.push(player);
+          }
+        }
+
+        focused.sort((a, b) => {
+          const aOrder = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+          const bOrder = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
           return aOrder - bOrder;
         });
         return [...focused, ...rest];
@@ -1606,12 +1632,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const youthPool = allPlayers.filter(
             (p) => p.age <= 21 && !observedPlayerIds.has(p.id),
           );
-          const count = Math.min(youthPool.length, actObsRng.nextInt(rangeMin, rangeMax));
+          const prioritizedPlayers = prioritizeFocusedPlayers(
+            actObsRng.shuffle([...youthPool]),
+            "academyVisit",
+          );
+          const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
 
-          for (let i = 0; i < count && youthPool.length > 0; i++) {
-            const idx = actObsRng.nextInt(0, youthPool.length - 1);
-            const player = youthPool[idx];
-            youthPool.splice(idx, 1);
+          for (let i = 0; i < count; i++) {
+            const player = prioritizedPlayers[i];
 
             const obs = observePlayerLight(actObsRng, player, currentScout, "academyVisit", Object.values(updatedObservations));
             obs.week = stateWithScheduleApplied.currentWeek;
@@ -1645,6 +1673,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
               relatedId: player.id,
               relatedEntityType: "player" as const,
             });
+          }
+
+          const focusTargetIds = focusPlayers("academyVisit");
+          const focusRepeats = focusDepth("academyVisit");
+          if (focusTargetIds.length > 0 && focusRepeats > 0) {
+            const focusedPlayers = focusTargetIds
+              .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+              .filter((p): p is Player => !!p);
+
+            for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+              const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+              const focusObs = observePlayerLight(
+                actObsRng,
+                focusedPlayer,
+                currentScout,
+                "academyVisit",
+                Object.values(updatedObservations),
+              );
+              focusObs.week = stateWithScheduleApplied.currentWeek;
+              focusObs.season = stateWithScheduleApplied.currentSeason;
+              updatedObservations[focusObs.id] = focusObs;
+              observedPlayerIds.add(focusedPlayer.id);
+              weekObservationsGenerated++;
+            }
           }
         }
       }
@@ -1738,12 +1790,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const youthPool = allPlayers.filter(
             (p) => p.age <= 21 && !observedPlayerIds.has(p.id),
           );
-          const count = Math.min(youthPool.length, actObsRng.nextInt(rangeMin, rangeMax));
+          const prioritizedPlayers = prioritizeFocusedPlayers(
+            actObsRng.shuffle([...youthPool]),
+            "youthTournament",
+          );
+          const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
 
-          for (let i = 0; i < count && youthPool.length > 0; i++) {
-            const idx = actObsRng.nextInt(0, youthPool.length - 1);
-            const player = youthPool[idx];
-            youthPool.splice(idx, 1);
+          for (let i = 0; i < count; i++) {
+            const player = prioritizedPlayers[i];
 
             const obs = observePlayerLight(actObsRng, player, currentScout, "youthTournament", Object.values(updatedObservations));
             obs.week = stateWithScheduleApplied.currentWeek;
@@ -1778,6 +1832,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
               relatedEntityType: "player" as const,
             });
           }
+
+          const focusTargetIds = focusPlayers("youthTournament");
+          const focusRepeats = focusDepth("youthTournament");
+          if (focusTargetIds.length > 0 && focusRepeats > 0) {
+            const focusedPlayers = focusTargetIds
+              .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+              .filter((p): p is Player => !!p);
+
+            for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+              const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+              const focusObs = observePlayerLight(
+                actObsRng,
+                focusedPlayer,
+                currentScout,
+                "youthTournament",
+                Object.values(updatedObservations),
+              );
+              focusObs.week = stateWithScheduleApplied.currentWeek;
+              focusObs.season = stateWithScheduleApplied.currentSeason;
+              updatedObservations[focusObs.id] = focusObs;
+              observedPlayerIds.add(focusedPlayer.id);
+              weekObservationsGenerated++;
+            }
+          }
         }
       }
 
@@ -1791,13 +1869,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? allPlayers.filter((p) => p.clubId === clubId)
           : allPlayers;
         const pool = candidatePool.length > 0 ? [...candidatePool] : [...allPlayers];
-        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          actObsRng.shuffle(pool),
+          "trainingVisit",
+        );
+        const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
         const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
 
-        for (let i = 0; i < count && pool.length > 0; i++) {
-          const idx = actObsRng.nextInt(0, pool.length - 1);
-          const player = pool[idx];
-          pool.splice(idx, 1);
+        for (let i = 0; i < count; i++) {
+          const player = prioritizedPlayers[i];
 
           const obs = observePlayerLight(actObsRng, player, currentScout, "trainingGround", Object.values(updatedObservations));
           obs.week = stateWithScheduleApplied.currentWeek;
@@ -1831,6 +1911,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
             relatedId: player.id,
             relatedEntityType: "player" as const,
           });
+        }
+
+        const focusTargetIds = focusPlayers("trainingVisit");
+        const focusRepeats = focusDepth("trainingVisit");
+        if (focusTargetIds.length > 0 && focusRepeats > 0) {
+          const focusedPlayers = focusTargetIds
+            .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+            .filter((p): p is Player => !!p);
+
+          for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+            const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+            const focusObs = observePlayerLight(
+              actObsRng,
+              focusedPlayer,
+              currentScout,
+              "trainingGround",
+              Object.values(updatedObservations),
+            );
+            focusObs.week = stateWithScheduleApplied.currentWeek;
+            focusObs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[focusObs.id] = focusObs;
+            observedPlayerIds.add(focusedPlayer.id);
+            weekObservationsGenerated++;
+          }
         }
       }
 
@@ -1951,17 +2055,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
           // Non-youth scouts: existing senior player video analysis
           const previouslyObserved = allPlayers.filter((p) => observedPlayerIds.has(p.id));
           const pool = previouslyObserved.length > 0 ? [...previouslyObserved] : [...allPlayers];
-          const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+          const prioritizedPlayers = prioritizeFocusedPlayers(
+            actObsRng.shuffle(pool),
+            "watchVideo",
+          );
+          const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
 
-          for (let i = 0; i < count && pool.length > 0; i++) {
-            const idx = actObsRng.nextInt(0, pool.length - 1);
-            const player = pool[idx];
-            pool.splice(idx, 1);
+          for (let i = 0; i < count; i++) {
+            const player = prioritizedPlayers[i];
 
             const obs = observePlayerLight(actObsRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations));
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
             updatedObservations[obs.id] = obs;
+            observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
 
             const topAttrs = obs.attributeReadings
@@ -1983,26 +2090,52 @@ export const useGameStore = create<GameStore>((set, get) => ({
               relatedEntityType: "player" as const,
             });
           }
+
+          const focusTargetIds = focusPlayers("watchVideo");
+          const focusRepeats = focusDepth("watchVideo");
+          if (focusTargetIds.length > 0 && focusRepeats > 0) {
+            const focusedPlayers = focusTargetIds
+              .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+              .filter((p): p is Player => !!p);
+
+            for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+              const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+              const focusObs = observePlayerLight(
+                actObsRng,
+                focusedPlayer,
+                currentScout,
+                "videoAnalysis",
+                Object.values(updatedObservations),
+              );
+              focusObs.week = stateWithScheduleApplied.currentWeek;
+              focusObs.season = stateWithScheduleApplied.currentSeason;
+              updatedObservations[focusObs.id] = focusObs;
+              observedPlayerIds.add(focusedPlayer.id);
+              weekObservationsGenerated++;
+            }
+          }
         }
       }
 
       // --- Reserve Match: observe 2-4 fringe players from scout's own club ---
       if (weekResult.reserveMatchesExecuted > 0) {
         const qr = qualityMap.get("reserveMatch");
-        const discMod = qr?.discoveryModifier ?? 0;
+        const discMod = (qr?.discoveryModifier ?? 0) + choiceDiscoveryMod("reserveMatch");
         const [rangeMin, rangeMax] = adjustedRange(2, 4, discMod);
         const clubId = currentScout.currentClubId;
         const candidatePool = clubId
           ? allPlayers.filter((p) => p.clubId === clubId && !observedPlayerIds.has(p.id))
           : allPlayers.filter((p) => !observedPlayerIds.has(p.id));
         const pool = candidatePool.length > 0 ? [...candidatePool] : [...allPlayers.filter((p) => !observedPlayerIds.has(p.id))];
-        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          actObsRng.shuffle(pool),
+          "reserveMatch",
+        );
+        const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
         const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
 
-        for (let i = 0; i < count && pool.length > 0; i++) {
-          const idx = actObsRng.nextInt(0, pool.length - 1);
-          const player = pool[idx];
-          pool.splice(idx, 1);
+        for (let i = 0; i < count; i++) {
+          const player = prioritizedPlayers[i];
 
           const obs = observePlayerLight(actObsRng, player, currentScout, "reserveMatch", Object.values(updatedObservations));
           obs.week = stateWithScheduleApplied.currentWeek;
@@ -2037,12 +2170,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
             relatedEntityType: "player" as const,
           });
         }
+
+        const focusTargetIds = focusPlayers("reserveMatch");
+        const focusRepeats = focusDepth("reserveMatch");
+        if (focusTargetIds.length > 0 && focusRepeats > 0) {
+          const focusedPlayers = focusTargetIds
+            .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+            .filter((p): p is Player => !!p);
+          for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+            const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+            const focusObs = observePlayerLight(
+              actObsRng,
+              focusedPlayer,
+              currentScout,
+              "reserveMatch",
+              Object.values(updatedObservations),
+            );
+            focusObs.week = stateWithScheduleApplied.currentWeek;
+            focusObs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[focusObs.id] = focusObs;
+            observedPlayerIds.add(focusedPlayer.id);
+            weekObservationsGenerated++;
+          }
+        }
       }
 
       // --- Scouting Mission: observe 4-6 players across one league ---
       if (weekResult.scoutingMissionsExecuted > 0) {
         const qr = qualityMap.get("scoutingMission");
-        const discMod = qr?.discoveryModifier ?? 0;
+        const discMod = (qr?.discoveryModifier ?? 0) + choiceDiscoveryMod("scoutingMission");
         const [rangeMin, rangeMax] = adjustedRange(4, 6, discMod);
         // Pick players from a random league's clubs (prefer scout's territory)
         const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
@@ -2055,13 +2211,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? allPlayers.filter((p) => leagueClubIds.has(p.clubId) && !observedPlayerIds.has(p.id))
           : allPlayers.filter((p) => !observedPlayerIds.has(p.id))
         ).slice();
-        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          actObsRng.shuffle(pool),
+          "scoutingMission",
+        );
+        const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
         const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
 
-        for (let i = 0; i < count && pool.length > 0; i++) {
-          const idx = actObsRng.nextInt(0, pool.length - 1);
-          const player = pool[idx];
-          pool.splice(idx, 1);
+        for (let i = 0; i < count; i++) {
+          const player = prioritizedPlayers[i];
 
           const obs = observePlayerLight(actObsRng, player, currentScout, "liveMatch", Object.values(updatedObservations));
           obs.week = stateWithScheduleApplied.currentWeek;
@@ -2096,12 +2254,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
             relatedEntityType: "player" as const,
           });
         }
+
+        const focusTargetIds = focusPlayers("scoutingMission");
+        const focusRepeats = focusDepth("scoutingMission");
+        if (focusTargetIds.length > 0 && focusRepeats > 0) {
+          const focusedPlayers = focusTargetIds
+            .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+            .filter((p): p is Player => !!p);
+          for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+            const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+            const focusObs = observePlayerLight(
+              actObsRng,
+              focusedPlayer,
+              currentScout,
+              "liveMatch",
+              Object.values(updatedObservations),
+            );
+            focusObs.week = stateWithScheduleApplied.currentWeek;
+            focusObs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[focusObs.id] = focusObs;
+            observedPlayerIds.add(focusedPlayer.id);
+            weekObservationsGenerated++;
+          }
+        }
       }
 
       // --- Opposition Analysis: observe 2-3 players from an opposing team ---
       if (weekResult.oppositionAnalysesExecuted > 0) {
         const qr = qualityMap.get("oppositionAnalysis");
-        const discMod = qr?.discoveryModifier ?? 0;
+        const discMod = (qr?.discoveryModifier ?? 0) + choiceDiscoveryMod("oppositionAnalysis");
         const [rangeMin, rangeMax] = adjustedRange(2, 3, discMod);
         // Pick a random opposing club (any club that is not the scout's own)
         const clubIds = Object.keys(stateWithScheduleApplied.clubs).filter(
@@ -2114,13 +2295,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ? allPlayers.filter((p) => p.clubId === targetClubId && !observedPlayerIds.has(p.id))
           : allPlayers.filter((p) => !observedPlayerIds.has(p.id))
         ).slice();
-        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          actObsRng.shuffle(pool),
+          "oppositionAnalysis",
+        );
+        const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
         const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
 
-        for (let i = 0; i < count && pool.length > 0; i++) {
-          const idx = actObsRng.nextInt(0, pool.length - 1);
-          const player = pool[idx];
-          pool.splice(idx, 1);
+        for (let i = 0; i < count; i++) {
+          const player = prioritizedPlayers[i];
 
           const obs = observePlayerLight(actObsRng, player, currentScout, "oppositionAnalysis", Object.values(updatedObservations));
           obs.week = stateWithScheduleApplied.currentWeek;
@@ -2155,21 +2338,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
             relatedEntityType: "player" as const,
           });
         }
+
+        const focusTargetIds = focusPlayers("oppositionAnalysis");
+        const focusRepeats = focusDepth("oppositionAnalysis");
+        if (focusTargetIds.length > 0 && focusRepeats > 0) {
+          const focusedPlayers = focusTargetIds
+            .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+            .filter((p): p is Player => !!p);
+          for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+            const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+            const focusObs = observePlayerLight(
+              actObsRng,
+              focusedPlayer,
+              currentScout,
+              "oppositionAnalysis",
+              Object.values(updatedObservations),
+            );
+            focusObs.week = stateWithScheduleApplied.currentWeek;
+            focusObs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[focusObs.id] = focusObs;
+            observedPlayerIds.add(focusedPlayer.id);
+            weekObservationsGenerated++;
+          }
+        }
       }
 
       // --- Agent Showcase: observe 2-3 players presented by agents ---
       if (weekResult.agentShowcasesExecuted > 0) {
         const qr = qualityMap.get("agentShowcase");
-        const discMod = qr?.discoveryModifier ?? 0;
+        const discMod = (qr?.discoveryModifier ?? 0) + choiceDiscoveryMod("agentShowcase");
         const [rangeMin, rangeMax] = adjustedRange(2, 3, discMod);
         const pool = allPlayers.filter((p) => !observedPlayerIds.has(p.id)).slice();
-        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          actObsRng.shuffle(pool),
+          "agentShowcase",
+        );
+        const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
         const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
 
-        for (let i = 0; i < count && pool.length > 0; i++) {
-          const idx = actObsRng.nextInt(0, pool.length - 1);
-          const player = pool[idx];
-          pool.splice(idx, 1);
+        for (let i = 0; i < count; i++) {
+          const player = prioritizedPlayers[i];
 
           const obs = observePlayerLight(actObsRng, player, currentScout, "agentShowcase", Object.values(updatedObservations));
           obs.week = stateWithScheduleApplied.currentWeek;
@@ -2204,21 +2412,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
             relatedEntityType: "player" as const,
           });
         }
+
+        const focusTargetIds = focusPlayers("agentShowcase");
+        const focusRepeats = focusDepth("agentShowcase");
+        if (focusTargetIds.length > 0 && focusRepeats > 0) {
+          const focusedPlayers = focusTargetIds
+            .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+            .filter((p): p is Player => !!p);
+          for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+            const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+            const focusObs = observePlayerLight(
+              actObsRng,
+              focusedPlayer,
+              currentScout,
+              "agentShowcase",
+              Object.values(updatedObservations),
+            );
+            focusObs.week = stateWithScheduleApplied.currentWeek;
+            focusObs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[focusObs.id] = focusObs;
+            observedPlayerIds.add(focusedPlayer.id);
+            weekObservationsGenerated++;
+          }
+        }
       }
 
       // --- Trial Match: observe 1-2 players in a controlled trial ---
       if (weekResult.trialMatchesExecuted > 0) {
         const qr = qualityMap.get("trialMatch");
-        const discMod = qr?.discoveryModifier ?? 0;
+        const discMod = (qr?.discoveryModifier ?? 0) + choiceDiscoveryMod("trialMatch");
         const [rangeMin, rangeMax] = adjustedRange(1, 2, discMod);
         const pool = allPlayers.filter((p) => !observedPlayerIds.has(p.id)).slice();
-        const count = Math.min(pool.length, actObsRng.nextInt(rangeMin, rangeMax));
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          actObsRng.shuffle(pool),
+          "trialMatch",
+        );
+        const count = Math.min(prioritizedPlayers.length, actObsRng.nextInt(rangeMin, rangeMax));
         const tierLabel = qr ? TIER_LABELS[qr.tier] ?? qr.tier : "";
 
-        for (let i = 0; i < count && pool.length > 0; i++) {
-          const idx = actObsRng.nextInt(0, pool.length - 1);
-          const player = pool[idx];
-          pool.splice(idx, 1);
+        for (let i = 0; i < count; i++) {
+          const player = prioritizedPlayers[i];
 
           const obs = observePlayerLight(actObsRng, player, currentScout, "trialMatch", Object.values(updatedObservations));
           obs.week = stateWithScheduleApplied.currentWeek;
@@ -2279,17 +2512,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
             relatedEntityType: "player" as const,
           });
         }
+
+        const focusTargetIds = focusPlayers("trialMatch");
+        const focusRepeats = focusDepth("trialMatch");
+        if (focusTargetIds.length > 0 && focusRepeats > 0) {
+          const focusedPlayers = focusTargetIds
+            .map((id) => prioritizedPlayers.find((p) => p.id === id) ?? stateWithScheduleApplied.players[id])
+            .filter((p): p is Player => !!p);
+          for (let repeat = 0; repeat < focusRepeats && focusedPlayers.length > 0; repeat++) {
+            const focusedPlayer = focusedPlayers[repeat % focusedPlayers.length];
+            const focusObs = observePlayerLight(
+              actObsRng,
+              focusedPlayer,
+              currentScout,
+              "trialMatch",
+              Object.values(updatedObservations),
+            );
+            focusObs.week = stateWithScheduleApplied.currentWeek;
+            focusObs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[focusObs.id] = focusObs;
+            observedPlayerIds.add(focusedPlayer.id);
+            weekObservationsGenerated++;
+          }
+        }
       }
 
       // --- Contract Negotiations: no observations — just XP and inbox message ---
       if (weekResult.contractNegotiationsExecuted > 0) {
+        const relationshipDelta = choiceRelationshipMod("contractNegotiation");
+        const qualityDelta = choiceReportQualityMod("contractNegotiation");
         actObsMessages.push({
           id: `obs-negotiation-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
           title: "Contract Negotiation Assistance",
-          body: `You assisted the club's negotiation team this week. Your insight into the player's strengths and market value helped structure the offer. XP gained in persuasion and network skills.`,
+          body: `You assisted the club's negotiation team this week. Your insight into the player's strengths and market value helped structure the offer. XP gained in persuasion and network skills.${relationshipDelta !== 0 ? ` Relationship leverage ${relationshipDelta > 0 ? "+" : ""}${relationshipDelta}.` : ""}${qualityDelta !== 0 ? ` Deal quality signal ${qualityDelta > 0 ? "+" : ""}${qualityDelta}.` : ""}`,
           read: false,
           actionRequired: false,
         });
@@ -2300,6 +2558,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const dbRng = createRNG(
           `${gameState.seed}-dbquery-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const queryProfileMod = choiceProfileMod("databaseQuery");
+        const queryAnomalyMod = choiceAnomalyMod("databaseQuery");
         const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
         if (leagueIds.length > 0) {
           const targetLeagueId = leagueIds[dbRng.nextInt(0, leagueIds.length - 1)];
@@ -2314,15 +2574,72 @@ export const useGameStore = create<GameStore>((set, get) => ({
               stateWithScheduleApplied.currentSeason,
               stateWithScheduleApplied.currentWeek,
             );
+            let effectiveProfiles = [...queryResult.profiles];
+            let effectivePlayerIds = [...queryResult.playerIds];
+            const selectedSet = new Set(effectivePlayerIds);
+
+            if (queryProfileMod > 0) {
+              const leagueClubIds = new Set(targetLeague.clubIds);
+              const extraCandidates = Object.values(stateWithScheduleApplied.players).filter(
+                (p) => leagueClubIds.has(p.clubId) && !selectedSet.has(p.id),
+              );
+              const extraCount = Math.min(queryProfileMod, extraCandidates.length);
+              const extraPlayers = dbRng.shuffle(extraCandidates).slice(0, extraCount);
+              for (const player of extraPlayers) {
+                const extraProfile = executeDeepVideoAnalysis(
+                  dbRng,
+                  currentScout,
+                  player,
+                  stateWithScheduleApplied.currentSeason,
+                  stateWithScheduleApplied.currentWeek,
+                  stateWithScheduleApplied.statisticalProfiles[player.id],
+                );
+                effectiveProfiles.push(extraProfile);
+                effectivePlayerIds.push(player.id);
+                selectedSet.add(player.id);
+              }
+            } else if (queryProfileMod < 0 && effectiveProfiles.length > 0) {
+              const keepCount = Math.max(1, effectiveProfiles.length + queryProfileMod);
+              const trimmedProfiles = dbRng.shuffle(effectiveProfiles).slice(0, keepCount);
+              const keepIds = new Set(trimmedProfiles.map((p) => p.playerId));
+              effectiveProfiles = trimmedProfiles;
+              effectivePlayerIds = effectivePlayerIds.filter((id) => keepIds.has(id));
+            }
+
             const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
-            for (const profile of queryResult.profiles) {
+            for (const profile of effectiveProfiles) {
               updatedProfiles[profile.playerId] = profile;
             }
+
+            let nextAnomalyFlags = stateWithScheduleApplied.anomalyFlags;
+            if (queryAnomalyMod > 0 && effectivePlayerIds.length > 0) {
+              const anomalyCandidates = dbRng.shuffle(effectivePlayerIds).slice(
+                0,
+                Math.min(queryAnomalyMod, effectivePlayerIds.length),
+              );
+              const generated: AnomalyFlag[] = anomalyCandidates.map((playerId, idx) => {
+                const player = stateWithScheduleApplied.players[playerId];
+                return {
+                  id: `query-anomaly-${playerId}-w${stateWithScheduleApplied.currentWeek}-i${idx}`,
+                  playerId,
+                  stat: "goals",
+                  direction: dbRng.nextFloat(0, 1) > 0.5 ? "positive" : "negative",
+                  severity: +(dbRng.nextFloat(0, 1) * 1.5 + 0.5).toFixed(1),
+                  description: `${player?.firstName ?? "Player"} ${player?.lastName ?? ""} triggered a query-side anomaly check due to outlier metric combinations.`,
+                  investigated: false,
+                  week: stateWithScheduleApplied.currentWeek,
+                  season: stateWithScheduleApplied.currentSeason,
+                };
+              });
+              nextAnomalyFlags = [...stateWithScheduleApplied.anomalyFlags, ...generated];
+            }
+
             stateWithScheduleApplied = {
               ...stateWithScheduleApplied,
               statisticalProfiles: updatedProfiles,
+              anomalyFlags: nextAnomalyFlags,
             };
-            const playerNames = queryResult.playerIds
+            const playerNames = effectivePlayerIds
               .slice(0, 5)
               .map((id) => {
                 const p = stateWithScheduleApplied.players[id];
@@ -2335,7 +2652,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               season: stateWithScheduleApplied.currentSeason,
               type: "feedback" as const,
               title: `Database Query: ${targetLeague.name}`,
-              body: `Your database query returned ${queryResult.playerIds.length} player${queryResult.playerIds.length !== 1 ? "s" : ""} in ${targetLeague.name}. Statistical profiles generated. Key finds: ${playerNames || "none"}.`,
+              body: `Your database query returned ${effectivePlayerIds.length} player${effectivePlayerIds.length !== 1 ? "s" : ""} in ${targetLeague.name}. Statistical profiles generated. Key finds: ${playerNames || "none"}.${queryAnomalyMod > 0 ? ` Additional anomaly flags: +${Math.min(queryAnomalyMod, effectivePlayerIds.length)}.` : ""}`,
               read: false,
               actionRequired: false,
             });
@@ -2348,52 +2665,68 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const deepVideoRng = createRNG(
           `${gameState.seed}-deepvideo-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const deepProfileMod = choiceProfileMod("deepVideoAnalysis");
         const previouslyObserved = allPlayers.filter((p) => observedPlayerIds.has(p.id));
         const pool = previouslyObserved.length > 0 ? [...previouslyObserved] : [...allPlayers];
-        if (pool.length > 0) {
-          const player = pool[deepVideoRng.nextInt(0, pool.length - 1)];
-          const existingProfile = stateWithScheduleApplied.statisticalProfiles[player.id];
-          const deepProfile = executeDeepVideoAnalysis(
-            deepVideoRng,
-            currentScout,
-            player,
-            stateWithScheduleApplied.currentSeason,
-            stateWithScheduleApplied.currentWeek,
-            existingProfile,
+        const prioritizedPlayers = prioritizeFocusedPlayers(
+          deepVideoRng.shuffle(pool),
+          "deepVideoAnalysis",
+        );
+        if (prioritizedPlayers.length > 0) {
+          const analysisCount = Math.max(
+            1,
+            Math.min(prioritizedPlayers.length, 1 + deepProfileMod),
           );
-          const updatedProfiles = {
-            ...stateWithScheduleApplied.statisticalProfiles,
-            [player.id]: deepProfile,
-          };
+          const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
+          for (let i = 0; i < analysisCount; i++) {
+            const player = prioritizedPlayers[i];
+            const existingProfile = updatedProfiles[player.id];
+            const deepProfile = executeDeepVideoAnalysis(
+              deepVideoRng,
+              currentScout,
+              player,
+              stateWithScheduleApplied.currentSeason,
+              stateWithScheduleApplied.currentWeek,
+              existingProfile,
+            );
+            updatedProfiles[player.id] = deepProfile;
 
-          const obs = observePlayerLight(deepVideoRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations));
-          obs.week = stateWithScheduleApplied.currentWeek;
-          obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
-          weekObservationsGenerated++;
+            const obs = observePlayerLight(
+              deepVideoRng,
+              player,
+              currentScout,
+              "videoAnalysis",
+              Object.values(updatedObservations),
+            );
+            obs.week = stateWithScheduleApplied.currentWeek;
+            obs.season = stateWithScheduleApplied.currentSeason;
+            updatedObservations[obs.id] = obs;
+            observedPlayerIds.add(player.id);
+            weekObservationsGenerated++;
+
+            const topAttrs = obs.attributeReadings
+              .sort((a, b) => b.perceivedValue - a.perceivedValue)
+              .slice(0, 3)
+              .map((r) => `${r.attribute} ${r.perceivedValue}`)
+              .join(", ");
+            actObsMessages.push({
+              id: `obs-deepvideo-${player.id}-w${stateWithScheduleApplied.currentWeek}-i${i}`,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+              type: "feedback" as const,
+              title: `Deep Video Analysis: ${player.firstName} ${player.lastName}`,
+              body: `You conducted an intensive video analysis session on ${player.firstName} ${player.lastName} (${player.position}). Statistical profile ${existingProfile ? "refined" : "created"}. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
+              read: false,
+              actionRequired: false,
+              relatedId: player.id,
+              relatedEntityType: "player" as const,
+            });
+          }
 
           stateWithScheduleApplied = {
             ...stateWithScheduleApplied,
             statisticalProfiles: updatedProfiles,
           };
-
-          const topAttrs = obs.attributeReadings
-            .sort((a, b) => b.perceivedValue - a.perceivedValue)
-            .slice(0, 3)
-            .map((r) => `${r.attribute} ${r.perceivedValue}`)
-            .join(", ");
-          actObsMessages.push({
-            id: `obs-deepvideo-${player.id}-w${stateWithScheduleApplied.currentWeek}`,
-            week: stateWithScheduleApplied.currentWeek,
-            season: stateWithScheduleApplied.currentSeason,
-            type: "feedback" as const,
-            title: `Deep Video Analysis: ${player.firstName} ${player.lastName}`,
-            body: `You conducted an intensive video analysis session on ${player.firstName} ${player.lastName} (${player.position}). Statistical profile ${existingProfile ? "refined" : "created"}. ${obs.attributeReadings.length} attributes assessed. Notable: ${topAttrs}.`,
-            read: false,
-            actionRequired: false,
-            relatedId: player.id,
-            relatedEntityType: "player" as const,
-          });
         }
       }
 
@@ -2402,6 +2735,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const briefingRng = createRNG(
           `${gameState.seed}-briefing-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const anomalyMod = choiceAnomalyMod("statsBriefing");
         const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
         if (leagueIds.length > 0) {
           const targetLeagueId = leagueIds[briefingRng.nextInt(0, leagueIds.length - 1)];
@@ -2415,9 +2749,34 @@ export const useGameStore = create<GameStore>((set, get) => ({
               stateWithScheduleApplied.currentSeason,
               stateWithScheduleApplied.currentWeek,
             );
+            let briefingAnomalies = [...briefing.anomalies];
+            if (anomalyMod < 0) {
+              const keepCount = Math.max(0, briefingAnomalies.length + anomalyMod);
+              briefingAnomalies = briefingAnomalies.slice(0, keepCount);
+            } else if (anomalyMod > 0) {
+              const extraCandidates = briefing.topPerformers.filter(
+                (playerId) => !briefingAnomalies.some((a) => a.playerId === playerId),
+              );
+              const extraCount = Math.min(anomalyMod, extraCandidates.length);
+              for (let i = 0; i < extraCount; i++) {
+                const playerId = extraCandidates[i];
+                const player = stateWithScheduleApplied.players[playerId];
+                briefingAnomalies.push({
+                  id: `briefing-extra-${playerId}-w${stateWithScheduleApplied.currentWeek}-i${i}`,
+                  playerId,
+                  stat: "goals",
+                  direction: briefingRng.nextFloat(0, 1) > 0.5 ? "positive" : "negative",
+                  severity: +(briefingRng.nextFloat(0, 1) * 1.2 + 0.4).toFixed(1),
+                  description: `${player?.firstName ?? "Player"} ${player?.lastName ?? ""} was flagged during focused anomaly review.`,
+                  investigated: false,
+                  week: stateWithScheduleApplied.currentWeek,
+                  season: stateWithScheduleApplied.currentSeason,
+                });
+              }
+            }
             const updatedAnomalyFlags = [
               ...stateWithScheduleApplied.anomalyFlags,
-              ...briefing.anomalies,
+              ...briefingAnomalies,
             ];
             stateWithScheduleApplied = {
               ...stateWithScheduleApplied,
@@ -2429,7 +2788,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               season: stateWithScheduleApplied.currentSeason,
               type: "feedback" as const,
               title: `Stats Briefing: ${targetLeague.name}`,
-              body: briefing.highlights.join("\n"),
+              body: `${briefing.highlights.join("\n")}\n\nAnomalies flagged this cycle: ${briefingAnomalies.length}.`,
               read: false,
               actionRequired: false,
             });
@@ -2437,15 +2796,62 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
-      // --- Data Conference: no observations — XP and networking ---
+      // --- Data Conference: networking + optional profile breakthroughs ---
       if (weekResult.dataConferencesExecuted > 0) {
+        const conferenceRng = createRNG(
+          `${gameState.seed}-conference-${gameState.currentWeek}-${gameState.currentSeason}`,
+        );
+        const conferenceRelMod = choiceRelationshipMod("dataConference");
+        const conferenceProfileMod = choiceProfileMod("dataConference");
+        const conferenceQualityMod = choiceReportQualityMod("dataConference");
+
+        let conferenceProfilesAdded = 0;
+        if (conferenceProfileMod > 0) {
+          const profileCandidates = conferenceRng.shuffle(
+            allPlayers.filter((p) => !stateWithScheduleApplied.statisticalProfiles[p.id]),
+          );
+          const selected = profileCandidates.slice(
+            0,
+            Math.min(conferenceProfileMod, profileCandidates.length),
+          );
+          if (selected.length > 0) {
+            const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
+            for (const player of selected) {
+              updatedProfiles[player.id] = executeDeepVideoAnalysis(
+                conferenceRng,
+                currentScout,
+                player,
+                stateWithScheduleApplied.currentSeason,
+                stateWithScheduleApplied.currentWeek,
+                updatedProfiles[player.id],
+              );
+            }
+            conferenceProfilesAdded = selected.length;
+            stateWithScheduleApplied = {
+              ...stateWithScheduleApplied,
+              statisticalProfiles: updatedProfiles,
+            };
+          }
+        }
+
+        if (conferenceRelMod !== 0 && stateWithScheduleApplied.dataAnalysts.length > 0) {
+          const adjustedAnalysts = stateWithScheduleApplied.dataAnalysts.map((analyst) => ({
+            ...analyst,
+            morale: Math.max(0, Math.min(100, analyst.morale + conferenceRelMod * 2)),
+          }));
+          stateWithScheduleApplied = {
+            ...stateWithScheduleApplied,
+            dataAnalysts: adjustedAnalysts,
+          };
+        }
+
         actObsMessages.push({
           id: `obs-conference-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
           title: "Data Conference Attended",
-          body: `You attended a data analytics conference this week. Networking with analysts and data scientists from across football expanded your professional network and sharpened your statistical toolkit. XP gained in data literacy.`,
+          body: `You attended a data analytics conference this week. Networking with analysts and data scientists from across football expanded your professional network and sharpened your statistical toolkit.${conferenceProfilesAdded > 0 ? ` Fresh contacts opened ${conferenceProfilesAdded} new profile lead${conferenceProfilesAdded !== 1 ? "s" : ""}.` : ""}${conferenceQualityMod !== 0 ? ` Method quality signal ${conferenceQualityMod > 0 ? "+" : ""}${conferenceQualityMod}.` : ""}`,
           read: false,
           actionRequired: false,
         });
@@ -2456,38 +2862,67 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const calibrationRng = createRNG(
           `${gameState.seed}-calibration-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const calibrationProfileMod = choiceProfileMod("algorithmCalibration");
+        const calibrationAnomalyMod = choiceAnomalyMod("algorithmCalibration");
         // Reduce noise in existing profiles by re-running deep analysis on a sample
         const profiledPlayerIds = Object.keys(stateWithScheduleApplied.statisticalProfiles);
-        const calibrated = Math.min(3, profiledPlayerIds.length);
+        const targetCalibrations = Math.max(1, 3 + calibrationProfileMod);
+        const calibrated = Math.min(targetCalibrations, profiledPlayerIds.length);
         const sampleIds = calibrationRng.shuffle(profiledPlayerIds).slice(0, calibrated);
-        if (sampleIds.length > 0) {
-          const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
-          for (const playerId of sampleIds) {
-            const player = stateWithScheduleApplied.players[playerId];
-            const existingProfile = updatedProfiles[playerId];
-            if (player && existingProfile) {
-              updatedProfiles[playerId] = executeDeepVideoAnalysis(
-                calibrationRng,
-                currentScout,
-                player,
-                stateWithScheduleApplied.currentSeason,
-                stateWithScheduleApplied.currentWeek,
-                existingProfile,
-              );
-            }
+        const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
+        for (const playerId of sampleIds) {
+          const player = stateWithScheduleApplied.players[playerId];
+          const existingProfile = updatedProfiles[playerId];
+          if (player && existingProfile) {
+            updatedProfiles[playerId] = executeDeepVideoAnalysis(
+              calibrationRng,
+              currentScout,
+              player,
+              stateWithScheduleApplied.currentSeason,
+              stateWithScheduleApplied.currentWeek,
+              existingProfile,
+            );
           }
-          stateWithScheduleApplied = {
-            ...stateWithScheduleApplied,
-            statisticalProfiles: updatedProfiles,
-          };
         }
+
+        let updatedAnomalyFlags = [...stateWithScheduleApplied.anomalyFlags];
+        if (calibrationAnomalyMod > 0 && sampleIds.length > 0) {
+          const anomalySample = calibrationRng.shuffle(sampleIds).slice(
+            0,
+            Math.min(calibrationAnomalyMod, sampleIds.length),
+          );
+          const generatedCalibrationFlags: AnomalyFlag[] = anomalySample.map((playerId, idx) => {
+            const player = stateWithScheduleApplied.players[playerId];
+            return {
+              id: `calibration-anomaly-${playerId}-w${stateWithScheduleApplied.currentWeek}-i${idx}`,
+              playerId,
+              stat: "passCompletion",
+              direction: calibrationRng.nextFloat(0, 1) > 0.5 ? "positive" : "negative",
+              severity: +(calibrationRng.nextFloat(0, 1) * 1.3 + 0.5).toFixed(1),
+              description: `${player?.firstName ?? "Player"} ${player?.lastName ?? ""} surfaced during model recalibration as a statistical outlier.`,
+              investigated: false,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+            };
+          });
+          updatedAnomalyFlags = [...updatedAnomalyFlags, ...generatedCalibrationFlags];
+        } else if (calibrationAnomalyMod < 0 && updatedAnomalyFlags.length > 0) {
+          const toTrim = Math.min(Math.abs(calibrationAnomalyMod), updatedAnomalyFlags.length);
+          updatedAnomalyFlags = updatedAnomalyFlags.slice(toTrim);
+        }
+
+        stateWithScheduleApplied = {
+          ...stateWithScheduleApplied,
+          statisticalProfiles: updatedProfiles,
+          anomalyFlags: updatedAnomalyFlags,
+        };
         actObsMessages.push({
           id: `obs-calibration-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
           title: "Algorithm Calibration Complete",
-          body: `You recalibrated your statistical models this week. ${calibrated} player profile${calibrated !== 1 ? "s" : ""} refined with improved accuracy. Future database queries will return more reliable data.`,
+          body: `You recalibrated your statistical models this week. ${calibrated} player profile${calibrated !== 1 ? "s" : ""} refined with improved accuracy.${calibrationAnomalyMod > 0 ? ` Additional anomalies identified: +${Math.min(calibrationAnomalyMod, sampleIds.length)}.` : calibrationAnomalyMod < 0 ? ` Noise reduced: ${Math.min(Math.abs(calibrationAnomalyMod), stateWithScheduleApplied.anomalyFlags.length)} low-confidence flags cleared.` : ""}`,
           read: false,
           actionRequired: false,
         });
@@ -2498,6 +2933,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const marketRng = createRNG(
           `${gameState.seed}-market-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const marketProfileMod = choiceProfileMod("marketInefficiency");
+        const marketAnomalyMod = choiceAnomalyMod("marketInefficiency");
+        const marketQualityMod = choiceReportQualityMod("marketInefficiency");
         // Find players whose CA significantly exceeds their market value expectations
         const undervalued = allPlayers
           .filter((p) => {
@@ -2505,10 +2943,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
             return p.marketValue < caExpectedValue * 0.7;
           })
           .slice();
-        const sampleSize = Math.min(5, undervalued.length);
-        const finds = marketRng.shuffle(undervalued).slice(0, sampleSize);
-        const findsText = finds.length > 0
-          ? finds.map((p) => {
+        const sampleSize = Math.min(
+          Math.max(1, 5 + marketProfileMod),
+          undervalued.length,
+        );
+        const baseFinds = marketRng.shuffle(undervalued).slice(0, sampleSize);
+        const effectiveFinds = marketAnomalyMod < 0
+          ? baseFinds.slice(0, Math.max(0, baseFinds.length + marketAnomalyMod))
+          : baseFinds;
+        let marketAnomaliesAdded = 0;
+        if (marketAnomalyMod > 0 && effectiveFinds.length > 0) {
+          const anomalyPlayers = marketRng.shuffle(effectiveFinds).slice(
+            0,
+            Math.min(marketAnomalyMod, effectiveFinds.length),
+          );
+          const generatedMarketFlags: AnomalyFlag[] = anomalyPlayers.map((player, idx) => ({
+            id: `market-anomaly-${player.id}-w${stateWithScheduleApplied.currentWeek}-i${idx}`,
+            playerId: player.id,
+            stat: "goals",
+            direction: marketRng.nextFloat(0, 1) > 0.5 ? "positive" : "negative",
+            severity: +(marketRng.nextFloat(0, 1) * 1.4 + 0.6).toFixed(1),
+            description: `${player.firstName} ${player.lastName} showed a valuation/performance mismatch in this market scan.`,
+            investigated: false,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+          }));
+          marketAnomaliesAdded = generatedMarketFlags.length;
+          stateWithScheduleApplied = {
+            ...stateWithScheduleApplied,
+            anomalyFlags: [...stateWithScheduleApplied.anomalyFlags, ...generatedMarketFlags],
+          };
+        }
+        const findsText = effectiveFinds.length > 0
+          ? effectiveFinds.map((p) => {
               const club = p.clubId ? stateWithScheduleApplied.clubs[p.clubId] : undefined;
               return `${p.firstName} ${p.lastName} (${p.position}, ${club?.name ?? "Unknown"})`;
             }).join("; ")
@@ -2519,7 +2986,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
           title: "Market Inefficiency Scan",
-          body: `Your scan identified ${finds.length} potentially undervalued player${finds.length !== 1 ? "s" : ""} this week.\n\n${findsText}`,
+          body: `Your scan identified ${effectiveFinds.length} potentially undervalued player${effectiveFinds.length !== 1 ? "s" : ""} this week.${marketAnomaliesAdded > 0 ? ` Added ${marketAnomaliesAdded} anomaly follow-up${marketAnomaliesAdded !== 1 ? "s" : ""}.` : ""}${marketQualityMod !== 0 ? ` Confidence ${marketQualityMod > 0 ? "up" : "down"} (${marketQualityMod > 0 ? "+" : ""}${marketQualityMod}).` : ""}\n\n${findsText}`,
           read: false,
           actionRequired: false,
         });
@@ -2530,8 +2997,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const meetingRng = createRNG(
           `${gameState.seed}-analystmeeting-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const meetingRelMod = choiceRelationshipMod("analyticsTeamMeeting");
+        const meetingAnomalyMod = choiceAnomalyMod("analyticsTeamMeeting");
+        const meetingProfileMod = choiceProfileMod("analyticsTeamMeeting");
+        const meetingQualityMod = choiceReportQualityMod("analyticsTeamMeeting");
         const updatedAnalysts = [...stateWithScheduleApplied.dataAnalysts];
         const updatedAnalystReports = { ...stateWithScheduleApplied.analystReports };
+        const profileCandidateIds = new Set<string>();
 
         for (let analystIdx = 0; analystIdx < updatedAnalysts.length; analystIdx++) {
           const analyst = updatedAnalysts[analystIdx];
@@ -2540,19 +3012,88 @@ export const useGameStore = create<GameStore>((set, get) => ({
           if (!analystLeague) continue;
 
           const reportId = `analyst-report-${analyst.id}-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`;
-          const report = generateAnalystReport(
+          const boostedAnalyst = {
+            ...analyst,
+            morale: Math.max(
+              0,
+              Math.min(100, analyst.morale + meetingRelMod * 3 + meetingQualityMod * 2),
+            ),
+          };
+          let report = generateAnalystReport(
             meetingRng,
-            analyst,
+            boostedAnalyst,
             analystLeague,
             stateWithScheduleApplied.players,
             stateWithScheduleApplied.currentSeason,
             stateWithScheduleApplied.currentWeek,
             reportId,
           );
+          if (meetingAnomalyMod !== 0) {
+            if (meetingAnomalyMod < 0) {
+              const keepCount = Math.max(0, report.anomalies.length + meetingAnomalyMod);
+              report = { ...report, anomalies: report.anomalies.slice(0, keepCount) };
+            } else if (report.highlightedPlayerIds.length > 0) {
+              const existing = new Set(report.anomalies.map((a) => a.playerId));
+              const extraTargets = report.highlightedPlayerIds.filter((id) => !existing.has(id)).slice(
+                0,
+                meetingAnomalyMod,
+              );
+              if (extraTargets.length > 0) {
+                const extraAnomalies: AnomalyFlag[] = extraTargets.map((playerId, idx) => {
+                  const player = stateWithScheduleApplied.players[playerId];
+                  return {
+                    id: `meeting-anomaly-${playerId}-w${stateWithScheduleApplied.currentWeek}-i${idx}`,
+                    playerId,
+                    stat: "assists",
+                    direction: meetingRng.nextFloat(0, 1) > 0.5 ? "positive" : "negative",
+                    severity: +(meetingRng.nextFloat(0, 1) * 1.1 + 0.5).toFixed(1),
+                    description: `${player?.firstName ?? "Player"} ${player?.lastName ?? ""} was escalated during analyst standup anomaly triage.`,
+                    investigated: false,
+                    week: stateWithScheduleApplied.currentWeek,
+                    season: stateWithScheduleApplied.currentSeason,
+                  };
+                });
+                report = { ...report, anomalies: [...report.anomalies, ...extraAnomalies] };
+              }
+            }
+          }
+          for (const playerId of report.highlightedPlayerIds) {
+            profileCandidateIds.add(playerId);
+          }
           updatedAnalystReports[reportId] = report;
 
-          // Morale improves when a meeting is held
-          updatedAnalysts[analystIdx] = updateAnalystMorale(analyst, { hadMeeting: true });
+          // Morale improves when a meeting is held, with interaction-based adjustment.
+          const meetingUpdated = updateAnalystMorale(analyst, { hadMeeting: true });
+          updatedAnalysts[analystIdx] = {
+            ...meetingUpdated,
+            morale: Math.max(0, Math.min(100, meetingUpdated.morale + meetingRelMod * 2)),
+          };
+        }
+
+        let profilesAddedFromMeeting = 0;
+        if (meetingProfileMod > 0 && profileCandidateIds.size > 0) {
+          const candidates = meetingRng.shuffle([...profileCandidateIds]);
+          const selectedIds = candidates.slice(0, Math.min(meetingProfileMod, candidates.length));
+          if (selectedIds.length > 0) {
+            const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
+            for (const playerId of selectedIds) {
+              const player = stateWithScheduleApplied.players[playerId];
+              if (!player) continue;
+              updatedProfiles[playerId] = executeDeepVideoAnalysis(
+                meetingRng,
+                currentScout,
+                player,
+                stateWithScheduleApplied.currentSeason,
+                stateWithScheduleApplied.currentWeek,
+                updatedProfiles[playerId],
+              );
+              profilesAddedFromMeeting++;
+            }
+            stateWithScheduleApplied = {
+              ...stateWithScheduleApplied,
+              statisticalProfiles: updatedProfiles,
+            };
+          }
         }
 
         stateWithScheduleApplied = {
@@ -2567,7 +3108,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
           title: "Analytics Team Meeting",
-          body: `You held a team meeting with your data analysts this week. ${updatedAnalysts.length > 0 ? `${updatedAnalysts.length} analyst${updatedAnalysts.length !== 1 ? "s" : ""} reported in. Reports are available in your analytics dashboard.` : "No analysts are currently assigned to your team."}`,
+          body: `You held a team meeting with your data analysts this week. ${updatedAnalysts.length > 0 ? `${updatedAnalysts.length} analyst${updatedAnalysts.length !== 1 ? "s" : ""} reported in.` : "No analysts are currently assigned to your team."}${profilesAddedFromMeeting > 0 ? ` ${profilesAddedFromMeeting} additional profile${profilesAddedFromMeeting !== 1 ? "s" : ""} were deepened from meeting actions.` : ""} Reports are available in your analytics dashboard.`,
           read: false,
           actionRequired: false,
         });
@@ -4623,19 +5164,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (selectedFocusIds.length === 0 && !focusedPlayerId && current.observations.length > 0) {
         selectedFocusIds = [current.observations[0].playerId];
       }
+      if (selectedFocusIds.length === 0 && !focusedPlayerId) {
+        const priorObservedIds = weekSimulation.dayResults
+          .slice(0, currentDay + 1)
+          .flatMap((day) => day.observations.map((obs) => obs.playerId));
+        if (priorObservedIds.length > 0) {
+          const uniquePrior = Array.from(new Set(priorObservedIds));
+          selectedFocusIds = uniquePrior.slice(0, current.interaction.maxFocusPlayers ?? 3);
+          focusedPlayerId = selectedFocusIds[0];
+        }
+      }
       if (!focusedPlayerId) {
         const obsCounts = new Map<string, number>();
         for (const obs of Object.values(gameState.observations)) {
           obsCounts.set(obs.playerId, (obsCounts.get(obs.playerId) ?? 0) + 1);
         }
-        const target = Object.values(gameState.unsignedYouth)
-          .filter((y) => !y.placed && !y.retired)
-          .sort((a, b) => {
-            const aScore = (obsCounts.get(a.player.id) ?? 0) * 10 + a.buzzLevel;
-            const bScore = (obsCounts.get(b.player.id) ?? 0) * 10 + b.buzzLevel;
-            return bScore - aScore;
-          })[0];
-        focusedPlayerId = target?.player.id;
+        if (gameState.scout.primarySpecialization === "youth") {
+          const target = Object.values(gameState.unsignedYouth)
+            .filter((y) => !y.placed && !y.retired)
+            .sort((a, b) => {
+              const aScore = (obsCounts.get(a.player.id) ?? 0) * 10 + a.buzzLevel;
+              const bScore = (obsCounts.get(b.player.id) ?? 0) * 10 + b.buzzLevel;
+              return bScore - aScore;
+            })[0];
+          focusedPlayerId = target?.player.id;
+        } else {
+          const topObserved = [...obsCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .map(([playerId]) => playerId);
+          if (topObserved.length > 0) {
+            selectedFocusIds = topObserved.slice(0, current.interaction.maxFocusPlayers ?? 3);
+            focusedPlayerId = selectedFocusIds[0];
+          }
+        }
       }
       if (selectedFocusIds.length === 0 && focusedPlayerId) {
         selectedFocusIds = [focusedPlayerId];
@@ -4724,15 +5285,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const sim = get().weekSimulation;
     if (!sim) return;
 
-    // Auto-resolve unresolved interactions with the default scouting choice.
+    // Auto-resolve unresolved interactions with activity-specific defaults.
     const resolvedDayResults = sim.dayResults.map((day) => {
       if (!isDayInteractionPending(day) || !day.interaction) return day;
+      const defaultChoice = day.activity ? getActivityDefaultChoice(day.activity.type) : "scan";
+      let defaultFocusIds = [...(day.interaction.focusedPlayerIds ?? [])];
+      if (defaultChoice === "focus" && defaultFocusIds.length === 0) {
+        defaultFocusIds = day.observations
+          .slice(0, day.interaction.maxFocusPlayers ?? 3)
+          .map((obs) => obs.playerId);
+      }
+      const defaultFocusId = defaultFocusIds[0] ?? day.interaction.focusedPlayerId;
+      const narrativeSuffix: Record<SimulationChoiceId, string> = {
+        scan: "You keep a balanced broad scan approach.",
+        focus: defaultFocusIds.length > 1
+          ? "You split focus across known leads to build deeper reads."
+          : "You lock onto your top lead for a deeper read.",
+        network: "You prioritize relationship and context-building this day.",
+      };
       return {
         ...day,
-        narrative: `${day.narrative}\n\nYou keep a balanced broad scan approach.`,
+        narrative: `${day.narrative}\n\n${narrativeSuffix[defaultChoice]}`,
         interaction: {
           ...day.interaction,
-          selectedOptionId: "scan",
+          selectedOptionId: defaultChoice,
+          focusedPlayerId: defaultFocusId,
+          focusedPlayerIds: defaultFocusIds,
         },
       };
     });

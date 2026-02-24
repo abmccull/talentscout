@@ -418,7 +418,7 @@ function DayCard({ dayResult, focusCandidates = [], onChooseInteraction }: DayCa
                       key={option.id}
                       variant="outline"
                       size="sm"
-                      className="h-auto justify-start px-3 py-2 text-left"
+                      className="h-auto min-w-0 justify-start overflow-hidden px-3 py-2 text-left"
                       onClick={() => {
                         if (option.id === "focus") {
                           if (availableFocusCandidates.length > 0) {
@@ -434,9 +434,9 @@ function DayCard({ dayResult, focusCandidates = [], onChooseInteraction }: DayCa
                         onChooseInteraction?.(option.id);
                       }}
                     >
-                      <div>
+                      <div className="min-w-0">
                         <div className="text-xs font-medium text-white">{option.label}</div>
-                        <div className="text-[11px] text-zinc-400">{option.description}</div>
+                        <div className="text-[11px] text-zinc-400 line-clamp-2">{option.description}</div>
                       </div>
                     </Button>
                   ))}

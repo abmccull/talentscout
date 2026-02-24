@@ -514,7 +514,9 @@ export function PlayerProfile() {
 
   if (!gameState || !selectedPlayerId) return null;
 
-  const player = gameState.players[selectedPlayerId];
+  const player = gameState.players[selectedPlayerId]
+    ?? gameState.unsignedYouth[selectedPlayerId]?.player
+    ?? null;
   if (!player) return null;
 
   const club = getClub(player.clubId);

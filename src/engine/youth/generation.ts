@@ -429,7 +429,7 @@ export function generateRegionalYouth(
       buzzLevel: 0,
       discoveredBy: [],
       regionId,
-      country: country.name,
+      country: country.key,
       venueAppearances: [],
       generatedSeason: season,
       placed: false,

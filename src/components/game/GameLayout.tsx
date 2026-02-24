@@ -123,6 +123,7 @@ function getNavVisibility(
   effectiveWeek: number,
   countryCount: number,
   careerPath: string,
+  specialization: string,
 ): boolean {
   if (ALWAYS_VISIBLE.has(screen)) return true;
 
@@ -151,10 +152,13 @@ function getNavVisibility(
     case "leaderboard":
       return true;
 
+    // Youth Hub: always visible for youth scouts, tier 3+ for others
+    case "youthScouting":
+      return specialization === "youth" || tier >= 3;
+
     // Tier 3+ items
     case "discoveries":
     case "analytics":
-    case "youthScouting":
     case "alumniDashboard":
       return tier >= 3;
 
@@ -189,6 +193,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   const tier = gameState.scout.careerTier;
   const countryCount = gameState.countries.length;
   const careerPath = gameState.scout.careerPath ?? "club";
+  const specialization = gameState.scout.primarySpecialization ?? "";
   // effectiveWeek accumulates across seasons so week-gated items stay visible
   // after season 1 ends (season 2+ means week >= 53, unlocking everything)
   const effectiveWeek =
@@ -198,7 +203,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   const visibleSections = NAV_SECTIONS.map((section) => ({
     ...section,
     visibleItems: section.items.filter(({ screen }) =>
-      getNavVisibility(screen, tier, effectiveWeek, countryCount, careerPath),
+      getNavVisibility(screen, tier, effectiveWeek, countryCount, careerPath, specialization),
     ),
   })).filter((section) => section.visibleItems.length > 0);
 

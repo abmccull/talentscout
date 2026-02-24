@@ -152,7 +152,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "gettingStarted",
     icon: "🤝",
     check: (state) =>
-      Object.values(state.contacts).some((c) => c.relationship > 20),
+      Object.values(state.contacts).some((c) => c.relationship > 30),
   },
   {
     id: "first-perk",

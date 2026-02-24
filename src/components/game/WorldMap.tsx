@@ -82,41 +82,41 @@ const EUROPE_KEYS = new Set([
 // preserveAspectRatio="xMidYMid slice". Positions are traced from visible
 // landmasses and city-light clusters on the actual image.
 const COUNTRY_SVG_POS: Record<string, { x: number; y: number }> = {
-  // Europe — calibrated from rendered screenshot against visible landmasses
-  england:     { x: 382, y: 142 },  // London/SE England
-  scotland:    { x: 377, y: 132 },  // Central Scotland
-  france:      { x: 388, y: 150 },  // Paris region
-  spain:       { x: 378, y: 162 },  // Central Iberia
-  portugal:    { x: 370, y: 161 },  // Western Iberia
-  germany:     { x: 400, y: 140 },  // Central Germany
-  netherlands: { x: 394, y: 135 },  // Dutch coast
-  belgium:     { x: 394, y: 142 },  // Between FR/NL
-  switzerland: { x: 399, y: 150 },  // Alpine region
-  italy:       { x: 406, y: 156 },  // Rome area
-  turkey:      { x: 435, y: 155 },  // Ankara area
+  // Europe — calibrated via /calibrate tool against actual background
+  england:      { x: 393, y: 120 },
+  scotland:     { x: 388, y: 109 },
+  france:       { x: 399, y: 132 },
+  spain:        { x: 387, y: 146 },
+  portugal:     { x: 379, y: 145 },
+  germany:      { x: 411, y: 123 },
+  netherlands:  { x: 407, y: 119 },
+  belgium:      { x: 403, y: 122 },
+  switzerland:  { x: 408, y: 128 },
+  italy:        { x: 422, y: 138 },
+  turkey:       { x: 457, y: 147 },
   // Africa
-  senegal:     { x: 365, y: 194 },  // Dakar / western tip
-  ivorycoast:  { x: 378, y: 200 },  // Abidjan coast
-  ghana:       { x: 385, y: 200 },  // Accra coast
-  nigeria:     { x: 397, y: 200 },  // Lagos / Gulf of Guinea
-  cameroon:    { x: 406, y: 202 },  // Douala / Yaoundé
-  egypt:       { x: 433, y: 170 },  // Cairo / Nile delta
-  southafrica: { x: 420, y: 250 },  // Johannesburg
+  nigeria:      { x: 405, y: 205 },
+  ghana:        { x: 396, y: 209 },
+  ivorycoast:   { x: 387, y: 210 },
+  senegal:      { x: 366, y: 195 },
+  cameroon:     { x: 417, y: 214 },
+  egypt:        { x: 448, y: 167 },
+  southafrica:  { x: 444, y: 282 },
   // Americas
-  usa:         { x: 237, y: 158 },  // Washington DC / east coast
-  canada:      { x: 228, y: 148 },  // Toronto / Great Lakes
-  mexico:      { x: 196, y: 178 },  // Mexico City
-  brazil:      { x: 270, y: 243 },  // São Paulo / Brasília
-  argentina:   { x: 255, y: 272 },  // Buenos Aires
-  colombia:    { x: 220, y: 198 },  // Bogotá
+  usa:          { x: 219, y: 153 },
+  canada:       { x: 188, y: 129 },
+  mexico:       { x: 199, y: 187 },
+  brazil:       { x: 306, y: 258 },
+  argentina:    { x: 265, y: 308 },
+  colombia:     { x: 250, y: 214 },
   // Asia
-  china:       { x: 635, y: 145 },  // Beijing
-  southkorea:  { x: 648, y: 148 },  // Seoul
-  japan:       { x: 660, y: 150 },  // Tokyo
-  saudiarabia: { x: 450, y: 175 },  // Riyadh
+  japan:        { x: 676, y: 153 },
+  southkorea:   { x: 655, y: 151 },
+  china:        { x: 620, y: 166 },
+  saudiarabia:  { x: 480, y: 175 },
   // Oceania
-  australia:   { x: 685, y: 262 },  // Sydney / east coast
-  newzealand:  { x: 720, y: 278 },  // Wellington
+  australia:    { x: 678, y: 275 },
+  newzealand:   { x: 749, y: 309 },
 };
 
 // Fallback projection for countries without hand-calibrated positions

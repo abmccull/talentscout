@@ -50,6 +50,20 @@ export function ActivityPanel({
     });
   }, [activities, resolveClubName]);
 
+  // League options should reflect only currently available attendMatch activities.
+  const availableMatchLeagues = useMemo(() => {
+    const leagueIds = new Set<string>();
+    for (const activity of enrichedActivities) {
+      if (activity.type !== "attendMatch") continue;
+      const leagueId = activity.targetId ? fixtureLeagueById[activity.targetId] : undefined;
+      if (leagueId) leagueIds.add(leagueId);
+    }
+    return allLeagues.filter((league) => leagueIds.has(league.id));
+  }, [allLeagues, enrichedActivities, fixtureLeagueById]);
+
+  const hasActiveLeagueFilter = leagueFilter !== "all"
+    && availableMatchLeagues.some((league) => league.id === leagueFilter);
+
   // Group activities by category
   const grouped = useMemo(() => {
     const groups: Record<ActivityCategory, Activity[]> = {
@@ -64,7 +78,7 @@ export function ActivityPanel({
     for (const activity of enrichedActivities) {
       const category = ACTIVITY_CATEGORIES[activity.type] ?? "scouting";
       // Apply league filter only to match activities
-      if (category === "matches" && activity.type === "attendMatch" && leagueFilter !== "all") {
+      if (category === "matches" && activity.type === "attendMatch" && hasActiveLeagueFilter) {
         const fixtureLeagueId = activity.targetId ? fixtureLeagueById[activity.targetId] : undefined;
         if (!fixtureLeagueId || fixtureLeagueId !== leagueFilter) {
           continue;
@@ -74,7 +88,7 @@ export function ActivityPanel({
     }
 
     return groups;
-  }, [enrichedActivities, fixtureLeagueById, leagueFilter]);
+  }, [enrichedActivities, fixtureLeagueById, hasActiveLeagueFilter, leagueFilter]);
 
   // Sorted category keys (skip empty ones; hide specialist for regional if empty)
   const sortedCategories = useMemo(() => {
@@ -119,14 +133,14 @@ export function ActivityPanel({
               <div className="mb-2 flex items-center justify-between">
                 <span className={headerClass}>{sectionLabel}</span>
                 {/* League filter in matches section only */}
-                {category === "matches" && allLeagues.length > 0 && (
+                {category === "matches" && availableMatchLeagues.length > 1 && (
                   <select
-                    value={leagueFilter}
+                    value={hasActiveLeagueFilter ? leagueFilter : "all"}
                     onChange={(e) => onLeagueFilterChange(e.target.value)}
                     className="rounded-md border border-[#27272a] bg-[#141414] px-2 py-1 text-xs text-zinc-300"
                   >
                     <option value="all">All Leagues</option>
-                    {allLeagues.map((league) => (
+                    {availableMatchLeagues.map((league) => (
                       <option key={league.id} value={league.id}>
                         {league.name}
                       </option>
