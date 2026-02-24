@@ -20,6 +20,11 @@ import {
   isInternationalBreak,
   getSeasonPhase,
 } from "@/engine/core/seasonEvents";
+import {
+  isTransferWindowOpen,
+  getCurrentTransferWindow,
+  isDeadlineDayPressure,
+} from "@/engine/core/transferWindow";
 import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
 import { useTranslations } from "next-intl";
@@ -81,6 +86,12 @@ export function CalendarScreen() {
   const seasonPhase = getSeasonPhase(currentWeek);
   const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
   const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
+
+  // Transfer window state
+  const twArray = gameState.transferWindow ? [gameState.transferWindow] : [];
+  const transferWindowActive = isTransferWindowOpen(twArray, currentWeek);
+  const currentWindow = getCurrentTransferWindow(twArray, currentWeek);
+  const isDeadlineDay = currentWindow ? isDeadlineDayPressure(currentWindow, currentWeek) : false;
 
   const allLeagues = Object.values(gameState.leagues);
 
@@ -255,6 +266,29 @@ export function CalendarScreen() {
           <div className="mb-4 flex items-center gap-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-4 py-2.5 text-sm text-sky-300">
             <Info size={14} className="shrink-0" aria-hidden="true" />
             International Break — League matches suspended
+          </div>
+        )}
+
+        {/* Transfer window banner */}
+        {transferWindowActive && currentWindow && (
+          <div
+            className={`mb-4 rounded-md border px-4 py-2.5 text-sm ${
+              isDeadlineDay
+                ? "border-red-500/30 bg-red-500/10 text-red-300"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-300"
+            }`}
+          >
+            <div className="flex items-center gap-2 font-semibold mb-0.5">
+              <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+              {isDeadlineDay
+                ? "DEADLINE DAY — Final week of transfer window!"
+                : `TRANSFER WINDOW ACTIVE — W${currentWindow.openWeek}–W${currentWindow.closeWeek}`}
+            </div>
+            <p className="text-xs opacity-80">
+              {isDeadlineDay
+                ? "Assessment requests are more frequent. Don't miss any."
+                : "Clubs are making signings. Check your Inbox for urgent assessment requests (+3 reputation)."}
+            </p>
           </div>
         )}
 

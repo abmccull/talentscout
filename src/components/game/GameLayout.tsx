@@ -26,6 +26,8 @@ import {
   Wrench,
   Building2,
   X,
+  BookOpen,
+  Swords,
 } from "lucide-react";
 
 // ─── Sectioned Navigation ────────────────────────────────────────────────────
@@ -51,6 +53,7 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { screen: "career", label: "My Scout", icon: Briefcase },
       { screen: "equipment", label: "Equipment", icon: Wrench },
+      { screen: "training", label: "Training", icon: BookOpen },
       { screen: "finances", label: "Finances", icon: Wallet },
       { screen: "agency", label: "Agency", icon: Building2 },
     ],
@@ -61,6 +64,7 @@ const NAV_SECTIONS: NavSection[] = [
       { screen: "youthScouting", label: "Youth Hub", icon: GraduationCap },
       { screen: "discoveries", label: "Discoveries", icon: Trophy },
       { screen: "network", label: "Scout Network", icon: Network },
+      { screen: "rivals", label: "Rivals", icon: Swords },
       { screen: "npcManagement", label: "Scouts", icon: UserCheck },
       { screen: "internationalView", label: "International", icon: Globe },
       { screen: "alumniDashboard", label: "Alumni", icon: Award },
@@ -130,6 +134,7 @@ function getNavVisibility(
     // Week 3+ items
     case "career":
     case "equipment":
+    case "training":
     case "inbox":
       return effectiveWeek >= 3;
 
@@ -139,6 +144,7 @@ function getNavVisibility(
 
     // Tier 2+ items
     case "network":
+    case "rivals":
       return tier >= 2;
 
     // Leaderboard always visible

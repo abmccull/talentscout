@@ -1551,6 +1551,10 @@ export interface FinancialRecord {
   activeEnrollment?: CourseEnrollment;
   ownedVehicle?: { name: string; value: number; travelBonus: number };
 
+  // Pending offers (generated weekly, accepted/declined by player)
+  pendingRetainerOffers: RetainerContract[];
+  pendingConsultingOffers: ConsultingContract[];
+
   // Market state
   marketTemperature: MarketTemperature;
   activeEconomicEvents: EconomicEvent[];

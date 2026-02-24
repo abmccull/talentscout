@@ -1,224 +1,135 @@
 "use client";
 
-import { useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Globe, Plane, MapPin, Star } from "lucide-react";
-import { getCountryOptions } from "@/data/index";
+import { Globe, MapPin, Wallet, Plane } from "lucide-react";
+import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
 import type { CountryReputation, TravelBooking } from "@/engine/core/types";
-import { WorldMap } from "@/components/game/WorldMap";
-import { ScreenBackground } from "@/components/ui/screen-background";
+import { getTravelCost, getTravelSlots, getScoutHomeCountry, getContinentId } from "@/engine/world/travel";
+import { WorldMap, COUNTRY_COORDS, lonLatToSvg, getTierColors } from "@/components/game/WorldMap";
+import { CountryPopup } from "@/components/game/CountryPopup";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Country metadata resolver — works for both core and secondary countries
 // ---------------------------------------------------------------------------
 
-const ALL_COUNTRY_OPTIONS = getCountryOptions();
+const CORE_OPTIONS = getCountryOptions();
+const SECONDARY_OPTIONS = getSecondaryCountryOptions();
 
 function getCountryMeta(key: string): { name: string; leagueCount: number; clubCount: number } {
-  return (
-    ALL_COUNTRY_OPTIONS.find((c) => c.key === key) ?? {
-      name: key.charAt(0).toUpperCase() + key.slice(1),
-      leagueCount: 0,
-      clubCount: 0,
-    }
-  );
-}
-
-function expertiseLabel(familiarity: number): string {
-  if (familiarity >= 80) return "Master";
-  if (familiarity >= 60) return "Expert";
-  if (familiarity >= 40) return "Familiar";
-  if (familiarity >= 20) return "Novice";
-  return "Unknown";
-}
-
-function expertiseColor(familiarity: number): string {
-  if (familiarity >= 80) return "bg-emerald-500";
-  if (familiarity >= 60) return "bg-blue-500";
-  if (familiarity >= 40) return "bg-amber-500";
-  if (familiarity >= 20) return "bg-zinc-400";
-  return "bg-zinc-700";
-}
-
-function expertiseBadgeVariant(
-  familiarity: number,
-): "success" | "default" | "warning" | "secondary" | "outline" {
-  if (familiarity >= 80) return "success";
-  if (familiarity >= 60) return "default";
-  if (familiarity >= 40) return "warning";
-  return "secondary";
+  const core = CORE_OPTIONS.find((c) => c.key === key);
+  if (core) return { name: core.name, leagueCount: core.leagueCount, clubCount: core.clubCount };
+  const sec = SECONDARY_OPTIONS.find((c) => c.key === key);
+  if (sec) return { name: sec.name, leagueCount: 0, clubCount: sec.clubCount };
+  const coords = COUNTRY_COORDS[key];
+  return {
+    name: coords?.label ?? key.charAt(0).toUpperCase() + key.slice(1),
+    leagueCount: 0,
+    clubCount: 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Sub-components
+// HUD — Location (top-left)
 // ---------------------------------------------------------------------------
 
-interface ActiveBookingPanelProps {
-  booking: TravelBooking;
-  currentWeek: number;
-}
-
-function ActiveBookingPanel({ booking, currentWeek }: ActiveBookingPanelProps) {
-  const meta = getCountryMeta(booking.destinationCountry);
-  const isAbroad = booking.isAbroad;
-  const departingThisWeek = !isAbroad && booking.departureWeek === currentWeek;
-
+function LocationHUD({ location, week }: { location: string; week: number }) {
   return (
-    <Card className="border-blue-500/30 bg-blue-500/5">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-sm text-blue-400">
-          <Plane size={16} aria-hidden="true" />
-          {isAbroad ? "Currently Abroad" : "Upcoming Travel"}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-4">
-          <div>
-            <p className="text-zinc-500">Destination</p>
-            <p className="font-medium text-white">{meta.name}</p>
-          </div>
-          <div>
-            <p className="text-zinc-500">Departs Week</p>
-            <p className="font-medium text-white">{booking.departureWeek}</p>
-          </div>
-          <div>
-            <p className="text-zinc-500">Returns Week</p>
-            <p className="font-medium text-white">{booking.returnWeek}</p>
-          </div>
-          <div>
-            <p className="text-zinc-500">Cost</p>
-            <p className="font-medium text-white">£{booking.cost.toLocaleString()}</p>
-          </div>
-        </div>
-        {departingThisWeek && (
-          <p className="mt-3 text-xs text-amber-400">
-            Travel departs this week — add an &quot;International Travel&quot; activity to your schedule.
-          </p>
-        )}
-      </CardContent>
-    </Card>
+    <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md">
+      <MapPin size={14} className="text-blue-400" />
+      <span className="text-xs text-zinc-300">
+        Currently in: <span className="font-semibold text-white">{location}</span>
+      </span>
+      <span className="text-zinc-600">·</span>
+      <span className="text-xs text-zinc-400">Week {week}</span>
+    </div>
   );
 }
 
-interface CountryCardProps {
-  countryKey: string;
-  reputation: CountryReputation | undefined;
-  isHome: boolean;
-  isCurrentLocation: boolean;
-  hasActiveBooking: boolean;
-  onBookTravel: () => void;
-}
+// ---------------------------------------------------------------------------
+// HUD — Budget (top-right)
+// ---------------------------------------------------------------------------
 
-function CountryCard({
-  countryKey,
-  reputation,
-  isHome,
-  isCurrentLocation,
-  hasActiveBooking,
-  onBookTravel,
-}: CountryCardProps) {
-  const meta = getCountryMeta(countryKey);
-  const familiarity = reputation?.familiarity ?? 0;
-  const label = expertiseLabel(familiarity);
-  const badgeVariant = expertiseBadgeVariant(familiarity);
+function BudgetHUD({ balance }: { balance: number }) {
+  const color =
+    balance < 500
+      ? "text-red-400"
+      : balance < 1000
+        ? "text-amber-400"
+        : "text-white";
 
   return (
-    <Card
-      className={
-        isCurrentLocation
-          ? "border-blue-500/40 bg-blue-500/5"
-          : "border-[#27272a] bg-[#141414]"
-      }
+    <div className="absolute top-3 right-3 z-20 flex items-center gap-2 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md">
+      <Wallet size={14} className="text-emerald-400" />
+      <span className={`text-sm font-semibold ${color}`}>
+        £{balance.toLocaleString()}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// HUD — Legend (bottom-left)
+// ---------------------------------------------------------------------------
+
+const LEGEND_ITEMS = [
+  { color: "#3f3f46", label: "Unknown" },
+  { color: "#78716c", label: "Novice" },
+  { color: "#d97706", label: "Familiar" },
+  { color: "#2563eb", label: "Expert" },
+  { color: "#16a34a", label: "Master" },
+] as const;
+
+function LegendHUD() {
+  return (
+    <div
+      className="absolute bottom-3 left-3 z-20 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md"
+      aria-label="Map legend"
     >
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="flex items-center gap-2 text-sm text-white">
-            <Globe size={15} className="shrink-0 text-zinc-400" aria-hidden="true" />
-            {meta.name}
-          </CardTitle>
-          <div className="flex shrink-0 flex-wrap justify-end gap-1">
-            {isHome && (
-              <Badge variant="secondary" className="text-[10px]">
-                Home
-              </Badge>
-            )}
-            {isCurrentLocation && (
-              <Badge variant="success" className="text-[10px]">
-                Currently Here
-              </Badge>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        {/* Familiarity bar */}
-        <div>
-          <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-zinc-500">Familiarity</span>
-            <div className="flex items-center gap-1.5">
-              <Badge variant={badgeVariant} className="text-[10px]">
-                {label}
-              </Badge>
-              <span className="text-zinc-400">{familiarity}/100</span>
-            </div>
-          </div>
-          <Progress
-            value={familiarity}
-            max={100}
-            className="h-1.5"
-            indicatorClassName={expertiseColor(familiarity)}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {LEGEND_ITEMS.map(({ color, label }) => (
+          <span key={label} className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: color }}
+              aria-hidden="true"
+            />
+            {label}
+          </span>
+        ))}
+        <span className="flex items-center gap-1.5 text-[10px] text-zinc-400">
+          <span
+            className="inline-block h-2.5 w-2.5 rounded-full border-2 border-amber-500 bg-zinc-800"
+            aria-hidden="true"
           />
-        </div>
+          Current
+        </span>
+      </div>
+    </div>
+  );
+}
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-md bg-zinc-800/60 px-3 py-2">
-            <p className="text-zinc-500">Leagues</p>
-            <p className="font-semibold text-white">{meta.leagueCount}</p>
-          </div>
-          <div className="rounded-md bg-zinc-800/60 px-3 py-2">
-            <p className="text-zinc-500">Clubs</p>
-            <p className="font-semibold text-white">{meta.clubCount}</p>
-          </div>
-        </div>
+// ---------------------------------------------------------------------------
+// HUD — Booking banner (bottom-center)
+// ---------------------------------------------------------------------------
 
-        {/* Scouting history (only shown once the scout has activity there) */}
-        {reputation && (reputation.reportsSubmitted > 0 || reputation.successfulFinds > 0) && (
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="flex items-center gap-1.5 text-zinc-400">
-              <Star size={11} className="text-amber-400" aria-hidden="true" />
-              <span>{reputation.successfulFinds} finds</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-zinc-400">
-              <MapPin size={11} className="text-blue-400" aria-hidden="true" />
-              <span>{reputation.reportsSubmitted} reports</span>
-            </div>
-          </div>
+function BookingBanner({ booking, homeName }: { booking: TravelBooking; homeName: string }) {
+  const destName = getCountryMeta(booking.destinationCountry).name;
+  const isAbroad = booking.isAbroad;
+  return (
+    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 rounded-lg border border-blue-500/30 bg-zinc-900/80 px-4 py-2 backdrop-blur-md">
+      <Plane size={14} className="text-blue-400" />
+      <span className="text-xs text-zinc-300">
+        {isAbroad ? (
+          <>Scouting in <span className="font-semibold text-white">{destName}</span> · Returns Wk {booking.returnWeek}</>
+        ) : (
+          <>Travel to <span className="font-semibold text-white">{destName}</span> · Dep: Wk {booking.departureWeek} · Ret: Wk {booking.returnWeek}</>
         )}
-
-        {/* Action */}
-        {!isCurrentLocation && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="w-full"
-            onClick={onBookTravel}
-            disabled={hasActiveBooking}
-            aria-label={`Book travel to ${meta.name}`}
-          >
-            <Plane size={13} className="mr-1.5" aria-hidden="true" />
-            {hasActiveBooking ? "Booking Active" : "Book Travel"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      </span>
+      <span className="text-xs text-zinc-500">· £{booking.cost.toLocaleString()}</span>
+    </div>
   );
 }
 
@@ -229,7 +140,105 @@ function CountryCard({
 export function InternationalScreen() {
   const { gameState, bookInternationalTravel } = useGameStore();
   const { playSFX } = useAudio();
-  const countryCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // SVG ref for coordinate conversion
+  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Popup state
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
+  const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
+  const [justBooked, setJustBooked] = useState(false);
+
+  // ── Handlers (must be before early return) ────────────────────────────────
+
+  const handleCountrySelect = useCallback(
+    (countryKey: string, svgX: number, svgY: number) => {
+      // If clicking the same country, toggle off
+      if (selectedCountry === countryKey) {
+        setSelectedCountry(null);
+        setPopupPos(null);
+        setJustBooked(false);
+        return;
+      }
+
+      // Convert SVG coords to screen coords relative to container
+      const svg = svgRef.current;
+      const container = containerRef.current;
+      if (!svg || !container) return;
+
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const screenX = svgX * ctm.a + ctm.e - containerRect.left;
+      const screenY = svgY * ctm.d + ctm.f - containerRect.top;
+
+      setSelectedCountry(countryKey);
+      setPopupPos({ x: screenX, y: screenY });
+      setJustBooked(false);
+    },
+    [selectedCountry],
+  );
+
+  const handleBookTravel = useCallback(() => {
+    if (!selectedCountry) return;
+    playSFX("travel");
+    bookInternationalTravel(selectedCountry);
+    setJustBooked(true);
+    // Auto-dismiss after 1.5s
+    setTimeout(() => {
+      setSelectedCountry(null);
+      setPopupPos(null);
+      setJustBooked(false);
+    }, 1500);
+  }, [selectedCountry, playSFX, bookInternationalTravel]);
+
+  const handleClose = useCallback(() => {
+    setSelectedCountry(null);
+    setPopupPos(null);
+    setJustBooked(false);
+  }, []);
+
+  // Escape key closes popup
+  useEffect(() => {
+    if (!selectedCountry) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedCountry, handleClose]);
+
+  // Recalculate popup position on resize
+  useEffect(() => {
+    if (!selectedCountry || !popupPos) return;
+    const handler = () => {
+      const svg = svgRef.current;
+      const container = containerRef.current;
+      if (!svg || !container) return;
+
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return;
+
+      const coords = COUNTRY_COORDS[selectedCountry];
+      if (!coords) return;
+
+      const projected = lonLatToSvg(coords.lon, coords.lat);
+      const svgX = projected.x;
+      const svgY = projected.y;
+
+      const containerRect = container.getBoundingClientRect();
+      const screenX = svgX * ctm.a + ctm.e - containerRect.left;
+      const screenY = svgY * ctm.d + ctm.f - containerRect.top;
+
+      setPopupPos({ x: screenX, y: screenY });
+    };
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, [selectedCountry, popupPos]);
+
+  // ── Early return after all hooks ──────────────────────────────────────────
 
   if (!gameState) return null;
 
@@ -240,111 +249,99 @@ export function InternationalScreen() {
   const currentCountry: string | null =
     booking?.isAbroad === true ? booking.destinationCountry : null;
 
-  // Home country: the first country in the list (set at game creation)
-  const homeCountry = countries[0] ?? null;
+  // Home country
+  const homeCountry = getScoutHomeCountry(scout);
+  const homeMeta = getCountryMeta(homeCountry);
+
+  // Effective location for display
+  const effectiveLocation = currentCountry ?? homeCountry;
+  const locationName = getCountryMeta(effectiveLocation).name;
 
   const hasActiveBooking = booking !== undefined;
 
-  // Status subtitle
-  const statusLine = currentCountry
-    ? `Currently scouting in ${getCountryMeta(currentCountry).name}`
-    : booking
-      ? `Travel to ${getCountryMeta(booking.destinationCountry).name} booked — departing week ${booking.departureWeek}`
-      : "Based at home — book travel to scout abroad";
-
-  // Build familiarity levels map from scout.countryReputations
+  // Build familiarity levels map
   const familiarityLevels: Record<string, number> = {};
   for (const [key, rep] of Object.entries(scout.countryReputations)) {
     familiarityLevels[key] = rep.familiarity;
   }
 
-  // Handle map country click: scroll to that country's card and briefly highlight
-  const handleMapCountryClick = (countryKey: string) => {
-    const el = countryCardRefs.current[countryKey];
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.focus();
-    }
-  };
+  // Scout balance (from finances)
+  const scoutBalance = gameState.finances?.balance ?? 0;
+
+  // ── Popup data ────────────────────────────────────────────────────────────
+
+  const selectedMeta = selectedCountry ? getCountryMeta(selectedCountry) : null;
+  const selectedReputation: CountryReputation | undefined = selectedCountry
+    ? scout.countryReputations[selectedCountry]
+    : undefined;
+  const selectedFamiliarity = selectedReputation?.familiarity ?? 0;
+  const selectedContinent = selectedCountry ? getContinentId(selectedCountry) : "unknown";
+  const selectedTravelCost = selectedCountry
+    ? getTravelCost(homeCountry, selectedCountry)
+    : 0;
+  const selectedTravelSlots = selectedCountry
+    ? getTravelSlots(homeCountry, selectedCountry)
+    : 0;
+
+  // Container rect for popup clamping
+  const containerEl = containerRef.current;
+  const cRect = containerEl
+    ? { width: containerEl.clientWidth, height: containerEl.clientHeight }
+    : { width: 1200, height: 800 };
 
   return (
     <GameLayout>
-      <div className="relative min-h-full p-6">
-        <ScreenBackground src="/images/backgrounds/international.png" opacity={0.82} />
-        <div className="relative z-10">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="flex items-center gap-2 text-2xl font-bold">
-            <Globe size={22} className="text-blue-400" aria-hidden="true" />
-            International Scouting
-          </h1>
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-zinc-400">
-            <MapPin size={13} aria-hidden="true" />
-            {statusLine}
-          </p>
-        </div>
+      <div
+        ref={containerRef}
+        className="relative h-full w-full overflow-hidden bg-[#0a0a0a]"
+        onClick={(e) => {
+          // Click on empty map space closes popup
+          if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "svg") {
+            handleClose();
+          }
+        }}
+      >
+        {/* ── SVG Map ──────────────────────────────────────────── */}
+        <WorldMap
+          countries={countries}
+          familiarityLevels={familiarityLevels}
+          currentLocation={currentCountry ?? homeCountry}
+          activeAssignments={[]}
+          travelDestination={booking && !booking.isAbroad ? booking.destinationCountry : undefined}
+          onCountryClick={handleCountrySelect}
+          svgRef={svgRef}
+        />
 
-        {/* Active booking banner */}
-        {booking && (
-          <div className="mb-6">
-            <ActiveBookingPanel booking={booking} currentWeek={currentWeek} />
-          </div>
+        {/* ── HUD Overlays ─────────────────────────────────────── */}
+        <LocationHUD location={locationName} week={currentWeek} />
+        <BudgetHUD balance={scoutBalance} />
+        <LegendHUD />
+        {booking && <BookingBanner booking={booking} homeName={homeMeta.name} />}
+
+        {/* ── Country Popup ────────────────────────────────────── */}
+        {selectedCountry && popupPos && selectedMeta && (
+          <CountryPopup
+            countryKey={selectedCountry}
+            countryName={selectedMeta.name}
+            continent={selectedContinent}
+            familiarity={selectedFamiliarity}
+            reputation={selectedReputation}
+            leagueCount={selectedMeta.leagueCount}
+            clubCount={selectedMeta.clubCount}
+            isHome={selectedCountry === homeCountry}
+            isCurrentLocation={selectedCountry === effectiveLocation}
+            activeBooking={booking}
+            travelCost={selectedTravelCost}
+            travelSlots={selectedTravelSlots}
+            currentWeek={currentWeek}
+            scoutBalance={scoutBalance}
+            position={popupPos}
+            containerRect={cRect}
+            justBooked={justBooked}
+            onBookTravel={handleBookTravel}
+            onClose={handleClose}
+          />
         )}
-
-        {/* World Map */}
-        {countries.length > 0 && (
-          <div className="mb-6">
-            <WorldMap
-              countries={countries}
-              familiarityLevels={familiarityLevels}
-              currentLocation={currentCountry ?? undefined}
-              onCountryClick={handleMapCountryClick}
-            />
-          </div>
-        )}
-
-        {/* Country grid */}
-        {countries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Globe size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm text-zinc-500">No countries active in this game world.</p>
-          </div>
-        ) : (
-          <>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
-              Available Countries ({countries.length})
-            </p>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {countries.map((countryKey) => {
-                const reputation: CountryReputation | undefined =
-                  scout.countryReputations[countryKey];
-                const isHome = countryKey === homeCountry;
-                const isCurrentLocation = countryKey === currentCountry;
-
-                return (
-                  <div
-                    key={countryKey}
-                    ref={(el) => {
-                      countryCardRefs.current[countryKey] = el;
-                    }}
-                    tabIndex={-1}
-                    className="outline-none focus:ring-2 focus:ring-emerald-500 rounded-lg"
-                  >
-                    <CountryCard
-                      countryKey={countryKey}
-                      reputation={reputation}
-                      isHome={isHome}
-                      isCurrentLocation={isCurrentLocation}
-                      hasActiveBooking={hasActiveBooking}
-                      onBookTravel={() => { playSFX("travel"); bookInternationalTravel(countryKey); }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-        </div>
       </div>
     </GameLayout>
   );

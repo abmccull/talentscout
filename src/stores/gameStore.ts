@@ -83,9 +83,11 @@ import {
   createWeekSchedule,
   addActivity,
   removeActivity,
+  canAddActivity,
   getAvailableActivities,
   processCompletedWeek,
   applyWeekResults,
+  ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
   ACTIVITY_FATIGUE_COSTS as ACTIVITY_FATIGUE_COSTS_MAP,
 } from "@/engine/core/calendar";
@@ -139,6 +141,8 @@ import {
   takeLoan,
   repayLoanEarly,
   acceptConsulting,
+  generateRetainerOffers,
+  generateConsultingOffers,
 } from "@/engine/finance";
 import type { EquipmentItemId } from "@/engine/finance";
 import {
@@ -225,7 +229,9 @@ export type GameScreen =
   | "demoEnd"
   | "equipment"
   | "agency"
-  | "weekSimulation";
+  | "weekSimulation"
+  | "training"
+  | "rivals";
 
 interface GameStore {
   // Navigation
@@ -303,6 +309,7 @@ interface GameStore {
   fastForwardWeek: () => void;
 
   // Match actions
+  scheduleMatch: (fixtureId: string) => boolean;
   startMatch: (fixtureId: string) => void;
   advancePhase: () => void;
   setFocus: (playerId: string, lens: FocusSelection["lens"]) => void;
@@ -360,6 +367,8 @@ interface GameStore {
   takeLoanAction: (type: LoanType, amount: number) => void;
   repayLoanAction: () => void;
   acceptConsultingContract: (contract: ConsultingContract) => void;
+  declineRetainerOffer: (contractId: string) => void;
+  declineConsultingOffer: (contractId: string) => void;
 
   // Cross-screen fixture filter (set from PlayerProfile → consumed by FixtureBrowser)
   pendingFixtureClubFilter: string | null;
@@ -888,13 +897,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // ── Gate: play all scheduled attendMatch fixtures interactively first ───
     // Find every attendMatch activity in this week's schedule that has a
     // targetId (fixture ID) which hasn't been played via the MatchScreen yet.
-    const pendingFixtureIds = get().getPendingMatches();
-    if (pendingFixtureIds.length > 0) {
-      // Launch the first unplayed fixture. The user will call endMatch(), which
-      // records it in playedFixtures. They then click "Advance Week" again and
-      // this gate re-evaluates — eventually clearing all pending matches.
-      get().startMatch(pendingFixtureIds[0]);
-      return;
+    // Youth scouts skip this gate — they cannot attend first-team matches.
+    if (gameState.scout.primarySpecialization !== "youth") {
+      const pendingFixtureIds = get().getPendingMatches();
+      if (pendingFixtureIds.length > 0) {
+        // Launch the first unplayed fixture. The user will call endMatch(), which
+        // records it in playedFixtures. They then click "Advance Week" again and
+        // this gate re-evaluates — eventually clearing all pending matches.
+        get().startMatch(pendingFixtureIds[0]);
+        return;
+      }
     }
 
     const rng = createRNG(`${gameState.seed}-week-${gameState.currentWeek}-${gameState.currentSeason}`);
@@ -2694,6 +2706,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
         econFinances = processEmployeeWeek(econRng, econFinances);
       }
 
+      // Generate pending retainer/consulting offers for independent scouts
+      if (stateWithPhase2.scout.careerPath === "independent") {
+        const retainerOffers = generateRetainerOffers(
+          econRng, stateWithPhase2.scout, econFinances, stateWithPhase2.clubs,
+        );
+        if (retainerOffers.length > 0) {
+          econFinances = {
+            ...econFinances,
+            pendingRetainerOffers: [...(econFinances.pendingRetainerOffers ?? []), ...retainerOffers],
+          };
+        }
+        const consultingOffers = generateConsultingOffers(
+          econRng, stateWithPhase2.scout, econFinances, stateWithPhase2.clubs,
+          stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
+        );
+        if (consultingOffers.length > 0) {
+          econFinances = {
+            ...econFinances,
+            pendingConsultingOffers: [...(econFinances.pendingConsultingOffers ?? []), ...consultingOffers],
+          };
+        }
+      }
+
       // Independent tier advancement check
       if (stateWithPhase2.scout.careerPath === "independent") {
         const nextTier = checkIndependentTierAdvancement(stateWithPhase2.scout, econFinances);
@@ -3498,10 +3533,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
 
     // Gate: play all scheduled attendMatch fixtures interactively first
-    const pendingFixtureIds = get().getPendingMatches();
-    if (pendingFixtureIds.length > 0) {
-      get().startMatch(pendingFixtureIds[0]);
-      return;
+    // Youth scouts skip — they cannot attend first-team matches.
+    if (gameState.scout.primarySpecialization !== "youth") {
+      const pendingFixtureIds = get().getPendingMatches();
+      if (pendingFixtureIds.length > 0) {
+        get().startMatch(pendingFixtureIds[0]);
+        return;
+      }
     }
 
     // Build day-by-day results
@@ -3648,6 +3686,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   startMatch: (fixtureId) => {
     const { gameState } = get();
     if (!gameState) return;
+    // Youth scouts cannot attend first-team league matches
+    if (gameState.scout.primarySpecialization === "youth") return;
     const fixture = gameState.fixtures[fixtureId];
     if (!fixture) return;
 
@@ -4457,7 +4497,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState || !gameState.finances) return;
     const updated = acceptRetainer(gameState.finances, contract, gameState.scout);
     if (updated) {
-      set({ gameState: { ...gameState, finances: updated } });
+      // Remove from pending offers
+      const pendingRetainers = (updated.pendingRetainerOffers ?? []).filter(
+        (r) => r.id !== contract.id,
+      );
+      set({ gameState: { ...gameState, finances: { ...updated, pendingRetainerOffers: pendingRetainers } } });
     }
   },
 
@@ -4533,7 +4577,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { gameState } = get();
     if (!gameState || !gameState.finances) return;
     const updated = acceptConsulting(gameState.finances, contract);
-    set({ gameState: { ...gameState, finances: updated } });
+    // Remove from pending offers
+    const pendingConsulting = (updated.pendingConsultingOffers ?? []).filter(
+      (c) => c.id !== contract.id,
+    );
+    set({ gameState: { ...gameState, finances: { ...updated, pendingConsultingOffers: pendingConsulting } } });
+  },
+
+  declineRetainerOffer: (contractId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const pending = (gameState.finances.pendingRetainerOffers ?? []).filter(
+      (r) => r.id !== contractId,
+    );
+    set({ gameState: { ...gameState, finances: { ...gameState.finances, pendingRetainerOffers: pending } } });
+  },
+
+  declineConsultingOffer: (contractId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const pending = (gameState.finances.pendingConsultingOffers ?? []).filter(
+      (c) => c.id !== contractId,
+    );
+    set({ gameState: { ...gameState, finances: { ...gameState.finances, pendingConsultingOffers: pending } } });
   },
 
   // Helpers

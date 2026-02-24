@@ -36,6 +36,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS } from "@/engine/finance";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
+import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { SeasonTimeline } from "./SeasonTimeline";
 import { ConnectedScenarioProgressPanel } from "./ScenarioProgressPanel";
 import { useTranslations } from "next-intl";
@@ -196,6 +197,10 @@ export function Dashboard() {
   // data: analysts
   const dataAnalysts = specialization === "data" ? gameState.dataAnalysts : [];
 
+  // Transfer window
+  const twArray = gameState.transferWindow ? [gameState.transferWindow] : [];
+  const transferWindowActive = isTransferWindowOpen(twArray, currentWeek);
+
   // Issue 9: season phase badge
   const seasonPhase = getSeasonPhase(currentWeek);
   // Season phase labels are only used once, so no need for a constant — but
@@ -259,6 +264,14 @@ export function Dashboard() {
             seasonEvents={gameState.seasonEvents}
             currentWeek={currentWeek}
           />
+        )}
+
+        {/* Transfer window alert */}
+        {transferWindowActive && (
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
+            <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
+            Transfer Window Active — Check Inbox for urgent assessments
+          </div>
         )}
 
         {/* Scenario Progress — only shown when a scenario is active */}
@@ -558,14 +571,16 @@ export function Dashboard() {
                             </Badge>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => startMatch(fixture.id)}
-                        >
-                          <Eye size={14} className="mr-1" aria-hidden="true" />
-                          Scout
-                        </Button>
+                        {scout.primarySpecialization !== "youth" && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => startMatch(fixture.id)}
+                          >
+                            <Eye size={14} className="mr-1" aria-hidden="true" />
+                            Scout
+                          </Button>
+                        )}
                       </div>
                     );
                   })}

@@ -223,7 +223,7 @@ export function FixtureBrowser() {
                             : "—"}
                         </td>
                         <td className="px-4 py-3">
-                          {!f.played && f.week === gameState.currentWeek && (
+                          {!f.played && f.week === gameState.currentWeek && gameState.scout.primarySpecialization !== "youth" && (
                             <Button
                               size="sm"
                               variant="secondary"

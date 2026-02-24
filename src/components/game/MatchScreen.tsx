@@ -59,7 +59,7 @@ export function MatchScreen() {
   // Play whistle on match start (once)
   const whistlePlayed = useRef(false);
   // Match stats bar collapsed state
-  const [showStats, setShowStats] = useState(false);
+  const [showStats, setShowStats] = useState(true);
 
   // Compute isComplete before any early return (Rules of Hooks — optional chaining
   // makes this safe when activeMatch is null).
@@ -235,6 +235,9 @@ export function MatchScreen() {
     <GameLayout>
       <div className="relative flex h-full flex-col">
         <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.85} />
+
+        {/* relative z-10 ensures content renders above the ScreenBackground overlay */}
+        <div className="relative z-10 flex flex-1 flex-col min-h-0">
 
         {/* ── Top scoreboard bar ──────────────────────────────────────────── */}
         <div className="border-b border-[#27272a] bg-[#0c0c0c] px-4 py-2.5 shrink-0" data-tutorial-id="match-scoreboard">
@@ -621,6 +624,8 @@ export function MatchScreen() {
             </div>
           </div>
         </div>
+
+        </div>{/* close relative z-10 wrapper */}
       </div>
     </GameLayout>
   );

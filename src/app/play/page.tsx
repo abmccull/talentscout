@@ -35,6 +35,8 @@ import { DemoEndScreen } from "@/components/game/DemoEndScreen";
 import { WeekSimulationScreen } from "@/components/game/WeekSimulationScreen";
 import { EquipmentScreen } from "@/components/game/EquipmentScreen";
 import { AgencyScreen } from "@/components/game/AgencyScreen";
+import { TrainingScreen } from "@/components/game/TrainingScreen";
+import { RivalsScreen } from "@/components/game/RivalsScreen";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
@@ -133,6 +135,10 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <EquipmentScreen />;
     case "agency":
       return <AgencyScreen />;
+    case "training":
+      return <TrainingScreen />;
+    case "rivals":
+      return <RivalsScreen />;
     default:
       return <MainMenu />;
   }

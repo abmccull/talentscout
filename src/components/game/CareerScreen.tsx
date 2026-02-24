@@ -15,6 +15,7 @@ import {
   Users,
   UserCheck,
   Wrench,
+  BookOpen,
   Lock,
   Target,
   Brain,
@@ -702,7 +703,7 @@ export function CareerScreen() {
                 </div>
 
                 {/* Equipment loadout — link to dedicated screen */}
-                <div className="mt-4">
+                <div className="mt-4 space-y-2">
                   <Card
                     className="cursor-pointer hover:border-zinc-600 transition"
                     onClick={() => setScreen("equipment")}
@@ -711,6 +712,24 @@ export function CareerScreen() {
                       <div className="flex items-center gap-2">
                         <Wrench size={14} className="text-emerald-400" />
                         <span className="text-sm font-medium">Equipment Loadout</span>
+                      </div>
+                      <ChevronRight size={14} className="text-zinc-500" />
+                    </CardContent>
+                  </Card>
+
+                  {/* Training — link to courses screen */}
+                  <Card
+                    className="cursor-pointer hover:border-zinc-600 transition"
+                    onClick={() => setScreen("training")}
+                  >
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <BookOpen size={14} className="text-amber-400" />
+                        <span className="text-sm font-medium">
+                          {gameState.finances?.activeEnrollment
+                            ? "Training — In Progress"
+                            : "Training & Courses"}
+                        </span>
                       </div>
                       <ChevronRight size={14} className="text-zinc-500" />
                     </CardContent>

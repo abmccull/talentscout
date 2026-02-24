@@ -94,6 +94,10 @@ export function migrateFinancialRecord(
     activeEnrollment: undefined,
     ownedVehicle: undefined,
 
+    // Pending offers
+    pendingRetainerOffers: [],
+    pendingConsultingOffers: [],
+
     // Market
     marketTemperature: "normal",
     activeEconomicEvents: [],

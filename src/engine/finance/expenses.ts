@@ -150,6 +150,8 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
     completedCourses: [],
     activeEnrollment: undefined,
     ownedVehicle: undefined,
+    pendingRetainerOffers: [],
+    pendingConsultingOffers: [],
     marketTemperature: "normal",
     activeEconomicEvents: [],
   };
