@@ -123,7 +123,7 @@ const ASSETS = [
     subdir: "backgrounds",
     aspect: "16:9",
     model: "nano-banana-pro",
-    prompt: `Overhead view of a scout's organized desk late at night, player profile photos spread out, handwritten scouting reports with ratings, a laptop showing video analysis, coffee mug, emerald desk lamp, dark atmosphere, detective investigation board feel, ${BRAND}`,
+    prompt: `Overhead view of a football scout's organized desk late at night, printed photos of soccer players in jerseys spread out, handwritten scouting reports with player ratings and tactical formation diagrams, a leather-bound notebook open with notes, pen and reading glasses, coffee mug, emerald desk lamp casting warm light, dark moody atmosphere, no basketball, ${BRAND}`,
   },
 
   // ── LOADING SCREEN ───────────────────────────────────────────────────────
