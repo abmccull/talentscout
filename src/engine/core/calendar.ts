@@ -164,6 +164,9 @@ export const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   analyticsTeamMeeting:1,
 };
 
+/** Passive fatigue recovery per empty (unscheduled) day */
+export const EMPTY_DAY_FATIGUE_RECOVERY = -5;
+
 /** Fatigue cost per activity type */
 export const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   attendMatch:        10,
@@ -847,7 +850,10 @@ export function processCompletedWeek(
   const endurance = scout.attributes.endurance; // 1–20
 
   for (const activity of schedule.activities) {
-    if (activity === null) continue;
+    if (activity === null) {
+      fatigueChange += EMPTY_DAY_FATIGUE_RECOVERY;
+      continue;
+    }
     if (seenActivities.has(activity)) continue;
     seenActivities.add(activity);
 

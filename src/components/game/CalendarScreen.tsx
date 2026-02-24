@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +68,18 @@ export function CalendarScreen() {
 
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
+
+  // Empty-day warning dialog
+  const [showEmptyDayWarning, setShowEmptyDayWarning] = useState(false);
+
+  useEffect(() => {
+    if (!showEmptyDayWarning) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowEmptyDayWarning(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showEmptyDayWarning]);
 
   // Stable callback for resolving club IDs to names in ActivityPanel
   const resolveClubName = useCallback(
@@ -257,7 +269,15 @@ export function CalendarScreen() {
             </p>
           </div>
           <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
-            <Button onClick={() => { playSFX("calendar-slide"); startWeekSimulation(); }} data-tutorial-id="advance-week">Advance Week</Button>
+            <Button onClick={() => {
+              const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
+              if (emptyCount > 0) {
+                setShowEmptyDayWarning(true);
+              } else {
+                playSFX("calendar-slide");
+                startWeekSimulation();
+              }
+            }} data-tutorial-id="advance-week">Advance Week</Button>
           </Tooltip>
         </div>
 
@@ -429,6 +449,42 @@ export function CalendarScreen() {
         />
         </div>
       </div>
+      {/* Empty-day warning dialog */}
+      {showEmptyDayWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg border border-amber-500/30 bg-zinc-900 p-6 shadow-xl">
+            <div className="mb-3 flex items-center gap-2 text-amber-400">
+              <AlertTriangle size={18} />
+              <h3 className="text-lg font-semibold">Unplanned Days</h3>
+            </div>
+            <p className="mb-5 text-sm text-zinc-300">
+              You have{" "}
+              <span className="font-semibold text-amber-400">
+                {(gameState.schedule.activities ?? []).filter((a) => a === null).length}
+              </span>{" "}
+              unplanned day(s). Empty days recover a small amount of fatigue but
+              scheduled activities earn XP and progress. Advance anyway?
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowEmptyDayWarning(false)}
+              >
+                Go Back
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowEmptyDayWarning(false);
+                  playSFX("calendar-slide");
+                  startWeekSimulation();
+                }}
+              >
+                Advance
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </GameLayout>
   );
 }

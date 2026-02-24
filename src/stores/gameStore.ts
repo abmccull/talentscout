@@ -92,6 +92,7 @@ import {
   ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
   ACTIVITY_FATIGUE_COSTS as ACTIVITY_FATIGUE_COSTS_MAP,
+  EMPTY_DAY_FATIGUE_RECOVERY,
 } from "@/engine/core/calendar";
 import {
   assignTerritory,
@@ -3763,8 +3764,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
           profilesGenerated: 0,
           anomaliesFound: 0,
           xpGained: {},
-          fatigueChange: 0,
-          narrative: "Free day — no activity scheduled.",
+          fatigueChange: EMPTY_DAY_FATIGUE_RECOVERY,
+          narrative: "A quiet day off. You recover a little energy.",
           inboxMessages: [],
         });
         continue;
