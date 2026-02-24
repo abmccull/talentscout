@@ -117,28 +117,19 @@ export function Dashboard() {
     getLeagueStandings,
     advanceWeek,
     startMatch,
-    startReport,
     markMessageRead,
     selectPlayer,
   } = useGameStore();
-  const [expandedRivals, setExpandedRivals] = useState<Set<string>>(new Set());
   const [expandedExpenses, setExpandedExpenses] = useState(false);
   const t = useTranslations("dashboard");
   const tCal = useTranslations("calendar");
 
-  const toggleRival = (rivalId: string) => {
-    setExpandedRivals((prev) => {
-      const next = new Set(prev);
-      if (next.has(rivalId)) next.delete(rivalId);
-      else next.add(rivalId);
-      return next;
-    });
-  };
-
   if (!gameState) return null;
 
   const { scout, currentWeek, currentSeason } = gameState;
-  const upcoming = getUpcomingFixtures(currentWeek, 8);
+  const upcoming = scout.primarySpecialization !== "youth"
+    ? getUpcomingFixtures(currentWeek, 8)
+    : [];
   const thisWeekFixtures = upcoming.filter((f) => f.week === currentWeek);
   const recentReports = Object.values(gameState.reports)
     .sort((a, b) => b.submittedWeek - a.submittedWeek)
@@ -162,12 +153,13 @@ export function Dashboard() {
     ? Object.values(finances.expenses).reduce((s, v) => s + v, 0)
     : 0;
 
-  // Phase 2: rival scouts
-  const rivalScouts = Object.values(gameState.rivalScouts);
-  const hasRivals = rivalScouts.length > 0;
-
   // Specialization-specific data
   const specialization = scout.primarySpecialization;
+
+  // Phase 2: rival scouts — filtered to matching specialization
+  const allRivals = Object.values(gameState.rivalScouts);
+  const rivalScouts = allRivals.filter(r => r.specialization === specialization);
+  const hasRivals = rivalScouts.length > 0;
 
   // firstTeam: active (unfulfilled) directives
   const activeDirectives = specialization === "firstTeam"
@@ -203,11 +195,6 @@ export function Dashboard() {
 
   // data: analysts
   const dataAnalysts = specialization === "data" ? gameState.dataAnalysts : [];
-
-  // Observed player IDs for shared-target detection
-  const myTargetIds = new Set(
-    Object.values(gameState.observations).map((o) => o.playerId),
-  );
 
   // Issue 9: season phase badge
   const seasonPhase = getSeasonPhase(currentWeek);
@@ -1109,14 +1096,7 @@ export function Dashboard() {
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {rivalScouts.map((rival) => {
                     const rivalClub = gameState.clubs[rival.clubId];
-                    const sharedTargets = rival.targetPlayerIds.filter((id) =>
-                      myTargetIds.has(id),
-                    );
-                    const isExpanded = expandedRivals.has(rival.id);
-                    // Check which shared targets have observations but no report yet
-                    const reportedIds = new Set(
-                      Object.values(gameState.reports).map((r) => r.playerId),
-                    );
+                    const rivalLeague = rivalClub ? gameState.leagues[rivalClub.leagueId] : undefined;
                     return (
                       <div
                         key={rival.id}
@@ -1131,12 +1111,20 @@ export function Dashboard() {
                               {rivalClub?.shortName ?? "Unknown Club"}
                             </p>
                           </div>
-                          <Badge
-                            variant={threatBadgeVariant(rival.quality)}
-                            className="shrink-0 text-[10px]"
-                          >
-                            {threatLabel(rival.quality)}
-                          </Badge>
+                          <div className="flex flex-col items-end gap-1">
+                            <Badge
+                              variant={threatBadgeVariant(rival.quality)}
+                              className="shrink-0 text-[10px]"
+                            >
+                              {threatLabel(rival.quality)}
+                            </Badge>
+                            <Badge variant="outline" className="shrink-0 text-[9px] text-zinc-400 border-zinc-700">
+                              {rival.specialization === "firstTeam" ? "First Team"
+                               : rival.specialization === "youth" ? "Youth"
+                               : rival.specialization === "regional" ? "Regional"
+                               : "Data"}
+                            </Badge>
+                          </div>
                         </div>
 
                         {/* Quality stars */}
@@ -1155,68 +1143,10 @@ export function Dashboard() {
                           ))}
                         </div>
 
-                        {/* Shared targets warning */}
-                        {sharedTargets.length > 0 && (
-                          <p className="text-[10px] text-amber-400 flex items-center gap-1">
-                            <AlertTriangle size={9} aria-hidden="true" />
-                            {sharedTargets.length} shared target
-                            {sharedTargets.length !== 1 ? "s" : ""}
+                        {rivalLeague && (
+                          <p className="text-[10px] text-zinc-500">
+                            Active in {rivalLeague.name}
                           </p>
-                        )}
-
-                        {/* Expandable targets */}
-                        {rival.targetPlayerIds.length > 0 && (
-                          <button
-                            onClick={() => toggleRival(rival.id)}
-                            className="mt-2 flex w-full items-center gap-1 text-[10px] text-zinc-400 hover:text-white transition"
-                          >
-                            {isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                            View Targets ({rival.targetPlayerIds.length})
-                          </button>
-                        )}
-                        {isExpanded && (
-                          <div className="mt-2 space-y-1">
-                            {rival.targetPlayerIds.map((pid) => {
-                              const p = gameState.players[pid];
-                              const name = p ? `${p.firstName} ${p.lastName}` : pid;
-                              const isShared = myTargetIds.has(pid);
-                              const hasObs = Object.values(gameState.observations).some(
-                                (o) => o.playerId === pid,
-                              );
-                              const hasReport = reportedIds.has(pid);
-                              return (
-                                <div
-                                  key={pid}
-                                  className={`flex items-center justify-between rounded px-2 py-1 text-[10px] ${
-                                    isShared ? "bg-amber-500/10 border border-amber-500/20" : "bg-[#0c0c0c]"
-                                  }`}
-                                >
-                                  <button
-                                    onClick={() => {
-                                      selectPlayer(pid);
-                                      setScreen("playerProfile");
-                                    }}
-                                    className="text-left hover:text-emerald-400 transition truncate"
-                                  >
-                                    <span className={isShared ? "text-amber-400" : "text-zinc-300"}>
-                                      {name}
-                                    </span>
-                                    {isShared && (
-                                      <span className="ml-1 text-amber-500">SHARED</span>
-                                    )}
-                                  </button>
-                                  {isShared && hasObs && !hasReport && (
-                                    <button
-                                      onClick={() => startReport(pid)}
-                                      className="shrink-0 ml-1 rounded px-1.5 py-0.5 text-[9px] font-medium bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition"
-                                    >
-                                      File Report
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
                         )}
                       </div>
                     );

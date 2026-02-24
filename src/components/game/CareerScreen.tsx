@@ -19,6 +19,7 @@ import {
   Target,
   Brain,
   ArrowRight,
+  ChevronRight,
   TrendingDown,
   Minus,
 } from "lucide-react";
@@ -31,7 +32,7 @@ import type {
 } from "@/engine/core/types";
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
-import { EquipmentPanel } from "./EquipmentPanel";
+// EquipmentPanel now has its own dedicated screen
 import { Tooltip } from "@/components/ui/tooltip";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
@@ -700,9 +701,20 @@ export function CareerScreen() {
                   })}
                 </div>
 
-                {/* Equipment loadout */}
+                {/* Equipment loadout — link to dedicated screen */}
                 <div className="mt-4">
-                  <EquipmentPanel />
+                  <Card
+                    className="cursor-pointer hover:border-zinc-600 transition"
+                    onClick={() => setScreen("equipment")}
+                  >
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wrench size={14} className="text-emerald-400" />
+                        <span className="text-sm font-medium">Equipment Loadout</span>
+                      </div>
+                      <ChevronRight size={14} className="text-zinc-500" />
+                    </CardContent>
+                  </Card>
                 </div>
               </CardContent>
             </Card>

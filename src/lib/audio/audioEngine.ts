@@ -133,7 +133,11 @@ export class AudioEngine {
   }
 
   getVolumes(): VolumeState {
-    return { ...this.volumes };
+    // Return the same reference — this.volumes is replaced (never mutated)
+    // by setVolume/mute/unmute, so callers already get a stable snapshot.
+    // Returning a spread copy here would break useSyncExternalStore, which
+    // compares snapshots with Object.is and would see every call as a change.
+    return this.volumes;
   }
 
   mute(): void {

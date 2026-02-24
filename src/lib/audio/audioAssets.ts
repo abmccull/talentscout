@@ -39,11 +39,11 @@ function single(dir: string, name: string, ext = "mp3"): string[] {
 // ---------------------------------------------------------------------------
 
 export const MUSIC_ASSETS: Record<string, AudioAssetDef> = {
-  menu:         { srcs: single("/audio/music", "menu"),       loop: true },
-  scouting:     { srcs: single("/audio/music", "scouting"),   loop: true },
-  matchday:     { srcs: single("/audio/music", "matchday"),   loop: true },
-  "season-end": { srcs: single("/audio/music", "season-end"), loop: true },
-  tension:      { srcs: single("/audio/music", "tension"),    loop: true },
+  menu:         { srcs: variants("/audio/music", "menu", 3),       loop: true },
+  scouting:     { srcs: variants("/audio/music", "scouting", 3),   loop: true },
+  matchday:     { srcs: variants("/audio/music", "matchday", 3),   loop: true },
+  "season-end": { srcs: variants("/audio/music", "season-end", 3), loop: true },
+  tension:      { srcs: variants("/audio/music", "tension", 3),    loop: true },
 };
 
 export const SFX_ASSETS: Record<string, AudioAssetDef> = {

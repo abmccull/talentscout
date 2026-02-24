@@ -145,6 +145,16 @@ const ASSETS = [
     model: "nano-banana-pro",
     prompt: `An airport departure gate at dawn, a scout sitting alone with a worn leather bag and notebook, flight information board showing destinations of football cities (Madrid, Milan, Munich, Rio), emerald light from outside, contemplative mood, ${BRAND}`,
   },
+
+  // ── WORLD MAP ──────────────────────────────────────────────────────────
+  {
+    id: "world-map",
+    filename: "world-map.png",
+    subdir: "backgrounds",
+    aspect: "16:9",
+    model: "nano-banana-pro",
+    prompt: `Equirectangular flat world map projection showing all continents and oceans, dark navy ocean (#0f172a), dark landmasses with subtle emerald topographic contour lines, no text or labels, no borders, satellite imagery style, night view from space with subtle city lights, ${BRAND}`,
+  },
 ];
 
 // ---------------------------------------------------------------------------

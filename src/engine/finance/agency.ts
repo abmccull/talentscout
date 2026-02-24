@@ -53,7 +53,7 @@ export function upgradeOffice(
 // ---------------------------------------------------------------------------
 
 /** Salary ranges by role */
-const SALARY_BY_ROLE: Record<AgencyEmployeeRole, [number, number]> = {
+export const SALARY_BY_ROLE: Record<AgencyEmployeeRole, [number, number]> = {
   scout: [500, 2000],
   analyst: [400, 1500],
   administrator: [300, 1000],

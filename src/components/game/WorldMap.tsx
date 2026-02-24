@@ -20,53 +20,63 @@ export interface WorldMapProps {
 }
 
 // =============================================================================
-// MAP LAYOUT DATA
+// GEOGRAPHIC DATA
 // =============================================================================
 
-/**
- * Approximate [cx, cy, rx, ry] positions on a 800×400 viewBox.
- * Layout is stylized / board-game-style — not geographically precise.
- */
-const COUNTRY_POSITIONS: Record<
-  string,
-  { cx: number; cy: number; rx: number; ry: number; label: string }
-> = {
+const COUNTRY_COORDS: Record<string, { lat: number; lon: number; label: string }> = {
   // Europe
-  england:     { cx: 240, cy: 80,  rx: 22, ry: 18, label: "England" },
-  scotland:    { cx: 230, cy: 58,  rx: 16, ry: 14, label: "Scotland" },
-  france:      { cx: 258, cy: 108, rx: 24, ry: 18, label: "France" },
-  spain:       { cx: 232, cy: 136, rx: 26, ry: 18, label: "Spain" },
-  portugal:    { cx: 212, cy: 140, rx: 14, ry: 14, label: "Portugal" },
-  germany:     { cx: 284, cy: 92,  rx: 22, ry: 18, label: "Germany" },
-  netherlands: { cx: 272, cy: 72,  rx: 16, ry: 14, label: "Netherlands" },
-  belgium:     { cx: 268, cy: 87,  rx: 14, ry: 12, label: "Belgium" },
-  switzerland: { cx: 278, cy: 112, rx: 14, ry: 12, label: "Switzerland" },
-  italy:       { cx: 296, cy: 128, rx: 18, ry: 20, label: "Italy" },
-  turkey:      { cx: 334, cy: 126, rx: 22, ry: 16, label: "Turkey" },
+  england:     { lat: 52.5,  lon: -1.5,   label: "England" },
+  scotland:    { lat: 56.5,  lon: -4.0,   label: "Scotland" },
+  france:      { lat: 46.6,  lon: 2.3,    label: "France" },
+  spain:       { lat: 40.4,  lon: -3.7,   label: "Spain" },
+  portugal:    { lat: 39.4,  lon: -8.2,   label: "Portugal" },
+  germany:     { lat: 51.2,  lon: 10.4,   label: "Germany" },
+  netherlands: { lat: 52.1,  lon: 5.3,    label: "Netherlands" },
+  belgium:     { lat: 50.8,  lon: 4.4,    label: "Belgium" },
+  switzerland: { lat: 46.8,  lon: 8.2,    label: "Switzerland" },
+  italy:       { lat: 41.9,  lon: 12.5,   label: "Italy" },
+  turkey:      { lat: 39.9,  lon: 32.9,   label: "Turkey" },
   // Africa
-  nigeria:     { cx: 278, cy: 216, rx: 22, ry: 18, label: "Nigeria" },
-  ghana:       { cx: 256, cy: 218, rx: 16, ry: 14, label: "Ghana" },
-  ivorycoast:  { cx: 248, cy: 228, rx: 16, ry: 14, label: "Ivory Coast" },
-  senegal:     { cx: 230, cy: 204, rx: 16, ry: 14, label: "Senegal" },
-  cameroon:    { cx: 292, cy: 224, rx: 16, ry: 14, label: "Cameroon" },
-  egypt:       { cx: 318, cy: 186, rx: 20, ry: 16, label: "Egypt" },
-  southafrica: { cx: 310, cy: 272, rx: 22, ry: 18, label: "South Africa" },
+  nigeria:     { lat: 9.1,   lon: 7.5,    label: "Nigeria" },
+  ghana:       { lat: 7.9,   lon: -1.0,   label: "Ghana" },
+  ivorycoast:  { lat: 7.5,   lon: -5.5,   label: "Ivory Coast" },
+  senegal:     { lat: 14.7,  lon: -17.4,  label: "Senegal" },
+  cameroon:    { lat: 7.4,   lon: 12.4,   label: "Cameroon" },
+  egypt:       { lat: 30.0,  lon: 31.2,   label: "Egypt" },
+  southafrica: { lat: -30.6, lon: 22.9,   label: "South Africa" },
   // Americas
-  usa:         { cx: 120, cy: 140, rx: 34, ry: 24, label: "USA" },
-  canada:      { cx: 112, cy: 108, rx: 32, ry: 20, label: "Canada" },
-  mexico:      { cx: 106, cy: 172, rx: 22, ry: 18, label: "Mexico" },
-  brazil:      { cx: 178, cy: 244, rx: 32, ry: 28, label: "Brazil" },
-  argentina:   { cx: 166, cy: 294, rx: 20, ry: 24, label: "Argentina" },
-  colombia:    { cx: 152, cy: 216, rx: 18, ry: 16, label: "Colombia" },
+  usa:         { lat: 39.8,  lon: -98.6,  label: "USA" },
+  canada:      { lat: 56.1,  lon: -106.3, label: "Canada" },
+  mexico:      { lat: 23.6,  lon: -102.6, label: "Mexico" },
+  brazil:      { lat: -14.2, lon: -51.9,  label: "Brazil" },
+  argentina:   { lat: -38.4, lon: -63.6,  label: "Argentina" },
+  colombia:    { lat: 4.6,   lon: -74.3,  label: "Colombia" },
   // Asia
-  japan:       { cx: 582, cy: 124, rx: 16, ry: 20, label: "Japan" },
-  southkorea:  { cx: 562, cy: 136, rx: 16, ry: 14, label: "S. Korea" },
-  china:       { cx: 534, cy: 128, rx: 30, ry: 22, label: "China" },
-  saudiarabia: { cx: 376, cy: 172, rx: 24, ry: 18, label: "Saudi Arabia" },
+  japan:       { lat: 36.2,  lon: 138.3,  label: "Japan" },
+  southkorea:  { lat: 35.9,  lon: 127.8,  label: "S. Korea" },
+  china:       { lat: 35.9,  lon: 104.2,  label: "China" },
+  saudiarabia: { lat: 23.9,  lon: 45.1,   label: "Saudi Arabia" },
   // Oceania
-  australia:   { cx: 590, cy: 280, rx: 36, ry: 26, label: "Australia" },
-  newzealand:  { cx: 644, cy: 308, rx: 16, ry: 14, label: "New Zealand" },
+  australia:   { lat: -25.3, lon: 133.8,  label: "Australia" },
+  newzealand:  { lat: -40.9, lon: 174.9,  label: "New Zealand" },
 };
+
+// European countries — labels hidden by default, shown on hover to avoid crowding
+const EUROPE_KEYS = new Set([
+  "england", "scotland", "france", "spain", "portugal",
+  "germany", "netherlands", "belgium", "switzerland", "italy", "turkey",
+]);
+
+// =============================================================================
+// PROJECTION
+// =============================================================================
+
+/** Equirectangular projection for 16:9 world map (83°N to -60°S). */
+function lonLatToSvg(lon: number, lat: number): { x: number; y: number } {
+  const x = ((lon + 180) / 360) * 800;
+  const y = ((83 - lat) / 143) * 450; // 83°N to -60°S = 143° range
+  return { x, y };
+}
 
 // =============================================================================
 // COLOUR HELPERS
@@ -85,10 +95,10 @@ function countryFillHover(familiarity: number): string {
 }
 
 // =============================================================================
-// SUB-COMPONENT: single country shape
+// SUB-COMPONENT: single country marker
 // =============================================================================
 
-interface CountryShapeProps {
+interface CountryMarkerProps {
   countryKey: string;
   familiarity: number;
   isCurrent: boolean;
@@ -96,25 +106,29 @@ interface CountryShapeProps {
   onClick?: () => void;
 }
 
-function CountryShape({
+function CountryMarker({
   countryKey,
   familiarity,
   isCurrent,
   hasActiveAssignment,
   onClick,
-}: CountryShapeProps) {
+}: CountryMarkerProps) {
   const [hovered, setHovered] = React.useState(false);
-  const pos = COUNTRY_POSITIONS[countryKey];
-  if (!pos) return null;
+  const coords = COUNTRY_COORDS[countryKey];
+  if (!coords) return null;
 
+  const { x, y } = lonLatToSvg(coords.lon, coords.lat);
   const fill = hovered ? countryFillHover(familiarity) : countryFill(familiarity);
-  const stroke = isCurrent ? "#f59e0b" : "#1c1917"; // amber border for current location
+  const stroke = isCurrent ? "#f59e0b" : "#1c1917";
   const strokeWidth = isCurrent ? 2.5 : 1;
+
+  const isEurope = EUROPE_KEYS.has(countryKey);
+  const showLabel = !isEurope || hovered;
 
   return (
     <g
       role="button"
-      aria-label={`${pos.label}${isCurrent ? " (current location)" : ""}${hasActiveAssignment ? ", active assignment" : ""}`}
+      aria-label={`${coords.label}${isCurrent ? " (current location)" : ""}${hasActiveAssignment ? ", active assignment" : ""}`}
       tabIndex={onClick ? 0 : -1}
       style={{ cursor: onClick ? "pointer" : "default" }}
       onClick={onClick}
@@ -127,37 +141,43 @@ function CountryShape({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <ellipse
-        cx={pos.cx}
-        cy={pos.cy}
-        rx={pos.rx}
-        ry={pos.ry}
+      {/* Country circle marker */}
+      <circle
+        cx={x}
+        cy={y}
+        r={hovered ? 9 : 7}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
-        style={{ transition: "fill 150ms ease" }}
+        style={{ transition: "all 150ms ease" }}
       />
 
-      {/* Country label — hidden at small sizes via fontSize */}
+      {/* Country label */}
       <text
-        x={pos.cx}
-        y={pos.cy + 1}
+        x={x}
+        y={y - 12}
         textAnchor="middle"
-        dominantBaseline="middle"
-        fontSize="7"
+        dominantBaseline="auto"
+        fontSize="8"
+        fontWeight="600"
         fontFamily="system-ui, sans-serif"
         fill="#e4e4e7"
         pointerEvents="none"
         aria-hidden="true"
+        style={{
+          opacity: showLabel ? 1 : 0,
+          transition: "opacity 150ms ease",
+          textShadow: "0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.6)",
+        }}
       >
-        {pos.label}
+        {coords.label}
       </text>
 
       {/* Pulsing emerald dot for active assignments */}
       {hasActiveAssignment && (
         <circle
-          cx={pos.cx + pos.rx - 5}
-          cy={pos.cy - pos.ry + 5}
+          cx={x + 6}
+          cy={y - 6}
           r={4}
           fill="#10b981"
           aria-hidden="true"
@@ -185,9 +205,10 @@ function CountryShape({
 // =============================================================================
 
 /**
- * WorldMap — a stylized SVG schematic map of the 22+ game countries.
+ * WorldMap — an interactive world map showing scoutable countries.
  *
- * Countries are shown as ellipses positioned approximately on a world layout.
+ * Uses a Meshy AI-generated equirectangular map as background with
+ * interactive circle markers at real geographic positions.
  * Colour encodes familiarity level; a gold border marks the current location;
  * pulsing dots mark active scouting assignments.
  */
@@ -206,29 +227,27 @@ export function WorldMap({
       aria-label="World scouting map"
     >
       <svg
-        viewBox="0 0 800 400"
+        viewBox="0 0 800 450"
         aria-label="World scouting map showing all scoutable countries"
         role="img"
         className="w-full"
-        style={{ maxHeight: "420px" }}
+        style={{ maxHeight: "480px" }}
       >
-        {/* Ocean background */}
-        <rect width="800" height="400" fill="#0f172a" />
+        {/* Map background image */}
+        <image
+          href="/images/backgrounds/world-map.png"
+          x="0"
+          y="0"
+          width="800"
+          height="450"
+          preserveAspectRatio="xMidYMid slice"
+        />
 
-        {/* Subtle grid lines for reference */}
-        <line x1="400" y1="0" x2="400" y2="400" stroke="#1e293b" strokeWidth="0.5" aria-hidden="true" />
-        <line x1="0" y1="200" x2="800" y2="200" stroke="#1e293b" strokeWidth="0.5" aria-hidden="true" />
-
-        {/* Continent silhouette hints (purely decorative) */}
-        <text x="120" y="390" fontSize="9" fill="#1e293b" fontFamily="system-ui" aria-hidden="true">Americas</text>
-        <text x="255" y="390" fontSize="9" fill="#1e293b" fontFamily="system-ui" aria-hidden="true">Europe / Africa</text>
-        <text x="510" y="390" fontSize="9" fill="#1e293b" fontFamily="system-ui" aria-hidden="true">Asia / Oceania</text>
-
-        {/* Render all countries that have position data */}
+        {/* Render all countries that have coordinate data */}
         {countries.map((key) => {
-          if (!COUNTRY_POSITIONS[key]) return null;
+          if (!COUNTRY_COORDS[key]) return null;
           return (
-            <CountryShape
+            <CountryMarker
               key={key}
               countryKey={key}
               familiarity={familiarityLevels[key] ?? 0}
@@ -246,15 +265,15 @@ export function WorldMap({
         aria-label="Map legend"
       >
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm bg-zinc-700" aria-hidden="true" />
+          <span className="inline-block h-3 w-3 rounded-full bg-zinc-700" aria-hidden="true" />
           Unknown
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm bg-yellow-700" aria-hidden="true" />
+          <span className="inline-block h-3 w-3 rounded-full bg-yellow-700" aria-hidden="true" />
           Familiar
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm bg-green-700" aria-hidden="true" />
+          <span className="inline-block h-3 w-3 rounded-full bg-green-700" aria-hidden="true" />
           Well known
         </span>
         <span className="flex items-center gap-1.5">
@@ -262,7 +281,7 @@ export function WorldMap({
           Active assignment
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded-sm border-2 border-amber-500 bg-green-700" aria-hidden="true" />
+          <span className="inline-block h-3 w-3 rounded-full border-2 border-amber-500 bg-green-700" aria-hidden="true" />
           Current location
         </span>
       </div>

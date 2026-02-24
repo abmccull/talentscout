@@ -119,10 +119,10 @@ const freelanceFork: TutorialStep[] = [
   {
     id: "onb-free-marketplace",
     screen: "dashboard",
-    targetSelector: "nav-finances",
-    title: "The Marketplace",
+    targetSelector: "dashboard-finances",
+    title: "Earning Income",
     description:
-      "Open Finances to list reports for sale. Pricing, conviction level, and exclusivity determine what clubs pay.",
+      "No salary means you earn by selling reports and placing youth at clubs. As you grow, you\u2019ll unlock the Finances screen to list reports on the marketplace.",
     position: "bottom",
   },
 ];

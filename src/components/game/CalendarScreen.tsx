@@ -51,6 +51,7 @@ export function CalendarScreen() {
     scheduleActivity,
     unscheduleActivity,
     advanceWeek,
+    startWeekSimulation,
     getClub,
     lastWeekSummary,
     dismissWeekSummary,
@@ -245,7 +246,7 @@ export function CalendarScreen() {
             </p>
           </div>
           <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
-            <Button onClick={() => { playSFX("calendar-slide"); advanceWeek(); }} data-tutorial-id="advance-week">Advance Week</Button>
+            <Button onClick={() => { playSFX("calendar-slide"); startWeekSimulation(); }} data-tutorial-id="advance-week">Advance Week</Button>
           </Tooltip>
         </div>
 

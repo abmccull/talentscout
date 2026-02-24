@@ -102,6 +102,20 @@ export interface WeekProcessingResult {
 
   /** Number of placement reports written this week */
   writePlacementReportsExecuted: number;
+  /** Number of school matches observed this week */
+  schoolMatchesExecuted: number;
+  /** Number of grassroots tournaments attended this week */
+  grassrootsTournamentsExecuted: number;
+  /** Number of street football sessions observed this week */
+  streetFootballExecuted: number;
+  /** Number of academy trial days attended this week */
+  academyTrialDaysExecuted: number;
+  /** Number of youth festivals attended this week */
+  youthFestivalsExecuted: number;
+  /** Number of follow-up sessions conducted this week */
+  followUpSessionsExecuted: number;
+  /** Number of parent/coach meetings held this week */
+  parentCoachMeetingsExecuted: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -414,14 +428,17 @@ export function getAvailableActivities(
   }
 
   // Match attendance — current and upcoming fixtures
-  const upcomingFixtures = fixtures.filter((f) => f.week === week && !f.played);
-  for (const fixture of upcomingFixtures.slice(0, 5)) {
-    activities.push({
-      type: "attendMatch",
-      slots: ACTIVITY_SLOT_COSTS.attendMatch,
-      targetId: fixture.id,
-      description: `Attend match: ${fixture.homeClubId} vs ${fixture.awayClubId}`,
-    });
+  // First-team match attendance is not available for youth-only scouts
+  if (scout.primarySpecialization !== "youth") {
+    const upcomingFixtures = fixtures.filter((f) => f.week === week && !f.played);
+    for (const fixture of upcomingFixtures.slice(0, 5)) {
+      activities.push({
+        type: "attendMatch",
+        slots: ACTIVITY_SLOT_COSTS.attendMatch,
+        targetId: fixture.id,
+        description: `Attend match: ${fixture.homeClubId} vs ${fixture.awayClubId}`,
+      });
+    }
   }
 
   // Video analysis (flexible — no fixture dependency)
@@ -754,6 +771,13 @@ export function processCompletedWeek(
       marketInefficienciesExecuted: 0,
       analyticsTeamMeetingsExecuted: 0,
       writePlacementReportsExecuted: 0,
+      schoolMatchesExecuted: 0,
+      grassrootsTournamentsExecuted: 0,
+      streetFootballExecuted: 0,
+      academyTrialDaysExecuted: 0,
+      youthFestivalsExecuted: 0,
+      followUpSessionsExecuted: 0,
+      parentCoachMeetingsExecuted: 0,
     };
   }
 
@@ -791,6 +815,13 @@ export function processCompletedWeek(
 
   // Youth-exclusive
   let writePlacementReportsExecuted = 0;
+  let schoolMatchesExecuted = 0;
+  let grassrootsTournamentsExecuted = 0;
+  let streetFootballExecuted = 0;
+  let academyTrialDaysExecuted = 0;
+  let youthFestivalsExecuted = 0;
+  let followUpSessionsExecuted = 0;
+  let parentCoachMeetingsExecuted = 0;
 
   const endurance = scout.attributes.endurance; // 1–20
 
@@ -938,6 +969,27 @@ export function processCompletedWeek(
       case "writePlacementReport":
         writePlacementReportsExecuted++;
         break;
+      case "schoolMatch":
+        schoolMatchesExecuted++;
+        break;
+      case "grassrootsTournament":
+        grassrootsTournamentsExecuted++;
+        break;
+      case "streetFootball":
+        streetFootballExecuted++;
+        break;
+      case "academyTrialDay":
+        academyTrialDaysExecuted++;
+        break;
+      case "youthFestival":
+        youthFestivalsExecuted++;
+        break;
+      case "followUpSession":
+        followUpSessionsExecuted++;
+        break;
+      case "parentCoachMeeting":
+        parentCoachMeetingsExecuted++;
+        break;
 
       default:
         break;
@@ -988,6 +1040,13 @@ export function processCompletedWeek(
     analyticsTeamMeetingsExecuted,
     // Youth-exclusive
     writePlacementReportsExecuted,
+    schoolMatchesExecuted,
+    grassrootsTournamentsExecuted,
+    streetFootballExecuted,
+    academyTrialDaysExecuted,
+    youthFestivalsExecuted,
+    followUpSessionsExecuted,
+    parentCoachMeetingsExecuted,
   };
 }
 

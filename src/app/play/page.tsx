@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -32,6 +32,9 @@ import { AchievementScreen } from "@/components/game/AchievementScreen";
 import { ScenarioSelect } from "@/components/game/ScenarioSelect";
 import { HallOfFame } from "@/components/game/HallOfFame";
 import { DemoEndScreen } from "@/components/game/DemoEndScreen";
+import { WeekSimulationScreen } from "@/components/game/WeekSimulationScreen";
+import { EquipmentScreen } from "@/components/game/EquipmentScreen";
+import { AgencyScreen } from "@/components/game/AgencyScreen";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
@@ -49,10 +52,13 @@ function HallOfFameWrapper() {
   const gameState = useGameStore((s) => s.gameState);
   const setScreen = useGameStore((s) => s.setScreen);
 
-  if (!gameState) {
-    setScreen("mainMenu");
-    return null;
-  }
+  useEffect(() => {
+    if (!gameState) {
+      setScreen("mainMenu");
+    }
+  }, [gameState, setScreen]);
+
+  if (!gameState) return null;
 
   return (
     <HallOfFame
@@ -121,6 +127,12 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <HallOfFameWrapper />;
     case "demoEnd":
       return <DemoEndScreen />;
+    case "weekSimulation":
+      return <WeekSimulationScreen />;
+    case "equipment":
+      return <EquipmentScreen />;
+    case "agency":
+      return <AgencyScreen />;
     default:
       return <MainMenu />;
   }

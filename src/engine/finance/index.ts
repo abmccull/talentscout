@@ -54,7 +54,7 @@ export { calculatePerformanceBonusAmount, calculateSigningBonus, calculateDiscov
 export { calculateReportPrice, listReport, withdrawListing, expireOldListings, processMarketplaceSales } from "./reportMarketplace";
 export { calculatePlacementFee, calculateYouthPlacementFee, calculateSellOnPercentage, processSellOnClauses, checkPlacementFeeEligibility, triggerPlacementFee } from "./placementFees";
 export { generateRetainerOffers, acceptRetainer, cancelRetainer, processRetainerDeliveries, recordRetainerDelivery } from "./retainers";
-export { OFFICE_TIERS, upgradeOffice, hireEmployee, fireEmployee, processEmployeeWeek, calculateAgencyOverhead } from "./agency";
+export { OFFICE_TIERS, SALARY_BY_ROLE, upgradeOffice, hireEmployee, fireEmployee, processEmployeeWeek, calculateAgencyOverhead } from "./agency";
 export { getLoanEligibility, takeLoan, processLoanPayment, repayLoanEarly } from "./loans";
 export { generateConsultingOffers, acceptConsulting, processConsultingDeadline, completeConsulting } from "./consulting";
 export { calculateProfitAndLoss, forecastCashFlow, calculateRevenueBreakdown, calculateNetWorth } from "./dashboard";

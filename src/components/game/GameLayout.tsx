@@ -23,29 +23,60 @@ import {
   Wallet,
   Book,
   Medal,
+  Wrench,
+  Building2,
   X,
 } from "lucide-react";
 
-const NAV_ITEMS: { screen: GameScreen; label: string; icon: React.ElementType }[] = [
-  { screen: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { screen: "calendar", label: "Calendar", icon: Calendar },
-  { screen: "playerDatabase", label: "Players", icon: Users },
-  { screen: "leaderboard", label: "Leaderboard", icon: Award },
-  { screen: "fixtureBrowser", label: "Fixtures", icon: CalendarDays },
-  { screen: "reportHistory", label: "Reports", icon: FileText },
-  { screen: "career", label: "Career", icon: Briefcase },
-  { screen: "inbox", label: "Inbox", icon: Mail },
-  { screen: "network", label: "Network", icon: Network },
-  { screen: "finances", label: "Finances", icon: Wallet },
-  { screen: "discoveries", label: "Discoveries", icon: Trophy },
-  { screen: "analytics", label: "Analytics", icon: BarChart3 },
-  { screen: "youthScouting", label: "Youth", icon: GraduationCap },
-  { screen: "alumniDashboard", label: "Alumni", icon: Award },
-  { screen: "npcManagement", label: "Scouts", icon: UserCheck },
-  { screen: "internationalView", label: "International", icon: Globe },
-  { screen: "achievements", label: "Achievements", icon: Medal },
-  { screen: "handbook", label: "Handbook", icon: Book },
-  { screen: "settings", label: "Settings", icon: Settings },
+// ─── Sectioned Navigation ────────────────────────────────────────────────────
+
+interface NavSection {
+  label: string | null; // null = no header (utility section)
+  items: { screen: GameScreen; label: string; icon: React.ElementType }[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    label: "Scouting",
+    items: [
+      { screen: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { screen: "calendar", label: "Calendar", icon: Calendar },
+      { screen: "fixtureBrowser", label: "Fixtures", icon: CalendarDays },
+      { screen: "playerDatabase", label: "Players", icon: Users },
+      { screen: "reportHistory", label: "Reports", icon: FileText },
+    ],
+  },
+  {
+    label: "Career",
+    items: [
+      { screen: "career", label: "My Scout", icon: Briefcase },
+      { screen: "equipment", label: "Equipment", icon: Wrench },
+      { screen: "finances", label: "Finances", icon: Wallet },
+      { screen: "agency", label: "Agency", icon: Building2 },
+    ],
+  },
+  {
+    label: "World",
+    items: [
+      { screen: "youthScouting", label: "Youth Hub", icon: GraduationCap },
+      { screen: "discoveries", label: "Discoveries", icon: Trophy },
+      { screen: "network", label: "Scout Network", icon: Network },
+      { screen: "npcManagement", label: "Scouts", icon: UserCheck },
+      { screen: "internationalView", label: "International", icon: Globe },
+      { screen: "alumniDashboard", label: "Alumni", icon: Award },
+      { screen: "analytics", label: "Analytics", icon: BarChart3 },
+      { screen: "leaderboard", label: "Leaderboard", icon: Award },
+    ],
+  },
+  {
+    label: null,
+    items: [
+      { screen: "inbox", label: "Inbox", icon: Mail },
+      { screen: "achievements", label: "Achievements", icon: Medal },
+      { screen: "handbook", label: "Handbook", icon: Book },
+      { screen: "settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 // Screens that are always visible regardless of tier or week
@@ -53,8 +84,8 @@ const ALWAYS_VISIBLE = new Set<GameScreen>([
   "dashboard",
   "calendar",
   "playerDatabase",
-  "leaderboard",
   "fixtureBrowser",
+  "finances",
   "achievements",
   "handbook",
   "settings",
@@ -81,26 +112,38 @@ function saveSeenNav(seen: Set<GameScreen>): void {
   }
 }
 
-/** Returns true if the nav item should be shown given current tier, week, and country count. */
+/** Returns true if the nav item should be shown given current game state. */
 function getNavVisibility(
   screen: GameScreen,
   tier: number,
   effectiveWeek: number,
   countryCount: number,
+  careerPath: string,
 ): boolean {
   if (ALWAYS_VISIBLE.has(screen)) return true;
 
   switch (screen) {
-    // Week 3+ items
+    // Always visible (reports encourage early writing)
     case "reportHistory":
+      return effectiveWeek >= 3;
+
+    // Week 3+ items
     case "career":
+    case "equipment":
     case "inbox":
       return effectiveWeek >= 3;
 
+    // Agency: independent path + tier 3+
+    case "agency":
+      return careerPath === "independent" && tier >= 3;
+
     // Tier 2+ items
     case "network":
-    case "finances":
       return tier >= 2;
+
+    // Leaderboard always visible
+    case "leaderboard":
+      return true;
 
     // Tier 3+ items
     case "discoveries":
@@ -139,14 +182,19 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
 
   const tier = gameState.scout.careerTier;
   const countryCount = gameState.countries.length;
+  const careerPath = gameState.scout.careerPath ?? "club";
   // effectiveWeek accumulates across seasons so week-gated items stay visible
   // after season 1 ends (season 2+ means week >= 53, unlocking everything)
   const effectiveWeek =
     (gameState.currentSeason - 1) * 52 + gameState.currentWeek;
 
-  const visibleNavItems = NAV_ITEMS.filter(({ screen }) =>
-    getNavVisibility(screen, tier, effectiveWeek, countryCount),
-  );
+  // Build visible sections — only include sections that have at least one visible item
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    visibleItems: section.items.filter(({ screen }) =>
+      getNavVisibility(screen, tier, effectiveWeek, countryCount, careerPath),
+    ),
+  })).filter((section) => section.visibleItems.length > 0);
 
   function handleNavClick(screen: GameScreen): void {
     if (screen !== currentScreen) playSFX("click");
@@ -172,40 +220,52 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           </p>
         </div>
 
-        <nav className="flex-1 p-2" data-tutorial-id="sidebar-nav">
-          {visibleNavItems.map(({ screen, label, icon: Icon }) => {
-            const isNew = !seenNav.has(screen);
-            return (
-              <button
-                key={screen}
-                data-tutorial-id={`nav-${screen}`}
-                onClick={() => handleNavClick(screen)}
-                className={`mb-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                  currentScreen === screen
-                    ? "bg-emerald-500/10 text-emerald-400"
-                    : "text-zinc-400 hover:bg-[var(--secondary)] hover:text-white"
-                }`}
-              >
-                <Icon size={16} />
-                <span className="flex-1 text-left">{label}</span>
-                {isNew && (
-                  <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
-                    New
-                  </span>
-                )}
-                {screen === "inbox" && !isNew && unreadCount > 0 && (
-                  <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                    {unreadCount}
-                  </span>
-                )}
-                {screen === "npcManagement" && !isNew && unreviewedNpcReportCount > 0 && (
-                  <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                    {unreviewedNpcReportCount}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto p-2" data-tutorial-id="sidebar-nav">
+          {visibleSections.map((section) => (
+            <div key={section.label ?? "util"}>
+              {section.label && (
+                <p className="px-3 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                  {section.label}
+                </p>
+              )}
+              {!section.label && visibleSections.length > 1 && (
+                <div className="mx-3 my-2 border-t border-zinc-800" />
+              )}
+              {section.visibleItems.map(({ screen, label, icon: Icon }) => {
+                const isNew = !seenNav.has(screen);
+                return (
+                  <button
+                    key={screen}
+                    data-tutorial-id={`nav-${screen}`}
+                    onClick={() => handleNavClick(screen)}
+                    className={`mb-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                      currentScreen === screen
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "text-zinc-400 hover:bg-[var(--secondary)] hover:text-white"
+                    }`}
+                  >
+                    <Icon size={16} />
+                    <span className="flex-1 text-left">{label}</span>
+                    {isNew && (
+                      <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
+                        New
+                      </span>
+                    )}
+                    {screen === "inbox" && !isNew && unreadCount > 0 && (
+                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                        {unreadCount}
+                      </span>
+                    )}
+                    {screen === "npcManagement" && !isNew && unreviewedNpcReportCount > 0 && (
+                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                        {unreviewedNpcReportCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         {/* Scout Info */}

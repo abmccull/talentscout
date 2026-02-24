@@ -509,6 +509,7 @@ export function PlayerProfile() {
     getClub,
     getLeague,
     toggleWatchlist,
+    setPendingFixtureClubFilter,
   } = useGameStore();
 
   if (!gameState || !selectedPlayerId) return null;
@@ -650,10 +651,24 @@ export function PlayerProfile() {
               </div>
             </div>
           </div>
-          <Button onClick={() => startReport(selectedPlayerId)} disabled={observations.length === 0}>
-            <FileText size={14} className="mr-2" />
-            Write Report
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => startReport(selectedPlayerId)} disabled={observations.length === 0}>
+              <FileText size={14} className="mr-2" />
+              Write Report
+            </Button>
+            {club && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPendingFixtureClubFilter(club.shortName);
+                  setScreen("fixtureBrowser");
+                }}
+              >
+                <Eye size={14} className="mr-2" />
+                Find Match
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Overview */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,13 +11,22 @@ import type { Fixture } from "@/engine/core/types";
 import { ClubCrest } from "@/components/game/ClubCrest";
 
 export function FixtureBrowser() {
-  const { gameState, startMatch, getClub, getLeague, setScreen } = useGameStore();
+  const { gameState, startMatch, getClub, getLeague, setScreen, pendingFixtureClubFilter, setPendingFixtureClubFilter } = useGameStore();
 
   const [leagueFilter, setLeagueFilter] = useState("");
   const [weekMin, setWeekMin] = useState("");
   const [weekMax, setWeekMax] = useState("");
-  const [clubSearch, setClubSearch] = useState("");
+  const [clubSearch, setClubSearch] = useState(
+    useGameStore.getState().pendingFixtureClubFilter ?? ""
+  );
   const [showPlayed, setShowPlayed] = useState(false);
+
+  useEffect(() => {
+    if (pendingFixtureClubFilter) {
+      setPendingFixtureClubFilter(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const leagues = useMemo(
     () => (gameState ? Object.values(gameState.leagues) : []),

@@ -63,8 +63,15 @@ export function PlayerDatabase() {
 
   const sourcePlayers = scoutedOnly ? scoutedPlayers : allPlayers;
 
+  const specialization = gameState?.scout.primarySpecialization;
+  const specFilteredPlayers = useMemo(() => {
+    if (scoutedOnly) return sourcePlayers; // scouted = show all observed
+    if (specialization === "youth") return sourcePlayers.filter(p => p.age <= 21);
+    return sourcePlayers;
+  }, [sourcePlayers, scoutedOnly, specialization]);
+
   const rows: PlayerRow[] = useMemo(() => {
-    return sourcePlayers.map((player) => {
+    return specFilteredPlayers.map((player) => {
       const club = getClub(player.clubId);
       const league = club ? getLeague(club.leagueId) : undefined;
       const observations = getPlayerObservations(player.id);
@@ -82,7 +89,7 @@ export function PlayerDatabase() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourcePlayers, gameState?.observations, gameState?.reports]);
+  }, [specFilteredPlayers, gameState?.observations, gameState?.reports]);
 
   const filtered = useMemo(() => {
     let result = rows;

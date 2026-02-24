@@ -196,24 +196,63 @@ function classifyWonderkidTier(age: number, pa: number): WonderkidTier {
   return "journeyman";
 }
 
-function calculateMarketValue(ca: number, pa: number, age: number, pos: Position): number {
-  const caFactor = Math.pow(ca / 100, 2.5);
-  let base = caFactor * 50_000_000;
+function calculateMarketValue(
+  ca: number,
+  pa: number,
+  age: number,
+  pos: Position,
+  clubReputation: number = 80,
+): number {
+  // ---------------------------------------------------------------------------
+  // Calibrated against Transfermarkt 2025-26 data:
+  //   Egyptian PL avg €253k · Al Ahly top €4.5M · PL avg €22M
+  //   Championship avg €2.88M · League Two avg €152k
+  //
+  // The 5th-power curve on a 0-1 scale produces the ~4 orders of magnitude
+  // spread needed (€10k – €150M).  Club reputation then places players on the
+  // correct league tier.
+  // ---------------------------------------------------------------------------
+
+  // 1. Base value from current ability — steep curve so low-CA players are
+  //    worth very little while elite players command huge fees.
+  //    CA 50 → €195k | CA 100 → €6.25M | CA 150 → €47M | CA 180 → €118M
+  const caFactor = Math.pow(ca / 200, 5);
+  let base = caFactor * 200_000_000;
+
+  // 2. Age factor — teenagers are unproven (heavily discounted), prime-age
+  //    players get full value, veterans depreciate sharply.
   const ageFactor =
-    age <= 20 ? 1.4
-    : age <= 24 ? 1.2
-    : age <= 27 ? 1.0
-    : age <= 30 ? 0.75
-    : age <= 33 ? 0.45
-    : 0.2;
+    age <= 18 ? 0.35
+    : age <= 20 ? 0.55
+    : age <= 23 ? 0.8
+    : age <= 29 ? 1.0
+    : age <= 31 ? 0.6
+    : age <= 33 ? 0.3
+    : 0.12;
   base *= ageFactor;
-  base *= 1 + Math.max(0, pa - ca) / 200;
+
+  // 3. Potential premium — only for players 25 and under, reflecting
+  //    speculative resale value.  Capped at a modest multiplier to prevent
+  //    youth value inflation.
+  if (age <= 25 && pa > ca) {
+    base *= 1 + (pa - ca) / 400;
+  }
+
+  // 4. Position multiplier — strikers / attacking mids command premiums.
   const posMult: Record<Position, number> = {
     ST: 1.3, CAM: 1.2, LW: 1.15, RW: 1.15, CM: 1.0,
-    CDM: 0.95, LB: 0.9, RB: 0.9, CB: 0.85, GK: 0.8,
+    CDM: 0.95, LB: 0.9, RB: 0.9, CB: 0.85, GK: 0.75,
   };
   base *= posMult[pos];
-  return Math.round(base);
+
+  // 5. Club / league reputation — the dominant tier separator.
+  //    Rep 95 (Man City) → 0.93x | Rep 65 (Championship) → 0.52x
+  //    Rep 50 (Al Ahly)  → 0.35x | Rep 30 (lower Egyptian) → 0.16x
+  const repFactor = Math.pow(Math.min(clubReputation, 100) / 100, 1.5);
+  base *= repFactor;
+
+  // Floor: every registered player has some nominal value.
+  return Math.max(5_000, Math.round(base));
 }
 
 function calculateWage(ca: number, clubRep: number): number {
@@ -340,7 +379,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     clubId,
     contractExpiry: currentSeason + rng.nextInt(1, 5),
     wage: calculateWage(currentAbility, clubReputation),
-    marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position),
+    marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),
     attributes,
     currentAbility,
     potentialAbility,
