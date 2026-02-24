@@ -74,37 +74,76 @@ const EUROPE_KEYS = new Set([
   "germany", "netherlands", "belgium", "switzerland", "italy", "turkey",
 ]);
 
-/** Minor coordinate nudges for overlapping European markers. */
-const COORD_NUDGES: Record<string, { dx: number; dy: number }> = {
-  netherlands: { dx: 2, dy: -4 },
-  belgium:     { dx: 2, dy: 3 },
-  switzerland: { dx: 3, dy: 3 },
+/**
+ * Direct SVG positions hand-calibrated against the AI-generated background.
+ * The background doesn't follow a standard projection, so hardcoded positions
+ * are more accurate than any linear lon/lat formula.
+ */
+const COUNTRY_SVG_POS: Record<string, { x: number; y: number }> = {
+  // Europe
+  england:     { x: 302, y: 104 },
+  scotland:    { x: 293, y: 94 },
+  france:      { x: 311, y: 116 },
+  spain:       { x: 300, y: 128 },
+  portugal:    { x: 288, y: 128 },
+  germany:     { x: 323, y: 106 },
+  netherlands: { x: 314, y: 100 },
+  belgium:     { x: 314, y: 108 },
+  switzerland: { x: 320, y: 117 },
+  italy:       { x: 326, y: 123 },
+  turkey:      { x: 362, y: 124 },
+  // Africa
+  nigeria:     { x: 323, y: 178 },
+  ghana:       { x: 311, y: 180 },
+  ivorycoast:  { x: 304, y: 180 },
+  senegal:     { x: 288, y: 166 },
+  cameroon:    { x: 332, y: 180 },
+  egypt:       { x: 364, y: 142 },
+  southafrica: { x: 362, y: 254 },
+  // Americas
+  usa:         { x: 177, y: 128 },
+  canada:      { x: 174, y: 118 },
+  mexico:      { x: 140, y: 168 },
+  brazil:      { x: 224, y: 230 },
+  argentina:   { x: 210, y: 250 },
+  colombia:    { x: 180, y: 180 },
+  // Asia
+  japan:       { x: 668, y: 122 },
+  southkorea:  { x: 650, y: 124 },
+  china:       { x: 632, y: 120 },
+  saudiarabia: { x: 384, y: 152 },
+  // Oceania
+  australia:   { x: 686, y: 262 },
+  newzealand:  { x: 716, y: 280 },
 };
 
 // =============================================================================
 // PROJECTION — calibrated to the AI-generated background image
 // =============================================================================
 
-// The background image (world-map.png) spans approximately 85°N to -77°S
-// with ~8px dark border padding at top/bottom edges.
+// Calibrated against reference points on the background image:
+//   UK (lon=0)     → x≈397   Japan (lon=138)  → x≈672
+//   UK (lat=52.5)  → y≈97    Australia (lat=-34) → y≈280
+const PROJ_LEFT_PAD = 30;
+const PROJ_MAP_WIDTH = 740;
 const PROJ_TOP_PAD = 8;
-const PROJ_MAP_HEIGHT = 434; // 450 - 2 * 8
-const PROJ_TOP_LAT = 85;
-const PROJ_LAT_RANGE = 162; // 85 - (-77) = 162°
+const PROJ_MAP_HEIGHT = 410;
+const PROJ_TOP_LAT = 83;
+const PROJ_LAT_RANGE = 150; // 83 - (-67) = 150°
 
 function lonLatToSvg(lon: number, lat: number): { x: number; y: number } {
-  const x = ((lon + 180) / 360) * 800;
+  const x = PROJ_LEFT_PAD + ((lon + 180) / 360) * PROJ_MAP_WIDTH;
   const y = PROJ_TOP_PAD + ((PROJ_TOP_LAT - lat) / PROJ_LAT_RANGE) * PROJ_MAP_HEIGHT;
   return { x, y };
 }
 
-/** Get projected SVG coords for a country, with nudge applied. */
+/** Get SVG coords for a country (hardcoded position, or projection fallback). */
 function getCountryPos(key: string): { x: number; y: number } | null {
+  const direct = COUNTRY_SVG_POS[key];
+  if (direct) return { x: direct.x, y: direct.y };
   const coords = COUNTRY_COORDS[key];
   if (!coords) return null;
-  const { x, y } = lonLatToSvg(coords.lon, coords.lat);
-  const nudge = COORD_NUDGES[key];
-  return { x: x + (nudge?.dx ?? 0), y: y + (nudge?.dy ?? 0) };
+  return lonLatToSvg(coords.lon, coords.lat);
 }
 
 // =============================================================================

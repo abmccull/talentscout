@@ -250,14 +250,29 @@ export function generateUrgentAssessment(
   rng: RNG,
   state: GameState,
 ): UrgentAssessment | null {
-  const allPlayerIds = Object.keys(state.players);
-  if (allPlayerIds.length === 0) return null;
-
   const allClubs = Object.values(state.clubs);
   if (allClubs.length === 0) return null;
 
+  // Filter candidate players by scout specialization
+  const spec = state.scout.primarySpecialization;
+  let candidateIds = Object.keys(state.players);
+
+  if (spec === "youth") {
+    candidateIds = candidateIds.filter((id) => {
+      const p = state.players[id];
+      return p && p.age <= 21;
+    });
+  } else if (spec === "firstTeam") {
+    candidateIds = candidateIds.filter((id) => {
+      const p = state.players[id];
+      return p && p.age >= 20;
+    });
+  }
+
+  if (candidateIds.length === 0) return null;
+
   // Pick a random player to be assessed
-  const playerId = rng.pick(allPlayerIds);
+  const playerId = rng.pick(candidateIds);
 
   // Pick a random club as the requester (prefer clubs other than the scout's
   // own club to represent external transfer interest, but don't hard-block it)
@@ -322,6 +337,7 @@ function makeMessageId(prefix: string, rng: RNG): string {
 
 /**
  * Generate an inbox message notifying the scout of a new urgent assessment.
+ * Message framing adapts to the scout's specialization.
  */
 function buildUrgentAssessmentMessage(
   assessment: UrgentAssessment,
@@ -333,14 +349,25 @@ function buildUrgentAssessmentMessage(
     ? `${player.firstName} ${player.lastName}`
     : "an unnamed player";
   const position = player ? ` (${player.position})` : "";
+  const age = player ? `, age ${player.age}` : "";
+
+  const isYouth = state.scout.primarySpecialization === "youth";
+
+  const title = isYouth
+    ? `Urgent: Evaluate prospect ${playerName} by day ${assessment.deadline}`
+    : `Urgent: Assess ${playerName} by day ${assessment.deadline}`;
+
+  const body = isYouth
+    ? `${assessment.requestedBy} is interested in signing young talent and wants your assessment of ${playerName}${position}${age} before the transfer window closes. Submit your report by day ${assessment.deadline}. Completing this on time earns +${assessment.reputationReward} reputation; missing it costs −${assessment.reputationPenalty}.`
+    : `${assessment.requestedBy} has requested an urgent assessment of ${playerName}${position} before the transfer window closes. Submit your report by day ${assessment.deadline}. Completing this on time earns +${assessment.reputationReward} reputation; missing it costs −${assessment.reputationPenalty}.`;
 
   return {
     id: makeMessageId("urgent_assessment", rng),
     week: state.currentWeek,
     season: state.currentSeason,
     type: "assignment",
-    title: `Urgent: Assess ${playerName} by day ${assessment.deadline}`,
-    body: `${assessment.requestedBy} has requested an urgent assessment of ${playerName}${position} before the transfer window closes. Submit your report by day ${assessment.deadline}. Completing this on time earns +${assessment.reputationReward} reputation; missing it costs −${assessment.reputationPenalty}.`,
+    title,
+    body,
     read: false,
     actionRequired: true,
     relatedId: assessment.playerId,

@@ -442,11 +442,32 @@ export function getAvailableActivities(
   }
 
   // Video analysis (flexible — no fixture dependency)
-  activities.push({
-    type: "watchVideo",
-    slots: ACTIVITY_SLOT_COSTS.watchVideo,
-    description: "Watch video footage of a target player",
-  });
+  if (scout.primarySpecialization === "youth") {
+    activities.push({
+      type: "watchVideo",
+      slots: ACTIVITY_SLOT_COSTS.watchVideo,
+      targetId: "video-academy",
+      description: "Review academy footage — higher-profile youth with buzz",
+    });
+    activities.push({
+      type: "watchVideo",
+      slots: ACTIVITY_SLOT_COSTS.watchVideo,
+      targetId: "video-grassroots",
+      description: "Watch grassroots tournament highlights — broader regional pool",
+    });
+    activities.push({
+      type: "watchVideo",
+      slots: ACTIVITY_SLOT_COSTS.watchVideo,
+      targetId: "video-school",
+      description: "Study school match recordings — discover low-visibility gems (14-16)",
+    });
+  } else {
+    activities.push({
+      type: "watchVideo",
+      slots: ACTIVITY_SLOT_COSTS.watchVideo,
+      description: "Watch video footage of a target player",
+    });
+  }
 
   // Write report
   activities.push({

@@ -19,6 +19,7 @@ import type {
   YouthVenueType,
 } from "@/engine/core/types";
 import { observePlayerLight } from "@/engine/scout/perception";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // =============================================================================
 // VENUE POOL CONFIGURATION
@@ -121,6 +122,11 @@ export function getYouthVenuePool(
   }
 
   // Step 3: apply venue-specific filters
+  // Use the scout's mechanical home country (derived from countryReputations)
+  // rather than the optional display-only nationality field. Youth .country
+  // stores the lowercase country key (e.g. "england") which matches the key
+  // format used by getScoutHomeCountry.
+  const scoutCountry = getScoutHomeCountry(scout);
   let filtered: UnsignedYouth[];
 
   switch (venueType) {
@@ -128,7 +134,7 @@ export function getYouthVenuePool(
       // Same country as scout's location, age 14-16, low visibility
       filtered = activeYouth.filter(
         (y) =>
-          y.country === scout.nationality &&
+          y.country === scoutCountry &&
           y.player.age >= 14 &&
           y.player.age <= 16 &&
           y.visibility < 30,
@@ -137,7 +143,7 @@ export function getYouthVenuePool(
 
     case "grassrootsTournament":
       // Same country, any age
-      filtered = activeYouth.filter((y) => y.country === scout.nationality);
+      filtered = activeYouth.filter((y) => y.country === scoutCountry);
       break;
 
     case "streetFootball":

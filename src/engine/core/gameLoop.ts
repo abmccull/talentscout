@@ -709,6 +709,12 @@ function makeMessageId(prefix: string, rng: RNG): string {
 /**
  * Generate an assignment message from the scout's club.
  * Triggered probabilistically — not every week has an assignment.
+ *
+ * Assignments are filtered by the scout's primary specialization:
+ *  - youth:     only players aged ≤ 21 (prospects / academy players)
+ *  - firstTeam: only players aged ≥ 20 (senior professionals)
+ *  - regional:  any age, but prefer the scout's home country
+ *  - data:      any age (data analysts work across all profiles)
  */
 function maybeGenerateAssignment(
   state: GameState,
@@ -727,7 +733,22 @@ function maybeGenerateAssignment(
   const alreadyReported = new Set(
     Object.values(state.reports).map((r) => r.playerId),
   );
-  const unreported = allPlayerIds.filter((id) => !alreadyReported.has(id));
+  let unreported = allPlayerIds.filter((id) => !alreadyReported.has(id));
+  if (unreported.length === 0) return null;
+
+  // Filter candidates by scout specialization
+  const spec = state.scout.primarySpecialization;
+  if (spec === "youth") {
+    unreported = unreported.filter((id) => {
+      const p = state.players[id];
+      return p && p.age <= 21;
+    });
+  } else if (spec === "firstTeam") {
+    unreported = unreported.filter((id) => {
+      const p = state.players[id];
+      return p && p.age >= 20;
+    });
+  }
   if (unreported.length === 0) return null;
 
   const targetId = rng.pick(unreported);
@@ -838,6 +859,93 @@ function generateExpiringOfferMessages(
 }
 
 /**
+ * Generate a youth-scout-specific tip from a contact about an unsigned youth.
+ *
+ * These replace the generic senior-player assignments for youth specialists,
+ * giving flavourful leads about tournaments, hidden gems, or promising kids
+ * that a contact has spotted. ~25% chance per week.
+ */
+function maybeGenerateYouthTip(
+  state: GameState,
+  rng: RNG,
+): InboxMessage | null {
+  if (state.scout.primarySpecialization !== "youth") return null;
+  if (!rng.chance(0.25)) return null;
+
+  // Need unsigned youth to tip about
+  const activeYouth = Object.values(state.unsignedYouth ?? {}).filter(
+    (y) => !y.placed && !y.retired,
+  );
+  if (activeYouth.length === 0) return null;
+
+  // Prefer youth the scout hasn't discovered yet
+  const undiscovered = activeYouth.filter(
+    (y) => !y.discoveredBy.includes(state.scout.id),
+  );
+  const pool = undiscovered.length > 0 ? undiscovered : activeYouth;
+
+  const youth = rng.pick(pool);
+  const player = youth.player;
+
+  // Pick a contact source (or use a generic one)
+  const contactEntries = Object.values(state.contacts ?? {});
+  const youthContacts = contactEntries.filter(
+    (c) =>
+      c.type === "academyCoach" ||
+      c.type === "schoolCoach" ||
+      c.type === "grassrootsOrganizer" ||
+      c.type === "youthAgent" ||
+      c.type === "academyDirector" ||
+      c.type === "localScout",
+  );
+  const contact =
+    youthContacts.length > 0 ? rng.pick(youthContacts) : null;
+  const sourceName = contact ? contact.name : "A local contact";
+  const sourceRole = contact
+    ? contact.type.replace(/([A-Z])/g, " $1").toLowerCase().trim()
+    : "scout";
+
+  // Tip templates — varied flavour
+  const tips = [
+    {
+      title: `Tip: Promising youngster in ${youth.country}`,
+      body: `${sourceName} (${sourceRole}) mentioned a ${player.age}-year-old ${player.position} named ${player.firstName} ${player.lastName} who's been turning heads at local matches. "${player.firstName} has something special — you should take a look." Consider scheduling a school match or grassroots tournament to spot this player.`,
+    },
+    {
+      title: `Tip: Academy buzz about ${player.firstName} ${player.lastName}`,
+      body: `${sourceName} (${sourceRole}) says there's growing buzz around ${player.firstName} ${player.lastName}, a ${player.age}-year-old ${player.position} from ${youth.country}. "Clubs are starting to notice — if you want first look, go soon." A youth tournament or academy visit might give you a chance to observe.`,
+    },
+    {
+      title: `Tip: Hidden gem spotted in ${youth.country}`,
+      body: `${sourceName} (${sourceRole}) passed along a lead: "${player.firstName} ${player.lastName} is the real deal — raw but incredibly talented for ${player.age}." The youngster plays ${player.position} and has been under the radar so far. Worth scheduling an observation visit.`,
+    },
+    {
+      title: `Tip: Tournament standout — ${player.firstName} ${player.lastName}`,
+      body: `${sourceName} (${sourceRole}) flagged a standout from a recent youth event: ${player.firstName} ${player.lastName} (${player.position}, ${player.age}). "Dominated the tournament — every touch was quality." Check the grassroots circuit or upcoming youth tournaments to see for yourself.`,
+    },
+    {
+      title: `Tip: School talent worth watching`,
+      body: `${sourceName} (${sourceRole}) reached out about ${player.firstName} ${player.lastName}, a ${player.age}-year-old ${player.position} from ${youth.country}. "This kid is outgrowing school football fast — won't stay hidden much longer." A school match visit could be your chance.`,
+    },
+  ];
+
+  const tip = rng.pick(tips);
+
+  return {
+    id: makeMessageId("youth_tip", rng),
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "event",
+    title: tip.title,
+    body: tip.body,
+    read: false,
+    actionRequired: false,
+    relatedId: youth.player.id,
+    relatedEntityType: "player",
+  };
+}
+
+/**
  * Collect all new inbox messages generated this week.
  */
 function generateInboxMessages(
@@ -850,6 +958,11 @@ function generateInboxMessages(
 
   const assignment = maybeGenerateAssignment(state, rng);
   if (assignment) messages.push(assignment);
+
+  // Youth scouts receive tips about unsigned youth instead of only
+  // generic club assignments
+  const youthTip = maybeGenerateYouthTip(state, rng);
+  if (youthTip) messages.push(youthTip);
 
   messages.push(...generateNewsMessages(state, transfers, injuries, rng));
   messages.push(...generateExpiringOfferMessages(state, rng));
