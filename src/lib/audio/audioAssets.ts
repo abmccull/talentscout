@@ -39,11 +39,16 @@ function single(dir: string, name: string, ext = "mp3"): string[] {
 // ---------------------------------------------------------------------------
 
 export const MUSIC_ASSETS: Record<string, AudioAssetDef> = {
-  menu:         { srcs: variants("/audio/music", "menu", 3),       loop: true },
-  scouting:     { srcs: variants("/audio/music", "scouting", 3),   loop: true },
-  matchday:     { srcs: variants("/audio/music", "matchday", 3),   loop: true },
-  "season-end": { srcs: variants("/audio/music", "season-end", 3), loop: true },
-  tension:      { srcs: variants("/audio/music", "tension", 3),    loop: true },
+  "title-anthem":      { srcs: variants("/audio/music", "title-anthem", 4),      loop: true },
+  "career-hub":        { srcs: variants("/audio/music", "career-hub", 8),        loop: true },
+  observation:         { srcs: variants("/audio/music", "observation", 8),       loop: true },
+  "report-writing":    { srcs: variants("/audio/music", "report-writing", 6),    loop: true },
+  "agency-theme":      { srcs: variants("/audio/music", "agency-theme", 4),      loop: true },
+  "youth-scouting":    { srcs: variants("/audio/music", "youth-scouting", 4),    loop: true },
+  "transfer-pressure": { srcs: variants("/audio/music", "transfer-pressure", 4), loop: true },
+  "network-groove":    { srcs: variants("/audio/music", "network-groove", 4),    loop: true },
+  wonderkid:           { srcs: variants("/audio/music", "wonderkid", 3),         loop: true },
+  "season-review":     { srcs: variants("/audio/music", "season-review", 3),     loop: true },
 };
 
 export const SFX_ASSETS: Record<string, AudioAssetDef> = {
@@ -123,8 +128,10 @@ function getOrCreateHowl(src: string, loop: boolean, volume: number): Howl {
  * For SFX (one-shot sounds), a random variant is chosen each call — this
  * means successive plays of "crowd-goal" will use different crowd recordings.
  *
- * For music and ambience (looping), the variant is chosen once and cached
+ * For ambience (looping), the variant is chosen once and cached
  * so the same track loops seamlessly without switching mid-play.
+ *
+ * For music, use `pickMusicVariant` instead — it supports playlist shuffling.
  */
 export function getHowl(
   assetId: string,
@@ -150,7 +157,7 @@ export function getHowl(
     return getOrCreateHowl(src, false, def.volume ?? 1);
   }
 
-  // Music/Ambience: use a stable cache key so the same variant loops
+  // Ambience: use a stable cache key so the same variant loops
   const stableKey = `${channel}:${assetId}`;
   const cached = howlCache.get(stableKey);
   if (cached) return cached;
@@ -166,4 +173,35 @@ export function getHowl(
   });
   howlCache.set(stableKey, howl);
   return howl;
+}
+
+/**
+ * Pick a music variant for playlist-style playback.
+ *
+ * - Multi-variant assets: returns a Howl with `loop: false` so the engine
+ *   can advance to a different variant when it ends.
+ * - Single-variant assets: returns a self-looping Howl.
+ * - `excludeSrc` avoids an immediate repeat of the just-finished track.
+ */
+export function pickMusicVariant(
+  assetId: string,
+  excludeSrc?: string | null,
+): { howl: Howl; src: string; isPlaylist: boolean } {
+  const def = MUSIC_ASSETS[assetId];
+  if (!def) {
+    throw new Error(
+      `[AudioEngine] Unknown music asset: "${assetId}". Check audioAssets.ts.`,
+    );
+  }
+
+  const isPlaylist = def.srcs.length > 1;
+
+  let candidates = def.srcs;
+  if (excludeSrc && isPlaylist) {
+    candidates = candidates.filter((s) => s !== excludeSrc);
+  }
+
+  const src = candidates[Math.floor(Math.random() * candidates.length)];
+  const howl = getOrCreateHowl(src, !isPlaylist, def.volume ?? 1);
+  return { howl, src, isPlaylist };
 }

@@ -41,6 +41,8 @@ export class AudioEngine {
   /** Track IDs so we can skip re-loading the same track. */
   private musicId: string | null = null;
   private ambienceId: string | null = null;
+  /** Source path of the currently playing music variant (for playlist rotation). */
+  private currentMusicSrc: string | null = null;
   /** Deferred playback requests while audio assets are still lazy-loading. */
   private pendingMusicId: string | null = null;
   private pendingAmbienceId: string | null = null;
@@ -94,10 +96,44 @@ export class AudioEngine {
       return;
     }
     this.pendingMusicId = null;
-    const nextHowl = assets.getHowl(trackId, "music");
+
+    const result = assets.pickMusicVariant(trackId, null);
+    const nextHowl = result.howl;
+
+    // For multi-variant playlists: when this track ends, advance to a different one
+    if (result.isPlaylist) {
+      nextHowl.once("end", () => {
+        if (this.musicId === trackId) {
+          this.advanceMusicPlaylist(trackId);
+        }
+      });
+    }
+
     this.crossfade(this.currentMusic, nextHowl, "music");
     this.currentMusic = nextHowl;
     this.musicId = trackId;
+    this.currentMusicSrc = result.src;
+  }
+
+  /** Advance to the next track in a multi-variant music playlist. */
+  private advanceMusicPlaylist(trackId: string): void {
+    const assets = this.getAssets();
+    if (!assets) return;
+
+    const result = assets.pickMusicVariant(trackId, this.currentMusicSrc);
+    const nextHowl = result.howl;
+
+    if (result.isPlaylist) {
+      nextHowl.once("end", () => {
+        if (this.musicId === trackId) {
+          this.advanceMusicPlaylist(trackId);
+        }
+      });
+    }
+
+    this.crossfade(this.currentMusic, nextHowl, "music");
+    this.currentMusic = nextHowl;
+    this.currentMusicSrc = result.src;
   }
 
   playSFX(sfxId: string): void {
@@ -144,6 +180,7 @@ export class AudioEngine {
       this.fadeOut(this.currentMusic);
       this.currentMusic = null;
       this.musicId = null;
+      this.currentMusicSrc = null;
     }
   }
 
@@ -283,18 +320,21 @@ export class AudioEngine {
    * Loaded via dynamic import() on first use — works in both browser and Electron.
    */
   private _getHowlFn: ((id: string, channel: "music" | "sfx" | "ambience") => HowlType) | null = null;
+  private _pickMusicVariantFn: ((assetId: string, excludeSrc?: string | null) => { howl: HowlType; src: string; isPlaylist: boolean }) | null = null;
   private _assetsLoading: Promise<void> | null = null;
 
   private getAssets(): {
     getHowl: (id: string, channel: "music" | "sfx" | "ambience") => HowlType;
+    pickMusicVariant: (assetId: string, excludeSrc?: string | null) => { howl: HowlType; src: string; isPlaylist: boolean };
   } | null {
-    if (this._getHowlFn) {
-      return { getHowl: this._getHowlFn };
+    if (this._getHowlFn && this._pickMusicVariantFn) {
+      return { getHowl: this._getHowlFn, pickMusicVariant: this._pickMusicVariantFn };
     }
     // Kick off lazy load if not started
     if (!this._assetsLoading) {
       this._assetsLoading = import("./audioAssets").then((mod) => {
         this._getHowlFn = mod.getHowl;
+        this._pickMusicVariantFn = mod.pickMusicVariant;
       });
     }
     return null; // Not ready yet — callers silently skip

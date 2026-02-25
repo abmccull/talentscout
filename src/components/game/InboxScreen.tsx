@@ -391,9 +391,9 @@ export function InboxScreen() {
     if (!gameState) return;
     const audio = AudioEngine.getInstance();
     if (hasDramaticEvent) {
-      audio.playMusic("tension");
+      audio.playMusic("transfer-pressure");
     } else {
-      audio.playMusic("scouting");
+      audio.playMusic("career-hub");
     }
   }, [hasDramaticEvent, gameState]);
 
