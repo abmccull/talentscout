@@ -88,7 +88,7 @@ import { processFocusedObservations } from "@/engine/match/focus";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { generateReportContent, finalizeReport, calculateReportQuality, trackPostTransfer } from "@/engine/reports/reporting";
 import { updateReputation, generateJobOffers, calculatePerformanceReview, type TierReviewContext } from "@/engine/career/progression";
-import { generateStartingContacts, meetContact, generateContactForType } from "@/engine/network/contacts";
+import { generateStartingContacts, meetContact, generateContactForType, getHiddenAttributeIntel } from "@/engine/network/contacts";
 import {
   createWeekSchedule,
   addActivity,
@@ -122,6 +122,8 @@ import {
 } from "@/lib/leaderboard";
 import {
   bookTravel,
+  getTravelDuration,
+  getScoutHomeCountry as getScoutHome,
   processCrossCountryTransfers,
   processInternationalWeek,
 } from "@/engine/world/index";
@@ -188,7 +190,7 @@ import {
   processParentCoachMeeting,
   mapVenueTypeToContext,
 } from "@/engine/youth/venues";
-import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
+import { getCountryDataSync, getSecondaryCountries, getAvailableCountries } from "@/data/index";
 import {
   saveGame as dbSaveGame,
   loadGame as dbLoadGame,
@@ -386,6 +388,13 @@ interface GameStore {
   pendingFixtureClubFilter: string | null;
   setPendingFixtureClubFilter: (filter: string | null) => void;
 
+  // Cross-screen calendar pre-fill (set from PlayerProfile → consumed by CalendarScreen)
+  pendingCalendarActivity: { type: string; targetId: string; label: string } | null;
+  setPendingCalendarActivity: (pending: { type: string; targetId: string; label: string } | null) => void;
+
+  // Tap network for hidden attribute intel on a player
+  tapNetworkForPlayer: (playerId: string) => void;
+
   // Watchlist
   toggleWatchlist: (playerId: string) => void;
 
@@ -541,6 +550,81 @@ export const useGameStore = create<GameStore>((set, get) => ({
   pendingFixtureClubFilter: null,
   setPendingFixtureClubFilter: (filter) => set({ pendingFixtureClubFilter: filter }),
 
+  // Cross-screen calendar pre-fill
+  pendingCalendarActivity: null,
+  setPendingCalendarActivity: (pending) => set({ pendingCalendarActivity: pending }),
+
+  // Tap network for hidden attribute intel
+  tapNetworkForPlayer: (playerId) => {
+    const state = get();
+    if (!state.gameState) return;
+    const player = state.gameState.players[playerId]
+      ?? state.gameState.unsignedYouth[playerId]?.player
+      ?? null;
+    if (!player) return;
+
+    const contacts = Object.values(state.gameState.contacts);
+    if (contacts.length === 0) return;
+
+    const rng = createRNG(
+      `${state.gameState.seed}-tapnet-${playerId}-${state.gameState.currentWeek}`,
+    );
+
+    let updatedIntel = { ...(state.gameState.contactIntel ?? {}) };
+    const existingIntel = updatedIntel[playerId] ?? [];
+    let found = false;
+    const messages: InboxMessage[] = [];
+
+    for (const contact of contacts) {
+      const intel = getHiddenAttributeIntel(rng, contact, playerId, player);
+      if (intel) {
+        // Avoid duplicate intel for the same attribute
+        const alreadyHas = existingIntel.some((e) => e.attribute === intel.attribute);
+        if (!alreadyHas) {
+          updatedIntel = {
+            ...updatedIntel,
+            [playerId]: [...(updatedIntel[playerId] ?? []), intel],
+          };
+          found = true;
+          messages.push({
+            id: `tapnet-${playerId}-${contact.id}-w${state.gameState.currentWeek}`,
+            week: state.gameState.currentWeek,
+            season: state.gameState.currentSeason,
+            type: "feedback" as const,
+            title: `Network Intel: ${player.firstName} ${player.lastName}`,
+            body: `Your contact ${contact.name} shared intel on ${player.firstName} ${player.lastName}: "${intel.hint}"`,
+            read: false,
+            actionRequired: false,
+            relatedId: playerId,
+            relatedEntityType: "player" as const,
+          });
+          break; // One intel per tap
+        }
+      }
+    }
+
+    if (!found) {
+      messages.push({
+        id: `tapnet-noresult-${playerId}-w${state.gameState.currentWeek}`,
+        week: state.gameState.currentWeek,
+        season: state.gameState.currentSeason,
+        type: "feedback" as const,
+        title: `Network Intel: ${player.firstName} ${player.lastName}`,
+        body: `You reached out to your contacts about ${player.firstName} ${player.lastName}, but nobody had new information to share right now. Try again after building stronger relationships.`,
+        read: false,
+        actionRequired: false,
+      });
+    }
+
+    set({
+      gameState: {
+        ...state.gameState,
+        contactIntel: updatedIntel,
+        inbox: [...state.gameState.inbox, ...messages],
+      },
+    });
+  },
+
   // Day-by-day simulation state
   weekSimulation: null,
 
@@ -682,7 +766,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       npcScouts: {},
       npcReports: {},
       territories,
-      countries: [...selectedCountries, ...getSecondaryCountries()],
+      countries: [...new Set([...selectedCountries, ...getSecondaryCountries(), "england", "spain", "germany", "france", "brazil", "argentina"])],
       narrativeEvents: [],
       activeStorylines: [],
       rivalScouts: {},
@@ -1558,6 +1642,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "academyTrialDay", // academyVisit maps to academyTrialDay venue
             stateWithScheduleApplied.unsignedYouth,
             currentScout,
+            undefined,
+            undefined,
+            undefined,
+            stateWithScheduleApplied.currentWeek,
           );
           const prioritizedPool = prioritizeFocusedYouth([...venuePool], "academyVisit");
           const count = Math.min(prioritizedPool.length, actObsRng.nextInt(rangeMin, rangeMax));
@@ -1716,6 +1804,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "youthFestival", // youthTournament maps to youthFestival venue
             stateWithScheduleApplied.unsignedYouth,
             currentScout,
+            undefined,
+            undefined,
+            undefined,
+            stateWithScheduleApplied.currentWeek,
           );
           const prioritizedPool = prioritizeFocusedYouth([...venuePool], "youthTournament");
           const count = Math.min(prioritizedPool.length, actObsRng.nextInt(rangeMin, rangeMax));
@@ -1964,6 +2056,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
               venueType,
               updatedUnsignedYouthVideo,
               currentScout,
+              undefined,
+              undefined,
+              undefined,
+              stateWithScheduleApplied.currentWeek,
             );
             const prioritizedPool = prioritizeFocusedYouth([...venuePool], "watchVideo");
             const count = Math.min(prioritizedPool.length, actObsRng.nextInt(rangeMin, rangeMax));
@@ -3155,6 +3251,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               undefined,
               targetYouthId,
+              undefined,
+              stateWithScheduleApplied.currentWeek,
             );
             if (pool.length === 0) continue;
             const youth = pool[0];
@@ -3230,6 +3328,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
           }
         }
 
+        // ── Focus observations for youth venues (main path) ──────────────
+        // The fallback path has this inline; the main path must run it too.
+        const YOUTH_VENUE_TYPES_FOR_FOCUS = [
+          "schoolMatch", "grassrootsTournament", "streetFootball",
+          "academyTrialDay", "youthFestival",
+        ] as const;
+        for (const venueType of YOUTH_VENUE_TYPES_FOR_FOCUS) {
+          const focusTargetIds = focusPlayers(venueType);
+          const focusRepeats = focusDepth(venueType);
+          if (focusTargetIds.length === 0 || focusRepeats === 0) continue;
+
+          const focusedYouthList = focusTargetIds
+            .map((id) => Object.values(updatedUnsignedYouthObs).find((y) => y.player.id === id))
+            .filter((y): y is UnsignedYouth => !!y);
+
+          for (let repeat = 0; repeat < focusRepeats && focusedYouthList.length > 0; repeat++) {
+            const focusedYouth = focusedYouthList[repeat % focusedYouthList.length];
+            const focusObsForYouth = Object.values(updatedObservations).filter(
+              (o) => o.playerId === focusedYouth.player.id,
+            );
+            const focusResult = processVenueObservation(
+              actObsRng,
+              currentScout,
+              focusedYouth,
+              "followUpSession",
+              focusObsForYouth,
+              stateWithScheduleApplied.currentWeek,
+              stateWithScheduleApplied.currentSeason,
+              2, // extraAttributes — focus reveals more per pass
+            );
+            updatedObservations[focusResult.observation.id] = focusResult.observation;
+            updatedUnsignedYouthObs[focusedYouth.id] = focusResult.updatedYouth;
+            weekObservationsGenerated++;
+          }
+        }
+
         stateWithScheduleApplied = {
           ...stateWithScheduleApplied,
           unsignedYouth: updatedUnsignedYouthObs,
@@ -3290,6 +3424,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           undefined,
           undefined,
           youthBonus,
+          stateWithScheduleApplied.currentWeek,
         );
 
         // Apply quality modifier to pool size
@@ -3427,6 +3562,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             currentScout,
             undefined,
             targetYouthId,
+            undefined,
+            stateWithScheduleApplied.currentWeek,
           );
           if (pool.length === 0) continue;
           const youth = pool[0];
@@ -4944,6 +5081,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             undefined,
             undefined,
             youthBonus,
+            gameState.currentWeek,
           );
           const dayRoll = obsRng.nextInt(dailyMin, dailyMax) + discoveryMod;
           const adjustedCount = Math.max(0, Math.min(pool.length, dayRoll));
@@ -5085,6 +5223,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           undefined,
           undefined,
           youthBonus,
+          gameState.currentWeek,
         );
         const count = Math.min(pool.length, previewRng.nextInt(cfg.min, cfg.max));
         if (count === 0) continue;
@@ -6024,15 +6163,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { gameState } = get();
     if (!gameState) return;
 
-    // Default travel duration: 2 weeks, departing next week
-    const DEFAULT_TRAVEL_DURATION = 2;
+    const homeCountry = getScoutHome(gameState.scout);
+    const duration = getTravelDuration(homeCountry, country);
     const departureWeek = gameState.currentWeek + 1;
 
     const updatedScout = bookTravel(
       gameState.scout,
       country,
       departureWeek,
-      DEFAULT_TRAVEL_DURATION,
+      duration,
     );
 
     set({

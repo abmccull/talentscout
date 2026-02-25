@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
-import type { AttributeReading, HiddenIntel, Observation, AbilityReading, SystemFitResult, StatisticalProfile, AnomalyFlag } from "@/engine/core/types";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users } from "lucide-react";
+import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
+import { calculateConfidenceRange } from "@/engine/scout/perception";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
+import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
@@ -498,6 +500,24 @@ function ObservationsSidebar({ observations }: { observations: Observation[] }) 
   );
 }
 
+/** Map each attribute domain to the scout skill that governs its accuracy. */
+const DOMAIN_SKILL_MAP: Record<string, ScoutSkill> = {
+  technical: "technicalEye",
+  physical: "physicalAssessment",
+  mental: "psychologicalRead",
+  tactical: "tacticalUnderstanding",
+  hidden: "psychologicalRead",
+};
+
+/** Backward-compat: compute rangeLow/rangeHigh for old saves missing them. */
+function ensureRange(reading: AttributeReading, scoutSkill: number): AttributeReading {
+  if (reading.rangeLow !== undefined && reading.rangeHigh !== undefined) return reading;
+  const [rangeLow, rangeHigh] = calculateConfidenceRange(
+    reading.perceivedValue, reading.confidence, scoutSkill, reading.observationCount,
+  );
+  return { ...reading, rangeLow, rangeHigh };
+}
+
 export function PlayerProfile() {
   const {
     gameState,
@@ -510,6 +530,8 @@ export function PlayerProfile() {
     getLeague,
     toggleWatchlist,
     setPendingFixtureClubFilter,
+    setPendingCalendarActivity,
+    tapNetworkForPlayer,
   } = useGameStore();
 
   if (!gameState || !selectedPlayerId) return null;
@@ -524,16 +546,23 @@ export function PlayerProfile() {
   const observations = getPlayerObservations(selectedPlayerId);
   const reports = getPlayerReports(selectedPlayerId);
 
+  // Own-club check: signed players at scout's club show exact values
+  const isOwnClubPlayer = !!(player.clubId && player.clubId === gameState.scout.currentClubId);
+
   // Aggregate readings from all observations
   const allReadings: AttributeReading[] = observations.flatMap((o) => o.attributeReadings);
 
-  // Merge by attribute (take latest/highest-confidence)
+  // Merge by attribute (take best observation count, apply backward-compat range)
   const merged = new Map<string, AttributeReading>();
   for (const reading of allReadings) {
     const key = String(reading.attribute);
+    const domain = ATTRIBUTE_DOMAINS[reading.attribute];
+    const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
+    const skillLevel = gameState.scout.skills[skillKey as ScoutSkill];
+    const withRange = ensureRange(reading, skillLevel);
     const existing = merged.get(key);
-    if (!existing || reading.confidence > existing.confidence) {
-      merged.set(key, reading);
+    if (!existing || withRange.observationCount > existing.observationCount) {
+      merged.set(key, withRange);
     }
   }
 
@@ -544,28 +573,22 @@ export function PlayerProfile() {
     byDomain.get(domain)!.push([attr, merged.get(attr)]);
   }
 
-  // Aggregate ability readings from up to 3 most recent observations
-  const abilityReadings: AbilityReading[] = observations
-    .filter((o) => o.abilityReading)
-    .slice(-3)
-    .map((o) => o.abilityReading!);
+  // Aggregate ability readings using shared helper
+  const allObs = Object.values(gameState.observations);
+  const perceived = getPerceivedAbility(allObs, selectedPlayerId);
 
-  const aggregatedAbility = abilityReadings.length > 0
+  // Map perceived to the shape used by the UI below
+  const aggregatedAbility = perceived
     ? {
-        ca: abilityReadings.reduce((s, r) => s + r.perceivedCA, 0) / abilityReadings.length,
-        caConfidence: abilityReadings.reduce((s, r) => s + r.caConfidence, 0) / abilityReadings.length,
-        paLow: abilityReadings.reduce((s, r) => s + r.perceivedPALow, 0) / abilityReadings.length,
-        paHigh: abilityReadings.reduce((s, r) => s + r.perceivedPAHigh, 0) / abilityReadings.length,
-        paConfidence: abilityReadings.reduce((s, r) => s + r.paConfidence, 0) / abilityReadings.length,
+        ca: perceived.ca,
+        caLow: perceived.caLow,
+        caHigh: perceived.caHigh,
+        caConfidence: perceived.caConfidence,
+        paLow: perceived.paLow,
+        paHigh: perceived.paHigh,
+        paConfidence: perceived.paConfidence,
       }
     : null;
-
-  // Snap aggregated values to nearest 0.5
-  if (aggregatedAbility) {
-    aggregatedAbility.ca = Math.round(aggregatedAbility.ca * 2) / 2;
-    aggregatedAbility.paLow = Math.round(aggregatedAbility.paLow * 2) / 2;
-    aggregatedAbility.paHigh = Math.round(aggregatedAbility.paHigh * 2) / 2;
-  }
 
   const contactIntel: HiddenIntel[] = gameState.contactIntel[selectedPlayerId] ?? [];
 
@@ -653,7 +676,7 @@ export function PlayerProfile() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button onClick={() => startReport(selectedPlayerId)} disabled={observations.length === 0}>
               <FileText size={14} className="mr-2" />
               Write Report
@@ -669,6 +692,48 @@ export function PlayerProfile() {
                 <Eye size={14} className="mr-2" />
                 Find Match
               </Button>
+            )}
+            {/* Tap Network — available for any player with contacts */}
+            <Button
+              variant="outline"
+              onClick={() => tapNetworkForPlayer(selectedPlayerId)}
+              disabled={Object.keys(gameState.contacts).length === 0}
+            >
+              <Phone size={14} className="mr-2" />
+              Tap Network
+            </Button>
+            {/* Youth-specific quick actions */}
+            {unsignedYouthRecord && observations.length > 0 && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPendingCalendarActivity({
+                      type: "followUpSession",
+                      targetId: unsignedYouthRecord.id,
+                      label: `Follow-Up: ${player.firstName} ${player.lastName}`,
+                    });
+                    setScreen("calendar");
+                  }}
+                >
+                  <CalendarPlus size={14} className="mr-2" />
+                  Schedule Follow-Up
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPendingCalendarActivity({
+                      type: "parentCoachMeeting",
+                      targetId: unsignedYouthRecord.id,
+                      label: `Meeting: ${player.firstName} ${player.lastName}`,
+                    });
+                    setScreen("calendar");
+                  }}
+                >
+                  <Users size={14} className="mr-2" />
+                  Meet Parents/Coach
+                </Button>
+              </>
             )}
           </div>
         </div>
@@ -792,11 +857,25 @@ export function PlayerProfile() {
                     title={`${confidenceLabel(aggregatedAbility.caConfidence)} confidence`}
                   />
                 </div>
-                <StarRating
-                  rating={aggregatedAbility.ca}
-                  confidence={aggregatedAbility.caConfidence}
-                  size="lg"
-                />
+                {aggregatedAbility.caHigh - aggregatedAbility.caLow > 0.5 ? (
+                  <StarRatingRange
+                    low={aggregatedAbility.caLow}
+                    high={aggregatedAbility.caHigh}
+                    confidence={aggregatedAbility.caConfidence}
+                    size="lg"
+                  />
+                ) : (
+                  <StarRating
+                    rating={aggregatedAbility.ca}
+                    confidence={aggregatedAbility.caConfidence}
+                    size="lg"
+                  />
+                )}
+                {aggregatedAbility.caConfidence < 0.5 && (
+                  <p className="mt-2 text-[10px] text-zinc-500">
+                    More observations will narrow this range
+                  </p>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -851,25 +930,44 @@ export function PlayerProfile() {
                             </span>
                           </Tooltip>
                           {reading ? (
-                            <>
-                              <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                            isOwnClubPlayer ? (
+                              <>
+                                <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                                  <div
+                                    className="absolute left-0 top-0 h-full rounded-full bg-emerald-500"
+                                    style={{ width: `${(player.attributes[attr as keyof typeof player.attributes] / 20) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="w-8 shrink-0 text-right text-xs font-mono font-medium text-white">
+                                  {player.attributes[attr as keyof typeof player.attributes]}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                                  <div
+                                    className={`absolute top-0 h-full rounded-full ${confidenceColor(reading.confidence)}`}
+                                    style={{
+                                      left: `${(((reading.rangeLow ?? reading.perceivedValue) - 1) / 19) * 100}%`,
+                                      width: `${((((reading.rangeHigh ?? reading.perceivedValue) - (reading.rangeLow ?? reading.perceivedValue)) || 1) / 19) * 100}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span className="w-8 shrink-0 text-right text-xs font-mono font-medium text-white">
+                                  {reading.rangeLow != null && reading.rangeHigh != null && reading.rangeLow !== reading.rangeHigh
+                                    ? `${reading.rangeLow}-${reading.rangeHigh}`
+                                    : reading.perceivedValue}
+                                </span>
                                 <div
-                                  className={`absolute left-0 top-0 h-full rounded-full ${confidenceColor(reading.confidence)}`}
-                                  style={{ width: `${(reading.perceivedValue / 20) * 100}%` }}
+                                  className={`h-2 w-2 shrink-0 rounded-full ${confidenceColor(reading.confidence)}`}
+                                  title={`${confidenceLabel(reading.confidence)} confidence (${reading.observationCount} obs)`}
                                 />
-                              </div>
-                              <span className="w-6 shrink-0 text-right text-xs font-mono font-medium text-white">
-                                {reading.perceivedValue}
-                              </span>
-                              <div
-                                className={`h-2 w-2 shrink-0 rounded-full ${confidenceColor(reading.confidence)}`}
-                                title={`${confidenceLabel(reading.confidence)} confidence (${reading.observationCount} observations)`}
-                              />
-                            </>
+                              </>
+                            )
                           ) : (
                             <>
                               <div className="flex-1 h-1.5 rounded-full bg-[#27272a]" />
-                              <span className="w-6 shrink-0 text-right text-xs text-zinc-600">?</span>
+                              <span className="w-8 shrink-0 text-right text-xs text-zinc-600">?</span>
                               <div className="h-2 w-2 shrink-0 rounded-full bg-zinc-700" />
                             </>
                           )}

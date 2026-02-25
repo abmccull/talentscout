@@ -279,7 +279,7 @@ export function generateReportContent(
       recentWithAbility.length;
     perceivedPARange = [
       Math.round(avgPALow * 2) / 2,
-      Math.round(avgPAHigh * 2) / 2,
+      Math.min(5.0, Math.round(avgPAHigh * 2) / 2),
     ];
   }
 

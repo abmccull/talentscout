@@ -20,3 +20,9 @@ export {
   starsToAbility,
   generateAbilityReading,
 } from './starRating';
+
+export {
+  getPerceivedAbility,
+} from './perceivedAbility';
+
+export type { PerceivedAbility } from './perceivedAbility';

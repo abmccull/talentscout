@@ -67,18 +67,15 @@ export function ActivityPanel({
   // Group activities by category
   const grouped = useMemo(() => {
     const groups: Record<ActivityCategory, Activity[]> = {
-      matches: [],
-      specialist: [],
       scouting: [],
-      office: [],
       networking: [],
       recovery: [],
     };
 
     for (const activity of enrichedActivities) {
       const category = ACTIVITY_CATEGORIES[activity.type] ?? "scouting";
-      // Apply league filter only to match activities
-      if (category === "matches" && activity.type === "attendMatch" && hasActiveLeagueFilter) {
+      // Apply league filter to attendMatch activities within the scouting category
+      if (activity.type === "attendMatch" && hasActiveLeagueFilter) {
         const fixtureLeagueId = activity.targetId ? fixtureLeagueById[activity.targetId] : undefined;
         if (!fixtureLeagueId || fixtureLeagueId !== leagueFilter) {
           continue;
@@ -115,25 +112,21 @@ export function ActivityPanel({
           {theme.tagline}
         </p>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-3">
         {sortedCategories.map((category) => {
           const config = ACTIVITY_CATEGORY_CONFIG[category];
           const sectionActivities = grouped[category];
           const sectionLabel =
             config.specLabel?.[specialization] ?? config.label;
 
-          // Use accent color for the specialist section
-          const isSpecialist = category === "specialist";
-          const headerClass = isSpecialist
-            ? `text-[10px] font-semibold uppercase tracking-wider ${theme.textClass}`
-            : "text-[10px] font-semibold uppercase tracking-wider text-zinc-500";
+          const headerClass = "text-[10px] font-semibold uppercase tracking-wider text-zinc-500";
 
           return (
             <div key={category}>
               <div className="mb-2 flex items-center justify-between">
                 <span className={headerClass}>{sectionLabel}</span>
-                {/* League filter in matches section only */}
-                {category === "matches" && availableMatchLeagues.length > 1 && (
+                {/* League filter in scouting section when matches are present */}
+                {category === "scouting" && availableMatchLeagues.length > 1 && (
                   <select
                     value={hasActiveLeagueFilter ? leagueFilter : "all"}
                     onChange={(e) => onLeagueFilterChange(e.target.value)}

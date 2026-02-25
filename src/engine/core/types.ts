@@ -530,6 +530,10 @@ export interface AttributeReading {
   confidence: number;
   /** Number of separate sessions contributing to this reading. */
   observationCount: number;
+  /** Lower bound of estimated range (1–20). Undefined in old saves. */
+  rangeLow?: number;
+  /** Upper bound of estimated range (1–20). Undefined in old saves. */
+  rangeHigh?: number;
 }
 
 export interface Observation {

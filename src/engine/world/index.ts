@@ -10,6 +10,7 @@ export {
   getScoutHomeCountry,
   getTravelCost,
   getTravelSlots,
+  getTravelDuration,
   bookTravel,
   isScoutAbroad,
   getAccessibleFixtures,

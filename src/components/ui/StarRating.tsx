@@ -95,20 +95,24 @@ export function StarRatingRange({
   const px = SIZES[size];
   const opacity = 0.4 + confidence * 0.6;
 
-  if (low === high) {
-    return <StarRating rating={low} confidence={confidence} size={size} />;
+  // Defensive clamping — guards against stale saves with out-of-range values
+  const clampedLow = Math.max(0.5, Math.min(5.0, low));
+  const clampedHigh = Math.max(0.5, Math.min(5.0, high));
+
+  if (clampedLow === clampedHigh) {
+    return <StarRating rating={clampedLow} confidence={confidence} size={size} />;
   }
 
   return (
     <div className="flex items-center gap-2" style={{ opacity }}>
       <div className="flex items-center gap-0.5">
         <Star size={px - 2} className="text-amber-400 fill-amber-400" strokeWidth={1.5} />
-        <span className="text-xs font-mono font-medium text-zinc-300">{low.toFixed(1)}</span>
+        <span className="text-xs font-mono font-medium text-zinc-300">{clampedLow.toFixed(1)}</span>
       </div>
       <span className="text-zinc-600 text-xs">—</span>
       <div className="flex items-center gap-0.5">
         <Star size={px - 2} className="text-amber-400 fill-amber-400" strokeWidth={1.5} />
-        <span className="text-xs font-mono font-medium text-zinc-300">{high.toFixed(1)}</span>
+        <span className="text-xs font-mono font-medium text-zinc-300">{clampedHigh.toFixed(1)}</span>
       </div>
     </div>
   );

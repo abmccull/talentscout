@@ -19,7 +19,7 @@ import type {
   YouthVenueType,
 } from "@/engine/core/types";
 import { observePlayerLight } from "@/engine/scout/perception";
-import { getScoutHomeCountry } from "@/engine/world/travel";
+import { getScoutHomeCountry, isScoutAbroad } from "@/engine/world/travel";
 
 // =============================================================================
 // VENUE POOL CONFIGURATION
@@ -97,6 +97,8 @@ const HIDDEN_ATTRIBUTE_KEYS = Object.keys(HIDDEN_INTEL_POOLS) as Array<keyof typ
  * @param subRegionId    - Optional sub-region filter (used by streetFootball).
  * @param targetYouthId  - Optional specific youth ID (required by followUpSession
  *                         and parentCoachMeeting).
+ * @param youthDiscoveryBonus - Fractional bonus to discovery pool size from equipment.
+ * @param currentWeek    - Current game week, used to determine if scout is abroad.
  */
 export function getYouthVenuePool(
   rng: RNG,
@@ -107,6 +109,7 @@ export function getYouthVenuePool(
   targetYouthId?: string,
   /** Fractional bonus to discovery pool size from equipment (e.g. 0.10 = +10% more youth visible). */
   youthDiscoveryBonus?: number,
+  currentWeek?: number,
 ): UnsignedYouth[] {
   // Step 1: base pool — active (not placed, not retired) youth
   const activeYouth = Object.values(unsignedYouth).filter(
@@ -122,11 +125,13 @@ export function getYouthVenuePool(
   }
 
   // Step 3: apply venue-specific filters
-  // Use the scout's mechanical home country (derived from countryReputations)
-  // rather than the optional display-only nationality field. Youth .country
-  // stores the lowercase country key (e.g. "england") which matches the key
-  // format used by getScoutHomeCountry.
-  const scoutCountry = getScoutHomeCountry(scout);
+  // Use the scout's effective location: if abroad, use destination country;
+  // otherwise use home country. This ensures scouting in Brazil finds
+  // Brazilian youth, not English youth.
+  const abroad = currentWeek != null && isScoutAbroad(scout, currentWeek);
+  const scoutCountry = abroad
+    ? scout.travelBooking!.destinationCountry.toLowerCase()
+    : getScoutHomeCountry(scout);
   let filtered: UnsignedYouth[];
 
   switch (venueType) {
@@ -147,9 +152,10 @@ export function getYouthVenuePool(
       break;
 
     case "streetFootball":
-      // Specific sub-region (if provided), age 14-17, lower visibility
+      // Same country as scout's location, specific sub-region (if provided), age 14-17, lower visibility
       filtered = activeYouth.filter(
         (y) =>
+          y.country === scoutCountry &&
           y.player.age >= 14 &&
           y.player.age <= 17 &&
           y.visibility < 50,
@@ -160,8 +166,8 @@ export function getYouthVenuePool(
       break;
 
     case "academyTrialDay":
-      // Youth with buzz, any region
-      filtered = activeYouth.filter((y) => y.buzzLevel > 30);
+      // Same country as scout's location, youth with buzz
+      filtered = activeYouth.filter((y) => y.country === scoutCountry && y.buzzLevel > 30);
       break;
 
     case "youthFestival":
@@ -195,6 +201,8 @@ export function processVenueObservation(
   existingObservations: Observation[],
   week: number,
   season: number,
+  /** Extra attributes to observe per session (e.g. focus passes reveal more). */
+  extraAttributes?: number,
 ): {
   observation: Observation;
   buzzIncrease: number;
@@ -208,6 +216,7 @@ export function processVenueObservation(
     scout,
     context,
     existingObservations,
+    extraAttributes,
   );
 
   // Stamp week and season (perception engine leaves these as 0)

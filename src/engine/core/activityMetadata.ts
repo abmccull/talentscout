@@ -9,14 +9,11 @@
 import type { ActivityType, Specialization } from "./types";
 
 // ---------------------------------------------------------------------------
-// Activity categories
+// Activity categories — three groups for a clean calendar layout
 // ---------------------------------------------------------------------------
 
 export type ActivityCategory =
-  | "matches"
-  | "specialist"
   | "scouting"
-  | "office"
   | "networking"
   | "recovery";
 
@@ -28,90 +25,78 @@ export interface ActivityCategoryConfig {
 }
 
 export const ACTIVITY_CATEGORY_CONFIG: Record<ActivityCategory, ActivityCategoryConfig> = {
-  matches: {
-    label: "Matches",
-    order: 0,
-  },
-  specialist: {
-    label: "Your Specialty",
-    order: 1,
-    specLabel: {
-      youth: "Youth Scouting",
-      firstTeam: "First Team Operations",
-      data: "Data Analysis",
-    },
-  },
   scouting: {
     label: "Scouting",
-    order: 2,
-  },
-  office: {
-    label: "Office Work",
-    order: 3,
+    order: 0,
+    specLabel: {
+      youth: "Scouting & Youth",
+      firstTeam: "Scouting & First Team",
+      data: "Scouting & Analysis",
+    },
   },
   networking: {
     label: "Networking",
-    order: 4,
+    order: 1,
   },
   recovery: {
-    label: "Recovery & Travel",
-    order: 5,
+    label: "Recovery, Travel & Development",
+    order: 2,
   },
 };
 
 /** Maps every ActivityType to its display category. */
 export const ACTIVITY_CATEGORIES: Record<ActivityType, ActivityCategory> = {
-  // Matches
-  attendMatch: "matches",
-  schoolMatch: "matches",
-  reserveMatch: "matches",
-  trialMatch: "matches",
+  // Scouting — matches, specialist activities, and general scouting
+  attendMatch: "scouting",
+  schoolMatch: "scouting",
+  reserveMatch: "scouting",
+  trialMatch: "scouting",
 
-  // Specialist — youth
-  grassrootsTournament: "specialist",
-  streetFootball: "specialist",
-  academyTrialDay: "specialist",
-  youthFestival: "specialist",
-  followUpSession: "specialist",
-  writePlacementReport: "specialist",
+  // Scouting — youth specialist
+  grassrootsTournament: "scouting",
+  streetFootball: "scouting",
+  academyTrialDay: "scouting",
+  youthFestival: "scouting",
+  followUpSession: "scouting",
+  writePlacementReport: "scouting",
 
-  // Specialist — first-team
-  scoutingMission: "specialist",
-  oppositionAnalysis: "specialist",
-  agentShowcase: "specialist",
-  contractNegotiation: "specialist",
+  // Scouting — first-team specialist
+  scoutingMission: "scouting",
+  oppositionAnalysis: "scouting",
+  agentShowcase: "scouting",
+  contractNegotiation: "scouting",
 
-  // Specialist — data
-  databaseQuery: "specialist",
-  deepVideoAnalysis: "specialist",
-  algorithmCalibration: "specialist",
-  marketInefficiency: "specialist",
-  statsBriefing: "specialist",
-  dataConference: "specialist",
-  analyticsTeamMeeting: "specialist",
+  // Scouting — data specialist
+  databaseQuery: "scouting",
+  deepVideoAnalysis: "scouting",
+  algorithmCalibration: "scouting",
+  marketInefficiency: "scouting",
+  statsBriefing: "scouting",
+  dataConference: "scouting",
+  analyticsTeamMeeting: "scouting",
 
-  // Scouting (universal)
+  // Scouting — universal
   watchVideo: "scouting",
   trainingVisit: "scouting",
   academyVisit: "scouting",
   youthTournament: "scouting",
 
-  // Office work
-  writeReport: "office",
-  study: "office",
-  reviewNPCReport: "office",
-  boardPresentation: "office",
-  assignTerritory: "office",
+  // Scouting — reports (core scouting output)
+  writeReport: "scouting",
+  reviewNPCReport: "scouting",
+  boardPresentation: "scouting",
+  assignTerritory: "scouting",
 
   // Networking
   networkMeeting: "networking",
   parentCoachMeeting: "networking",
   managerMeeting: "networking",
 
-  // Recovery & travel
+  // Recovery, travel & development
   rest: "recovery",
   travel: "recovery",
   internationalTravel: "recovery",
+  study: "recovery",
 };
 
 // ---------------------------------------------------------------------------

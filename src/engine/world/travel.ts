@@ -258,6 +258,36 @@ export function getTravelCost(fromCountry: string, toCountry: string): number {
 }
 
 // =============================================================================
+// TRAVEL DURATION
+// =============================================================================
+
+/**
+ * Continent-distance matrix for travel duration (in weeks).
+ *
+ *   Same continent            : 1 week
+ *   Adjacent continents       : 2 weeks
+ *   Distant continents        : 3 weeks
+ */
+export function getTravelDuration(fromCountry: string, toCountry: string): number {
+  const from = normalise(fromCountry);
+  const to = normalise(toCountry);
+
+  if (from === to) return 0;
+
+  const fromContinent = getContinentId(from);
+  const toContinent = getContinentId(to);
+
+  // Same continent
+  if (fromContinent === toContinent && fromContinent !== "unknown") return 1;
+
+  // Adjacent continents
+  if (areAdjacentContinents(fromContinent, toContinent)) return 2;
+
+  // Distant continents
+  return 3;
+}
+
+// =============================================================================
 // TRAVEL SLOTS
 // =============================================================================
 

@@ -37,51 +37,58 @@ interface NavSection {
   items: { screen: GameScreen; label: string; icon: React.ElementType }[];
 }
 
-const NAV_SECTIONS: NavSection[] = [
-  {
-    label: "Scouting",
-    items: [
-      { screen: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-      { screen: "calendar", label: "Calendar", icon: Calendar },
-      { screen: "fixtureBrowser", label: "Fixtures", icon: CalendarDays },
-      { screen: "playerDatabase", label: "Players", icon: Users },
-      { screen: "reportHistory", label: "Reports", icon: FileText },
-    ],
-  },
-  {
-    label: "Career",
-    items: [
-      { screen: "career", label: "My Scout", icon: Briefcase },
-      { screen: "equipment", label: "Equipment", icon: Wrench },
-      { screen: "training", label: "Training", icon: BookOpen },
-      { screen: "finances", label: "Finances", icon: Wallet },
-      { screen: "agency", label: "Agency", icon: Building2 },
-    ],
-  },
-  {
-    label: "World",
-    items: [
-      { screen: "youthScouting", label: "Youth Hub", icon: GraduationCap },
-      { screen: "discoveries", label: "Discoveries", icon: Trophy },
-      { screen: "network", label: "Scout Network", icon: Network },
-      { screen: "rivals", label: "Rivals", icon: Swords },
-      { screen: "npcManagement", label: "Scouts", icon: UserCheck },
-      { screen: "internationalView", label: "International", icon: Globe },
-      { screen: "alumniDashboard", label: "Alumni", icon: Award },
-      { screen: "analytics", label: "Analytics", icon: BarChart3 },
-      { screen: "leaderboard", label: "Leaderboard", icon: Award },
-    ],
-  },
-  {
-    label: null,
-    items: [
-      { screen: "inbox", label: "Inbox", icon: Mail },
-      { screen: "achievements", label: "Achievements", icon: Medal },
-      { screen: "handbook", label: "Handbook", icon: Book },
-      { screen: "settings", label: "Settings", icon: Settings },
-    ],
-  },
-];
+function getNavSections(specialization: string): NavSection[] {
+  const isYouth = specialization === "youth";
+  return [
+    {
+      label: "Scouting",
+      items: [
+        { screen: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+        { screen: "calendar", label: "Calendar", icon: Calendar },
+        ...(isYouth
+          ? [{ screen: "youthScouting" as GameScreen, label: "Youth Hub", icon: GraduationCap }]
+          : [{ screen: "playerDatabase" as GameScreen, label: "Players", icon: Users }]),
+        { screen: "fixtureBrowser", label: "Fixtures", icon: CalendarDays },
+        { screen: "reportHistory", label: "Reports", icon: FileText },
+      ],
+    },
+    {
+      label: "Career",
+      items: [
+        { screen: "career", label: "My Scout", icon: Briefcase },
+        { screen: "equipment", label: "Equipment", icon: Wrench },
+        { screen: "training", label: "Training", icon: BookOpen },
+        { screen: "finances", label: "Finances", icon: Wallet },
+        { screen: "agency", label: "Agency", icon: Building2 },
+      ],
+    },
+    {
+      label: "World",
+      items: [
+        ...(isYouth
+          ? [{ screen: "playerDatabase" as GameScreen, label: "Players", icon: Users }]
+          : [{ screen: "youthScouting" as GameScreen, label: "Youth Hub", icon: GraduationCap }]),
+        { screen: "discoveries", label: "Discoveries", icon: Trophy },
+        { screen: "network", label: "Scout Network", icon: Network },
+        { screen: "rivals", label: "Rivals", icon: Swords },
+        { screen: "npcManagement", label: "Scouts", icon: UserCheck },
+        { screen: "internationalView", label: "International", icon: Globe },
+        { screen: "alumniDashboard", label: "Alumni", icon: Award },
+        { screen: "analytics", label: "Analytics", icon: BarChart3 },
+        { screen: "leaderboard", label: "Leaderboard", icon: Award },
+      ],
+    },
+    {
+      label: null,
+      items: [
+        { screen: "inbox", label: "Inbox", icon: Mail },
+        { screen: "achievements", label: "Achievements", icon: Medal },
+        { screen: "handbook", label: "Handbook", icon: Book },
+        { screen: "settings", label: "Settings", icon: Settings },
+      ],
+    },
+  ];
+}
 
 // Screens that are always visible regardless of tier or week
 const ALWAYS_VISIBLE = new Set<GameScreen>([
@@ -200,7 +207,8 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     (gameState.currentSeason - 1) * 52 + gameState.currentWeek;
 
   // Build visible sections — only include sections that have at least one visible item
-  const visibleSections = NAV_SECTIONS.map((section) => ({
+  const navSections = getNavSections(specialization);
+  const visibleSections = navSections.map((section) => ({
     ...section,
     visibleItems: section.items.filter(({ screen }) =>
       getNavVisibility(screen, tier, effectiveWeek, countryCount, careerPath, specialization),

@@ -3,8 +3,9 @@
 import * as React from "react";
 import { X, Plane, MapPin, FileText, Star, TrendingUp, Building2, Trophy, Check } from "lucide-react";
 import { getTierColors } from "@/components/game/WorldMap";
-import { getContinentId } from "@/engine/world/travel";
+import { getContinentId, getTravelDuration } from "@/engine/world/travel";
 import type { CountryReputation, TravelBooking } from "@/engine/core/types";
+import { Tooltip } from "@/components/ui/tooltip";
 
 // =============================================================================
 // TYPES
@@ -23,6 +24,7 @@ export interface CountryPopupProps {
   activeBooking: TravelBooking | undefined;
   travelCost: number;
   travelSlots: number;
+  travelDuration: number;
   currentWeek: number;
   scoutBalance: number;
   /** Screen-relative position for the popup (px). */
@@ -87,6 +89,7 @@ export function CountryPopup({
   activeBooking,
   travelCost,
   travelSlots,
+  travelDuration,
   currentWeek,
   scoutBalance,
   position,
@@ -123,7 +126,8 @@ export function CountryPopup({
   }
 
   const departureWeek = currentWeek + 1;
-  const returnWeek = departureWeek + 2;
+  const returnWeek = departureWeek + travelDuration;
+  const durationLabel = travelDuration === 1 ? "1 week" : `${travelDuration} weeks`;
   const canAfford = scoutBalance >= travelCost;
   const hasBooking = activeBooking !== undefined;
   const bookingIsForThisCountry = activeBooking?.destinationCountry === countryKey;
@@ -184,7 +188,8 @@ export function CountryPopup({
         </div>
 
         {/* ── Familiarity bar ────────────────────────────────────── */}
-        <div className="px-4 pb-3">
+        <div className="px-4 pb-3" data-tutorial-id="travel-familiarity">
+          <Tooltip content="Your knowledge of this country. Higher familiarity = better scouting accuracy. Grows from reports, contacts, and successful finds." side="bottom">
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[11px] text-zinc-500">Familiarity</span>
             <div className="flex items-center gap-1.5">
@@ -194,6 +199,7 @@ export function CountryPopup({
               <span className="text-[11px] text-zinc-400">{familiarity}/100</span>
             </div>
           </div>
+          </Tooltip>
           <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
             <div
               className="h-full rounded-full transition-all duration-500 ease-out"
@@ -244,26 +250,37 @@ export function CountryPopup({
 
         {/* ── Travel section ─────────────────────────────────────── */}
         {!isCurrentLocation && !justBooked && (
-          <div className="px-4 pt-3 pb-4">
+          <div className="px-4 pt-3 pb-4" data-tutorial-id="travel-booking-section">
             <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+              <Tooltip content="Travel cost based on distance from home. Deducted from your balance when you book." side="bottom">
               <div>
                 <p className="text-[10px] text-zinc-500">Cost</p>
                 <p className="text-xs font-semibold text-white">
                   {travelCost > 0 ? `£${travelCost.toLocaleString()}` : "—"}
                 </p>
               </div>
+              </Tooltip>
+              <Tooltip content="Activity slots consumed by travel. Long-distance trips take more slots from your weekly schedule." side="bottom">
               <div>
                 <p className="text-[10px] text-zinc-500">Slots</p>
                 <p className="text-xs font-semibold text-white">
                   {travelSlots > 0 ? `${travelSlots} slot${travelSlots > 1 ? "s" : ""}` : "—"}
                 </p>
               </div>
+              </Tooltip>
+              <Tooltip content="How long you'll be away. Nearby countries: 1 week. Far countries: up to 3 weeks." side="bottom">
               <div>
                 <p className="text-[10px] text-zinc-500">Duration</p>
                 <p className="text-xs font-semibold text-white">
-                  {travelCost > 0 ? `Wk ${departureWeek}–${returnWeek}` : "—"}
+                  {travelDuration > 0 ? durationLabel : "—"}
                 </p>
+                {travelDuration > 0 && (
+                  <p className="text-[9px] text-zinc-600 mt-0.5">
+                    Wk {departureWeek}–{returnWeek}
+                  </p>
+                )}
               </div>
+              </Tooltip>
             </div>
 
             <button
@@ -295,7 +312,7 @@ export function CountryPopup({
             </div>
             <p className="text-sm font-semibold text-green-400">Travel Booked!</p>
             <p className="mt-1 text-[11px] text-zinc-400">
-              Departs Wk {departureWeek} · Returns Wk {returnWeek} · £{travelCost.toLocaleString()}
+              {durationLabel} · Wk {departureWeek}–{returnWeek} · £{travelCost.toLocaleString()}
             </p>
           </div>
         )}

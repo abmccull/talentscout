@@ -2,12 +2,13 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import { useTutorialStore } from "@/stores/tutorialStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
 import { Globe, MapPin, Wallet, Plane } from "lucide-react";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
 import type { CountryReputation, TravelBooking } from "@/engine/core/types";
-import { getTravelCost, getTravelSlots, getScoutHomeCountry, getContinentId } from "@/engine/world/travel";
+import { getTravelCost, getTravelSlots, getTravelDuration, getScoutHomeCountry, getContinentId } from "@/engine/world/travel";
 import { WorldMap, COUNTRY_COORDS, lonLatToSvg, getTierColors } from "@/components/game/WorldMap";
 import { CountryPopup } from "@/components/game/CountryPopup";
 
@@ -140,6 +141,7 @@ function BookingBanner({ booking, homeName }: { booking: TravelBooking; homeName
 export function InternationalScreen() {
   const { gameState, bookInternationalTravel } = useGameStore();
   const { playSFX } = useAudio();
+  const { startSequence, checkAutoAdvance } = useTutorialStore();
 
   // SVG ref for coordinate conversion
   const svgRef = useRef<SVGSVGElement>(null);
@@ -177,8 +179,9 @@ export function InternationalScreen() {
       setSelectedCountry(countryKey);
       setPopupPos({ x: screenX, y: screenY });
       setJustBooked(false);
+      checkAutoAdvance("countryClicked");
     },
-    [selectedCountry],
+    [selectedCountry, checkAutoAdvance],
   );
 
   const handleBookTravel = useCallback(() => {
@@ -238,6 +241,11 @@ export function InternationalScreen() {
     return () => window.removeEventListener("resize", handler);
   }, [selectedCountry, popupPos]);
 
+  // ── Tutorial trigger on first visit ──────────────────────────────────────
+  useEffect(() => {
+    startSequence("firstTravel");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Early return after all hooks ──────────────────────────────────────────
 
   if (!gameState) return null;
@@ -282,6 +290,9 @@ export function InternationalScreen() {
   const selectedTravelSlots = selectedCountry
     ? getTravelSlots(homeCountry, selectedCountry)
     : 0;
+  const selectedTravelDuration = selectedCountry
+    ? getTravelDuration(homeCountry, selectedCountry)
+    : 0;
 
   // Container rect for popup clamping
   const containerEl = containerRef.current;
@@ -302,6 +313,7 @@ export function InternationalScreen() {
         }}
       >
         {/* ── SVG Map ──────────────────────────────────────────── */}
+        <div data-tutorial-id="travel-world-map">
         <WorldMap
           countries={countries}
           familiarityLevels={familiarityLevels}
@@ -311,9 +323,12 @@ export function InternationalScreen() {
           onCountryClick={handleCountrySelect}
           svgRef={svgRef}
         />
+        </div>
 
         {/* ── HUD Overlays ─────────────────────────────────────── */}
+        <div data-tutorial-id="travel-location-hud">
         <LocationHUD location={locationName} week={currentWeek} />
+        </div>
         <BudgetHUD balance={scoutBalance} />
         <LegendHUD />
         {booking && <BookingBanner booking={booking} homeName={homeMeta.name} />}
@@ -333,6 +348,7 @@ export function InternationalScreen() {
             activeBooking={booking}
             travelCost={selectedTravelCost}
             travelSlots={selectedTravelSlots}
+            travelDuration={selectedTravelDuration}
             currentWeek={currentWeek}
             scoutBalance={scoutBalance}
             position={popupPos}

@@ -400,7 +400,9 @@ export function NewGameScreen() {
       ...(startingPosition === "club" && startingClubId && { startingClubId }),
       ...(Object.keys(skillAllocations).length > 0 && { skillAllocations }),
     };
-    startNewGame(config);
+    startNewGame(config).catch((err) => {
+      console.error("[NewGame] startNewGame failed:", err, err?.stack);
+    });
   };
 
   // ---------------------------------------------------------------------------
@@ -482,9 +484,9 @@ export function NewGameScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <div className="relative min-h-screen bg-[var(--background)] flex flex-col">
+    <div className="relative h-screen bg-[var(--background)] flex flex-col overflow-hidden">
       <ScreenBackground src="/images/backgrounds/menu-bg-2.png" opacity={0.8} />
-      <div className="relative z-10 flex flex-1 flex-col">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
       {/* Top bar */}
       <div className="px-8 pt-6">
         <div className="mx-auto max-w-4xl">
@@ -552,7 +554,7 @@ export function NewGameScreen() {
       </div>
 
       {/* Step content */}
-      <div className="flex-1 px-8 py-6 overflow-y-auto">
+      <div className="min-h-0 flex-1 px-8 py-6 overflow-y-auto">
         <div className="mx-auto max-w-4xl">
           <div
             key={step}

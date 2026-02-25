@@ -119,36 +119,29 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule }: ActivityCa
           : "text-red-400";
 
   return (
-    <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
+    <div className="rounded-md border border-[#27272a] bg-[#141414] px-2.5 py-2">
       {/* Header: icon + label + slot badge */}
-      <div className="mb-1.5 flex items-start justify-between">
-        <div className="flex items-center gap-1.5">
-          <Icon size={14} className={display.color} aria-hidden="true" />
-          <span className={`text-xs font-medium ${display.color}`}>
+      <div className="mb-1 flex items-center justify-between">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Icon size={13} className={`${display.color} shrink-0`} aria-hidden="true" />
+          <span className={`text-[11px] font-medium truncate ${display.color}`}>
             {display.label}
           </span>
         </div>
-        <Badge variant="outline" className="text-[10px] shrink-0">
-          {activity.slots} slot{activity.slots > 1 ? "s" : ""}
+        <Badge variant="outline" className="text-[9px] shrink-0 ml-1">
+          {activity.slots}s
         </Badge>
       </div>
 
-      {/* Description */}
-      {activity.description && (
-        <p className="mb-2 text-[10px] text-zinc-500 leading-snug line-clamp-2">
-          {activity.description}
-        </p>
-      )}
-
       {/* Fatigue + XP badges */}
-      <div className="mb-2 flex flex-wrap gap-1">
-        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-[#1a1a1a] ${fatigueColor}`}>
-          {fatigueCost >= 0 ? "+" : ""}{fatigueCost} fatigue
+      <div className="mb-1.5 flex flex-wrap gap-0.5">
+        <span className={`inline-flex items-center rounded px-1 py-px text-[9px] font-medium bg-[#1a1a1a] ${fatigueColor}`}>
+          {fatigueCost >= 0 ? "+" : ""}{fatigueCost}f
         </span>
         {topSkills.map(([skill, xp]) => (
           <span
             key={skill}
-            className="inline-flex items-center rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-400"
+            className="inline-flex items-center rounded bg-blue-500/10 px-1 py-px text-[9px] font-medium text-blue-400"
           >
             {SKILL_LABELS[skill] ?? skill} +{xp}
           </span>
@@ -156,7 +149,7 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule }: ActivityCa
         {topAttrs.map(([attr, xp]) => (
           <span
             key={attr}
-            className="inline-flex items-center rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-300"
+            className="inline-flex items-center rounded bg-purple-500/10 px-1 py-px text-[9px] font-medium text-purple-300"
           >
             {ATTR_LABELS[attr] ?? attr} +{xp}
           </span>
@@ -164,7 +157,7 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule }: ActivityCa
       </div>
 
       {/* Day buttons */}
-      <div className="flex flex-wrap gap-1">
+      <div className="flex gap-0.5">
         {DAY_LABELS.map((day, dayIdx) => {
           const canPlace = canScheduleAt(activity, dayIdx);
           return (
@@ -172,14 +165,14 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule }: ActivityCa
               key={day}
               disabled={!canPlace}
               onClick={() => onSchedule(activity, dayIdx)}
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition ${
+              className={`flex-1 rounded px-0 py-px text-[9px] font-medium transition ${
                 !canPlace
                   ? "cursor-not-allowed bg-[#27272a] text-zinc-600"
                   : "bg-[#27272a] text-zinc-300 hover:bg-emerald-500/20 hover:text-emerald-400"
               }`}
               aria-label={`Schedule ${display.label} on ${day}`}
             >
-              {day}
+              {day.charAt(0)}
             </button>
           );
         })}

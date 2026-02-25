@@ -1,6 +1,6 @@
 "use strict";
 
-const { app, BrowserWindow, ipcMain, dialog, session } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog, session, protocol, net } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -10,6 +10,29 @@ const fs = require("fs");
 
 const isDev =
   process.argv.includes("--dev") || process.env.ELECTRON_DEV === "1";
+
+// ---------------------------------------------------------------------------
+// Custom protocol registration (must happen before app.ready)
+// ---------------------------------------------------------------------------
+// Register a privileged "app" scheme so the static export can be served from
+// inside the asar archive with correct MIME types. The deprecated
+// protocol.interceptFileProtocol does not reliably serve files from asar in
+// Electron 25+.
+
+if (!isDev) {
+  protocol.registerSchemesAsPrivileged([
+    {
+      scheme: "app",
+      privileges: {
+        standard: true,
+        secure: true,
+        supportFetchAPI: true,
+        corsEnabled: true,
+        stream: true,
+      },
+    },
+  ]);
+}
 
 // ---------------------------------------------------------------------------
 // Steamworks SDK initialization
@@ -31,6 +54,42 @@ function initSteam() {
     steamAvailable = false;
     console.warn("[Steam] Failed to initialize (Steam client may not be running):", err.message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// MIME type lookup
+// ---------------------------------------------------------------------------
+
+const MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+  ".otf": "font/otf",
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".ogg": "audio/ogg",
+  ".webm": "audio/webm",
+  ".mp4": "video/mp4",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml",
+  ".map": "application/json",
+};
+
+function getMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return MIME_TYPES[ext] || "application/octet-stream";
 }
 
 // ---------------------------------------------------------------------------
@@ -56,8 +115,6 @@ function createWindow() {
 
   // ----- CSP via response headers -----
   // In dev mode, set CSP headers on HTTP responses.
-  // In production (file://), Electron's webRequest doesn't intercept file:// loads,
-  // so we disable the default CSP entirely — the app is sandboxed by Electron already.
   if (isDev) {
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
       callback({
@@ -81,26 +138,7 @@ function createWindow() {
     mainWindow.loadURL("http://localhost:3000/play");
     mainWindow.webContents.openDevTools();
   } else {
-    const outDir = path.join(__dirname, "..", "out");
-    const indexPath = path.join(outDir, "play.html");
-
-    // Intercept file:// requests so that absolute paths like /_next/...
-    // resolve relative to the out/ directory instead of the filesystem root.
-    const { protocol } = require("electron");
-    protocol.interceptFileProtocol("file", (request, callback) => {
-      let url = request.url.replace("file://", "");
-      url = decodeURIComponent(url);
-
-      // If the path doesn't exist on disk and starts with /_next or /images etc.,
-      // resolve it relative to the out/ directory.
-      if (!fs.existsSync(url) && (url.startsWith("/_next") || url.startsWith("/images") || url.startsWith("/audio"))) {
-        callback(path.join(outDir, url));
-      } else {
-        callback(url);
-      }
-    });
-
-    mainWindow.loadFile(indexPath);
+    mainWindow.loadURL("app://host/play.html");
   }
 
   // ----- F11 fullscreen toggle -----
@@ -261,6 +299,38 @@ ipcMain.handle("dialog:openFile", async () => {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(() => {
+  // Register the app:// protocol handler once, before any windows are created.
+  // This serves the Next.js static export from the out/ directory (asar-aware).
+  if (!isDev) {
+    const outDir = path.join(__dirname, "..", "out");
+    protocol.handle("app", (request) => {
+      const url = new URL(request.url);
+      let pathname = decodeURIComponent(url.pathname);
+
+      if (pathname === "/" || pathname === "") {
+        pathname = "play.html";
+      } else if (pathname.startsWith("/")) {
+        pathname = pathname.substring(1);
+      }
+
+      const filePath = path.join(outDir, pathname);
+      const contentType = getMimeType(filePath);
+
+      try {
+        const data = fs.readFileSync(filePath);
+        return new Response(data, {
+          status: 200,
+          headers: { "Content-Type": contentType },
+        });
+      } catch {
+        return new Response("Not Found", {
+          status: 404,
+          headers: { "Content-Type": "text/plain" },
+        });
+      }
+    });
+  }
+
   initSteam();
   createWindow();
 

@@ -225,11 +225,13 @@ function TimelineDay({ dayName, activityLabel, status, dayIndex }: TimelineDayPr
 
 interface DayCardProps {
   dayResult: DayResult;
-  focusCandidates?: DayResult["observations"];
+  /** All day results for the week — used to gather observations from earlier days of the same event. */
+  allDayResults: DayResult[];
+  currentDay: number;
   onChooseInteraction?: (choiceId: string, focusedPlayerIds?: string[]) => void;
 }
 
-function DayCard({ dayResult, focusCandidates = [], onChooseInteraction }: DayCardProps) {
+function DayCard({ dayResult, allDayResults, currentDay, onChooseInteraction }: DayCardProps) {
   const activityLabel = dayResult.activity
     ? getActivityLabel(dayResult.activity.type)
     : "Free Day";
@@ -240,14 +242,25 @@ function DayCard({ dayResult, focusCandidates = [], onChooseInteraction }: DayCa
   const [pendingFocusIds, setPendingFocusIds] = useState<string[]>([]);
 
   const availableFocusCandidates = useMemo(() => {
+    // Collect observations from all days of the SAME event (same instanceId).
+    // A 3-day tournament lets you focus on anyone seen at that tournament so far.
     const byId = new Map<string, DayResult["observations"][number]>();
-    for (const obs of focusCandidates.length > 0 ? focusCandidates : dayResult.observations) {
-      if (!byId.has(obs.playerId)) {
-        byId.set(obs.playerId, obs);
+    const instanceId = dayResult.activity?.instanceId;
+
+    for (let i = 0; i <= currentDay; i++) {
+      const day = allDayResults[i];
+      if (!day) continue;
+      // Same event: matching instanceId, or same activity type on adjacent days if no instanceId
+      const sameEvent = instanceId
+        ? day.activity?.instanceId === instanceId
+        : day.activity?.type === dayResult.activity?.type && day.activity?.type != null;
+      if (!sameEvent) continue;
+      for (const obs of day.observations) {
+        if (!byId.has(obs.playerId)) byId.set(obs.playerId, obs);
       }
     }
-    return [...byId.values()].slice(0, 8);
-  }, [dayResult.observations, focusCandidates]);
+    return [...byId.values()];
+  }, [dayResult, allDayResults, currentDay]);
 
   const maxFocusPlayers = dayResult.interaction?.maxFocusPlayers ?? 3;
 
@@ -365,7 +378,7 @@ function DayCard({ dayResult, focusCandidates = [], onChooseInteraction }: DayCa
                     Pick 1-{maxFocusPlayers} players. Fewer targets means deeper scouting reads.
                   </p>
                   {availableFocusCandidates.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
                       {availableFocusCandidates.map((candidate) => {
                         const active = pendingFocusIds.includes(candidate.playerId);
                         return (
@@ -531,21 +544,6 @@ export function WeekSimulationScreen() {
   // All hooks must be called before any early return
   const currentDay = weekSimulation?.currentDay ?? 0;
   const dayResults = weekSimulation?.dayResults ?? EMPTY_DAY_RESULTS;
-  const focusCandidates = useMemo(() => {
-    const merged = new Map<string, DayResult["observations"][number]>();
-    const upperBound = Math.min(dayResults.length - 1, currentDay);
-    for (let i = 0; i <= upperBound; i++) {
-      const day = dayResults[i];
-      if (!day) continue;
-      for (const obs of day.observations) {
-        if (!merged.has(obs.playerId)) {
-          merged.set(obs.playerId, obs);
-        }
-      }
-    }
-    return [...merged.values()].slice(0, 8);
-  }, [currentDay, dayResults]);
-
   if (!weekSimulation) return null;
 
   const currentDayResult: DayResult | undefined = dayResults[currentDay];
@@ -559,11 +557,11 @@ export function WeekSimulationScreen() {
 
   return (
     <GameLayout>
-      <div className="relative flex h-full min-h-screen flex-col bg-zinc-950 p-6">
+      <div className="relative flex h-screen flex-col bg-zinc-950 p-6">
         <ScreenBackground src={currentBg} opacity={0.82} />
-        <div className="relative z-10 flex flex-1 flex-col">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="mb-6">
+        <header className="mb-6 shrink-0">
           <h1 className="text-2xl font-bold text-white">Week in Progress</h1>
           <p className="mt-0.5 text-sm text-zinc-400">
             Day {Math.min(currentDay + 1, 7)} of 7
@@ -571,7 +569,7 @@ export function WeekSimulationScreen() {
         </header>
 
         {/* Body: timeline + card */}
-        <div className="flex flex-1 gap-6">
+        <div className="flex min-h-0 flex-1 gap-6">
           {/* Left: 7-day timeline */}
           <aside
             className="w-52 shrink-0"
@@ -610,7 +608,7 @@ export function WeekSimulationScreen() {
           </aside>
 
           {/* Center: current day card */}
-          <main className="flex-1 min-w-0" aria-live="polite" aria-label="Current day details">
+          <main className="flex-1 min-w-0 overflow-y-auto" aria-live="polite" aria-label="Current day details">
             <AnimatePresence mode="wait">
               {isComplete ? (
                 <motion.div
@@ -639,7 +637,8 @@ export function WeekSimulationScreen() {
                   {currentDayResult ? (
                     <DayCard
                       dayResult={currentDayResult}
-                      focusCandidates={focusCandidates}
+                      allDayResults={dayResults}
+                      currentDay={currentDay}
                       onChooseInteraction={chooseSimulationInteraction}
                     />
                   ) : (
@@ -652,7 +651,7 @@ export function WeekSimulationScreen() {
         </div>
 
         {/* Footer: action buttons */}
-        <footer className="mt-6 flex items-center justify-between border-t border-zinc-800 pt-5">
+        <footer className="mt-6 shrink-0 flex items-center justify-between border-t border-zinc-800 pt-5">
           <div className="flex items-center gap-3">
             {isComplete ? (
               <Button

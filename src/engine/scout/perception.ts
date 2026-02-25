@@ -176,7 +176,7 @@ export function calculateConfidenceRange(
   const skill = Math.max(1, Math.min(20, scoutSkill));
   const rawWidth = (20 - skill) / (1 + Math.max(1, observationCount) * 0.3);
   const confidenceNarrow = 1 - confidence * 0.4;
-  const finalWidth = Math.max(1, rawWidth * confidenceNarrow);
+  const finalWidth = Math.max(2, rawWidth * confidenceNarrow);
 
   const half = finalWidth / 2;
   const low = Math.max(1, Math.round(perceivedValue - half));
@@ -285,11 +285,19 @@ export function observePlayerLight(
     const avgPerceived = Math.round(bucket.values.reduce((s, v) => s + v, 0) / bucket.values.length);
     const avgConfidence = bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length;
     const totalCount = (priorCounts.get(attr) ?? 0) + bucket.values.length;
+    const domain = ATTRIBUTE_DOMAINS[attr];
+    const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
+    const skillLevel = scout.skills[skillKey as ScoutSkill];
+    const [rangeLow, rangeHigh] = calculateConfidenceRange(
+      avgPerceived, avgConfidence, skillLevel, totalCount,
+    );
     attributeReadings.push({
       attribute: attr,
       perceivedValue: avgPerceived,
       confidence: avgConfidence,
       observationCount: totalCount,
+      rangeLow,
+      rangeHigh,
     });
   }
 
@@ -416,12 +424,20 @@ export function observePlayer(
     const avgPerceived = Math.round(bucket.values.reduce((s, v) => s + v, 0) / bucket.values.length);
     const avgConfidence = bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length;
     const totalCount = (priorCounts.get(attr) ?? 0) + bucket.values.length;
+    const domain = ATTRIBUTE_DOMAINS[attr];
+    const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
+    const skillLevel = scout.skills[skillKey as ScoutSkill];
+    const [rangeLow, rangeHigh] = calculateConfidenceRange(
+      avgPerceived, avgConfidence, skillLevel, totalCount,
+    );
 
     attributeReadings.push({
       attribute: attr,
       perceivedValue: avgPerceived,
       confidence: avgConfidence,
       observationCount: totalCount,
+      rangeLow,
+      rangeHigh,
     });
   }
 

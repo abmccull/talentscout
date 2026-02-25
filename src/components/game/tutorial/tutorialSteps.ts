@@ -612,6 +612,63 @@ const firstReportWriting: TutorialSequence = {
 };
 
 // ---------------------------------------------------------------------------
+// Travel tutorial sequence
+// ---------------------------------------------------------------------------
+
+const firstTravel: TutorialSequence = {
+  id: "firstTravel",
+  name: "International Travel",
+  steps: [
+    {
+      id: "travel-1",
+      screen: "internationalView",
+      targetSelector: "travel-world-map",
+      title: "The World Map",
+      description:
+        "This is your world map. Countries are coloured by your familiarity \u2014 higher familiarity means better scouting accuracy when you visit.",
+      position: "bottom",
+    },
+    {
+      id: "travel-2",
+      screen: "internationalView",
+      targetSelector: "travel-world-map",
+      title: "Click a Country",
+      description:
+        "Click any country to see intel: familiarity, leagues, clubs, and travel costs. Nearby countries are cheaper and faster to reach.",
+      position: "bottom",
+      nextStep: "countryClicked",
+    },
+    {
+      id: "travel-3",
+      screen: "internationalView",
+      targetSelector: "travel-booking-section",
+      title: "Booking Travel",
+      description:
+        "Travel duration and cost depend on distance. Same-continent trips are quick and cheap; intercontinental trips take longer and cost more. While abroad, you can only attend matches in that country.",
+      position: "left",
+    },
+    {
+      id: "travel-4",
+      screen: "internationalView",
+      targetSelector: "travel-familiarity",
+      title: "Familiarity Matters",
+      description:
+        "Your familiarity with a country affects scouting accuracy. Submit reports, make contacts, and find talent abroad to grow familiarity. Low familiarity means wider confidence ranges on your attribute readings.",
+      position: "left",
+    },
+    {
+      id: "travel-5",
+      screen: "internationalView",
+      targetSelector: "travel-location-hud",
+      title: "Coming Home",
+      description:
+        "When your trip ends, you return home automatically. Plan your calendar around travel \u2014 you\u2019ll need rest days after long trips.",
+      position: "bottom",
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
 // Exported collection
 // ---------------------------------------------------------------------------
 
@@ -621,6 +678,7 @@ export const TUTORIAL_SEQUENCES: TutorialSequence[] = [
   careerProgression,
   firstMatch,
   firstReportWriting,
+  firstTravel,
   ahaMomentYouth,
   ahaMomentFirstTeam,
   ahaMomentRegional,

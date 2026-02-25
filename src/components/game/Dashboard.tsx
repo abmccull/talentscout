@@ -31,6 +31,8 @@ import {
   BookOpen,
   Monitor,
   Plane,
+  Sparkles,
+  ClipboardList,
 } from "lucide-react";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -157,6 +159,20 @@ export function Dashboard() {
 
   // Specialization-specific data
   const specialization = scout.primarySpecialization;
+
+  // Youth scout data
+  const youthList = specialization === "youth" ? Object.values(gameState.unsignedYouth) : [];
+  const youthDiscoveredCount = youthList.filter((y) =>
+    y.discoveredBy.includes(scout.id),
+  ).length;
+  const youthReportedIds = specialization === "youth"
+    ? new Set(
+        Object.values(gameState.placementReports ?? {})
+          .filter((r) => r.scoutId === scout.id)
+          .map((r) => r.unsignedYouthId),
+      )
+    : new Set<string>();
+  const youthReportedCount = youthReportedIds.size;
 
   // Phase 2: rival scouts — filtered to matching specialization
   const allRivals = Object.values(gameState.rivalScouts);
@@ -299,10 +315,17 @@ export function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Reports Filed</p>
-                  <p className="text-2xl font-bold">{scout.reportsSubmitted}</p>
+                  <p className="text-xs text-zinc-500">
+                    {specialization === "youth" ? "Youth Discovered" : "Reports Filed"}
+                  </p>
+                  <p className="text-2xl font-bold">
+                    {specialization === "youth" ? youthDiscoveredCount : scout.reportsSubmitted}
+                  </p>
                 </div>
-                <FileText className="text-zinc-500" size={20} aria-hidden="true" />
+                {specialization === "youth"
+                  ? <Users className="text-emerald-500" size={20} aria-hidden="true" />
+                  : <FileText className="text-zinc-500" size={20} aria-hidden="true" />
+                }
               </div>
             </CardContent>
           </Card>
@@ -310,10 +333,17 @@ export function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Players Scouted</p>
-                  <p className="text-2xl font-bold">{observedPlayerCount}</p>
+                  <p className="text-xs text-zinc-500">
+                    {specialization === "youth" ? "Legacy Score" : "Players Scouted"}
+                  </p>
+                  <p className={`text-2xl font-bold ${specialization === "youth" ? "text-amber-400" : ""}`}>
+                    {specialization === "youth" ? gameState.legacyScore.totalScore : observedPlayerCount}
+                  </p>
                 </div>
-                <Eye className="text-zinc-500" size={20} aria-hidden="true" />
+                {specialization === "youth"
+                  ? <Star className="text-amber-500" size={20} aria-hidden="true" />
+                  : <Eye className="text-zinc-500" size={20} aria-hidden="true" />
+                }
               </div>
             </CardContent>
           </Card>
@@ -523,92 +553,173 @@ export function Dashboard() {
         )}
 
         <div className="grid grid-cols-3 gap-6">
-          {/* This Week's Fixtures */}
-          <Card className="col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <span>This Week&apos;s Fixtures</span>
-                <div className="flex items-center gap-2">
-                  <Badge variant="secondary">{thisWeekFixtures.length} matches</Badge>
-                  <Button size="sm" variant="ghost" onClick={() => setScreen("fixtureBrowser")} className="text-xs text-zinc-400 hover:text-white">
-                    Browse All
-                  </Button>
+          {/* This Week's Fixtures / Youth Pipeline */}
+          {specialization === "youth" ? (
+            /* Youth Pipeline card */
+            <Card className="col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <GraduationCap size={16} className="text-emerald-400" aria-hidden="true" />
+                    Youth Pipeline
+                  </span>
+                  <Badge variant="secondary">{youthList.length} total</Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Pipeline stages */}
+                <div className="mb-4 grid grid-cols-4 gap-3">
+                  {([
+                    { label: "New", count: youthList.length - youthDiscoveredCount, color: "text-zinc-400", bg: "bg-zinc-800" },
+                    { label: "Observed", count: youthDiscoveredCount, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+                    { label: "Reported", count: youthReportedCount, color: "text-blue-400", bg: "bg-blue-500/10" },
+                    { label: "Placed", count: youthList.filter((y) => y.placed).length, color: "text-amber-400", bg: "bg-amber-500/10" },
+                  ] as const).map((stage) => (
+                    <div key={stage.label} className={`rounded-md border border-[#27272a] p-3 text-center ${stage.bg}`}>
+                      <p className={`text-lg font-bold ${stage.color}`}>{stage.count}</p>
+                      <p className="text-[10px] text-zinc-500">{stage.label}</p>
+                    </div>
+                  ))}
                 </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {thisWeekFixtures.length === 0 ? (
-                <p className="text-sm text-zinc-500">No fixtures this week.</p>
-              ) : (
-                <div className="space-y-2">
-                  {thisWeekFixtures.slice(0, 6).map((fixture) => {
-                    const homeClub = gameState.clubs[fixture.homeClubId];
-                    const awayClub = gameState.clubs[fixture.awayClubId];
-                    const league = gameState.leagues[fixture.leagueId];
-                    // Get standings positions
-                    const standings = league ? getLeagueStandings(league.id) : [];
-                    const homePos = standings.findIndex((s) => s.clubId === fixture.homeClubId) + 1;
-                    const awayPos = standings.findIndex((s) => s.clubId === fixture.awayClubId) + 1;
-                    const weather = fixture.weather;
-                    return (
-                      <div
-                        key={fixture.id}
-                        className="flex items-center justify-between rounded-md border border-[var(--border)] p-3"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {homeClub?.name || "?"}
-                              {homePos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(homePos)})</span>}
-                              {" vs "}
-                              {awayClub?.name || "?"}
-                              {awayPos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(awayPos)})</span>}
-                            </span>
-                            {weather && (
-                              <span className="text-[10px] text-zinc-500 capitalize">{weather.replace(/([A-Z])/g, " $1").trim()}</span>
-                            )}
-                            <Badge variant="outline" className="text-[10px]">
-                              {league?.shortName}
-                            </Badge>
+
+                {/* Top prospects */}
+                {(() => {
+                  const observed = youthList
+                    .filter((y) => y.discoveredBy.includes(scout.id))
+                    .sort((a, b) => b.buzzLevel - a.buzzLevel)
+                    .slice(0, 3);
+                  if (observed.length === 0) return (
+                    <p className="text-sm text-zinc-500">No youth observed yet. Visit youth venues to discover talent.</p>
+                  );
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Top Prospects</p>
+                      {observed.map((y) => (
+                        <button
+                          key={y.id}
+                          onClick={() => { selectPlayer(y.player.id); setScreen("playerProfile"); }}
+                          className="flex w-full items-center gap-3 rounded-md border border-[#27272a] p-2.5 text-left transition hover:border-zinc-600"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">
+                              {y.player.firstName} {y.player.lastName}
+                            </p>
+                            <p className="text-[10px] text-zinc-500">{y.player.position} · {y.player.nationality}</p>
                           </div>
-                        </div>
-                        {scout.primarySpecialization !== "youth" && (() => {
-                          const scheduled = gameState.schedule.activities.some(
-                            (a) => a !== null && a.type === "attendMatch" && a.targetId === fixture.id,
-                          );
-                          if (scheduled) {
-                            return (
-                              <Badge variant="outline" className="text-emerald-400 border-emerald-500/40">
-                                Scheduled
+                          <div className="w-16">
+                            <div className="mb-0.5 text-right text-[10px] text-zinc-400">{y.buzzLevel}%</div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+                              <div
+                                className={`h-full rounded-full ${y.buzzLevel >= 70 ? "bg-emerald-500" : y.buzzLevel >= 40 ? "bg-amber-500" : "bg-zinc-600"}`}
+                                style={{ width: `${y.buzzLevel}%` }}
+                              />
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 w-full"
+                  onClick={() => setScreen("youthScouting")}
+                >
+                  View Youth Hub
+                  <ArrowRight size={12} className="ml-1" aria-hidden="true" />
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            /* Original Fixtures card for non-youth scouts */
+            <Card className="col-span-2">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>This Week&apos;s Fixtures</span>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">{thisWeekFixtures.length} matches</Badge>
+                    <Button size="sm" variant="ghost" onClick={() => setScreen("fixtureBrowser")} className="text-xs text-zinc-400 hover:text-white">
+                      Browse All
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {thisWeekFixtures.length === 0 ? (
+                  <p className="text-sm text-zinc-500">No fixtures this week.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {thisWeekFixtures.slice(0, 6).map((fixture) => {
+                      const homeClub = gameState.clubs[fixture.homeClubId];
+                      const awayClub = gameState.clubs[fixture.awayClubId];
+                      const league = gameState.leagues[fixture.leagueId];
+                      // Get standings positions
+                      const standings = league ? getLeagueStandings(league.id) : [];
+                      const homePos = standings.findIndex((s) => s.clubId === fixture.homeClubId) + 1;
+                      const awayPos = standings.findIndex((s) => s.clubId === fixture.awayClubId) + 1;
+                      const weather = fixture.weather;
+                      return (
+                        <div
+                          key={fixture.id}
+                          className="flex items-center justify-between rounded-md border border-[var(--border)] p-3"
+                        >
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">
+                                {homeClub?.name || "?"}
+                                {homePos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(homePos)})</span>}
+                                {" vs "}
+                                {awayClub?.name || "?"}
+                                {awayPos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(awayPos)})</span>}
+                              </span>
+                              {weather && (
+                                <span className="text-[10px] text-zinc-500 capitalize">{weather.replace(/([A-Z])/g, " $1").trim()}</span>
+                              )}
+                              <Badge variant="outline" className="text-[10px]">
+                                {league?.shortName}
                               </Badge>
+                            </div>
+                          </div>
+                          {scout.primarySpecialization !== "youth" && (() => {
+                            const scheduled = gameState.schedule.activities.some(
+                              (a) => a !== null && a.type === "attendMatch" && a.targetId === fixture.id,
                             );
-                          }
-                          return (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                const ok = scheduleMatch(fixture.id);
-                                if (!ok) { /* calendar full — button state will reflect on re-render */ }
-                              }}
-                            >
-                              <CalendarPlus size={14} className="mr-1" aria-hidden="true" />
-                              Schedule
-                            </Button>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {thisWeekFixtures.length > 6 && (
-                <p className="mt-2 text-xs text-zinc-500">
-                  +{thisWeekFixtures.length - 6} more fixtures
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                            if (scheduled) {
+                              return (
+                                <Badge variant="outline" className="text-emerald-400 border-emerald-500/40">
+                                  Scheduled
+                                </Badge>
+                              );
+                            }
+                            return (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  const ok = scheduleMatch(fixture.id);
+                                  if (!ok) { /* calendar full — button state will reflect on re-render */ }
+                                }}
+                              >
+                                <CalendarPlus size={14} className="mr-1" aria-hidden="true" />
+                                Schedule
+                              </Button>
+                            );
+                          })()}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {thisWeekFixtures.length > 6 && (
+                  <p className="mt-2 text-xs text-zinc-500">
+                    +{thisWeekFixtures.length - 6} more fixtures
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Inbox & Recent Activity */}
           <div className="space-y-6">
@@ -801,6 +912,38 @@ export function Dashboard() {
                       <p className="text-lg font-medium text-emerald-400">{gameState.legacyScore.totalScore}</p>
                     </div>
                   </div>
+                  {specialization === "youth" && (() => {
+                    const observed = Object.values(gameState.unsignedYouth).filter(
+                      (y) => y.discoveredBy.includes(scout.id),
+                    );
+                    const wonderkids = observed.filter(
+                      (y) => y.player.wonderkidTier === "generational" || y.player.wonderkidTier === "worldClass",
+                    );
+                    const topProspect = observed
+                      .sort((a, b) => b.player.potentialAbility - a.player.potentialAbility)[0];
+                    return (
+                      <div className="mt-3 space-y-2 border-t border-[#27272a] pt-3">
+                        {wonderkids.length > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-amber-400 flex items-center gap-1">
+                              <Sparkles size={12} aria-hidden="true" />
+                              Wonderkids
+                            </span>
+                            <span className="font-medium text-amber-400">{wonderkids.length}</span>
+                          </div>
+                        )}
+                        {topProspect && (
+                          <div className="text-sm">
+                            <p className="text-zinc-500 text-xs">Top Prospect</p>
+                            <p className="font-medium text-white">
+                              {topProspect.player.firstName} {topProspect.player.lastName}
+                              <span className="ml-1 text-xs text-zinc-500">{topProspect.player.position}</span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <Button
                     variant="outline"
                     size="sm"
@@ -812,6 +955,59 @@ export function Dashboard() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Placement Reports (Youth scouts) */}
+            {specialization === "youth" && (() => {
+              const reports = Object.values(gameState.placementReports ?? {})
+                .filter((r) => r.scoutId === scout.id)
+                .sort((a, b) => b.season - a.season || b.week - a.week)
+                .slice(0, 3);
+              if (reports.length === 0) return null;
+              const statusColors: Record<string, string> = {
+                accepted: "border-emerald-500/50 bg-emerald-500/10 text-emerald-400",
+                rejected: "border-red-500/50 bg-red-500/10 text-red-400",
+                trial: "border-amber-500/50 bg-amber-500/10 text-amber-400",
+                pending: "border-zinc-600 bg-zinc-800 text-zinc-400",
+              };
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <ClipboardList size={16} className="text-blue-400" aria-hidden="true" />
+                      Placement Reports
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {reports.map((r) => {
+                      const youth = gameState.unsignedYouth[r.unsignedYouthId];
+                      const club = gameState.clubs[r.targetClubId];
+                      const status = r.clubResponse ?? "pending";
+                      return (
+                        <div key={r.id} className="rounded-md border border-[#27272a] p-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-medium text-white truncate">
+                              {youth?.player.firstName ?? "?"} {youth?.player.lastName ?? "?"}
+                            </p>
+                            <Badge className={`shrink-0 text-[10px] capitalize ${statusColors[status] ?? statusColors.pending}`}>
+                              {status}
+                            </Badge>
+                          </div>
+                          <p className="text-[10px] text-zinc-500">{club?.shortName ?? "Unknown Club"}</p>
+                        </div>
+                      );
+                    })}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs text-zinc-400 hover:text-white"
+                      onClick={() => setScreen("youthScouting")}
+                    >
+                      View All
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </div>
         </div>
 

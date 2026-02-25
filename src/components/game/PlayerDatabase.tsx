@@ -10,8 +10,10 @@ import { Search, ChevronUp, ChevronDown, Users, FileText, Star } from "lucide-re
 import type { Player, Position } from "@/engine/core/types";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
+import { getPerceivedAbility, type PerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { MiniStarRange } from "@/components/ui/MiniStarRange";
 
-type SortKey = "name" | "age" | "position" | "club" | "league" | "observations" | "reports" | "lastSeen";
+type SortKey = "name" | "age" | "position" | "nationality" | "club" | "league" | "value" | "ca" | "observations" | "reports" | "lastSeen";
 type SortDir = "asc" | "desc";
 
 const POSITIONS: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
@@ -24,6 +26,21 @@ interface PlayerRow {
   observationCount: number;
   reportCount: number;
   lastSeenWeek: number | null;
+  perceived: PerceivedAbility | null;
+}
+
+function formatValue(n: number): string {
+  if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `£${(n / 1_000).toFixed(0)}K`;
+  return `£${n}`;
+}
+
+function parseValueInput(input: string): number {
+  const trimmed = input.trim().replace(/[£,]/g, "");
+  const upper = trimmed.toUpperCase();
+  if (upper.endsWith("M")) return parseFloat(upper) * 1_000_000;
+  if (upper.endsWith("K")) return parseFloat(upper) * 1_000;
+  return parseFloat(trimmed) || 0;
 }
 
 export function PlayerDatabase() {
@@ -48,6 +65,10 @@ export function PlayerDatabase() {
   const [watchlistOnly, setWatchlistOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [nationalityFilter, setNationalityFilter] = useState("");
+  const [leagueFilter, setLeagueFilter] = useState("");
+  const [minValue, setMinValue] = useState("");
+  const [maxValue, setMaxValue] = useState("");
 
   // All hooks must be called before any early return
   const scoutedPlayers = useMemo(
@@ -70,6 +91,16 @@ export function PlayerDatabase() {
     return sourcePlayers;
   }, [sourcePlayers, scoutedOnly, specialization]);
 
+  const allNationalities = useMemo(
+    () => [...new Set(specFilteredPlayers.map((p) => p.nationality))].sort(),
+    [specFilteredPlayers],
+  );
+
+  const allObs = useMemo(
+    () => (gameState ? Object.values(gameState.observations) : []),
+    [gameState?.observations],
+  );
+
   const rows: PlayerRow[] = useMemo(() => {
     return specFilteredPlayers.map((player) => {
       const club = getClub(player.clubId);
@@ -86,10 +117,16 @@ export function PlayerDatabase() {
         observationCount: observations.length,
         reportCount: reports.length,
         lastSeenWeek,
+        perceived: getPerceivedAbility(allObs, player.id),
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [specFilteredPlayers, gameState?.observations, gameState?.reports]);
+  }, [specFilteredPlayers, gameState?.observations, gameState?.reports, allObs]);
+
+  const allLeagues = useMemo(
+    () => [...new Set(rows.map((r) => r.leagueName).filter((l) => l !== "?"))].sort(),
+    [rows],
+  );
 
   const filtered = useMemo(() => {
     let result = rows;
@@ -121,6 +158,24 @@ export function PlayerDatabase() {
       result = result.filter((r) => r.player.age <= Number(maxAge));
     }
 
+    if (nationalityFilter) {
+      result = result.filter((r) => r.player.nationality === nationalityFilter);
+    }
+
+    if (leagueFilter) {
+      result = result.filter((r) => r.leagueName === leagueFilter);
+    }
+
+    if (minValue) {
+      const min = parseValueInput(minValue);
+      result = result.filter((r) => r.player.marketValue >= min);
+    }
+
+    if (maxValue) {
+      const max = parseValueInput(maxValue);
+      result = result.filter((r) => r.player.marketValue <= max);
+    }
+
     return result.sort((a, b) => {
       let cmp = 0;
       switch (sortKey) {
@@ -135,11 +190,20 @@ export function PlayerDatabase() {
         case "position":
           cmp = a.player.position.localeCompare(b.player.position);
           break;
+        case "nationality":
+          cmp = a.player.nationality.localeCompare(b.player.nationality);
+          break;
         case "club":
           cmp = a.clubName.localeCompare(b.clubName);
           break;
         case "league":
           cmp = a.leagueName.localeCompare(b.leagueName);
+          break;
+        case "value":
+          cmp = a.player.marketValue - b.player.marketValue;
+          break;
+        case "ca":
+          cmp = (a.perceived?.ca ?? 0) - (b.perceived?.ca ?? 0);
           break;
         case "observations":
           cmp = a.observationCount - b.observationCount;
@@ -153,7 +217,7 @@ export function PlayerDatabase() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [rows, search, positionFilter, minAge, maxAge, sortKey, sortDir, watchlistOnly, gameState]);
+  }, [rows, search, positionFilter, minAge, maxAge, nationalityFilter, leagueFilter, minValue, maxValue, sortKey, sortDir, watchlistOnly, gameState]);
 
   // Early return after all hooks
   if (!gameState) return null;
@@ -218,6 +282,7 @@ export function PlayerDatabase() {
         {/* Filters */}
         <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4">
           <div className="flex flex-wrap gap-3">
+            {/* Search */}
             <div className="relative flex-1 min-w-48">
               <Search
                 size={14}
@@ -233,6 +298,8 @@ export function PlayerDatabase() {
                 aria-label="Search players"
               />
             </div>
+
+            {/* Position */}
             <select
               value={positionFilter}
               onChange={(e) => setPositionFilter(e.target.value as Position | "")}
@@ -241,40 +308,83 @@ export function PlayerDatabase() {
             >
               <option value="">All Positions</option>
               {POSITIONS.map((pos) => (
-                <option key={pos} value={pos}>
-                  {pos}
-                </option>
+                <option key={pos} value={pos}>{pos}</option>
               ))}
             </select>
+
+            {/* Nationality */}
+            <select
+              value={nationalityFilter}
+              onChange={(e) => setNationalityFilter(e.target.value)}
+              className="rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              aria-label="Filter by nationality"
+            >
+              <option value="">All Nationalities</option>
+              {allNationalities.map((nat) => (
+                <option key={nat} value={nat}>{nat}</option>
+              ))}
+            </select>
+
+            {/* League */}
+            {allLeagues.length > 0 && (
+              <select
+                value={leagueFilter}
+                onChange={(e) => setLeagueFilter(e.target.value)}
+                className="rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                aria-label="Filter by league"
+              >
+                <option value="">All Leagues</option>
+                {allLeagues.map((lg) => (
+                  <option key={lg} value={lg}>{lg}</option>
+                ))}
+              </select>
+            )}
+
+            {/* Age range */}
             <div className="flex items-center gap-2">
-              <label htmlFor="minAge" className="text-xs text-zinc-500 shrink-0">
-                Age
-              </label>
+              <label className="text-xs text-zinc-500 shrink-0">Age</label>
               <input
-                id="minAge"
                 type="number"
                 placeholder="Min"
                 value={minAge}
                 onChange={(e) => setMinAge(e.target.value)}
                 min={15}
                 max={45}
+                aria-label="Minimum age"
                 className="w-16 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
-              <span className="text-zinc-600" aria-hidden="true">
-                –
-              </span>
-              <label htmlFor="maxAge" className="sr-only">
-                Max age
-              </label>
+              <span className="text-zinc-600" aria-hidden="true">–</span>
               <input
-                id="maxAge"
                 type="number"
                 placeholder="Max"
                 value={maxAge}
                 onChange={(e) => setMaxAge(e.target.value)}
                 min={15}
                 max={45}
+                aria-label="Maximum age"
                 className="w-16 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+
+            {/* Value range */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-zinc-500 shrink-0">Value</label>
+              <input
+                type="text"
+                placeholder="Min"
+                value={minValue}
+                onChange={(e) => setMinValue(e.target.value)}
+                aria-label="Minimum market value"
+                className="w-20 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <span className="text-zinc-600" aria-hidden="true">–</span>
+              <input
+                type="text"
+                placeholder="Max"
+                value={maxValue}
+                onChange={(e) => setMaxValue(e.target.value)}
+                aria-label="Maximum market value"
+                className="w-20 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>
           </div>
@@ -301,8 +411,11 @@ export function PlayerDatabase() {
                         ["name", "Name"],
                         ["age", "Age"],
                         ["position", "Pos"],
+                        ["nationality", "Nat"],
                         ["club", "Club"],
                         ["league", "League"],
+                        ["value", "Value"],
+                        ["ca", "Ability"],
                         ["observations", "Obs"],
                         ["reports", "Rep"],
                         ["lastSeen", "Last Seen"],
@@ -376,6 +489,7 @@ export function PlayerDatabase() {
                           {row.player.position}
                         </Badge>
                       </td>
+                      <td className="px-4 py-3 text-zinc-400">{row.player.nationality}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5 text-zinc-400">
                           {row.clubId && (
@@ -389,6 +503,10 @@ export function PlayerDatabase() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-zinc-500">{row.leagueName}</td>
+                      <td className="px-4 py-3 text-zinc-400">{formatValue(row.player.marketValue)}</td>
+                      <td className="px-4 py-3">
+                        <MiniStarRange perceived={row.perceived} mode="ca" />
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={

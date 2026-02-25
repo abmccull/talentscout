@@ -115,12 +115,14 @@ function perceiveCA(
 
   // Base stddev in CA-point space
   const baseStddev = Math.max(5, (20 - skill) * 1.5);
+  // First observation penalty: widen uncertainty for early sightings
+  const firstObsPenalty = count === 1 ? 1.5 : count === 2 ? 1.2 : 1.0;
   const observationReduction = Math.sqrt(count);
   const diversityFactor = 1 - Math.min(0.3, contextDiversity * 0.3);
   const methodMultiplier = CA_CONTEXT_NOISE[context];
 
   const stddev =
-    (baseStddev / observationReduction) * diversityFactor * methodMultiplier;
+    (baseStddev / observationReduction) * diversityFactor * methodMultiplier * firstObsPenalty;
 
   // Form bias: ±9 CA points at max form (form is -3 to 3)
   const formBias = player.form * 3;
@@ -139,7 +141,7 @@ function perceiveCA(
         ? -0.05
         : 0);
 
-  const confidence = Math.min(1, Math.max(0, rawConfidence));
+  const confidence = Math.min(0.92, Math.max(0, rawConfidence));
 
   return { perceivedCA, confidence };
 }
@@ -173,6 +175,8 @@ function perceivePA(
     ageFactor = 1.0 - ((player.age - 22) / 6) * 0.3;
   }
 
+  // First observation penalty: widen uncertainty for early sightings
+  const firstObsPenalty = count === 1 ? 1.5 : count === 2 ? 1.2 : 1.0;
   const observationReduction = Math.sqrt(count);
   const diversityFactor = 1 - Math.min(0.3, contextDiversity * 0.3);
   const methodMultiplier = PA_CONTEXT_NOISE[context];
@@ -180,7 +184,8 @@ function perceivePA(
   const stddev =
     (baseStddev * ageFactor / observationReduction) *
     diversityFactor *
-    methodMultiplier;
+    methodMultiplier *
+    firstObsPenalty;
 
   const rawPerceived = rng.gaussian(player.potentialAbility, stddev);
   const clampedPA = Math.max(1, Math.min(200, Math.round(rawPerceived)));
@@ -205,7 +210,7 @@ function perceivePA(
     (context === "academyVisit" || context === "youthTournament" ? 0.05 : 0) +
     (player.age >= 28 ? 0.1 : 0);
 
-  const confidence = Math.min(1, Math.max(0, rawConfidence));
+  const confidence = Math.min(0.85, Math.max(0, rawConfidence));
 
   return { low, high, confidence };
 }
@@ -237,7 +242,7 @@ export function generateAbilityReading(
   // Ensure PA range is >= perceived CA
   const paLow = Math.max(pa.low, ca.perceivedCA);
   // Ensure minimum range width of 5 to prevent division issues
-  const paHigh = Math.max(pa.high, paLow + 5);
+  const paHigh = Math.min(5.0, Math.max(pa.high, paLow + 0.5));
 
   return {
     perceivedCA: ca.perceivedCA,

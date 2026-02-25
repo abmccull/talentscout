@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Info,
   CalendarDays,
+  MapPin,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { Activity, ActivityType } from "@/engine/core/types";
@@ -29,6 +30,7 @@ import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
 import { useTranslations } from "next-intl";
 import { useAudio } from "@/lib/audio/useAudio";
+import { isScoutAbroad } from "@/engine/world/travel";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -61,6 +63,8 @@ export function CalendarScreen() {
     lastWeekSummary,
     dismissWeekSummary,
     getAvailableCalendarActivities,
+    pendingCalendarActivity,
+    setPendingCalendarActivity,
   } = useGameStore();
 
   const t = useTranslations("calendar");
@@ -68,6 +72,26 @@ export function CalendarScreen() {
 
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
+
+  // Auto-schedule pending activity from PlayerProfile quick actions
+  useEffect(() => {
+    if (!pendingCalendarActivity || !gameState) return;
+    const activities = gameState.schedule.activities ?? [];
+    // Find first empty slot
+    const firstEmpty = activities.findIndex((a) => a === null);
+    if (firstEmpty === -1) {
+      setPendingCalendarActivity(null);
+      return;
+    }
+    const activity: Activity = {
+      type: pendingCalendarActivity.type as Activity["type"],
+      description: pendingCalendarActivity.label,
+      slots: 1,
+      targetId: pendingCalendarActivity.targetId,
+    };
+    scheduleActivity(activity, firstEmpty);
+    setPendingCalendarActivity(null);
+  }, [pendingCalendarActivity, gameState, scheduleActivity, setPendingCalendarActivity]);
 
   // Empty-day warning dialog
   const [showEmptyDayWarning, setShowEmptyDayWarning] = useState(false);
@@ -98,6 +122,8 @@ export function CalendarScreen() {
   const seasonPhase = getSeasonPhase(currentWeek);
   const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
   const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
+  const abroad = isScoutAbroad(scout, currentWeek);
+  const abroadCountry = abroad ? scout.travelBooking!.destinationCountry : null;
 
   // Transfer window state
   const twArray = gameState.transferWindow ? [gameState.transferWindow] : [];
@@ -284,6 +310,14 @@ export function CalendarScreen() {
             }} data-tutorial-id="advance-week">Advance Week</Button>
           </Tooltip>
         </div>
+
+        {/* Abroad location indicator */}
+        {abroadCountry && (
+          <div className="mb-4 flex items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/10 px-4 py-2.5 text-sm text-blue-300">
+            <MapPin size={14} className="shrink-0" aria-hidden="true" />
+            Currently in: <span className="font-semibold text-white">{abroadCountry.charAt(0).toUpperCase() + abroadCountry.slice(1)}</span> — scouting activities will target this country
+          </div>
+        )}
 
         {/* International break banner */}
         {internationalBreak && (

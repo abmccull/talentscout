@@ -42,6 +42,7 @@ export type TutorialSequenceId =
   | "careerProgression"
   | "firstMatch"
   | "firstReportWriting"
+  | "firstTravel"
   | OnboardingSequenceId
   | AhaMomentSequenceId;
 
