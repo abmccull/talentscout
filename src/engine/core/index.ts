@@ -100,7 +100,28 @@ export type {
   InjuryHistory,
   InjuryType,
   InjurySeverity,
+
+  // Board satisfaction tracking (A4)
+  BoardSatisfactionDelta,
+
+  // Chain consequences (A5)
+  NarrativeEventType,
+  NarrativeEvent,
+  ChainConsequence,
+
+  // Gossip actions (A3)
+  GossipAction,
+  ActionableGossipItem,
+
+  // Season awards (A8)
+  SeasonAward,
+  LeagueAward,
+  SeasonAwardsData,
+  SeasonStats,
 } from "./types";
+
+// Season awards engine (A8)
+export { generateSeasonAwardsData } from "./seasonAwards";
 
 // Runtime constants (values, not just types)
 export {

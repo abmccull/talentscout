@@ -299,7 +299,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                       </span>
                     )}
                     {screen === "inbox" && !isNew && unreadCount > 0 && (
-                      <span className="rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold text-black">
+                      <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white min-w-[18px] text-center">
                         {unreadCount}
                       </span>
                     )}

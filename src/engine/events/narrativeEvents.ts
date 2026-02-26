@@ -19,6 +19,7 @@ import type {
   NarrativeEventType,
   InboxMessage,
   Specialization,
+  ChainConsequence,
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import {
@@ -1045,4 +1046,25 @@ export function acknowledgeEvent(
   return events.map((e) =>
     e.id === eventId ? { ...e, acknowledged: true } : e,
   );
+}
+
+// =============================================================================
+// CHAIN CONSEQUENCES (A5)
+// =============================================================================
+
+/**
+ * Format a consequence value for display (e.g. "+5 Reputation", "-3 Club Trust").
+ */
+export function formatConsequence(c: ChainConsequence): string {
+  const sign = c.value > 0 ? "+" : "";
+  const suffix = c.type === "playerValue" ? "%" : "";
+  const typeLabel: Record<ChainConsequence["type"], string> = {
+    reputation: "Reputation",
+    clubTrust: "Club Trust",
+    contactRelationship: "Contact Relationship",
+    budget: "Budget",
+    form: "Form",
+    playerValue: "Player Value",
+  };
+  return `${sign}${c.value}${suffix} ${typeLabel[c.type]}`;
 }

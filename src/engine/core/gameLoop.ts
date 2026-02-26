@@ -41,6 +41,7 @@ import type {
   RegionalKnowledge,
   CulturalInsight,
   Contact,
+  BoardSatisfactionDelta,
 } from "./types";
 import {
   processNPCScoutingWeek,
@@ -149,6 +150,8 @@ export interface TickResult {
   npcScoutResults: NPCScoutWeekResult[];
   /** Board directive evaluation result, set only at season-end for tier 5. */
   boardDirectiveResult?: BoardDirectiveEvaluationResult;
+  /** Itemised reputation changes this week with human-readable reasons (A4). */
+  satisfactionDeltas: BoardSatisfactionDelta[];
   /** Youth aging results: auto-signed, retired, updated pool. */
   youthAgingResult?: {
     autoSigned: Array<{ youthId: string; clubId: string }>;
@@ -1356,39 +1359,97 @@ function generateEndOfSeasonMessage(
 // =============================================================================
 
 /**
- * Compute reputation change for the scout this week.
- * Driven by: reports submitted (quality), table-pounds, successful finds.
+ * Compute reputation change for the scout this week, returning both a
+ * net numeric delta and an itemised list of reasons for transparency.
+ *
+ * Driven by: reports submitted (quality), table-pounds, successful finds,
+ * idle-week penalties, board directives, etc.
  *
  * This is a lightweight heuristic — full reputation calculation happens
  * at the end of season performance review. Weekly changes are small.
  */
-function computeReputationChange(state: GameState): number {
-  // Small passive reputation decay to prevent stagnation
-  // Active reputation gains come from submitting quality reports
-  const seasonLength = getSeasonLength(state.fixtures);
+function computeReputationChangeDetailed(
+  state: GameState,
+): { total: number; deltas: BoardSatisfactionDelta[] } {
+  const deltas: BoardSatisfactionDelta[] = [];
+  const week = state.currentWeek;
+  const season = state.currentSeason;
+
+  // ── Reports submitted last week ─────────────────────────────────────────
   const recentReports = Object.values(state.reports).filter(
-    (r) => {
-      if (r.submittedWeek === state.currentWeek - 1 && r.submittedSeason === state.currentSeason) {
-        return true;
-      }
-      // Cross-season boundary: week 1 should also check last week of previous season
-      if (state.currentWeek === 1 && r.submittedWeek === seasonLength && r.submittedSeason === state.currentSeason - 1) {
-        return true;
-      }
-      return false;
-    },
+    (r) =>
+      r.submittedWeek === state.currentWeek - 1 &&
+      r.submittedSeason === state.currentSeason,
   );
 
-  if (recentReports.length === 0) return 0;
+  if (recentReports.length > 0) {
+    const avgQuality =
+      recentReports.reduce((sum, r) => sum + r.qualityScore, 0) /
+      recentReports.length;
 
-  const avgQuality =
-    recentReports.reduce((sum, r) => sum + r.qualityScore, 0) /
-    recentReports.length;
+    if (avgQuality >= 75) {
+      deltas.push({
+        reason: `${recentReports.length} quality report${recentReports.length !== 1 ? "s" : ""} submitted`,
+        delta: 1,
+        week,
+        season,
+      });
+    } else if (avgQuality < 50) {
+      deltas.push({
+        reason: "Low quality reports",
+        delta: -1,
+        week,
+        season,
+      });
+    }
+  }
 
-  // High quality reports (>75) earn small reputation gains
-  if (avgQuality >= 75) return 1;
-  if (avgQuality >= 50) return 0;
-  return -1; // Low quality reports hurt reputation
+  // ── Idle week: no scheduled activities at all ────────────────────────────
+  const scheduledCount = state.schedule.activities.filter(
+    (a) => a !== null,
+  ).length;
+  if (scheduledCount === 0) {
+    deltas.push({
+      reason: "Idle week (no scouting activity)",
+      delta: -1,
+      week,
+      season,
+    });
+  }
+
+  // ── Successful signing: a report led to a "signed" club response ────────
+  const recentSignings = Object.values(state.reports).filter(
+    (r) =>
+      r.clubResponse === "signed" &&
+      r.submittedWeek >= state.currentWeek - 2 &&
+      r.submittedSeason === state.currentSeason,
+  );
+  if (recentSignings.length > 0) {
+    deltas.push({
+      reason: `Successful signing recommendation`,
+      delta: 2,
+      week,
+      season,
+    });
+  }
+
+  // ── Missed directive deadline ────────────────────────────────────────────
+  if (state.scout.careerTier >= 5) {
+    const overdueDirectives = state.scout.boardDirectives.filter(
+      (d) => !d.completed && d.deadline <= season && state.currentWeek >= 36,
+    );
+    if (overdueDirectives.length > 0) {
+      deltas.push({
+        reason: `Missed directive deadline (${overdueDirectives.length})`,
+        delta: -2,
+        week,
+        season,
+      });
+    }
+  }
+
+  const total = deltas.reduce((sum, d) => sum + d.delta, 0);
+  return { total, deltas };
 }
 
 // =============================================================================
@@ -1612,8 +1673,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     newMessages.push(generateEndOfSeasonMessage(state, rng));
   }
 
-  // 7. Reputation change
-  const reputationChange = computeReputationChange(state);
+  // 7. Reputation change (with itemised deltas for transparency UI — A4)
+  const { total: reputationChange, deltas: satisfactionDeltas } =
+    computeReputationChangeDetailed(state);
 
   // 8. NPC scout processing (tier 4+): assigned scouts generate reports,
   //    unassigned scouts recover fatigue via rest.
@@ -1626,6 +1688,26 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
 
   // 10. Board directive evaluation (tier 5, season-end only).
   const boardDirectiveResult = evaluateBoardDirectivesForTick(state, endOfSeasonTriggered);
+
+  // 10a. Board satisfaction summary inbox message (A4, only when net change is non-zero).
+  const netSatisfactionDelta = satisfactionDeltas.reduce((sum, d) => sum + d.delta, 0);
+  if (netSatisfactionDelta !== 0) {
+    const breakdown = satisfactionDeltas
+      .map((d) => `${d.delta > 0 ? "+" : ""}${d.delta} ${d.reason}`)
+      .join(", ");
+    const direction = netSatisfactionDelta > 0 ? "improved" : "declined";
+    newMessages.push({
+      id: makeMessageId("satisfaction", rng),
+      week: state.currentWeek,
+      season: state.currentSeason,
+      type: "feedback",
+      title: `Board Satisfaction ${direction} (${netSatisfactionDelta > 0 ? "+" : ""}${netSatisfactionDelta})`,
+      body: `Your reputation this week: ${netSatisfactionDelta > 0 ? "+" : ""}${netSatisfactionDelta} (net). ${breakdown}.`,
+      read: false,
+      actionRequired: false,
+      relatedId: undefined,
+    });
+  }
 
   // 10b. Board AI weekly processing (F10, tier 5): evaluate satisfaction and reactions.
   const boardAIResult = processBoardWeekly(state, rng);
@@ -1768,6 +1850,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     endOfSeasonTriggered,
     npcScoutResults,
     boardDirectiveResult,
+    satisfactionDeltas,
     youthAgingResult: {
       autoSigned: youthAgingResult.autoSigned,
       retired: youthAgingResult.retired,
@@ -2105,6 +2188,40 @@ export function advanceWeek(
     ),
   };
 
+  // ---- A4: Satisfaction history: accumulate deltas with a rolling cap ----
+  let allDeltas: BoardSatisfactionDelta[] = [...tickResult.satisfactionDeltas];
+
+  // Add board directive reputation change as a satisfaction delta (tier 5)
+  if (boardReputationChange !== 0 && tickResult.boardDirectiveResult) {
+    const { completed, failed } = tickResult.boardDirectiveResult;
+    if (completed.length > 0) {
+      allDeltas.push({
+        reason: `Board directive${completed.length !== 1 ? "s" : ""} completed`,
+        delta: completed.reduce((s, d) => s + d.rewardReputation, 0),
+        week: state.currentWeek,
+        season: state.currentSeason,
+      });
+    }
+    if (failed.length > 0) {
+      allDeltas.push({
+        reason: `Board directive${failed.length !== 1 ? "s" : ""} failed`,
+        delta: -failed.reduce((s, d) => s + d.penaltyReputation, 0),
+        week: state.currentWeek,
+        season: state.currentSeason,
+      });
+    }
+  }
+
+  // Keep only deltas with a non-zero change
+  allDeltas = allDeltas.filter((d) => d.delta !== 0);
+
+  // Merge with existing history, cap at most recent entries (~10 weeks of data)
+  const MAX_SATISFACTION_HISTORY = 30; // ~10 weeks * ~3 entries/week
+  const updatedSatisfactionHistory = [
+    ...(state.satisfactionHistory ?? []),
+    ...allDeltas,
+  ].slice(-MAX_SATISFACTION_HISTORY);
+
   // ---- Board profile & reactions (F10) ----
   const updatedBoardProfile = tickResult.updatedBoardProfile ?? state.boardProfile;
   const updatedBoardReactions = [
@@ -2183,6 +2300,7 @@ export function advanceWeek(
       activeNegotiations: tickResult.updatedNegotiations ?? state.activeNegotiations ?? [],
       boardProfile: updatedBoardProfile,
       boardReactions: updatedBoardReactions,
+      satisfactionHistory: updatedSatisfactionHistory,
     };
   }
 
@@ -2216,5 +2334,6 @@ export function advanceWeek(
     activeNegotiations: tickResult.updatedNegotiations ?? state.activeNegotiations ?? [],
     boardProfile: updatedBoardProfile,
     boardReactions: updatedBoardReactions,
+    satisfactionHistory: updatedSatisfactionHistory,
   };
 }

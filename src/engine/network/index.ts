@@ -6,12 +6,16 @@ export {
   evaluateBetrayalRisk,
   generateExclusiveWindow,
   processExclusiveWindows,
+  getExclusiveWindowChance,
+  rollExclusiveWindow,
+  getContactSpecializationBonus,
 } from "./contacts";
 
 export type {
   ContactMeetingResult,
   HiddenIntel,
   PlayerTip,
+  ContactSpecializationBonus,
 } from "./contacts";
 
 export {

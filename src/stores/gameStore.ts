@@ -49,7 +49,12 @@ import type {
   TransferRecord,
   TransferAddOn,
   LegacyProfile,
+  ActionableGossipItem,
+  GossipAction,
+  ChainConsequence,
+  BoardSatisfactionDelta,
 } from "@/engine/core/types";
+import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import {
   generateDirectives,
   evaluateReportAgainstDirectives,
@@ -303,7 +308,8 @@ export type GameScreen =
   | "training"
   | "rivals"
   | "reportComparison"
-  | "negotiation";
+  | "negotiation"
+  | "seasonAwards";
 
 interface GameStore {
   // Navigation
@@ -414,6 +420,11 @@ interface GameStore {
 
   // Inbox
   markMessageRead: (messageId: string) => void;
+  markAllRead: () => void;
+
+  // Gossip actions (A3)
+  handleGossipAction: (gossipId: string, action: GossipAction) => void;
+  getActiveGossip: () => ActionableGossipItem[];
 
   // Entity selection
   selectPlayer: (playerId: string | null) => void;
@@ -580,6 +591,98 @@ export interface ClubStanding {
 }
 
 type SimulationChoiceId = ActivityChoiceId;
+
+/**
+ * Apply ChainConsequence[] to a GameState, returning a new GameState.
+ * Pure helper for A5 chain consequence system.
+ */
+function applyConsequences(state: GameState, consequences: ChainConsequence[]): GameState {
+  let updated = state;
+  for (const c of consequences) {
+    switch (c.type) {
+      case "reputation":
+        updated = {
+          ...updated,
+          scout: {
+            ...updated.scout,
+            reputation: Math.min(100, Math.max(0, updated.scout.reputation + c.value)),
+          },
+        };
+        break;
+      case "clubTrust":
+        updated = {
+          ...updated,
+          scout: {
+            ...updated.scout,
+            clubTrust: Math.min(100, Math.max(0, updated.scout.clubTrust + c.value)),
+          },
+        };
+        break;
+      case "budget": {
+        if (updated.finances) {
+          updated = {
+            ...updated,
+            finances: {
+              ...updated.finances,
+              balance: updated.finances.balance + c.value,
+            },
+          };
+        }
+        break;
+      }
+      case "form": {
+        if (c.targetId && updated.players[c.targetId]) {
+          const player = updated.players[c.targetId];
+          updated = {
+            ...updated,
+            players: {
+              ...updated.players,
+              [c.targetId]: {
+                ...player,
+                form: Math.min(3, Math.max(-3, player.form + c.value)),
+              },
+            },
+          };
+        }
+        break;
+      }
+      case "playerValue": {
+        if (c.targetId && updated.players[c.targetId]) {
+          const player = updated.players[c.targetId];
+          const multiplier = 1 + c.value / 100;
+          updated = {
+            ...updated,
+            players: {
+              ...updated.players,
+              [c.targetId]: {
+                ...player,
+                marketValue: Math.round(player.marketValue * multiplier),
+              },
+            },
+          };
+        }
+        break;
+      }
+      case "contactRelationship": {
+        if (c.targetId && updated.contacts[c.targetId]) {
+          const contact = updated.contacts[c.targetId];
+          updated = {
+            ...updated,
+            contacts: {
+              ...updated.contacts,
+              [c.targetId]: {
+                ...contact,
+                relationship: Math.min(100, Math.max(0, contact.relationship + c.value)),
+              },
+            },
+          };
+        }
+        break;
+      }
+    }
+  }
+  return updated;
+}
 
 function buildDaySpanInfo(
   schedule: WeekSchedule,
@@ -1287,6 +1390,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ),
       // Dynamic Board Expectations (F10)
       boardReactions: [],
+      // Gossip actions (A3)
+      gossipItems: [],
+      // Board satisfaction tracking (A4)
+      satisfactionHistory: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -5205,6 +5312,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         newState = { ...newState, reports: updatedReports };
       }
 
+      // A8: Generate season awards data before transitioning
+      const seasonAwardsData = generateSeasonAwardsData(newState, completedSeason);
+      newState = { ...newState, seasonAwardsData };
+
       // Add all season-end messages to inbox
       if (seasonEndMessages.length > 0) {
         newState = { ...newState, inbox: [...newState.inbox, ...seasonEndMessages] };
@@ -6893,6 +7004,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  // Mark all read (A7)
+  markAllRead: () => {
+    const { gameState } = get();
+    if (!gameState) return;
+    set({
+      gameState: {
+        ...gameState,
+        inbox: gameState.inbox.map((m) => ({ ...m, read: true })),
+      },
+    });
+  },
+
+  // Gossip actions (A3)
+  handleGossipAction: (gossipId, action) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const gossipIndex = gameState.gossipItems.findIndex((g) => g.id === gossipId);
+    if (gossipIndex === -1) return;
+    const gossip = gameState.gossipItems[gossipIndex];
+    const updatedGossip: ActionableGossipItem = {
+      ...gossip,
+      actionTaken: action,
+      dismissed: action === "dismiss",
+    };
+    const updatedGossipItems = [...gameState.gossipItems];
+    updatedGossipItems[gossipIndex] = updatedGossip;
+
+    // If the scout chose to "act on" the gossip, add the subject to the watchlist
+    let updatedWatchlist = gameState.watchlist;
+    if (action === "actOn" && gossip.subjectPlayerId && !gameState.watchlist.includes(gossip.subjectPlayerId)) {
+      updatedWatchlist = [...gameState.watchlist, gossip.subjectPlayerId];
+    }
+
+    set({
+      gameState: {
+        ...gameState,
+        gossipItems: updatedGossipItems,
+        watchlist: updatedWatchlist,
+      },
+    });
+  },
+
+  getActiveGossip: () => {
+    const { gameState } = get();
+    if (!gameState) return [];
+    return gameState.gossipItems.filter((g) => !g.dismissed && !g.actionTaken);
+  },
+
   // Selection
   selectPlayer: (playerId) => set({ selectedPlayerId: playerId }),
   selectFixture: (fixtureId) => set({ selectedFixtureId: fixtureId }),
@@ -7070,8 +7229,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
   acknowledgeNarrativeEvent: (eventId) => {
     const { gameState } = get();
     if (!gameState) return;
+    const event = gameState.narrativeEvents.find((e) => e.id === eventId);
     const updatedEvents = acknowledgeEvent(gameState.narrativeEvents, eventId);
-    set({ gameState: { ...gameState, narrativeEvents: updatedEvents } });
+    // A5: Apply consequences if the event has them and no choices (auto-apply on acknowledge)
+    let updatedState: GameState = { ...gameState, narrativeEvents: updatedEvents };
+    if (event?.consequences && event.consequences.length > 0 && (!event.choices || event.choices.length === 0)) {
+      updatedState = applyConsequences(updatedState, event.consequences);
+    }
+    set({ gameState: updatedState });
   },
 
   resolveNarrativeEventChoice: (eventId, choiceIndex) => {
@@ -7128,19 +7293,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       Math.max(0, gameState.scout.fatigue + totalFatigueChange),
     );
 
-    set({
-      gameState: {
-        ...gameState,
-        narrativeEvents: updatedEvents,
-        eventChains: updatedChains,
-        scout: {
-          ...gameState.scout,
-          reputation: newReputation,
-          fatigue: newFatigue,
-        },
-        inbox: [...gameState.inbox, ...result.messages],
+    let finalState: GameState = {
+      ...gameState,
+      narrativeEvents: updatedEvents,
+      eventChains: updatedChains,
+      scout: {
+        ...gameState.scout,
+        reputation: newReputation,
+        fatigue: newFatigue,
       },
-    });
+      inbox: [...gameState.inbox, ...result.messages],
+    };
+    // A5: Apply consequences if the resolved event has them
+    const resolvedEvent = finalState.narrativeEvents.find((e) => e.id === eventId);
+    if (resolvedEvent?.consequences && resolvedEvent.consequences.length > 0) {
+      finalState = applyConsequences(finalState, resolvedEvent.consequences);
+    }
+    set({ gameState: finalState });
   },
 
   purchaseEquipItem: (itemId: EquipmentItemId) => {

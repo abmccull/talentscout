@@ -22,7 +22,7 @@ import {
   Lock,
 } from "lucide-react";
 import type { Contact, ContactType, Activity, HiddenIntel, GossipItem } from "@/engine/core/types";
-import { getHiddenAttributeIntel } from "@/engine/network/contacts";
+import { getHiddenAttributeIntel, getContactSpecializationBonus } from "@/engine/network/contacts";
 import { RNG } from "@/engine/rng";
 
 const CONTACT_TYPE_CONFIG: Record<
@@ -40,6 +40,14 @@ const CONTACT_TYPE_CONFIG: Record<
   youthAgent: { label: "Youth Agent", icon: UserCheck, color: "text-cyan-400" },
   academyDirector: { label: "Academy Director", icon: GraduationCap, color: "text-rose-400" },
   localScout: { label: "Local Scout", icon: Eye, color: "text-teal-400" },
+};
+
+/** Color classes for specialization bonus badges. */
+const SPECIALIZATION_BADGE_COLORS: Partial<Record<ContactType, string>> = {
+  agent: "bg-blue-500/20 text-blue-300 border-blue-500/30",
+  clubStaff: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+  journalist: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+  scout: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
 };
 
 function relationshipLabel(rel: number): string {
@@ -181,6 +189,23 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, currentWeek, o
             </div>
           )}
         </div>
+
+        {/* Specialization bonus (A6) */}
+        {(() => {
+          const bonus = getContactSpecializationBonus(contact.type);
+          const badgeColor = SPECIALIZATION_BADGE_COLORS[contact.type];
+          if (!bonus || !badgeColor) return null;
+          return (
+            <div className="flex items-start gap-2">
+              <span
+                className={`inline-flex items-center rounded border px-2 py-0.5 text-[10px] font-medium ${badgeColor}`}
+              >
+                {bonus.badgeLabel}
+              </span>
+              <span className="text-xs text-zinc-400">{bonus.description}</span>
+            </div>
+          );
+        })()}
 
         {/* Relationship */}
         <div>

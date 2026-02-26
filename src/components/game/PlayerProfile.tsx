@@ -17,6 +17,52 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 
+// ---------------------------------------------------------------------------
+// Form display helpers (A1 — Form Visibility)
+// ---------------------------------------------------------------------------
+
+interface FormDisplay {
+  label: string;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+  icon: "up" | "down" | "neutral";
+}
+
+const FORM_MAP: Record<number, FormDisplay> = {
+  3:  { label: "Exceptional Form", color: "text-emerald-400", bgColor: "bg-emerald-500/15", borderColor: "border-emerald-500/40", icon: "up" },
+  2:  { label: "Good Form",        color: "text-emerald-400", bgColor: "bg-emerald-500/10", borderColor: "border-emerald-500/30", icon: "up" },
+  1:  { label: "Decent Form",      color: "text-emerald-300", bgColor: "bg-emerald-500/5",  borderColor: "border-emerald-500/20", icon: "up" },
+  0:  { label: "Average Form",     color: "text-zinc-400",    bgColor: "bg-zinc-500/10",    borderColor: "border-zinc-500/20",    icon: "neutral" },
+};
+FORM_MAP[-1] = { label: "Below Average",  color: "text-red-300",  bgColor: "bg-red-500/5",  borderColor: "border-red-500/20",  icon: "down" };
+FORM_MAP[-2] = { label: "Poor Form",      color: "text-red-400",  bgColor: "bg-red-500/10", borderColor: "border-red-500/30",  icon: "down" };
+FORM_MAP[-3] = { label: "Terrible Form",  color: "text-red-400",  bgColor: "bg-red-500/15", borderColor: "border-red-500/40",  icon: "down" };
+
+function getFormDisplay(form: number): FormDisplay {
+  const clamped = Math.max(-3, Math.min(3, Math.round(form)));
+  return FORM_MAP[clamped] ?? FORM_MAP[0];
+}
+
+function FormIndicator({ form }: { form: number }) {
+  const display = getFormDisplay(form);
+  const IconComponent =
+    display.icon === "up" ? TrendingUp :
+    display.icon === "down" ? TrendingDown :
+    Minus;
+
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 ${display.bgColor} ${display.borderColor}`}
+    >
+      <IconComponent size={14} className={display.color} aria-hidden="true" />
+      <span className={`text-xs font-medium ${display.color}`}>
+        {display.label}
+      </span>
+    </div>
+  );
+}
+
 const DOMAIN_LABELS: Record<string, string> = {
   technical: "Technical",
   physical: "Physical",
@@ -1079,6 +1125,7 @@ export function PlayerProfile() {
                     {league ? ` (${league.shortName})` : ""}
                   </span>
                 ) : null}
+                <FormIndicator form={player.form} />
               </div>
             </div>
           </div>

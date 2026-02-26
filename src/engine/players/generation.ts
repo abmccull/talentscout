@@ -229,12 +229,40 @@ function classifyWonderkidTier(age: number, pa: number): WonderkidTier {
   return "journeyman";
 }
 
+// ---------------------------------------------------------------------------
+// Form-based market value modifier (A1 — Form Visibility)
+// ---------------------------------------------------------------------------
+
+/**
+ * How current form affects market value.
+ *   Form +3 → +10%   |  Form -3 → -10%
+ *   Form +2 → +5%    |  Form -2 → -5%
+ *   Form +1 → +2%    |  Form -1 → -2%
+ *   Form  0 →  0%
+ */
+const FORM_VALUE_MODIFIERS: Record<number, number> = {
+  3: 0.10,
+  2: 0.05,
+  1: 0.02,
+  0: 0,
+};
+// Negative numeric keys must be assigned after literal initialisation
+FORM_VALUE_MODIFIERS[-1] = -0.02;
+FORM_VALUE_MODIFIERS[-2] = -0.05;
+FORM_VALUE_MODIFIERS[-3] = -0.10;
+
+export function getFormValueModifier(form: number): number {
+  const clamped = Math.max(-3, Math.min(3, Math.round(form)));
+  return FORM_VALUE_MODIFIERS[clamped] ?? 0;
+}
+
 function calculateMarketValue(
   ca: number,
   pa: number,
   age: number,
   pos: Position,
   clubReputation: number = 80,
+  form: number = 0,
 ): number {
   // ---------------------------------------------------------------------------
   // Calibrated against Transfermarkt 2025-26 data:
@@ -286,6 +314,9 @@ function calculateMarketValue(
   //    Rep 50 (Al Ahly)  → 0.35x | Rep 30 (lower Egyptian) → 0.16x
   const repFactor = Math.pow(Math.min(clubReputation, 100) / 100, 1.5);
   base *= repFactor;
+
+  // 6. Form modifier — hot streaks inflate value, cold streaks deflate.
+  base *= 1 + getFormValueModifier(form);
 
   // Floor: every registered player has some nominal value.
   return Math.max(5_000, Math.round(base));

@@ -7,6 +7,7 @@ export {
   generateSquad,
   generateWorldPlayers,
   resolveNamePool,
+  getFormValueModifier,
 } from './generation';
 export type { PlayerGenConfig } from './generation';
 

@@ -1154,7 +1154,8 @@ export type InboxMessageType =
   | "transferUpdate"
   | "analystReport"
   | "predictionResult"
-  | "warning";
+  | "warning"
+  | "gossip";
 
 export type InboxRelatedEntity = "player" | "report" | "contact" | "jobOffer" | "tool" | "narrative" | "directive" | "transfer" | "prediction" | "analyst";
 
@@ -1195,6 +1196,26 @@ export interface StorylineState {
   startedSeason: number;
   resolved: boolean;
   context: Record<string, unknown>;
+}
+
+// =============================================================================
+// BOARD SATISFACTION TRACKING
+// =============================================================================
+
+/**
+ * A single recorded change to the scout's reputation for transparency.
+ * The dashboard shows recent deltas so the player can understand *why*
+ * their reputation is rising or falling each week.
+ */
+export interface BoardSatisfactionDelta {
+  /** Human-readable reason, e.g. "Reports submitted", "Idle week penalty". */
+  reason: string;
+  /** Signed change value, e.g. +5 or -2. */
+  delta: number;
+  /** Game week when this change occurred. */
+  week: number;
+  /** Game season when this change occurred. */
+  season: number;
 }
 
 // =============================================================================
@@ -1382,6 +1403,21 @@ export interface GameState {
   boardProfile?: BoardProfile;
   /** History of board reactions (praise, warnings, budget changes, ultimatums). */
   boardReactions: BoardReaction[];
+
+  // --- Gossip Actions (F3 extension) ---
+
+  /** Actionable gossip items presented to the scout for decisions. */
+  gossipItems: ActionableGossipItem[];
+
+  // --- Board Satisfaction Tracking ---
+
+  /** Rolling history of reputation/satisfaction changes for dashboard display. */
+  satisfactionHistory: BoardSatisfactionDelta[];
+
+  // --- Season Awards ---
+
+  /** Generated at end of season for the awards ceremony screen. */
+  seasonAwardsData?: SeasonAwardsData;
 }
 
 // =============================================================================
@@ -1933,6 +1969,21 @@ export type NarrativeEventType =
   | "scoutingAwardNomination"
   | "financialFairPlayImpact";
 
+/**
+ * A mechanical consequence applied when a narrative event is resolved.
+ * Each consequence maps to a specific game state change (reputation, trust,
+ * contact relationships, budget, player form, or player market value).
+ */
+export interface ChainConsequence {
+  type: "reputation" | "clubTrust" | "contactRelationship" | "budget" | "form" | "playerValue";
+  /** Additive delta for reputation/clubTrust/form; additive for budget; percentage for playerValue. */
+  value: number;
+  /** Player or contact ID, required for contactRelationship/form/playerValue. */
+  targetId?: string;
+  /** Human-readable description of why this consequence occurred. */
+  description: string;
+}
+
 export interface NarrativeEvent {
   id: string;
   type: NarrativeEventType;
@@ -1963,6 +2014,8 @@ export interface NarrativeEvent {
   escalationLevel?: number;
   /** Whether this chain event has been resolved/concluded. */
   resolved?: boolean;
+  /** Mechanical consequences applied when this event is resolved. */
+  consequences?: ChainConsequence[];
 }
 
 export type EquipmentSlot = "notebook" | "video" | "travel" | "network" | "analysis";
@@ -2198,7 +2251,14 @@ export type SeasonEventType =
   | "winterTransferWindow"
   | "internationalBreak"
   | "endOfSeasonReview"
-  | "youthCup";
+  | "youthCup"
+  | "transferDeadlineDrama"
+  | "midSeasonFormCheck"
+  | "injuryCrisisPeriod"
+  | "januaryWindowFrenzy"
+  | "springRevival"
+  | "titleRacePressure"
+  | "seasonAwardsBuildUp";
 
 // =============================================================================
 // PHASE 4: LEGACY & ANALYTICS
@@ -3590,6 +3650,44 @@ export interface GossipItem {
   content: string;
 }
 
+/**
+ * Action the scout can take in response to gossip.
+ *  - actOn:         actively pursue the opportunity (varies by gossip type)
+ *  - watchClosely:  mark for close observation
+ *  - dismiss:       ignore this gossip
+ */
+export type GossipAction = "actOn" | "watchClosely" | "dismiss";
+
+/**
+ * A piece of actionable gossip intelligence presented to the scout.
+ * Generated from contact gossip and delivered via the inbox.
+ * The scout can act on, watch, or dismiss each piece of gossip.
+ */
+export interface ActionableGossipItem {
+  id: string;
+  /** The contact who provided this gossip. */
+  contactId: string;
+  /** The player this gossip is about. */
+  subjectPlayerId: string;
+  /** Category of gossip. */
+  gossipType: GossipItem["type"];
+  /** Human-readable gossip description. */
+  description: string;
+  /** Week when the gossip was received. */
+  week: number;
+  /** Season when the gossip was received. */
+  season: number;
+  /**
+   * Whether the gossip turns out to be true (resolved at season end).
+   * undefined = not yet evaluated.
+   */
+  resolvedAccurate?: boolean;
+  /** Action the scout chose (undefined = no action taken yet). */
+  actionTaken?: GossipAction;
+  /** Whether this gossip has been dismissed from active view. */
+  dismissed: boolean;
+}
+
 // =============================================================================
 // MATCH TACTICAL LAYER (F5)
 // =============================================================================
@@ -3683,4 +3781,68 @@ export interface BoardReaction {
   week: number;
   /** Display message for the inbox / UI. */
   message: string;
+}
+
+// =============================================================================
+// SEASON AWARDS
+// =============================================================================
+
+/**
+ * An award earned (or generated) at the end of a season.
+ * Scout awards are earned based on performance; league awards are generated
+ * from world state data.
+ */
+export interface SeasonAward {
+  id: string;
+  name: string;
+  description: string;
+  /** Human-readable criteria that triggered the award. */
+  criteria: string;
+  tier: "gold" | "silver" | "bronze";
+}
+
+/**
+ * A league-level award generated from world state at season end.
+ */
+export interface LeagueAward {
+  id: string;
+  name: string;
+  description: string;
+  /** ID of the player or entity associated with the award. */
+  relatedPlayerId?: string;
+  stat: string;
+}
+
+/**
+ * Complete season awards data generated at end of season.
+ */
+export interface SeasonAwardsData {
+  season: number;
+  clubName: string;
+  /** Scout performance awards earned this season. */
+  scoutAwards: SeasonAward[];
+  /** League-level awards generated from world data. */
+  leagueAwards: LeagueAward[];
+  /** Summary statistics for the season. */
+  stats: SeasonStats;
+}
+
+export interface SeasonStats {
+  reportsSubmitted: number;
+  avgReportQuality: number;
+  matchesAttended: number;
+  playersDiscovered: number;
+  wonderkidsDiscovered: number;
+  transferRecommendations: number;
+  recommendationsAccepted: number;
+  recommendationsSigned: number;
+  hitRate: number;
+  reputationStart: number;
+  reputationEnd: number;
+  reputationChange: number;
+  income: number;
+  expenses: number;
+  profitLoss: number;
+  countriesScouted: number;
+  avgFatigue: number;
 }

@@ -99,6 +99,14 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     ],
   },
   {
+    type: "transferDeadlineDrama",
+    name: "Transfer Deadline Drama",
+    startWeek: 5,
+    endWeek: 5,
+    description:
+      "Last-minute deals create inflated prices as clubs scramble to complete signings before the window shuts",
+  },
+  {
     type: "internationalBreak",
     name: "International Break 1",
     startWeek: 10,
@@ -110,6 +118,22 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
       { type: "fatigueModifier", value: -0.1, targetScope: "global" },
     ],
+  },
+  {
+    type: "midSeasonFormCheck",
+    name: "Mid-Season Form Check",
+    startWeek: 12,
+    endWeek: 12,
+    description:
+      "Clubs assess scouting department performance at the halfway mark of the first half",
+  },
+  {
+    type: "injuryCrisisPeriod",
+    name: "Injury Crisis Period",
+    startWeek: 15,
+    endWeek: 15,
+    description:
+      "Fixture congestion leads to higher injury rates across all leagues, affecting player availability",
   },
   {
     type: "internationalBreak",
@@ -176,6 +200,14 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     ],
   },
   {
+    type: "januaryWindowFrenzy",
+    name: "January Window Frenzy",
+    startWeek: 25,
+    endWeek: 25,
+    description:
+      "Clubs desperate after a poor first half look to sell, creating opportunities for shrewd scouts",
+  },
+  {
     type: "internationalBreak",
     name: "International Break 3",
     startWeek: 28,
@@ -219,6 +251,30 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
         ],
       },
     ],
+  },
+  {
+    type: "springRevival",
+    name: "Spring Revival",
+    startWeek: 31,
+    endWeek: 31,
+    description:
+      "Promotion and relegation battles intensify as players give everything, boosting scouting accuracy",
+  },
+  {
+    type: "titleRacePressure",
+    name: "Title Race Pressure",
+    startWeek: 35,
+    endWeek: 35,
+    description:
+      "Top clubs ramp up recruitment planning for the summer, increasing urgency and reputation rewards",
+  },
+  {
+    type: "seasonAwardsBuildUp",
+    name: "Season Awards Build-Up",
+    startWeek: 37,
+    endWeek: 37,
+    description:
+      "Awards season creates media attention, boosting the profile of discovered wonderkids and scout visibility",
   },
   {
     type: "endOfSeasonReview",

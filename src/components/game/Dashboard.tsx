@@ -18,6 +18,7 @@ import {
   Star,
   Shield,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Bookmark,
   Compass,
@@ -126,6 +127,7 @@ export function Dashboard() {
     meetBoard,
   } = useGameStore();
   const [expandedExpenses, setExpandedExpenses] = useState(false);
+  const [showSatisfactionHistory, setShowSatisfactionHistory] = useState(false);
   const t = useTranslations("dashboard");
   const tCal = useTranslations("calendar");
 
@@ -143,6 +145,9 @@ export function Dashboard() {
   const observedPlayerCount = new Set(
     Object.values(gameState.observations).map((o) => o.playerId),
   ).size;
+
+  // Board satisfaction history -- most recent 5 entries
+  const satisfactionHistory = (gameState.satisfactionHistory ?? []).slice(-5);
 
   // Phase 1 widgets
   const unreviewedNPCReports = Object.values(gameState.npcReports).filter(
@@ -320,6 +325,54 @@ export function Dashboard() {
                 </div>
                 <TrendingUp className="text-emerald-500" size={20} aria-hidden="true" />
               </div>
+              {/* Expandable satisfaction history */}
+              {satisfactionHistory.length > 0 && (
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowSatisfactionHistory(!showSatisfactionHistory);
+                    }}
+                    className="mt-2 flex w-full items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition"
+                    aria-expanded={showSatisfactionHistory}
+                    aria-label="Toggle reputation change history"
+                  >
+                    {showSatisfactionHistory ? (
+                      <ChevronUp size={10} aria-hidden="true" />
+                    ) : (
+                      <ChevronDown size={10} aria-hidden="true" />
+                    )}
+                    Recent changes
+                  </button>
+                  {showSatisfactionHistory && (
+                    <div className="mt-1.5 space-y-1">
+                      {satisfactionHistory
+                        .slice()
+                        .reverse()
+                        .map((entry, i) => (
+                          <div
+                            key={`${entry.week}-${entry.season}-${i}`}
+                            className="flex items-center justify-between text-[10px]"
+                          >
+                            <span className="text-zinc-400 truncate mr-2">
+                              {entry.reason}
+                            </span>
+                            <span
+                              className={`shrink-0 font-semibold ${
+                                entry.delta > 0
+                                  ? "text-emerald-400"
+                                  : "text-red-400"
+                              }`}
+                            >
+                              {entry.delta > 0 ? "+" : ""}
+                              {entry.delta}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
           <Card

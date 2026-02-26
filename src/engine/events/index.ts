@@ -17,6 +17,7 @@ export {
   resolveEventChoice,
   getActiveEvents,
   acknowledgeEvent,
+  formatConsequence,
 } from "./narrativeEvents";
 
 // Economic events

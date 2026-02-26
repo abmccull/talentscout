@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { AudioEngine } from "@/lib/audio/audioEngine";
@@ -20,8 +20,15 @@ import {
   X,
   AlertTriangle,
   Link2,
+  MessageCircle,
+  Eye,
+  XCircle,
+  Target,
+  ChevronDown,
+  Filter,
 } from "lucide-react";
-import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain } from "@/engine/core/types";
+import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain, ChainConsequence, GossipAction, ActionableGossipItem } from "@/engine/core/types";
+import { formatConsequence } from "@/engine/events";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -40,6 +47,7 @@ const MESSAGE_TYPE_CONFIG: Record<
   analystReport: { label: "Analyst Report", icon: ClipboardList, color: "text-cyan-400" },
   predictionResult: { label: "Prediction Result", icon: Zap, color: "text-amber-400" },
   warning: { label: "Warning", icon: AlertTriangle, color: "text-red-400" },
+  gossip: { label: "Gossip", icon: MessageCircle, color: "text-cyan-400" },
 };
 
 // ─── Narrative event type config ─────────────────────────────────────────────
@@ -96,7 +104,62 @@ const NARRATIVE_TYPE_CONFIG: Record<
   financialFairPlayImpact:     { label: "Industry News",       color: "text-amber-400" },
 };
 
+// ─── Filter categories (A7) ──────────────────────────────────────────────────
+
+type FilterCategory = "all" | "unread" | "assignment" | "news" | "jobOffer" | "event" | "feedback" | "gossip";
+
+const FILTER_CATEGORIES: { key: FilterCategory; label: string; types?: InboxMessageType[] }[] = [
+  { key: "all", label: "All" },
+  { key: "unread", label: "Unread" },
+  { key: "assignment", label: "Assignments", types: ["assignment"] },
+  { key: "news", label: "News", types: ["news", "feedback"] },
+  { key: "jobOffer", label: "Jobs", types: ["jobOffer"] },
+  { key: "event", label: "Events", types: ["event"] },
+  { key: "gossip", label: "Gossip", types: ["gossip"] },
+];
+
+// ─── Sort options (A7) ──────────────────────────────────────────────────────
+
+type SortMode = "newest" | "oldest" | "byType";
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "newest", label: "Newest First" },
+  { value: "oldest", label: "Oldest First" },
+  { value: "byType", label: "By Type" },
+];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function sortMessages(messages: InboxMessage[], mode: SortMode): InboxMessage[] {
+  const sorted = [...messages];
+  switch (mode) {
+    case "newest":
+      return sorted.sort((a, b) => {
+        if (b.season !== a.season) return b.season - a.season;
+        return b.week - a.week;
+      });
+    case "oldest":
+      return sorted.sort((a, b) => {
+        if (a.season !== b.season) return a.season - b.season;
+        return a.week - b.week;
+      });
+    case "byType":
+      return sorted.sort((a, b) => {
+        const typeCompare = a.type.localeCompare(b.type);
+        if (typeCompare !== 0) return typeCompare;
+        if (b.season !== a.season) return b.season - a.season;
+        return b.week - a.week;
+      });
+    default:
+      return sorted;
+  }
+}
+
+/** Get unique seasons present in inbox messages. */
+function getSeasons(inbox: InboxMessage[]): number[] {
+  const seasons = new Set(inbox.map((m) => m.season));
+  return Array.from(seasons).sort((a, b) => b - a);
+}
 
 function timeAgo(
   week: number,
@@ -110,6 +173,29 @@ function timeAgo(
   if (totalWeeksAgo === 1) return "1 week ago";
   if (totalWeeksAgo < 4) return `${totalWeeksAgo} weeks ago`;
   return `Season ${season}, Week ${week}`;
+}
+
+// ─── ConsequenceList (A5) ────────────────────────────────────────────────────
+
+function ConsequenceList({ consequences }: { consequences: ChainConsequence[] }) {
+  if (consequences.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-1 rounded-md bg-[#0a0a0a] p-3 border border-zinc-800">
+      <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1.5">Consequences</p>
+      {consequences.map((c, i) => {
+        const formatted = formatConsequence(c);
+        const isPositive = c.value > 0;
+        return (
+          <div key={i} className="flex items-start gap-2 text-xs">
+            <span className={`shrink-0 font-semibold ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
+              {formatted}
+            </span>
+            <span className="text-zinc-500">{c.description}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── NarrativeEventCard ──────────────────────────────────────────────────────
@@ -207,6 +293,11 @@ function NarrativeEventCard({
         </p>
       )}
 
+      {/* A5: Consequences — shown for auto-events or after choice is resolved */}
+      {event.consequences && event.consequences.length > 0 && (!hasChoices || choiceResolved) && (
+        <ConsequenceList consequences={event.consequences} />
+      )}
+
       {/* Choices or dismiss */}
       {hasChoices && !choiceResolved ? (
         <div className="flex flex-wrap gap-2">
@@ -254,6 +345,61 @@ function NarrativeEventCard({
   );
 }
 
+// ─── GossipActionButtons (A3) ────────────────────────────────────────────────
+
+interface GossipActionButtonsProps {
+  gossipItem: ActionableGossipItem;
+  onAction: (gossipId: string, action: GossipAction) => void;
+}
+
+function GossipActionButtons({ gossipItem, onAction }: GossipActionButtonsProps) {
+  if (gossipItem.actionTaken) {
+    const actionLabels: Record<GossipAction, string> = {
+      actOn: "Acting on this",
+      watchClosely: "Watching closely",
+      dismiss: "Dismissed",
+    };
+    return (
+      <p className="mt-3 text-xs text-zinc-500">
+        Action taken: {actionLabels[gossipItem.actionTaken]}
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+      <Button
+        size="sm"
+        className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white border-0 h-7 px-3"
+        onClick={() => onAction(gossipItem.id, "actOn")}
+        aria-label="Act on this gossip"
+      >
+        <Target size={12} className="mr-1.5" aria-hidden="true" />
+        Act On This
+      </Button>
+      <Button
+        size="sm"
+        className="text-xs bg-amber-600 hover:bg-amber-500 text-white border-0 h-7 px-3"
+        onClick={() => onAction(gossipItem.id, "watchClosely")}
+        aria-label="Watch this player closely"
+      >
+        <Eye size={12} className="mr-1.5" aria-hidden="true" />
+        Watch Closely
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-xs text-zinc-500 hover:text-white h-7 px-3"
+        onClick={() => onAction(gossipItem.id, "dismiss")}
+        aria-label="Dismiss this gossip"
+      >
+        <XCircle size={12} className="mr-1.5" aria-hidden="true" />
+        Dismiss
+      </Button>
+    </div>
+  );
+}
+
 // ─── MessageItem ─────────────────────────────────────────────────────────────
 
 interface MessageItemProps {
@@ -265,6 +411,8 @@ interface MessageItemProps {
   onViewPlayer?: (playerId: string) => void;
   onWriteReport?: (playerId: string) => void;
   onViewCareer?: () => void;
+  gossipItem?: ActionableGossipItem;
+  onGossipAction?: (gossipId: string, action: GossipAction) => void;
 }
 
 function MessageItem({
@@ -276,6 +424,8 @@ function MessageItem({
   onViewPlayer,
   onWriteReport,
   onViewCareer,
+  gossipItem,
+  onGossipAction,
 }: MessageItemProps) {
   const config = MESSAGE_TYPE_CONFIG[message.type];
   const Icon = config.icon;
@@ -398,6 +548,13 @@ function MessageItem({
                   </Button>
                 </div>
               )}
+              {/* A3: Gossip action buttons — only shown for gossip messages when expanded */}
+              {gossipItem && onGossipAction && (
+                <GossipActionButtons
+                  gossipItem={gossipItem}
+                  onAction={onGossipAction}
+                />
+              )}
             </>
           ) : (
             <p className="text-xs text-zinc-500 line-clamp-2">{message.body}</p>
@@ -423,15 +580,21 @@ export function InboxScreen() {
   const {
     gameState,
     markMessageRead,
+    markAllRead,
     acknowledgeNarrativeEvent,
     resolveNarrativeEventChoice,
+    handleGossipAction,
     selectPlayer,
     setScreen,
     startReport,
   } = useGameStore();
   const { playSFX } = useAudio();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<InboxMessageType | "all">("all");
+  // A7: Enhanced filter/sort state
+  const [filterCategory, setFilterCategory] = useState<FilterCategory>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [seasonFilter, setSeasonFilter] = useState<number | "all">("all");
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   // Play tension music when dramatic narrative events are present.
   // Must be above the early return so hooks are called unconditionally.
@@ -442,7 +605,17 @@ export function InboxScreen() {
     "healthScare", "familyEmergency", "youthAcademyScandal", "rivalPoach",
     "rivalRecruitment", "agentDeception",
   ]);
-  const activeNarrativeEvents = gameState?.narrativeEvents.filter((e) => !e.acknowledged) ?? [];
+
+  const inbox = useMemo(() => gameState?.inbox ?? [], [gameState?.inbox]);
+  const currentWeek = gameState?.currentWeek ?? 1;
+  const currentSeason = gameState?.currentSeason ?? 1;
+
+  // Active (unacknowledged) narrative events — with useMemo for perf (A7)
+  const activeNarrativeEvents = useMemo(
+    () => (gameState?.narrativeEvents ?? []).filter((e) => !e.acknowledged),
+    [gameState?.narrativeEvents],
+  );
+
   const hasDramaticEvent = activeNarrativeEvents.some((e) => DRAMATIC_TYPES.has(e.type));
   useEffect(() => {
     if (!gameState) return;
@@ -454,26 +627,64 @@ export function InboxScreen() {
     }
   }, [hasDramaticEvent, gameState]);
 
+  // A7: Compute available seasons
+  const availableSeasons = useMemo(() => getSeasons(inbox), [inbox]);
+
+  // A7: Compute unread count
+  const unreadCount = useMemo(() => inbox.filter((m) => !m.read).length, [inbox]);
+
+  // A7: Apply filters and sorting
+  const filteredMessages = useMemo(() => {
+    let messages = inbox;
+
+    // Season filter
+    if (seasonFilter !== "all") {
+      messages = messages.filter((m) => m.season === seasonFilter);
+    }
+
+    // Category filter
+    if (filterCategory === "unread") {
+      messages = messages.filter((m) => !m.read);
+    } else if (filterCategory !== "all") {
+      const categoryDef = FILTER_CATEGORIES.find((c) => c.key === filterCategory);
+      if (categoryDef?.types) {
+        messages = messages.filter((m) => categoryDef.types!.includes(m.type));
+      }
+    }
+
+    // Sort
+    return sortMessages(messages, sortMode);
+  }, [inbox, filterCategory, sortMode, seasonFilter]);
+
+  // A7: Category counts for badges
+  const categoryCounts = useMemo(() => {
+    const base = seasonFilter !== "all" ? inbox.filter((m) => m.season === seasonFilter) : inbox;
+    const counts: Record<FilterCategory, number> = {
+      all: base.length,
+      unread: base.filter((m) => !m.read).length,
+      assignment: base.filter((m) => m.type === "assignment").length,
+      news: base.filter((m) => m.type === "news" || m.type === "feedback").length,
+      jobOffer: base.filter((m) => m.type === "jobOffer").length,
+      event: base.filter((m) => m.type === "event").length,
+      feedback: 0, // merged into news
+      gossip: base.filter((m) => m.type === "gossip").length,
+    };
+    return counts;
+  }, [inbox, seasonFilter]);
+
   if (!gameState) return null;
 
-  const { inbox, currentWeek, currentSeason, narrativeEvents } = gameState;
+  // A3: Build a lookup from gossip ID to gossip item for quick access
+  const gossipById = new Map<string, ActionableGossipItem>();
+  for (const g of gameState.gossipItems ?? []) {
+    gossipById.set(g.id, g);
+  }
 
   // F2: Build a lookup map for event chains
   const chainMap = new Map<string, EventChain>();
   for (const chain of gameState.eventChains ?? []) {
     chainMap.set(chain.id, chain);
   }
-
-  // Sort messages by most recent (week desc, season desc)
-  const sorted = [...inbox].sort((a, b) => {
-    if (b.season !== a.season) return b.season - a.season;
-    return b.week - a.week;
-  });
-
-  const filtered =
-    filterType === "all" ? sorted : sorted.filter((m) => m.type === filterType);
-
-  const unreadCount = inbox.filter((m) => !m.read).length;
 
   const handleExpand = (message: InboxMessage) => {
     const isExpanding = expandedId !== message.id;
@@ -484,13 +695,20 @@ export function InboxScreen() {
     }
   };
 
-  const handleMarkAllRead = () => {
-    inbox.filter((m) => !m.read).forEach((m) => markMessageRead(m.id));
+  // A7: Compute empty state label
+  const getEmptyLabel = (): string => {
+    if (filterCategory === "all" && seasonFilter === "all") return "No messages yet.";
+    if (filterCategory === "unread") return "No unread messages.";
+    const categoryDef = FILTER_CATEGORIES.find((c) => c.key === filterCategory);
+    const categoryLabel = categoryDef?.label.toLowerCase() ?? "";
+    if (seasonFilter !== "all") return `No ${categoryLabel || ""} messages in season ${seasonFilter}.`;
+    return `No ${categoryLabel} messages.`;
   };
 
   return (
     <GameLayout>
       <div className="p-6">
+        {/* ── Header ────────────────────────────────────────────────────── */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Inbox</h1>
@@ -502,7 +720,7 @@ export function InboxScreen() {
           </div>
           {unreadCount > 0 && (
             <button
-              onClick={handleMarkAllRead}
+              onClick={markAllRead}
               className="text-xs text-zinc-500 hover:text-white transition"
               aria-label="Mark all messages as read"
             >
@@ -511,7 +729,7 @@ export function InboxScreen() {
           )}
         </div>
 
-        {/* ── T8.3: Narrative events at the top ─────────────────────────── */}
+        {/* ── Narrative events at the top ──────────────────────────────── */}
         {activeNarrativeEvents.length > 0 && (
           <section aria-label="Narrative events" className="mb-6">
             <div className="mb-3 flex items-center gap-2">
@@ -537,89 +755,162 @@ export function InboxScreen() {
           </section>
         )}
 
-        {/* Type filter tabs */}
-        <div
-          className="mb-4 flex flex-wrap gap-2"
-          role="tablist"
-          aria-label="Filter messages by type"
-        >
-          <button
-            role="tab"
-            aria-selected={filterType === "all"}
-            onClick={() => setFilterType("all")}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              filterType === "all"
-                ? "bg-emerald-500/20 text-emerald-400"
-                : "bg-[#141414] text-zinc-500 hover:text-white border border-[#27272a]"
-            }`}
-          >
-            All ({inbox.length})
-          </button>
-          {(
-            Object.entries(MESSAGE_TYPE_CONFIG) as [
-              InboxMessageType,
-              (typeof MESSAGE_TYPE_CONFIG)[InboxMessageType],
-            ][]
-          ).map(([type, config]) => {
-            const count = inbox.filter((m) => m.type === type).length;
-            if (count === 0) return null;
-            const Icon = config.icon;
-            return (
+        {/* ── A7: Enhanced filter bar ──────────────────────────────────── */}
+        <div className="mb-4 space-y-3">
+          {/* Row 1: Category filter pills + Sort + Season */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Category pills */}
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="tablist"
+              aria-label="Filter messages by category"
+            >
+              {FILTER_CATEGORIES.map(({ key, label }) => {
+                const count = categoryCounts[key];
+                // Hide categories with 0 messages (except all & unread)
+                if (count === 0 && key !== "all" && key !== "unread") return null;
+                const isActive = filterCategory === key;
+                return (
+                  <button
+                    key={key}
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => setFilterCategory(key)}
+                    className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                      isActive
+                        ? "bg-emerald-500/20 text-emerald-400"
+                        : "bg-[#141414] text-zinc-500 hover:text-white border border-[#27272a]"
+                    }`}
+                  >
+                    {label}
+                    {key === "unread" && count > 0 ? (
+                      <span className="ml-0.5 inline-flex items-center justify-center rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white min-w-[18px]">
+                        {count}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-600 ml-0.5">({count})</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Season filter */}
+            {availableSeasons.length > 1 && (
+              <div className="relative">
+                <select
+                  value={seasonFilter === "all" ? "all" : seasonFilter}
+                  onChange={(e) =>
+                    setSeasonFilter(e.target.value === "all" ? "all" : Number(e.target.value))
+                  }
+                  className="appearance-none rounded-md border border-[#27272a] bg-[#141414] pl-3 pr-7 py-1.5 text-xs text-zinc-400 hover:text-white transition cursor-pointer focus:outline-none focus:border-zinc-600"
+                  aria-label="Filter by season"
+                >
+                  <option value="all">All Seasons</option>
+                  {availableSeasons.map((s) => (
+                    <option key={s} value={s}>
+                      Season {s}{s === currentSeason ? " (current)" : ""}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={12}
+                  className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-600"
+                  aria-hidden="true"
+                />
+              </div>
+            )}
+
+            {/* Sort dropdown */}
+            <div className="relative">
               <button
-                key={type}
-                role="tab"
-                aria-selected={filterType === type}
-                onClick={() => setFilterType(type)}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                  filterType === type
-                    ? "bg-emerald-500/20 text-emerald-400"
-                    : "bg-[#141414] text-zinc-500 hover:text-white border border-[#27272a]"
-                }`}
+                onClick={() => setSortDropdownOpen(!sortDropdownOpen)}
+                className="flex items-center gap-1.5 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-zinc-400 hover:text-white transition"
+                aria-haspopup="listbox"
+                aria-expanded={sortDropdownOpen}
+                aria-label="Sort messages"
               >
-                <Icon size={11} className={config.color} aria-hidden="true" />
-                {config.label} ({count})
+                <Filter size={11} aria-hidden="true" />
+                {SORT_OPTIONS.find((o) => o.value === sortMode)?.label}
+                <ChevronDown size={11} aria-hidden="true" />
               </button>
-            );
-          })}
+              {sortDropdownOpen && (
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setSortDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-1 z-20 rounded-md border border-[#27272a] bg-[#0c0c0c] py-1 shadow-xl min-w-[140px]">
+                    {SORT_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setSortMode(option.value);
+                          setSortDropdownOpen(false);
+                        }}
+                        className={`w-full px-3 py-1.5 text-left text-xs transition ${
+                          sortMode === option.value
+                            ? "text-emerald-400 bg-emerald-500/10"
+                            : "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Messages */}
-        {filtered.length === 0 ? (
+        {/* ── Messages ────────────────────────────────────────────────── */}
+        {filteredMessages.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <MailOpen size={32} className="mb-3 text-zinc-700" aria-hidden="true" />
-              <p className="text-sm text-zinc-500">
-                {filterType === "all"
-                  ? "No messages yet."
-                  : `No ${MESSAGE_TYPE_CONFIG[filterType as InboxMessageType]?.label.toLowerCase()} messages.`}
-              </p>
+              <p className="text-sm text-zinc-500">{getEmptyLabel()}</p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-2" role="list" data-tutorial-id="inbox-latest">
-            {filtered.map((message) => (
-              <div key={message.id} role="listitem">
-                <MessageItem
-                  message={message}
-                  isExpanded={expandedId === message.id}
-                  currentWeek={currentWeek}
-                  currentSeason={currentSeason}
-                  onClick={() => handleExpand(message)}
-                  onViewPlayer={(playerId) => {
-                    selectPlayer(playerId);
-                    setScreen("playerProfile");
-                  }}
-                  onWriteReport={(playerId) => {
-                    startReport(playerId);
-                  }}
-                  onViewCareer={() => {
-                    if (message.relatedEntityType === "contact") setScreen("network");
-                    else if (message.relatedEntityType === "tool") setScreen("career");
-                    else setScreen("career");
-                  }}
-                />
-              </div>
-            ))}
+            {filteredMessages.map((message) => {
+              // A3: For gossip messages, look up the associated gossip item
+              const relatedGossip =
+                message.type === "gossip" && message.relatedId
+                  ? gossipById.get(message.relatedId)
+                  : undefined;
+
+              return (
+                <div key={message.id} role="listitem">
+                  <MessageItem
+                    message={message}
+                    isExpanded={expandedId === message.id}
+                    currentWeek={currentWeek}
+                    currentSeason={currentSeason}
+                    onClick={() => handleExpand(message)}
+                    onViewPlayer={(playerId) => {
+                      selectPlayer(playerId);
+                      setScreen("playerProfile");
+                    }}
+                    onWriteReport={(playerId) => {
+                      startReport(playerId);
+                    }}
+                    onViewCareer={() => {
+                      if (message.relatedEntityType === "contact") setScreen("network");
+                      else if (message.relatedEntityType === "tool") setScreen("career");
+                      else setScreen("career");
+                    }}
+                    gossipItem={relatedGossip}
+                    onGossipAction={handleGossipAction}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

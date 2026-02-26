@@ -39,6 +39,7 @@ import { TrainingScreen } from "@/components/game/TrainingScreen";
 import { RivalsScreen } from "@/components/game/RivalsScreen";
 import { ReportComparison } from "@/components/game/ReportComparison";
 import { NegotiationScreen } from "@/components/game/NegotiationScreen";
+import { SeasonAwardsScreen } from "@/components/game/SeasonAwardsScreen";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
@@ -145,6 +146,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <ReportComparison />;
     case "negotiation":
       return <NegotiationScreen />;
+    case "seasonAwards":
+      return <SeasonAwardsScreen />;
     default:
       return <MainMenu />;
   }

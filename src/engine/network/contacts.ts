@@ -64,6 +64,90 @@ export interface PlayerTip {
 }
 
 // ---------------------------------------------------------------------------
+// Exclusive window chance (A6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Probability that a contact offers an exclusive intel window this week.
+ * Tiers:
+ *   - relationship 60–74:  8%
+ *   - relationship 75–89: 15%
+ *   - relationship 90+:   22%
+ *   - below 60:           0%
+ */
+export function getExclusiveWindowChance(relationship: number): number {
+  if (relationship >= 90) return 0.22;
+  if (relationship >= 75) return 0.15;
+  if (relationship >= 60) return 0.08;
+  return 0;
+}
+
+/**
+ * Check whether a contact offers an exclusive intel window this week.
+ * Each high-trust contact is checked independently, producing 1-3 exclusive
+ * windows per season for well-maintained contacts.
+ */
+export function rollExclusiveWindow(
+  rng: RNG,
+  contact: Contact,
+): boolean {
+  const chance = getExclusiveWindowChance(contact.relationship);
+  if (chance <= 0) return false;
+  return rng.chance(chance);
+}
+
+// ---------------------------------------------------------------------------
+// Contact specialization bonuses (A6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Describes the specialization bonus a contact type provides.
+ */
+export interface ContactSpecializationBonus {
+  /** UI badge label */
+  badgeLabel: string;
+  /** Short description of the bonus */
+  description: string;
+}
+
+/**
+ * Look up the specialization bonus for a contact type.
+ *
+ * - Agent:      "Negotiation Intel" -- reduces estimated transfer fee by 5%.
+ * - Club Staff: "Injury Intel" -- reveals injury history 1 week early.
+ * - Journalist: "Reliable Sources" -- +15% gossip/tip reliability.
+ * - Scout:      "Expert Eye" -- +10% intel accuracy.
+ */
+export function getContactSpecializationBonus(
+  type: ContactType,
+): ContactSpecializationBonus | null {
+  switch (type) {
+    case "agent":
+      return {
+        badgeLabel: "Negotiation Intel",
+        description: "Agent contacts provide wage demand hints and 5% more accurate transfer pricing.",
+      };
+    case "clubStaff":
+      return {
+        badgeLabel: "Injury Intel",
+        description: "Club staff reveal injury history 1 week before it becomes public.",
+      };
+    case "journalist":
+      return {
+        badgeLabel: "Reliable Sources",
+        description: "Journalist contacts provide tips with +15% reliability from better sources.",
+      };
+    case "scout":
+      return {
+        badgeLabel: "Expert Eye",
+        description: "Scout contacts provide intel with +10% accuracy from professional expertise.",
+      };
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Name pools (realistic football-world names for contact generation)
 // ---------------------------------------------------------------------------
 
