@@ -55,3 +55,21 @@ export {
 export {
   processWeeklyCourseProgress,
 } from './courses';
+
+export {
+  generateLegacyProfile,
+  generateCompletedCareer,
+  applyLegacyPerks,
+  checkScenarioUnlocks,
+  getScenarioUnlockDescriptions,
+  getAvailablePerks,
+  getUsedSpecializations,
+  hasCompletedCareer,
+  readLegacyProfile,
+  writeLegacyProfile,
+  MAX_ACTIVE_PERKS,
+  LEGACY_PROFILE_STORAGE_KEY,
+  LEGACY_PERK_DEFINITIONS,
+} from './legacy';
+
+export type { LegacyPerkApplicationResult } from './legacy';

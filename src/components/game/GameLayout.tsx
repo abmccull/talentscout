@@ -28,6 +28,7 @@ import {
   X,
   BookOpen,
   Swords,
+  Lock,
 } from "lucide-react";
 
 // ─── Sectioned Navigation ────────────────────────────────────────────────────
@@ -146,9 +147,9 @@ function getNavVisibility(
     case "inbox":
       return effectiveWeek >= 3;
 
-    // Agency: independent path + tier 3+
+    // Agency: visible for all independent path players (locked UI until tier 3)
     case "agency":
-      return careerPath === "independent" && tier >= 3;
+      return careerPath === "independent";
 
     // Tier 2+ items
     case "network":
@@ -180,6 +181,19 @@ function getNavVisibility(
     default:
       return true;
   }
+}
+
+function getNavLockState(
+  screen: GameScreen,
+  tier: number,
+  careerPath: string,
+): "unlocked" | "preview" | "locked" | null {
+  if (screen === "agency" && careerPath === "independent") {
+    if (tier >= 3) return "unlocked";
+    if (tier === 2) return "preview";
+    return "locked";
+  }
+  return null;
 }
 
 export function GameLayout({ children }: { children: React.ReactNode }) {
@@ -252,20 +266,34 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
               )}
               {section.visibleItems.map(({ screen, label, icon: Icon }) => {
                 const isNew = !seenNav.has(screen);
+                const lockState = getNavLockState(screen, tier, careerPath);
+                const isLocked = lockState === "locked";
                 return (
                   <button
                     key={screen}
                     data-tutorial-id={`nav-${screen}`}
-                    onClick={() => handleNavClick(screen)}
-                    className={`mb-0.5 flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
-                      currentScreen === screen
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : "text-zinc-400 hover:bg-[var(--secondary)] hover:text-white"
+                    onClick={() => !isLocked && handleNavClick(screen)}
+                    disabled={isLocked}
+                    title={isLocked ? "Unlocks at Tier 3" : undefined}
+                    className={`mb-0.5 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                      isLocked
+                        ? "cursor-not-allowed opacity-40 text-zinc-600"
+                        : currentScreen === screen
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "cursor-pointer text-zinc-400 hover:bg-[var(--secondary)] hover:text-white"
                     }`}
                   >
                     <Icon size={16} />
                     <span className="flex-1 text-left">{label}</span>
-                    {isNew && (
+                    {isLocked && (
+                      <Lock size={12} className="text-zinc-600" aria-hidden="true" />
+                    )}
+                    {lockState === "preview" && !isNew && (
+                      <span className="rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+                        Preview
+                      </span>
+                    )}
+                    {isNew && !isLocked && lockState !== "preview" && (
                       <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-bold text-emerald-400">
                         New
                       </span>

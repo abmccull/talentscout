@@ -12,6 +12,8 @@ export interface WorldMapProps {
   countries: string[];
   /** Familiarity level per country key, 0–100. */
   familiarityLevels?: Record<string, number>;
+  /** Regional knowledge level per country key, 0–100 (F13). */
+  knowledgeLevels?: Record<string, number>;
   /** The scout's current country key. */
   currentLocation?: string;
   /** Countries with active scouting assignments. */
@@ -285,6 +287,8 @@ function FlightPath({
 interface CountryMarkerProps {
   countryKey: string;
   familiarity: number;
+  /** Regional knowledge level 0–100 (F13). */
+  knowledgeLevel: number;
   isCurrent: boolean;
   hasActiveAssignment: boolean;
   delay: number;
@@ -294,6 +298,7 @@ interface CountryMarkerProps {
 function CountryMarker({
   countryKey,
   familiarity,
+  knowledgeLevel,
   isCurrent,
   hasActiveAssignment,
   delay,
@@ -446,6 +451,62 @@ function CountryMarker({
           <animate attributeName="opacity" values="1;0.5;1" dur="1.8s" repeatCount="indefinite" />
         </circle>
       )}
+
+      {/* Knowledge level indicator (F13) — small diamond badge bottom-right */}
+      {knowledgeLevel > 0 && (
+        <g aria-hidden="true">
+          <rect
+            x={x + (isEurope && !hovered ? 3 : 5) - 3.5}
+            y={y + (isEurope && !hovered ? 3 : 5) - 3.5}
+            width={7}
+            height={7}
+            rx={1.5}
+            fill={
+              knowledgeLevel >= 75 ? "#a855f7" :
+              knowledgeLevel >= 50 ? "#6366f1" :
+              knowledgeLevel >= 25 ? "#8b5cf6" :
+              "#64748b"
+            }
+            stroke="#0a0a0a"
+            strokeWidth={0.5}
+            opacity={hovered ? 1 : 0.8}
+          />
+          <text
+            x={x + (isEurope && !hovered ? 3 : 5)}
+            y={y + (isEurope && !hovered ? 3 : 5) + 0.5}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={4}
+            fontWeight="700"
+            fontFamily="system-ui, sans-serif"
+            fill="#fff"
+            pointerEvents="none"
+          >
+            {knowledgeLevel >= 75 ? "M" : knowledgeLevel >= 50 ? "E" : knowledgeLevel >= 25 ? "F" : "N"}
+          </text>
+        </g>
+      )}
+
+      {/* Knowledge level tooltip on hover */}
+      {hovered && knowledgeLevel > 0 && (
+        <text
+          x={x}
+          y={y + ringR + 10}
+          textAnchor="middle"
+          dominantBaseline="auto"
+          fontSize="6"
+          fontWeight="500"
+          fontFamily="system-ui, sans-serif"
+          fill="#c4b5fd"
+          pointerEvents="none"
+          aria-hidden="true"
+          style={{
+            textShadow: "0 1px 4px rgba(0,0,0,0.9)",
+          }}
+        >
+          Knowledge: {knowledgeLevel}%
+        </text>
+      )}
     </g>
   );
 }
@@ -464,6 +525,7 @@ function CountryMarker({
 export function WorldMap({
   countries,
   familiarityLevels = {},
+  knowledgeLevels = {},
   currentLocation,
   activeAssignments = [],
   travelDestination,
@@ -511,6 +573,7 @@ export function WorldMap({
             key={key}
             countryKey={key}
             familiarity={familiarityLevels[key] ?? 0}
+            knowledgeLevel={knowledgeLevels[key] ?? 0}
             isCurrent={key === currentLocation}
             hasActiveAssignment={activeSet.has(key)}
             delay={idx * 30}

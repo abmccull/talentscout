@@ -6,7 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, X, ChevronDown, ChevronUp, DollarSign } from "lucide-react";
+import { FileText, X, ChevronDown, ChevronUp, DollarSign, GitCompareArrows } from "lucide-react";
 import type { ScoutReport, ConvictionLevel, ReportListing } from "@/engine/core/types";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -288,7 +288,7 @@ function ListForSaleModal({ reportId: _reportId, playerName, onConfirm, onClose 
 }
 
 export function ReportHistory() {
-  const { gameState, selectPlayer, setScreen, listReportForSale, withdrawReportListing } = useGameStore();
+  const { gameState, selectPlayer, setScreen, listReportForSale, withdrawReportListing, comparisonReportIds, addToComparison, removeFromComparison, clearComparison } = useGameStore();
   const [selectedReport, setSelectedReport] = useState<ScoutReport | null>(null);
   const [listingReport, setListingReport] = useState<ScoutReport | null>(null);
 
@@ -377,6 +377,34 @@ export function ReportHistory() {
           ))}
         </div>
 
+        {/* Comparison action bar */}
+        {comparisonReportIds.length > 0 && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3">
+            <GitCompareArrows size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
+            <span className="text-sm text-zinc-300">
+              {comparisonReportIds.length} report{comparisonReportIds.length > 1 ? "s" : ""} selected for comparison
+              {comparisonReportIds.length < 2 && " (select at least 2)"}
+            </span>
+            <div className="ml-auto flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={clearComparison}
+                className="text-zinc-400 hover:text-red-400"
+              >
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                disabled={comparisonReportIds.length < 2}
+                onClick={() => setScreen("reportComparison")}
+              >
+                Compare ({comparisonReportIds.length})
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Reports table */}
         <Card>
           <CardContent className="p-0">
@@ -393,6 +421,9 @@ export function ReportHistory() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#27272a] text-left text-xs text-zinc-500">
+                      <th className="w-10 px-2 py-3 font-medium text-center">
+                        <GitCompareArrows size={13} className="inline text-zinc-500" aria-label="Compare" />
+                      </th>
                       <th className="px-4 py-3 font-medium">Player</th>
                       <th className="px-4 py-3 font-medium">Conviction</th>
                       <th className="px-4 py-3 font-medium">Quality</th>
@@ -409,11 +440,29 @@ export function ReportHistory() {
                         ? `${player.firstName} ${player.lastName}`
                         : "Unknown";
                       const listing = listingByReportId[report.id];
+                      const isInComparison = comparisonReportIds.includes(report.id);
+                      const comparisonFull = comparisonReportIds.length >= 3 && !isInComparison;
                       return (
                         <tr
                           key={report.id}
-                          className="border-b border-[#27272a] transition hover:bg-[#141414]"
+                          className={`border-b border-[#27272a] transition hover:bg-[#141414] ${isInComparison ? "bg-emerald-950/20" : ""}`}
                         >
+                          <td className="w-10 px-2 py-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isInComparison}
+                              disabled={comparisonFull}
+                              onChange={() => {
+                                if (isInComparison) {
+                                  removeFromComparison(report.id);
+                                } else {
+                                  addToComparison(report.id);
+                                }
+                              }}
+                              className="h-4 w-4 rounded border-[#27272a] bg-[#141414] accent-emerald-500 disabled:opacity-30"
+                              aria-label={`${isInComparison ? "Remove from" : "Add to"} comparison for ${playerName}`}
+                            />
+                          </td>
                           <td className="px-4 py-3">
                             <button
                               onClick={() => {

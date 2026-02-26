@@ -15,6 +15,7 @@ import { loadCountries, getSecondaryCountries } from "@/data/index";
 import type { ClubData, LeagueData, CountryData } from "@/data/types";
 import { generateSquad } from "@/engine/players/generation";
 import { generateSeasonFixtures } from "@/engine/world/fixtures";
+import { generateTacticalStyle } from "@/engine/firstTeam/tacticalStyle";
 
 export interface WorldState {
   leagues: Record<string, League>;
@@ -41,7 +42,7 @@ function buildLeague(data: LeagueData, countryName: string, clubIds: string[]): 
   };
 }
 
-function buildClub(data: ClubData, leagueId: string, playerIds: string[]): Club {
+function buildClub(rng: RNG, data: ClubData, leagueId: string, playerIds: string[]): Club {
   return {
     id: data.id,
     name: data.name,
@@ -53,6 +54,7 @@ function buildClub(data: ClubData, leagueId: string, playerIds: string[]): Club 
     budget: data.budget,
     managerId: `mgr_${data.id}`,
     playerIds,
+    tacticalStyle: generateTacticalStyle(rng, data.scoutingPhilosophy, data.reputation),
   };
 }
 
@@ -158,7 +160,7 @@ function buildCountryWorld(
         playerIds.push(player.id);
       }
 
-      const club = buildClub(clubData, leagueData.id, playerIds);
+      const club = buildClub(rng, clubData, leagueData.id, playerIds);
       clubs[club.id] = club;
       clubIds.push(club.id);
     }

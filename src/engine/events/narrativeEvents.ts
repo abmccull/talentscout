@@ -27,6 +27,13 @@ import {
   extractRelatedIds,
   type EventTemplate,
 } from "./eventTemplates";
+import {
+  checkPendingChains,
+  advanceChain,
+  tryTriggerChain,
+  CHAIN_TRIGGER_CHANCE,
+} from "./eventChains";
+import type { ChainStartResult, ChainAdvanceResult } from "./eventChains";
 
 // =============================================================================
 // Constants
@@ -178,49 +185,89 @@ function pickWeightedTemplate(
 // =============================================================================
 
 /**
+ * Result of the weekly event generation, including chain state changes.
+ */
+export interface WeeklyEventResult {
+  /** The narrative event generated (chain continuation or standalone). */
+  event: NarrativeEvent | null;
+  /** If a chain was advanced, the updated chain. */
+  advancedChain?: ChainAdvanceResult;
+  /** If a new chain was started, the chain start result. */
+  newChain?: ChainStartResult;
+}
+
+/**
  * Attempt to generate a narrative event for the current week.
  *
  * Algorithm:
+ *  0. (F2) Check pending chains first — chain continuations take priority
+ *     and fire deterministically (bypass the 12% roll).
  *  1. Roll the weekly trigger (12% chance). Return null on miss.
  *  2. Check cooldown — if an event fired within the last 2 weeks, skip.
  *  3. Filter EVENT_TEMPLATES to those whose prerequisites are satisfied.
  *  4. If no templates pass, return null.
  *  5. Pick one template using specialization-weighted random selection.
  *  6. Build the event with contextual title/description/relatedIds.
+ *  7. (F2) 10% chance the event spawns a new chain instead of firing standalone.
  *
  * @param rng   - The shared PRNG instance (advances its internal state).
  * @param state - Current game state (read-only).
- * @returns A new NarrativeEvent, or null if no event fires this week.
+ * @returns A WeeklyEventResult with event and optional chain updates.
  */
 export function generateWeeklyEvent(
   rng: RNG,
   state: GameState,
-): NarrativeEvent | null {
+): WeeklyEventResult {
+  // Step 0 (F2) — prioritize pending chain continuations.
+  // Chain events bypass the weekly roll and cooldown.
+  const pendingChains = checkPendingChains(state);
+  if (pendingChains.length > 0) {
+    const chain = pendingChains[0]; // advance the first due chain
+    const result = advanceChain(rng, state, chain);
+    if (result.event) {
+      return {
+        event: result.event,
+        advancedChain: result,
+      };
+    }
+  }
+
   // Step 1 — weekly trigger roll
   if (!rng.chance(WEEKLY_EVENT_CHANCE)) {
-    return null;
+    return { event: null };
   }
 
   // Step 2 — cooldown check
   const lastWeek = mostRecentEventWeek(state);
   if (state.currentWeek - lastWeek < EVENT_COOLDOWN_WEEKS) {
-    return null;
+    return { event: null };
   }
 
-  // Step 3 — filter to eligible templates
+  // Step 3 (F2) — 10% chance to trigger a new chain instead of a standalone event
+  if (rng.chance(CHAIN_TRIGGER_CHANCE)) {
+    const chainResult = tryTriggerChain(rng, state);
+    if (chainResult) {
+      return {
+        event: chainResult.event,
+        newChain: chainResult,
+      };
+    }
+  }
+
+  // Step 4 — filter to eligible templates
   const eligible = EVENT_TEMPLATES.filter((t) => t.prerequisites(state));
   if (eligible.length === 0) {
-    return null;
+    return { event: null };
   }
 
-  // Step 4 — pick a template with specialization weighting
+  // Step 5 — pick a template with specialization weighting
   const template = pickWeightedTemplate(
     rng,
     [...eligible],
     state.scout.primarySpecialization,
   );
 
-  // Step 5 — build contextual content
+  // Step 6 — build contextual content
   const ctx = buildEventContext(template.type, state);
   const relatedIds = extractRelatedIds(template.type, state);
 
@@ -237,7 +284,7 @@ export function generateWeeklyEvent(
     selectedChoice: undefined,
   };
 
-  return event;
+  return { event };
 }
 
 // =============================================================================

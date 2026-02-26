@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import type { LegacyScore, Scout, GameState } from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -13,6 +14,7 @@ import {
   TrendingUp,
   Award,
   Home,
+  Sparkles,
 } from "lucide-react";
 
 // =============================================================================
@@ -200,7 +202,9 @@ function TopDiscoveries({ state }: { state: GameState }) {
 
 export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
   const setScreen = useGameStore((s) => s.setScreen);
+  const completeLegacyCareer = useGameStore((s) => s.completeLegacyCareer);
   const tier = getLegacyTier(legacyScore.totalScore);
+  const [legacySaved, setLegacySaved] = useState(false);
 
   // Career statistics derived from game state
   const totalReports = Object.values(gameState.reports).length +
@@ -290,17 +294,47 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
         </div>
 
         {/* Play Again CTA */}
-        <div className="text-center">
-          <p className="mb-4 text-sm text-zinc-500">
+        <div className="text-center space-y-4">
+          <p className="mb-2 text-sm text-zinc-500">
             Your story as a scout is complete. Ready to begin again?
           </p>
-          <button
-            onClick={() => setScreen("mainMenu")}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-emerald-500 active:scale-[0.98]"
-          >
-            <Home size={18} aria-hidden="true" />
-            Play Again
-          </button>
+
+          {/* New Game+ button — saves legacy career first */}
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <button
+              onClick={() => {
+                if (!legacySaved) {
+                  completeLegacyCareer();
+                  setLegacySaved(true);
+                }
+                setScreen("newGame");
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-amber-600 to-yellow-500 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:from-amber-500 hover:to-yellow-400 active:scale-[0.98]"
+            >
+              <Sparkles size={18} aria-hidden="true" />
+              New Game+
+            </button>
+
+            <button
+              onClick={() => {
+                if (!legacySaved) {
+                  completeLegacyCareer();
+                  setLegacySaved(true);
+                }
+                setScreen("mainMenu");
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-emerald-500 active:scale-[0.98]"
+            >
+              <Home size={18} aria-hidden="true" />
+              Main Menu
+            </button>
+          </div>
+
+          {legacySaved && (
+            <p className="text-xs text-amber-400/80">
+              Career saved to your legacy profile. Your achievements carry forward.
+            </p>
+          )}
         </div>
       </div>
     </div>

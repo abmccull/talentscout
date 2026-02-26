@@ -22,9 +22,13 @@ import type {
   Player,
   Position,
   PlayerAttribute,
+  PlayerRole,
   ScoutReport,
   ScoutingPhilosophy,
+  BoardProfile,
 } from "@/engine/core/types";
+import { adjustDirectiveDifficulty } from "./boardAI";
+import { calculateRoleSuitability, getBestRole, getCompatibleRoles } from "@/engine/players/roles";
 
 // =============================================================================
 // CONSTANTS
@@ -58,16 +62,16 @@ const BUDGET_SHARES: Record<ManagerDirective["priority"], number> = {
  * These represent what scouts and managers typically value in each role.
  */
 const POSITION_KEY_ATTRIBUTES: Record<Position, PlayerAttribute[]> = {
-  GK: ["positioning", "composure", "decisionMaking", "leadership", "defensiveAwareness"],
-  CB: ["defensiveAwareness", "heading", "strength", "composure", "positioning"],
-  LB: ["pace", "crossing", "stamina", "defensiveAwareness", "pressing"],
-  RB: ["pace", "crossing", "stamina", "defensiveAwareness", "pressing"],
-  CDM: ["defensiveAwareness", "pressing", "passing", "strength", "composure"],
-  CM: ["passing", "stamina", "decisionMaking", "offTheBall", "workRate"],
-  CAM: ["passing", "dribbling", "decisionMaking", "offTheBall", "firstTouch"],
-  LW: ["pace", "dribbling", "crossing", "agility", "offTheBall"],
-  RW: ["pace", "dribbling", "crossing", "agility", "offTheBall"],
-  ST: ["shooting", "heading", "pace", "composure", "offTheBall"],
+  GK: ["positioning", "composure", "decisionMaking", "leadership", "anticipation"],
+  CB: ["tackling", "heading", "strength", "marking", "anticipation", "jumping"],
+  LB: ["pace", "crossing", "stamina", "tackling", "teamwork", "marking"],
+  RB: ["pace", "crossing", "stamina", "tackling", "teamwork", "marking"],
+  CDM: ["tackling", "marking", "passing", "anticipation", "teamwork", "vision"],
+  CM: ["passing", "stamina", "vision", "teamwork", "workRate", "anticipation"],
+  CAM: ["vision", "dribbling", "finishing", "offTheBall", "firstTouch", "composure"],
+  LW: ["pace", "dribbling", "crossing", "agility", "finishing", "balance"],
+  RW: ["pace", "dribbling", "crossing", "agility", "finishing", "balance"],
+  ST: ["finishing", "heading", "pace", "composure", "offTheBall", "jumping"],
 } as const;
 
 /**
@@ -164,6 +168,45 @@ function selectKeyAttributes(
 }
 
 /**
+ * Preferred roles by tactical identity for each position.
+ * When a club's identity suggests a specific role type, the directive will
+ * request that role; otherwise a random compatible role is picked.
+ */
+const IDENTITY_ROLE_HINTS: Partial<Record<string, Partial<Record<Position, PlayerRole[]>>>> = {
+  possessionBased: {
+    CB: ["ballPlayingDefender"], CDM: ["deepLyingPlaymaker"], CM: ["advancedPlaymaker", "mezzala"],
+    LB: ["invertedFullBack"], RB: ["invertedFullBack"],
+  },
+  highPress: {
+    ST: ["pressingForward"], CM: ["boxToBox"], LW: ["insideForward"], RW: ["insideForward"],
+  },
+  counterAttacking: {
+    LW: ["winger"], RW: ["winger"], ST: ["poacher"], CM: ["carrilero"],
+  },
+  directPlay: {
+    ST: ["targetMan"], LW: ["winger"], RW: ["winger"], CB: ["noNonsenseCB"],
+  },
+  wingPlay: {
+    LB: ["wingBack"], RB: ["wingBack"], LW: ["winger"], RW: ["winger"],
+  },
+};
+
+/**
+ * Pick a preferred role for a directive based on club tactical identity and position.
+ */
+function selectPreferredRole(rng: RNG, position: Position, club: Club): PlayerRole | undefined {
+  const identity = club.tacticalStyle?.tacticalIdentity;
+  if (identity) {
+    const hints = IDENTITY_ROLE_HINTS[identity]?.[position];
+    if (hints && hints.length > 0) {
+      return rng.pick(hints);
+    }
+  }
+  // No strong identity preference — leave undefined (system fit will evaluate generically)
+  return undefined;
+}
+
+/**
  * Build tactical notes text from the manager's preferred formation and
  * philosophy, tailored to the target position.
  */
@@ -171,16 +214,21 @@ function buildTacticalNotes(
   manager: ManagerProfile,
   position: Position,
   priority: ManagerDirective["priority"],
+  preferredRole?: PlayerRole,
 ): string {
   const urgencyText =
     priority === "critical" ? "urgently"
     : priority === "high" ? "soon"
     : "during this window";
 
+  const roleText = preferredRole
+    ? ` Ideal profile: ${preferredRole.replace(/([A-Z])/g, " $1").trim()}.`
+    : "";
+
   return (
     `Manager requires a ${position} ${urgencyText}. ` +
     `Formation: ${manager.preferredFormation}. ` +
-    `Scout preference: ${manager.preference}. ` +
+    `Scout preference: ${manager.preference}.${roleText} ` +
     `The incoming player must fit the club's ${manager.preferredFormation} system ` +
     `and demonstrate the tactical discipline demanded by the coaching staff.`
   );
@@ -263,6 +311,8 @@ export function generateDirectives(
   manager: ManagerProfile,
   players: Record<string, Player>,
   season: number,
+  boardProfile?: BoardProfile,
+  state?: { boardProfile?: BoardProfile },
 ): ManagerDirective[] {
   const squad = clubPlayers(players, club.id);
 
@@ -271,8 +321,31 @@ export function generateDirectives(
   const gaps = identifyPositionGaps(squad, gapCount);
 
   const priorityOrder: ManagerDirective["priority"][] = ["critical", "high", "medium", "low"];
-  const minCAStars = minCAStarsForReputation(club.reputation);
-  const ageRange = PHILOSOPHY_AGE_RANGES[club.scoutingPhilosophy];
+  const baseMinCAStars = minCAStarsForReputation(club.reputation);
+  const baseAgeRange = PHILOSOPHY_AGE_RANGES[club.scoutingPhilosophy];
+
+  // F10: Apply board difficulty scaling if board profile is available
+  const effectiveBoardProfile = boardProfile ?? state?.boardProfile;
+  const difficulty = effectiveBoardProfile
+    ? adjustDirectiveDifficulty(
+        { boardProfile: effectiveBoardProfile } as import("@/engine/core/types").GameState,
+        effectiveBoardProfile,
+      )
+    : { caStarsMultiplier: 1.0, budgetScale: 1.0, ageFlexibility: 1.0 };
+
+  // Scale CA stars requirement by board difficulty
+  const scaledMinCAStars = clamp(
+    Math.round(baseMinCAStars * difficulty.caStarsMultiplier * 2) / 2,
+    0.5,
+    5.0,
+  );
+
+  // Scale age range by flexibility
+  const ageFlexDelta = Math.round((1 - difficulty.ageFlexibility) * 2);
+  const scaledAgeRange: [number, number] = [
+    baseAgeRange[0] + ageFlexDelta,
+    baseAgeRange[1] - ageFlexDelta,
+  ];
 
   const directives: ManagerDirective[] = gaps.map((gap, index) => {
     // Derive priority from CA gap magnitude
@@ -287,9 +360,16 @@ export function generateDirectives(
       priority = "low";
     }
 
-    const budgetAllocation = Math.round(club.budget * BUDGET_SHARES[priority]);
+    // F10: Scale budget allocation by board budget multiplier
+    const budgetAllocation = Math.round(
+      club.budget * BUDGET_SHARES[priority] * difficulty.budgetScale,
+    );
     const keyAttributes = selectKeyAttributes(rng, gap.position, 4);
-    const tacticalNotes = buildTacticalNotes(manager, gap.position, priority);
+
+    // Derive a preferred role for this position from club tactical identity
+    const preferredRole = selectPreferredRole(rng, gap.position, club);
+
+    const tacticalNotes = buildTacticalNotes(manager, gap.position, priority, preferredRole);
 
     // Stable deterministic ID
     const id = `dir_${club.id.slice(0, 8)}_${gap.position}_s${season}_${index}`;
@@ -301,9 +381,10 @@ export function generateDirectives(
       position: gap.position,
       priority,
       budgetAllocation,
-      ageRange,
-      minCAStars,
+      ageRange: scaledAgeRange,
+      minCAStars: scaledMinCAStars,
       keyAttributes,
+      preferredRole,
       submittedReportIds: [],
       fulfilled: false,
       season,
@@ -327,11 +408,12 @@ export function generateDirectives(
  * Evaluate a scout report against a list of active directives and return the
  * best match, if any.
  *
- * Scoring breakdown (100 pts total):
- *  - Position match (40 pts): 40 if primary, 28 if secondary, 16 if adjacent, 0 if none.
- *  - Age fit        (20 pts): full 20 if within ageRange, scaled down linearly beyond bounds.
+ * Scoring breakdown (110 pts total):
+ *  - Position match (35 pts): 35 if primary, 24 if secondary, 14 if adjacent, 0 if none.
+ *  - Age fit        (15 pts): full 15 if within ageRange, scaled down linearly beyond bounds.
  *  - CA stars       (20 pts): full 20 if perceivedCAStars >= minCAStars, 0 if absent.
  *  - Key attributes (20 pts): 5 pts per matched key attribute (up to 4 attributes).
+ *  - Role fit       (20 pts): NEW. If directive has preferredRole, scores role suitability.
  *
  * A report must score > 40 to be considered a match.
  * Returns the best-matching { directiveId, matchScore } or null.
@@ -358,7 +440,7 @@ export function evaluateReportAgainstDirectives(
     let score = 0;
 
     // ------------------------------------------------------------------
-    // 1. Position match (40 pts)
+    // 1. Position match (35 pts)
     // ------------------------------------------------------------------
     const ADJACENT_POSITIONS: Record<Position, Position[]> = {
       GK: [],
@@ -374,23 +456,22 @@ export function evaluateReportAgainstDirectives(
     };
 
     if (player.position === directive.position) {
-      score += 40;
+      score += 35;
     } else if (player.secondaryPositions.includes(directive.position)) {
-      score += 28;
+      score += 24;
     } else if (ADJACENT_POSITIONS[player.position]?.includes(directive.position)) {
-      score += 16;
+      score += 14;
     }
 
     // ------------------------------------------------------------------
-    // 2. Age fit (20 pts)
+    // 2. Age fit (15 pts)
     // ------------------------------------------------------------------
     const [minAge, maxAge] = directive.ageRange;
     if (player.age >= minAge && player.age <= maxAge) {
-      score += 20;
+      score += 15;
     } else {
-      // Linear decay: 1 pt lost per year outside range
       const overshoot = player.age < minAge ? minAge - player.age : player.age - maxAge;
-      score += Math.max(0, 20 - overshoot * 2);
+      score += Math.max(0, 15 - overshoot * 2);
     }
 
     // ------------------------------------------------------------------
@@ -411,6 +492,19 @@ export function evaluateReportAgainstDirectives(
       assessedAttributes.has(attr),
     );
     score += clamp(matchedKeys.length * 5, 0, 20);
+
+    // ------------------------------------------------------------------
+    // 5. Role fit (20 pts) — NEW
+    // ------------------------------------------------------------------
+    if (directive.preferredRole) {
+      const suitability = calculateRoleSuitability(player, directive.preferredRole);
+      // suitability is 0-100; map to 0-20 pts
+      score += Math.round((suitability / 100) * 20);
+    } else {
+      // No preferred role: award partial credit based on best role suitability
+      const best = getBestRole(player, directive.position);
+      score += Math.round((best.suitability / 100) * 10); // max 10 pts without directive role
+    }
 
     if (score > bestScore) {
       bestScore = score;

@@ -94,6 +94,12 @@ export type {
   StatisticalProfile,
   AnomalyFlag,
   AnalystReport,
+
+  // Injury system
+  Injury,
+  InjuryHistory,
+  InjuryType,
+  InjurySeverity,
 } from "./types";
 
 // Runtime constants (values, not just types)
@@ -128,6 +134,19 @@ export {
   getSeasonPhase,
 } from "./seasonEvents";
 
+// Season event effects
+export {
+  applySeasonEventEffects,
+  resolveSeasonEventChoice,
+  getActiveEffectModifiers,
+} from "./seasonEventEffects";
+
+export type {
+  SeasonEventEffect,
+  SeasonEventEffectType,
+  SeasonEventChoice,
+} from "./types";
+
 // Calendar data tables (used by UI for activity previews)
 export {
   ACTIVITY_SLOT_COSTS,
@@ -151,3 +170,27 @@ export type {
   ActivityQualityTier,
   ActivityQualityResult,
 } from "./activityQuality";
+
+// Achievement engine
+export {
+  getAchievementProgress,
+  getAchievementRarity,
+  createUnlockRecord,
+  RARITY_CONFIG,
+} from "./achievementEngine";
+export type {
+  AchievementRarity,
+  AchievementProgress,
+  AchievementEvaluation,
+  AchievementUnlock,
+} from "./achievementEngine";
+
+// Week preview (F16)
+export { generateWeekPreview, suggestOptimalSchedule } from "./weekPreview";
+export type {
+  PreviewMatch,
+  CongestionLevel,
+  ScheduleSuggestion,
+  SchedulePriorities,
+  WeekPreview,
+} from "./weekPreview";

@@ -18,3 +18,12 @@ export type {
   MasteryPerkEffect,
   MasteryModifiers,
 } from './masteryPerks';
+
+export {
+  calculateScoutingEfficiency,
+  getGraduatedRegionalBonus,
+  initializeRegionalKnowledge,
+  processRegionalKnowledgeGrowth,
+  generateCulturalInsight,
+  generateLocalContact,
+} from './regionalKnowledge';

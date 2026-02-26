@@ -1,13 +1,16 @@
 /**
  * Achievement definitions and check logic for TalentScout.
  *
- * ACHIEVEMENTS is the canonical list of all 45 achievements.
- * checkAchievements(state) returns IDs of achievements that are newly
- * unlocked (i.e. checks pass) — the caller is responsible for filtering
- * out already-unlocked IDs before adding them to the store.
+ * ACHIEVEMENTS is the canonical list of all achievements, organized across
+ * 8 categories: Getting Started, Career Milestones, Scouting Excellence,
+ * Specialization Mastery, World Explorer, Match & Analysis, Financial, and Hidden.
+ *
+ * checkAchievements(state) returns IDs of achievements whose conditions are
+ * currently met — the caller is responsible for filtering out already-unlocked
+ * IDs before treating them as newly earned.
  */
 
-import type { GameState } from "@/engine/core/types";
+import type { GameState, Position } from "@/engine/core/types";
 import { ALL_PERKS } from "@/engine/specializations/perks";
 
 // =============================================================================
@@ -20,6 +23,8 @@ export type AchievementCategory =
   | "scoutingExcellence"
   | "specializationMastery"
   | "worldExplorer"
+  | "matchAnalysis"
+  | "financial"
   | "hidden";
 
 export interface AchievementDef {
@@ -99,6 +104,35 @@ function hasCompletedTree(
 ): boolean {
   return countUnlockedPerksForSpec(state, spec) >= totalPerksForSpec(spec);
 }
+
+/**
+ * Count distinct positions covered by the scout's reports.
+ */
+function countPositionsCovered(state: GameState): number {
+  const positions = new Set<string>();
+  for (const report of Object.values(state.reports)) {
+    const player = state.players[report.playerId];
+    if (player) positions.add(player.position);
+  }
+  return positions.size;
+}
+
+/**
+ * Count contacts with relationship at or above a threshold.
+ */
+function countHighTrustContacts(state: GameState, threshold: number): number {
+  return Object.values(state.contacts).filter(
+    (c) => c.relationship >= threshold,
+  ).length;
+}
+
+// =============================================================================
+// ALL POSITIONS (for position coverage checks)
+// =============================================================================
+
+const ALL_POS: readonly Position[] = [
+  "GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST",
+];
 
 // =============================================================================
 // ACHIEVEMENT DEFINITIONS
@@ -261,7 +295,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
 
   // ---------------------------------------------------------------------------
-  // Scouting Excellence (10)
+  // Scouting Excellence (12)
   // ---------------------------------------------------------------------------
   {
     id: "reports-10",
@@ -319,25 +353,22 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     check: (state) => state.discoveryRecords.length >= 1,
   },
   {
-    id: "alumni-5",
-    name: "Talent Pipeline",
-    description: "Have 5 alumni debuts.",
-    hint: "Place 5 youth players who go on to make their debuts.",
+    id: "discoveries-5",
+    name: "Eye for Talent",
+    description: "Discover 5 wonderkids.",
+    hint: "Identify 5 outstanding young talents before anyone else.",
     category: "scoutingExcellence",
-    icon: "🌱",
-    check: (state) => state.alumniRecords.length >= 5,
+    icon: "👁️‍🗨️",
+    check: (state) => state.discoveryRecords.length >= 5,
   },
   {
-    id: "alumni-international",
-    name: "International Talent",
-    description: "Have an alumni earn an international call-up.",
-    hint: "Place a youth player who goes on to represent their country.",
+    id: "discoveries-15",
+    name: "Talent Factory",
+    description: "Discover 15 wonderkids.",
+    hint: "Build a legendary track record of 15 discoveries.",
     category: "scoutingExcellence",
-    icon: "🌍",
-    check: (state) =>
-      state.alumniRecords.some((record) =>
-        record.milestones.some((m) => m.type === "internationalCallUp"),
-      ),
+    icon: "🏭",
+    check: (state) => state.discoveryRecords.length >= 15,
   },
   {
     id: "high-accuracy",
@@ -361,6 +392,87 @@ export const ACHIEVEMENTS: AchievementDef[] = [
         const player = state.players[record.playerId];
         return player?.wonderkidTier === "generational";
       }),
+  },
+  {
+    id: "full-house",
+    name: "Full House",
+    description: "Submit a report for every position.",
+    hint: "Cover all 10 positions with at least one scouting report each.",
+    category: "scoutingExcellence",
+    icon: "🃏",
+    check: (state) => countPositionsCovered(state) >= ALL_POS.length,
+  },
+  {
+    id: "perfect-record",
+    name: "Perfect Record",
+    description: "Have 10+ reports with all receiving positive club responses.",
+    hint: "Submit 10 or more reports that clubs shortlist or sign.",
+    category: "scoutingExcellence",
+    icon: "💯",
+    check: (state) => {
+      const reports = Object.values(state.reports).filter(
+        (r) => r.clubResponse !== undefined,
+      );
+      if (reports.length < 10) return false;
+      return reports.every(
+        (r) => r.clubResponse === "shortlisted" || r.clubResponse === "signed",
+      );
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Youth Development (5) — NEW CATEGORY (was part of scoutingExcellence)
+  // ---------------------------------------------------------------------------
+  {
+    id: "alumni-5",
+    name: "Talent Pipeline",
+    description: "Have 5 alumni debuts.",
+    hint: "Place 5 youth players who go on to make their debuts.",
+    category: "scoutingExcellence",
+    icon: "🌱",
+    check: (state) => state.alumniRecords.length >= 5,
+  },
+  {
+    id: "alumni-15",
+    name: "Youth Whisperer",
+    description: "Have 15 alumni debuts.",
+    hint: "Place 15 youth players who make their professional debuts.",
+    category: "scoutingExcellence",
+    icon: "🧙",
+    check: (state) => state.alumniRecords.length >= 15,
+  },
+  {
+    id: "alumni-international",
+    name: "International Talent",
+    description: "Have an alumni earn an international call-up.",
+    hint: "Place a youth player who goes on to represent their country.",
+    category: "scoutingExcellence",
+    icon: "🌍",
+    check: (state) =>
+      state.alumniRecords.some((record) =>
+        record.milestones.some((m) => m.type === "internationalCallUp"),
+      ),
+  },
+  {
+    id: "academy-gold",
+    name: "Academy Gold",
+    description: "Place 5+ youth who average 7+ in match ratings.",
+    hint: "Your youth placements consistently perform at a high level.",
+    category: "scoutingExcellence",
+    icon: "🥇",
+    check: (state) => {
+      let highPerformers = 0;
+      for (const record of state.alumniRecords) {
+        const player = state.players[record.playerId];
+        if (!player) continue;
+        const ratings = player.recentMatchRatings ?? [];
+        if (ratings.length === 0) continue;
+        const avg =
+          ratings.reduce((sum, r) => sum + r.rating, 0) / ratings.length;
+        if (avg >= 7) highPerformers++;
+      }
+      return highPerformers >= 5;
+    },
   },
 
   // ---------------------------------------------------------------------------
@@ -407,7 +519,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "dual-mastery",
     name: "Renaissance Scout",
-    description: "Earn mastery in 2 different skills.",
+    description: "Earn mastery in 2 different specializations.",
     hint: "Reach the mastery-tier perk in two separate specialization trees.",
     category: "specializationMastery",
     icon: "🎨",
@@ -428,9 +540,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Purchase all available scouting tools.",
     category: "specializationMastery",
     icon: "🧰",
-    // 9 ToolIds in types.ts: videoEditor, dataSubscription, scoutingApp,
-    // travelPlanner, contactManager, reportTemplates, youthDatabase,
-    // performanceTracker, networkAnalyzer
     check: (state) => state.unlockedTools.length >= 9,
   },
   {
@@ -449,22 +558,16 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Try every type of activity available to a scout.",
     category: "specializationMastery",
     icon: "🎭",
-    // Check via completed schedule activities across all processed weeks
     check: (state) => {
       const performed = new Set<string>();
-      // Count from weekly schedule completed activities
       if (state.schedule.completed) {
         for (const activity of state.schedule.activities) {
           if (activity) performed.add(activity.type);
         }
       }
-      // Also count from observations (each has a context matching activities)
       for (const obs of Object.values(state.observations)) {
         performed.add(obs.context);
       }
-      // Core activity types available from week 1 — use a representative subset
-      // of at least 5 distinct types as the threshold (the full union is very large
-      // and many are specialization-gated)
       return performed.size >= 5;
     },
   },
@@ -539,9 +642,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "worldExplorer",
     icon: "🌍",
     check: (state) => {
-      // Continents approximated by grouping countries from game world.
-      // We check if reports cover players from at least 5 distinct nationalities
-      // spanning multiple regions — a proxy for continental spread.
       const nationalities = new Set<string>();
       for (const report of Object.values(state.reports)) {
         const player = state.players[report.playerId];
@@ -552,7 +652,216 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
 
   // ---------------------------------------------------------------------------
-  // Hidden (5)
+  // Match & Analysis (6) — NEW CATEGORY
+  // ---------------------------------------------------------------------------
+  {
+    id: "matches-25",
+    name: "Regular Attendee",
+    description: "Attend 25 live matches.",
+    hint: "Watch 25 matches in person.",
+    category: "matchAnalysis",
+    icon: "🏟️",
+    check: (state) => state.playedFixtures.length >= 25,
+  },
+  {
+    id: "matches-50",
+    name: "Stadium Regular",
+    description: "Attend 50 live matches.",
+    hint: "Watch 50 matches in person to deepen your assessment skills.",
+    category: "matchAnalysis",
+    icon: "🎫",
+    check: (state) => state.playedFixtures.length >= 50,
+  },
+  {
+    id: "matches-100",
+    name: "Match Junkie",
+    description: "Attend 100 live matches.",
+    hint: "You practically live at the stadium. Attend 100 matches.",
+    category: "matchAnalysis",
+    icon: "🔥",
+    check: (state) => state.playedFixtures.length >= 100,
+  },
+  {
+    id: "observations-50",
+    name: "Keen Observer",
+    description: "Make 50 observations.",
+    hint: "Carefully observe 50 players across your career.",
+    category: "matchAnalysis",
+    icon: "🔍",
+    check: (state) => Object.keys(state.observations).length >= 50,
+  },
+  {
+    id: "observations-200",
+    name: "Analyst",
+    description: "Make 200 observations.",
+    hint: "Accumulate 200 detailed player observations.",
+    category: "matchAnalysis",
+    icon: "📐",
+    check: (state) => Object.keys(state.observations).length >= 200,
+  },
+  {
+    id: "observations-500",
+    name: "All-Seeing Eye",
+    description: "Make 500 observations.",
+    hint: "Nothing escapes your gaze. Make 500 observations.",
+    category: "matchAnalysis",
+    icon: "👁️",
+    check: (state) => Object.keys(state.observations).length >= 500,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Social & Network (5) — NEW CATEGORY (uses existing contact system)
+  // ---------------------------------------------------------------------------
+  {
+    id: "contacts-5",
+    name: "Connected",
+    description: "Have 5 contacts with high trust.",
+    hint: "Build strong relationships (60+) with 5 contacts.",
+    category: "matchAnalysis",
+    icon: "📱",
+    check: (state) => countHighTrustContacts(state, 60) >= 5,
+  },
+  {
+    id: "contacts-15",
+    name: "Network Master",
+    description: "Have 15 contacts with high trust.",
+    hint: "Build a massive network of 15 high-trust contacts.",
+    category: "matchAnalysis",
+    icon: "🕸️",
+    check: (state) => countHighTrustContacts(state, 60) >= 15,
+  },
+  {
+    id: "rep-75",
+    name: "Industry Name",
+    description: "Reach 75 reputation.",
+    hint: "Your name carries weight. Build reputation to 75.",
+    category: "matchAnalysis",
+    icon: "📢",
+    check: (state) => state.scout.reputation >= 75,
+  },
+  {
+    id: "rep-100",
+    name: "Living Legend",
+    description: "Reach maximum reputation (100).",
+    hint: "Become the most renowned scout in the world.",
+    category: "matchAnalysis",
+    icon: "🏛️",
+    check: (state) => state.scout.reputation >= 100,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Financial (5) — NEW CATEGORY
+  // ---------------------------------------------------------------------------
+  {
+    id: "savings-100k",
+    name: "Nest Egg",
+    description: "Accumulate 100,000 in savings.",
+    hint: "Build up your financial reserves to 100,000.",
+    category: "financial",
+    icon: "💰",
+    check: (state) => (state.finances?.balance ?? 0) >= 100_000,
+  },
+  {
+    id: "savings-500k",
+    name: "Self-Made",
+    description: "Accumulate 500,000 in savings with no active loans.",
+    hint: "Reach 500,000 in the bank with zero debt.",
+    category: "financial",
+    icon: "🏦",
+    check: (state) =>
+      (state.finances?.balance ?? 0) >= 500_000 &&
+      state.finances?.activeLoan === undefined,
+  },
+  {
+    id: "big-spender",
+    name: "Big Spender",
+    description: "Complete a full infrastructure upgrade.",
+    hint: "Upgrade your office to the highest tier.",
+    category: "financial",
+    icon: "🏗️",
+    check: (state) => state.finances?.office?.tier === "hq",
+  },
+  {
+    id: "first-employee",
+    name: "Building a Team",
+    description: "Hire your first employee.",
+    hint: "Expand your agency by hiring your first staff member.",
+    category: "financial",
+    icon: "👔",
+    check: (state) => (state.finances?.employees?.length ?? 0) >= 1,
+  },
+  {
+    id: "agency-empire",
+    name: "Agency Empire",
+    description: "Have 5+ employees and 3+ client relationships.",
+    hint: "Build a thriving agency with staff and clients.",
+    category: "financial",
+    icon: "🏢",
+    check: (state) =>
+      (state.finances?.employees?.length ?? 0) >= 5 &&
+      (state.finances?.clientRelationships?.length ?? 0) >= 3,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Challenge (3) — uses hidden category for surprise
+  // ---------------------------------------------------------------------------
+  {
+    id: "speedrun",
+    name: "Speedrun",
+    description: "Reach Career Tier 5 in under 10 seasons.",
+    hint: "Hidden Achievement",
+    category: "hidden",
+    icon: "⏱️",
+    hidden: true,
+    check: (state) =>
+      state.scout.careerTier >= 5 && state.currentSeason <= 10,
+  },
+  {
+    id: "against-all-odds",
+    name: "Against All Odds",
+    description: "Complete a scenario on hard difficulty.",
+    hint: "Hidden Achievement",
+    category: "hidden",
+    icon: "🎲",
+    hidden: true,
+    check: (state) =>
+      state.activeScenarioId !== undefined &&
+      state.scout.careerTier >= 5,
+  },
+  {
+    id: "streak-5",
+    name: "Hot Streak",
+    description: "Have 5 consecutive reports receive positive club responses.",
+    hint: "Hidden Achievement",
+    category: "hidden",
+    icon: "🔥",
+    hidden: true,
+    check: (state) => {
+      const reports = Object.values(state.reports)
+        .filter((r) => r.clubResponse !== undefined)
+        .sort(
+          (a, b) =>
+            a.submittedSeason * 100 + a.submittedWeek -
+            (b.submittedSeason * 100 + b.submittedWeek),
+        );
+      let streak = 0;
+      for (const r of reports) {
+        if (
+          r.clubResponse === "shortlisted" ||
+          r.clubResponse === "signed"
+        ) {
+          streak++;
+          if (streak >= 5) return true;
+        } else {
+          streak = 0;
+        }
+      }
+      return false;
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // Hidden (5) — kept from original + expanded
   // ---------------------------------------------------------------------------
   {
     id: "blind-faith",

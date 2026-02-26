@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +10,22 @@ import {
   getOverallPerformanceRating,
   comparePerformancePeriods,
 } from "@/engine/career/index";
-import type { ScoutPerformanceSnapshot, ScoutSkill } from "@/engine/core/types";
+import {
+  generateScatterData,
+  generateCoverageHeatMap,
+  generateDevelopmentTrends,
+  generateLeagueComparison,
+  generatePlayerRadar,
+} from "@/engine/data";
+import {
+  ScatterPlot,
+  BarChart,
+  RadarChart,
+  TrendLine,
+  HeatMap,
+  PositionLegend,
+} from "./DataVisualization";
+import type { ScoutPerformanceSnapshot, ScoutSkill, Player } from "@/engine/core/types";
 
 // ─── Skill labels ─────────────────────────────────────────────────────────────
 
@@ -71,10 +87,15 @@ function trendColor(direction: TrendDirection): string {
   return "text-zinc-500";
 }
 
+// ─── Analytics tab type ──────────────────────────────────────────────────────
+
+type AnalyticsTab = "overview" | "visualizations";
+
 // ─── AnalyticsScreen ──────────────────────────────────────────────────────────
 
 export function AnalyticsScreen() {
   const { gameState, getPerformanceHistory } = useGameStore();
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>("overview");
 
   const history = getPerformanceHistory();
   const overallRating = getOverallPerformanceRating(history);
@@ -92,20 +113,109 @@ export function AnalyticsScreen() {
   const latestSnapshot: ScoutPerformanceSnapshot | null =
     history.length > 0 ? history[history.length - 1] : null;
 
+  // ── Visualization data (memoized) ──────────────────────────────────────────
+
+  const scatterData = useMemo(() => {
+    if (!gameState) return null;
+    return generateScatterData(
+      gameState.players,
+      gameState.anomalyFlags,
+    );
+  }, [gameState]);
+
+  const heatMapData = useMemo(() => {
+    if (!gameState) return null;
+    return generateCoverageHeatMap(
+      gameState.observations,
+      gameState.players,
+      gameState.countries,
+    );
+  }, [gameState]);
+
+  const leagueComparisonData = useMemo(() => {
+    if (!gameState) return null;
+    return generateLeagueComparison(gameState.players, gameState.leagues);
+  }, [gameState]);
+
+  const trendLineData = useMemo(() => {
+    if (!gameState) return null;
+    // Pick up to 4 players from the watchlist, or top-CA players if watchlist is empty
+    const watchlistPlayers: Player[] = [];
+    if (gameState.watchlist.length > 0) {
+      for (const pid of gameState.watchlist.slice(0, 4)) {
+        const p = gameState.players[pid];
+        if (p) watchlistPlayers.push(p);
+      }
+    }
+    if (watchlistPlayers.length === 0) {
+      // Fallback: top 4 CA players
+      const sorted = Object.values(gameState.players)
+        .sort((a, b) => b.currentAbility - a.currentAbility)
+        .slice(0, 4);
+      watchlistPlayers.push(...sorted);
+    }
+    return generateDevelopmentTrends(watchlistPlayers, gameState.currentSeason);
+  }, [gameState]);
+
+  // Radar chart for the first anomaly player or first watchlist player
+  const radarData = useMemo(() => {
+    if (!gameState) return null;
+    let targetPlayer: Player | undefined;
+    // Prefer first anomaly player
+    if (gameState.anomalyFlags.length > 0) {
+      targetPlayer = gameState.players[gameState.anomalyFlags[0].playerId];
+    }
+    // Fallback to first watchlist player
+    if (!targetPlayer && gameState.watchlist.length > 0) {
+      targetPlayer = gameState.players[gameState.watchlist[0]];
+    }
+    // Fallback to highest-CA player
+    if (!targetPlayer) {
+      const sorted = Object.values(gameState.players).sort(
+        (a, b) => b.currentAbility - a.currentAbility,
+      );
+      targetPlayer = sorted[0];
+    }
+    if (!targetPlayer) return null;
+
+    const profile = gameState.statisticalProfiles[targetPlayer.id];
+    return generatePlayerRadar(targetPlayer, profile);
+  }, [gameState]);
+
   if (!gameState) return null;
 
   return (
     <GameLayout>
       <div className="p-6">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Performance Analytics</h1>
-          <p className="text-sm text-zinc-400">
-            Season {gameState.currentSeason} — Week {gameState.currentWeek}
-          </p>
+        <div className="mb-4 flex items-end justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Performance Analytics</h1>
+            <p className="text-sm text-zinc-400">
+              Season {gameState.currentSeason} — Week {gameState.currentWeek}
+            </p>
+          </div>
+          {/* Tab switcher */}
+          <div className="flex gap-1 rounded-lg bg-zinc-900 p-0.5">
+            {(["overview", "visualizations"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                  activeTab === tab
+                    ? "bg-zinc-700 text-white"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {tab === "overview" ? "Overview" : "Data Visualizations"}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {activeTab === "overview" ? (
+          /* ── OVERVIEW TAB (original content) ──────────────────────────── */
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* ── Left column ──────────────────────────────────────────────── */}
           <div className="space-y-4">
             {/* Overall rating */}
@@ -371,6 +481,178 @@ export function AnalyticsScreen() {
             )}
           </div>
         </div>
+        ) : (
+          /* ── VISUALIZATIONS TAB ───────────────────────────────────────── */
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {/* Player Market Scatter */}
+            <Card>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Player Market</CardTitle>
+                  <PositionLegend />
+                </div>
+                <p className="text-[10px] text-zinc-500">
+                  Current Ability vs Market Value — anomalies highlighted
+                </p>
+              </CardHeader>
+              <CardContent>
+                {scatterData && scatterData.points.length > 0 ? (
+                  <ScatterPlot data={scatterData} />
+                ) : (
+                  <p className="py-8 text-center text-xs text-zinc-500">
+                    No player data available. Scout more players.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* League Comparison Bars */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">League Comparison</CardTitle>
+                <p className="text-[10px] text-zinc-500">
+                  Average Current Ability by league
+                </p>
+              </CardHeader>
+              <CardContent>
+                {leagueComparisonData && leagueComparisonData.bars.length > 0 ? (
+                  <BarChart data={leagueComparisonData} showSecondary />
+                ) : (
+                  <p className="py-8 text-center text-xs text-zinc-500">
+                    No league data available.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Regional Coverage Heat Map */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Regional Coverage</CardTitle>
+                <p className="text-[10px] text-zinc-500">
+                  Scouting observations by country
+                </p>
+              </CardHeader>
+              <CardContent>
+                {heatMapData && heatMapData.cells.length > 0 ? (
+                  <HeatMap data={heatMapData} />
+                ) : (
+                  <p className="py-8 text-center text-xs text-zinc-500">
+                    No observations recorded yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Development Tracker Trend Lines */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Development Tracker</CardTitle>
+                <p className="text-[10px] text-zinc-500">
+                  CA trajectory for watchlist players (or top players)
+                </p>
+              </CardHeader>
+              <CardContent>
+                {trendLineData && trendLineData.length > 0 ? (
+                  <TrendLine lines={trendLineData} />
+                ) : (
+                  <p className="py-8 text-center text-xs text-zinc-500">
+                    Add players to your watchlist to track development.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Anomaly Spotlight + Player Radar */}
+            <Card className="lg:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Anomaly Spotlight</CardTitle>
+                <p className="text-[10px] text-zinc-500">
+                  Flagged anomalies and player attribute profile
+                </p>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {/* Anomaly list */}
+                  <div>
+                    {gameState.anomalyFlags.length === 0 ? (
+                      <p className="py-8 text-center text-xs text-zinc-500">
+                        No anomalies flagged yet. Run data analyses to detect outliers.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {gameState.anomalyFlags.slice(0, 6).map((anomaly) => {
+                          const player = gameState.players[anomaly.playerId];
+                          const name = player
+                            ? `${player.firstName} ${player.lastName}`
+                            : "Unknown";
+                          return (
+                            <div
+                              key={anomaly.id}
+                              className="flex items-start gap-2 rounded-md border border-[#27272a] px-3 py-2"
+                            >
+                              <span
+                                className={`mt-0.5 inline-block h-2 w-2 rounded-full ${
+                                  anomaly.direction === "positive"
+                                    ? "bg-emerald-500"
+                                    : "bg-red-500"
+                                }`}
+                              />
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-zinc-200">
+                                    {name}
+                                  </span>
+                                  <Badge variant="secondary" className="text-[8px]">
+                                    {anomaly.stat}
+                                  </Badge>
+                                  <Badge
+                                    variant="secondary"
+                                    className={`text-[8px] ${
+                                      anomaly.direction === "positive"
+                                        ? "text-emerald-400"
+                                        : "text-red-400"
+                                    }`}
+                                  >
+                                    {anomaly.severity.toFixed(1)} SD
+                                  </Badge>
+                                </div>
+                                <p className="mt-0.5 text-[10px] text-zinc-500">
+                                  {anomaly.description}
+                                </p>
+                              </div>
+                              {anomaly.investigated && (
+                                <Badge variant="secondary" className="text-[7px] text-amber-400">
+                                  Investigated
+                                </Badge>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Radar chart */}
+                  <div className="flex flex-col items-center">
+                    {radarData ? (
+                      <>
+                        <p className="mb-2 text-xs font-medium text-zinc-300">
+                          {radarData.label}
+                        </p>
+                        <RadarChart data={radarData} size={220} />
+                      </>
+                    ) : (
+                      <p className="py-8 text-center text-xs text-zinc-500">
+                        No player profile available.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </GameLayout>
   );

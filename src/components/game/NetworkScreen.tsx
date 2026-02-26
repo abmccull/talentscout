@@ -7,8 +7,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Users, UserCheck, Newspaper, GraduationCap, Eye, ChevronRight, X } from "lucide-react";
-import type { Contact, ContactType, Activity, HiddenIntel } from "@/engine/core/types";
+import {
+  Users,
+  UserCheck,
+  Newspaper,
+  GraduationCap,
+  Eye,
+  ChevronRight,
+  X,
+  Shield,
+  AlertTriangle,
+  MessageCircle,
+  UserPlus,
+  Lock,
+} from "lucide-react";
+import type { Contact, ContactType, Activity, HiddenIntel, GossipItem } from "@/engine/core/types";
 import { getHiddenAttributeIntel } from "@/engine/network/contacts";
 import { RNG } from "@/engine/rng";
 
@@ -44,6 +57,49 @@ function relationshipColor(rel: number): string {
   return "bg-zinc-500";
 }
 
+function trustColor(trust: number): string {
+  if (trust >= 75) return "bg-emerald-500";
+  if (trust >= 50) return "bg-blue-500";
+  if (trust >= 25) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function trustLabel(trust: number): string {
+  if (trust >= 75) return "Trusted Insider";
+  if (trust >= 50) return "Reliable";
+  if (trust >= 25) return "Cautious";
+  return "Wary";
+}
+
+function betrayalRiskLabel(risk: number): { label: string; color: string } {
+  if (risk >= 0.3) return { label: "High Risk", color: "text-red-400" };
+  if (risk >= 0.15) return { label: "Moderate Risk", color: "text-amber-400" };
+  if (risk >= 0.05) return { label: "Low Risk", color: "text-zinc-400" };
+  return { label: "Safe", color: "text-emerald-400" };
+}
+
+function gossipTypeLabel(type: GossipItem["type"]): string {
+  const labels: Record<GossipItem["type"], string> = {
+    transferRumor: "Transfer Rumor",
+    unhappyPlayer: "Unhappy Player",
+    youthProspect: "Youth Prospect",
+    managerChange: "Manager Change",
+    injuryNews: "Injury News",
+  };
+  return labels[type] ?? type;
+}
+
+function gossipTypeColor(type: GossipItem["type"]): string {
+  const colors: Record<GossipItem["type"], string> = {
+    transferRumor: "text-blue-400",
+    unhappyPlayer: "text-red-400",
+    youthProspect: "text-emerald-400",
+    managerChange: "text-amber-400",
+    injuryNews: "text-orange-400",
+  };
+  return colors[type] ?? "text-zinc-400";
+}
+
 interface IntelEntry {
   playerName: string;
   intel: HiddenIntel;
@@ -53,6 +109,7 @@ interface ContactDetailProps {
   contact: Contact;
   knownPlayerNames: string[];
   intelEntries: IntelEntry[];
+  currentWeek: number;
   onScheduleMeeting: () => void;
   onClose: () => void;
 }
@@ -79,9 +136,16 @@ function formatAttributeLabel(attribute: string): string {
   return labels[attribute] ?? attribute;
 }
 
-function ContactDetail({ contact, knownPlayerNames, intelEntries, onScheduleMeeting, onClose }: ContactDetailProps) {
+function ContactDetail({ contact, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
   const config = CONTACT_TYPE_CONFIG[contact.type];
   const Icon = config.icon;
+  const trustLevel = contact.trustLevel ?? contact.relationship;
+  const betrayalRisk = contact.betrayalRisk ?? 0;
+  const gossipQueue = contact.gossipQueue ?? [];
+  const activeGossip = gossipQueue.filter((g) => g.expiresWeek > currentWeek);
+  const referralCount = (contact.referralNetwork ?? []).length;
+  const exclusiveWindow = contact.exclusiveWindow;
+  const risk = betrayalRiskLabel(betrayalRisk);
 
   return (
     <Card className="border-emerald-500/20">
@@ -132,6 +196,23 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, onScheduleMeet
           <p className="mt-1 text-xs text-zinc-500">{contact.relationship}/100</p>
         </div>
 
+        {/* F3: Trust Level */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="text-zinc-500 flex items-center gap-1">
+              <Shield size={10} aria-hidden="true" />
+              Trust
+            </span>
+            <span className="text-white font-medium">{trustLabel(trustLevel)}</span>
+          </div>
+          <Progress
+            value={trustLevel}
+            max={100}
+            indicatorClassName={trustColor(trustLevel)}
+          />
+          <p className="mt-1 text-xs text-zinc-500">{trustLevel}/100</p>
+        </div>
+
         {/* Reliability */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
@@ -146,6 +227,82 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, onScheduleMeet
             indicatorClassName="bg-purple-500"
           />
         </div>
+
+        {/* F3: Betrayal Risk Warning */}
+        {betrayalRisk >= 0.05 && (
+          <div className="rounded-md border border-red-500/20 bg-red-500/5 p-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <AlertTriangle size={12} className="text-red-400" aria-hidden="true" />
+              <span className={`font-medium ${risk.color}`}>
+                Betrayal: {risk.label}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-500">
+              This contact may leak information to rivals. Maintain trust to reduce risk.
+            </p>
+          </div>
+        )}
+
+        {/* F3: Exclusive Window */}
+        {exclusiveWindow && exclusiveWindow.expiresWeek > currentWeek && (
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <Lock size={12} className="text-amber-400" aria-hidden="true" />
+              <span className="font-medium text-amber-400">
+                Exclusive Access
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-400">
+              Early access to a prospect expires in week {exclusiveWindow.expiresWeek}.
+            </p>
+          </div>
+        )}
+
+        {/* F3: Gossip Feed */}
+        {activeGossip.length > 0 && (
+          <div>
+            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1">
+              <MessageCircle size={11} aria-hidden="true" />
+              Gossip ({activeGossip.length})
+            </p>
+            <ul className="space-y-2" aria-label="Contact gossip">
+              {activeGossip.slice(0, 5).map((item) => (
+                <li
+                  key={item.id}
+                  className="rounded-md border border-zinc-800 bg-zinc-900/60 p-2 text-xs"
+                >
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className={`text-[10px] font-medium ${gossipTypeColor(item.type)}`}>
+                      {gossipTypeLabel(item.type)}
+                    </span>
+                    <span className="text-[10px] text-zinc-600">
+                      Expires wk {item.expiresWeek}
+                    </span>
+                  </div>
+                  <p className="text-zinc-400 leading-relaxed">{item.content}</p>
+                  <div className="mt-1 flex items-center gap-1">
+                    <span className="text-[10px] text-zinc-600">Reliability:</span>
+                    <span
+                      className={`text-[10px] font-medium ${reliabilityColor(item.reliability)}`}
+                    >
+                      {Math.round(item.reliability * 100)}%
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* F3: Referral Network */}
+        {referralCount > 0 && (
+          <div className="flex items-center gap-2 text-xs">
+            <UserPlus size={11} className="text-cyan-400" aria-hidden="true" />
+            <span className="text-zinc-500">
+              Introduced {referralCount} contact{referralCount !== 1 ? "s" : ""} to your network
+            </span>
+          </div>
+        )}
 
         {/* Known players */}
         {knownPlayerNames.length > 0 && (
@@ -210,6 +367,69 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, onScheduleMeet
   );
 }
 
+// =============================================================================
+// Gossip Feed Panel — displays all active gossip across all contacts
+// =============================================================================
+
+function GossipFeedPanel({ contacts, currentWeek }: { contacts: Contact[]; currentWeek: number }) {
+  const allGossip = useMemo(() => {
+    const items: Array<{ contact: Contact; gossip: GossipItem }> = [];
+    for (const contact of contacts) {
+      for (const g of contact.gossipQueue ?? []) {
+        if (g.expiresWeek > currentWeek) {
+          items.push({ contact, gossip: g });
+        }
+      }
+    }
+    // Sort by most recent first
+    items.sort((a, b) => b.gossip.revealedWeek - a.gossip.revealedWeek);
+    return items;
+  }, [contacts, currentWeek]);
+
+  if (allGossip.length === 0) return null;
+
+  return (
+    <Card className="border-zinc-700/50">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <MessageCircle size={14} className="text-cyan-400" aria-hidden="true" />
+          Intelligence Feed
+          <Badge variant="secondary" className="text-[10px]">
+            {allGossip.length}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-2" aria-label="Intelligence feed">
+          {allGossip.slice(0, 8).map(({ contact, gossip }) => (
+            <li
+              key={gossip.id}
+              className="rounded-md border border-zinc-800 bg-zinc-900/40 p-2.5 text-xs"
+            >
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className={`font-medium ${gossipTypeColor(gossip.type)}`}>
+                    {gossipTypeLabel(gossip.type)}
+                  </span>
+                  <span className="text-zinc-600">via {contact.name}</span>
+                </div>
+                <span className="text-[10px] text-zinc-600 shrink-0">
+                  Wk {gossip.revealedWeek}
+                </span>
+              </div>
+              <p className="text-zinc-400 leading-relaxed">{gossip.content}</p>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+// =============================================================================
+// Main NetworkScreen
+// =============================================================================
+
 export function NetworkScreen() {
   const { gameState, scheduleActivity, getPlayer } = useGameStore();
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -247,6 +467,7 @@ export function NetworkScreen() {
   if (!gameState) return null;
 
   const contacts = Object.values(gameState.contacts);
+  const currentWeek = gameState.currentWeek;
 
   const handleScheduleMeeting = (contact: Contact) => {
     const activity: Activity = {
@@ -273,14 +494,25 @@ export function NetworkScreen() {
       .filter((n): n is string => !!n);
   };
 
+  // Count contacts with active betrayal risk
+  const riskyContacts = contacts.filter((c) => (c.betrayalRisk ?? 0) >= 0.15);
+
   return (
     <GameLayout>
       <div className="p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Network</h1>
-          <p className="text-sm text-zinc-400">
-            {contacts.length} contact{contacts.length !== 1 ? "s" : ""} in your network
-          </p>
+          <div className="flex items-center gap-4 text-sm text-zinc-400">
+            <span>
+              {contacts.length} contact{contacts.length !== 1 ? "s" : ""} in your network
+            </span>
+            {riskyContacts.length > 0 && (
+              <span className="flex items-center gap-1 text-red-400 text-xs">
+                <AlertTriangle size={12} aria-hidden="true" />
+                {riskyContacts.length} at risk of betrayal
+              </span>
+            )}
+          </div>
         </div>
 
         {contacts.length === 0 ? (
@@ -292,86 +524,146 @@ export function NetworkScreen() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Contact list */}
-            <div className={selectedContact ? "lg:col-span-2" : "lg:col-span-3"}>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {contacts.map((contact) => {
-                  const config = CONTACT_TYPE_CONFIG[contact.type];
-                  const Icon = config.icon;
-                  const isSelected = selectedContact?.id === contact.id;
-                  const wasScheduled = scheduledId === contact.id;
-                  return (
-                    <button
-                      key={contact.id}
-                      onClick={() => setSelectedContact(isSelected ? null : contact)}
-                      aria-pressed={isSelected}
-                      aria-label={`View contact: ${contact.name}`}
-                      className={`rounded-lg border p-4 text-left transition ${
-                        isSelected
-                          ? "border-emerald-500/50 bg-emerald-500/5"
-                          : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
-                      }`}
-                    >
-                      <div className="mb-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Icon size={16} className={config.color} aria-hidden="true" />
-                          <span className="font-medium text-white">{contact.name}</span>
-                        </div>
-                        <ChevronRight
-                          size={14}
-                          className={`text-zinc-600 transition ${isSelected ? "rotate-90" : ""}`}
-                          aria-hidden="true"
-                        />
-                      </div>
-                      <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
-                        <Badge variant="outline" className="text-[10px]">
-                          {config.label}
-                        </Badge>
-                        <span>{contact.organization}</span>
-                        {contact.region && (
-                          <span className="text-zinc-600">· {contact.region}</span>
-                        )}
-                      </div>
-                      <div>
-                        <div className="mb-1 flex items-center justify-between text-xs">
-                          <span className="text-zinc-500">Relationship</span>
-                          <span className="text-white">{contact.relationship}/100</span>
-                        </div>
-                        <Progress
-                          value={contact.relationship}
-                          max={100}
-                          className="h-1.5"
-                          indicatorClassName={relationshipColor(contact.relationship)}
-                        />
-                      </div>
-                      {(contactIntelMap.get(contact.id)?.length ?? 0) > 0 && (
-                        <p className="mt-2 flex items-center gap-1 text-xs text-cyan-400">
-                          <Eye size={11} aria-hidden="true" />
-                          Intel Available
-                        </p>
-                      )}
-                      {wasScheduled && (
-                        <p className="mt-2 text-xs text-emerald-400">Meeting scheduled</p>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          <div className="space-y-6">
+            {/* Gossip Feed — full-width intelligence summary */}
+            <GossipFeedPanel contacts={contacts} currentWeek={currentWeek} />
 
-            {/* Detail panel */}
-            {selectedContact && (
-              <div>
-                <ContactDetail
-                  contact={selectedContact}
-                  knownPlayerNames={getKnownPlayerNames(selectedContact)}
-                  intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
-                  onScheduleMeeting={() => handleScheduleMeeting(selectedContact)}
-                  onClose={() => setSelectedContact(null)}
-                />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+              {/* Contact list */}
+              <div className={selectedContact ? "lg:col-span-2" : "lg:col-span-3"}>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {contacts.map((contact) => {
+                    const config = CONTACT_TYPE_CONFIG[contact.type];
+                    const Icon = config.icon;
+                    const isSelected = selectedContact?.id === contact.id;
+                    const wasScheduled = scheduledId === contact.id;
+                    const trust = contact.trustLevel ?? contact.relationship;
+                    const bRisk = contact.betrayalRisk ?? 0;
+                    const gossipCount = (contact.gossipQueue ?? []).filter(
+                      (g) => g.expiresWeek > currentWeek,
+                    ).length;
+                    const hasExclusive =
+                      contact.exclusiveWindow &&
+                      contact.exclusiveWindow.expiresWeek > currentWeek;
+
+                    return (
+                      <button
+                        key={contact.id}
+                        onClick={() => setSelectedContact(isSelected ? null : contact)}
+                        aria-pressed={isSelected}
+                        aria-label={`View contact: ${contact.name}`}
+                        className={`rounded-lg border p-4 text-left transition ${
+                          isSelected
+                            ? "border-emerald-500/50 bg-emerald-500/5"
+                            : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
+                        }`}
+                      >
+                        <div className="mb-3 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Icon size={16} className={config.color} aria-hidden="true" />
+                            <span className="font-medium text-white">{contact.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {bRisk >= 0.15 && (
+                              <AlertTriangle
+                                size={12}
+                                className="text-red-400"
+                                aria-label="Betrayal risk"
+                              />
+                            )}
+                            {hasExclusive && (
+                              <Lock
+                                size={12}
+                                className="text-amber-400"
+                                aria-label="Exclusive access"
+                              />
+                            )}
+                            <ChevronRight
+                              size={14}
+                              className={`text-zinc-600 transition ${isSelected ? "rotate-90" : ""}`}
+                              aria-hidden="true"
+                            />
+                          </div>
+                        </div>
+                        <div className="mb-3 flex items-center gap-2 text-xs text-zinc-400">
+                          <Badge variant="outline" className="text-[10px]">
+                            {config.label}
+                          </Badge>
+                          <span>{contact.organization}</span>
+                          {contact.region && (
+                            <span className="text-zinc-600">· {contact.region}</span>
+                          )}
+                        </div>
+
+                        {/* Relationship bar */}
+                        <div className="mb-2">
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-zinc-500">Relationship</span>
+                            <span className="text-white">{contact.relationship}/100</span>
+                          </div>
+                          <Progress
+                            value={contact.relationship}
+                            max={100}
+                            className="h-1.5"
+                            indicatorClassName={relationshipColor(contact.relationship)}
+                          />
+                        </div>
+
+                        {/* Trust bar */}
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span className="text-zinc-500 flex items-center gap-1">
+                              <Shield size={9} aria-hidden="true" />
+                              Trust
+                            </span>
+                            <span className="text-white">{trust}/100</span>
+                          </div>
+                          <Progress
+                            value={trust}
+                            max={100}
+                            className="h-1.5"
+                            indicatorClassName={trustColor(trust)}
+                          />
+                        </div>
+
+                        {/* Status indicators */}
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {(contactIntelMap.get(contact.id)?.length ?? 0) > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-cyan-400">
+                              <Eye size={11} aria-hidden="true" />
+                              Intel
+                            </span>
+                          )}
+                          {gossipCount > 0 && (
+                            <span className="flex items-center gap-1 text-xs text-purple-400">
+                              <MessageCircle size={11} aria-hidden="true" />
+                              {gossipCount} gossip
+                            </span>
+                          )}
+                          {wasScheduled && (
+                            <span className="text-xs text-emerald-400">Meeting scheduled</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            )}
+
+              {/* Detail panel */}
+              {selectedContact && (
+                <div>
+                  <ContactDetail
+                    contact={selectedContact}
+                    knownPlayerNames={getKnownPlayerNames(selectedContact)}
+                    intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
+                    currentWeek={currentWeek}
+                    onScheduleMeeting={() => handleScheduleMeeting(selectedContact)}
+                    onClose={() => setSelectedContact(null)}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

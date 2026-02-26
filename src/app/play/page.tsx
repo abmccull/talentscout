@@ -37,6 +37,8 @@ import { EquipmentScreen } from "@/components/game/EquipmentScreen";
 import { AgencyScreen } from "@/components/game/AgencyScreen";
 import { TrainingScreen } from "@/components/game/TrainingScreen";
 import { RivalsScreen } from "@/components/game/RivalsScreen";
+import { ReportComparison } from "@/components/game/ReportComparison";
+import { NegotiationScreen } from "@/components/game/NegotiationScreen";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
@@ -139,6 +141,10 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <TrainingScreen />;
     case "rivals":
       return <RivalsScreen />;
+    case "reportComparison":
+      return <ReportComparison />;
+    case "negotiation":
+      return <NegotiationScreen />;
     default:
       return <MainMenu />;
   }

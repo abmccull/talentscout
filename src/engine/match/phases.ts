@@ -1,8 +1,11 @@
 /**
  * Match Phase Generator
  *
- * Produces text-based observation experience. A match has 12–18 phases,
- * each containing 2–4 events that reveal specific player attributes.
+ * Produces text-based observation experience. A match has 12-18 phases,
+ * each containing 2-4 events that reveal specific player attributes.
+ *
+ * Commentary is now generated via the enhanced commentary engine, which
+ * provides position-aware, form-aware, and scouting-relevant descriptions.
  */
 
 import { type RNG } from "@/engine/rng";
@@ -18,13 +21,20 @@ import {
   type PlayerAttribute,
   type Position,
   type SetPieceVariant,
+  type TacticalMatchup,
 } from "@/engine/core/types";
+import { generateCommentary } from "./commentary";
+import { applyTacticalModifiers, getTacticalQualityModifier } from "./tactics";
 
 export interface MatchContext {
   fixture: Fixture;
   homePlayers: Player[];
   awayPlayers: Player[];
   weather: Weather;
+  /** IDs of players the scout is specifically focusing on this match. */
+  scoutedPlayerIds?: string[];
+  /** Tactical matchup between home and away styles (from F5). */
+  tacticalMatchup?: TacticalMatchup;
 }
 
 // ---------------------------------------------------------------------------
@@ -32,29 +42,36 @@ export interface MatchContext {
 // ---------------------------------------------------------------------------
 
 export const EVENT_REVEALED: Record<MatchEventType, PlayerAttribute[]> = {
-  goal:        ["shooting", "composure"],
-  assist:      ["passing", "decisionMaking"],
-  shot:        ["shooting", "composure"],
-  pass:        ["passing", "decisionMaking"],
-  dribble:     ["dribbling", "agility"],
-  tackle:      ["defensiveAwareness", "strength"],
-  header:      ["heading", "strength"],
-  save:        ["composure", "positioning"],
-  foul:        ["composure", "pressing"],
-  cross:       ["crossing", "passing"],
-  sprint:      ["pace", "stamina"],
-  positioning: ["positioning", "offTheBall"],
-  error:       ["composure", "decisionMaking"],
-  leadership:  ["leadership", "composure"],
+  goal:         ["finishing", "composure"],
+  assist:       ["passing", "vision"],
+  shot:         ["shooting", "composure"],
+  pass:         ["passing", "teamwork"],
+  dribble:      ["dribbling", "balance"],
+  tackle:       ["tackling", "anticipation"],
+  header:       ["heading", "jumping"],
+  save:         ["composure", "positioning"],
+  foul:         ["composure", "pressing"],
+  cross:        ["crossing", "vision"],
+  sprint:       ["pace", "stamina"],
+  positioning:  ["positioning", "anticipation"],
+  error:        ["composure", "decisionMaking"],
+  leadership:   ["leadership", "teamwork"],
+  aerialDuel:   ["jumping", "heading", "strength"],
+  interception: ["anticipation", "marking", "positioning"],
+  throughBall:  ["vision", "passing", "decisionMaking"],
+  holdUp:       ["balance", "strength", "firstTouch"],
+  injury:       ["stamina", "strength"],
+  substitution: [],
+  card:         ["composure"],
 };
 
 const PHASE_EVENT_WEIGHTS: Record<MatchPhaseType, Partial<Record<MatchEventType, number>>> = {
-  buildUp:          { pass: 6, positioning: 3, dribble: 2, cross: 2, leadership: 1 },
-  transition:       { sprint: 5, pass: 4, dribble: 3, tackle: 3, shot: 2, error: 2 },
-  setpiece:         { header: 5, shot: 4, cross: 3, tackle: 2, goal: 1 },
-  pressingSequence: { tackle: 6, sprint: 4, pass: 3, error: 3, positioning: 2, leadership: 1 },
-  counterAttack:    { sprint: 5, dribble: 4, pass: 3, shot: 3, goal: 2, cross: 1 },
-  possession:       { pass: 6, positioning: 6, dribble: 2, cross: 2, leadership: 1 },
+  buildUp:          { pass: 5, positioning: 3, dribble: 2, cross: 2, throughBall: 2, leadership: 1, holdUp: 1 },
+  transition:       { sprint: 5, pass: 4, dribble: 3, tackle: 3, shot: 2, error: 2, interception: 2 },
+  setpiece:         { header: 4, aerialDuel: 4, shot: 4, cross: 3, tackle: 2, goal: 1 },
+  pressingSequence: { tackle: 5, interception: 4, sprint: 4, pass: 3, error: 3, positioning: 2, leadership: 1 },
+  counterAttack:    { sprint: 5, dribble: 4, pass: 3, shot: 3, goal: 2, throughBall: 2, cross: 1 },
+  possession:       { pass: 5, positioning: 5, throughBall: 3, dribble: 2, cross: 2, holdUp: 1, leadership: 1 },
 };
 
 const WEATHER_NOISE: Record<Weather, number> = {
@@ -71,102 +88,27 @@ const WEATHER_NOISE: Record<Weather, number> = {
 // ---------------------------------------------------------------------------
 
 const EVENT_ELIGIBLE_POSITIONS: Record<MatchEventType, readonly Position[]> = {
-  goal:        ["ST", "LW", "RW", "CAM", "CM", "CDM", "CB", "LB", "RB"],
-  assist:      ["CAM", "CM", "LW", "RW", "ST", "LB", "RB", "CDM", "CB"],
-  shot:        ["ST", "LW", "RW", "CAM", "CM", "CDM", "CB", "LB", "RB"],
-  pass:        ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
-  dribble:     ["LW", "RW", "ST", "CAM", "CM", "LB", "RB"],
-  tackle:      ["CB", "LB", "RB", "CDM", "CM"],
-  header:      ["CB", "ST", "CDM", "CM", "CAM", "LB", "RB"],
-  save:        ["GK"],
-  foul:        ["CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
-  cross:       ["LB", "RB", "LW", "RW", "CM"],
-  sprint:      ["LW", "RW", "ST", "CAM", "CM", "CDM", "CB", "LB", "RB"],
-  positioning: ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
-  error:       ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
-  leadership:  ["GK", "CB", "CDM", "CM", "CAM", "ST"],
-};
-
-// ---------------------------------------------------------------------------
-// Commentary templates
-// ---------------------------------------------------------------------------
-
-type Cfn = (p: string[], m: number) => string;
-
-const COMMENTARY: Record<MatchEventType, Cfn[]> = {
-  goal: [
-    (p, m) => `${m}' — ${p[0]} latches onto a loose ball and drives it low into the corner. GOAL!`,
-    (p, m) => `${m}' — GOAL! ${p[0]} is unmarked at the far post and nods it home.`,
-    (p, m) => `${m}' — Clinical finish from ${p[0]}, who cuts inside and curls it beyond the keeper.`,
-  ],
-  assist: [
-    (p, m) => `${m}' — Brilliant ball from ${p[0]} sets up the chance.`,
-    (p, m) => `${m}' — ${p[0]} threads the perfect pass to create the opening.`,
-  ],
-  shot: [
-    (p, m) => `${m}' — ${p[0]} gets a sight of goal but fires straight at the keeper.`,
-    (p, m) => `${m}' — Powerful effort from ${p[0]} forces a fine save at full stretch.`,
-    (p, m) => `${m}' — ${p[0]} cuts inside and bends one just wide of the far post.`,
-    (p, m) => `${m}' — Long-range effort from ${p[0]} — clips the crossbar and goes over.`,
-  ],
-  pass: [
-    (p, m) => `${m}' — ${p[0]} picks up the ball in midfield and threads a diagonal to ${p[1] ?? "a teammate"} on the wing.`,
-    (p, m) => `${m}' — Delicate flick from ${p[0]} releases ${p[1] ?? "the runner"} in behind.`,
-    (p, m) => `${m}' — ${p[0]} switches play with a sweeping 50-yard ball to ${p[1] ?? "the far side"}.`,
-    (p, m) => `${m}' — Quick one-two between ${p[0]} and ${p[1] ?? "a teammate"} cuts through the press.`,
-    (p, m) => `${m}' — Incisive through-ball from ${p[0]} splits the two centre-backs.`,
-  ],
-  dribble: [
-    (p, m) => `${m}' — ${p[0]} takes on ${p[1] ?? "the full-back"} and goes past with a sharp change of direction.`,
-    (p, m) => `${m}' — Brilliant footwork from ${p[0]}, feints inside before jinking outside.`,
-    (p, m) => `${m}' — ${p[0]} dribbles into the box, rides two challenges, but runs into a dead end.`,
-    (p, m) => `${m}' — Strong direct run from ${p[0]}, showing great balance to advance.`,
-  ],
-  tackle: [
-    (p, m) => `${m}' — ${p[0]} times the sliding challenge perfectly to dispossess ${p[1] ?? "the attacker"}.`,
-    (p, m) => `${m}' — Muscular challenge from ${p[0]}, who wins the ball fairly and drives forward.`,
-    (p, m) => `${m}' — ${p[0]} reads the danger and steps in with a decisive interception.`,
-    (p, m) => `${m}' — Crunching but fair tackle from ${p[0]} — a statement of intent.`,
-  ],
-  header: [
-    (p, m) => `${m}' — Corner kick. ${p[0]} rises highest but heads wide under pressure.`,
-    (p, m) => `${m}' — Towering header from ${p[0]} at the near post — straight at the keeper.`,
-    (p, m) => `${m}' — ${p[0]} wins the aerial duel convincingly, powering it clear.`,
-  ],
-  save: [
-    (p, m) => `${m}' — Brilliant reflexes from ${p[0]} to deny the shot at close range.`,
-    (p, m) => `${m}' — ${p[0]} gets down well to palm the low drive around the post.`,
-  ],
-  foul: [
-    (p, m) => `${m}' — ${p[0]} goes in too hard and the referee blows for a foul.`,
-    (p, m) => `${m}' — Cynical foul from ${p[0]} to stop the counter-attack.`,
-  ],
-  sprint: [
-    (p, m) => `${m}' — ${p[0]} bursts past two defenders with raw pace before being fouled.`,
-    (p, m) => `${m}' — Relentless pressing from ${p[0]}, who covers more ground than anyone.`,
-    (p, m) => `${m}' — ${p[0]} makes a lung-bursting 60-yard recovery run to make the challenge.`,
-    (p, m) => `${m}' — ${p[0]} accelerates away from ${p[1] ?? "the last defender"} with frightening pace.`,
-  ],
-  cross: [
-    (p, m) => `${m}' — ${p[0]} delivers a whipped cross from the flank — no one gets on the end of it.`,
-    (p, m) => `${m}' — ${p[0]} cuts inside and floats a precise cross to the back post.`,
-    (p, m) => `${m}' — ${p[0]} picks out ${p[1] ?? "the striker"} at the far post with a weighted delivery.`,
-  ],
-  positioning: [
-    (p, m) => `${m}' — ${p[0]} drifts into space between the lines, always available.`,
-    (p, m) => `${m}' — Intelligent movement from ${p[0]}, who drops deep to create an overload.`,
-    (p, m) => `${m}' — Smart positioning from ${p[0]} cuts off the passing lane before the ball arrives.`,
-  ],
-  error: [
-    (p, m) => `${m}' — Uncharacteristic mistake from ${p[0]}, misplacing a simple pass.`,
-    (p, m) => `${m}' — ${p[0]} dallies on the ball under pressure and is dispossessed.`,
-    (p, m) => `${m}' — Heavy first touch from ${p[0]} lets ${p[1] ?? "the defender"} nip in.`,
-  ],
-  leadership: [
-    (p, m) => `${m}' — ${p[0]} organises the defensive shape with loud, clear instructions.`,
-    (p, m) => `${m}' — After a difficult spell, ${p[0]} rallies teammates with visible encouragement.`,
-    (p, m) => `${m}' — ${p[0]} calls for the ball and takes responsibility when it matters.`,
-  ],
+  goal:         ["ST", "LW", "RW", "CAM", "CM", "CDM", "CB", "LB", "RB"],
+  assist:       ["CAM", "CM", "LW", "RW", "ST", "LB", "RB", "CDM", "CB"],
+  shot:         ["ST", "LW", "RW", "CAM", "CM", "CDM", "CB", "LB", "RB"],
+  pass:         ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  dribble:      ["LW", "RW", "ST", "CAM", "CM", "LB", "RB"],
+  tackle:       ["CB", "LB", "RB", "CDM", "CM"],
+  header:       ["CB", "ST", "CDM", "CM", "CAM", "LB", "RB"],
+  save:         ["GK"],
+  foul:         ["CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  cross:        ["LB", "RB", "LW", "RW", "CM"],
+  sprint:       ["LW", "RW", "ST", "CAM", "CM", "CDM", "CB", "LB", "RB"],
+  positioning:  ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  error:        ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  leadership:   ["GK", "CB", "CDM", "CM", "CAM", "ST"],
+  aerialDuel:   ["CB", "ST", "CDM", "CM", "CAM", "LB", "RB", "LW", "RW"],
+  interception: ["CB", "LB", "RB", "CDM", "CM", "CAM"],
+  throughBall:  ["CAM", "CM", "CDM", "LW", "RW", "ST"],
+  holdUp:       ["ST", "LW", "RW", "CAM"],
+  injury:       ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  substitution: ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
+  card:         ["CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"],
 };
 
 const PHASE_DESCRIPTIONS: Record<MatchPhaseType, string[]> = {
@@ -327,12 +269,75 @@ function collectObservableAttributes(events: MatchEvent[]): PlayerAttribute[] {
 }
 
 // ---------------------------------------------------------------------------
+// Tactical phase pool — bias phase types based on matchup styles
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a phase type pool biased by the tactical matchup.
+ * Without a matchup, returns the default balanced pool.
+ *
+ * Tactical biases:
+ *  - highPress increases pressingSequence and transition phases
+ *  - possessionBased increases possession and buildUp phases
+ *  - counterAttacking increases counterAttack and transition phases
+ *  - directPlay increases setpiece and transition phases
+ *  - wingPlay increases buildUp and counterAttack phases
+ */
+function buildTacticalPhasePool(matchup?: TacticalMatchup): MatchPhaseType[] {
+  // Default pool with no tactical bias
+  const defaultPool: MatchPhaseType[] = [
+    "buildUp", "buildUp", "buildUp",
+    "transition", "transition",
+    "setpiece", "setpiece",
+    "pressingSequence", "pressingSequence",
+    "counterAttack", "counterAttack",
+    "possession", "possession", "possession",
+  ];
+
+  if (!matchup) return defaultPool;
+
+  // Start with the default pool, then add extra entries based on styles
+  const pool = [...defaultPool];
+
+  const addPhases = (style: string) => {
+    switch (style) {
+      case "highPress":
+        pool.push("pressingSequence", "pressingSequence", "transition");
+        break;
+      case "possessionBased":
+        pool.push("possession", "possession", "buildUp");
+        break;
+      case "counterAttacking":
+        pool.push("counterAttack", "counterAttack", "transition");
+        break;
+      case "directPlay":
+        pool.push("setpiece", "transition", "counterAttack");
+        break;
+      case "wingPlay":
+        pool.push("buildUp", "counterAttack", "transition");
+        break;
+      // balanced adds nothing extra
+    }
+  };
+
+  addPhases(matchup.homeStyle);
+  addPhases(matchup.awayStyle);
+
+  return pool;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase[] {
-  const { fixture, homePlayers, awayPlayers, weather } = context;
+  const { fixture, homePlayers, awayPlayers, weather, scoutedPlayerIds, tacticalMatchup } = context;
   const phaseCount = rng.nextInt(12, 18);
+
+  const scoutedSet = new Set(scoutedPlayerIds ?? []);
+
+  // Build home player ID set for tactical modifier lookups
+  const homePlayerIds = new Set(homePlayers.map((p) => p.id));
 
   const step = Math.floor(90 / phaseCount);
   const startMinutes: number[] = [];
@@ -348,14 +353,8 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
     allPlayers.set(p.id, p);
   }
 
-  const phaseTypePool: MatchPhaseType[] = [
-    "buildUp", "buildUp", "buildUp",
-    "transition", "transition",
-    "setpiece", "setpiece",
-    "pressingSequence", "pressingSequence",
-    "counterAttack", "counterAttack",
-    "possession", "possession", "possession",
-  ];
+  // Build tactical phase type pool — tactical styles bias which phases appear
+  const phaseTypePool: MatchPhaseType[] = buildTacticalPhasePool(tacticalMatchup);
 
   const phases: MatchPhase[] = [];
 
@@ -374,10 +373,15 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
       setPieceVariant = rng.pick(SET_PIECE_VARIANT_POOL);
     }
 
-    // Use variant-specific event weights for set pieces
-    const effectiveWeights = setPieceVariant
+    // Use variant-specific event weights for set pieces, then apply tactical modifiers
+    const baseWeights = setPieceVariant
       ? SET_PIECE_EVENT_WEIGHTS[setPieceVariant]
       : PHASE_EVENT_WEIGHTS[phaseType];
+
+    // Apply tactical modifiers if matchup exists and not a set piece (set pieces are style-neutral)
+    const effectiveWeights = (tacticalMatchup && !setPieceVariant)
+      ? applyTacticalModifiers(baseWeights, tacticalMatchup, "home")
+      : baseWeights;
 
     // Penalties have fewer events
     const eventCount = setPieceVariant === "penalty" ? 1 : rng.nextInt(2, 4);
@@ -401,15 +405,30 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
       const phaseWidth = Math.max(1, endMinute - minute);
       const eventMinute = minute + Math.floor((phaseWidth / eventCount) * e);
 
-      const quality = computeEventQuality(rng, primary, revealed, weather);
+      // Compute base quality, then apply tactical matchup modifier
+      let quality = computeEventQuality(rng, primary, revealed, weather);
+      if (tacticalMatchup) {
+        const tacticalBonus = getTacticalQualityModifier(
+          tacticalMatchup,
+          primary.id,
+          homePlayerIds,
+        );
+        quality = Math.min(10, Math.max(1, Math.round(quality + tacticalBonus)));
+      }
       recentQualities.push(quality);
 
-      const templates = COMMENTARY[eventType];
-      const template = rng.pick(templates);
-      const names = secondary
-        ? [`${primary.firstName} ${primary.lastName}`, `${secondary.firstName} ${secondary.lastName}`]
-        : [`${primary.firstName} ${primary.lastName}`];
-      const description = template(names, eventMinute);
+      // Generate position-aware, form-aware, scouting-relevant commentary
+      const description = generateCommentary({
+        eventType,
+        minute: eventMinute,
+        playerName: `${primary.firstName} ${primary.lastName}`,
+        position: primary.position,
+        form: primary.form,
+        isScoutingTarget: scoutedSet.has(primary.id),
+        secondaryName: secondary
+          ? `${secondary.firstName} ${secondary.lastName}`
+          : undefined,
+      });
 
       events.push({
         type: eventType,
@@ -419,6 +438,52 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
         description,
         minute: eventMinute,
       });
+
+      // Match injury check: sprint and tackle events can cause injuries (~3% per event)
+      const INJURY_TRIGGER_EVENTS: MatchEventType[] = ["sprint", "tackle", "aerialDuel", "foul"];
+      if (INJURY_TRIGGER_EVENTS.includes(eventType) && rng.chance(0.03)) {
+        const injuredPlayer = primary;
+        const injMinute = Math.min(90, eventMinute + 1);
+        const injName = `${injuredPlayer.firstName} ${injuredPlayer.lastName}`;
+
+        const injDescription = generateCommentary({
+          eventType: "injury",
+          minute: injMinute,
+          playerName: injName,
+          position: injuredPlayer.position,
+          form: injuredPlayer.form,
+          isScoutingTarget: scoutedSet.has(injuredPlayer.id),
+        });
+
+        events.push({
+          type: "injury",
+          playerId: injuredPlayer.id,
+          attributesRevealed: EVENT_REVEALED.injury,
+          quality: 1,
+          description: injDescription,
+          minute: injMinute,
+        });
+
+        // Follow up with substitution event
+        const subMinute = Math.min(90, injMinute + 1);
+        const subDescription = generateCommentary({
+          eventType: "substitution",
+          minute: subMinute,
+          playerName: injName,
+          position: injuredPlayer.position,
+          form: injuredPlayer.form,
+          isScoutingTarget: scoutedSet.has(injuredPlayer.id),
+        });
+
+        events.push({
+          type: "substitution",
+          playerId: injuredPlayer.id,
+          attributesRevealed: [],
+          quality: 1,
+          description: subDescription,
+          minute: subMinute,
+        });
+      }
     }
 
     // Compute momentum from recent event qualities (last ~8 events)
@@ -489,7 +554,12 @@ export function simulateMatchResult(
     if (players.length === 0 || count === 0) return [];
     const weighted = players.map((p) => ({
       item: p.id,
-      weight: Math.max(1, p.attributes.shooting + (ATTACKING.has(p.position) ? 3 : 0)),
+      weight: Math.max(
+        1,
+        (p.attributes.shooting ?? 10) * 0.4
+          + (p.attributes.finishing ?? 10) * 0.6
+          + (ATTACKING.has(p.position) ? 3 : 0),
+      ),
     }));
     const used = new Set<number>();
     return Array.from({ length: count }, () => {

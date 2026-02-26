@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { X, Plane, MapPin, FileText, Star, TrendingUp, Building2, Trophy, Check } from "lucide-react";
+import { X, Plane, MapPin, FileText, Star, TrendingUp, Building2, Trophy, Check, BookOpen, Eye, Users } from "lucide-react";
 import { getTierColors } from "@/components/game/WorldMap";
 import { getContinentId, getTravelDuration } from "@/engine/world/travel";
-import type { CountryReputation, TravelBooking } from "@/engine/core/types";
+import type { CountryReputation, TravelBooking, RegionalKnowledge, HiddenLeague, CulturalInsight } from "@/engine/core/types";
 import { Tooltip } from "@/components/ui/tooltip";
 
 // =============================================================================
@@ -33,6 +33,10 @@ export interface CountryPopupProps {
   containerRect: { width: number; height: number };
   /** Whether a booking was just confirmed (shows success state). */
   justBooked: boolean;
+  /** Regional knowledge for this country (F13). */
+  regionalKnowledge?: RegionalKnowledge;
+  /** Hidden leagues discovered in this country (F13). */
+  discoveredHiddenLeagues?: HiddenLeague[];
   onBookTravel: () => void;
   onClose: () => void;
 }
@@ -95,6 +99,8 @@ export function CountryPopup({
   position,
   containerRect,
   justBooked,
+  regionalKnowledge,
+  discoveredHiddenLeagues,
   onBookTravel,
   onClose,
 }: CountryPopupProps) {
@@ -242,6 +248,76 @@ export function CountryPopup({
             </div>
           </div>
         </div>
+
+        {/* ── Regional Knowledge (F13) ─────────────────────────── */}
+        {regionalKnowledge && regionalKnowledge.knowledgeLevel > 0 && (
+          <div className="px-4 pb-3">
+            <Tooltip content="Regional knowledge grows from scouting activity in this country. Higher knowledge unlocks hidden leagues, cultural insights, and local contacts." side="bottom">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] text-zinc-500 flex items-center gap-1">
+                <BookOpen size={10} className="text-purple-400" />
+                Knowledge
+              </span>
+              <span className="text-[11px] text-purple-300">
+                {regionalKnowledge.knowledgeLevel}/100
+              </span>
+            </div>
+            </Tooltip>
+            <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${regionalKnowledge.knowledgeLevel}%`,
+                  backgroundColor: regionalKnowledge.knowledgeLevel >= 75 ? "#a855f7"
+                    : regionalKnowledge.knowledgeLevel >= 50 ? "#6366f1"
+                    : regionalKnowledge.knowledgeLevel >= 25 ? "#8b5cf6"
+                    : "#64748b",
+                }}
+              />
+            </div>
+
+            {/* Cultural insights */}
+            {regionalKnowledge.culturalInsights.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {regionalKnowledge.culturalInsights.map((insight, i) => (
+                  <Tooltip key={i} content={insight.gameplayEffect} side="bottom">
+                  <div className="flex items-start gap-1.5 rounded bg-purple-500/5 border border-purple-500/10 px-2 py-1">
+                    <Eye size={9} className="text-purple-400 mt-0.5 flex-shrink-0" />
+                    <p className="text-[9px] text-purple-300 leading-tight">{insight.description}</p>
+                  </div>
+                  </Tooltip>
+                ))}
+              </div>
+            )}
+
+            {/* Local contacts count */}
+            {regionalKnowledge.localContacts.length > 0 && (
+              <div className="mt-1.5 flex items-center gap-1">
+                <Users size={9} className="text-purple-400" />
+                <span className="text-[9px] text-purple-300">
+                  {regionalKnowledge.localContacts.length} local contact{regionalKnowledge.localContacts.length !== 1 ? "s" : ""}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Discovered Hidden Leagues (F13) ────────────────────── */}
+        {discoveredHiddenLeagues && discoveredHiddenLeagues.length > 0 && (
+          <div className="px-4 pb-3">
+            <p className="text-[10px] text-zinc-500 mb-1">Hidden Leagues</p>
+            <div className="space-y-1">
+              {discoveredHiddenLeagues.map((league) => (
+                <Tooltip key={league.id} content={`Tier ${league.tier} — talent density ${Math.round(league.talentDensity * 100)}%`} side="bottom">
+                <div className="flex items-center justify-between rounded bg-indigo-500/5 border border-indigo-500/10 px-2 py-1">
+                  <span className="text-[9px] text-indigo-300">{league.name}</span>
+                  <span className="text-[8px] text-indigo-400 font-mono">T{league.tier}</span>
+                </div>
+                </Tooltip>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Divider ────────────────────────────────────────────── */}
         {!isCurrentLocation && (

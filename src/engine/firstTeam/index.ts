@@ -26,6 +26,7 @@ export {
 export {
   generateClubResponse,
   processTrialOutcome,
+  shouldRouteToNegotiation,
 } from "./clubResponse";
 
 // Tactical system fit analysis
@@ -38,3 +39,29 @@ export {
   updateTransferRecords,
   calculateScoutHitRate,
 } from "./transferTracker";
+
+// Dynamic board expectations (F10)
+export {
+  generateBoardProfile,
+  evaluateBoardSatisfaction,
+  generateBoardReaction,
+  adjustDirectiveDifficulty,
+  processBoardMeeting,
+  processBoardWeekly,
+} from "./boardAI";
+
+// Transfer negotiation system (F4)
+export {
+  initiateNegotiation,
+  submitOffer,
+  generateCounterOffer,
+  checkRivalBids,
+  processAgentDemands,
+  evaluateNegotiationOutcome,
+  processActiveNegotiations,
+  applyCompletedTransfer,
+  walkAwayFromNegotiation,
+  getRecommendedOffer,
+  getPersonalityDescription,
+  determineClubPersonality,
+} from "./negotiation";

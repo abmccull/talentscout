@@ -123,6 +123,7 @@ export function Dashboard() {
     scheduleMatch,
     markMessageRead,
     selectPlayer,
+    meetBoard,
   } = useGameStore();
   const [expandedExpenses, setExpandedExpenses] = useState(false);
   const t = useTranslations("dashboard");
@@ -156,6 +157,9 @@ export function Dashboard() {
   const totalExpenses = finances
     ? Object.values(finances.expenses).reduce((s, v) => s + v, 0)
     : 0;
+
+  // Career path
+  const careerPath = scout.careerPath ?? "club";
 
   // Specialization-specific data
   const specialization = scout.primarySpecialization;
@@ -280,6 +284,9 @@ export function Dashboard() {
           <SeasonTimeline
             seasonEvents={gameState.seasonEvents}
             currentWeek={currentWeek}
+            onResolveEvent={(eventId, choiceIndex) => {
+              useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
+            }}
           />
         )}
 
@@ -296,7 +303,11 @@ export function Dashboard() {
 
         {/* Quick Stats */}
         <div className="mb-6 grid grid-cols-4 gap-4">
-          <Card data-tutorial-id="dashboard-reputation">
+          <Card
+            data-tutorial-id="dashboard-reputation"
+            className="cursor-pointer hover:border-zinc-600 transition"
+            onClick={() => setScreen("handbook")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -311,7 +322,10 @@ export function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className="cursor-pointer hover:border-zinc-600 transition"
+            onClick={() => setScreen(specialization === "youth" ? "youthScouting" : "playerDatabase")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -329,7 +343,10 @@ export function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className="cursor-pointer hover:border-zinc-600 transition"
+            onClick={() => setScreen(specialization === "youth" ? "youthScouting" : "playerDatabase")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -347,7 +364,11 @@ export function Dashboard() {
               </div>
             </CardContent>
           </Card>
-          <Card data-tutorial-id="dashboard-fatigue">
+          <Card
+            data-tutorial-id="dashboard-fatigue"
+            className="cursor-pointer hover:border-zinc-600 transition"
+            onClick={() => setScreen("calendar")}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -552,6 +573,40 @@ export function Dashboard() {
           </div>
         )}
 
+        {/* Agency Business summary — independent path only */}
+        {careerPath === "independent" && gameState.finances && (
+          <div className="mb-6">
+            <Card className="col-span-full">
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-white">Agency Business</h3>
+                  <button
+                    onClick={() => setScreen("agency")}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 transition"
+                  >
+                    View Agency →
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+                  {[
+                    { label: "Balance", value: `£${gameState.finances.balance.toLocaleString()}`, color: gameState.finances.balance >= 0 ? "text-emerald-400" : "text-red-400" },
+                    { label: "Retainers", value: `${gameState.finances.retainerContracts.filter((r: { status: string }) => r.status === "active").length} active`, color: "text-blue-400" },
+                    { label: "Employees", value: `${gameState.finances.employees.length}/${gameState.finances.office.maxEmployees}`, color: "text-purple-400" },
+                    { label: "Office", value: gameState.finances.office.tier === "home" ? "Home" : gameState.finances.office.tier.charAt(0).toUpperCase() + gameState.finances.office.tier.slice(1), color: "text-amber-400" },
+                    { label: "Tier", value: `${gameState.scout.independentTier ?? 1}/5`, color: "text-emerald-400" },
+                    { label: "Pending Offers", value: `${(gameState.finances.pendingRetainerOffers?.length ?? 0) + (gameState.finances.pendingConsultingOffers?.length ?? 0)}`, color: "text-teal-400" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</p>
+                      <p className={`text-sm font-semibold ${color}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-6">
           {/* This Week's Fixtures / Youth Pipeline */}
           {specialization === "youth" ? (
@@ -575,10 +630,14 @@ export function Dashboard() {
                     { label: "Reported", count: youthReportedCount, color: "text-blue-400", bg: "bg-blue-500/10" },
                     { label: "Placed", count: youthList.filter((y) => y.placed).length, color: "text-amber-400", bg: "bg-amber-500/10" },
                   ] as const).map((stage) => (
-                    <div key={stage.label} className={`rounded-md border border-[#27272a] p-3 text-center ${stage.bg}`}>
+                    <button
+                      key={stage.label}
+                      onClick={() => setScreen("youthScouting")}
+                      className={`rounded-md border border-[#27272a] p-3 text-center cursor-pointer hover:border-zinc-600 transition w-full ${stage.bg}`}
+                    >
                       <p className={`text-lg font-bold ${stage.color}`}>{stage.count}</p>
                       <p className="text-[10px] text-zinc-500">{stage.label}</p>
-                    </div>
+                    </button>
                   ))}
                 </div>
 
@@ -724,7 +783,10 @@ export function Dashboard() {
           {/* Inbox & Recent Activity */}
           <div className="space-y-6">
             {/* Inbox */}
-            <Card>
+            <Card
+              className="cursor-pointer hover:border-zinc-600 transition"
+              onClick={() => setScreen("inbox")}
+            >
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span className="flex items-center gap-2">
@@ -827,7 +889,10 @@ export function Dashboard() {
 
             {/* Watchlist widget */}
             {gameState.watchlist.length > 0 && (
-              <Card>
+              <Card
+                className="cursor-pointer hover:border-zinc-600 transition"
+                onClick={() => setScreen("playerDatabase")}
+              >
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Bookmark size={14} className="text-amber-400" aria-hidden="true" />
@@ -1010,6 +1075,119 @@ export function Dashboard() {
             })()}
           </div>
         </div>
+
+        {/* ── Board Satisfaction (F10 — tier 5 only) ──────────────────────── */}
+        {specialization === "firstTeam" && gameState.boardProfile && scout.careerTier >= 5 && (
+          <div className="mt-6">
+            <Card data-tutorial-id="dashboard-board-satisfaction">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Shield size={14} className="text-amber-400" aria-hidden="true" />
+                  Board Satisfaction
+                  <Badge
+                    variant="outline"
+                    className={`ml-auto text-[10px] capitalize ${
+                      gameState.boardProfile.satisfactionLevel >= 80
+                        ? "border-emerald-500/50 text-emerald-400"
+                        : gameState.boardProfile.satisfactionLevel >= 50
+                          ? "border-amber-500/50 text-amber-400"
+                          : gameState.boardProfile.satisfactionLevel >= 25
+                            ? "border-orange-500/50 text-orange-400"
+                            : "border-red-500/50 text-red-400"
+                    }`}
+                  >
+                    {gameState.boardProfile.personality}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {/* Satisfaction bar */}
+                <div>
+                  <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
+                    <span>Satisfaction</span>
+                    <span>{Math.round(gameState.boardProfile.satisfactionLevel)}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        gameState.boardProfile.satisfactionLevel >= 80
+                          ? "bg-emerald-500"
+                          : gameState.boardProfile.satisfactionLevel >= 50
+                            ? "bg-amber-500"
+                            : gameState.boardProfile.satisfactionLevel >= 25
+                              ? "bg-orange-500"
+                              : "bg-red-500"
+                      }`}
+                      style={{ width: `${Math.min(100, Math.max(0, gameState.boardProfile.satisfactionLevel))}%` }}
+                    />
+                  </div>
+                </div>
+                {/* Patience bar */}
+                <div>
+                  <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
+                    <span>Patience</span>
+                    <span>{Math.round(gameState.boardProfile.patience)}%</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        gameState.boardProfile.patience >= 60
+                          ? "bg-blue-500"
+                          : gameState.boardProfile.patience >= 30
+                            ? "bg-amber-500"
+                            : "bg-red-500"
+                      }`}
+                      style={{ width: `${Math.min(100, Math.max(0, gameState.boardProfile.patience))}%` }}
+                    />
+                  </div>
+                </div>
+                {/* Budget multiplier */}
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-zinc-400">Budget Multiplier</span>
+                  <span className={
+                    gameState.boardProfile.budgetMultiplier >= 1.2
+                      ? "text-emerald-400 font-semibold"
+                      : gameState.boardProfile.budgetMultiplier >= 0.9
+                        ? "text-zinc-300"
+                        : "text-red-400 font-semibold"
+                  }>
+                    {gameState.boardProfile.budgetMultiplier.toFixed(2)}x
+                  </span>
+                </div>
+                {/* Ultimatum warning */}
+                {gameState.boardProfile.ultimatumIssued && (
+                  <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 p-2">
+                    <AlertTriangle size={14} className="text-red-400 shrink-0" aria-hidden="true" />
+                    <span className="text-xs text-red-400">
+                      Ultimatum active{gameState.boardProfile.ultimatumDeadline
+                        ? ` — deadline: week ${gameState.boardProfile.ultimatumDeadline}`
+                        : ""}
+                    </span>
+                  </div>
+                )}
+                {/* Firing warning */}
+                {gameState.boardProfile.satisfactionLevel < 20 && !gameState.boardProfile.ultimatumIssued && (
+                  <div className="flex items-center gap-2 rounded-md border border-orange-500/30 bg-orange-500/10 p-2">
+                    <AlertTriangle size={14} className="text-orange-400 shrink-0" aria-hidden="true" />
+                    <span className="text-xs text-orange-400">
+                      Board satisfaction dangerously low. Risk of termination.
+                    </span>
+                  </div>
+                )}
+                {/* Meet Board button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs"
+                  onClick={() => meetBoard()}
+                >
+                  <Users size={12} className="mr-1" aria-hidden="true" />
+                  Meet the Board
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* ── First-Team Scout Widgets ─────────────────────────────────────── */}
         {specialization === "firstTeam" && (activeDirectives.length > 0 || recentTransfers.length > 0) && (

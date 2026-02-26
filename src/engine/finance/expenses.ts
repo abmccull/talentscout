@@ -154,6 +154,10 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
     pendingConsultingOffers: [],
     marketTemperature: "normal",
     activeEconomicEvents: [],
+    clientRelationships: [],
+    pendingEmployeeEvents: [],
+    satelliteOffices: [],
+    awards: [],
   };
 
   const expenses = calculateMonthlyExpenses(scout, stub);

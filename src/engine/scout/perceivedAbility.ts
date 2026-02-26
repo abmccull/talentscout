@@ -74,8 +74,12 @@ export function getPerceivedAbility(
   const paLow = Math.round(avgPALow * 2) / 2;
   const paHigh = Math.min(5.0, Math.round(avgPAHigh * 2) / 2);
 
-  // Derive CA range from confidence: less confidence → wider spread
-  const caSpread = (1 - avgCAConf) * 2.0;
+  // Derive CA range from actual observation variance, not just confidence.
+  // If readings disagree widely, the range should reflect that uncertainty.
+  const readings = recent.map((o) => o.abilityReading!.perceivedCA);
+  const readingSpread = Math.max(...readings) - Math.min(...readings);
+  const confSpread = (1 - avgCAConf) * 2.0;
+  const caSpread = Math.max(readingSpread, confSpread * 0.5);
   const caLow = clamp(Math.round((ca - caSpread) * 2) / 2, 0.5, 5.0);
   const caHigh = clamp(Math.round((ca + caSpread) * 2) / 2, 0.5, 5.0);
 

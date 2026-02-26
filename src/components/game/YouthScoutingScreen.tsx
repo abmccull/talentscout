@@ -31,7 +31,7 @@ import { MiniStarRange } from "@/components/ui/MiniStarRange";
 
 type Tab = "unsigned" | "subRegions" | "venues";
 type SortOption = "buzz" | "age" | "country" | "visibility" | "pipeline";
-type PipelineStage = "new" | "observed" | "reported" | "placed";
+type PipelineStage = "discovered" | "observed" | "reported" | "placed";
 type ViewMode = "card" | "list";
 
 // ─── Venue data ──────────────────────────────────────────────────────────────
@@ -180,22 +180,27 @@ function getPipelineStage(
   youth: UnsignedYouth,
   scoutId: string,
   reportedIds: Set<string>,
+  observationCountForPlayer: number,
 ): PipelineStage {
   if (youth.placed) return "placed";
   if (reportedIds.has(youth.id)) return "reported";
-  if (youth.discoveredBy.includes(scoutId)) return "observed";
-  return "new";
+  if (youth.discoveredBy.includes(scoutId)) {
+    // "Observed" = 2+ follow-up observation sessions; "Discovered" = spotted but not yet deeply watched
+    return observationCountForPlayer >= 2 ? "observed" : "discovered";
+  }
+  // Regional/intel visibility: player is visible but scout hasn't personally discovered them yet
+  return "discovered";
 }
 
 const PIPELINE_COLORS: Record<PipelineStage, string> = {
-  new: "border-zinc-600 bg-zinc-800 text-zinc-400",
+  discovered: "border-zinc-600 bg-zinc-800 text-zinc-400",
   observed: "border-emerald-500/50 bg-emerald-500/10 text-emerald-400",
   reported: "border-blue-500/50 bg-blue-500/10 text-blue-400",
   placed: "border-amber-500/50 bg-amber-500/10 text-amber-400",
 };
 
 const PIPELINE_LABELS: Record<PipelineStage, string> = {
-  new: "New",
+  discovered: "Discovered",
   observed: "Observed",
   reported: "Reported",
   placed: "Placed",
@@ -207,13 +212,15 @@ interface YouthCardProps {
   youth: UnsignedYouth;
   scoutId: string;
   reportedIds: Set<string>;
+  /** Number of observation sessions this scout has logged for this player. */
+  observationCount: number;
   onClick: () => void;
 }
 
-function YouthCard({ youth, scoutId, reportedIds, onClick }: YouthCardProps) {
+function YouthCard({ youth, scoutId, reportedIds, observationCount, onClick }: YouthCardProps) {
   const isObserved = youth.discoveredBy.includes(scoutId);
-  const stage = getPipelineStage(youth, scoutId, reportedIds);
-  const observationCount = youth.discoveredBy.length;
+  const stage = getPipelineStage(youth, scoutId, reportedIds, observationCount);
+  const scoutCount = youth.discoveredBy.length;
 
   return (
     <button
@@ -249,7 +256,7 @@ function YouthCard({ youth, scoutId, reportedIds, onClick }: YouthCardProps) {
         </div>
         <div className="shrink-0 text-right">
           <p className="text-xs text-zinc-500">Scouts</p>
-          <p className="text-sm font-bold text-white">{observationCount}</p>
+          <p className="text-sm font-bold text-white">{scoutCount}</p>
         </div>
       </div>
 
@@ -416,6 +423,15 @@ function UnsignedYouthTab({
   if (filterNationality) {
     filtered = filtered.filter((y) => y.player.nationality === filterNationality);
   }
+  // Build a count of observation sessions per player for pipeline stage logic
+  const observationCountByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const obs of observations) {
+      map.set(obs.playerId, (map.get(obs.playerId) ?? 0) + 1);
+    }
+    return map;
+  }, [observations]);
+
   // Build perceived ability map for all filtered youth
   const perceivedMap = useMemo(() => {
     const map = new Map<string, ReturnType<typeof getPerceivedAbility>>();
@@ -650,7 +666,7 @@ function UnsignedYouthTab({
               </thead>
               <tbody>
                 {displayList.map((y) => {
-                  const stage = getPipelineStage(y, scoutId, reportedIds);
+                  const stage = getPipelineStage(y, scoutId, reportedIds, observationCountByPlayer.get(y.player.id) ?? 0);
                   const isObserved = y.discoveredBy.includes(scoutId);
                   return (
                     <tr
@@ -730,6 +746,7 @@ function UnsignedYouthTab({
               youth={y}
               scoutId={scoutId}
               reportedIds={reportedIds}
+              observationCount={observationCountByPlayer.get(y.player.id) ?? 0}
               onClick={() => onSelectYouth(y.player.id)}
             />
           ))}
@@ -848,8 +865,31 @@ export function YouthScoutingScreen() {
 
   const { unsignedYouth, subRegions, legacyScore, scout } = gameState;
 
-  const youthList = Object.values(unsignedYouth);
+  const allYouthList = Object.values(unsignedYouth);
   const subRegionList = Object.values(subRegions);
+
+  // Build sets for fast lookup
+  const observedPlayerIds = new Set(
+    Object.values(gameState.observations).map((o) => o.playerId),
+  );
+  const scoutHomeCountry = scout.nationality?.toLowerCase() ?? "";
+
+  // Visibility filter: only show youth the scout has knowledge of
+  const youthList = allYouthList.filter((y) => {
+    // 1. Scout personally discovered this player
+    if (y.discoveredBy.includes(scout.id)) return true;
+    // 2. Scout has logged at least one observation session for this player
+    if (observedPlayerIds.has(y.player.id)) return true;
+    // 3. Scout has received contact intel about this player
+    if (
+      gameState.contactIntel[y.player.id] &&
+      gameState.contactIntel[y.player.id].length > 0
+    )
+      return true;
+    // 4. Regional exception: same country as scout's home country + sufficient word-of-mouth
+    if (y.country === scoutHomeCountry && y.visibility >= 30) return true;
+    return false;
+  });
 
   // Summary stats
   const totalYouth = youthList.length;
@@ -895,7 +935,7 @@ export function YouthScoutingScreen() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Total Youth</p>
+                  <p className="text-xs text-zinc-500">Known</p>
                   <p className="text-2xl font-bold text-white">{totalYouth}</p>
                 </div>
                 <Users size={20} className="text-zinc-600" aria-hidden="true" />
@@ -906,7 +946,7 @@ export function YouthScoutingScreen() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Observed</p>
+                  <p className="text-xs text-zinc-500">Discovered</p>
                   <p className="text-2xl font-bold text-emerald-400">
                     {discoveredByScout}
                   </p>

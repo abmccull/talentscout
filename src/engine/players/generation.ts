@@ -14,6 +14,9 @@ import type {
 } from "@/engine/core/types";
 import { ALL_ATTRIBUTES, ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { generatePersonalityTraits } from "./personality";
+import { generateBehavioralTraits } from "./behavioralTraits";
+import { generatePersonalityProfile } from "./personalityEffects";
+import { getBestRole } from "./roles";
 import type { ClubData, LeagueData, NamePool, NationalityWeight } from "@/data/types";
 import type { CountryData } from "@/data/types";
 // England data is imported only to supply backward-compatible defaults.
@@ -81,52 +84,82 @@ const POSITION_WEIGHTS: Record<Position, AttrWeights> = {
     shooting: 0.2, dribbling: 0.2, crossing: 0.2, heading: 0.4,
     pace: 0.5, agility: 0.8, strength: 0.7,
     defensiveAwareness: 0.5, pressing: 0.3, offTheBall: 0.3,
+    // New attributes
+    tackling: 0.2, finishing: 0.1, jumping: 0.6, balance: 0.7,
+    anticipation: 1.3, vision: 0.3, marking: 0.3, teamwork: 0.8,
   },
   CB: {
     defensiveAwareness: 1.7, heading: 1.6, strength: 1.5,
     positioning: 1.5, composure: 1.2, leadership: 1.3, passing: 1.1,
     pace: 0.9, shooting: 0.4, dribbling: 0.6, crossing: 0.5,
+    // New attributes
+    tackling: 1.6, finishing: 0.3, jumping: 1.4, balance: 0.9,
+    anticipation: 1.3, vision: 0.7, marking: 1.5, teamwork: 1.2,
   },
   LB: {
     crossing: 1.5, pace: 1.5, stamina: 1.3, agility: 1.2,
     defensiveAwareness: 1.3, pressing: 1.2, dribbling: 1.1, workRate: 1.2,
     shooting: 0.5, heading: 0.8, strength: 0.9,
+    // New attributes
+    tackling: 1.3, finishing: 0.4, jumping: 0.8, balance: 1.1,
+    anticipation: 1.1, vision: 0.8, marking: 1.2, teamwork: 1.3,
   },
   RB: {
     crossing: 1.5, pace: 1.5, stamina: 1.3, agility: 1.2,
     defensiveAwareness: 1.3, pressing: 1.2, dribbling: 1.1, workRate: 1.2,
     shooting: 0.5, heading: 0.8, strength: 0.9,
+    // New attributes
+    tackling: 1.3, finishing: 0.4, jumping: 0.8, balance: 1.1,
+    anticipation: 1.1, vision: 0.8, marking: 1.2, teamwork: 1.3,
   },
   CDM: {
     defensiveAwareness: 1.6, pressing: 1.5, workRate: 1.4,
     stamina: 1.3, strength: 1.3, positioning: 1.3, passing: 1.2,
     decisionMaking: 1.2, shooting: 0.6, dribbling: 0.8,
+    // New attributes
+    tackling: 1.5, finishing: 0.4, jumping: 1.0, balance: 1.0,
+    anticipation: 1.3, vision: 1.1, marking: 1.4, teamwork: 1.4,
   },
   CM: {
     passing: 1.4, decisionMaking: 1.3, stamina: 1.3,
     workRate: 1.3, firstTouch: 1.2, composure: 1.1,
     offTheBall: 1.1, pressing: 1.1,
+    // New attributes
+    tackling: 1.0, finishing: 0.8, jumping: 0.8, balance: 1.1,
+    anticipation: 1.2, vision: 1.3, marking: 0.9, teamwork: 1.3,
   },
   CAM: {
     passing: 1.4, firstTouch: 1.4, dribbling: 1.4,
     decisionMaking: 1.3, composure: 1.3, shooting: 1.2, offTheBall: 1.3,
     defensiveAwareness: 0.5, heading: 0.7, strength: 0.8,
+    // New attributes
+    tackling: 0.4, finishing: 1.3, jumping: 0.6, balance: 1.2,
+    anticipation: 1.2, vision: 1.5, marking: 0.4, teamwork: 0.9,
   },
   LW: {
     pace: 1.6, dribbling: 1.6, agility: 1.4,
     crossing: 1.3, firstTouch: 1.3, shooting: 1.2, offTheBall: 1.2,
     defensiveAwareness: 0.5, strength: 0.7, heading: 0.6,
+    // New attributes
+    tackling: 0.3, finishing: 1.3, jumping: 0.5, balance: 1.3,
+    anticipation: 1.0, vision: 1.0, marking: 0.3, teamwork: 0.8,
   },
   RW: {
     pace: 1.6, dribbling: 1.6, agility: 1.4,
     crossing: 1.3, firstTouch: 1.3, shooting: 1.2, offTheBall: 1.2,
     defensiveAwareness: 0.5, strength: 0.7, heading: 0.6,
+    // New attributes
+    tackling: 0.3, finishing: 1.3, jumping: 0.5, balance: 1.3,
+    anticipation: 1.0, vision: 1.0, marking: 0.3, teamwork: 0.8,
   },
   ST: {
     shooting: 1.8, composure: 1.5, positioning: 1.5,
     heading: 1.4, strength: 1.3, firstTouch: 1.2, decisionMaking: 1.2,
     offTheBall: 1.4, pace: 1.1,
     defensiveAwareness: 0.3, pressing: 0.6,
+    // New attributes
+    tackling: 0.2, finishing: 1.7, jumping: 1.1, balance: 1.1,
+    anticipation: 1.2, vision: 0.8, marking: 0.2, teamwork: 0.7,
   },
 };
 
@@ -231,11 +264,14 @@ function calculateMarketValue(
     : 0.12;
   base *= ageFactor;
 
-  // 3. Potential premium — only for players 25 and under, reflecting
-  //    speculative resale value.  Capped at a modest multiplier to prevent
-  //    youth value inflation.
+  // 3. Potential premium — young players with high PA command speculative fees.
+  //    Stronger premium for teenagers to reflect wonderkid valuations.
   if (age <= 25 && pa > ca) {
-    base *= 1 + (pa - ca) / 400;
+    if (age <= 21) {
+      base *= 1 + (pa - ca) / 200;
+    } else {
+      base *= 1 + (pa - ca) / 300;
+    }
   }
 
   // 4. Position multiplier — strikers / attacking mids command premiums.
@@ -366,7 +402,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
   const maxDay = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 28;
   const day = rng.nextInt(1, maxDay);
 
-  return {
+  const player: Player = {
     id: generateId(rng),
     firstName,
     lastName,
@@ -391,7 +427,23 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     injuryWeeksRemaining: 0,
     personalityTraits: generatePersonalityTraits(rng, { position, age, developmentProfile }),
     personalityRevealed: [],
+    playerTraits: [],
+    playerTraitsRevealed: [],
+    recentMatchRatings: [],
+    seasonRatings: [],
   };
+
+  // Generate behavioral traits based on position + actual attributes
+  player.playerTraits = generateBehavioralTraits(rng, player);
+
+  // Generate personality profile from archetype system
+  player.personalityProfile = generatePersonalityProfile(rng, player);
+
+  // Determine natural role from attribute profile
+  const bestRole = getBestRole(player);
+  player.naturalRole = bestRole.role;
+
+  return player;
 }
 
 // ---------------------------------------------------------------------------

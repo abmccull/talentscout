@@ -14,6 +14,8 @@ import type {
   CareerTier,
   Scout,
 } from "../core/types";
+import type { RNG } from "../rng/index";
+import { ensureEmployeeSkills } from "./employeeSkills";
 
 /**
  * Default lifestyle config for a given career tier.
@@ -101,5 +103,30 @@ export function migrateFinancialRecord(
     // Market
     marketTemperature: "normal",
     activeEconomicEvents: [],
+
+    // Agency overhaul
+    clientRelationships: [],
+    pendingEmployeeEvents: [],
+    satelliteOffices: [],
+    awards: [],
+  };
+}
+
+/**
+ * Migrate employees to have skills if they don't already.
+ * Called during game load to ensure backward compatibility.
+ */
+export function migrateEmployeeSkillsInRecord(
+  finances: FinancialRecord,
+  rng: RNG,
+): FinancialRecord {
+  if (finances.employees.length === 0) return finances;
+
+  const needsMigration = finances.employees.some((e) => !e.skills);
+  if (!needsMigration) return finances;
+
+  return {
+    ...finances,
+    employees: finances.employees.map((e) => ensureEmployeeSkills(rng, e)),
   };
 }

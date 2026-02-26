@@ -18,6 +18,9 @@ import type {
   Specialization,
   YouthVenueType,
   UnsignedYouth,
+  ContactInteraction,
+  GameState,
+  InboxMessage,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 
@@ -41,6 +44,10 @@ export interface ContactMeetingResult {
   intel: HiddenIntel[];
   /** Player tips passed along by the contact */
   tips: PlayerTip[];
+  /** F3: Trust change from this interaction. */
+  trustDelta: number;
+  /** F3: The interaction record for history tracking. */
+  interaction: ContactInteraction;
 }
 
 export type { HiddenIntel } from "@/engine/core/types";
@@ -306,6 +313,13 @@ function generateContact(
     knownPlayerIds: [],
     region,
     country,
+    // F3: Contact Network Depth defaults
+    trustLevel: relationship,
+    loyalty: rng.nextInt(30, 70),
+    interactionHistory: [],
+    gossipQueue: [],
+    referralNetwork: [],
+    betrayalRisk: 0,
   };
 }
 
@@ -434,7 +448,17 @@ export function meetContact(
     }
   }
 
-  return { relationshipChange, intel, tips };
+  // F3: Trust delta from this meeting (similar to relationship change but for trust)
+  const trustDelta = clamp(Math.round(baseChange * 0.7 + networkingBonus * 0.5), 0, 10);
+
+  // F3: Record the interaction for history
+  const interaction: ContactInteraction = {
+    week: 0, // caller should set the actual week
+    type: "meeting",
+    trustDelta,
+  };
+
+  return { relationshipChange, intel, tips, trustDelta, interaction };
 }
 
 /**
@@ -588,6 +612,13 @@ export function generateContactForType(
     reliability,
     knownPlayerIds: [],
     region: region ?? rng.pick(REGIONS),
+    // F3: Contact Network Depth defaults
+    trustLevel: 20,
+    loyalty: rng.nextInt(30, 70),
+    interactionHistory: [],
+    gossipQueue: [],
+    referralNetwork: [],
+    betrayalRisk: 0,
   };
 }
 
@@ -742,6 +773,227 @@ export function generateContactFavor(
 
   const favor = rng.pick(favors);
   return { description: favor.description, relationshipBonus: favor.bonus };
+}
+
+// ---------------------------------------------------------------------------
+// F3: Trust Decay, Betrayal, and Exclusive Windows
+// ---------------------------------------------------------------------------
+
+/**
+ * Process weekly trust and relationship decay for all contacts.
+ *
+ * Trust decays by 1 per week without interaction (after a 4-week grace period).
+ * Relationship decay is handled by the existing processRelationshipDecay.
+ * Betrayal risk is recalculated based on low loyalty and trust.
+ */
+export function processWeeklyContactDecay(
+  state: GameState,
+  rng: RNG,
+): { updatedContacts: Record<string, Contact>; betrayalMessages: InboxMessage[] } {
+  const updatedContacts: Record<string, Contact> = {};
+  const betrayalMessages: InboxMessage[] = [];
+
+  for (const [id, contact] of Object.entries(state.contacts)) {
+    let updated = { ...contact };
+
+    // Trust decay: 1 point per week without interaction, after 4 weeks grace
+    const weeksSinceInteraction = Math.max(
+      0,
+      state.currentWeek - (contact.lastInteractionWeek ?? state.currentWeek),
+    );
+    const currentTrust = contact.trustLevel ?? contact.relationship;
+
+    if (weeksSinceInteraction > 4 && currentTrust > 0) {
+      const trustDecay = 1;
+      updated = {
+        ...updated,
+        trustLevel: Math.max(0, currentTrust - trustDecay),
+      };
+    }
+
+    // Recalculate betrayal risk based on trust and loyalty
+    updated = {
+      ...updated,
+      betrayalRisk: calculateBetrayalRisk(updated),
+    };
+
+    // Expire exclusive windows
+    if (updated.exclusiveWindow && updated.exclusiveWindow.expiresWeek <= state.currentWeek) {
+      updated = { ...updated, exclusiveWindow: undefined };
+    }
+
+    // Evaluate betrayal: low-loyalty contacts may leak scout reports
+    const betrayalResult = evaluateBetrayalRisk(updated, state, rng);
+    if (betrayalResult.betrayed) {
+      // Record the betrayal interaction
+      const betrayalInteraction: ContactInteraction = {
+        week: state.currentWeek,
+        type: "betrayal",
+        trustDelta: -15,
+      };
+      updated = {
+        ...updated,
+        trustLevel: Math.max(0, (updated.trustLevel ?? updated.relationship) - 15),
+        loyalty: Math.max(0, (updated.loyalty ?? 50) - 10),
+        interactionHistory: [...(updated.interactionHistory ?? []), betrayalInteraction],
+        betrayalRisk: clamp((updated.betrayalRisk ?? 0) + 0.1, 0, 1),
+      };
+
+      betrayalMessages.push({
+        id: `msg_betrayal_${rng.nextInt(100000, 999999)}`,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "news",
+        title: `Betrayal: ${contact.name}`,
+        body: betrayalResult.message,
+        read: false,
+        actionRequired: true,
+        relatedId: contact.id,
+        relatedEntityType: "contact",
+      });
+    }
+
+    updatedContacts[id] = updated;
+  }
+
+  return { updatedContacts, betrayalMessages };
+}
+
+/**
+ * Calculate a contact's betrayal risk (0-1) based on trust and loyalty.
+ *
+ * Low loyalty + low trust = high betrayal risk.
+ * High loyalty + high trust = near-zero betrayal risk.
+ */
+function calculateBetrayalRisk(contact: Contact): number {
+  const trust = contact.trustLevel ?? contact.relationship;
+  const loyalty = contact.loyalty ?? 50;
+
+  // Betrayal risk inversely proportional to trust and loyalty
+  // At loyalty 100 + trust 100: risk = 0
+  // At loyalty 0 + trust 0: risk = 0.5 (capped)
+  const trustFactor = (100 - trust) / 200; // 0 to 0.5
+  const loyaltyFactor = (100 - loyalty) / 200; // 0 to 0.5
+  const risk = trustFactor * 0.6 + loyaltyFactor * 0.4;
+
+  return clamp(risk, 0, 0.5);
+}
+
+/**
+ * Evaluate whether a contact betrays the scout this week.
+ *
+ * Low-loyalty contacts may leak the scout's reports to rival clubs,
+ * share confidential player assessments, or tip off rival scouts.
+ */
+export function evaluateBetrayalRisk(
+  contact: Contact,
+  state: GameState,
+  rng: RNG,
+): { betrayed: boolean; message: string } {
+  const betrayalRisk = contact.betrayalRisk ?? calculateBetrayalRisk(contact);
+
+  // Weekly betrayal check: very low probability even for risky contacts
+  // (betrayalRisk is 0-0.5, but weekly check uses risk * 0.05 for a max of 2.5% per week)
+  const weeklyChance = betrayalRisk * 0.05;
+
+  if (!rng.chance(weeklyChance)) {
+    return { betrayed: false, message: "" };
+  }
+
+  // Pick a betrayal type
+  const betrayalTypes = [
+    `${contact.name} has leaked one of your scouting reports to a rival club. Your assessment of a player has been shared with competitors.`,
+    `${contact.name} tipped off a rival scout about a prospect you've been tracking. You may face increased competition.`,
+    `${contact.name} shared confidential information about your transfer targets with a journalist. Your strategy has been compromised.`,
+    `${contact.name} provided misleading player information that wasted your time and resources.`,
+  ];
+
+  const message = rng.pick(betrayalTypes);
+  return { betrayed: true, message };
+}
+
+/**
+ * Generate an exclusive window on a prospect for a high-trust insider contact.
+ *
+ * High-trust contacts (trust >= 75) may offer the scout a 2-week exclusive
+ * early access to a prospect before other scouts become aware.
+ */
+export function generateExclusiveWindow(
+  rng: RNG,
+  contact: Contact,
+  state: GameState,
+): { updatedContact: Contact; message: InboxMessage } | null {
+  const trustLevel = contact.trustLevel ?? contact.relationship;
+
+  // Only high-trust insider contacts (clubStaff, academyCoach, sportingDirector, academyDirector)
+  const insiderTypes = new Set(["clubStaff", "academyCoach", "sportingDirector", "academyDirector"]);
+  if (!insiderTypes.has(contact.type)) return null;
+  if (trustLevel < 75) return null;
+
+  // Already has an active exclusive window
+  if (contact.exclusiveWindow) return null;
+
+  // 5% chance per week for eligible contacts
+  const loyaltyBonus = ((contact.loyalty ?? 50) - 50) / 1000; // -0.05 to 0.05
+  if (!rng.chance(0.05 + loyaltyBonus)) return null;
+
+  // Pick a player to offer exclusive access to
+  const knownPlayers = contact.knownPlayerIds
+    .map((id) => state.players[id])
+    .filter((p): p is Player => !!p && p.age <= 25);
+
+  if (knownPlayers.length === 0) return null;
+
+  const player = rng.pick(knownPlayers);
+  const expiresWeek = state.currentWeek + 2; // 2-week window
+
+  const updatedContact: Contact = {
+    ...contact,
+    exclusiveWindow: {
+      playerId: player.id,
+      expiresWeek,
+    },
+    lastInteractionWeek: state.currentWeek,
+  };
+
+  const message: InboxMessage = {
+    id: `msg_exclusive_${rng.nextInt(100000, 999999)}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "news",
+    title: `Exclusive Tip from ${contact.name}`,
+    body: `${contact.name} has given you a 2-week exclusive on ${player.firstName} ${player.lastName}. You have early access before other scouts are aware. This window expires in week ${expiresWeek}.`,
+    read: false,
+    actionRequired: true,
+    relatedId: player.id,
+    relatedEntityType: "player",
+  };
+
+  return { updatedContact, message };
+}
+
+/**
+ * Process exclusive windows for all contacts.
+ * Returns updated contacts and any new exclusive window messages.
+ */
+export function processExclusiveWindows(
+  state: GameState,
+  rng: RNG,
+): { updatedContacts: Record<string, Contact>; exclusiveMessages: InboxMessage[] } {
+  const updatedContacts: Record<string, Contact> = {};
+  const exclusiveMessages: InboxMessage[] = [];
+
+  for (const [id, contact] of Object.entries(state.contacts)) {
+    const result = generateExclusiveWindow(rng, contact, state);
+    if (result) {
+      updatedContacts[id] = result.updatedContact;
+      exclusiveMessages.push(result.message);
+    } else {
+      updatedContacts[id] = contact;
+    }
+  }
+
+  return { updatedContacts, exclusiveMessages };
 }
 
 // ---------------------------------------------------------------------------

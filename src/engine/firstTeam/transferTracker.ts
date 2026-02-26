@@ -14,7 +14,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { Player, Position, TransferRecord } from "@/engine/core/types";
+import type { Player, Position, TransferRecord, PlayerMatchRating } from "@/engine/core/types";
 
 // =============================================================================
 // CONSTANTS
@@ -123,7 +123,24 @@ function generateSeasonSnapshot(
   clubId: string,
   allPlayers: Record<string, Player>,
   season: number,
+  playerMatchRatings?: PlayerMatchRating[],
 ): TransferRecord["seasonPerformance"][number] {
+  // When ≥5 real match ratings exist, use them instead of synthetic generation
+  if (playerMatchRatings && playerMatchRatings.length >= 5) {
+    const avgMatchRating =
+      playerMatchRatings.reduce((s, r) => s + r.rating, 0) / playerMatchRatings.length;
+    // Map 1-10 scale → 0-100
+    const rating = clamp(Math.round(((avgMatchRating - 1) / 9) * 100), 0, 100);
+    const appearances = playerMatchRatings.length;
+    let goals = 0;
+    let assists = 0;
+    for (const r of playerMatchRatings) {
+      goals += r.stats.goals ?? 0;
+      assists += r.stats.assists ?? 0;
+    }
+    return { season, rating, appearances, goals, assists, avgMatchRating };
+  }
+
   const sqAvg = squadAverageCA(clubId, allPlayers);
 
   // Base rating from CA
@@ -222,6 +239,7 @@ export function updateTransferRecords(
   records: TransferRecord[],
   players: Record<string, Player>,
   currentSeason: number,
+  matchRatings?: Record<string, Record<string, PlayerMatchRating>>,
 ): TransferRecord[] {
   return records.map((record) => {
     // Skip records that have already been fully classified and processed
@@ -245,13 +263,25 @@ export function updateTransferRecords(
       return record;
     }
 
-    // Generate a fresh seasonal snapshot
+    // Collect real match ratings for this player from all fixtures this season
+    let playerMatchRatings: PlayerMatchRating[] | undefined;
+    if (matchRatings) {
+      const collected: PlayerMatchRating[] = [];
+      for (const fixtureRatings of Object.values(matchRatings)) {
+        const r = fixtureRatings[record.playerId];
+        if (r) collected.push(r);
+      }
+      if (collected.length > 0) playerMatchRatings = collected;
+    }
+
+    // Generate a fresh seasonal snapshot (uses real data when ≥5 ratings exist)
     const snapshot = generateSeasonSnapshot(
       rng,
       player,
       record.toClubId,
       players,
       currentSeason,
+      playerMatchRatings,
     );
 
     const updatedPerformance = [...record.seasonPerformance, snapshot];

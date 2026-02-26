@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,6 +14,12 @@ import {
   BONUS_POINTS,
 } from "@/engine/scout/creation";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import {
+  readLegacyProfile,
+  getAvailablePerks,
+  hasCompletedCareer,
+  MAX_ACTIVE_PERKS,
+} from "@/engine/career/legacy";
 
 // ---------------------------------------------------------------------------
 // Static data
@@ -318,7 +324,26 @@ const STEPS = [
 // ---------------------------------------------------------------------------
 
 export function NewGameScreen() {
-  const { setScreen, startNewGame } = useGameStore();
+  const { setScreen, startNewGame, startNewGamePlus } = useGameStore();
+
+  // Legacy profile (read once on mount)
+  const legacyProfile = useMemo(() => readLegacyProfile(), []);
+  const isNewGamePlusAvailable = hasCompletedCareer(legacyProfile);
+  const availablePerks = useMemo(() => getAvailablePerks(legacyProfile), [legacyProfile]);
+
+  // New Game+ state
+  const [isNewGamePlusMode, setIsNewGamePlusMode] = useState(false);
+  const [selectedPerkIds, setSelectedPerkIds] = useState<string[]>([]);
+
+  const togglePerk = (perkId: string) => {
+    setSelectedPerkIds((prev) => {
+      if (prev.includes(perkId)) {
+        return prev.filter((id) => id !== perkId);
+      }
+      if (prev.length >= MAX_ACTIVE_PERKS) return prev;
+      return [...prev, perkId];
+    });
+  };
 
   // Wizard navigation
   const [step, setStep] = useState(1);
@@ -400,9 +425,16 @@ export function NewGameScreen() {
       ...(startingPosition === "club" && startingClubId && { startingClubId }),
       ...(Object.keys(skillAllocations).length > 0 && { skillAllocations }),
     };
-    startNewGame(config).catch((err) => {
-      console.error("[NewGame] startNewGame failed:", err, err?.stack);
-    });
+
+    if (isNewGamePlusMode && selectedPerkIds.length > 0) {
+      startNewGamePlus(config, selectedPerkIds).catch((err) => {
+        console.error("[NewGame+] startNewGamePlus failed:", err, err?.stack);
+      });
+    } else {
+      startNewGame(config).catch((err) => {
+        console.error("[NewGame] startNewGame failed:", err, err?.stack);
+      });
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -562,6 +594,121 @@ export function NewGameScreen() {
           >
             {step === 1 && (
               <>
+                {/* New Game+ banner (only shown when legacy profile exists) */}
+                {isNewGamePlusAvailable && (
+                  <Card className={`mb-6 transition-all ${isNewGamePlusMode ? "border-amber-500/60 bg-amber-950/30" : "border-zinc-700/40 bg-zinc-900/30"}`}>
+                    <CardContent className="pt-6">
+                      <div className="flex gap-4 items-start">
+                        <div
+                          className={`mt-0.5 flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                            isNewGamePlusMode ? "bg-amber-500/20" : "bg-zinc-700/20"
+                          }`}
+                          aria-hidden="true"
+                        >
+                          <svg className={`w-5 h-5 ${isNewGamePlusMode ? "text-amber-400" : "text-zinc-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between mb-1">
+                            <h2 className={`font-semibold ${isNewGamePlusMode ? "text-amber-300" : "text-zinc-400"}`}>
+                              New Game+ Available
+                            </h2>
+                            <button
+                              onClick={() => setIsNewGamePlusMode(!isNewGamePlusMode)}
+                              className={`px-3 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
+                                isNewGamePlusMode
+                                  ? "bg-amber-500/20 text-amber-300 hover:bg-amber-500/30"
+                                  : "bg-zinc-700/30 text-zinc-400 hover:bg-zinc-700/50"
+                              }`}
+                            >
+                              {isNewGamePlusMode ? "NG+ Active" : "Enable NG+"}
+                            </button>
+                          </div>
+                          <p className="text-sm text-zinc-400 leading-relaxed">
+                            {legacyProfile && legacyProfile.completedCareers.length > 0
+                              ? `${legacyProfile.completedCareers.length} career${legacyProfile.completedCareers.length > 1 ? "s" : ""} completed. ${legacyProfile.legacyPerks.length} perk${legacyProfile.legacyPerks.length !== 1 ? "s" : ""} unlocked.`
+                              : "Complete a career to unlock legacy perks."}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Perk selection (only when NG+ mode is active) */}
+                      {isNewGamePlusMode && (
+                        <div className="mt-4 border-t border-amber-800/30 pt-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-xs font-semibold text-amber-300/80">
+                              Select up to {MAX_ACTIVE_PERKS} legacy perks
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              {selectedPerkIds.length}/{MAX_ACTIVE_PERKS} selected
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            {availablePerks.map((perk) => {
+                              const isSelected = selectedPerkIds.includes(perk.id);
+                              const isFull = selectedPerkIds.length >= MAX_ACTIVE_PERKS && !isSelected;
+                              return (
+                                <button
+                                  key={perk.id}
+                                  onClick={() => perk.isUnlocked && !isFull && togglePerk(perk.id)}
+                                  disabled={!perk.isUnlocked || (isFull && !isSelected)}
+                                  className={`cursor-pointer rounded-lg border p-3 text-left transition ${
+                                    !perk.isUnlocked
+                                      ? "cursor-not-allowed border-zinc-800/50 opacity-40"
+                                      : isSelected
+                                        ? "border-amber-500/60 bg-amber-500/10"
+                                        : isFull
+                                          ? "cursor-not-allowed border-zinc-700/40 opacity-50"
+                                          : "border-zinc-700/40 hover:border-zinc-600"
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-2">
+                                    <div className={`mt-0.5 w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center ${
+                                      isSelected ? "border-amber-500 bg-amber-500" : "border-zinc-600"
+                                    }`}>
+                                      {isSelected && (
+                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <p className={`text-sm font-medium ${perk.isUnlocked ? "text-zinc-200" : "text-zinc-500"}`}>
+                                        {perk.name}
+                                      </p>
+                                      <p className="text-xs text-zinc-500 mt-0.5">
+                                        {perk.isUnlocked ? perk.description : `Locked: ${perk.unlockedBy.replace(/_/g, " ")}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Career history summary */}
+                          {legacyProfile && legacyProfile.completedCareers.length > 0 && (
+                            <div className="mt-3 rounded-lg border border-zinc-700/40 bg-zinc-900/50 p-3">
+                              <p className="text-xs font-semibold text-zinc-400 mb-2">Career History</p>
+                              <div className="space-y-1.5">
+                                {legacyProfile.completedCareers.slice(0, 5).map((career, i) => (
+                                  <div key={`career-${i}`} className="flex items-center justify-between text-xs">
+                                    <span className="text-zinc-300">{career.scoutName}</span>
+                                    <span className="text-zinc-500">
+                                      Tier {career.finalTier} &middot; {career.seasonsPlayed}s &middot; {career.specialization} &middot; Score {career.legacyScoreTotal}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Welcome banner */}
                 <Card className="mb-6 border-emerald-800/40 bg-emerald-950/30">
                   <CardContent className="pt-6">
@@ -1214,6 +1361,31 @@ export function NewGameScreen() {
                       <p className="text-sm text-zinc-400">Seed: {seed}</p>
                     </CardContent>
                   </Card>
+
+                  {/* New Game+ Perks (only shown when NG+ mode is active) */}
+                  {isNewGamePlusMode && selectedPerkIds.length > 0 && (
+                    <Card className="sm:col-span-2 border-amber-800/40 bg-amber-950/20">
+                      <CardContent className="pt-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-amber-300">New Game+ Perks</h3>
+                          <button onClick={() => goToStep(1)} className="text-xs text-amber-400 hover:text-amber-300 cursor-pointer">Edit</button>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedPerkIds.map((perkId) => {
+                            const perk = availablePerks.find((p) => p.id === perkId);
+                            return perk ? (
+                              <span
+                                key={perkId}
+                                className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-medium text-amber-300"
+                              >
+                                {perk.name}
+                              </span>
+                            ) : null;
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
                 </div>
               </>
             )}
@@ -1241,9 +1413,13 @@ export function NewGameScreen() {
               size="lg"
               onClick={handleStart}
               disabled={!canStart}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+              className={`text-white cursor-pointer ${
+                isNewGamePlusMode
+                  ? "bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+              }`}
             >
-              Begin Career
+              {isNewGamePlusMode ? "Begin New Game+" : "Begin Career"}
             </Button>
           )}
         </div>

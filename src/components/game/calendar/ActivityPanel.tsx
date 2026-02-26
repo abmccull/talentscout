@@ -22,6 +22,8 @@ interface ActivityPanelProps {
   onLeagueFilterChange: (leagueId: string) => void;
   /** Resolve club IDs to display names for match descriptions */
   resolveClubName: (id: string) => string;
+  /** Highlighted activity from PlayerProfile quick action (targetId to promote) */
+  highlightTargetId?: string;
 }
 
 export function ActivityPanel({
@@ -34,6 +36,7 @@ export function ActivityPanel({
   fixtureLeagueById,
   onLeagueFilterChange,
   resolveClubName,
+  highlightTargetId,
 }: ActivityPanelProps) {
   const theme = SPECIALIZATION_THEMES[specialization];
 
@@ -87,14 +90,28 @@ export function ActivityPanel({
     return groups;
   }, [enrichedActivities, fixtureLeagueById, hasActiveLeagueFilter, leagueFilter]);
 
+  // Sort highlighted activities to the top of each group
+  const sortedGrouped = useMemo(() => {
+    if (!highlightTargetId) return grouped;
+    const result = { ...grouped };
+    for (const cat of Object.keys(result) as ActivityCategory[]) {
+      result[cat] = [...result[cat]].sort((a, b) => {
+        const aMatch = a.targetId === highlightTargetId ? 0 : 1;
+        const bMatch = b.targetId === highlightTargetId ? 0 : 1;
+        return aMatch - bMatch;
+      });
+    }
+    return result;
+  }, [grouped, highlightTargetId]);
+
   // Sorted category keys (skip empty ones; hide specialist for regional if empty)
   const sortedCategories = useMemo(() => {
     return (Object.keys(ACTIVITY_CATEGORY_CONFIG) as ActivityCategory[])
       .sort(
         (a, b) => ACTIVITY_CATEGORY_CONFIG[a].order - ACTIVITY_CATEGORY_CONFIG[b].order,
       )
-      .filter((cat) => grouped[cat].length > 0);
-  }, [grouped]);
+      .filter((cat) => sortedGrouped[cat].length > 0);
+  }, [sortedGrouped]);
 
   return (
     <Card>
@@ -115,7 +132,7 @@ export function ActivityPanel({
       <CardContent className="space-y-3">
         {sortedCategories.map((category) => {
           const config = ACTIVITY_CATEGORY_CONFIG[category];
-          const sectionActivities = grouped[category];
+          const sectionActivities = sortedGrouped[category];
           const sectionLabel =
             config.specLabel?.[specialization] ?? config.label;
 
@@ -148,6 +165,7 @@ export function ActivityPanel({
                       activity={activity}
                       canScheduleAt={canScheduleAt}
                       onSchedule={onSchedule}
+                      highlighted={!!highlightTargetId && activity.targetId === highlightTargetId}
                     />
                   ))}
               </div>

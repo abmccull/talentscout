@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users } from "lucide-react";
-import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill } from "@/engine/core/types";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake } from "lucide-react";
+import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill, DisciplinaryRecord } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
@@ -15,6 +15,7 @@ import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
+import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 
 const DOMAIN_LABELS: Record<string, string> = {
   technical: "Technical",
@@ -28,6 +29,15 @@ const DOMAIN_ORDER = ["technical", "physical", "mental", "tactical"] as const;
 function confidenceColor(confidence: number): string {
   if (confidence >= 0.7) return "bg-emerald-500";
   if (confidence >= 0.4) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+/** Color the attribute bar by perceived value (1–20 scale). */
+function attributeValueColor(midpoint: number): string {
+  if (midpoint >= 16) return "bg-emerald-500";
+  if (midpoint >= 12) return "bg-emerald-600/80";
+  if (midpoint >= 8) return "bg-amber-500";
+  if (midpoint >= 5) return "bg-orange-500";
   return "bg-red-500";
 }
 
@@ -149,14 +159,24 @@ function SystemFitCard({ fit }: SystemFitCardProps) {
                 <div className={`h-full rounded-full transition-all ${fitColor(fit.positionFit)}`} style={{ width: `${fit.positionFit}%` }} />
               </div>
             </div>
-            {/* Style fit */}
+            {/* Role fit */}
             <div>
               <div className="mb-0.5 flex items-center justify-between text-xs">
-                <span className="text-zinc-500">Style</span>
-                <span className={`font-mono font-semibold ${fitTextColor(fit.styleFit)}`}>{fit.styleFit}%</span>
+                <span className="text-zinc-500">Role</span>
+                <span className={`font-mono font-semibold ${fitTextColor(fit.roleFit)}`}>{fit.roleFit}%</span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#27272a]">
-                <div className={`h-full rounded-full transition-all ${fitColor(fit.styleFit)}`} style={{ width: `${fit.styleFit}%` }} />
+                <div className={`h-full rounded-full transition-all ${fitColor(fit.roleFit)}`} style={{ width: `${fit.roleFit}%` }} />
+              </div>
+            </div>
+            {/* Tactical fit */}
+            <div>
+              <div className="mb-0.5 flex items-center justify-between text-xs">
+                <span className="text-zinc-500">Tactical</span>
+                <span className={`font-mono font-semibold ${fitTextColor(fit.tacticalFit)}`}>{fit.tacticalFit}%</span>
+              </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#27272a]">
+                <div className={`h-full rounded-full transition-all ${fitColor(fit.tacticalFit)}`} style={{ width: `${fit.tacticalFit}%` }} />
               </div>
             </div>
             {/* Age fit */}
@@ -171,6 +191,16 @@ function SystemFitCard({ fit }: SystemFitCardProps) {
             </div>
           </div>
         </div>
+
+        {/* Suggested role */}
+        {fit.suggestedRole && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Suggested Role</span>
+            <span className="rounded bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-400">
+              {fit.suggestedRole.replace(/([A-Z])/g, " $1").trim()}
+            </span>
+          </div>
+        )}
 
         {/* Strengths */}
         {fit.fitStrengths.length > 0 && (
@@ -518,6 +548,370 @@ function ensureRange(reading: AttributeReading, scoutSkill: number): AttributeRe
   return { ...reading, rangeLow, rangeHigh };
 }
 
+// ─── Form & Performance Card ────────────────────────────────────────────────
+
+function formLabel(form: number): { text: string; color: string; arrow: string } {
+  if (form >= 2) return { text: "Excellent", color: "text-emerald-400", arrow: "↑" };
+  if (form === 1) return { text: "Good", color: "text-emerald-500", arrow: "↗" };
+  if (form === 0) return { text: "Average", color: "text-zinc-400", arrow: "→" };
+  if (form === -1) return { text: "Poor", color: "text-orange-400", arrow: "↘" };
+  return { text: "Bad", color: "text-red-400", arrow: "↓" };
+}
+
+function ratingBarColor(rating: number): string {
+  if (rating >= 8.0) return "bg-emerald-500";
+  if (rating >= 7.0) return "bg-emerald-600/80";
+  if (rating >= 6.0) return "bg-amber-500";
+  if (rating >= 5.0) return "bg-orange-500";
+  return "bg-red-500";
+}
+
+// ---------------------------------------------------------------------------
+// Injury Status & History Card
+// ---------------------------------------------------------------------------
+
+const INJURY_TYPE_LABELS: Record<string, string> = {
+  muscle: "Muscle",
+  ligament: "Ligament",
+  fracture: "Fracture",
+  concussion: "Concussion",
+  knock: "Knock",
+  fatigue: "Fatigue",
+};
+
+const SEVERITY_COLORS: Record<string, string> = {
+  minor: "text-amber-400",
+  moderate: "text-orange-400",
+  serious: "text-red-400",
+  "career-threatening": "text-red-600",
+};
+
+function InjuryStatusCard({ player }: { player: import("@/engine/core/types").Player }) {
+  const currentInjury = player.currentInjury;
+  const history = player.injuryHistory;
+  const injuries = history?.injuries ?? [];
+  const totalWeeksMissed = history?.totalWeeksMissed ?? 0;
+  const proneness = history?.injuryProneness ?? 0;
+  const reinjuryWindow = history?.reinjuryWindowWeeksLeft ?? 0;
+
+  // Only show card if player has injury data worth showing
+  if (!currentInjury && injuries.length === 0) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <HeartPulse size={14} className={currentInjury ? "text-red-500" : "text-zinc-500"} />
+          Injury Status
+          {proneness >= 0.15 && (
+            <Badge variant="destructive" className="ml-auto text-[10px]">
+              Injury Prone
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Current injury */}
+        {currentInjury && (
+          <div className="rounded-md border border-red-500/20 bg-red-500/5 p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-semibold text-red-400">Currently Injured</span>
+              <Badge variant="outline" className="text-[10px]">
+                {currentInjury.weeksRemaining}w remaining
+              </Badge>
+            </div>
+            <p className="text-xs text-zinc-300">
+              {INJURY_TYPE_LABELS[currentInjury.type] ?? currentInjury.type} —{" "}
+              <span className={SEVERITY_COLORS[currentInjury.severity] ?? "text-zinc-400"}>
+                {currentInjury.severity}
+              </span>
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+              <div
+                className="h-full rounded-full bg-red-500 transition-all"
+                style={{
+                  width: `${((currentInjury.recoveryWeeks - currentInjury.weeksRemaining) / Math.max(1, currentInjury.recoveryWeeks)) * 100}%`,
+                }}
+              />
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-500">
+              Recovery: {currentInjury.recoveryWeeks - currentInjury.weeksRemaining}/{currentInjury.recoveryWeeks} weeks
+            </p>
+          </div>
+        )}
+
+        {/* Reinjury risk warning */}
+        {!currentInjury && reinjuryWindow > 0 && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2">
+            <AlertTriangle size={12} className="text-amber-400 shrink-0" />
+            <p className="text-[10px] text-amber-300">
+              Elevated reinjury risk — {reinjuryWindow} week{reinjuryWindow !== 1 ? "s" : ""} remaining
+            </p>
+          </div>
+        )}
+
+        {/* Summary stats */}
+        {injuries.length > 0 && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[10px] text-zinc-500">Total Injuries</p>
+              <p className="text-sm font-semibold text-white">{injuries.length}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500">Weeks Missed</p>
+              <p className="text-sm font-semibold text-white">{totalWeeksMissed}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Injury history timeline (last 5) */}
+        {injuries.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              History
+            </p>
+            <div className="space-y-1.5">
+              {injuries.slice(-5).reverse().map((inj) => (
+                <div
+                  key={inj.id}
+                  className="flex items-center justify-between rounded border border-[#27272a] bg-[#141414] px-2 py-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-medium ${SEVERITY_COLORS[inj.severity] ?? "text-zinc-400"}`}>
+                      {INJURY_TYPE_LABELS[inj.type] ?? inj.type}
+                    </span>
+                    <span className="text-[10px] text-zinc-500">
+                      {inj.recoveryWeeks}w
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-zinc-600">
+                    S{inj.occurredSeason} W{inj.occurredWeek}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FormPerformanceCard({ player }: { player: import("@/engine/core/types").Player }) {
+  const recentRatings = player.recentMatchRatings ?? [];
+  const seasonRatings = player.seasonRatings ?? [];
+  const form = formLabel(player.form);
+
+  // Calculate season average from recent ratings
+  const avgRating = recentRatings.length > 0
+    ? (recentRatings.reduce((s, r) => s + r.rating, 0) / recentRatings.length).toFixed(1)
+    : null;
+
+  if (recentRatings.length === 0 && seasonRatings.length === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <TrendingUp size={14} className="text-zinc-500" />
+            Form & Performance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-zinc-500">No match data available yet.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <TrendingUp size={14} className="text-emerald-500" />
+          Form & Performance
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Current form indicator */}
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-zinc-400">Current Form</span>
+          <span className={`text-sm font-semibold ${form.color}`}>
+            {form.arrow} {form.text}
+          </span>
+        </div>
+
+        {/* Season average */}
+        {avgRating && (
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-400">Recent Average</span>
+            <span className="text-sm font-bold text-white">{avgRating}</span>
+          </div>
+        )}
+
+        {/* Last 6 match ratings as mini bars */}
+        {recentRatings.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              Recent Matches
+            </p>
+            <div className="flex items-end gap-1 h-10">
+              {recentRatings.map((entry, i) => {
+                const heightPct = ((entry.rating - 1) / 9) * 100;
+                return (
+                  <div
+                    key={entry.fixtureId + i}
+                    className="flex-1 flex flex-col items-center justify-end h-full"
+                    title={`Week ${entry.week}: ${entry.rating.toFixed(1)}`}
+                  >
+                    <div
+                      className={`w-full rounded-sm ${ratingBarColor(entry.rating)}`}
+                      style={{ height: `${Math.max(8, heightPct)}%` }}
+                    />
+                    <span className="text-[9px] text-zinc-600 mt-0.5 font-mono">
+                      {entry.rating.toFixed(1)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Season history table */}
+        {seasonRatings.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              Season History
+            </p>
+            <div className="text-[10px]">
+              <div className="grid grid-cols-6 gap-1 text-zinc-600 font-medium mb-1">
+                <span>Season</span>
+                <span className="text-right">Avg</span>
+                <span className="text-right">Apps</span>
+                <span className="text-right">Goals</span>
+                <span className="text-right">Ast</span>
+                <span className="text-right">CS</span>
+              </div>
+              {seasonRatings.map((sr) => (
+                <div key={sr.season} className="grid grid-cols-6 gap-1 text-zinc-300">
+                  <span>{sr.season}</span>
+                  <span className="text-right font-bold">{sr.avgRating.toFixed(1)}</span>
+                  <span className="text-right">{sr.appearances}</span>
+                  <span className="text-right">{sr.goals}</span>
+                  <span className="text-right">{sr.assists}</span>
+                  <span className="text-right">{sr.cleanSheets > 0 ? sr.cleanSheets : "-"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---- Disciplinary Card Component ----
+
+function DisciplinaryCard({ record, gameState }: { record: DisciplinaryRecord | undefined; gameState: { currentSeason: number } }) {
+  const yellows = record?.yellowCards ?? 0;
+  const reds = record?.redCards ?? 0;
+  const suspWeeks = record?.suspensionWeeksRemaining ?? 0;
+  const season = record?.season ?? gameState.currentSeason;
+
+  // Warning thresholds
+  const nearFiveYellow = yellows >= 3 && yellows < 5;
+  const nearTenYellow = yellows >= 8 && yellows < 10;
+
+  if (yellows === 0 && reds === 0 && suspWeeks === 0) {
+    return (
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <AlertTriangle size={14} className="text-zinc-500" aria-hidden="true" />
+            Discipline
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-zinc-500">Clean record this season.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <AlertTriangle size={14} className={suspWeeks > 0 ? "text-red-500" : "text-amber-500"} aria-hidden="true" />
+          Discipline
+          {suspWeeks > 0 && (
+            <Badge variant="destructive" className="text-[10px] ml-auto">
+              SUSPENDED ({suspWeeks} match{suspWeeks > 1 ? "es" : ""})
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {/* Season stats */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-2 rounded-sm bg-amber-400" title="Yellow cards" />
+            <span className="text-xs text-zinc-400">
+              Yellows: <span className="font-semibold text-white">{yellows}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-2 rounded-sm bg-red-500" title="Red cards" />
+            <span className="text-xs text-zinc-400">
+              Reds: <span className="font-semibold text-white">{reds}</span>
+            </span>
+          </div>
+          <span className="text-[10px] text-zinc-600 ml-auto">Season {season}</span>
+        </div>
+
+        {/* Suspension warning */}
+        {nearFiveYellow && (
+          <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5">
+            <p className="text-[10px] text-amber-300">
+              Warning: {yellows}/5 yellows &mdash; {5 - yellows} more yellow card{5 - yellows > 1 ? "s" : ""} triggers a 1-match ban.
+            </p>
+          </div>
+        )}
+        {nearTenYellow && (
+          <div className="rounded border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5">
+            <p className="text-[10px] text-amber-300">
+              Warning: {yellows}/10 yellows &mdash; {10 - yellows} more yellow card{10 - yellows > 1 ? "s" : ""} triggers a 2-match ban.
+            </p>
+          </div>
+        )}
+
+        {/* Recent card history (last 5) */}
+        {record && record.cardHistory.length > 0 && (
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              Recent Cards
+            </p>
+            <div className="space-y-1">
+              {record.cardHistory.slice(-5).reverse().map((card, i) => (
+                <div key={i} className="flex items-center gap-2 text-[10px]">
+                  <div
+                    className={`h-2.5 w-1.5 rounded-sm ${
+                      card.type === "red" ? "bg-red-500" : "bg-amber-400"
+                    }`}
+                  />
+                  <span className="text-zinc-400">
+                    {card.minute}&apos; &mdash; {card.reason.replace(/([A-Z])/g, " $1").toLowerCase().trim()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PlayerProfile() {
   const {
     gameState,
@@ -532,6 +926,7 @@ export function PlayerProfile() {
     setPendingFixtureClubFilter,
     setPendingCalendarActivity,
     tapNetworkForPlayer,
+    initiateTransferNegotiation,
   } = useGameStore();
 
   if (!gameState || !selectedPlayerId) return null;
@@ -659,6 +1054,17 @@ export function PlayerProfile() {
               </div>
               <div className="mt-1 flex items-center gap-2 flex-wrap">
                 <Badge variant="secondary">{player.position}</Badge>
+                {player.injured && player.currentInjury && (
+                  <Badge variant="destructive" className="text-[10px]">
+                    <HeartPulse size={10} className="mr-1" />
+                    Injured — {player.currentInjury.weeksRemaining}w
+                  </Badge>
+                )}
+                {!player.injured && player.injured === false && (player.injuryHistory?.reinjuryWindowWeeksLeft ?? 0) > 0 && (
+                  <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px]">
+                    Reinjury Risk
+                  </Badge>
+                )}
                 <span className="text-sm text-zinc-400">
                   Age {player.age} — {player.nationality}
                 </span>
@@ -702,6 +1108,22 @@ export function PlayerProfile() {
               <Phone size={14} className="mr-2" />
               Tap Network
             </Button>
+            {/* Negotiate Transfer — first-team scouts with a club can negotiate */}
+            {gameState.scout.primarySpecialization === "firstTeam" &&
+             gameState.scout.currentClubId &&
+             player.clubId !== gameState.scout.currentClubId &&
+             !unsignedYouthRecord &&
+             !(gameState.activeNegotiations ?? []).some(
+               (n) => n.playerId === selectedPlayerId && n.phase !== "completed" && n.phase !== "collapsed"
+             ) && (
+              <Button
+                variant="outline"
+                onClick={() => initiateTransferNegotiation(selectedPlayerId)}
+              >
+                <Handshake size={14} className="mr-2" />
+                Negotiate Transfer
+              </Button>
+            )}
             {/* Youth-specific quick actions */}
             {unsignedYouthRecord && observations.length > 0 && (
               <>
@@ -946,22 +1368,21 @@ export function PlayerProfile() {
                               <>
                                 <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
                                   <div
-                                    className={`absolute top-0 h-full rounded-full ${confidenceColor(reading.confidence)}`}
+                                    className={`absolute top-0 h-full rounded-full ${attributeValueColor(reading.perceivedValue)}`}
                                     style={{
                                       left: `${(((reading.rangeLow ?? reading.perceivedValue) - 1) / 19) * 100}%`,
                                       width: `${((((reading.rangeHigh ?? reading.perceivedValue) - (reading.rangeLow ?? reading.perceivedValue)) || 1) / 19) * 100}%`,
                                     }}
                                   />
                                 </div>
-                                <span className="w-8 shrink-0 text-right text-xs font-mono font-medium text-white">
+                                <span className="w-10 shrink-0 text-right text-xs font-mono font-medium text-white">
                                   {reading.rangeLow != null && reading.rangeHigh != null && reading.rangeLow !== reading.rangeHigh
                                     ? `${reading.rangeLow}-${reading.rangeHigh}`
                                     : reading.perceivedValue}
                                 </span>
-                                <div
-                                  className={`h-2 w-2 shrink-0 rounded-full ${confidenceColor(reading.confidence)}`}
-                                  title={`${confidenceLabel(reading.confidence)} confidence (${reading.observationCount} obs)`}
-                                />
+                                <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500" title={`${reading.observationCount} observation${reading.observationCount !== 1 ? "s" : ""}`}>
+                                  {reading.observationCount}x
+                                </span>
                               </>
                             )
                           ) : (
@@ -986,6 +1407,152 @@ export function PlayerProfile() {
                 <p className="text-xs text-zinc-600 mt-1">
                   Attend a match and focus on this player to gather data.
                 </p>
+              </div>
+            )}
+
+            {/* Personality Profile */}
+            {player.personalityProfile && (
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+                  Character Profile
+                </h2>
+                <Card>
+                  <CardContent className="px-4 pb-4 pt-4">
+                    {player.personalityProfile.hiddenUntilRevealed ? (
+                      <div className="text-center py-2">
+                        <p className="text-xs text-zinc-500">
+                          Character type not yet identified. Continue observing to uncover their personality.
+                        </p>
+                        {player.personalityProfile.revealedTraits.length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-2 justify-center">
+                            {player.personalityProfile.revealedTraits.map((trait) => (
+                              <span
+                                key={trait}
+                                className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
+                              >
+                                {trait.replace(/([A-Z])/g, " $1").trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
+                          <div className="mt-2 flex justify-center gap-1">
+                            {Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
+                              <span
+                                key={`q-${i}`}
+                                className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
+                              >
+                                ?
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <Tooltip content={ARCHETYPE_DESCRIPTIONS[player.personalityProfile.archetype]} side="top">
+                            <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 cursor-help underline decoration-dotted underline-offset-2">
+                              {ARCHETYPE_LABELS[player.personalityProfile.archetype]}
+                            </span>
+                          </Tooltip>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {player.personalityProfile.revealedTraits.map((trait) => (
+                            <span
+                              key={trait}
+                              className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300"
+                            >
+                              {trait.replace(/([A-Z])/g, " $1").trim()}
+                            </span>
+                          ))}
+                          {player.personalityProfile.traits.length > player.personalityProfile.revealedTraits.length && (
+                            Array.from({ length: player.personalityProfile.traits.length - player.personalityProfile.revealedTraits.length }).map((_, i) => (
+                              <span
+                                key={`h-${i}`}
+                                className="rounded-full bg-zinc-700/50 px-3 py-1 text-xs font-medium text-zinc-500"
+                              >
+                                ?
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-500">Transfer Willingness</span>
+                            <span className={`text-xs font-medium ${player.personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : player.personalityProfile.transferWillingness >= 0.4 ? "text-amber-400" : "text-emerald-400"}`}>
+                              {player.personalityProfile.transferWillingness >= 0.7 ? "High" : player.personalityProfile.transferWillingness >= 0.4 ? "Medium" : "Low"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-500">Dressing Room</span>
+                            <span className={`text-xs font-medium ${player.personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : player.personalityProfile.dressingRoomImpact >= 0 ? "text-zinc-300" : "text-red-400"}`}>
+                              {player.personalityProfile.dressingRoomImpact >= 2 ? "Positive" : player.personalityProfile.dressingRoomImpact >= 0 ? "Neutral" : "Negative"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-500">Consistency</span>
+                            <span className={`text-xs font-medium ${player.personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : player.personalityProfile.formVolatility <= 0.6 ? "text-amber-400" : "text-red-400"}`}>
+                              {player.personalityProfile.formVolatility <= 0.3 ? "Very Consistent" : player.personalityProfile.formVolatility <= 0.6 ? "Moderate" : "Volatile"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-zinc-500">Big Match</span>
+                            <span className={`text-xs font-medium ${player.personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : player.personalityProfile.bigMatchModifier >= 0 ? "text-zinc-300" : "text-red-400"}`}>
+                              {player.personalityProfile.bigMatchModifier >= 2 ? "Thrives" : player.personalityProfile.bigMatchModifier >= 1 ? "Rises" : player.personalityProfile.bigMatchModifier >= 0 ? "Neutral" : "Struggles"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Behavioral Traits */}
+            {(player.playerTraitsRevealed?.length ?? 0) > 0 && (
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+                  Behavioral Traits
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {player.playerTraitsRevealed!.map((trait) => (
+                    <span
+                      key={trait}
+                      className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-medium text-violet-300"
+                    >
+                      {trait.replace(/([A-Z])/g, " $1").trim()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Natural Role */}
+            {player.naturalRole && observations.length >= 3 && (
+              <div>
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+                  Tactical Role
+                </h2>
+                <Card>
+                  <CardContent className="px-4 pb-4 pt-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-zinc-400">Natural Role</span>
+                      <span className="rounded bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-400">
+                        {player.naturalRole.replace(/([A-Z])/g, " $1").trim()}
+                      </span>
+                    </div>
+                    {player.secondaryRole && (
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className="text-xs text-zinc-400">Secondary</span>
+                        <span className="rounded bg-zinc-700/50 px-2 py-0.5 text-xs font-medium text-zinc-300">
+                          {player.secondaryRole.replace(/([A-Z])/g, " $1").trim()}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
 
@@ -1034,6 +1601,18 @@ export function PlayerProfile() {
                 anomalies={playerAnomalies}
               />
             )}
+
+            {/* Injury Status & History */}
+            <InjuryStatusCard player={player} />
+
+            {/* Form & Performance */}
+            <FormPerformanceCard player={player} />
+
+            {/* Discipline */}
+            <DisciplinaryCard
+              record={player.disciplinaryRecord ?? (gameState.disciplinaryRecords ?? {})[player.id]}
+              gameState={gameState}
+            />
 
             {/* Reports */}
             <Card>

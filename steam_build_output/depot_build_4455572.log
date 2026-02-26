@@ -1,0 +1,16 @@
+[2026-02-23 14:38:05]: Starting build for depot 4455572, content path is "/Users/tsc-001/talentscout/dist/mac-arm64", build flags 0x0
+[2026-02-23 14:38:05]: Building file listing for depot 4455572 ...
+[2026-02-23 14:38:05]: Found 583 files for mapping: /Users/tsc-001/talentscout/dist/mac-arm64/TalentScout.app * -> TalentScout.app/
+[2026-02-23 14:38:05]: Found 583 files (319 MB) for depot 4455572
+[2026-02-23 14:38:06]: Building depot 4455572, baseline manifest 4147110082859981377 (584 files)
+[2026-02-23 14:38:06]: Found 375 new chunks ( 374 used previously ) for depot 4455572, took 0 minutes, 0 seconds
+[2026-02-23 14:38:06]: Changes to baseline manifest 4147110082859981377 :
+[2026-02-23 14:38:06]: Changed: "TalentScout.app\Contents\Info.plist" 4 KB size, 4 KB changed 
+[2026-02-23 14:38:06]: Changed: "TalentScout.app\Contents\libsteam_api.dylib" 418 KB size, 418 KB changed 
+[2026-02-23 14:38:06]: Changed: "TalentScout.app\Contents\Resources\app.asar" 59441 KB size, 4145 KB changed 
+[2026-02-23 14:38:06]: Changed: "TalentScout.app\Contents\Resources\steam_appid.txt" 1 KB size, 1 KB changed 
+[2026-02-23 14:38:06]: Removed: TalentScout.app\Contents\Resources\app-update.yml (1 KB)
+[2026-02-23 14:38:06]: Summary: 0 files added (0 bytes), 4 files changed (4.46 MB), 1 files removed (105 bytes)
+[2026-02-23 14:38:07]: Uploading new manifest to depot_ingest.discovery.steamserver.net (handle 10093994936020807131, 108732 bytes).
+[2026-02-23 14:38:07]: Uploading 9 out of 9 missing chunks.
+[2026-02-23 14:38:09]: Success! New manifestID 5549294305734165235 created and 9 new chunks uploaded.

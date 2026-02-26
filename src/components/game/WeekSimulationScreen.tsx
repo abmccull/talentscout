@@ -392,7 +392,14 @@ function DayCard({ dayResult, allDayResults, currentDay, onChooseInteraction }: 
                             }`}
                             onClick={() => toggleFocusCandidate(candidate.playerId)}
                           >
-                            <p className="text-xs font-medium text-white">{candidate.playerName}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-medium text-white">{candidate.playerName}</p>
+                              {(candidate.age || candidate.position) && (
+                                <span className="text-[10px] text-zinc-500">
+                                  {candidate.position}{candidate.age ? `, ${candidate.age}` : ""}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-zinc-400">{candidate.topAttributes}</p>
                           </button>
                         );

@@ -7,7 +7,12 @@
  * no RNG is required because every event is fixed to known week ranges.
  */
 
-import type { SeasonEvent, SeasonEventType } from "./types";
+import type {
+  SeasonEvent,
+  SeasonEventType,
+  SeasonEventEffect,
+  SeasonEventChoice,
+} from "./types";
 
 // =============================================================================
 // INTERNAL EVENT DEFINITIONS
@@ -23,6 +28,8 @@ interface EventDefinition {
   startWeek: number;
   endWeek: number;
   description: string;
+  effects?: SeasonEventEffect[];
+  choices?: SeasonEventChoice[];
 }
 
 /**
@@ -36,55 +43,212 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 1,
     endWeek: 2,
     description: "Pre-season preparations and friendly tournaments",
+    effects: [
+      { type: "scoutingCostModifier", value: -0.4, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.25, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Focus on Youth Prospects",
+        description:
+          "Concentrate scouting on youth tournaments for better reveals on young players.",
+        effects: [
+          { type: "scoutingCostModifier", value: -0.4, targetScope: "global" },
+          { type: "attributeRevealBonus", value: 0.5, targetScope: "global" },
+          { type: "fatigueModifier", value: 0.15, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Network with Agents",
+        description:
+          "Use the tournament to build contacts rather than observe matches.",
+        effects: [
+          { type: "reputationBonus", value: 3, targetScope: "global" },
+          { type: "scoutingCostModifier", value: -0.2, targetScope: "global" },
+        ],
+      },
+    ],
   },
   {
     type: "summerTransferWindow",
     name: "Summer Transfer Window",
     startWeek: 1,
     endWeek: 8,
-    description: "Summer transfer window is open",
+    description: "Summer transfer window is open — panic pricing in final weeks",
+    effects: [
+      { type: "transferPriceModifier", value: 0.0, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Aggressive Scouting Push",
+        description:
+          "Double down on scouting to find bargains before the window closes.",
+        effects: [
+          { type: "scoutingCostModifier", value: -0.2, targetScope: "global" },
+          { type: "fatigueModifier", value: 0.2, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Wait for Deadline Deals",
+        description:
+          "Hold resources until panic pricing kicks in late in the window.",
+        effects: [
+          { type: "transferPriceModifier", value: -0.15, targetScope: "global" },
+        ],
+      },
+    ],
   },
   {
     type: "internationalBreak",
     name: "International Break 1",
     startWeek: 10,
     endWeek: 10,
-    description: "First international break of the season",
+    description:
+      "First international break — players called up are unavailable for club matches",
+    effects: [
+      { type: "playerAvailability", value: -0.15, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
+      { type: "fatigueModifier", value: -0.1, targetScope: "global" },
+    ],
   },
   {
     type: "internationalBreak",
     name: "International Break 2",
     startWeek: 18,
     endWeek: 18,
-    description: "Second international break",
+    description:
+      "Second international break — opportunity to scout international talent",
+    effects: [
+      { type: "playerAvailability", value: -0.15, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
+      { type: "fatigueModifier", value: -0.1, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Scout International Matches",
+        description:
+          "Travel to international venues for higher-quality observations.",
+        effects: [
+          { type: "attributeRevealBonus", value: 0.4, targetScope: "global" },
+          { type: "scoutingCostModifier", value: 0.3, targetScope: "global" },
+          { type: "fatigueModifier", value: 0.1, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Rest and Prepare",
+        description:
+          "Use the break to recover fatigue and prepare for the second half.",
+        effects: [
+          { type: "fatigueModifier", value: -0.3, targetScope: "global" },
+        ],
+      },
+    ],
   },
   {
     type: "winterTransferWindow",
     name: "Winter Transfer Window",
     startWeek: 20,
     endWeek: 23,
-    description: "January transfer window is open",
+    description:
+      "January transfer window — mid-season transfers, loan recalls, desperation deals",
+    effects: [
+      { type: "transferPriceModifier", value: -0.15, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Target Relegation Clubs",
+        description:
+          "Focus on players from struggling clubs willing to sell cheap.",
+        effects: [
+          { type: "transferPriceModifier", value: -0.25, targetScope: "global" },
+          { type: "scoutingCostModifier", value: 0.1, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Loan Market Sweep",
+        description:
+          "Identify loan opportunities from top-flight clubs with surplus talent.",
+        effects: [
+          { type: "transferPriceModifier", value: -0.1, targetScope: "global" },
+          { type: "attributeRevealBonus", value: 0.15, targetScope: "global" },
+        ],
+      },
+    ],
   },
   {
     type: "internationalBreak",
     name: "International Break 3",
     startWeek: 28,
     endWeek: 28,
-    description: "Third international break",
+    description: "Third international break of the season",
+    effects: [
+      { type: "playerAvailability", value: -0.15, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
+      { type: "fatigueModifier", value: -0.1, targetScope: "global" },
+    ],
   },
   {
     type: "youthCup",
     name: "Youth Cup",
     startWeek: 30,
     endWeek: 33,
-    description: "Youth cup tournament in progress",
+    description:
+      "Youth cup tournament in progress — increased youth prospect visibility",
+    effects: [
+      { type: "youthIntake", value: 0.5, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.3, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Dedicate to Youth Scouting",
+        description:
+          "Send all resources to the youth cup for maximum prospect evaluation.",
+        effects: [
+          { type: "youthIntake", value: 0.75, targetScope: "global" },
+          { type: "attributeRevealBonus", value: 0.5, targetScope: "global" },
+          { type: "fatigueModifier", value: 0.15, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Balanced Approach",
+        description:
+          "Attend some youth cup matches while maintaining regular scouting duties.",
+        effects: [
+          { type: "youthIntake", value: 0.3, targetScope: "global" },
+          { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
+        ],
+      },
+    ],
   },
   {
     type: "endOfSeasonReview",
     name: "End-of-Season Review",
     startWeek: 38,
     endWeek: 38,
-    description: "Season review and contract renewals",
+    description:
+      "Season review and contract renewals — board evaluation affects reputation",
+    effects: [
+      { type: "reputationBonus", value: 5, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Highlight Discoveries",
+        description:
+          "Present your best finds to the board for a reputation boost.",
+        effects: [
+          { type: "reputationBonus", value: 10, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Negotiate Better Resources",
+        description:
+          "Use your track record to secure reduced scouting costs next season.",
+        effects: [
+          { type: "reputationBonus", value: 3, targetScope: "global" },
+          { type: "scoutingCostModifier", value: -0.2, targetScope: "global" },
+        ],
+      },
+    ],
   },
 ] as const;
 
@@ -111,6 +275,15 @@ export function generateSeasonEvents(season: number): SeasonEvent[] {
     startWeek: def.startWeek,
     endWeek: def.endWeek,
     description: def.description,
+    effects: def.effects ? [...def.effects] : undefined,
+    choices: def.choices
+      ? def.choices.map((c) => ({
+          label: c.label,
+          description: c.description,
+          effects: [...c.effects],
+        }))
+      : undefined,
+    resolved: false,
   }));
 }
 

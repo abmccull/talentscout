@@ -23,8 +23,9 @@
  *    others by initializeCountryReputations).
  */
 
-import type { Scout, CountryReputation } from "@/engine/core/types";
+import type { Scout, CountryReputation, RegionalKnowledge } from "@/engine/core/types";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import { getGraduatedRegionalBonus } from "@/engine/specializations/regionalKnowledge";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -104,21 +105,42 @@ export function getRegionalExpertiseModifier(
  *     the highest familiarity in countryReputations, as determined by
  *     getScoutHomeCountry from ./travel.ts).
  *
- * When both criteria are met the bonus scales with specializationLevel:
- *   bonus = 0.7 * (specializationLevel / 20)
+ * F13 Rebalance: The bonus now uses a graduated curve based on regional
+ * knowledge level instead of a flat 70% reduction:
+ *   Knowledge  0-24: up to 15% error reduction
+ *   Knowledge 25-49: up to 30% error reduction
+ *   Knowledge 50-74: up to 50% error reduction
+ *   Knowledge 75-100: up to 70% error reduction
+ *
+ * Falls back to the old flat curve (0.7 * specLevel/20) when knowledge
+ * data is not provided, for backward compatibility.
  *
  * Range: [0.0, 0.7]
  *
- * @param scout   - The scout being evaluated.
- * @param country - The country the scout is currently operating in.
- * @returns       - A bonus fraction in [0.0, 0.7].
+ * @param scout     - The scout being evaluated.
+ * @param country   - The country the scout is currently operating in.
+ * @param knowledge - Optional regional knowledge for graduated curve (F13).
+ * @returns         - A bonus fraction in [0.0, 0.7].
  */
-export function getRegionalPerkBonus(scout: Scout, country: string): number {
+export function getRegionalPerkBonus(
+  scout: Scout,
+  country: string,
+  knowledge?: RegionalKnowledge,
+): number {
   if (scout.primarySpecialization !== "regional") return 0.0;
 
   const homeCountry = getScoutHomeCountry(scout);
   if (homeCountry !== country) return 0.0;
 
+  // F13: Use graduated curve when knowledge data is available
+  if (knowledge) {
+    return getGraduatedRegionalBonus(
+      knowledge.knowledgeLevel,
+      scout.specializationLevel,
+    );
+  }
+
+  // Legacy fallback: flat 70% curve scaled by specialization level
   return 0.7 * (scout.specializationLevel / 20);
 }
 
@@ -156,16 +178,18 @@ export function getCountryExpertiseLevel(
  *  - Full familiarity, max perk (level 20):      1.0 * (1 + 0.7) = 1.70 → clamped 1.50
  *  - Half familiarity, mid perk (level 10):      0.75 * (1 + 0.35) = 1.01
  *
- * @param scout   - The scout whose modifiers are computed.
- * @param country - The country the scout is operating in.
- * @returns       - A combined accuracy multiplier in [0.5, 1.5].
+ * @param scout     - The scout whose modifiers are computed.
+ * @param country   - The country the scout is operating in.
+ * @param knowledge - Optional regional knowledge for F13 graduated curve.
+ * @returns         - A combined accuracy multiplier in [0.5, 1.5].
  */
 export function calculateRegionalAccuracyBonus(
   scout: Scout,
   country: string,
+  knowledge?: RegionalKnowledge,
 ): number {
   const expertiseModifier = getRegionalExpertiseModifier(scout, country);
-  const perkBonus = getRegionalPerkBonus(scout, country);
+  const perkBonus = getRegionalPerkBonus(scout, country, knowledge);
   const total = expertiseModifier * (1 + perkBonus);
   return clamp(total, 0.5, 1.5);
 }

@@ -32,6 +32,15 @@ import type {
   AlumniMilestone,
   AlumniRecord,
   GutFeeling,
+  Position,
+  PlayerMatchRating,
+  Injury,
+  InjuryHistory,
+  InjuryType,
+  InjurySeverity,
+  RegionalKnowledge,
+  CulturalInsight,
+  Contact,
 } from "./types";
 import {
   processNPCScoutingWeek,
@@ -42,8 +51,26 @@ import {
   processYouthAging,
   processPlayerRetirement,
 } from "../youth/generation";
-import { processAlumniWeek } from "../youth/alumni";
-import { generateSeasonEvents } from "./seasonEvents";
+import { processAlumniWeek, generateAlumniSeasonSummary } from "../youth/alumni";
+import { generateSeasonEvents, getActiveSeasonEvents } from "./seasonEvents";
+import { applySeasonEventEffects } from "./seasonEventEffects";
+import {
+  generateSimulatedMatchRatings,
+  computeFormFromRatings,
+} from "../match/ratings";
+import { processRegionalKnowledgeGrowth } from "../specializations/regionalKnowledge";
+import {
+  decrementSuspensions,
+  clearSeasonCards,
+  processCardAccumulation,
+} from "../match/discipline";
+import { processActiveNegotiations } from "../firstTeam/negotiation";
+import { processBoardWeekly } from "../firstTeam/boardAI";
+import { processWeeklyGossip } from "../network/gossip";
+import { processWeeklyReferrals } from "../network/referrals";
+import { processWeeklyContactDecay, processExclusiveWindows } from "../network/contacts";
+import type { CardEvent, DisciplinaryRecord, TransferNegotiation, BoardReaction, BoardProfile, TacticalMatchup } from "./types";
+import { calculateTacticalMatchup } from "../match/tactics";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -67,6 +94,8 @@ export interface PlayerDevelopmentResult {
 export interface InjuryResult {
   playerId: string;
   weeksOut: number;
+  /** Rich injury object with type, severity, and history data. */
+  injury: Injury;
 }
 
 export interface SimulatedFixture extends Fixture {
@@ -75,6 +104,10 @@ export interface SimulatedFixture extends Fixture {
   awayGoals: number;
   attendance: number;
   weather: Weather;
+  /** Goal scorers for this fixture — used for rating generation. */
+  scorers?: Array<{ playerId: string; minute: number }>;
+  /** Per-player match ratings generated for this fixture. */
+  playerRatings?: Record<string, import("./types").PlayerMatchRating>;
 }
 
 /**
@@ -137,6 +170,37 @@ export interface TickResult {
   alumniRecords?: AlumniRecord[];
   /** Gut feelings triggered this tick. */
   gutFeelings?: GutFeeling[];
+  /** Regional knowledge growth results (F13). */
+  regionalKnowledgeResult?: {
+    regionalKnowledge: Record<string, RegionalKnowledge>;
+    newDiscoveries: Array<{ countryId: string; leagueId: string; leagueName: string }>;
+    newInsights: Array<{ countryId: string; insight: CulturalInsight }>;
+    newContacts: Array<{ countryId: string; contactId: string }>;
+  };
+  /** Season event effects applied this tick (state changes from active events). */
+  seasonEventState?: GameState;
+  /**
+   * Achievement IDs whose conditions are satisfied as of this tick's state.
+   * Populated by the store layer after advanceWeek() produces the new GameState,
+   * since achievement definitions live outside the engine module.
+   */
+  satisfiedAchievementIds?: string[];
+  /** Card events generated from simulated fixtures this tick. */
+  cardEvents?: CardEvent[];
+  /** Updated disciplinary records after processing cards. */
+  updatedDisciplinaryRecords?: Record<string, DisciplinaryRecord>;
+  /** Suspension notifications generated this tick. */
+  suspensionNotifications?: Array<{ playerId: string; weeks: number; reason: string }>;
+  /** Alumni contact promotions — alumni who graduated to the contact network (F12). */
+  alumniContactPromotions?: Array<{ alumniId: string; contact: Contact }>;
+  /** Updated active negotiations after weekly processing (F4). */
+  updatedNegotiations?: TransferNegotiation[];
+  /** Updated contacts after F3 contact network depth processing. */
+  updatedContacts?: Record<string, Contact>;
+  /** Board AI reaction result (F10, tier 5 weekly). */
+  boardReactions?: BoardReaction[];
+  /** Updated board profile after weekly evaluation (F10). */
+  updatedBoardProfile?: BoardProfile;
 }
 
 // =============================================================================
@@ -199,17 +263,21 @@ function clamp(value: number, min: number, max: number): number {
 function clubAverageAbility(
   club: Club,
   players: Record<string, Player>,
+  disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
 ): number {
   if (club.playerIds.length === 0) return 100;
 
   let found = 0;
   const total = club.playerIds.reduce((sum, pid) => {
     const p = players[pid];
-    if (p) {
-      found++;
-      return sum + p.currentAbility;
-    }
-    return sum;
+    if (!p) return sum;
+    // Exclude suspended players from the ability calculation
+    const record = disciplinaryRecords[pid];
+    if (record && record.suspensionWeeksRemaining > 0) return sum;
+    // Exclude injured players
+    if (p.injured) return sum;
+    found++;
+    return sum + p.currentAbility;
   }, 0);
 
   return found > 0 ? total / found : 100;
@@ -260,6 +328,45 @@ function generateAttendance(
 }
 
 /**
+ * Pick goal scorers for a simulated fixture, weighted by attacking attributes.
+ */
+function pickScorers(
+  rng: RNG,
+  homePlayers: Player[],
+  homeGoals: number,
+  awayPlayers: Player[],
+  awayGoals: number,
+): Array<{ playerId: string; minute: number }> {
+  const ATTACKING: Set<Position> = new Set(["ST", "LW", "RW", "CAM"]);
+
+  const pickForTeam = (players: Player[], goals: number) => {
+    if (players.length === 0 || goals === 0) return [];
+    const weighted = players.map((p) => ({
+      item: p.id,
+      weight: Math.max(
+        1,
+        (p.attributes.shooting ?? 10) * 0.4
+          + (p.attributes.finishing ?? 10) * 0.6
+          + (ATTACKING.has(p.position) ? 3 : 0),
+      ),
+    }));
+    const usedMinutes = new Set<number>();
+    return Array.from({ length: goals }, () => {
+      const playerId = rng.pickWeighted(weighted);
+      let minute: number;
+      do { minute = rng.nextInt(1, 90); } while (usedMinutes.has(minute));
+      usedMinutes.add(minute);
+      return { playerId, minute };
+    }).sort((a, b) => a.minute - b.minute);
+  };
+
+  return [
+    ...pickForTeam(homePlayers, homeGoals),
+    ...pickForTeam(awayPlayers, awayGoals),
+  ];
+}
+
+/**
  * Simulate a single fixture and return the updated fixture with scores.
  *
  * Model: Elo-style expected goals based on ability differential, with
@@ -271,6 +378,7 @@ function simulateFixture(
   clubs: Record<string, Club>,
   players: Record<string, Player>,
   rng: RNG,
+  disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
 ): SimulatedFixture {
   const homeClub = clubs[fixture.homeClubId];
   const awayClub = clubs[fixture.awayClubId];
@@ -279,19 +387,33 @@ function simulateFixture(
   const weatherMod = weatherAbilityModifier(weather);
 
   const homeAbility = homeClub
-    ? clubAverageAbility(homeClub, players) * weatherMod
+    ? clubAverageAbility(homeClub, players, disciplinaryRecords) * weatherMod
     : 100;
   const awayAbility = awayClub
-    ? clubAverageAbility(awayClub, players) * weatherMod
+    ? clubAverageAbility(awayClub, players, disciplinaryRecords) * weatherMod
     : 100;
+
+  // Calculate tactical matchup between the two clubs' styles
+  let tacticalMatchup: TacticalMatchup | undefined;
+  if (homeClub?.tacticalStyle && awayClub?.tacticalStyle) {
+    tacticalMatchup = calculateTacticalMatchup(
+      homeClub.tacticalStyle,
+      awayClub.tacticalStyle,
+    );
+  }
 
   // Home advantage: ~0.3 expected goals bonus
   const homeAdvantage = 0.3;
 
+  // Apply tactical matchup modifiers to expected goals
+  // A positive modifier (tactical advantage) increases expected goals slightly
+  const homeTacticalMod = tacticalMatchup ? 1 + tacticalMatchup.homeModifier * 0.5 : 1;
+  const awayTacticalMod = tacticalMatchup ? 1 + tacticalMatchup.awayModifier * 0.5 : 1;
+
   // Expected goals: ratio-based, tuned so roughly 2.6 goals per game on average
   const totalAbility = homeAbility + awayAbility;
-  const homeExpected = (homeAbility / totalAbility) * 2.6 + homeAdvantage;
-  const awayExpected = (awayAbility / totalAbility) * 2.6;
+  const homeExpected = (homeAbility / totalAbility) * 2.6 * homeTacticalMod + homeAdvantage;
+  const awayExpected = (awayAbility / totalAbility) * 2.6 * awayTacticalMod;
 
   // Simulate goals: Gaussian approximation of Poisson, floored at 0
   const homeGoals = Math.max(
@@ -307,6 +429,23 @@ function simulateFixture(
     ? generateAttendance(homeClub, rng)
     : rng.nextInt(5000, 30000);
 
+  // Pick scorers for rating generation — exclude injured players
+  const homePlayers = homeClub
+    ? homeClub.playerIds.map((id) => players[id]).filter((p): p is Player => !!p && !p.injured)
+    : [];
+  const awayPlayers = awayClub
+    ? awayClub.playerIds.map((id) => players[id]).filter((p): p is Player => !!p && !p.injured)
+    : [];
+  const scorers = pickScorers(rng, homePlayers, homeGoals, awayPlayers, awayGoals);
+
+  // Generate simulated match ratings for all players in both squads
+  let playerRatings: Record<string, PlayerMatchRating> | undefined;
+  if (homePlayers.length > 0 || awayPlayers.length > 0) {
+    playerRatings = generateSimulatedMatchRatings(
+      rng, homePlayers, awayPlayers, homeGoals, awayGoals, scorers, fixture.id,
+    );
+  }
+
   return {
     ...fixture,
     played: true,
@@ -314,6 +453,8 @@ function simulateFixture(
     awayGoals,
     attendance,
     weather,
+    scorers,
+    playerRatings,
   };
 }
 
@@ -323,13 +464,15 @@ function simulateFixture(
 function simulateWeekFixtures(
   state: GameState,
   rng: RNG,
+  disciplinaryRecords?: Record<string, DisciplinaryRecord>,
 ): SimulatedFixture[] {
   const results: SimulatedFixture[] = [];
+  const records = disciplinaryRecords ?? state.disciplinaryRecords ?? {};
 
   for (const fixture of Object.values(state.fixtures)) {
     if (fixture.week === state.currentWeek && !fixture.played) {
       results.push(
-        simulateFixture(fixture, state.clubs, state.players, rng),
+        simulateFixture(fixture, state.clubs, state.players, rng, records),
       );
     }
   }
@@ -473,9 +616,9 @@ function computePlayerDevelopment(
 ): PlayerDevelopmentResult {
   const mult = developmentMultiplier(player.age, player.developmentProfile, rng);
 
-  // Weekly development chance — only ~15% of weeks produce an attribute tick
-  // to simulate monthly granularity in a weekly tick system.
-  const developmentChance = 0.15;
+  // Weekly development chance — form bonus: +3 → 20%, baseline 15%, -3 → 10%
+  const formBonus = player.form * 0.017;
+  const developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
   if (!rng.chance(developmentChance)) {
     return { playerId: player.id, changes: {}, abilityChange: 0 };
   }
@@ -556,34 +699,111 @@ function processPlayerDevelopment(
 // INJURIES
 // =============================================================================
 
+/** Injury type distribution weights: muscle 40%, knock 25%, ligament 15%, fatigue 10%, fracture 7%, concussion 3%. */
+const INJURY_TYPE_WEIGHTS: { item: InjuryType; weight: number }[] = [
+  { item: "muscle", weight: 40 },
+  { item: "knock", weight: 25 },
+  { item: "ligament", weight: 15 },
+  { item: "fatigue", weight: 10 },
+  { item: "fracture", weight: 7 },
+  { item: "concussion", weight: 3 },
+];
+
+/** Recovery time ranges (weeks) per injury type: [min, max]. */
+const RECOVERY_RANGES: Record<InjuryType, [number, number]> = {
+  knock: [1, 2],
+  muscle: [2, 6],
+  fatigue: [1, 3],
+  ligament: [4, 12],
+  fracture: [6, 16],
+  concussion: [2, 4],
+};
+
+/** Derive severity from recovery weeks. */
+function deriveSeverity(recoveryWeeks: number): InjurySeverity {
+  if (recoveryWeeks <= 2) return "minor";
+  if (recoveryWeeks <= 5) return "moderate";
+  if (recoveryWeeks <= 10) return "serious";
+  return "career-threatening";
+}
+
 /**
- * Compute injury probability for a player based on their attributes.
- * Players with high injuryProneness hidden attribute have higher base risk.
+ * Compute injury probability for a player based on their attributes,
+ * injury history (proneness accumulation), and reinjury risk window.
  * Already-injured players are skipped.
  */
 function computeInjuryProbability(player: Player): number {
   if (player.injured) return 0;
 
-  const proneness = player.attributes.injuryProneness ?? 10; // 1–20
+  const proneness = player.attributes.injuryProneness ?? 10; // 1-20
   // proneness 1 = safest (0.5x), proneness 20 = most risk (2.5x)
   const pronenessMultiplier = 0.5 + (proneness / 20) * 2;
-  return BASE_INJURY_PROBABILITY * pronenessMultiplier;
+
+  // Accumulated injury-proneness from history (0-1 scale)
+  const historyProneness = player.injuryHistory?.injuryProneness ?? 0;
+  // Each 0.1 of history proneness adds ~10% more risk
+  const historyMultiplier = 1 + historyProneness;
+
+  // Reinjury risk window: chance is doubled for 4 weeks after return
+  const reinjuryWindow = player.injuryHistory?.reinjuryWindowWeeksLeft ?? 0;
+  const reinjuryMultiplier = reinjuryWindow > 0 ? 2.0 : 1.0;
+
+  return BASE_INJURY_PROBABILITY * pronenessMultiplier * historyMultiplier * reinjuryMultiplier;
 }
 
 /**
- * Generate a random injury duration in weeks.
- * Most injuries are short (1–3 weeks); serious ones (4–12 weeks) are rarer.
+ * Pick an injury type and generate recovery duration based on type-specific ranges.
  */
-function generateInjuryDuration(rng: RNG): number {
-  return rng.pickWeighted([
-    { item: 1, weight: 40 },
-    { item: 2, weight: 25 },
-    { item: 3, weight: 15 },
-    { item: 4, weight: 8 },
-    { item: 6, weight: 6 },
-    { item: 8, weight: 4 },
-    { item: 12, weight: 2 },
-  ]);
+function generateInjuryObject(
+  rng: RNG,
+  player: Player,
+  state: GameState,
+): Injury {
+  const injuryType = rng.pickWeighted(INJURY_TYPE_WEIGHTS);
+  const [minWeeks, maxWeeks] = RECOVERY_RANGES[injuryType];
+  const recoveryWeeks = rng.nextInt(minWeeks, maxWeeks);
+  const severity = deriveSeverity(recoveryWeeks);
+
+  return {
+    id: generateId("inj", rng),
+    playerId: player.id,
+    type: injuryType,
+    severity,
+    recoveryWeeks,
+    weeksRemaining: recoveryWeeks,
+    reinjuryRisk: 0, // Set when player returns
+    occurredWeek: state.currentWeek,
+    occurredSeason: state.currentSeason,
+  };
+}
+
+/**
+ * Update a player's injury history when a new injury occurs.
+ * Increases injuryProneness accumulation with each injury.
+ */
+function addToInjuryHistory(
+  player: Player,
+  injury: Injury,
+): InjuryHistory {
+  const existing: InjuryHistory = player.injuryHistory ?? {
+    playerId: player.id,
+    injuries: [],
+    totalWeeksMissed: 0,
+    injuryProneness: 0,
+    reinjuryWindowWeeksLeft: 0,
+  };
+
+  // Each injury adds 0.03 to proneness (capped at 0.5)
+  const newProneness = Math.min(0.5, existing.injuryProneness + 0.03);
+
+  return {
+    ...existing,
+    injuries: [...existing.injuries, injury],
+    totalWeeksMissed: existing.totalWeeksMissed + injury.recoveryWeeks,
+    injuryProneness: newProneness,
+    // Reset reinjury window — it will activate when the injury heals
+    reinjuryWindowWeeksLeft: 0,
+  };
 }
 
 /**
@@ -597,14 +817,109 @@ function processInjuries(state: GameState, rng: RNG): InjuryResult[] {
   for (const player of Object.values(state.players)) {
     const prob = computeInjuryProbability(player);
     if (prob > 0 && rng.chance(prob)) {
+      const injury = generateInjuryObject(rng, player, state);
       newInjuries.push({
         playerId: player.id,
-        weeksOut: generateInjuryDuration(rng),
+        weeksOut: injury.recoveryWeeks,
+        injury,
       });
     }
   }
 
   return newInjuries;
+}
+
+// =============================================================================
+// SIMULATED CARD GENERATION (for non-attended fixtures)
+// =============================================================================
+
+/**
+ * Card reason weights for simulated cards.
+ */
+type SimCardReason = "recklessTackle" | "professionalFoul" | "dissent" | "timewasting" | "handball" | "violentConduct";
+
+const SIM_YELLOW_REASONS: Array<{ item: SimCardReason; weight: number }> = [
+  { item: "recklessTackle", weight: 40 },
+  { item: "professionalFoul", weight: 25 },
+  { item: "dissent", weight: 15 },
+  { item: "timewasting", weight: 10 },
+  { item: "handball", weight: 10 },
+];
+
+const SIM_RED_REASONS: Array<{ item: SimCardReason; weight: number }> = [
+  { item: "violentConduct", weight: 30 },
+  { item: "recklessTackle", weight: 30 },
+  { item: "professionalFoul", weight: 25 },
+  { item: "handball", weight: 10 },
+  { item: "dissent", weight: 5 },
+];
+
+/**
+ * Generate simulated card events for a fixture.
+ * Each player has a small chance of receiving a card based on attributes.
+ *
+ * Average match: ~3 yellows, ~0.05 reds (realistic football statistics).
+ */
+function generateSimulatedCards(
+  rng: RNG,
+  fixtureId: string,
+  homePlayers: Player[],
+  awayPlayers: Player[],
+  disciplinaryRecords: Record<string, DisciplinaryRecord>,
+): CardEvent[] {
+  const cards: CardEvent[] = [];
+  const allPlayers = [...homePlayers, ...awayPlayers];
+
+  for (const player of allPlayers) {
+    // Skip suspended/injured players (they aren't playing)
+    const record = disciplinaryRecords[player.id];
+    if (record && record.suspensionWeeksRemaining > 0) continue;
+    if (player.injured) continue;
+
+    // Base probability: ~3 yellows per match across ~22 players = ~14% per player
+    let yellowProb = 0.14;
+    let redProb = 0.002; // ~1 red per ~50 matches, ~22 players
+
+    // Temperament modifier
+    const isTemperamental = player.personalityTraits?.includes("temperamental") ?? false;
+    if (isTemperamental) {
+      yellowProb *= 1.8;
+      redProb *= 2.0;
+    }
+
+    // Defensive awareness: lower awareness = slightly higher card risk
+    const defAwareness = player.attributes.defensiveAwareness ?? 10;
+    if (defAwareness < 8) {
+      yellowProb *= 1 + (8 - defAwareness) * 0.05;
+    }
+
+    // Defensive positions get cards more often
+    const defensivePositions = new Set(["CB", "LB", "RB", "CDM"]);
+    if (defensivePositions.has(player.position)) {
+      yellowProb *= 1.3;
+    }
+
+    const roll = rng.nextFloat(0, 1);
+    if (roll < redProb) {
+      cards.push({
+        type: "red",
+        playerId: player.id,
+        fixtureId,
+        minute: rng.nextInt(1, 90),
+        reason: rng.pickWeighted(SIM_RED_REASONS),
+      });
+    } else if (roll < redProb + yellowProb) {
+      cards.push({
+        type: "yellow",
+        playerId: player.id,
+        fixtureId,
+        minute: rng.nextInt(1, 90),
+        reason: rng.pickWeighted(SIM_YELLOW_REASONS),
+      });
+    }
+  }
+
+  return cards;
 }
 
 // =============================================================================
@@ -810,13 +1125,17 @@ function generateNewsMessages(
     const player = state.players[injury.playerId];
     if (!player) continue;
 
+    const injType = injury.injury.type;
+    const injSeverity = injury.injury.severity;
+    const typeLabel = injType.charAt(0).toUpperCase() + injType.slice(1);
+
     messages.push({
       id: makeMessageId("injury", rng),
       week: state.currentWeek,
       season: state.currentSeason,
       type: "news",
-      title: `Injury: ${player.firstName} ${player.lastName} out for ${injury.weeksOut} weeks`,
-      body: `${player.firstName} ${player.lastName} has picked up an injury and will be sidelined for approximately ${injury.weeksOut} weeks. Any current reports on this player may need revising.`,
+      title: `Injury: ${player.firstName} ${player.lastName} — ${typeLabel} (${injSeverity})`,
+      body: `${player.firstName} ${player.lastName} has suffered a ${injSeverity} ${injType} injury and will be sidelined for approximately ${injury.weeksOut} weeks. Any current reports on this player may need revising.`,
       read: false,
       actionRequired: false,
       relatedId: player.id,
@@ -1245,11 +1564,36 @@ function evaluateBoardDirectivesForTick(
  * @returns      A TickResult describing all events that occurred this week.
  */
 export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
-  // 1. Simulate fixtures
-  const fixturesPlayed = simulateWeekFixtures(state, rng);
+  // 0. Decrement suspensions at the start of the week
+  const currentDisciplinary = decrementSuspensions(state.disciplinaryRecords ?? {});
+
+  // 1. Simulate fixtures (pass decremented disciplinary records so suspended players are excluded)
+  const fixturesPlayed = simulateWeekFixtures(state, rng, currentDisciplinary);
 
   // 2. Check if standings changed (they did if any fixtures were played)
   const standingsUpdated = fixturesPlayed.length > 0;
+
+  // 2b. Generate card events for simulated fixtures
+  const allCardEvents: CardEvent[] = [];
+  for (const played of fixturesPlayed) {
+    const homeClub = state.clubs[played.homeClubId];
+    const awayClub = state.clubs[played.awayClubId];
+    const homePlayers = homeClub
+      ? homeClub.playerIds.map((id) => state.players[id]).filter((p): p is Player => !!p)
+      : [];
+    const awayPlayers = awayClub
+      ? awayClub.playerIds.map((id) => state.players[id]).filter((p): p is Player => !!p)
+      : [];
+    const fixtureCards = generateSimulatedCards(
+      rng, played.id, homePlayers, awayPlayers, currentDisciplinary,
+    );
+    allCardEvents.push(...fixtureCards);
+  }
+
+  // 2c. Process card accumulation and suspensions
+  const { updatedRecords: postCardRecords, suspensions } = processCardAccumulation(
+    allCardEvents, currentDisciplinary, state.currentSeason,
+  );
 
   // 3. Player development
   const playerDevelopment = processPlayerDevelopment(state, rng);
@@ -1283,6 +1627,12 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 10. Board directive evaluation (tier 5, season-end only).
   const boardDirectiveResult = evaluateBoardDirectivesForTick(state, endOfSeasonTriggered);
 
+  // 10b. Board AI weekly processing (F10, tier 5): evaluate satisfaction and reactions.
+  const boardAIResult = processBoardWeekly(state, rng);
+  if (boardAIResult) {
+    newMessages.push(...boardAIResult.messages);
+  }
+
   // 11. Youth scouting: aging and retirement
   const youthAgingResult = processYouthAging(
     rng,
@@ -1296,7 +1646,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     ? processPlayerRetirement(rng, state.players, state.clubs, state.currentSeason)
     : undefined;
 
-  // 13. Alumni milestone tracking
+  // 13. Alumni milestone tracking (F12: pass retiredPlayerIds for status derivation)
   const alumniResult = processAlumniWeek(
     rng,
     state.alumniRecords,
@@ -1304,10 +1654,108 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     state.clubs,
     state.currentWeek,
     state.currentSeason,
+    state.retiredPlayerIds,
   );
 
   // Merge alumni messages into inbox messages
   newMessages.push(...alumniResult.newMessages);
+
+  // 13b. F12: Generate season summaries for all active alumni at end of season
+  let alumniWithSeasonStats = alumniResult.updatedAlumni;
+  if (endOfSeasonTriggered) {
+    alumniWithSeasonStats = alumniWithSeasonStats.map((record) => {
+      const player = state.players[record.playerId];
+      if (!player) return record;
+      return generateAlumniSeasonSummary(rng, record, player, state.currentSeason);
+    });
+  }
+
+  // 14. Season event effects: apply mechanical effects from active events
+  const activeEvents = getActiveSeasonEvents(
+    state.seasonEvents,
+    state.currentWeek,
+  );
+  const seasonEventResult = applySeasonEventEffects(state, activeEvents, rng);
+  newMessages.push(...seasonEventResult.messages);
+
+  // 15. Regional knowledge growth (F13)
+  let regionalKnowledgeResult: TickResult["regionalKnowledgeResult"];
+  if (state.regionalKnowledge && Object.keys(state.regionalKnowledge).length > 0) {
+    const rkResult = processRegionalKnowledgeGrowth(state, rng);
+    regionalKnowledgeResult = rkResult;
+
+    // Generate inbox messages for discoveries and insights
+    for (const disc of rkResult.newDiscoveries) {
+      newMessages.push({
+        id: generateId("msg", rng),
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "news",
+        title: `Hidden League Discovered: ${disc.leagueName}`,
+        body: `Your growing knowledge of the region has revealed the ${disc.leagueName}. This lower-tier league may contain undiscovered talent that mainstream scouts overlook.`,
+        read: false,
+        actionRequired: false,
+      });
+    }
+    for (const ins of rkResult.newInsights) {
+      newMessages.push({
+        id: generateId("msg", rng),
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "news",
+        title: `Cultural Insight: ${ins.insight.type.replace(/([A-Z])/g, " $1").trim()}`,
+        body: `${ins.insight.description} — ${ins.insight.gameplayEffect}`,
+        read: false,
+        actionRequired: false,
+      });
+    }
+  }
+
+  // 16. Generate suspension notifications for observed players
+  const observedPlayerIds = new Set(
+    Object.values(state.observations).map((o) => o.playerId),
+  );
+  for (const susp of suspensions) {
+    if (!observedPlayerIds.has(susp.playerId)) continue;
+    const player = state.players[susp.playerId];
+    if (!player) continue;
+    newMessages.push({
+      id: makeMessageId("suspension", rng),
+      week: state.currentWeek,
+      season: state.currentSeason,
+      type: "news",
+      title: `Suspension: ${player.firstName} ${player.lastName}`,
+      body: `${player.firstName} ${player.lastName} has been suspended for ${susp.weeks} match${susp.weeks > 1 ? "es" : ""} due to ${susp.reason}.`,
+      read: false,
+      actionRequired: false,
+      relatedId: player.id,
+    });
+  }
+
+  // 17. Process active transfer negotiations (F4)
+  const negotiationResult = processActiveNegotiations(state, rng);
+  newMessages.push(...negotiationResult.messages);
+
+  // 18. F3: Contact Network Depth — gossip, referrals, trust decay, betrayal, exclusives
+  const contactDecayResult = processWeeklyContactDecay(state, rng);
+  newMessages.push(...contactDecayResult.betrayalMessages);
+
+  // Gossip processing on decayed contacts
+  const gossipState: GameState = { ...state, contacts: contactDecayResult.updatedContacts };
+  const gossipResult = processWeeklyGossip(gossipState, rng);
+  newMessages.push(...gossipResult.gossipMessages);
+
+  // Referral processing
+  const referralState: GameState = { ...state, contacts: gossipResult.updatedContacts };
+  const referralResult = processWeeklyReferrals(referralState, rng);
+  newMessages.push(...referralResult.referralMessages);
+
+  // Exclusive windows processing
+  const exclusiveState: GameState = { ...state, contacts: referralResult.updatedContacts };
+  const exclusiveResult = processExclusiveWindows(exclusiveState, rng);
+  newMessages.push(...exclusiveResult.exclusiveMessages);
+
+  const f3UpdatedContacts = exclusiveResult.updatedContacts;
 
   return {
     fixturesPlayed,
@@ -1331,8 +1779,22 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     newUnsignedYouth: undefined,
     newAcademyIntake: undefined,
     alumniMilestones: alumniResult.newMilestones,
-    alumniRecords: alumniResult.updatedAlumni,
+    alumniRecords: alumniWithSeasonStats,
+    alumniContactPromotions: alumniResult.contactPromotions.length > 0
+      ? alumniResult.contactPromotions
+      : undefined,
     gutFeelings: undefined, // generated during observation processing in store
+    regionalKnowledgeResult,
+    seasonEventState: seasonEventResult.state,
+    cardEvents: allCardEvents.length > 0 ? allCardEvents : undefined,
+    updatedDisciplinaryRecords: postCardRecords,
+    suspensionNotifications: suspensions.length > 0 ? suspensions : undefined,
+    updatedNegotiations: negotiationResult.negotiations.length > 0
+      ? negotiationResult.negotiations
+      : undefined,
+    updatedContacts: f3UpdatedContacts,
+    boardReactions: boardAIResult?.reactions,
+    updatedBoardProfile: boardAIResult?.updatedProfile,
   };
 }
 
@@ -1400,28 +1862,53 @@ export function advanceWeek(
   }
 
   // ---- Injuries: apply new injuries and decrement existing ones ----
-  // First, decrement existing injury timers
+  // First, decrement existing injury timers and handle recovery
   for (const [id, player] of Object.entries(updatedPlayers)) {
     if (player.injured && player.injuryWeeksRemaining > 0) {
       const newRemaining = player.injuryWeeksRemaining - 1;
+      const justRecovered = newRemaining === 0;
+
+      // Update current injury's weeksRemaining
+      const updatedCurrentInjury = player.currentInjury
+        ? { ...player.currentInjury, weeksRemaining: newRemaining }
+        : undefined;
+
+      // If player just recovered, activate 4-week reinjury risk window
+      const updatedHistory: InjuryHistory | undefined = justRecovered && player.injuryHistory
+        ? { ...player.injuryHistory, reinjuryWindowWeeksLeft: 4 }
+        : player.injuryHistory;
+
       updatedPlayers[id] = {
         ...player,
         injuryWeeksRemaining: newRemaining,
-        injured: newRemaining > 0,
+        injured: !justRecovered,
+        currentInjury: justRecovered ? undefined : updatedCurrentInjury,
+        injuryHistory: updatedHistory,
+      };
+    } else if (!player.injured && player.injuryHistory && player.injuryHistory.reinjuryWindowWeeksLeft > 0) {
+      // Decrement reinjury risk window for recovered players
+      updatedPlayers[id] = {
+        ...player,
+        injuryHistory: {
+          ...player.injuryHistory,
+          reinjuryWindowWeeksLeft: player.injuryHistory.reinjuryWindowWeeksLeft - 1,
+        },
       };
     }
   }
 
   // Apply new injuries
   const newlyInjuredPlayerIds = new Set<string>();
-  for (const injury of tickResult.injuries) {
-    const player = updatedPlayers[injury.playerId];
+  for (const injuryResult of tickResult.injuries) {
+    const player = updatedPlayers[injuryResult.playerId];
     if (!player) continue;
-    newlyInjuredPlayerIds.add(injury.playerId);
-    updatedPlayers[injury.playerId] = {
+    newlyInjuredPlayerIds.add(injuryResult.playerId);
+    updatedPlayers[injuryResult.playerId] = {
       ...player,
       injured: true,
-      injuryWeeksRemaining: injury.weeksOut,
+      injuryWeeksRemaining: injuryResult.weeksOut,
+      currentInjury: injuryResult.injury,
+      injuryHistory: addToInjuryHistory(player, injuryResult.injury),
     };
   }
 
@@ -1473,6 +1960,35 @@ export function advanceWeek(
     updatedNPCScouts[npcResult.npcScoutId] = npcResult.updatedNPCScout;
     for (const report of npcResult.reportsGenerated) {
       updatedNPCReports[report.id] = report;
+    }
+  }
+
+  // ---- Match ratings: store per-fixture ratings and update player form ----
+  let updatedMatchRatings = { ...state.matchRatings };
+  for (const played of tickResult.fixturesPlayed) {
+    if (played.playerRatings) {
+      updatedMatchRatings[played.id] = played.playerRatings;
+
+      // Update each player's recentMatchRatings (rolling window of 6) and form
+      for (const [playerId, rating] of Object.entries(played.playerRatings)) {
+        const player = updatedPlayers[playerId];
+        if (!player) continue;
+
+        const newEntry = {
+          fixtureId: played.id,
+          week: state.currentWeek,
+          season: state.currentSeason,
+          rating: rating.rating,
+        };
+        const recent = [...(player.recentMatchRatings ?? []), newEntry].slice(-6);
+        const form = computeFormFromRatings(recent, player);
+
+        updatedPlayers[playerId] = {
+          ...player,
+          recentMatchRatings: recent,
+          form,
+        };
+      }
     }
   }
 
@@ -1549,22 +2065,57 @@ export function advanceWeek(
     ...(tickResult.youthAgingResult?.retired ?? []),
   ];
 
-  // ---- Alumni records update ----
-  const updatedAlumniRecords = tickResult.alumniRecords ?? state.alumniRecords;
+  // ---- Alumni records update (F12: contact promotions + season summaries) ----
+  let updatedAlumniRecords = tickResult.alumniRecords ?? state.alumniRecords;
+
+  // F3 + F12: Apply F3 contact network updates first, then merge alumni promotions.
+  let updatedContacts = tickResult.updatedContacts
+    ? { ...tickResult.updatedContacts }
+    : { ...state.contacts };
+  if (tickResult.alumniContactPromotions) {
+    for (const promo of tickResult.alumniContactPromotions) {
+      updatedContacts[promo.contact.id] = promo.contact;
+    }
+  }
+
+  // ---- Discipline: apply updated disciplinary records and sync to players ----
+  let updatedDisciplinaryRecords = tickResult.updatedDisciplinaryRecords ?? (state.disciplinaryRecords ?? {});
+
+  // Sync disciplinary records onto players for quick access
+  for (const [playerId, record] of Object.entries(updatedDisciplinaryRecords)) {
+    const player = updatedPlayers[playerId];
+    if (player) {
+      updatedPlayers[playerId] = { ...player, disciplinaryRecord: record };
+    }
+  }
 
   // ---- Scout updates ----
   // Board directive evaluation may add an additional reputation change (tier 5).
   // Note: fatigue recovery is handled by the calendar system (applyWeekResults),
   // so we only apply reputation changes here.
+  // Season event effects may also modify scout reputation and fatigue.
   const boardReputationChange = tickResult.boardDirectiveResult?.reputationChange ?? 0;
+  const seasonScout = tickResult.seasonEventState?.scout ?? state.scout;
   const updatedScout = {
-    ...state.scout,
+    ...seasonScout,
     reputation: clamp(
-      state.scout.reputation + tickResult.reputationChange + boardReputationChange,
+      seasonScout.reputation + tickResult.reputationChange + boardReputationChange,
       0,
       100,
     ),
   };
+
+  // ---- Board profile & reactions (F10) ----
+  const updatedBoardProfile = tickResult.updatedBoardProfile ?? state.boardProfile;
+  const updatedBoardReactions = [
+    ...(state.boardReactions ?? []),
+    ...(tickResult.boardReactions ?? []),
+  ];
+
+  // ---- Regional knowledge (F13) ----
+  const updatedRegionalKnowledge = tickResult.regionalKnowledgeResult
+    ? tickResult.regionalKnowledgeResult.regionalKnowledge
+    : (state.regionalKnowledge ?? {});
 
   // ---- Inbox ----
   const updatedInbox = [...state.inbox, ...tickResult.newMessages];
@@ -1597,6 +2148,9 @@ export function advanceWeek(
       updatedLeagues[id] = { ...league, season: nextSeason };
     }
 
+    // Clear season cards at end of season
+    updatedDisciplinaryRecords = clearSeasonCards(updatedDisciplinaryRecords, nextSeason);
+
     return {
       ...state,
       fixtures: updatedFixtures,
@@ -1605,6 +2159,7 @@ export function advanceWeek(
       leagues: updatedLeagues,
       scout: updatedScout,
       inbox: updatedInbox,
+      contacts: updatedContacts,
       npcScouts: updatedNPCScouts,
       npcReports: updatedNPCReports,
       currentWeek: nextWeek,
@@ -1622,6 +2177,12 @@ export function advanceWeek(
       gutFeelings: updatedGutFeelings,
       retiredPlayerIds: updatedRetiredPlayerIds,
       alumniRecords: updatedAlumniRecords,
+      matchRatings: updatedMatchRatings,
+      regionalKnowledge: updatedRegionalKnowledge,
+      disciplinaryRecords: updatedDisciplinaryRecords,
+      activeNegotiations: tickResult.updatedNegotiations ?? state.activeNegotiations ?? [],
+      boardProfile: updatedBoardProfile,
+      boardReactions: updatedBoardReactions,
     };
   }
 
@@ -1632,6 +2193,7 @@ export function advanceWeek(
     clubs: updatedClubs,
     scout: updatedScout,
     inbox: updatedInbox,
+    contacts: updatedContacts,
     npcScouts: updatedNPCScouts,
     npcReports: updatedNPCReports,
     currentWeek: nextWeek,
@@ -1648,5 +2210,11 @@ export function advanceWeek(
     gutFeelings: updatedGutFeelings,
     retiredPlayerIds: updatedRetiredPlayerIds,
     alumniRecords: updatedAlumniRecords,
+    matchRatings: updatedMatchRatings,
+    regionalKnowledge: updatedRegionalKnowledge,
+    disciplinaryRecords: updatedDisciplinaryRecords,
+    activeNegotiations: tickResult.updatedNegotiations ?? state.activeNegotiations ?? [],
+    boardProfile: updatedBoardProfile,
+    boardReactions: updatedBoardReactions,
   };
 }

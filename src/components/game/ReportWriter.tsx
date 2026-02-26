@@ -20,6 +20,7 @@ import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
+import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
@@ -63,7 +64,9 @@ export function ReportWriter() {
   const draftApplied = useRef(false);
 
   // Derive data before any early return
-  const player = gameState && selectedPlayerId ? gameState.players[selectedPlayerId] : undefined;
+  const player = gameState && selectedPlayerId
+    ? gameState.players[selectedPlayerId] ?? gameState.unsignedYouth[selectedPlayerId]?.player
+    : undefined;
   const club = player ? getClub(player.clubId) : undefined;
   const observations = useMemo(
     () => (selectedPlayerId ? getPlayerObservations(selectedPlayerId) : []),
@@ -177,8 +180,11 @@ export function ReportWriter() {
   const handleGenerateDraft = () => {
     if (!draft) return;
     const lines: string[] = [];
+    const roleStr = player.naturalRole
+      ? ` ${player.naturalRole.replace(/([A-Z])/g, " $1").trim().toLowerCase()}`
+      : "";
     lines.push(
-      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player.firstName} ${player.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"} ${player.position}.`
+      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player.firstName} ${player.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"}${roleStr} ${player.position}.`
     );
     if (selectedStrengths.length > 0) {
       lines.push(`Key strengths include ${selectedStrengths.slice(0, 2).map(s => {
@@ -191,6 +197,27 @@ export function ReportWriter() {
         const attr = weaknessToAttribute.get(w);
         return attr ? attrLabel(attr).toLowerCase() : w.toLowerCase().split(" — ")[0];
       }).join(" and ")}.`);
+    }
+    // Behavioral traits add flavour
+    const revealedTraits = player.playerTraitsRevealed ?? [];
+    if (revealedTraits.length > 0) {
+      const traitStrs = revealedTraits.slice(0, 2).map(t => t.replace(/([A-Z])/g, " $1").trim().toLowerCase());
+      lines.push(`Notable tendencies: ${traitStrs.join(", ")}.`);
+    }
+    // Personality character assessment
+    if (player.personalityProfile && !player.personalityProfile.hiddenUntilRevealed) {
+      const archetypeLabel = ARCHETYPE_LABELS[player.personalityProfile.archetype];
+      lines.push(`Character: ${archetypeLabel}.`);
+      if (player.personalityProfile.dressingRoomImpact <= -2) {
+        lines.push("Warning: potential dressing room disruption risk.");
+      } else if (player.personalityProfile.dressingRoomImpact >= 2) {
+        lines.push("Positive dressing room influence expected.");
+      }
+      if (player.personalityProfile.bigMatchModifier >= 2) {
+        lines.push("Thrives in big-match scenarios.");
+      } else if (player.personalityProfile.bigMatchModifier <= -1) {
+        lines.push("May struggle in high-pressure fixtures.");
+      }
     }
     if (draft.perceivedPARange) {
       lines.push(`Potential ceiling estimated at ${draft.perceivedPARange[0]}–${draft.perceivedPARange[1]} stars.`);
@@ -636,6 +663,65 @@ export function ReportWriter() {
               />
             </CardContent>
           </Card>
+
+          {/* Character Assessment (F9) */}
+          {player.personalityProfile && !player.personalityProfile.hiddenUntilRevealed && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Character Assessment</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-zinc-500">Personality Type:</span>
+                    <Tooltip content={ARCHETYPE_DESCRIPTIONS[player.personalityProfile.archetype]} side="top">
+                      <span className="rounded bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400 cursor-help underline decoration-dotted underline-offset-2">
+                        {ARCHETYPE_LABELS[player.personalityProfile.archetype]}
+                      </span>
+                    </Tooltip>
+                  </div>
+                  {player.personalityProfile.revealedTraits.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {player.personalityProfile.revealedTraits.map((trait) => (
+                        <Badge key={trait} variant="secondary" className="text-[10px] capitalize">
+                          {trait.replace(/([A-Z])/g, " $1").trim()}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <div className="rounded-lg border border-[#27272a] bg-[#141414] p-3">
+                    <p className="text-xs font-semibold text-zinc-400 mb-2">Character Risk Assessment</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-zinc-500">Dressing Room: </span>
+                        <span className={player.personalityProfile.dressingRoomImpact >= 2 ? "text-emerald-400" : player.personalityProfile.dressingRoomImpact <= -1 ? "text-red-400" : "text-zinc-300"}>
+                          {player.personalityProfile.dressingRoomImpact >= 2 ? "Low Risk" : player.personalityProfile.dressingRoomImpact <= -1 ? "High Risk" : "Moderate"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Form Stability: </span>
+                        <span className={player.personalityProfile.formVolatility <= 0.3 ? "text-emerald-400" : player.personalityProfile.formVolatility >= 0.7 ? "text-red-400" : "text-amber-400"}>
+                          {player.personalityProfile.formVolatility <= 0.3 ? "Stable" : player.personalityProfile.formVolatility >= 0.7 ? "Unpredictable" : "Variable"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Retention: </span>
+                        <span className={player.personalityProfile.transferWillingness <= 0.3 ? "text-emerald-400" : player.personalityProfile.transferWillingness >= 0.7 ? "text-red-400" : "text-amber-400"}>
+                          {player.personalityProfile.transferWillingness <= 0.3 ? "Likely to Stay" : player.personalityProfile.transferWillingness >= 0.7 ? "Flight Risk" : "Moderate"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-zinc-500">Big Matches: </span>
+                        <span className={player.personalityProfile.bigMatchModifier >= 1 ? "text-emerald-400" : player.personalityProfile.bigMatchModifier <= -1 ? "text-red-400" : "text-zinc-300"}>
+                          {player.personalityProfile.bigMatchModifier >= 1 ? "Reliable" : player.personalityProfile.bigMatchModifier <= -1 ? "Concern" : "Average"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Written summary */}
           <Card>

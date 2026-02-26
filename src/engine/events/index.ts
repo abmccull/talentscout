@@ -11,7 +11,7 @@ export type { EventTemplate, EventContext } from "./eventTemplates";
 export { EVENT_TEMPLATES, buildEventContext, extractRelatedIds } from "./eventTemplates";
 
 // Event generation and processing
-export type { EventChoiceResult } from "./narrativeEvents";
+export type { EventChoiceResult, WeeklyEventResult } from "./narrativeEvents";
 export {
   generateWeeklyEvent,
   resolveEventChoice,
@@ -41,3 +41,19 @@ export {
   processActiveStorylines,
   resolveStorylineChoice,
 } from "./storylines";
+
+// Event chain system (F2)
+export type {
+  ChainStartResult,
+  ChainAdvanceResult,
+} from "./eventChains";
+export {
+  startChain,
+  advanceChain,
+  checkPendingChains,
+  resolveChain,
+  tryTriggerChain,
+  computeChainChoiceEffects,
+  CHAIN_TRIGGER_CHANCE,
+  getChainTemplateKeys,
+} from "./eventChains";

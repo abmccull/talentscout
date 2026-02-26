@@ -2,6 +2,10 @@ export {
   generateStartingContacts,
   meetContact,
   getHiddenAttributeIntel,
+  processWeeklyContactDecay,
+  evaluateBetrayalRisk,
+  generateExclusiveWindow,
+  processExclusiveWindows,
 } from "./contacts";
 
 export type {
@@ -9,3 +13,16 @@ export type {
   HiddenIntel,
   PlayerTip,
 } from "./contacts";
+
+export {
+  generateGossip,
+  processGossipDecay,
+  evaluateGossipAccuracy,
+  processWeeklyGossip,
+} from "./gossip";
+
+export {
+  generateReferralOpportunity,
+  processReferral,
+  processWeeklyReferrals,
+} from "./referrals";

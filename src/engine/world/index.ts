@@ -34,6 +34,14 @@ export {
 } from './regions';
 
 export {
+  HIDDEN_LEAGUE_DEFINITIONS,
+  getHiddenLeaguesForCountry,
+  discoverHiddenLeague,
+  getAllDiscoveredHiddenLeagues,
+  getUndiscoveredHiddenLeagues,
+} from './hiddenLeagues';
+
+export {
   generateInternationalAssignment,
   generateYouthTournaments,
   scoutAtYouthTournament,

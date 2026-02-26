@@ -22,11 +22,12 @@ interface RetainerTierConfig {
   requiredReports: number;
 }
 
-const RETAINER_TIERS: Record<1 | 2 | 3 | 4, RetainerTierConfig> = {
+const RETAINER_TIERS: Record<1 | 2 | 3 | 4 | 5, RetainerTierConfig> = {
   1: { name: "Basic", monthlyFeeRange: [500, 1000], requiredReports: 2 },
   2: { name: "Standard", monthlyFeeRange: [1500, 3000], requiredReports: 3 },
   3: { name: "Premium", monthlyFeeRange: [4000, 8000], requiredReports: 5 },
   4: { name: "Elite", monthlyFeeRange: [10000, 20000], requiredReports: 7 },
+  5: { name: "Platinum", monthlyFeeRange: [25000, 50000], requiredReports: 10 },
 };
 
 /** Maximum retainer contracts by independent tier */
@@ -78,7 +79,7 @@ export function generateRetainerOffers(
       : 1;
 
     // Only offer retainer tiers the scout can handle
-    const tier = Math.min(retainerTier, indTier) as 1 | 2 | 3 | 4;
+    const tier = Math.min(retainerTier, indTier) as 1 | 2 | 3 | 4 | 5;
     const config = RETAINER_TIERS[tier];
 
     const monthlyFee = rng.nextInt(config.monthlyFeeRange[0], config.monthlyFeeRange[1]);
@@ -205,6 +206,63 @@ export function recordRetainerDelivery(
     }
     return c;
   });
+
+  return { ...finances, retainerContracts: updatedContracts };
+}
+
+// ---------------------------------------------------------------------------
+// Quarterly renewal processing
+// ---------------------------------------------------------------------------
+
+/**
+ * Process retainer contract renewals every 12 weeks (quarterly).
+ * - Satisfaction >= 70: auto-renew; 20% chance to upgrade tier.
+ * - Satisfaction >= 40: auto-renew at same tier.
+ * - Satisfaction < 40: contract cancelled.
+ */
+export function processRetainerRenewals(
+  rng: RNG,
+  finances: FinancialRecord,
+  week: number,
+  season: number,
+): FinancialRecord {
+  // Only process quarterly
+  if (week % 12 !== 0) return finances;
+
+  const updatedContracts: RetainerContract[] = [];
+
+  for (const contract of finances.retainerContracts) {
+    if (contract.status !== "active") {
+      updatedContracts.push(contract);
+      continue;
+    }
+
+    const relationship = finances.clientRelationships.find((cr) => cr.clubId === contract.clubId);
+    const satisfaction = relationship?.satisfaction ?? 50;
+
+    if (satisfaction >= 70) {
+      // Auto-renew; 20% chance of tier upgrade
+      if (rng.chance(0.2) && contract.tier < 5) {
+        const newTier = (contract.tier + 1) as 1 | 2 | 3 | 4 | 5;
+        const config = RETAINER_TIERS[newTier];
+        const newFee = rng.nextInt(config.monthlyFeeRange[0], config.monthlyFeeRange[1]);
+        updatedContracts.push({
+          ...contract,
+          tier: newTier,
+          monthlyFee: newFee,
+          requiredReportsPerMonth: config.requiredReports,
+        });
+      } else {
+        updatedContracts.push(contract);
+      }
+    } else if (satisfaction >= 40) {
+      // Auto-renew at same tier
+      updatedContracts.push(contract);
+    } else {
+      // Not renewed — cancel the contract
+      updatedContracts.push({ ...contract, status: "cancelled" });
+    }
+  }
 
   return { ...finances, retainerContracts: updatedContracts };
 }

@@ -23,6 +23,7 @@ import {
 } from "@/engine/core/types";
 import { generateAbilityReading } from "@/engine/scout/starRating";
 import { checkPersonalityReveal } from "@/engine/players/personalityReveal";
+import { progressivePersonalityReveal } from "@/engine/players/personalityEffects";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -39,12 +40,12 @@ const DOMAIN_SKILL_MAP: Record<string, ScoutSkill> = {
 
 /** Attributes naturally visible per match phase type. */
 const PHASE_VISIBLE_ATTRIBUTES: Record<MatchPhaseType, PlayerAttribute[]> = {
-  buildUp: ["passing", "firstTouch", "dribbling", "composure", "positioning", "decisionMaking"],
-  transition: ["pace", "stamina", "agility", "decisionMaking", "passing", "offTheBall"],
-  setpiece: ["heading", "strength", "crossing", "composure", "positioning", "defensiveAwareness"],
-  pressingSequence: ["stamina", "workRate", "pressing", "defensiveAwareness", "agility", "decisionMaking"],
-  counterAttack: ["pace", "agility", "dribbling", "shooting", "composure", "offTheBall"],
-  possession: ["passing", "firstTouch", "positioning", "decisionMaking", "offTheBall", "composure"],
+  buildUp: ["passing", "firstTouch", "dribbling", "composure", "positioning", "decisionMaking", "vision", "teamwork", "balance"],
+  transition: ["pace", "stamina", "agility", "decisionMaking", "passing", "offTheBall", "anticipation", "balance"],
+  setpiece: ["heading", "strength", "crossing", "composure", "positioning", "defensiveAwareness", "jumping", "marking"],
+  pressingSequence: ["stamina", "workRate", "pressing", "defensiveAwareness", "agility", "decisionMaking", "tackling", "anticipation", "teamwork"],
+  counterAttack: ["pace", "agility", "dribbling", "shooting", "composure", "offTheBall", "finishing", "anticipation"],
+  possession: ["passing", "firstTouch", "positioning", "decisionMaking", "offTheBall", "composure", "vision", "teamwork"],
 };
 
 /** Noise multiplier per observation context. Lower = more accurate. */
@@ -80,6 +81,15 @@ const BONUS_VISIBILITY: { attribute: PlayerAttribute; skill: ScoutSkill; minLeve
   { attribute: "leadership", skill: "psychologicalRead", minLevel: 13 },
   { attribute: "pressing", skill: "tacticalUnderstanding", minLevel: 11 },
   { attribute: "decisionMaking", skill: "psychologicalRead", minLevel: 10 },
+  // New attributes — require decent scout skill to spot
+  { attribute: "vision", skill: "tacticalUnderstanding", minLevel: 12 },
+  { attribute: "anticipation", skill: "psychologicalRead", minLevel: 11 },
+  { attribute: "marking", skill: "tacticalUnderstanding", minLevel: 10 },
+  { attribute: "teamwork", skill: "tacticalUnderstanding", minLevel: 9 },
+  { attribute: "finishing", skill: "technicalEye", minLevel: 10 },
+  { attribute: "tackling", skill: "technicalEye", minLevel: 9 },
+  { attribute: "jumping", skill: "physicalAssessment", minLevel: 8 },
+  { attribute: "balance", skill: "physicalAssessment", minLevel: 10 },
 ];
 
 const HIDDEN_SET = new Set<string>(HIDDEN_ATTRIBUTES);
@@ -192,27 +202,27 @@ export function calculateConfidenceRange(
 
 /** Attributes naturally observable per non-match context. */
 const CONTEXT_VISIBLE_ATTRIBUTES: Record<ObservationContext, PlayerAttribute[]> = {
-  trainingGround: ["firstTouch", "passing", "dribbling", "shooting", "pace", "strength", "stamina", "agility", "composure", "workRate"],
-  videoAnalysis: ["passing", "shooting", "crossing", "positioning", "decisionMaking", "offTheBall", "pressing", "defensiveAwareness"],
-  youthTournament: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "strength"],
-  academyVisit: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate"],
+  trainingGround: ["firstTouch", "passing", "dribbling", "shooting", "pace", "strength", "stamina", "agility", "composure", "workRate", "tackling", "finishing", "balance", "teamwork"],
+  videoAnalysis: ["passing", "shooting", "crossing", "positioning", "decisionMaking", "offTheBall", "pressing", "defensiveAwareness", "vision", "marking", "anticipation"],
+  youthTournament: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "strength", "balance", "jumping", "finishing"],
+  academyVisit: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate", "balance", "teamwork"],
   liveMatch: [], // not used by light observation — full pipeline uses PHASE_VISIBLE_ATTRIBUTES
-  schoolMatch: ["pace", "dribbling", "agility", "shooting", "composure"],
-  grassrootsTournament: ["pace", "dribbling", "shooting", "agility", "strength", "workRate"],
-  streetFootball: ["dribbling", "firstTouch", "agility", "composure", "decisionMaking"],
-  academyTrialDay: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate", "positioning"],
-  youthFestival: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "passing"],
-  followUpSession: ["firstTouch", "passing", "composure", "workRate", "agility", "decisionMaking"],
+  schoolMatch: ["pace", "dribbling", "agility", "shooting", "composure", "balance", "finishing"],
+  grassrootsTournament: ["pace", "dribbling", "shooting", "agility", "strength", "workRate", "tackling", "jumping", "balance"],
+  streetFootball: ["dribbling", "firstTouch", "agility", "composure", "decisionMaking", "balance"],
+  academyTrialDay: ["firstTouch", "passing", "dribbling", "pace", "agility", "composure", "workRate", "positioning", "tackling", "finishing", "teamwork"],
+  youthFestival: ["pace", "dribbling", "shooting", "agility", "composure", "heading", "passing", "jumping", "balance"],
+  followUpSession: ["firstTouch", "passing", "composure", "workRate", "agility", "decisionMaking", "vision", "anticipation", "pace", "dribbling", "shooting", "strength", "stamina", "finishing", "heading", "jumping", "balance", "tackling", "pressing", "positioning", "offTheBall", "teamwork", "crossing", "defensiveAwareness"],
   parentCoachMeeting: [],
   // First-team exclusive
-  reserveMatch: ["firstTouch", "passing", "shooting", "pace", "strength", "composure", "positioning", "workRate", "offTheBall"],
-  oppositionAnalysis: ["positioning", "decisionMaking", "pressing", "defensiveAwareness", "offTheBall"],
-  agentShowcase: ["dribbling", "shooting", "pace", "agility", "composure", "firstTouch"],
-  trialMatch: ["firstTouch", "passing", "dribbling", "shooting", "pace", "strength", "stamina", "composure", "positioning", "workRate", "offTheBall", "pressing"],
+  reserveMatch: ["firstTouch", "passing", "shooting", "pace", "strength", "composure", "positioning", "workRate", "offTheBall", "tackling", "finishing", "anticipation", "teamwork", "marking"],
+  oppositionAnalysis: ["positioning", "decisionMaking", "pressing", "defensiveAwareness", "offTheBall", "marking", "anticipation", "vision"],
+  agentShowcase: ["dribbling", "shooting", "pace", "agility", "composure", "firstTouch", "finishing", "balance"],
+  trialMatch: ["firstTouch", "passing", "dribbling", "shooting", "pace", "strength", "stamina", "composure", "positioning", "workRate", "offTheBall", "pressing", "tackling", "finishing", "jumping", "balance", "anticipation", "vision", "marking", "teamwork"],
   // Data-exclusive
-  databaseQuery: ["shooting", "passing", "crossing"],  // limited to stats-derivable attributes
-  statsBriefing: ["shooting", "passing"],               // summary-level insight
-  deepVideoAnalysis: ["passing", "shooting", "crossing", "positioning", "decisionMaking", "offTheBall", "pressing", "defensiveAwareness", "composure"],
+  databaseQuery: ["shooting", "passing", "crossing", "finishing"],
+  statsBriefing: ["shooting", "passing"],
+  deepVideoAnalysis: ["passing", "shooting", "crossing", "positioning", "decisionMaking", "offTheBall", "pressing", "defensiveAwareness", "composure", "vision", "marking", "anticipation", "teamwork"],
 };
 
 // ---------------------------------------------------------------------------
@@ -266,11 +276,25 @@ export function observePlayerLight(
   const baseCount = rng.nextInt(4, 7);
   const attrCount = Math.min(visibleArray.length, baseCount + (extraAttributes ?? 0));
   const selected: PlayerAttribute[] = [];
-  const pool = [...visibleArray];
-  for (let i = 0; i < attrCount && pool.length > 0; i++) {
-    const idx = rng.nextInt(0, pool.length - 1);
-    selected.push(pool[idx]);
-    pool.splice(idx, 1);
+
+  // Prioritize unobserved attributes — split pool into unseen and seen
+  const unseen = visibleArray.filter((a) => !priorCounts.has(a));
+  const seen = visibleArray.filter((a) => priorCounts.has(a));
+
+  // Pick from unseen first (shuffled), then seen (shuffled) to fill remaining slots
+  const shuffled = [...unseen];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = rng.nextInt(0, i);
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const shuffledSeen = [...seen];
+  for (let i = shuffledSeen.length - 1; i > 0; i--) {
+    const j = rng.nextInt(0, i);
+    [shuffledSeen[i], shuffledSeen[j]] = [shuffledSeen[j], shuffledSeen[i]];
+  }
+  const prioritized = [...shuffled, ...shuffledSeen];
+  for (let i = 0; i < attrCount && i < prioritized.length; i++) {
+    selected.push(prioritized[i]);
   }
 
   // Generate readings
@@ -341,6 +365,20 @@ export function observePlayerLight(
     notes.push(`Personality insight: "${revealedPersonalityTrait}" — noted in the scout's journal.`);
   }
 
+  // Progressive personality profile reveal
+  const playerObsCount = existingObservations.filter((o) => o.playerId === player.id).length + 1;
+  const psychoSkill = scout.skills.psychologicalRead;
+  let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
+  if (player.personalityProfile) {
+    const updated = progressivePersonalityReveal(rng, player.personalityProfile, playerObsCount, psychoSkill);
+    if (updated !== player.personalityProfile) {
+      updatedPersonalityProfile = updated;
+      if (!updated.hiddenUntilRevealed && player.personalityProfile.hiddenUntilRevealed) {
+        notes.push(`Character profile emerging: this player appears to be a "${updated.archetype}" personality type.`);
+      }
+    }
+  }
+
   return {
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
@@ -354,6 +392,7 @@ export function observePlayerLight(
     flaggedMoments: [],
     abilityReading,
     revealedPersonalityTrait,
+    updatedPersonalityProfile,
   };
 }
 
@@ -473,6 +512,20 @@ export function observePlayer(
     notes.push(`Personality insight: "${revealedPersonalityTrait}" — noted in the scout's journal.`);
   }
 
+  // Progressive personality profile reveal
+  const matchObsCount = existingObservations.filter((o) => o.playerId === player.id).length + 1;
+  const matchPsychoSkill = scout.skills.psychologicalRead;
+  let updatedPersonalityProfile: import("@/engine/core/types").PersonalityProfile | undefined;
+  if (player.personalityProfile) {
+    const updated = progressivePersonalityReveal(rng, player.personalityProfile, matchObsCount, matchPsychoSkill);
+    if (updated !== player.personalityProfile) {
+      updatedPersonalityProfile = updated;
+      if (!updated.hiddenUntilRevealed && player.personalityProfile.hiddenUntilRevealed) {
+        notes.push(`Character profile emerging: this player appears to be a "${updated.archetype}" personality type.`);
+      }
+    }
+  }
+
   return {
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
@@ -486,6 +539,7 @@ export function observePlayer(
     flaggedMoments,
     abilityReading,
     revealedPersonalityTrait,
+    updatedPersonalityProfile,
   };
 }
 

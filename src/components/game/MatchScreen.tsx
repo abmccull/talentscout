@@ -5,7 +5,8 @@ import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Eye, Plus, X, ChevronRight, Trophy, ChevronDown, BarChart3 } from "lucide-react";
+import { Eye, Plus, X, ChevronRight, Trophy, ChevronDown, BarChart3, Binoculars } from "lucide-react";
+import { checkRivalPresence } from "@/engine/rivals";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PitchCanvas } from "./match/PitchCanvas";
 import { Commentary } from "./match/Commentary";
@@ -229,6 +230,9 @@ export function MatchScreen() {
     };
   })();
 
+  // ── Rival presence (F8) ──────────────────────────────────────────────────
+  const rivalsPresent = checkRivalPresence(gameState, activeMatch.fixtureId);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -238,6 +242,21 @@ export function MatchScreen() {
 
         {/* relative z-10 ensures content renders above the ScreenBackground overlay */}
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
+
+        {/* ── Rival presence banner (F8) ───────────────────────────────── */}
+        {rivalsPresent.length > 0 && (
+          <div className="border-b border-amber-500/30 bg-amber-500/5 px-4 py-2 shrink-0">
+            <div className="flex items-center gap-2">
+              <Binoculars size={14} className="text-amber-400" />
+              <span className="text-xs text-amber-400 font-medium">
+                Rival scout{rivalsPresent.length > 1 ? "s" : ""} in attendance:
+              </span>
+              <span className="text-xs text-zinc-300">
+                {rivalsPresent.map((r) => r.name).join(", ")}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* ── Top scoreboard bar ──────────────────────────────────────────── */}
         <div className="border-b border-[#27272a] bg-[#0c0c0c] px-4 py-2.5 shrink-0" data-tutorial-id="match-scoreboard">

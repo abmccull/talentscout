@@ -88,9 +88,10 @@ interface ActivityCardProps {
   activity: Activity;
   canScheduleAt: (activity: Activity, dayIndex: number) => boolean;
   onSchedule: (activity: Activity, dayIndex: number) => void;
+  highlighted?: boolean;
 }
 
-export function ActivityCard({ activity, canScheduleAt, onSchedule }: ActivityCardProps) {
+export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted }: ActivityCardProps) {
   const display = ACTIVITY_DISPLAY[activity.type];
   const Icon = display.icon;
   const fatigueCost = ACTIVITY_FATIGUE_COSTS[activity.type];
@@ -119,7 +120,7 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule }: ActivityCa
           : "text-red-400";
 
   return (
-    <div className="rounded-md border border-[#27272a] bg-[#141414] px-2.5 py-2">
+    <div className={`rounded-md border px-2.5 py-2 ${highlighted ? "border-emerald-500/60 bg-emerald-500/5 ring-1 ring-emerald-500/20" : "border-[#27272a] bg-[#141414]"}`}>
       {/* Header: icon + label + slot badge */}
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">

@@ -23,6 +23,7 @@ import type {
   Scout,
   ScoutReport,
 } from "@/engine/core/types";
+import { calculateRoleSuitability } from "@/engine/players/roles";
 
 // =============================================================================
 // CONSTANTS
@@ -145,17 +146,36 @@ function buildFeedbackText(
   club: Club,
 ): string {
   const name = `${player.firstName} ${player.lastName}`;
+
+  // Build role mismatch detail for doesNotFit responses
+  const roleMismatchDetail = (() => {
+    if (!directive?.preferredRole) return "";
+    const suitability = calculateRoleSuitability(player, directive.preferredRole);
+    if (suitability < 40) {
+      const roleLabel = directive.preferredRole.replace(/([A-Z])/g, " $1").trim();
+      return ` The manager specifically wanted a ${roleLabel} profile, and this player's attributes don't match.`;
+    }
+    return "";
+  })();
+
+  const tacticalDetail = (() => {
+    const identity = club.tacticalStyle?.tacticalIdentity;
+    if (!identity || identity === "balanced") return "";
+    const label = identity.replace(/([A-Z])/g, " $1").trim();
+    return ` The club plays a ${label} style`;
+  })();
+
   switch (response) {
     case "signed":
       return `${club.shortName} has agreed a deal to sign ${name}. Excellent recommendation — the manager is delighted.`;
     case "loanSigned":
       return `${club.shortName} has signed ${name} on loan. The manager sees this as a good short-term solution.`;
     case "trial":
-      return `${club.shortName} want to see ${name} in a trial match before making a decision. Arrange the session.`;
+      return `${club.shortName} want to see ${name} in a trial match before making a decision.${tacticalDetail ? `${tacticalDetail} — they want to see how he adapts.` : ""} Arrange the session.`;
     case "interested":
       return `${club.shortName} have added ${name} to the shortlist following your report. Stay close to developments.`;
     case "doesNotFit":
-      return `The manager feels ${name} does not fit the current tactical system${directive ? ` (${directive.position} profile)` : ""}. No further action planned.`;
+      return `The manager feels ${name} does not fit the current tactical system${directive ? ` (${directive.position} profile)` : ""}.${roleMismatchDetail}${tacticalDetail ? `${tacticalDetail} and the player's profile doesn't align.` : ""} No further action planned.`;
     case "tooExpensive":
       return `${name}'s market value exceeds the budget allocated for this position. The club cannot proceed at this time.`;
     case "ignored":
@@ -362,4 +382,29 @@ export function processTrialOutcome(
   }
 
   return rng.pickWeighted(items);
+}
+
+// =============================================================================
+// NEGOTIATION ROUTING (F4)
+// =============================================================================
+
+/**
+ * Determine if a "signed" club response should be routed through the
+ * negotiation system instead of being an instant transfer.
+ *
+ * Player-initiated transfers (from scout reports) go through negotiation;
+ * AI background transfers remain instant.
+ *
+ * @param response       The club response type.
+ * @param isPlayerAction Whether this transfer was initiated by the player's report.
+ * @returns              True if the transfer should go through negotiation.
+ */
+export function shouldRouteToNegotiation(
+  response: ClubResponseType,
+  isPlayerAction: boolean,
+): boolean {
+  // Only "signed" and "loanSigned" responses can be negotiated
+  if (response !== "signed" && response !== "loanSigned") return false;
+  // Only player-initiated transfers go through negotiation
+  return isPlayerAction;
 }

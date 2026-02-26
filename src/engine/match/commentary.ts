@@ -1,31 +1,262 @@
 /**
  * Commentary Engine
  *
- * Generates rich, quality-aware match commentary for each event type.
- * Templates are keyed by event type then quality band:
- *   - low  (quality 1–3): Generic, no scouting insight
- *   - mid  (quality 4–7): Shows character, moderate scouting value
- *   - high (quality 8–10): Clear scouting moment — scout sits up and notices
+ * Generates rich, context-aware match commentary using the template system
+ * from commentaryTemplates.ts. Commentary is position-aware, form-aware,
+ * and scouting-relevant.
  *
- * 3–5 templates per band, 14 event types.
- * Tokens: {playerName}, {clubName}, {minute}
+ * Tokens: {playerName}, {secondaryName}, {minute}, {clubName}
+ *
+ * Pure engine function — no React imports, no side effects.
  */
+
+import type { Position, MatchEventType } from "@/engine/core/types";
+import {
+  type CommentaryTemplate,
+  COMMENTARY_TEMPLATES,
+  FORM_PREFIXES,
+  SCOUTING_CONTEXT,
+  HISTORICAL_REFERENCES,
+} from "./commentaryTemplates";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type QualityBand = "low" | "mid" | "high";
-
-interface CommentaryTemplate {
-  template: string;
+/** Context passed into commentary generation for each event. */
+export interface CommentaryContext {
+  /** The type of match event. */
+  eventType: MatchEventType;
+  /** Match minute (1-90). */
+  minute: number;
+  /** Primary player's full name. */
+  playerName: string;
+  /** Primary player's position. */
+  position: Position;
+  /** Primary player's form [-3, 3]. */
+  form: number;
+  /** Whether the primary player is being scouted (focused on). */
+  isScoutingTarget: boolean;
+  /** Secondary player name (for passes, tackles, etc.). */
+  secondaryName?: string;
+  /** Club name for token replacement. */
+  clubName?: string;
 }
 
 // ---------------------------------------------------------------------------
-// Template bank
+// Form classification
 // ---------------------------------------------------------------------------
 
-const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
+type FormBand = "high" | "neutral" | "low";
+
+function getFormBand(form: number): FormBand {
+  if (form >= 2) return "high";
+  if (form <= -2) return "low";
+  return "neutral";
+}
+
+// ---------------------------------------------------------------------------
+// Template selection
+// ---------------------------------------------------------------------------
+
+/**
+ * Picks a template from an array using minute as a deterministic seed.
+ * Not cryptographically random — sufficient for display purposes.
+ */
+function pickIndex(length: number, minute: number, salt: number = 0): number {
+  // Use a simple hash-like formula for variety
+  return Math.abs((minute * 7 + salt * 13 + 3) % length);
+}
+
+/**
+ * Selects the best commentary string from a template, considering:
+ * 1. Scouting context (if player is being observed)
+ * 2. Position-specific variant (if available for the player's position)
+ * 3. Form-aware variant (if player is in high/low form)
+ * 4. Generic fallback
+ *
+ * The priority order ensures scouting-relevant text appears ~40% of the time
+ * for scouted players, position-specific ~60% of the time when available,
+ * and form ~30% when applicable.
+ */
+function selectTemplateText(
+  template: CommentaryTemplate,
+  position: Position,
+  formBand: FormBand,
+  isScoutingTarget: boolean,
+  minute: number,
+): string {
+  // Scouting context: ~40% chance if available and player is target
+  if (isScoutingTarget && template.scoutingRelevant) {
+    if ((minute * 11 + 5) % 5 < 2) {
+      return template.scoutingRelevant;
+    }
+  }
+
+  // Position-specific: use if available
+  if (template.byPosition) {
+    const positionText = template.byPosition[position];
+    if (positionText) {
+      // ~70% chance to use position-specific when available
+      if ((minute * 3 + 7) % 10 < 7) {
+        return positionText;
+      }
+    }
+  }
+
+  // Form-aware: use if applicable
+  if (template.formAware && formBand !== "neutral") {
+    const formText = formBand === "high"
+      ? template.formAware.highForm
+      : template.formAware.lowForm;
+    // ~40% chance to use form variant when applicable
+    if ((minute * 13 + 11) % 5 < 2) {
+      return formText;
+    }
+  }
+
+  return template.generic;
+}
+
+// ---------------------------------------------------------------------------
+// Token replacement
+// ---------------------------------------------------------------------------
+
+function applyTokens(
+  text: string,
+  ctx: CommentaryContext,
+): string {
+  let result = text;
+  result = result.replace(/\{playerName\}/g, ctx.playerName);
+  result = result.replace(/\{minute\}/g, String(ctx.minute));
+  if (ctx.secondaryName) {
+    result = result.replace(/\{secondaryName\}/g, ctx.secondaryName);
+  }
+  if (ctx.clubName) {
+    result = result.replace(/\{clubName\}/g, ctx.clubName);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Form prefix
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a form-context prefix ~25% of the time when form is extreme.
+ */
+function getFormPrefix(formBand: FormBand, minute: number): string {
+  if (formBand === "neutral") return "";
+  // ~25% chance
+  if ((minute * 7 + 3) % 4 !== 0) return "";
+
+  const prefixes = formBand === "high" ? FORM_PREFIXES.high : FORM_PREFIXES.low;
+  const idx = pickIndex(prefixes.length, minute, 17);
+  return prefixes[idx] + " ";
+}
+
+// ---------------------------------------------------------------------------
+// Scouting context suffix
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a scouting context suffix ~20% of the time for scouted players.
+ */
+function getScoutingSuffix(isScoutingTarget: boolean, minute: number): string {
+  if (!isScoutingTarget) return "";
+  // ~20% chance
+  if ((minute * 11 + 7) % 5 !== 0) return "";
+
+  const idx = pickIndex(SCOUTING_CONTEXT.length, minute, 23);
+  return " " + SCOUTING_CONTEXT[idx];
+}
+
+// ---------------------------------------------------------------------------
+// Historical reference suffix
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a historical reference ~12% of the time.
+ */
+function getHistoricalReference(minute: number): string {
+  // ~12% chance
+  if ((minute * 13 + 5) % 8 !== 0) return "";
+
+  const idx = pickIndex(HISTORICAL_REFERENCES.length, minute, 31);
+  return " " + HISTORICAL_REFERENCES[idx];
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a commentary string for a match event with full context awareness.
+ *
+ * The generated commentary considers:
+ * - Player position (striker goals differ from centre-back goals)
+ * - Player form (hot streak vs poor run)
+ * - Scouting focus (adds evaluation-relevant observations)
+ * - Historical references (occasional callbacks to prior performances)
+ *
+ * @param ctx - Full context for the commentary event
+ * @returns A rich commentary string
+ */
+export function generateCommentary(ctx: CommentaryContext): string {
+  const templates = COMMENTARY_TEMPLATES[ctx.eventType];
+
+  // Fallback for unknown event types
+  if (!templates || templates.length === 0) {
+    return `${ctx.minute}' — ${ctx.playerName} is involved in the play.`;
+  }
+
+  // Pick a template from the bank
+  const templateIdx = pickIndex(templates.length, ctx.minute, ctx.eventType.length);
+  const template = templates[templateIdx];
+
+  const formBand = getFormBand(ctx.form);
+
+  // Select the best text variant from the template
+  const rawText = selectTemplateText(
+    template,
+    ctx.position,
+    formBand,
+    ctx.isScoutingTarget,
+    ctx.minute,
+  );
+
+  // Apply token replacements
+  let commentary = applyTokens(rawText, ctx);
+
+  // Prepend form prefix (occasional)
+  const formPrefix = getFormPrefix(formBand, ctx.minute);
+  if (formPrefix) {
+    // Lowercase the first character of commentary after the minute marker
+    // We prepend the form prefix after the minute+dash pattern
+    const minutePattern = `${ctx.minute}' — `;
+    if (commentary.startsWith(minutePattern)) {
+      const afterMinute = commentary.slice(minutePattern.length);
+      const lowerFirst = afterMinute.charAt(0).toLowerCase() + afterMinute.slice(1);
+      commentary = `${minutePattern}${formPrefix}${lowerFirst}`;
+    }
+  }
+
+  // Append scouting suffix (occasional)
+  commentary += getScoutingSuffix(ctx.isScoutingTarget, ctx.minute);
+
+  // Append historical reference (occasional)
+  commentary += getHistoricalReference(ctx.minute);
+
+  return commentary;
+}
+
+// ---------------------------------------------------------------------------
+// Quality-band commentary (used by Commentary.tsx UI component)
+// ---------------------------------------------------------------------------
+
+type QualityBand = "low" | "mid" | "high";
+
+const QUALITY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
   goal: {
     low: [
       "{minute}' — A scrappy finish from {playerName}. It won't make the highlight reel, but it counts all the same.",
@@ -48,7 +279,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — Simply stunning from {playerName}! Off the underside of the bar and in. That is a goal any player in the world would be proud of.",
     ],
   },
-
   assist: {
     low: [
       "{minute}' — A lucky ricochet puts {playerName} in position to play the pass. The scorer will take the credit.",
@@ -68,7 +298,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — That is the pass of the season. {playerName} threads it through five bodies into the only square metre of grass the striker needed. Unbelievable.",
     ],
   },
-
   shot: {
     low: [
       "{minute}' — {playerName} gets a sight of goal but fires straight at the keeper. Too central, too easy.",
@@ -90,7 +319,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — {playerName} conjures a shot from an impossible angle that somehow ends up kissing the far post. That instinct to create something from nothing is rare.",
     ],
   },
-
   pass: {
     low: [
       "{minute}' — Safe sideways ball from {playerName}. Keeping it simple, nothing more.",
@@ -111,7 +339,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — Extraordinary footwork from {playerName} to manufacture space before threading the needle. The precision at that speed is exceptional.",
     ],
   },
-
   dribble: {
     low: [
       "{minute}' — {playerName} tries to take on the full-back but is closed down too quickly. Possession lost.",
@@ -131,7 +358,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — The feet! {playerName} produces a piece of individual skill that defies belief — both feet, both directions, then gone. A packed bench goes wild.",
     ],
   },
-
   tackle: {
     low: [
       "{minute}' — Clumsy challenge from {playerName} — the referee waves play on but it was borderline.",
@@ -151,7 +377,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — Brilliant anticipation from {playerName} — a block tackle that looked impossible becomes routine. The composure to hold the challenge until the right moment is rare.",
     ],
   },
-
   header: {
     low: [
       "{minute}' — {playerName} rises for the corner but heads straight at the keeper. Not enough power.",
@@ -171,7 +396,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — The leap! {playerName} seems to hang in the air for an impossible moment before directing the header with extraordinary control. Physical gifts and technique combined at the highest level.",
     ],
   },
-
   save: {
     low: [
       "{minute}' — Routine stop from {playerName} — a comfortable gather from a speculative effort.",
@@ -191,7 +415,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — Three saves in the space of ten seconds — {playerName} is having a match that belongs in coaching manuals. The agility, the command of the area — exceptional.",
     ],
   },
-
   foul: {
     low: [
       "{minute}' — {playerName} goes in too hard and the referee blows for a foul. A moment of poor discipline.",
@@ -208,7 +431,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — Interesting decision from {playerName}: concedes a foul to break up a dangerous move, then immediately organises the defensive wall. Leadership in the small margins of the game.",
     ],
   },
-
   cross: {
     low: [
       "{minute}' — {playerName} delivers a cross from the flank but it drifts harmlessly over everyone.",
@@ -227,7 +449,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — {playerName} delivers from the byline with the outside of the right foot — generating curl, pace and dip simultaneously. That crossing ability is worth millions.",
     ],
   },
-
   sprint: {
     low: [
       "{minute}' — {playerName} makes a run but is caught quickly. Effective pace, limited stamina.",
@@ -247,7 +468,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — Extraordinary engine from {playerName}: full sprint to press, win the ball, full sprint to support. 95 minutes of that requires elite-level conditioning. Take note.",
     ],
   },
-
   positioning: {
     low: [
       "{minute}' — {playerName} drifts out of position — a gap forms that the opposition nearly exploits.",
@@ -267,7 +487,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — {playerName} covers three different defensive zones in ten seconds — anticipating the transition, blocking the passing lane, then pinning the last man. Exceptional reading of the game.",
     ],
   },
-
   error: {
     low: [
       "{minute}' — Uncharacteristic mistake from {playerName}, misplacing a simple pass.",
@@ -285,7 +504,6 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
       "{minute}' — A rare mistake from {playerName}. What is instructive is the body language — head stays up, already communicating with teammates. This is a player who manages pressure well.",
     ],
   },
-
   leadership: {
     low: [
       "{minute}' — {playerName} calls out to a teammate. The noise of the crowd swallows most of it.",
@@ -307,12 +525,8 @@ const COMMENTARY_TEMPLATES: Record<string, Record<QualityBand, string[]>> = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
- * Determines the quality band for a given quality score (1–10).
+ * Determines the quality band for a given quality score (1-10).
  */
 function getQualityBand(quality: number): QualityBand {
   if (quality >= 8) return "high";
@@ -323,7 +537,7 @@ function getQualityBand(quality: number): QualityBand {
 /**
  * Replaces {playerName}, {clubName}, {minute} tokens in a template string.
  */
-function applyTokens(
+function applyQualityTokens(
   template: string,
   playerName: string,
   clubName: string,
@@ -337,18 +551,18 @@ function applyTokens(
 
 /**
  * Picks a deterministic-looking template from an array using minute as seed.
- * Not cryptographically random — sufficient for display purposes.
  */
-function pickTemplate(templates: string[], minute: number): string {
+function pickQualityTemplate(templates: string[], minute: number): string {
   const index = minute % templates.length;
   return templates[index];
 }
 
 /**
- * Returns a commentary string for the given event.
+ * Returns a quality-band-aware commentary string for the given event.
+ * Used by the Commentary.tsx UI component.
  *
  * @param eventType   - MatchEventType string
- * @param quality     - Event quality 1–10
+ * @param quality     - Event quality 1-10
  * @param playerName  - Full name of the primary player
  * @param clubName    - Name of the player's club
  * @param minute      - Match minute (used for template selection)
@@ -360,16 +574,14 @@ export function getCommentary(
   clubName: string,
   minute: number,
 ): string {
-  const typeTemplates = COMMENTARY_TEMPLATES[eventType];
+  const typeTemplates = QUALITY_TEMPLATES[eventType];
   if (!typeTemplates) {
-    // Unknown event type — return a minimal fallback
     return `${minute}' — ${playerName} is involved in the play.`;
   }
 
   const band = getQualityBand(quality);
   const templates = typeTemplates[band];
 
-  // Fallback chain: if somehow a band is missing, try mid → low
   const resolvedTemplates =
     templates ??
     typeTemplates.mid ??
@@ -379,16 +591,12 @@ export function getCommentary(
     return `${minute}' — ${playerName} is involved in the play.`;
   }
 
-  const template = pickTemplate(resolvedTemplates, minute);
-  return applyTokens(template, playerName, clubName, minute);
+  const template = pickQualityTemplate(resolvedTemplates, minute);
+  return applyQualityTokens(template, playerName, clubName, minute);
 }
 
-// Export template data for testing
-export { COMMENTARY_TEMPLATES };
-export type { QualityBand, CommentaryTemplate };
-
 // ---------------------------------------------------------------------------
-// 4a. Score-state commentary prefixes
+// Score-state commentary prefixes
 // ---------------------------------------------------------------------------
 
 export interface ScoreContext {
@@ -468,7 +676,7 @@ export function getScoreStatePrefix(ctx: ScoreContext, minute: number): string {
 }
 
 // ---------------------------------------------------------------------------
-// 4d. Weather commentary interjections
+// Weather commentary interjections
 // ---------------------------------------------------------------------------
 
 const WEATHER_INTERJECTIONS: Record<string, string[]> = {
@@ -514,7 +722,7 @@ export function getWeatherInterjection(weather: string, minute: number): string 
 }
 
 // ---------------------------------------------------------------------------
-// 4e. Contextual commentary chains (same player in consecutive events)
+// Contextual commentary chains (same player in consecutive events)
 // ---------------------------------------------------------------------------
 
 const CHAIN_TEMPLATES: string[] = [
@@ -548,7 +756,7 @@ export function getChainCommentary(
 }
 
 // ---------------------------------------------------------------------------
-// 4b. Momentum commentary (used by phases.ts when momentum is extreme)
+// Momentum commentary
 // ---------------------------------------------------------------------------
 
 export const MOMENTUM_COMMENTARY = {
@@ -592,3 +800,7 @@ export function getMomentumCommentary(momentum: number, prevMomentum: number, mi
   }
   return "";
 }
+
+// Re-export template types for consumers
+export type { CommentaryTemplate } from "./commentaryTemplates";
+export { COMMENTARY_TEMPLATES } from "./commentaryTemplates";

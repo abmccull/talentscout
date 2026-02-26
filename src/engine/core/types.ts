@@ -29,21 +29,33 @@ export type TechnicalAttribute =
   | "dribbling"
   | "crossing"
   | "shooting"
-  | "heading";
+  | "heading"
+  | "tackling"
+  | "finishing";
 
-export type PhysicalAttribute = "pace" | "strength" | "stamina" | "agility";
+export type PhysicalAttribute =
+  | "pace"
+  | "strength"
+  | "stamina"
+  | "agility"
+  | "jumping"
+  | "balance";
 
 export type MentalAttribute =
   | "composure"
   | "positioning"
   | "workRate"
   | "decisionMaking"
-  | "leadership";
+  | "leadership"
+  | "anticipation";
 
 export type TacticalAttribute =
   | "offTheBall"
   | "pressing"
-  | "defensiveAwareness";
+  | "defensiveAwareness"
+  | "vision"
+  | "marking"
+  | "teamwork";
 
 /**
  * Hidden attributes are not directly observable during a match.
@@ -75,12 +87,16 @@ export const ATTRIBUTE_DOMAINS: Record<PlayerAttribute, AttributeDomain> = {
   crossing: "technical",
   shooting: "technical",
   heading: "technical",
+  tackling: "technical",
+  finishing: "technical",
 
   // Physical
   pace: "physical",
   strength: "physical",
   stamina: "physical",
   agility: "physical",
+  jumping: "physical",
+  balance: "physical",
 
   // Mental
   composure: "mental",
@@ -88,11 +104,15 @@ export const ATTRIBUTE_DOMAINS: Record<PlayerAttribute, AttributeDomain> = {
   workRate: "mental",
   decisionMaking: "mental",
   leadership: "mental",
+  anticipation: "mental",
 
   // Tactical
   offTheBall: "tactical",
   pressing: "tactical",
   defensiveAwareness: "tactical",
+  vision: "tactical",
+  marking: "tactical",
+  teamwork: "tactical",
 
   // Hidden — inferred over time, not directly observable in-match
   injuryProneness: "hidden",
@@ -109,6 +129,8 @@ export const TECHNICAL_ATTRIBUTES: readonly TechnicalAttribute[] = [
   "crossing",
   "shooting",
   "heading",
+  "tackling",
+  "finishing",
 ] as const;
 
 export const PHYSICAL_ATTRIBUTES: readonly PhysicalAttribute[] = [
@@ -116,6 +138,8 @@ export const PHYSICAL_ATTRIBUTES: readonly PhysicalAttribute[] = [
   "strength",
   "stamina",
   "agility",
+  "jumping",
+  "balance",
 ] as const;
 
 export const MENTAL_ATTRIBUTES: readonly MentalAttribute[] = [
@@ -124,12 +148,16 @@ export const MENTAL_ATTRIBUTES: readonly MentalAttribute[] = [
   "workRate",
   "decisionMaking",
   "leadership",
+  "anticipation",
 ] as const;
 
 export const TACTICAL_ATTRIBUTES: readonly TacticalAttribute[] = [
   "offTheBall",
   "pressing",
   "defensiveAwareness",
+  "vision",
+  "marking",
+  "teamwork",
 ] as const;
 
 export const HIDDEN_ATTRIBUTES: readonly HiddenAttribute[] = [
@@ -176,6 +204,123 @@ export type PersonalityTrait =
   | "inconsistent"
   | "injuryProne"
   | "lateDeveloper";
+
+// =============================================================================
+// PLAYER ROLES & BEHAVIORAL TRAITS
+// =============================================================================
+
+/**
+ * Tactical roles define how a player behaves within a formation.
+ * Each position has 2-4 compatible roles.
+ */
+export type PlayerRole =
+  // GK
+  | "shotStopper"
+  | "sweeper"
+  // CB
+  | "ballPlayingDefender"
+  | "noNonsenseCB"
+  | "libero"
+  // LB/RB
+  | "fullBack"
+  | "wingBack"
+  | "invertedFullBack"
+  // CDM
+  | "anchorMan"
+  | "halfBack"
+  | "deepLyingPlaymaker"
+  // CM
+  | "boxToBox"
+  | "mezzala"
+  | "advancedPlaymaker"
+  | "carrilero"
+  // CAM
+  | "enganche"
+  | "shadowStriker"
+  | "trequartista"
+  // LW/RW
+  | "winger"
+  | "invertedWinger"
+  | "insideForward"
+  // ST
+  | "poacher"
+  | "targetMan"
+  | "advancedForward"
+  | "pressingForward";
+
+export type RoleDuty = "defend" | "support" | "attack";
+
+/**
+ * Behavioral traits describe what a player does on the pitch.
+ * Distinct from personality traits (who they are off the pitch).
+ * Discovered through match observations.
+ */
+export type PlayerTrait =
+  // Attacking (7)
+  | "placesShots"
+  | "triesTricks"
+  | "cutsInside"
+  | "runsWithBall"
+  | "movesIntoChannels"
+  | "shootsFromDistance"
+  | "triesKillerBalls"
+  // Defensive (3)
+  | "staysBack"
+  | "divesStraightIn"
+  | "marksPlayerTightly"
+  // Passing (4)
+  | "dictatesTempo"
+  | "playsShortPasses"
+  | "switchesPlayToFlank"
+  | "playsOneTwo"
+  // Physical/Style (4)
+  | "holdsUpBall"
+  | "bringsOthersIntoPlay"
+  | "arrivesLateInBox"
+  | "playsWithBackToGoal"
+  // Positional (2)
+  | "driftsWide"
+  | "dropsDeep";
+
+// =============================================================================
+// TACTICAL STYLE
+// =============================================================================
+
+/**
+ * High-level tactical identity for a club. Drives tactical fit scoring
+ * and determines which player attributes are most valued.
+ */
+export type TacticalIdentity =
+  | "possessionBased"
+  | "highPress"
+  | "counterAttacking"
+  | "directPlay"
+  | "balanced"
+  | "wingPlay";
+
+/**
+ * A club's tactical style, describing how they play.
+ * Generated from scouting philosophy and club reputation.
+ */
+export interface TacticalStyle {
+  /** 1-20: 1=deep block, 20=extreme high line. */
+  defensiveLine: number;
+  /** 1-20: 1=sit back, 20=gegenpressing. */
+  pressingIntensity: number;
+  /** 1-20: 1=slow patient, 20=fast direct. */
+  tempo: number;
+  /** 1-20: 1=narrow central, 20=very wide. */
+  width: number;
+  /** 1-20: 1=short passing, 20=long balls. */
+  directness: number;
+  tacticalIdentity: TacticalIdentity;
+  /** Weight modifiers per event type — shifts event frequency during matches. */
+  eventDistribution?: Partial<Record<MatchEventType, number>>;
+  /** Tactical identities this style counters (rock-paper-scissors). */
+  strengthAgainst?: TacticalIdentity[];
+  /** Tactical identities this style is weak against. */
+  weakAgainst?: TacticalIdentity[];
+}
 
 // =============================================================================
 // PLAYER
@@ -274,6 +419,11 @@ export interface Player {
   injured: boolean;
   injuryWeeksRemaining: number;
 
+  /** Current active injury (if any). */
+  currentInjury?: Injury;
+  /** Full injury history for this player. */
+  injuryHistory?: InjuryHistory;
+
   /**
    * The player's true personality traits (2–4).
    * Hidden from the scout; revealed incrementally through observation.
@@ -284,6 +434,92 @@ export interface Player {
    * Populated by the perception engine during observation sessions.
    */
   personalityRevealed: PersonalityTrait[];
+
+  /** The player's best-fit tactical role, determined at generation. */
+  naturalRole?: PlayerRole;
+  /** A secondary role the player can competently fill. */
+  secondaryRole?: PlayerRole;
+  /** Behavioral traits describing what the player does on the pitch (2-4). */
+  playerTraits: PlayerTrait[];
+  /** Subset of playerTraits discovered through match observations. */
+  playerTraitsRevealed: PlayerTrait[];
+
+  /** Rolling window of last 6 match ratings, for form calculation. */
+  recentMatchRatings: MatchFormEntry[];
+  /** One consolidated entry per completed season — permanent history. */
+  seasonRatings: SeasonRatingRecord[];
+
+  /**
+   * Full personality profile including archetype, transfer willingness,
+   * dressing room impact, form volatility, and big-match modifier.
+   * Generated at player creation; progressively revealed through scouting.
+   */
+  personalityProfile?: PersonalityProfile;
+
+  /** Disciplinary record tracking cards and suspensions for the current season. */
+  disciplinaryRecord?: DisciplinaryRecord;
+}
+
+// =============================================================================
+// MATCH RATING SYSTEM
+// =============================================================================
+
+/** Per-player match rating with position-appropriate stat breakdown. */
+export interface PlayerMatchRating {
+  playerId: string;
+  fixtureId: string;
+  /** 1.0–10.0, one decimal place. */
+  rating: number;
+  eventCount: number;
+  /** Position-relevant stats extracted from events. */
+  stats: MatchPlayerStats;
+  source: "attended" | "simulated";
+}
+
+/**
+ * Position-relevant match statistics. All fields optional — only populated
+ * when the player participated in relevant events.
+ */
+export interface MatchPlayerStats {
+  // Attacking (all outfield)
+  goals?: number;
+  assists?: number;
+  shots?: number;
+  // Creative
+  keyPasses?: number;
+  crosses?: number;
+  dribbles?: number;
+  // Defensive
+  tackles?: number;
+  interceptions?: number;
+  aerialDuelsWon?: number;
+  // GK-specific
+  saves?: number;
+  goalsConceded?: number;
+  cleanSheet?: boolean;
+  // General
+  errors?: number;
+  // Aggregate quality
+  avgEventQuality?: number;
+}
+
+/** Rolling form history entry — one per match. */
+export interface MatchFormEntry {
+  fixtureId: string;
+  week: number;
+  season: number;
+  rating: number;
+}
+
+/** Consolidated season performance — stored permanently per player. */
+export interface SeasonRatingRecord {
+  season: number;
+  avgRating: number;
+  appearances: number;
+  goals: number;
+  assists: number;
+  /** GK only (0 for outfield). */
+  cleanSheets: number;
 }
 
 // =============================================================================
@@ -318,6 +554,8 @@ export interface Club {
   playerIds: string[];
   /** Quality of the youth intake system, 1–20. */
   youthAcademyRating: number;
+  /** The club's tactical playing style. */
+  tacticalStyle?: TacticalStyle;
 }
 
 export interface League {
@@ -556,6 +794,20 @@ export interface Observation {
    * Callers should add this to player.personalityRevealed in game state.
    */
   revealedPersonalityTrait?: PersonalityTrait;
+  /**
+   * A behavioral trait uncovered during this observation session.
+   * Callers should add this to player.playerTraitsRevealed in game state.
+   */
+  revealedPlayerTrait?: PlayerTrait;
+  /**
+   * Role suitability inferences from this observation, if enough data exists.
+   */
+  inferredRoleFit?: Array<{ role: PlayerRole; suitability: number }>;
+  /**
+   * Updated personality profile after progressive reveal during this observation.
+   * Callers should apply this to player.personalityProfile in game state.
+   */
+  updatedPersonalityProfile?: PersonalityProfile;
 }
 
 export interface AbilityReading {
@@ -714,6 +966,26 @@ export interface Contact {
    * Used to calculate relationship decay over time.
    */
   lastInteractionWeek?: number;
+
+  // --- F3: Contact Network Depth ---
+
+  /** Trust level 0-100. Determines what information the contact will share. */
+  trustLevel?: number;
+  /** Hidden loyalty stat 0-100. Affects betrayal risk and gossip reliability. */
+  loyalty?: number;
+  /** History of interactions for trust/loyalty calculations. */
+  interactionHistory?: ContactInteraction[];
+  /** Pending gossip items this contact has to share. */
+  gossipQueue?: GossipItem[];
+  /** IDs of contacts this contact can introduce (referral network). */
+  referralNetwork?: string[];
+  /** Probability 0-1 that this contact will betray the scout. */
+  betrayalRisk?: number;
+  /** Timed exclusive access to a prospect via a high-trust insider. */
+  exclusiveWindow?: {
+    playerId: string;
+    expiresWeek: number;
+  };
 }
 
 // =============================================================================
@@ -831,7 +1103,14 @@ export type MatchEventType =
   | "sprint"
   | "positioning"
   | "error"
-  | "leadership";
+  | "leadership"
+  | "aerialDuel"
+  | "interception"
+  | "throughBall"
+  | "holdUp"
+  | "injury"
+  | "substitution"
+  | "card";
 
 export interface MatchEvent {
   minute: number;
@@ -874,7 +1153,8 @@ export type InboxMessageType =
   | "clubResponse"
   | "transferUpdate"
   | "analystReport"
-  | "predictionResult";
+  | "predictionResult"
+  | "warning";
 
 export type InboxRelatedEntity = "player" | "report" | "contact" | "jobOffer" | "tool" | "narrative" | "directive" | "transfer" | "prediction" | "analyst";
 
@@ -1049,12 +1329,59 @@ export interface GameState {
   /** Passive reports generated by data analysts, keyed by ID. */
   analystReports: Record<string, AnalystReport>;
 
+  // --- Regional Scouting Depth (F13) ---
+
+  /** Regional knowledge records per country, keyed by country key. */
+  regionalKnowledge: Record<string, RegionalKnowledge>;
+
+  // --- Match Rating System ---
+
+  /**
+   * Per-fixture, per-player match ratings. Keyed fixtureId → playerId.
+   * Ephemeral — wiped at season end after consolidation into player.seasonRatings.
+   */
+  matchRatings: Record<string, Record<string, PlayerMatchRating>>;
+
+  // --- Discipline/Card System ---
+
+  /** Per-player disciplinary records, keyed by playerId. */
+  disciplinaryRecords: Record<string, DisciplinaryRecord>;
+
   /** Unix timestamp (ms) when this game save was created. */
   createdAt: number;
   /** Unix timestamp (ms) of the most recent save. */
   lastSaved: number;
   /** Total weeks played across all sessions for this save. */
   totalWeeksPlayed: number;
+
+  // --- Financial Strategy Layer (F14) ---
+
+  /** Scouting infrastructure investment state. */
+  scoutingInfrastructure?: ScoutingInfrastructure;
+  /** Assistant scouts hired by the player. */
+  assistantScouts?: AssistantScout[];
+
+  // --- Event Chains (F2) ---
+
+  /** Active and completed narrative event chains. */
+  eventChains: EventChain[];
+
+  // --- Transfer Negotiation System (F4) ---
+
+  /** Active transfer negotiations the scout's club is involved in. */
+  activeNegotiations: TransferNegotiation[];
+
+  // --- Rival Scout Activities (F8) ---
+
+  /** Log of rival scout activities for display and history tracking. */
+  rivalActivities: RivalActivity[];
+
+  // --- Dynamic Board Expectations (F10) ---
+
+  /** Board of directors profile — personality, satisfaction, patience. */
+  boardProfile?: BoardProfile;
+  /** History of board reactions (praise, warnings, budget changes, ultimatums). */
+  boardReactions: BoardReaction[];
 }
 
 // =============================================================================
@@ -1327,14 +1654,43 @@ export type RetainerStatus = "active" | "suspended" | "cancelled";
 export interface RetainerContract {
   id: string;
   clubId: string;
-  tier: 1 | 2 | 3 | 4;
+  tier: 1 | 2 | 3 | 4 | 5;
   monthlyFee: number;
   requiredReportsPerMonth: number;
   reportsDeliveredThisMonth: number;
   status: RetainerStatus;
 }
 
-export type AgencyEmployeeRole = "scout" | "analyst" | "administrator" | "relationshipManager";
+export type AgencyEmployeeRole = "scout" | "analyst" | "administrator" | "relationshipManager" | "mentee";
+
+// --- Employee Skill System ---
+
+export type ScoutEmployeeSkill = "coverage" | "accuracy" | "potential";
+export type AnalystSkill = "insightDepth" | "patternRecognition" | "efficiency";
+export type AdministratorSkill = "costControl" | "organization" | "paperwork";
+export type RelationshipManagerSkill = "prospecting" | "clientRetention" | "negotiation";
+
+export type EmployeeSkillName =
+  | ScoutEmployeeSkill
+  | AnalystSkill
+  | AdministratorSkill
+  | RelationshipManagerSkill;
+
+export interface EmployeeSkills {
+  skill1: number; // 1-20 scale
+  skill2: number;
+  skill3: number;
+  xp1: number;
+  xp2: number;
+  xp3: number;
+}
+
+export interface EmployeeTraining {
+  skillIndex: 1 | 2 | 3;
+  skillName: string;
+  weeksRemaining: number;
+  cost: number;
+}
 
 export interface AgencyEmployee {
   id: string;
@@ -1344,6 +1700,102 @@ export interface AgencyEmployee {
   salary: number;
   morale: number;
   fatigue: number;
+  // --- Phase 2 fields ---
+  hiredWeek: number;
+  hiredSeason: number;
+  regionSpecialization?: string;
+  positionSpecialization?: string;
+  reportsGenerated: string[];
+  currentAssignment?: EmployeeAssignment;
+  experience: number;
+  weeklyLog: EmployeeLogEntry[];
+  // --- Phase 4 fields ---
+  regionFocusWeeks: number;
+  onLeave?: boolean;
+  leaveReturnWeek?: number;
+  // --- Phase 5 fields ---
+  skills?: EmployeeSkills;
+  activeTraining?: EmployeeTraining;
+}
+
+export interface EmployeeAssignment {
+  type: "scoutRegion" | "scoutPlayer" | "analyzeReports" | "manageClients" | "adminDuties" | "idle";
+  targetRegion?: string;
+  targetPlayerId?: string;
+  targetClubId?: string;
+  assignedWeek: number;
+  assignedSeason: number;
+}
+
+export interface EmployeeLogEntry {
+  week: number;
+  season: number;
+  action: string;
+  result?: string;
+  reportId?: string;
+}
+
+export interface EmployeeEvent {
+  id: string;
+  type: "poaching" | "trainingRequest" | "personalIssue" | "breakthrough";
+  employeeId: string;
+  description: string;
+  options: EmployeeEventOption[];
+  deadline: number;
+  deadlineSeason: number;
+}
+
+export interface EmployeeEventOption {
+  label: string;
+  cost?: number;
+  moraleChange: number;
+  effect: "matchSalary" | "grantLeave" | "denyLeave" | "fundTraining" | "declineTraining" | "acceptPoach" | "ignore";
+}
+
+export interface ClientRelationship {
+  clubId: string;
+  satisfaction: number;
+  totalReportsDelivered: number;
+  totalRevenue: number;
+  tenureWeeks: number;
+  preferences: ClientPreference[];
+  status: "prospect" | "active" | "cooling" | "lost";
+  lastInteractionWeek: number;
+  lastInteractionSeason: number;
+}
+
+export type ClientPreference = "youth" | "firstTeam" | "data" | "physical" | "technical" | "specificPosition";
+
+export interface PitchResult {
+  success: boolean;
+  message: string;
+  offeredContract?: RetainerContract;
+}
+
+export interface SatelliteOffice {
+  id: string;
+  region: string;
+  monthlyCost: number;
+  qualityBonus: number;
+  maxEmployees: number;
+  employeeIds: string[];
+  openedWeek: number;
+  openedSeason: number;
+}
+
+export interface AwardRecord {
+  season: number;
+  type: "scoutOfYear" | "bestAgency" | "discoveryOfYear";
+  title: string;
+  reputationBonus: number;
+  cashBonus: number;
+}
+
+export interface ConsultingDeliverable {
+  type: "reports" | "analysis" | "presentation";
+  description: string;
+  required: number;
+  delivered: number;
 }
 
 export type OfficeTier = "home" | "coworking" | "small" | "professional" | "hq";
@@ -1414,6 +1866,7 @@ export interface ConsultingContract {
   deadline: number;
   deadlineSeason: number;
   status: ConsultingStatus;
+  deliverables?: ConsultingDeliverable[];
 }
 
 export type EconomicEventType = "marketCrash" | "tvDealBonanza" | "ffpInvestigation" | "newOwnership" | "wageCap";
@@ -1495,6 +1948,21 @@ export interface NarrativeEvent {
   choices?: { label: string; effect: string }[];
   /** Index of the choice the player selected (undefined = no choice made). */
   selectedChoice?: number;
+
+  // --- Event Chain fields (F2) ---
+
+  /** Links events that belong to the same narrative chain. */
+  chainId?: string;
+  /** 1-based position within the chain (1, 2, 3...). */
+  chainStep?: number;
+  /** ID of the event that triggered this chain continuation. */
+  parentEventId?: string;
+  /** Absolute week when the follow-up event should fire. */
+  followUpWeek?: number;
+  /** Escalation level: 0=normal, 1=warning, 2=critical. */
+  escalationLevel?: number;
+  /** Whether this chain event has been resolved/concluded. */
+  resolved?: boolean;
 }
 
 export type EquipmentSlot = "notebook" | "video" | "travel" | "network" | "analysis";
@@ -1567,6 +2035,12 @@ export interface FinancialRecord {
   // Market state
   marketTemperature: MarketTemperature;
   activeEconomicEvents: EconomicEvent[];
+
+  // --- Agency overhaul fields ---
+  clientRelationships: ClientRelationship[];
+  pendingEmployeeEvents: EmployeeEvent[];
+  satelliteOffices: SatelliteOffice[];
+  awards: AwardRecord[];
 }
 
 export type ExpenseType =
@@ -1605,6 +2079,18 @@ export interface RivalScout {
   isNemesis: boolean;
   /** Player IDs that both this rival and the player-scout are competing for. */
   competingForPlayers: string[];
+  /** The playerId being actively scouted this week. */
+  currentTarget?: string;
+  /** Scouting progress per player: playerId → observation count (0–5). */
+  scoutingProgress: Record<string, number>;
+  /** Week when the rival will submit their scouting report. */
+  reportDeadline?: number;
+  /** The fixtureId where this rival was last spotted. */
+  lastSeenAtFixture?: string;
+  /** How quickly the rival moves on targets, 0–1. */
+  aggressiveness: number;
+  /** Budget tier of the rival's employer club — affects which players they target. */
+  budgetTier: "low" | "medium" | "high";
 }
 
 export type ToolId =
@@ -1662,6 +2148,48 @@ export interface SeasonEvent {
   startWeek: number;
   endWeek: number;
   description: string;
+  /** Mechanical effects applied each week while the event is active. */
+  effects?: SeasonEventEffect[];
+  /** Player-facing choices that can be resolved once per event. */
+  choices?: SeasonEventChoice[];
+  /** Whether the player has resolved this event's choices (if any). */
+  resolved?: boolean;
+  /** Index of the choice the player selected (if resolved via choice). */
+  choiceSelected?: number;
+}
+
+/**
+ * A single mechanical effect that a season event applies to game state.
+ * Effects are processed each week the event is active.
+ */
+export interface SeasonEventEffect {
+  type: SeasonEventEffectType;
+  /** Numeric value for the effect (e.g., 0.3 = +30% modifier). */
+  value: number;
+  /** Scope of effect application. Defaults to "global". */
+  targetScope?: "global" | "league" | "club";
+  /** Optional target entity ID (league or club) for scoped effects. */
+  targetId?: string;
+}
+
+export type SeasonEventEffectType =
+  | "transferPriceModifier"
+  | "scoutingCostModifier"
+  | "fatigueModifier"
+  | "reputationBonus"
+  | "youthIntake"
+  | "playerAvailability"
+  | "injuryRiskModifier"
+  | "attributeRevealBonus";
+
+/**
+ * A choice presented to the player during a season event.
+ * Choosing an option replaces the event's base effects with the choice's effects.
+ */
+export interface SeasonEventChoice {
+  label: string;
+  description: string;
+  effects: SeasonEventEffect[];
 }
 
 export type SeasonEventType =
@@ -1815,6 +2343,43 @@ export interface AlumniMilestone {
   notified: boolean;
 }
 
+// --- F12: Youth Pipeline Tracking types ---
+
+export type AlumniStatus =
+  | "academy"
+  | "firstTeam"
+  | "loaned"
+  | "released"
+  | "retired"
+  | "transferred";
+
+export type AlumniCareerUpdateType =
+  | "debut"
+  | "firstGoal"
+  | "teamOfWeek"
+  | "loanMove"
+  | "transfer"
+  | "released"
+  | "internationalCall"
+  | "injury"
+  | "captaincy";
+
+export interface AlumniCareerUpdate {
+  week: number;
+  season: number;
+  type: AlumniCareerUpdateType;
+  description: string;
+}
+
+export interface AlumniSeasonStats {
+  season: number;
+  appearances: number;
+  goals: number;
+  assists: number;
+  avgRating: number;
+  clubId: string;
+}
+
 export interface AlumniRecord {
   id: string;
   playerId: string;
@@ -1824,6 +2389,14 @@ export interface AlumniRecord {
   careerSnapshots: CareerSnapshot[];
   placedWeek: number;
   placedSeason: number;
+  /** Career update timeline for pipeline tracking (F12). */
+  careerUpdates: AlumniCareerUpdate[];
+  /** Current career status of the alumni (F12). */
+  currentStatus: AlumniStatus;
+  /** Season-by-season stats for the alumni (F12). */
+  seasonStats: AlumniSeasonStats[];
+  /** Whether this alumni graduated to the scout's contact network (F12). */
+  becameContact: boolean;
 }
 
 export interface LegacyScore {
@@ -1880,6 +2453,8 @@ export interface ManagerDirective {
   season: number;
   /** Optional tactical notes from the manager. */
   tacticalNotes?: string;
+  /** The tactical role the manager wants for this position. */
+  preferredRole?: PlayerRole;
 }
 
 /**
@@ -1930,6 +2505,8 @@ export interface TransferRecord {
     appearances: number;
     goals: number;
     assists: number;
+    /** Average match rating on 1-10 scale (present when derived from real match data). */
+    avgMatchRating?: number;
   }>;
   /** Overall outcome classification set retrospectively. */
   outcome?: "hit" | "decent" | "flop" | "tooEarly";
@@ -1950,6 +2527,12 @@ export interface SystemFitResult {
   styleFit: number;
   /** Age bracket appropriateness 0-100. */
   ageFit: number;
+  /** Role suitability score 0-100. */
+  roleFit: number;
+  /** Tactical style compatibility score 0-100. */
+  tacticalFit: number;
+  /** Suggested best role for the player at this club. */
+  suggestedRole?: PlayerRole;
   /** Key strengths matching system. */
   fitStrengths: string[];
   /** Areas of concern. */
@@ -2120,7 +2703,7 @@ export interface DayResult {
   /** The activity for this day (null = rest/free day). */
   activity: Activity | null;
   /** Players observed during this day's activity. */
-  observations: { playerId: string; playerName: string; topAttributes: string }[];
+  observations: { playerId: string; playerName: string; topAttributes: string; age?: number; position?: string }[];
   /** Number of new players discovered. */
   playersDiscovered: number;
   /** Names of reports written. */
@@ -2160,4 +2743,944 @@ export interface WeekSimulationState {
     totalObservations: number;
     totalDiscoveries: number;
   };
+}
+
+// =============================================================================
+// PERSONALITY PROFILE SYSTEM (F9)
+// =============================================================================
+
+/**
+ * Personality archetypes describe the dominant character pattern of a player.
+ * Each archetype implies default values for transfer willingness, dressing room
+ * impact, form volatility, and big-match temperament. These can be further
+ * adjusted by the player's individual personality traits.
+ */
+export type PersonalityArchetype =
+  | "leader"
+  | "mercenary"
+  | "homesick"
+  | "ambitious"
+  | "loyal"
+  | "disruptive"
+  | "introvert"
+  | "professional"
+  | "hothead"
+  | "clutch";
+
+/**
+ * A player's full personality profile, combining a dominant archetype with
+ * numeric modifiers that affect gameplay: transfer willingness, dressing room
+ * impact, form volatility, and big-match performance.
+ *
+ * The profile is partially hidden from the scout — `hiddenUntilRevealed` is
+ * true until the scout has made enough observations to uncover the archetype,
+ * and `revealedTraits` tracks which individual personality traits have been
+ * discovered so far.
+ */
+export interface PersonalityProfile {
+  /** Dominant character archetype. */
+  archetype: PersonalityArchetype;
+  /** Individual personality traits (2-4, from the PersonalityTrait pool). */
+  traits: PersonalityTrait[];
+  /** 0-1 scale: how willing the player is to transfer (mercenary=0.9, loyal=0.2). */
+  transferWillingness: number;
+  /** -3 to +3: effect on team morale when in the dressing room (leader=+3, disruptive=-2). */
+  dressingRoomImpact: number;
+  /** 0-1 scale: how volatile the player's form is (professional=0.2, hothead=0.8). */
+  formVolatility: number;
+  /** -2 to +2: rating modifier in important matches (clutch=+2, introvert=-1). */
+  bigMatchModifier: number;
+  /** True until the scout has gathered enough observations to reveal the archetype. */
+  hiddenUntilRevealed: boolean;
+  /** Personality traits discovered by the scout so far. */
+  revealedTraits: PersonalityTrait[];
+}
+
+// =============================================================================
+// INJURY SYSTEM
+// =============================================================================
+
+export type InjuryType =
+  | "muscle"
+  | "ligament"
+  | "fracture"
+  | "concussion"
+  | "knock"
+  | "fatigue";
+
+export type InjurySeverity =
+  | "minor"
+  | "moderate"
+  | "serious"
+  | "career-threatening";
+
+export interface Injury {
+  id: string;
+  playerId: string;
+  type: InjuryType;
+  severity: InjurySeverity;
+  recoveryWeeks: number;
+  weeksRemaining: number;
+  /** The fixture in which the injury occurred (if match-related). */
+  occurredInMatch?: string;
+  /** Match minute at which the injury occurred. */
+  minute?: number;
+  /** Elevated reinjury risk factor (0-1), active for 4 weeks post-return. */
+  reinjuryRisk: number;
+  /** Week number when the injury occurred. */
+  occurredWeek: number;
+  /** Season when the injury occurred. */
+  occurredSeason: number;
+}
+
+export interface InjuryHistory {
+  playerId: string;
+  injuries: Injury[];
+  totalWeeksMissed: number;
+  /** Accumulated injury proneness (0-1), increases with repeated injuries. */
+  injuryProneness: number;
+  /** Weeks remaining in reinjury-risk window after return (0 = no elevated risk). */
+  reinjuryWindowWeeksLeft: number;
+}
+
+// =============================================================================
+// REPORT COMPARISON (F11)
+// =============================================================================
+
+/**
+ * Per-attribute delta between two or more reports: shows how each player
+ * compares on the same attribute scale.
+ */
+export interface AttributeComparisonEntry {
+  attribute: PlayerAttribute;
+  domain: AttributeDomain;
+  /** One value per report in the same order as the input array. */
+  values: number[];
+  /** Confidence ranges per report. */
+  ranges: Array<[number, number]>;
+  /** Highest value among reports. */
+  best: number;
+  /** Index of the report with the best value. */
+  bestIndex: number;
+}
+
+/**
+ * Summary object returned by `compareReports`.
+ */
+export interface ReportComparison {
+  /** The report IDs that were compared, in order. */
+  reportIds: string[];
+  /** Player IDs corresponding to each report. */
+  playerIds: string[];
+  /** Attribute-by-attribute comparison rows. */
+  attributes: AttributeComparisonEntry[];
+  /** Per-report aggregate metrics. */
+  metrics: ReportComparisonMetrics[];
+  /** Textual summary of the key differences. */
+  summaryText: string;
+}
+
+/**
+ * Aggregate comparison metrics for a single report within a comparison set.
+ */
+export interface ReportComparisonMetrics {
+  reportId: string;
+  playerId: string;
+  perceivedCAStars: number | null;
+  perceivedPARange: [number, number] | null;
+  estimatedValue: number;
+  conviction: ConvictionLevel;
+  strengthCount: number;
+  weaknessCount: number;
+  /** Average estimated attribute value across all assessments. */
+  avgAttribute: number;
+  /** Value-for-money score (0-100), if a transfer fee is provided. */
+  valueScore: number | null;
+  /** Position fit percentage (0-100), if calculated. */
+  positionFit: number | null;
+}
+
+// =============================================================================
+// REGIONAL SCOUTING DEPTH (F13)
+// =============================================================================
+
+/**
+ * Tracks the scout's accumulated knowledge of a specific country.
+ * Knowledge grows through scouting activity (reports, travel, contacts) and
+ * unlocks hidden leagues, cultural insights, and local contacts.
+ */
+export interface RegionalKnowledge {
+  /** The country key this knowledge record relates to. */
+  countryId: string;
+  /** Knowledge level from 0 (unknown) to 100 (complete mastery). */
+  knowledgeLevel: number;
+  /** IDs of hidden leagues the scout has discovered in this country. */
+  discoveredLeagues: string[];
+  /** Cultural insights the scout has accumulated. */
+  culturalInsights: CulturalInsight[];
+  /** Auto-generated local contact IDs unlocked at knowledge thresholds. */
+  localContacts: string[];
+  /** Scouting efficiency multiplier derived from knowledge level (0.5–1.5). */
+  scoutingEfficiency: number;
+}
+
+/**
+ * A cultural insight gained from deep regional knowledge.
+ * Provides thematic flavor and minor gameplay effects.
+ */
+export interface CulturalInsight {
+  /** Category of the insight. */
+  type: "playingStyle" | "developmentCulture" | "mentalityPattern" | "physicalTrait";
+  /** Human-readable description of the insight. */
+  description: string;
+  /** What the insight unlocks or reveals for the player. */
+  gameplayEffect: string;
+}
+
+/**
+ * A hidden lower-tier league that can be discovered through regional knowledge.
+ * Contains undiscovered talent at lower current ability but potentially high PA.
+ */
+export interface HiddenLeague {
+  /** Unique identifier for the hidden league. */
+  id: string;
+  /** The country this league belongs to. */
+  countryId: string;
+  /** Display name of the league. */
+  name: string;
+  /** League tier (3+ — these are below the main scoutable leagues). */
+  tier: number;
+  /** Minimum knowledgeLevel required to discover this league. */
+  discoveryThreshold: number;
+  /** Current ability range of players in this league [min, max] on 1-200 scale. */
+  playerQualityRange: [number, number];
+  /** Probability (0–1) that a player in this league has high potential ability. */
+  talentDensity: number;
+}
+
+// =============================================================================
+// QUICK SCOUT MODE (F17)
+// =============================================================================
+
+/**
+ * Priorities for the auto-schedule system. The scheduler uses these to
+ * decide which activities to fill empty days with.
+ */
+export interface QuickScoutPriorities {
+  /** Player IDs to prioritize for match observation. */
+  targetPlayerIds: string[];
+  /** Whether to prioritize training on weakest skills. */
+  trainWeakSkills: boolean;
+  /** Whether to prioritize network meetings for decaying contacts. */
+  maintainContacts: boolean;
+  /** Whether to include report writing for well-observed players. */
+  writeReports: boolean;
+}
+
+/**
+ * Summary of a single week produced during batch advancement. */
+export interface BatchWeekSummary {
+  week: number;
+  season: number;
+  fatigueChange: number;
+  matchesAttended: number;
+  reportsWritten: number;
+  meetingsHeld: number;
+  newMessages: number;
+  playersDiscovered: number;
+  observationsGenerated: number;
+  /** Key events that happened this week (narrative text). */
+  keyEvents: string[];
+}
+
+/**
+ * Aggregated result of advancing multiple weeks at once. */
+export interface BatchAdvanceResult {
+  /** Per-week breakdown. */
+  weekSummaries: BatchWeekSummary[];
+  /** Total weeks advanced. */
+  weeksAdvanced: number;
+  /** Starting fatigue before batch. */
+  startingFatigue: number;
+  /** Final fatigue after batch. */
+  endingFatigue: number;
+  /** Total skill XP gained across all weeks, keyed by skill name. */
+  totalSkillXp: Record<string, number>;
+  /** Total attribute XP gained across all weeks, keyed by attribute name. */
+  totalAttributeXp: Record<string, number>;
+  /** Total new messages received. */
+  totalNewMessages: number;
+  /** Total players discovered. */
+  totalPlayersDiscovered: number;
+  /** Total observations generated. */
+  totalObservationsGenerated: number;
+  /** Whether an end-of-season was triggered during the batch. */
+  seasonTransitionOccurred: boolean;
+}
+
+/**
+ * Result of delegating a scouting task to an NPC scout. */
+export interface DelegationResult {
+  /** Updated NPC scout after accepting the task. */
+  npcScout: NPCScout;
+  /** Estimated weeks until the delegation completes. */
+  estimatedWeeks: number;
+  /** Whether the delegation was accepted (false if NPC is too fatigued). */
+  accepted: boolean;
+  /** Reason for rejection, if not accepted. */
+  rejectionReason?: string;
+}
+
+/**
+ * An active delegation assignment - NPC scouting a specific player. */
+export interface NPCDelegation {
+  id: string;
+  npcScoutId: string;
+  playerId: string;
+  /** Week the delegation started. */
+  startWeek: number;
+  /** Week the delegation completes. */
+  completionWeek: number;
+  /** Whether the delegation has been completed. */
+  completed: boolean;
+}
+
+// =============================================================================
+// F14: FINANCIAL STRATEGY LAYER
+// =============================================================================
+
+/** Data subscription tier affecting data scouting quality. */
+export type DataSubscriptionTier = "none" | "basic" | "premium" | "elite";
+
+/** Travel budget tier affecting scout fatigue on trips. */
+export type TravelBudgetTier = "economy" | "standard" | "business";
+
+/** Office equipment tier affecting report quality. */
+export type OfficeEquipmentTier = "basic" | "upgraded" | "professional";
+
+/**
+ * Scouting infrastructure investments that provide passive bonuses
+ * to various aspects of the scouting workflow.
+ */
+export interface ScoutingInfrastructure {
+  /** Data subscription level — affects data scouting quality. */
+  dataSubscription: DataSubscriptionTier;
+  /** Travel budget level — affects fatigue from travel. */
+  travelBudget: TravelBudgetTier;
+  /** Office equipment level — affects report quality. */
+  officeEquipment: OfficeEquipmentTier;
+  /** Costs breakdown: weekly recurring + one-time paid so far. */
+  investmentCosts: { weekly: number; oneTime: number };
+}
+
+/**
+ * An assistant scout that can be hired to perform scouting tasks
+ * while the player focuses on other activities.
+ */
+export interface AssistantScout {
+  /** Unique identifier. */
+  id: string;
+  /** Display name. */
+  name: string;
+  /** Skill level 1-10 (affects observation quality). */
+  skill: number;
+  /** Weekly salary cost. */
+  salary: number;
+  /** Player ID currently assigned to observe, if any. */
+  assignedPlayerId?: string;
+  /** Region currently assigned to scout, if any. */
+  assignedRegion?: string;
+  /** Fatigue 0-100. */
+  fatigue: number;
+  /** Lifetime count of reports completed. */
+  reportsCompleted: number;
+}
+
+/** Trip quality level for individual scouting trips. */
+export type TripQualityLevel = "budget" | "standard" | "premium";
+
+/**
+ * Trip quality configuration affecting cost, fatigue, and observation accuracy.
+ */
+export interface TripQuality {
+  /** Quality level. */
+  level: TripQualityLevel;
+  /** Multiplier on base travel cost (0.5 = half price, 1.8 = 80% more). */
+  costMultiplier: number;
+  /** Multiplier on fatigue from traveling (1.5 = 50% more fatigue, 0.6 = 40% less). */
+  fatigueMultiplier: number;
+  /** Additive bonus to observation accuracy (-0.1, 0, +0.15). */
+  observationBonus: number;
+}
+
+/**
+ * Aggregated effects of all infrastructure investments, computed from
+ * the ScoutingInfrastructure state.
+ */
+export interface InfrastructureEffects {
+  /** Additive bonus to data scouting accuracy (0 to 0.20). */
+  dataQualityBonus: number;
+  /** Multiplier on travel fatigue (1.0 = normal, 0.6 = 40% less). */
+  travelFatigueMultiplier: number;
+  /** Additive bonus to report quality (0 to 0.15). */
+  reportQualityBonus: number;
+  /** Weekly maintenance cost for all infrastructure. */
+  weeklyCost: number;
+}
+
+// =============================================================================
+// WEEK PREVIEW (F16)
+// =============================================================================
+
+/** A fixture that features a player of interest to the scout. */
+export interface PreviewMatch {
+  fixtureId: string;
+  homeClubId: string;
+  awayClubId: string;
+  leagueId: string;
+  /** Player IDs from the scout's watchlist appearing in this fixture. */
+  watchlistPlayerIds: string[];
+  /** Player IDs relevant to active manager directives in this fixture. */
+  directivePlayerIds: string[];
+  /** Combined relevance score (higher = more important to attend). */
+  relevanceScore: number;
+}
+
+/** Congestion level for the week. */
+export type CongestionLevel = "light" | "moderate" | "heavy";
+
+/** A suggestion for a single day slot in the schedule. */
+export interface ScheduleSuggestion {
+  dayIndex: number;
+  activity: Activity;
+  reason: string;
+}
+
+/** Priority weights the player can set for schedule suggestions. */
+export interface SchedulePriorities {
+  /** Weight given to watching tracked/targeted players (0-1). */
+  watchlistWeight: number;
+  /** Weight given to fulfilling manager directives (0-1). */
+  directiveWeight: number;
+  /** Weight given to rest/fatigue recovery (0-1). */
+  restWeight: number;
+}
+
+/** Complete week preview result from generateWeekPreview. */
+export interface WeekPreview {
+  /** Fixtures featuring players of interest, sorted by relevance. */
+  relevantMatches: PreviewMatch[];
+  /** Total number of fixtures this week across all leagues. */
+  totalFixtures: number;
+  /** Congestion level based on fixture density. */
+  congestion: CongestionLevel;
+  /** Whether the scout should consider resting based on fatigue. */
+  fatigueWarning: boolean;
+  /** Whether the scout is abroad this week. */
+  isAbroad: boolean;
+  /** Suggested schedule with reasons. */
+  suggestions: ScheduleSuggestion[];
+}
+
+// =============================================================================
+// F20: DATA VISUALIZATION DASHBOARD
+// =============================================================================
+
+/** A single point in a scatter plot visualization. */
+export interface ScatterDataPoint {
+  playerId: string;
+  label: string;
+  x: number;
+  y: number;
+  /** Position group for color coding. */
+  category: Position;
+  /** True if this player has an active anomaly flag. */
+  isAnomaly: boolean;
+}
+
+/** Configuration and data for a scatter plot. */
+export interface ScatterPlotData {
+  points: ScatterDataPoint[];
+  xLabel: string;
+  yLabel: string;
+  xMax: number;
+  yMax: number;
+}
+
+/** A single cell in a heat map visualization. */
+export interface HeatMapCell {
+  /** Country or region identifier. */
+  key: string;
+  /** Display label for the cell. */
+  label: string;
+  /** Intensity value, normalized to 0-1. */
+  intensity: number;
+  /** Raw count (observations, scouts, etc.). */
+  rawValue: number;
+}
+
+/** Configuration and data for a heat map. */
+export interface HeatMapData {
+  cells: HeatMapCell[];
+  title: string;
+  maxValue: number;
+}
+
+/** A single data point in a development trend line. */
+export interface TrendDataPoint {
+  season: number;
+  value: number;
+}
+
+/** One player's development trajectory. */
+export interface TrendLineData {
+  playerId: string;
+  label: string;
+  points: TrendDataPoint[];
+  color: string;
+}
+
+/** A single bar in a bar chart. */
+export interface BarChartBar {
+  key: string;
+  label: string;
+  value: number;
+  /** Secondary value for comparison (optional). */
+  secondaryValue?: number;
+}
+
+/** Configuration and data for a bar chart. */
+export interface BarChartData {
+  bars: BarChartBar[];
+  yLabel: string;
+  maxValue: number;
+}
+
+/** A single axis on a radar chart. */
+export interface RadarAxis {
+  key: string;
+  label: string;
+  value: number;
+  /** Maximum possible value on this axis. */
+  max: number;
+}
+
+/** Configuration and data for a radar chart. */
+export interface RadarChartData {
+  axes: RadarAxis[];
+  label: string;
+}
+
+// =============================================================================
+// DISCIPLINE / CARD SYSTEM
+// =============================================================================
+
+/**
+ * Reason a card was shown. Drives suspension length for red cards
+ * and commentary text.
+ */
+export type CardReason =
+  | "recklessTackle"
+  | "professionalFoul"
+  | "dissent"
+  | "timewasting"
+  | "handball"
+  | "violentConduct";
+
+/**
+ * A single card event that occurred during a match.
+ */
+export interface CardEvent {
+  type: "yellow" | "red";
+  playerId: string;
+  fixtureId: string;
+  minute: number;
+  reason: CardReason;
+}
+
+/**
+ * Tracks a player's disciplinary record across a season.
+ * Stored both on the Player and in GameState.disciplinaryRecords.
+ */
+export interface DisciplinaryRecord {
+  playerId: string;
+  season: number;
+  yellowCards: number;
+  redCards: number;
+  /** Remaining match suspensions — player is unavailable when > 0. */
+  suspensionWeeksRemaining: number;
+  /** Full history of card events this season. */
+  cardHistory: CardEvent[];
+}
+
+// =============================================================================
+// EVENT CHAINS (F2)
+// =============================================================================
+
+/**
+ * Tracks a multi-step narrative event chain.
+ * Chains link related NarrativeEvents across multiple weeks,
+ * allowing choices at earlier steps to influence later outcomes.
+ */
+export interface EventChain {
+  /** Unique chain identifier. */
+  id: string;
+  /** Which chain template produced this chain. */
+  templateKey: string;
+  /** The week this chain started (absolute). */
+  startWeek: number;
+  /** Current step within the chain (0-based). */
+  currentStep: number;
+  /** Total number of steps in this chain. */
+  maxSteps: number;
+  /** Whether the chain has concluded. */
+  resolved: boolean;
+  /** Choices made at each step (index = step, value = choiceIndex). */
+  choiceHistory: number[];
+  /** Carried context data (playerId, clubId, playerName, etc.). */
+  context: Record<string, string>;
+  /** Absolute week when the next step should fire. */
+  nextStepWeek: number;
+  /** IDs of NarrativeEvents generated by this chain. */
+  eventIds: string[];
+}
+
+// =============================================================================
+// TRANSFER NEGOTIATION SYSTEM (F4)
+// =============================================================================
+
+/**
+ * Personality of a club during transfer negotiations.
+ * Affects starting price, patience, willingness to include add-ons.
+ *  - hardball:    starts high (+20% asking), few rounds, rarely accepts add-ons
+ *  - reasonable:  fair starting price, moderate patience, open to add-ons
+ *  - desperate:   lower asking (-15%), quick to accept, very open to add-ons
+ *  - prestige:    price premium (+10%), but easily swayed by club reputation
+ */
+export type ClubNegotiationPersonality =
+  | "hardball"
+  | "reasonable"
+  | "desperate"
+  | "prestige";
+
+/**
+ * A single round within a transfer negotiation.
+ * Each round represents one offer/counter-offer exchange.
+ */
+export interface NegotiationRound {
+  roundNumber: number;
+  /** The buying club's offer amount. */
+  offerAmount: number;
+  /** The selling club's asking amount. */
+  askingAmount: number;
+  /** Optional add-on clauses included in this offer. */
+  addOns?: TransferAddOn[];
+  /** How the selling club responded to this round. */
+  response: "accepted" | "rejected" | "countered";
+  /** Game week when this round occurred. */
+  week: number;
+}
+
+/**
+ * An add-on clause attached to a transfer offer.
+ * Add-ons reduce the upfront fee while deferring costs to future milestones.
+ */
+export interface TransferAddOn {
+  type: "appearanceBonus" | "sellOnClause" | "performanceBonus" | "relegationClause";
+  /** Monetary value of the add-on (or percentage for sellOnClause). */
+  value: number;
+  /** Human-readable description of the trigger condition. */
+  trigger?: string;
+}
+
+/**
+ * A rival club's competing bid for a player under negotiation.
+ * Increases urgency and may force the buying club to raise their offer.
+ */
+export interface RivalBid {
+  clubId: string;
+  /** The rival's bid amount. */
+  amount: number;
+  /** Week the rival bid was placed. */
+  week: number;
+  /** Name of the rival club's scout (flavour). */
+  scoutName?: string;
+}
+
+/**
+ * A multi-round transfer negotiation between two clubs for a player.
+ * Created when the scout's club responds "signed" or "interested" and
+ * the player initiates a formal transfer process.
+ */
+export interface TransferNegotiation {
+  id: string;
+  playerId: string;
+  /** The club selling the player. */
+  fromClubId: string;
+  /** The club buying the player (the scout's club). */
+  toClubId: string;
+  /** Current phase of the negotiation. */
+  phase: "initial" | "counterOffer" | "finalOffer" | "completed" | "collapsed";
+  /** History of all offer rounds. */
+  rounds: NegotiationRound[];
+  /** Maximum rounds before the selling club walks away. */
+  maxRounds: number;
+  /** Any rival bids that have appeared during negotiation. */
+  rivalBids: RivalBid[];
+  /** Game week when this negotiation expires if not completed. */
+  deadline: number;
+  /** The selling club's negotiation personality. */
+  clubPersonality: ClubNegotiationPersonality;
+  /** Whether a player agent is involved (adds wage/bonus demands). */
+  agentInvolved: boolean;
+  /** Agent demands if agent is involved. */
+  agentDemands?: { wagePremium: number; signingBonus: number };
+  /** The initial asking price set by the selling club. */
+  initialAskingPrice: number;
+  /** Season when this negotiation started. */
+  season: number;
+  /** Week when this negotiation started. */
+  startWeek: number;
+}
+
+// =============================================================================
+// RIVAL SCOUT ACTIVITIES (F8)
+// =============================================================================
+
+/**
+ * Represents a notable action by a rival scout, used to display activity
+ * history on the Rivals Screen and generate inbox messages.
+ */
+export interface RivalActivity {
+  /** ID of the rival scout who performed this action. */
+  rivalId: string;
+  /** Type of activity. */
+  type: "spotted" | "targetAcquired" | "reportSubmitted" | "playerSigned";
+  /** The player involved, if applicable. */
+  playerId?: string;
+  /** The fixture where the activity occurred, if applicable. */
+  fixtureId?: string;
+  /** The game week when this activity occurred. */
+  week: number;
+  /** The season when this activity occurred. */
+  season: number;
+}
+
+// =============================================================================
+// NEW GAME+ / LEGACY MODE (F19)
+// =============================================================================
+
+/**
+ * The type of bonus a legacy perk provides to a New Game+ career.
+ *
+ * - `startingContact`   — begin with extra contacts from prior career knowledge
+ * - `reputationBoost`   — flat bonus to starting reputation
+ * - `skillBonus`        — bonus points to a scout skill
+ * - `budgetBonus`       — percentage increase to starting financial balance
+ * - `knowledgeRetain`   — retain a fraction of regional knowledge
+ * - `fatigueReduction`  — lower starting fatigue ceiling / faster recovery
+ */
+export type LegacyPerkType =
+  | "startingContact"
+  | "reputationBoost"
+  | "skillBonus"
+  | "budgetBonus"
+  | "knowledgeRetain"
+  | "fatigueReduction";
+
+/**
+ * A single legacy perk earned through prior career achievement.
+ * Perks are applied when starting a New Game+ run.
+ */
+export interface LegacyPerk {
+  /** Unique perk identifier (e.g. "starting_network", "reputation_head_start"). */
+  id: string;
+  /** Display name shown in the perk selection UI. */
+  name: string;
+  /** Short description of what this perk does. */
+  description: string;
+  /** The mechanical bonus category. */
+  type: LegacyPerkType;
+  /** Numeric value of the bonus (interpretation depends on `type`). */
+  value: number;
+  /** The achievement ID or career milestone that unlocked this perk. */
+  unlockedBy: string;
+}
+
+/**
+ * Summary of a single completed career, stored in the legacy profile.
+ */
+export interface CompletedCareer {
+  /** Scout display name for the career history. */
+  scoutName: string;
+  /** The highest career tier reached during this career. */
+  finalTier: number;
+  /** Total seasons played in this career. */
+  seasonsPlayed: number;
+  /** Total player discoveries recorded. */
+  totalDiscoveries: number;
+  /** Hit rate: fraction of reports that led to successful finds (0-1). */
+  hitRate: number;
+  /** Primary specialization used in this career. */
+  specialization: Specialization;
+  /** IDs of scenarios completed during this career. */
+  completedScenarios: string[];
+  /** The legacy score achieved at career end. */
+  legacyScoreTotal: number;
+  /** Unix timestamp when this career was completed. */
+  completedAt: number;
+}
+
+/**
+ * Persistent cross-career profile that tracks cumulative achievements
+ * and unlocks for New Game+ mode. Stored in localStorage, not in
+ * individual game saves.
+ */
+export interface LegacyProfile {
+  /** Unique profile identifier. */
+  id: string;
+  /** All completed careers, newest first. */
+  completedCareers: CompletedCareer[];
+  /** Scenario IDs unlocked for future playthroughs. */
+  unlockedScenarios: string[];
+  /** All legacy perks earned across careers. */
+  legacyPerks: LegacyPerk[];
+  /** Cumulative discoveries across all completed careers. */
+  totalDiscoveries: number;
+  /** Cumulative seasons played across all completed careers. */
+  totalSeasonsPlayed: number;
+  /** Best hit rate achieved in any single career (0-1). */
+  bestHitRate: number;
+  /** Highest legacy score achieved in any single career. */
+  bestLegacyScore: number;
+  /** Highest career tier reached across all careers. */
+  highestTierReached: number;
+}
+
+// =============================================================================
+// CONTACT NETWORK DEPTH (F3)
+// =============================================================================
+
+/**
+ * A record of an interaction between the scout and a contact.
+ * Stored in Contact.interactionHistory for trust/loyalty calculations.
+ */
+export interface ContactInteraction {
+  week: number;
+  type: "meeting" | "tip" | "referral" | "betrayal" | "favor";
+  trustDelta: number;
+}
+
+/**
+ * A piece of gossip shared by a contact. Gossip items have a limited
+ * lifespan and varying reliability based on the contact's loyalty.
+ */
+export interface GossipItem {
+  id: string;
+  type: "transferRumor" | "unhappyPlayer" | "youthProspect" | "managerChange" | "injuryNews";
+  playerId?: string;
+  clubId?: string;
+  /** 0-1: how reliable this gossip is (contact loyalty affects this). */
+  reliability: number;
+  /** The week this gossip was revealed to the scout. */
+  revealedWeek: number;
+  /** The week after which this gossip becomes stale. */
+  expiresWeek: number;
+  /** Human-readable gossip content. */
+  content: string;
+}
+
+// =============================================================================
+// MATCH TACTICAL LAYER (F5)
+// =============================================================================
+
+/**
+ * The result of comparing two clubs' tactical styles for a single match.
+ * Modifiers affect event quality and event frequency distribution.
+ */
+export interface TacticalMatchup {
+  homeStyle: TacticalIdentity;
+  awayStyle: TacticalIdentity;
+  /** Quality modifier applied to home team events, range [-0.3, +0.3]. */
+  homeModifier: number;
+  /** Quality modifier applied to away team events, range [-0.3, +0.3]. */
+  awayModifier: number;
+  /** Event frequency adjustments derived from the matchup interaction. */
+  eventShift: Partial<Record<MatchEventType, number>>;
+}
+
+/**
+ * A substitution event generated during match simulation.
+ * Tracks tactical, injury, fatigue, and disciplinary subs.
+ */
+export interface MatchSubstitution {
+  minute: number;
+  playerOutId: string;
+  playerInId: string;
+  tacticalReason: "injury" | "tactical" | "fatigue" | "redCard";
+}
+
+// =============================================================================
+// DYNAMIC BOARD EXPECTATIONS (F10)
+// =============================================================================
+
+/**
+ * Board personality archetype. Each personality shifts the satisfaction
+ * thresholds, patience decay, and reaction severity.
+ *
+ * - patient:        Wide neutral band, slow patience decay
+ * - impatient:      Narrow neutral band, fast patience decay
+ * - penny-pinching: Budget-focused, budget cuts more severe
+ * - ambitious:      Expects rapid growth, escalates directive difficulty
+ * - hands-off:      Rarely intervenes, wide tolerance bands
+ */
+export type BoardPersonality =
+  | "patient"
+  | "impatient"
+  | "penny-pinching"
+  | "ambitious"
+  | "hands-off";
+
+/**
+ * Profile of the club's board of directors. Tracks satisfaction,
+ * patience, budget willingness, and ultimatum state.
+ */
+export interface BoardProfile {
+  /** Board archetype — affects thresholds and reaction severity. */
+  personality: BoardPersonality;
+  /** Patience counter 0–100. Decreases when directives fail or scout underperforms. */
+  patience: number;
+  /** Overall satisfaction with the scouting department 0–100. */
+  satisfactionLevel: number;
+  /** Budget multiplier applied to directive allocations, range 0.5–2.0. */
+  budgetMultiplier: number;
+  /** Whether the board has issued a formal ultimatum. */
+  ultimatumIssued: boolean;
+  /** If ultimatum issued, the week deadline for improvement. */
+  ultimatumDeadline?: number;
+  /** History of directive type IDs issued (for escalation tracking). */
+  recentDirectives: string[];
+}
+
+/**
+ * A board reaction event triggered by satisfaction thresholds.
+ */
+export type BoardReactionType =
+  | "praise"
+  | "warning"
+  | "budgetIncrease"
+  | "budgetCut"
+  | "ultimatum"
+  | "demotion"
+  | "firing";
+
+export interface BoardReaction {
+  /** The type of reaction. */
+  type: BoardReactionType;
+  /** Human-readable description of what triggered this reaction. */
+  trigger: string;
+  /** The week this reaction occurred. */
+  week: number;
+  /** Display message for the inbox / UI. */
+  message: string;
 }

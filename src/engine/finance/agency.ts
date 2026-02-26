@@ -11,6 +11,7 @@ import type {
   Office,
   OfficeTier,
 } from "../core/types";
+import { generateEmployeeSkills, deriveQuality, computeSalaryFromSkills, processSkillXp, processTrainingWeek } from "./employeeSkills";
 
 // ---------------------------------------------------------------------------
 // Office tiers
@@ -58,6 +59,7 @@ export const SALARY_BY_ROLE: Record<AgencyEmployeeRole, [number, number]> = {
   analyst: [400, 1500],
   administrator: [300, 1000],
   relationshipManager: [600, 2500],
+  mentee: [200, 600],
 };
 
 /** First names pool for generated employees */
@@ -79,13 +81,16 @@ export function hireEmployee(
   rng: RNG,
   finances: FinancialRecord,
   role: AgencyEmployeeRole,
+  week?: number,
+  season?: number,
+  regions?: string[],
 ): FinancialRecord | null {
   // Check office capacity
   if (finances.employees.length >= finances.office.maxEmployees) return null;
 
-  const [minSalary, maxSalary] = SALARY_BY_ROLE[role];
-  const quality = rng.nextInt(3, 15); // 1-20 scale, weighted toward average
-  const salary = Math.round(minSalary + (quality / 20) * (maxSalary - minSalary));
+  const skills = generateEmployeeSkills(rng, role);
+  const quality = deriveQuality(skills);
+  const salary = computeSalaryFromSkills(skills, role);
 
   const firstName = rng.pick(FIRST_NAMES);
   const lastName = rng.pick(LAST_NAMES);
@@ -98,6 +103,16 @@ export function hireEmployee(
     salary,
     morale: 70,
     fatigue: 0,
+    hiredWeek: week ?? 1,
+    hiredSeason: season ?? 1,
+    regionSpecialization: role === "scout" && regions && regions.length > 0 ? rng.pick(regions) : undefined,
+    positionSpecialization: undefined,
+    reportsGenerated: [],
+    currentAssignment: undefined,
+    experience: 0,
+    weeklyLog: [],
+    regionFocusWeeks: 0,
+    skills,
   };
 
   return {
@@ -124,8 +139,15 @@ export function fireEmployee(
 // ---------------------------------------------------------------------------
 
 /**
- * Process one week of employee activity. Updates morale and fatigue.
- * Actual report generation happens in the game loop where world state is available.
+ * XP thresholds at which an employee's quality increases by 1 point.
+ * Ten milestones covering the full journey from quality 3 to 13+.
+ */
+const QUALITY_THRESHOLDS = [50, 120, 210, 320, 450, 600, 780, 990, 1230, 1500];
+
+/**
+ * Process one week of employee activity. Updates morale, fatigue, XP, quality.
+ * Handles on-leave tracking, resignation checks, and region-focus accumulation.
+ * Actual report generation happens in employeeWork.ts where world state is available.
  */
 export function processEmployeeWeek(
   rng: RNG,
@@ -133,19 +155,102 @@ export function processEmployeeWeek(
 ): FinancialRecord {
   if (finances.employees.length === 0) return finances;
 
+  const resignations: string[] = [];
+
   const updatedEmployees = finances.employees.map((emp) => {
-    // Fatigue naturally recovers
-    const newFatigue = Math.max(0, emp.fatigue - 5 + rng.nextInt(0, 3));
+    // Handle on-leave employees
+    if (emp.onLeave) {
+      if (emp.leaveReturnWeek !== undefined && emp.leaveReturnWeek <= 0) {
+        return { ...emp, onLeave: false, leaveReturnWeek: undefined };
+      }
+      return { ...emp, leaveReturnWeek: (emp.leaveReturnWeek ?? 1) - 1 };
+    }
 
-    // Morale drifts toward 60 (neutral) with random variation
-    const moraleDrift = emp.morale > 60 ? -1 : emp.morale < 60 ? 1 : 0;
-    const moraleNoise = rng.nextInt(-2, 2);
-    const newMorale = Math.max(10, Math.min(100, emp.morale + moraleDrift + moraleNoise));
+    // Fatigue recovery (base -5, offset by noise)
+    let newFatigue = Math.max(0, emp.fatigue - 5 + rng.nextInt(0, 3));
 
-    return { ...emp, fatigue: newFatigue, morale: newMorale };
+    // Morale calculation
+    let moraleDelta = 0;
+    // Base drift toward 60
+    moraleDelta += emp.morale > 60 ? -1 : emp.morale < 60 ? 1 : 0;
+    // Overwork penalty
+    if (emp.fatigue > 70) moraleDelta -= 3;
+    // Good office bonus
+    if (finances.office.tier === "professional" || finances.office.tier === "hq") moraleDelta += 1;
+    // Idle penalty
+    if (!emp.currentAssignment || emp.currentAssignment.type === "idle") {
+      moraleDelta -= 2;
+    }
+    // Random noise
+    moraleDelta += rng.nextInt(-1, 1);
+
+    const newMorale = Math.max(5, Math.min(100, emp.morale + moraleDelta));
+
+    // Fatigue consequences
+    if (newFatigue > 80 && rng.chance(0.05)) {
+      // Sick leave — skip remaining processing
+      return { ...emp, fatigue: newFatigue, morale: newMorale, onLeave: true, leaveReturnWeek: 2 };
+    }
+    if (newFatigue > 90 && rng.chance(0.10)) {
+      resignations.push(emp.id);
+      return emp;
+    }
+
+    // Morale consequences
+    if (newMorale < 20 && rng.chance(0.03)) {
+      resignations.push(emp.id);
+      return emp;
+    }
+    if (newMorale < 10 && rng.chance(0.10)) {
+      resignations.push(emp.id);
+      return emp;
+    }
+
+    // Experience accumulation (only if actively working)
+    let newExp = emp.experience;
+    if (emp.currentAssignment && emp.currentAssignment.type !== "idle") {
+      newExp += Math.round(5 + emp.quality * 0.5 + (emp.morale / 100) * 3);
+    }
+
+    // Quality improvement at XP thresholds (max quality 20)
+    let newQuality = emp.quality;
+    for (const threshold of QUALITY_THRESHOLDS) {
+      if (emp.experience < threshold && newExp >= threshold && newQuality < 20) {
+        newQuality++;
+        break;
+      }
+    }
+
+    // Region focus tracking for scouts
+    let regionFocusWeeks = emp.regionFocusWeeks;
+    if (
+      emp.role === "scout" &&
+      emp.currentAssignment?.type === "scoutRegion" &&
+      emp.currentAssignment.targetRegion === emp.regionSpecialization
+    ) {
+      regionFocusWeeks++;
+    } else {
+      regionFocusWeeks = 0;
+    }
+
+    // Work fatigue from active assignments
+    if (emp.currentAssignment && emp.currentAssignment.type !== "idle") {
+      newFatigue = Math.min(100, newFatigue + rng.nextInt(3, 8));
+    }
+
+    let result: AgencyEmployee = { ...emp, fatigue: newFatigue, morale: newMorale, experience: newExp, quality: newQuality, regionFocusWeeks };
+    // Process per-skill XP for employees with skills
+    result = processSkillXp(rng, result);
+    return result;
   });
 
-  return { ...finances, employees: updatedEmployees };
+  // Remove resigned employees
+  const remaining = updatedEmployees.filter((e) => !resignations.includes(e.id));
+
+  // Process training countdown for all employees
+  let financesWithRemaining: FinancialRecord = { ...finances, employees: remaining };
+  financesWithRemaining = processTrainingWeek(financesWithRemaining);
+  return financesWithRemaining;
 }
 
 // ---------------------------------------------------------------------------

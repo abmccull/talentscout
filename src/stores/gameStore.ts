@@ -40,6 +40,15 @@ import type {
   DayResult,
   WeekSimulationState,
   LeaderboardEntry,
+  PlayerMatchRating,
+  BatchAdvanceResult,
+  QuickScoutPriorities,
+  DataSubscriptionTier,
+  TravelBudgetTier,
+  OfficeEquipmentTier,
+  TransferRecord,
+  TransferAddOn,
+  LegacyProfile,
 } from "@/engine/core/types";
 import {
   generateDirectives,
@@ -48,6 +57,9 @@ import {
   processTrialOutcome,
   updateTransferRecords,
 } from "@/engine/firstTeam";
+import * as negotiationEngine from "@/engine/firstTeam/negotiation";
+import { processBoardMeeting, generateBoardProfile } from "@/engine/firstTeam/boardAI";
+import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import {
   executeDatabaseQuery,
   executeDeepVideoAnalysis,
@@ -73,6 +85,7 @@ import {
   generateSeasonEvents,
   getActiveSeasonEvents,
 } from "@/engine/core/seasonEvents";
+import { resolveSeasonEventChoice } from "@/engine/core/seasonEventEffects";
 import {
   initializeTransferWindows,
   isTransferWindowOpen,
@@ -83,7 +96,11 @@ import {
 import { initializeWorld } from "@/engine/world";
 import { createScout } from "@/engine/scout/creation";
 import { processWeeklyTick, advanceWeek } from "@/engine/core/gameLoop";
+import { autoScheduleWeek, batchAdvanceWeeks, delegateScoutingTask, buildDefaultPriorities } from "@/engine/core/quickScout";
 import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases";
+import { calculateAttendedMatchRatings, computeFormFromRatings } from "@/engine/match/ratings";
+import { generateCardEvents, processCardAccumulation } from "@/engine/match/discipline";
+import type { CardEvent } from "@/engine/core/types";
 import { processFocusedObservations } from "@/engine/match/focus";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { generateReportContent, finalizeReport, calculateReportQuality, trackPostTransfer } from "@/engine/reports/reporting";
@@ -114,6 +131,12 @@ import {
   checkIndependentTierAdvancement,
   advanceIndependentTier,
 } from "@/engine/career/index";
+import {
+  generateLegacyProfile as generateLegacyProfileEngine,
+  applyLegacyPerks as applyLegacyPerksEngine,
+  readLegacyProfile,
+  writeLegacyProfile,
+} from "@/engine/career/legacy";
 import { chooseCareerPath, canChooseIndependentPath } from "@/engine/career/pathChoice";
 import { processWeeklyCourseProgress, enrollInCourse } from "@/engine/career/courses";
 import {
@@ -127,6 +150,7 @@ import {
   processCrossCountryTransfers,
   processInternationalWeek,
 } from "@/engine/world/index";
+import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
 import { generateSeasonFixtures } from "@/engine/world/fixtures";
 import {
   initializeFinances,
@@ -137,6 +161,8 @@ import {
   getActiveEquipmentBonuses,
   migrateEquipmentLevel,
   migrateFinancialRecord,
+  migrateEmployeeSkillsInRecord,
+  enrollInTraining,
   processMarketplaceSales,
   expireOldListings,
   processRetainerDeliveries,
@@ -156,8 +182,32 @@ import {
   acceptConsulting,
   generateRetainerOffers,
   generateConsultingOffers,
+  processEmployeeWork,
+  processClientRelationshipWeek,
+  pitchToClub,
+  negotiateRetainerTerms,
+  checkEmployeeEvents,
+  resolveEmployeeEvent as resolveEmployeeEventEngine,
+  processRetainerRenewals,
+  openSatelliteOffice,
+  closeSatelliteOffice,
+  assignEmployeeToSatellite,
+  processAnnualAwards,
+  ensureClientRelationship,
+  // F14: Financial Strategy Layer
+  purchaseDataSubscription,
+  upgradeTravelBudget,
+  upgradeOfficeEquipment,
+  hireAssistantScout,
+  fireAssistantScout,
+  assignAssistantScout,
+  unassignAssistantScout,
+  processAssistantScoutWeek,
+  processWeeklyInfrastructureCosts,
+  calculateInfrastructureEffects,
 } from "@/engine/finance";
 import type { EquipmentItemId } from "@/engine/finance";
+import type { EmployeeAssignment, ClientRelationship } from "@/engine/core/types";
 import {
   generateWeeklyEvent,
   resolveEventChoice,
@@ -168,13 +218,18 @@ import {
   expireEconomicEvents,
   checkStorylineTriggers,
   processActiveStorylines,
+  advanceChain,
+  computeChainChoiceEffects,
 } from "@/engine/events";
 import {
   generateRivalScouts,
-  processRivalWeek,
+  processRivalScoutWeek,
+  generateRivalIntelligence,
 } from "@/engine/rivals";
 import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
+import { checkTraitReveal } from "@/engine/players/traitReveal";
+import type { MatchEventType } from "@/engine/core/types";
 import { generateManagerProfiles } from "@/engine/analytics";
 import { generateRegionalYouth, generateAcademyIntake } from "@/engine/youth/generation";
 import {
@@ -246,7 +301,9 @@ export type GameScreen =
   | "agency"
   | "weekSimulation"
   | "training"
-  | "rivals";
+  | "rivals"
+  | "reportComparison"
+  | "negotiation";
 
 interface GameStore {
   // Navigation
@@ -277,6 +334,12 @@ interface GameStore {
     awayGoals: number;
     /** Screen to navigate to when the user clicks "Continue" */
     continueScreen: GameScreen;
+    /** Behavioral traits discovered during the match */
+    traitDiscoveries?: Array<{ playerName: string; trait: string }>;
+    /** Per-player match ratings (1-10 scale) */
+    playerRatings?: Record<string, PlayerMatchRating>;
+    /** Card events that occurred during the match. */
+    cardEvents?: CardEvent[];
   } | null;
 
   // Selected entities
@@ -317,6 +380,16 @@ interface GameStore {
   unscheduleActivity: (dayIndex: number) => void;
   advanceWeek: () => void;
 
+  // Quick Scout Mode (F17)
+  autoSchedule: (priorities?: QuickScoutPriorities) => void;
+  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => void;
+  delegateScouting: (npcScoutId: string, playerId: string) => void;
+  batchSummary: BatchAdvanceResult | null;
+  dismissBatchSummary: () => void;
+
+  // Season event actions
+  resolveSeasonEvent: (eventId: string, choiceIndex: number) => void;
+
   // Day-by-day simulation
   weekSimulation: WeekSimulationState | null;
   startWeekSimulation: () => void;
@@ -353,6 +426,7 @@ interface GameStore {
   // Career Management
   meetManager: () => void;
   presentToBoard: () => void;
+  meetBoard: () => void;
   unlockSecondarySpecialization: (spec: Specialization) => void;
 
   // Travel
@@ -378,11 +452,48 @@ interface GameStore {
   upgradeAgencyOffice: (tier: OfficeTier) => void;
   hireAgencyEmployee: (role: AgencyEmployeeRole) => void;
   fireAgencyEmployee: (employeeId: string) => void;
+
+  // Phase 2: Employee assignment
+  assignAgencyEmployee: (employeeId: string, assignment: EmployeeAssignment) => void;
+
+  // Phase 3: Business development
+  pitchToClient: (clubId: string, pitchType: "coldCall" | "referral" | "showcase") => void;
+
+  // Phase 4: Employee event resolution
+  resolveAgencyEmployeeEvent: (eventId: string, optionIndex: number) => void;
+  adjustEmployeeSalary: (employeeId: string, newSalary: number) => void;
+
+  // Phase 5: International expansion
+  openAgencySatelliteOffice: (region: string) => void;
+  closeAgencySatelliteOffice: (officeId: string) => void;
+  assignEmployeeToAgencySatellite: (employeeId: string, officeId: string) => void;
+
+  // Phase 5: Employee skills training (implementation provided by backend)
+  trainAgencyEmployee: (employeeId: string, skillIndex: 1 | 2 | 3) => void;
+
   takeLoanAction: (type: LoanType, amount: number) => void;
   repayLoanAction: () => void;
   acceptConsultingContract: (contract: ConsultingContract) => void;
   declineRetainerOffer: (contractId: string) => void;
   declineConsultingOffer: (contractId: string) => void;
+
+  // F14: Financial Strategy Layer — infrastructure investments
+  purchaseDataSubscriptionAction: (tier: DataSubscriptionTier) => void;
+  upgradeTravelBudgetAction: (tier: TravelBudgetTier) => void;
+  upgradeOfficeEquipmentAction: (tier: OfficeEquipmentTier) => void;
+
+  // F14: Financial Strategy Layer — assistant scouts
+  hireAssistantScoutAction: () => void;
+  fireAssistantScoutAction: (scoutId: string) => void;
+  assignAssistantScoutAction: (scoutId: string, task: { playerId?: string; region?: string }) => void;
+  unassignAssistantScoutAction: (scoutId: string) => void;
+
+  // Transfer Negotiation actions (F4)
+  activeNegotiationId: string | null;
+  initiateTransferNegotiation: (playerId: string) => void;
+  submitTransferOffer: (negotiationId: string, amount: number, addOns?: import("@/engine/core/types").TransferAddOn[]) => void;
+  acceptNegotiation: (negotiationId: string) => void;
+  walkAway: (negotiationId: string) => void;
 
   // Cross-screen fixture filter (set from PlayerProfile → consumed by FixtureBrowser)
   pendingFixtureClubFilter: string | null;
@@ -398,8 +509,18 @@ interface GameStore {
   // Watchlist
   toggleWatchlist: (playerId: string) => void;
 
+  // Report comparison (F11)
+  comparisonReportIds: string[];
+  addToComparison: (reportId: string) => void;
+  removeFromComparison: (reportId: string) => void;
+  clearComparison: () => void;
+
   // Leaderboard
   submitToLeaderboard: () => Promise<LeaderboardEntry | null>;
+
+  // New Game+ / Legacy Mode (F19)
+  completeLegacyCareer: () => LegacyProfile | null;
+  startNewGamePlus: (config: NewGameConfig, selectedPerkIds: string[]) => Promise<void>;
 
   // Helpers
   getPendingMatches: () => string[];
@@ -493,6 +614,329 @@ function getDayChoiceId(dayResult: DayResult | undefined): SimulationChoiceId | 
   return undefined;
 }
 
+// ---------------------------------------------------------------------------
+// Migration: Player roles, traits & tactical depth expansion
+// ---------------------------------------------------------------------------
+function migratePlayerRolesAndTraits(state: GameState): void {
+  const clampAttr = (v: number) => Math.round(Math.max(1, Math.min(20, v)));
+
+  // Migrate players: derive new attributes from existing ones
+  for (const player of Object.values(state.players)) {
+    const a = player.attributes;
+    // Only migrate if new attributes are missing
+    if (a.tackling === undefined) {
+      a.tackling = clampAttr(a.defensiveAwareness * 0.6 + a.strength * 0.4);
+      a.finishing = clampAttr(a.shooting * 0.7 + a.composure * 0.3);
+      a.jumping = clampAttr(a.heading * 0.5 + a.strength * 0.3 + a.agility * 0.2);
+      a.balance = clampAttr(a.agility * 0.6 + a.strength * 0.4);
+      a.anticipation = clampAttr(a.positioning * 0.5 + a.decisionMaking * 0.5);
+      a.vision = clampAttr(a.passing * 0.5 + a.decisionMaking * 0.5);
+      a.marking = clampAttr(a.defensiveAwareness * 0.7 + a.positioning * 0.3);
+      a.teamwork = clampAttr(a.workRate * 0.6 + a.decisionMaking * 0.4);
+    }
+    // Default empty trait arrays
+    if (!player.playerTraits) player.playerTraits = [];
+    if (!player.playerTraitsRevealed) player.playerTraitsRevealed = [];
+  }
+
+  // Migrate unsigned youth (same attribute derivation)
+  if (state.unsignedYouth) {
+    for (const youth of Object.values(state.unsignedYouth)) {
+      const a = (youth as unknown as Player).attributes;
+      if (a && a.tackling === undefined) {
+        a.tackling = clampAttr(a.defensiveAwareness * 0.6 + a.strength * 0.4);
+        a.finishing = clampAttr(a.shooting * 0.7 + a.composure * 0.3);
+        a.jumping = clampAttr(a.heading * 0.5 + a.strength * 0.3 + a.agility * 0.2);
+        a.balance = clampAttr(a.agility * 0.6 + a.strength * 0.4);
+        a.anticipation = clampAttr(a.positioning * 0.5 + a.decisionMaking * 0.5);
+        a.vision = clampAttr(a.passing * 0.5 + a.decisionMaking * 0.5);
+        a.marking = clampAttr(a.defensiveAwareness * 0.7 + a.positioning * 0.3);
+        a.teamwork = clampAttr(a.workRate * 0.6 + a.decisionMaking * 0.4);
+      }
+    }
+  }
+
+  // Migrate clubs: generate tactical style from philosophy + reputation
+  for (const club of Object.values(state.clubs)) {
+    if (!club.tacticalStyle) {
+      club.tacticalStyle = deriveTacticalStyleFromPhilosophy(
+        club.scoutingPhilosophy,
+        club.reputation,
+      );
+    }
+  }
+
+  // Clear system fit cache (will recompute with new formula)
+  state.systemFitCache = {};
+}
+
+/**
+ * Migration: Add match rating system fields to existing saves.
+ * Players get empty recentMatchRatings and seasonRatings arrays.
+ * GameState gets empty matchRatings record.
+ */
+function migrateMatchRatings(state: GameState): void {
+  // eslint-disable-next-line
+  if ((state as any).matchRatings === undefined) {
+    (state as any).matchRatings = {};
+  }
+  for (const player of Object.values(state.players)) {
+    if (!player.recentMatchRatings) {
+      (player as Player).recentMatchRatings = [];
+    }
+    if (!player.seasonRatings) {
+      (player as Player).seasonRatings = [];
+    }
+  }
+  // Also migrate unsigned youth players
+  if (state.unsignedYouth) {
+    for (const youth of Object.values(state.unsignedYouth)) {
+      const p = youth.player;
+      if (p && !p.recentMatchRatings) {
+        p.recentMatchRatings = [];
+      }
+      if (p && !p.seasonRatings) {
+        p.seasonRatings = [];
+      }
+    }
+  }
+}
+
+/**
+ * Migration: Add injury system fields to existing saves.
+ * Players get default injuryHistory and currentInjury derived from existing injury state.
+ */
+function migrateInjurySystem(state: GameState): void {
+  for (const player of Object.values(state.players)) {
+    // Default new fields if missing
+    player.injuryHistory ??= {
+      playerId: player.id,
+      injuries: [],
+      totalWeeksMissed: 0,
+      injuryProneness: 0,
+      reinjuryWindowWeeksLeft: 0,
+    };
+    // If player is currently injured but has no currentInjury object, synthesize one
+    if (player.injured && !player.currentInjury) {
+      player.currentInjury = {
+        id: `inj_migrated_${player.id}`,
+        playerId: player.id,
+        type: "knock",
+        severity: player.injuryWeeksRemaining <= 2 ? "minor" : player.injuryWeeksRemaining <= 5 ? "moderate" : "serious",
+        recoveryWeeks: player.injuryWeeksRemaining,
+        weeksRemaining: player.injuryWeeksRemaining,
+        reinjuryRisk: 0,
+        occurredWeek: state.currentWeek,
+        occurredSeason: state.currentSeason,
+      };
+    }
+  }
+  // Also migrate unsigned youth players
+  if (state.unsignedYouth) {
+    for (const youth of Object.values(state.unsignedYouth)) {
+      const p = youth.player;
+      if (p) {
+        p.injuryHistory ??= {
+          playerId: p.id,
+          injuries: [],
+          totalWeeksMissed: 0,
+          injuryProneness: 0,
+          reinjuryWindowWeeksLeft: 0,
+        };
+      }
+    }
+  }
+}
+
+/**
+ * Migration: Add effects, choices, and resolved fields to existing season events.
+ * Older saves have bare-bones SeasonEvent objects without mechanical effects.
+ * We regenerate from the template to pick up the new fields.
+ */
+function migrateSeasonEvents(state: GameState): void {
+  if (!state.seasonEvents || state.seasonEvents.length === 0) return;
+
+  // Check if already migrated — presence of 'resolved' on first event indicates new format
+  const first = state.seasonEvents[0];
+  if (first.resolved !== undefined) return;
+
+  // Regenerate events from templates to pick up effects/choices
+  const freshEvents = generateSeasonEvents(state.currentSeason);
+
+  // Merge: keep existing event IDs but apply new fields
+  state.seasonEvents = state.seasonEvents.map((existing) => {
+    const template = freshEvents.find((f) => f.id === existing.id);
+    if (template) {
+      return {
+        ...existing,
+        effects: template.effects,
+        choices: template.choices,
+        resolved: false,
+      };
+    }
+    // No matching template — add defaults
+    return {
+      ...existing,
+      resolved: false,
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Migration: Personality profiles (F9)
+// ---------------------------------------------------------------------------
+function migratePersonalityProfiles(state: GameState): void {
+  const migratePlayer = (player: Player) => {
+    if (!player.personalityProfile) {
+      const traits = player.personalityTraits ?? [];
+      const traitSet = new Set(traits);
+
+      type PA = import("@/engine/core/types").PersonalityArchetype;
+      let archetype: PA = "professional";
+      if (traitSet.has("leader")) archetype = "leader";
+      else if (traitSet.has("bigGamePlayer") || traitSet.has("pressurePlayer")) archetype = "clutch";
+      else if (traitSet.has("ambitious")) archetype = "ambitious";
+      else if (traitSet.has("loyal") || traitSet.has("modelCitizen")) archetype = "loyal";
+      else if (traitSet.has("temperamental") && traitSet.has("controversialCharacter")) archetype = "disruptive";
+      else if (traitSet.has("temperamental")) archetype = "hothead";
+      else if (traitSet.has("introvert")) archetype = "introvert";
+      else if (traitSet.has("easygoing")) archetype = "professional";
+      else if (traitSet.has("flair")) archetype = "ambitious";
+
+      const DEFAULTS: Record<PA, { tw: number; dri: number; fv: number; bmm: number }> = {
+        leader:       { tw: 0.3,  dri: 3,  fv: 0.3,  bmm: 1 },
+        mercenary:    { tw: 0.9,  dri: -1, fv: 0.5,  bmm: 0 },
+        homesick:     { tw: 0.2,  dri: 0,  fv: 0.6,  bmm: -1 },
+        ambitious:    { tw: 0.7,  dri: 1,  fv: 0.4,  bmm: 1 },
+        loyal:        { tw: 0.15, dri: 2,  fv: 0.25, bmm: 0 },
+        disruptive:   { tw: 0.6,  dri: -2, fv: 0.7,  bmm: 0 },
+        introvert:    { tw: 0.35, dri: 0,  fv: 0.35, bmm: -1 },
+        professional: { tw: 0.5,  dri: 1,  fv: 0.2,  bmm: 0 },
+        hothead:      { tw: 0.55, dri: -1, fv: 0.8,  bmm: -1 },
+        clutch:       { tw: 0.4,  dri: 2,  fv: 0.35, bmm: 2 },
+      };
+      const d = DEFAULTS[archetype];
+
+      player.personalityProfile = {
+        archetype,
+        traits: [...traits],
+        transferWillingness: d.tw,
+        dressingRoomImpact: d.dri,
+        formVolatility: d.fv,
+        bigMatchModifier: d.bmm,
+        hiddenUntilRevealed: true,
+        revealedTraits: [...(player.personalityRevealed ?? [])],
+      };
+    }
+  };
+
+  for (const player of Object.values(state.players)) {
+    migratePlayer(player);
+  }
+  if (state.unsignedYouth) {
+    for (const youth of Object.values(state.unsignedYouth)) {
+      if (youth.player) {
+        migratePlayer(youth.player);
+      }
+    }
+  }
+}
+
+/**
+ * Migration: F14 Financial Strategy Layer.
+ * Ensures scoutingInfrastructure and assistantScouts exist on older saves.
+ */
+function migrateFinancialStrategy(state: GameState): void {
+  const s = state as Record<string, any>; // eslint-disable-line
+  if (s.scoutingInfrastructure === undefined) {
+    s.scoutingInfrastructure = {
+      dataSubscription: "none",
+      travelBudget: "economy",
+      officeEquipment: "basic",
+      investmentCosts: { weekly: 0, oneTime: 0 },
+    };
+  }
+  if (s.assistantScouts === undefined) {
+    s.assistantScouts = [];
+  }
+}
+
+/**
+ * Migration: Add regional knowledge system (F13) to existing saves.
+ * Initializes empty regional knowledge records for all countries.
+ */
+function migrateRegionalKnowledge(state: GameState): void {
+  // eslint-disable-next-line
+  const s = state as unknown as Record<string, unknown>;
+  if (s.regionalKnowledge === undefined || s.regionalKnowledge === null) {
+    const countries = state.countries ?? [];
+    const startingCountry = countries[0] ?? "england";
+    s.regionalKnowledge = initializeRegionalKnowledge(countries, startingCountry);
+  }
+}
+
+/**
+ * Migration: F12 Youth Pipeline Tracking.
+ * Ensures alumni records have careerUpdates, currentStatus, seasonStats,
+ * becameContact fields for existing saves.
+ */
+/**
+ * Migration: F8 Rival Scouts Enhancement.
+ * Adds new fields to existing rival scouts (scoutingProgress, aggressiveness, budgetTier)
+ * and initialises rivalActivities on GameState.
+ */
+function migrateRivalScouts(state: GameState): void {
+  // eslint-disable-next-line
+  const s = state as any;
+  s.rivalActivities ??= [];
+  if (s.rivalScouts) {
+    for (const rival of Object.values(s.rivalScouts) as any[]) {
+      rival.scoutingProgress ??= {};
+      if (rival.aggressiveness === undefined) {
+        const bases: Record<string, number> = {
+          aggressive: 0.8,
+          methodical: 0.3,
+          connected: 0.5,
+          lucky: 0.6,
+        };
+        rival.aggressiveness = bases[rival.personality as string] ?? 0.5;
+      }
+      rival.budgetTier ??= "medium";
+    }
+  }
+}
+
+/**
+ * Migration: F3 Contact Network Depth
+ * Adds new F3 fields to existing contacts with sensible defaults.
+ */
+function migrateContactNetworkDepth(state: GameState): void {
+  if (!state.contacts) return;
+  for (const contact of Object.values(state.contacts)) {
+    // eslint-disable-next-line
+    const c = contact as any;
+    c.trustLevel ??= c.relationship ?? 30;
+    c.loyalty ??= 50;
+    c.interactionHistory ??= [];
+    c.gossipQueue ??= [];
+    c.referralNetwork ??= [];
+    c.betrayalRisk ??= 0;
+    // exclusiveWindow is intentionally left undefined (optional field)
+  }
+}
+
+function migrateAlumniPipeline(state: GameState): void {
+  if (!state.alumniRecords) return;
+  for (const record of state.alumniRecords) {
+    // eslint-disable-next-line
+    const r = record as any;
+    r.careerUpdates ??= [];
+    r.currentStatus ??= "academy";
+    r.seasonStats ??= [];
+    r.becameContact ??= false;
+  }
+}
+
 // Module-level flag to prevent autosave race condition (Fix #24)
 let _autosavePending = false;
 
@@ -527,6 +971,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   activeMatch: null,
   lastWeekSummary: null,
   dismissWeekSummary: () => set({ lastWeekSummary: null }),
+  batchSummary: null,
+  dismissBatchSummary: () => set({ batchSummary: null }),
   lastMatchResult: null,
   selectedPlayerId: null,
   selectedFixtureId: null,
@@ -546,6 +992,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   pendingCelebration: null,
   dismissCelebration: () => set({ pendingCelebration: null }),
 
+  // Transfer Negotiation (F4)
+  activeNegotiationId: null,
+
   // Cross-screen fixture filter
   pendingFixtureClubFilter: null,
   setPendingFixtureClubFilter: (filter) => set({ pendingFixtureClubFilter: filter }),
@@ -553,6 +1002,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Cross-screen calendar pre-fill
   pendingCalendarActivity: null,
   setPendingCalendarActivity: (pending) => set({ pendingCalendarActivity: pending }),
+
+  // Report comparison (F11) — transient UI state
+  comparisonReportIds: [],
+  addToComparison: (reportId: string) => {
+    const current = get().comparisonReportIds;
+    if (current.includes(reportId) || current.length >= 3) return;
+    set({ comparisonReportIds: [...current, reportId] });
+  },
+  removeFromComparison: (reportId: string) => {
+    set({ comparisonReportIds: get().comparisonReportIds.filter((id) => id !== reportId) });
+  },
+  clearComparison: () => {
+    set({ comparisonReportIds: [] });
+  },
 
   // Tap network for hidden attribute intel
   tapNetworkForPlayer: (playerId) => {
@@ -769,7 +1232,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       countries: [...new Set([...selectedCountries, ...getSecondaryCountries(), "england", "spain", "germany", "france", "brazil", "argentina"])],
       narrativeEvents: [],
       activeStorylines: [],
+      eventChains: [],
       rivalScouts: {},
+      rivalActivities: [],
       unlockedTools: [],
       managerProfiles: {},
       seasonEvents: initialSeasonEvents,
@@ -803,12 +1268,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
       clubResponses: [],
       transferRecords: [],
       systemFitCache: {},
+      // Transfer Negotiation System (F4)
+      activeNegotiations: [],
+      // Match Rating System
+      matchRatings: {},
       // Data Scouting System
       predictions: [],
       dataAnalysts: [],
       statisticalProfiles: {},
       anomalyFlags: [],
       analystReports: {},
+      // Discipline/Card System
+      disciplinaryRecords: {},
+      // Regional Scouting Depth (F13)
+      regionalKnowledge: initializeRegionalKnowledge(
+        [...new Set([...selectedCountries, ...getSecondaryCountries(), "england", "spain", "germany", "france", "brazil", "argentina"])],
+        effectiveConfig.startingCountry ?? effectiveConfig.region ?? selectedCountries[0] ?? "england",
+      ),
+      // Dynamic Board Expectations (F10)
+      boardReactions: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -898,6 +1376,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Phase 2 populated values
       finances,
       rivalScouts,
+      rivalActivities: [],
       managerProfiles,
       unlockedTools: startingTools,
       managerDirectives: initialDirectives,
@@ -947,6 +1426,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (migrated.finances && migrated.finances.careerPath === undefined) {
       migrated.finances = migrateFinancialRecord(migrated.finances, migrated.scout);
     }
+    // Migration: employee skills system
+    if (migrated.finances && migrated.finances.employees.some((e) => !e.skills)) {
+      const rng = createRNG(`${migrated.seed}-skill-migrate`);
+      migrated.finances = migrateEmployeeSkillsInRecord(migrated.finances, rng);
+    }
+    // Migration: Player roles, traits & tactical depth expansion
+    migratePlayerRolesAndTraits(migrated);
+    // Migration: Match rating system
+    migrateMatchRatings(migrated);
+    // Migration: Season event effects (F1)
+    migrateSeasonEvents(migrated);
+    // Migration: Injury system (F7)
+    migrateInjurySystem(migrated);
+    // Migration: Personality profiles (F9)
+    migratePersonalityProfiles(migrated);
+    // Migration: F14 Financial Strategy Layer
+    migrateFinancialStrategy(migrated);
+    // Migration: F13 Regional Scouting Depth
+    migrateRegionalKnowledge(migrated);
+    // Migration: discipline/card system
+    // eslint-disable-next-line
+    if ((migrated as any).disciplinaryRecords === undefined) {
+      (migrated as any).disciplinaryRecords = {};
+    }
+    // Migration: F12 Youth Pipeline Tracking
+    migrateAlumniPipeline(migrated);
+    // Migration: F4 Transfer Negotiation System
+    // eslint-disable-next-line
+    (migrated as any).activeNegotiations ??= [];
+    // Migration: F8 Rival Scouts Enhancement
+    migrateRivalScouts(migrated);
+    // Migration: F2 Event Chains
+    // eslint-disable-next-line
+    (migrated as any).eventChains ??= [];
+    // Migration: F3 Contact Network Depth
+    migrateContactNetworkDepth(migrated);
+    // Migration: F10 Dynamic Board Expectations
+    // eslint-disable-next-line
+    (migrated as any).boardReactions ??= [];
+    // boardProfile is optional — generated on first tier 5 promotion or board meeting
     set({ gameState: migrated, isLoaded: true, currentScreen: "dashboard" });
   },
 
@@ -995,10 +1514,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (state.finances && state.finances.careerPath === undefined) {
           state.finances = migrateFinancialRecord(state.finances, state.scout);
         }
+        // Migration: employee skills system
+        if (state.finances && state.finances.employees.some((e) => !e.skills)) {
+          const rng = createRNG(`${state.seed}-skill-migrate`);
+          state.finances = migrateEmployeeSkillsInRecord(state.finances, rng);
+        }
         // Migration: storyline system
         if (!Array.isArray(state.activeStorylines)) {
           state.activeStorylines = [];
         }
+        // Migration: Player roles, traits & tactical depth expansion
+        migratePlayerRolesAndTraits(state);
+        // Migration: Match rating system
+        migrateMatchRatings(state);
+        // Migration: Season event effects (F1)
+        migrateSeasonEvents(state);
+        // Migration: Injury system (F7)
+        migrateInjurySystem(state);
+        // Migration: Personality profiles (F9)
+        migratePersonalityProfiles(state);
+        // Migration: F14 Financial Strategy Layer
+        migrateFinancialStrategy(state);
+        // Migration: F13 Regional Scouting Depth
+        migrateRegionalKnowledge(state);
+        // Migration: discipline/card system
+        // eslint-disable-next-line
+        if ((state as any).disciplinaryRecords === undefined) {
+          (state as any).disciplinaryRecords = {};
+        }
+        // Migration: F12 Youth Pipeline Tracking
+        migrateAlumniPipeline(state);
+        // Migration: F4 Transfer Negotiation System
+        // eslint-disable-next-line
+        (state as any).activeNegotiations ??= [];
+        // Migration: F8 Rival Scouts Enhancement
+        migrateRivalScouts(state);
+        // Migration: F3 Contact Network Depth
+        migrateContactNetworkDepth(state);
+        // Migration: F10 Dynamic Board Expectations
+        // eslint-disable-next-line
+        (state as any).boardReactions ??= [];
         set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
       }
     } finally {
@@ -1049,6 +1604,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState) return;
     const schedule = removeActivity(gameState.schedule, dayIndex);
     set({ gameState: { ...gameState, schedule } });
+  },
+
+  resolveSeasonEvent: (eventId, choiceIndex) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const newState = resolveSeasonEventChoice(gameState, eventId, choiceIndex);
+    set({ gameState: newState });
   },
 
   advanceWeek: () => {
@@ -1280,7 +1842,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
           0,
           Math.min(100, contact.relationship + adjustedChange),
         );
-        updatedContacts[contactId] = { ...contact, relationship: newRelationship };
+        // F3: Apply trust change and record interaction history
+        const currentTrust = contact.trustLevel ?? contact.relationship;
+        const newTrust = Math.max(0, Math.min(100, currentTrust + (result.trustDelta ?? 0)));
+        const meetingInteraction = result.interaction
+          ? { ...result.interaction, week: gameState.currentWeek }
+          : undefined;
+        updatedContacts[contactId] = {
+          ...contact,
+          relationship: newRelationship,
+          trustLevel: newTrust,
+          lastInteractionWeek: gameState.currentWeek,
+          interactionHistory: meetingInteraction
+            ? [...(contact.interactionHistory ?? []), meetingInteraction]
+            : (contact.interactionHistory ?? []),
+        };
 
         // Issue 7: Store contact intel entries
         for (const hint of result.intel) {
@@ -1401,7 +1977,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
           playerId,
         );
         const qualityMod = choiceReportQualityModifiers.get("writeReport") ?? 0;
-        const quality = Math.max(0, Math.min(100, calculateReportQuality(report, player) + qualityMod));
+        // F14: Include infrastructure report quality bonus
+        const infraReportBonus = calculateInfrastructureEffects(stateWithScheduleApplied.scoutingInfrastructure).reportQualityBonus;
+        const quality = Math.max(0, Math.min(100, calculateReportQuality(report, player, infraReportBonus) + qualityMod));
         const scoredReport = { ...report, qualityScore: quality };
         updatedReports[scoredReport.id] = scoredReport;
 
@@ -4051,6 +4629,83 @@ export const useGameStore = create<GameStore>((set, get) => ({
         econFinances = processEmployeeWeek(econRng, econFinances);
       }
 
+      // Process employee work output (reports, analysis, admin, leads)
+      if (econFinances.employees.length > 0) {
+        const workResult = processEmployeeWork(
+          econRng, econFinances, stateWithPhase2.players, stateWithPhase2.clubs,
+          stateWithPhase2.scout, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
+        );
+        econFinances = workResult.finances;
+
+        // Store generated reports
+        if (workResult.generatedReports.length > 0) {
+          const newReports = { ...stateWithPhase2.reports };
+          for (const report of workResult.generatedReports) {
+            newReports[report.id] = report;
+          }
+          stateWithPhase2 = { ...stateWithPhase2, reports: newReports };
+        }
+
+        // Add inbox messages from employee work
+        if (workResult.inboxMessages.length > 0) {
+          const msgs = workResult.inboxMessages.map((m, i) => ({
+            id: `emp_work_${stateWithPhase2.currentWeek}_${i}`,
+            week: stateWithPhase2.currentWeek,
+            season: stateWithPhase2.currentSeason,
+            type: "event" as const,
+            title: m.title,
+            body: m.body,
+            read: false,
+            actionRequired: false,
+          }));
+          stateWithPhase2 = { ...stateWithPhase2, inbox: [...msgs, ...stateWithPhase2.inbox] };
+        }
+      }
+
+      // Check for employee events (poaching, training, personal, breakthrough)
+      if (econFinances.employees.length > 0) {
+        for (const emp of econFinances.employees) {
+          const event = checkEmployeeEvents(
+            econRng, emp, econFinances, stateWithPhase2.scout,
+            stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
+          );
+          if (event) {
+            econFinances = {
+              ...econFinances,
+              pendingEmployeeEvents: [...(econFinances.pendingEmployeeEvents ?? []), event],
+            };
+            // Add inbox notification
+            stateWithPhase2 = {
+              ...stateWithPhase2,
+              inbox: [{
+                id: `emp_evt_${event.id}`,
+                week: stateWithPhase2.currentWeek,
+                season: stateWithPhase2.currentSeason,
+                type: "event" as const,
+                title: `Employee Event: ${event.type}`,
+                body: event.description,
+                read: false,
+                actionRequired: true,
+              }, ...stateWithPhase2.inbox],
+            };
+          }
+        }
+      }
+
+      // Client relationship weekly tick
+      if (stateWithPhase2.scout.careerPath === "independent") {
+        econFinances = processClientRelationshipWeek(
+          econRng, econFinances,
+          stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
+        );
+
+        // Retainer renewals (quarterly)
+        econFinances = processRetainerRenewals(
+          econRng, econFinances,
+          stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
+        );
+      }
+
       // Generate pending retainer/consulting offers for independent scouts
       if (stateWithPhase2.scout.careerPath === "independent") {
         const retainerOffers = generateRetainerOffers(
@@ -4087,6 +4742,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       stateWithPhase2 = { ...stateWithPhase2, finances: econFinances };
+    }
+
+    // 1aa. F14: Process weekly infrastructure costs and assistant scout work
+    {
+      stateWithPhase2 = processWeeklyInfrastructureCosts(stateWithPhase2);
+      const asstRng = createRNG(
+        `${gameState.seed}-asst-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+      stateWithPhase2 = processAssistantScoutWeek(stateWithPhase2, asstRng);
     }
 
     // 1b. Transfer window urgency — generate urgent assessments during open windows
@@ -4139,10 +4803,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const rivalRng = createRNG(
       `${gameState.seed}-rivals-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
-    const rivalResult = processRivalWeek(rivalRng, stateWithPhase2.rivalScouts, stateWithPhase2);
-    let rivalInboxMessages: InboxMessage[] = [];
+    const rivalResult = processRivalScoutWeek(rivalRng, stateWithPhase2);
+    let rivalInboxMessages: InboxMessage[] = [...rivalResult.newMessages];
     if (rivalResult.poachWarnings.length > 0) {
-      rivalInboxMessages = rivalResult.poachWarnings.map((warning) => {
+      const poachMessages = rivalResult.poachWarnings.map((warning) => {
         const rivalScout = rivalResult.updatedRivals[warning.rivalId];
         const player = stateWithPhase2.players[warning.playerId];
         const rivalName = rivalScout?.name ?? "A rival scout";
@@ -4162,18 +4826,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
           relatedEntityType: "player" as const,
         };
       });
+      rivalInboxMessages = [...rivalInboxMessages, ...poachMessages];
     }
+    // Generate contact intelligence about rival movements (F8)
+    const intelMessages = generateRivalIntelligence(rivalRng, stateWithPhase2, stateWithPhase2.contacts);
+    rivalInboxMessages = [...rivalInboxMessages, ...intelMessages];
+    // Track rival activities (F8), capping at 50 entries
+    const existingActivities = stateWithPhase2.rivalActivities ?? [];
+    const mergedActivities = [...existingActivities, ...rivalResult.newActivities].slice(-50);
     stateWithPhase2 = {
       ...stateWithPhase2,
       rivalScouts: rivalResult.updatedRivals,
+      rivalActivities: mergedActivities,
       inbox: [...stateWithPhase2.inbox, ...rivalInboxMessages],
     };
 
-    // 3. Generate narrative event (5% weekly chance)
+    // 3. Generate narrative event (12% weekly chance, with F2 chain support)
     const eventRng = createRNG(
       `${gameState.seed}-events-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
-    const narrativeEvent = generateWeeklyEvent(eventRng, stateWithPhase2);
+    // Ensure eventChains is initialized for chain processing
+    if (!stateWithPhase2.eventChains) {
+      stateWithPhase2 = { ...stateWithPhase2, eventChains: [] };
+    }
+    const weeklyResult = generateWeeklyEvent(eventRng, stateWithPhase2);
+    const narrativeEvent = weeklyResult.event;
+
     if (narrativeEvent) {
       const eventInboxMessage: InboxMessage = {
         id: `narrative-${narrativeEvent.id}`,
@@ -4191,6 +4869,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...stateWithPhase2,
         narrativeEvents: [...stateWithPhase2.narrativeEvents, narrativeEvent],
         inbox: [...stateWithPhase2.inbox, eventInboxMessage],
+      };
+    }
+
+    // F2: Update event chains if a chain was advanced or started
+    if (weeklyResult.advancedChain) {
+      const updatedChains = (stateWithPhase2.eventChains ?? []).map((c) =>
+        c.id === weeklyResult.advancedChain!.chain.id
+          ? weeklyResult.advancedChain!.chain
+          : c,
+      );
+      stateWithPhase2 = { ...stateWithPhase2, eventChains: updatedChains };
+    }
+    if (weeklyResult.newChain) {
+      stateWithPhase2 = {
+        ...stateWithPhase2,
+        eventChains: [...(stateWithPhase2.eventChains ?? []), weeklyResult.newChain.chain],
       };
     }
 
@@ -4422,13 +5116,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // If promoted, advance career tier
       if (review.outcome === "promoted" && newState.scout.careerTier < 5) {
+        const newTier = (newState.scout.careerTier + 1) as 1 | 2 | 3 | 4 | 5;
         newState = {
           ...newState,
           scout: {
             ...newState.scout,
-            careerTier: (newState.scout.careerTier + 1) as 1 | 2 | 3 | 4 | 5,
+            careerTier: newTier,
           },
         };
+
+        // F10: Generate board profile on promotion to tier 5
+        if (newTier === 5 && !newState.boardProfile) {
+          const boardRng = createRNG(`${gameState.seed}-board-profile-${completedSeason}`);
+          newState = {
+            ...newState,
+            boardProfile: generateBoardProfile(boardRng),
+          };
+        }
       }
 
       const reviewOutcomeText =
@@ -4642,9 +5346,58 @@ export const useGameStore = create<GameStore>((set, get) => ({
             newState.transferRecords,
             newState.players,
             completedSeason,
+            newState.matchRatings,
           );
           newState = { ...newState, transferRecords: updatedTransferRecords };
         }
+      }
+
+      // ── Season consolidation: matchRatings → player.seasonRatings, then wipe ──
+      if (Object.keys(newState.matchRatings).length > 0) {
+        const consolidatedPlayers = { ...newState.players };
+
+        // Gather all ratings per player from all fixtures this season
+        const playerSeasonRatings = new Map<string, import("@/engine/core/types").PlayerMatchRating[]>();
+        for (const fixtureRatings of Object.values(newState.matchRatings)) {
+          for (const [pid, rating] of Object.entries(fixtureRatings)) {
+            if (!playerSeasonRatings.has(pid)) playerSeasonRatings.set(pid, []);
+            playerSeasonRatings.get(pid)!.push(rating);
+          }
+        }
+
+        // Build SeasonRatingRecord for each player
+        for (const [pid, ratings] of playerSeasonRatings) {
+          const player = consolidatedPlayers[pid];
+          if (!player) continue;
+
+          const avgRating = ratings.reduce((s, r) => s + r.rating, 0) / ratings.length;
+          const appearances = ratings.length;
+          let goals = 0;
+          let assists = 0;
+          let cleanSheets = 0;
+          for (const r of ratings) {
+            goals += r.stats.goals ?? 0;
+            assists += r.stats.assists ?? 0;
+            if (r.stats.cleanSheet) cleanSheets++;
+          }
+
+          const seasonRecord = {
+            season: completedSeason,
+            avgRating: Math.round(avgRating * 10) / 10,
+            appearances,
+            goals,
+            assists,
+            cleanSheets,
+          };
+
+          consolidatedPlayers[pid] = {
+            ...player,
+            seasonRatings: [...(player.seasonRatings ?? []), seasonRecord],
+          };
+        }
+
+        // Wipe per-fixture match ratings, keep recentMatchRatings on players (carries form)
+        newState = { ...newState, players: consolidatedPlayers, matchRatings: {} };
       }
 
       // ── Data scout season-end: resolve predictions and generate new analyst candidates ──
@@ -4866,6 +5619,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
     }
   },
+
+  // ── Quick Scout Mode (F17) ──────────────────────────────────────────────
+  autoSchedule: (priorities?: QuickScoutPriorities) => { const { gameState } = get(); if (!gameState) return; const p = priorities ?? buildDefaultPriorities(gameState); const ns = autoScheduleWeek(gameState, p); set({ gameState: { ...gameState, schedule: ns } }); },
+  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => { const { gameState } = get(); if (!gameState) return; const p = priorities ?? buildDefaultPriorities(gameState); const rng = createRNG(`${gameState.seed}-batch-${gameState.currentWeek}-${gameState.currentSeason}`); const { state: ns, result } = batchAdvanceWeeks(gameState, rng, weeks, p); set({ gameState: ns, batchSummary: result }); },
+  delegateScouting: (npcScoutId: string, playerId: string) => { const { gameState } = get(); if (!gameState) return; const { state: ns, result } = delegateScoutingTask(gameState, npcScoutId, playerId); if (!result.accepted) { set({ gameState: { ...gameState, inbox: [...gameState.inbox, { id: `deleg-rej-${npcScoutId}-${playerId}-${gameState.currentWeek}`, week: gameState.currentWeek, season: gameState.currentSeason, type: "event" as const, title: "Delegation Rejected", body: result.rejectionReason ?? "NPC scout could not accept.", read: false, actionRequired: false }] } }); return; } set({ gameState: ns }); },
 
   // ── Day-by-day simulation actions ──────────────────────────────────────────
 
@@ -5130,6 +5888,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
               playerId: youth.player.id,
               playerName: `${youth.player.firstName} ${youth.player.lastName}`,
               topAttributes: topAttrs,
+              age: youth.player.age,
+              position: youth.player.position,
             });
           }
 
@@ -5257,6 +6017,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             playerId: youth.player.id,
             playerName: `${youth.player.firstName} ${youth.player.lastName}`,
             topAttributes: topAttrs,
+            age: youth.player.age,
+            position: youth.player.position,
           });
 
           if (!previewDiscovered.has(youth.player.id)) {
@@ -5520,11 +6282,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const homePlayers = homeClub.playerIds
       .map((id) => gameState.players[id])
-      .filter((p): p is Player => !!p)
+      .filter((p): p is Player => !!p && !p.injured)
       .slice(0, 11);
     const awayPlayers = awayClub.playerIds
       .map((id) => gameState.players[id])
-      .filter((p): p is Player => !!p)
+      .filter((p): p is Player => !!p && !p.injured)
       .slice(0, 11);
 
     const rng = createRNG(`${gameState.seed}-match-${fixtureId}`);
@@ -5607,6 +6369,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const rng = createRNG(`${gameState.seed}-observe-${activeMatch.fixtureId}`);
     const newObservations = { ...gameState.observations };
+    const updatedPlayers = { ...gameState.players };
+    const traitDiscoveries: Array<{ playerName: string; trait: string }> = [];
 
     // Issue 5a+6: Compute tool and equipment bonuses for observation confidence
     const toolBonuses = getActiveToolBonuses(gameState.unlockedTools);
@@ -5616,7 +6380,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const equipBonus = equipBonuses?.observationConfidence ?? 0;
 
     for (const focus of activeMatch.focusSelections) {
-      const player = gameState.players[focus.playerId];
+      const player = updatedPlayers[focus.playerId];
       if (!player) continue;
       const existingObs = Object.values(gameState.observations).filter(
         (o) => o.playerId === focus.playerId
@@ -5643,6 +6407,36 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }));
       }
 
+      // Behavioral trait reveal: check each event type in the phase for trait discovery
+      const playerTraits = player.playerTraits ?? [];
+      const revealed = new Set(player.playerTraitsRevealed ?? []);
+      const unrevealed = playerTraits.filter((t) => !revealed.has(t));
+      if (unrevealed.length > 0) {
+        const eventTypes = new Set(
+          activeMatch.phases.flatMap((ph) =>
+            ph.events
+              .filter((e) => e.playerId === player.id)
+              .map((e) => e.type)
+          )
+        );
+        for (const eventType of eventTypes) {
+          const traitResult = checkTraitReveal(rng, player, eventType as MatchEventType, gameState.scout);
+          if (traitResult) {
+            observation.revealedPlayerTrait = traitResult;
+            revealed.add(traitResult);
+            updatedPlayers[player.id] = {
+              ...player,
+              playerTraitsRevealed: [...revealed],
+            };
+            traitDiscoveries.push({
+              playerName: `${player.firstName} ${player.lastName}`,
+              trait: traitResult.replace(/([A-Z])/g, " $1").trim(),
+            });
+            break; // max one trait per observation
+          }
+        }
+      }
+
       newObservations[observation.id] = observation;
     }
 
@@ -5660,10 +6454,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     const homePlayers = homeClub.playerIds
       .map((id) => gameState.players[id])
-      .filter((p): p is Player => !!p);
+      .filter((p): p is Player => !!p && !p.injured);
     const awayPlayers = awayClub.playerIds
       .map((id) => gameState.players[id])
-      .filter((p): p is Player => !!p);
+      .filter((p): p is Player => !!p && !p.injured);
     const resultRng = createRNG(`${gameState.seed}-result-${activeMatch.fixtureId}`);
     const result = simulateMatchResult(resultRng, homeClub, awayClub, homePlayers, awayPlayers);
 
@@ -5682,6 +6476,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     let updatedGameState: GameState = {
       ...gameState,
+      players: updatedPlayers,
       observations: newObservations,
       fixtures: { ...gameState.fixtures, [fixture.id]: updatedFixture },
       playedFixtures: updatedPlayedFixtures,
@@ -5733,6 +6528,68 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     const continueScreen: GameScreen = wasScheduled ? "calendar" : "dashboard";
 
+    // --- Match ratings: calculate attended ratings for all players ---
+    const attendedRatings = calculateAttendedMatchRatings(
+      activeMatch.phases,
+      homePlayers,
+      awayPlayers,
+      result.homeGoals,
+      result.awayGoals,
+      activeMatch.fixtureId,
+    );
+
+    // Store ratings in gameState.matchRatings and update player form
+    const ratingPlayers = { ...updatedGameState.players };
+    for (const [playerId, rating] of Object.entries(attendedRatings)) {
+      const player = ratingPlayers[playerId];
+      if (!player) continue;
+      const newEntry = {
+        fixtureId: activeMatch.fixtureId,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+        rating: rating.rating,
+      };
+      const recent = [...(player.recentMatchRatings ?? []), newEntry].slice(-6);
+      const form = computeFormFromRatings(recent);
+      ratingPlayers[playerId] = { ...player, recentMatchRatings: recent, form };
+    }
+
+    updatedGameState = {
+      ...updatedGameState,
+      players: ratingPlayers,
+      matchRatings: {
+        ...updatedGameState.matchRatings,
+        [activeMatch.fixtureId]: attendedRatings,
+      },
+    };
+
+    // --- Discipline: generate card events from attended match phases ---
+    const allMatchPlayers = new Map<string, Player>();
+    for (const p of [...homePlayers, ...awayPlayers]) {
+      allMatchPlayers.set(p.id, p);
+    }
+    const cardRng = createRNG(`${gameState.seed}-cards-${activeMatch.fixtureId}`);
+    const { cards: matchCards, updatedPhases: phasesWithCards } = generateCardEvents(
+      cardRng,
+      activeMatch.phases,
+      allMatchPlayers,
+      activeMatch.fixtureId,
+    );
+
+    // Process card accumulation
+    const currentDisciplinary = gameState.disciplinaryRecords ?? {};
+    const { updatedRecords: newDisciplinary } =
+      processCardAccumulation(matchCards, currentDisciplinary, gameState.currentSeason);
+
+    // Apply disciplinary records to game state
+    updatedGameState = {
+      ...updatedGameState,
+      disciplinaryRecords: newDisciplinary,
+    };
+
+    // Suppress unused variable warnings
+    void phasesWithCards;
+
     set({
       gameState: updatedGameState,
       activeMatch: null,
@@ -5742,6 +6599,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
         homeGoals: result.homeGoals,
         awayGoals: result.awayGoals,
         continueScreen,
+        traitDiscoveries: traitDiscoveries.length > 0 ? traitDiscoveries : undefined,
+        playerRatings: attendedRatings,
+        cardEvents: matchCards.length > 0 ? matchCards : undefined,
       },
       currentScreen: "matchSummary",
     });
@@ -5802,7 +6662,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedPlayerId
     );
 
-    const quality = calculateReportQuality(report, player);
+    // F14: Include infrastructure report quality bonus
+    const infraEffectsForReport = calculateInfrastructureEffects(gameState.scoutingInfrastructure);
+    const quality = calculateReportQuality(report, player, infraEffectsForReport.reportQualityBonus);
 
     const repBefore = gameState.scout.reputation;
     const baseUpdatedScout = updateReputation(gameState.scout, {
@@ -6141,6 +7003,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  meetBoard: () => {
+    const { gameState } = get();
+    if (!gameState) return;
+    if (gameState.scout.careerTier < 5) return;
+
+    const rng = createRNG(
+      `${gameState.seed}-board-meeting-${gameState.currentWeek}-${gameState.currentSeason}`,
+    );
+
+    const result = processBoardMeeting(gameState, rng);
+    if (!result) return;
+
+    set({
+      gameState: {
+        ...gameState,
+        boardProfile: result.updatedProfile,
+        inbox: [...gameState.inbox, result.message],
+      },
+    });
+  },
+
   unlockSecondarySpecialization: (spec) => {
     const { gameState } = get();
     if (!gameState) return;
@@ -6202,6 +7085,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       `${gameState.seed}-event-resolve-${eventId}-${choiceIndex}`,
     );
 
+    // F2: If event is part of a chain, record choice and compute chain effects
+    let chainRepChange = 0;
+    let chainFatigueChange = 0;
+    let updatedChains = gameState.eventChains ?? [];
+    if (event.chainId) {
+      const chain = updatedChains.find((c) => c.id === event.chainId);
+      if (chain && !chain.resolved) {
+        const effects = computeChainChoiceEffects(chain, choiceIndex, resolveRng);
+        chainRepChange = effects.reputationChange;
+        chainFatigueChange = effects.fatigueChange;
+        const newChoiceHistory = [...chain.choiceHistory];
+        newChoiceHistory[chain.currentStep - 1] = choiceIndex;
+        updatedChains = updatedChains.map((c) =>
+          c.id === chain.id ? { ...c, choiceHistory: newChoiceHistory } : c,
+        );
+      }
+    }
+
     let result;
     try {
       result = resolveEventChoice(event, choiceIndex, gameState, resolveRng);
@@ -6214,20 +7115,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       e.id === eventId ? result.updatedEvent : e,
     );
 
+    const totalRepChange = result.reputationChange + chainRepChange;
+    const totalFatigueChange = result.fatigueChange + chainFatigueChange;
+
     const newReputation = Math.min(
       100,
-      Math.max(0, gameState.scout.reputation + result.reputationChange),
+      Math.max(0, gameState.scout.reputation + totalRepChange),
     );
 
     const newFatigue = Math.min(
       100,
-      Math.max(0, gameState.scout.fatigue + result.fatigueChange),
+      Math.max(0, gameState.scout.fatigue + totalFatigueChange),
     );
 
     set({
       gameState: {
         ...gameState,
         narrativeEvents: updatedEvents,
+        eventChains: updatedChains,
         scout: {
           ...gameState.scout,
           reputation: newReputation,
@@ -6375,7 +7280,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { gameState } = get();
     if (!gameState || !gameState.finances) return;
     const rng = createRNG(`${gameState.seed}-hire-${gameState.currentWeek}`);
-    const updated = hireEmployee(rng, gameState.finances, role);
+    const regions = gameState.countries ?? [];
+    const updated = hireEmployee(rng, gameState.finances, role, gameState.currentWeek, gameState.currentSeason, regions);
     if (updated) {
       set({ gameState: { ...gameState, finances: updated } });
     }
@@ -6386,6 +7292,100 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState || !gameState.finances) return;
     const updated = fireEmployee(gameState.finances, employeeId);
     set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  assignAgencyEmployee: (employeeId: string, assignment: EmployeeAssignment) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    const updated = {
+      ...gameState.finances,
+      employees: gameState.finances.employees.map((emp) =>
+        emp.id === employeeId ? { ...emp, currentAssignment: assignment } : emp,
+      ),
+    };
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  pitchToClient: (clubId: string, pitchType: "coldCall" | "referral" | "showcase") => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    const club = gameState.clubs[clubId];
+    if (!club) return;
+    const rng = createRNG(`${gameState.seed}-pitch-${gameState.currentWeek}`);
+    const result = pitchToClub(rng, gameState.scout, gameState.finances, club, pitchType);
+    if (result.success && result.offeredContract) {
+      const financesWithRelationship = ensureClientRelationship(
+        gameState.finances, clubId, gameState.currentWeek, gameState.currentSeason,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          finances: {
+            ...financesWithRelationship,
+            pendingRetainerOffers: [...financesWithRelationship.pendingRetainerOffers, result.offeredContract],
+          },
+        },
+      });
+    }
+  },
+
+  resolveAgencyEmployeeEvent: (eventId: string, optionIndex: number) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    const updated = resolveEmployeeEventEngine(gameState.finances, eventId, optionIndex);
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  adjustEmployeeSalary: (employeeId: string, newSalary: number) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    const updated = {
+      ...gameState.finances,
+      employees: gameState.finances.employees.map((emp) =>
+        emp.id === employeeId ? { ...emp, salary: newSalary } : emp,
+      ),
+    };
+    set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  openAgencySatelliteOffice: (region: string) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    const updated = openSatelliteOffice(gameState.finances, region, gameState.currentWeek, gameState.currentSeason);
+    if (updated) set({ gameState: { ...gameState, finances: updated } });
+  },
+
+  closeAgencySatelliteOffice: (officeId: string) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    set({ gameState: { ...gameState, finances: closeSatelliteOffice(gameState.finances, officeId) } });
+  },
+
+  assignEmployeeToAgencySatellite: (employeeId: string, officeId: string) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    set({ gameState: { ...gameState, finances: assignEmployeeToSatellite(gameState.finances, employeeId, officeId) } });
+  },
+
+  trainAgencyEmployee: (employeeId: string, skillIndex: 1 | 2 | 3) => {
+    const { gameState } = get();
+    if (!gameState?.finances) return;
+    const updated = enrollInTraining(gameState.finances, employeeId, skillIndex);
+    if (updated) {
+      // Fix the week/season on the training transaction
+      const lastTx = updated.transactions[updated.transactions.length - 1];
+      if (lastTx && lastTx.week === 0) {
+        const fixedTransactions = [...updated.transactions];
+        fixedTransactions[fixedTransactions.length - 1] = {
+          ...lastTx,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+        };
+        set({ gameState: { ...gameState, finances: { ...updated, transactions: fixedTransactions } } });
+      } else {
+        set({ gameState: { ...gameState, finances: updated } });
+      }
+    }
   },
 
   takeLoanAction: (type: LoanType, amount: number) => {
@@ -6438,6 +7438,178 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (c) => c.id !== contractId,
     );
     set({ gameState: { ...gameState, finances: { ...gameState.finances, pendingConsultingOffers: pending } } });
+  },
+
+  // F14: Financial Strategy Layer — infrastructure investments
+
+  purchaseDataSubscriptionAction: (tier: DataSubscriptionTier) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const updated = purchaseDataSubscription(gameState, tier);
+    if (updated) set({ gameState: updated });
+  },
+
+  upgradeTravelBudgetAction: (tier: TravelBudgetTier) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const updated = upgradeTravelBudget(gameState, tier);
+    if (updated) set({ gameState: updated });
+  },
+
+  upgradeOfficeEquipmentAction: (tier: OfficeEquipmentTier) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const updated = upgradeOfficeEquipment(gameState, tier);
+    if (updated) set({ gameState: updated });
+  },
+
+  // F14: Financial Strategy Layer — assistant scouts
+
+  hireAssistantScoutAction: () => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const rng = createRNG(`${gameState.seed}-hire-asst-${gameState.currentWeek}`);
+    const updated = hireAssistantScout(rng, gameState);
+    if (updated) set({ gameState: updated });
+  },
+
+  fireAssistantScoutAction: (scoutId: string) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    set({ gameState: fireAssistantScout(gameState, scoutId) });
+  },
+
+  assignAssistantScoutAction: (scoutId: string, task: { playerId?: string; region?: string }) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const updated = assignAssistantScout(gameState, scoutId, task);
+    if (updated) set({ gameState: updated });
+  },
+
+  unassignAssistantScoutAction: (scoutId: string) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const updated = unassignAssistantScout(gameState, scoutId);
+    if (updated) set({ gameState: updated });
+  },
+
+  // ── Transfer Negotiation actions (F4) ──────────────────────────────────────
+
+  initiateTransferNegotiation: (playerId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.scout.currentClubId) return;
+    const rng = createRNG(`${gameState.seed}-neg-init-${playerId}-${gameState.currentWeek}`);
+    const negotiation = negotiationEngine.initiateNegotiation(rng, gameState, playerId, gameState.scout.currentClubId);
+    if (!negotiation) return;
+    const player = gameState.players[playerId];
+    const fromClub = gameState.clubs[player?.clubId ?? ""];
+    const playerName = player ? `${player.firstName} ${player.lastName}` : "Unknown";
+    const fmtPrice = negotiation.initialAskingPrice >= 1_000_000
+      ? `\u00A3${(negotiation.initialAskingPrice / 1_000_000).toFixed(1)}M`
+      : `\u00A3${(negotiation.initialAskingPrice / 1_000).toFixed(0)}K`;
+    const message: InboxMessage = {
+      id: `neg_start_${negotiation.id}`, week: gameState.currentWeek, season: gameState.currentSeason,
+      type: "transferUpdate" as const, title: `Negotiation Started: ${playerName}`,
+      body: `Your club has opened negotiations with ${fromClub?.name ?? "Unknown"} for ${playerName}. Their initial asking price is ${fmtPrice}.${negotiation.agentInvolved ? " An agent is involved in this deal." : ""}`,
+      read: false, actionRequired: true, relatedId: negotiation.id, relatedEntityType: "transfer" as const,
+    };
+    set({
+      gameState: { ...gameState, activeNegotiations: [...(gameState.activeNegotiations ?? []), negotiation], inbox: [...gameState.inbox, message] },
+      activeNegotiationId: negotiation.id, currentScreen: "negotiation" as GameScreen,
+    });
+  },
+
+  submitTransferOffer: (negotiationId: string, amount: number, addOns?) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const negotiations = gameState.activeNegotiations ?? [];
+    const negIndex = negotiations.findIndex((n) => n.id === negotiationId);
+    if (negIndex === -1) return;
+    const neg = negotiations[negIndex];
+    if (neg.phase === "completed" || neg.phase === "collapsed") return;
+    const rng = createRNG(`${gameState.seed}-neg-offer-${negotiationId}-${neg.rounds.length}`);
+    const updated = negotiationEngine.submitOffer(rng, neg, amount, addOns, gameState);
+    const updatedNegotiations = [...negotiations];
+    updatedNegotiations[negIndex] = updated;
+    const lastRound = updated.rounds[updated.rounds.length - 1];
+    const player = gameState.players[updated.playerId];
+    const playerName = player ? `${player.firstName} ${player.lastName}` : "Unknown";
+    const fromClub = gameState.clubs[updated.fromClubId];
+    const fmtAmt = (v: number) => v >= 1_000_000 ? `\u00A3${(v / 1_000_000).toFixed(1)}M` : `\u00A3${(v / 1_000).toFixed(0)}K`;
+    let messageBody: string;
+    if (lastRound.response === "accepted") {
+      messageBody = `${fromClub?.name ?? "The selling club"} has accepted your offer of ${fmtAmt(amount)} for ${playerName}!`;
+    } else if (lastRound.response === "rejected") {
+      messageBody = `${fromClub?.name ?? "The selling club"} has rejected your offer for ${playerName}. Negotiations have collapsed.`;
+    } else {
+      messageBody = `${fromClub?.name ?? "The selling club"} has countered with an asking price of ${fmtAmt(lastRound.askingAmount)} for ${playerName}.`;
+    }
+    const message: InboxMessage = {
+      id: `neg_round_${negotiationId}_${updated.rounds.length}`, week: gameState.currentWeek, season: gameState.currentSeason,
+      type: "transferUpdate" as const,
+      title: lastRound.response === "accepted" ? `Offer Accepted: ${playerName}` : lastRound.response === "rejected" ? `Offer Rejected: ${playerName}` : `Counter-Offer: ${playerName}`,
+      body: messageBody, read: false, actionRequired: lastRound.response === "countered",
+      relatedId: negotiationId, relatedEntityType: "transfer" as const,
+    };
+    set({ gameState: { ...gameState, activeNegotiations: updatedNegotiations, inbox: [...gameState.inbox, message] } });
+  },
+
+  acceptNegotiation: (negotiationId: string) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const negotiations = gameState.activeNegotiations ?? [];
+    const neg = negotiations.find((n) => n.id === negotiationId);
+    if (!neg || neg.phase !== "completed") return;
+    const player = gameState.players[neg.playerId];
+    const fromClub = gameState.clubs[neg.fromClubId];
+    const toClub = gameState.clubs[neg.toClubId];
+    if (!player || !fromClub || !toClub) return;
+    const outcome = negotiationEngine.evaluateNegotiationOutcome(neg, player, fromClub, toClub);
+    if (!outcome.accepted) {
+      const failedNeg = { ...neg, phase: "collapsed" as const };
+      const updatedNegs = negotiations.map((n) => n.id === negotiationId ? failedNeg : n);
+      const message: InboxMessage = {
+        id: `neg_personal_fail_${negotiationId}`, week: gameState.currentWeek, season: gameState.currentSeason,
+        type: "transferUpdate" as const, title: `Personal Terms Rejected: ${player.firstName} ${player.lastName}`,
+        body: outcome.reason, read: false, actionRequired: false,
+        relatedId: neg.playerId, relatedEntityType: "player" as const,
+      };
+      set({ gameState: { ...gameState, activeNegotiations: updatedNegs, inbox: [...gameState.inbox, message] }, activeNegotiationId: null, currentScreen: "dashboard" as GameScreen });
+      return;
+    }
+    const result = negotiationEngine.applyCompletedTransfer(neg, gameState);
+    const transferRecord: TransferRecord = {
+      id: `tr_${neg.id}`, playerId: neg.playerId, reportId: "", directiveId: undefined,
+      fromClubId: neg.fromClubId, toClubId: neg.toClubId, transferFee: result.transferFee,
+      season: gameState.currentSeason, week: gameState.currentWeek, isLoan: false, seasonPerformance: [],
+    };
+    const updatedNegs = negotiations.map((n) => n.id === negotiationId ? { ...n, phase: "completed" as const } : n);
+    set({
+      gameState: {
+        ...gameState, players: result.players, clubs: result.clubs,
+        activeNegotiations: updatedNegs, transferRecords: [...gameState.transferRecords, transferRecord],
+        inbox: [...gameState.inbox, result.message],
+      },
+      activeNegotiationId: null, currentScreen: "dashboard" as GameScreen,
+    });
+  },
+
+  walkAway: (negotiationId: string) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    const negotiations = gameState.activeNegotiations ?? [];
+    const neg = negotiations.find((n) => n.id === negotiationId);
+    if (!neg) return;
+    const rng = createRNG(`${gameState.seed}-neg-walkaway-${negotiationId}`);
+    const result = negotiationEngine.walkAwayFromNegotiation(neg, gameState, rng);
+    const updatedNegs = negotiations.map((n) => n.id === negotiationId ? result.negotiation : n);
+    set({
+      gameState: {
+        ...gameState, activeNegotiations: updatedNegs, inbox: [...gameState.inbox, result.message],
+        scout: { ...gameState.scout, reputation: Math.max(0, Math.min(100, gameState.scout.reputation + result.reputationDelta)) },
+      },
+      activeNegotiationId: null, currentScreen: "dashboard" as GameScreen,
+    });
   },
 
   // Helpers
@@ -6630,4 +7802,157 @@ export const useGameStore = create<GameStore>((set, get) => ({
     await submitLeaderboardEntry(entry);
     return entry;
   },
+
+  // ==========================================================================
+  // New Game+ / Legacy Mode (F19)
+  // ==========================================================================
+
+  completeLegacyCareer: () => {
+    const { gameState } = get();
+    if (!gameState) return null;
+
+    // Read existing profile from localStorage (may be undefined for first career)
+    const existingProfile = readLegacyProfile();
+
+    // Generate updated legacy profile
+    const updatedProfile = generateLegacyProfileEngine(gameState, existingProfile);
+
+    // Persist to localStorage
+    writeLegacyProfile(updatedProfile);
+
+    return updatedProfile;
+  },
+
+  startNewGamePlus: async (config, selectedPerkIds) => {
+    // Read legacy profile from localStorage
+    const profile = readLegacyProfile();
+    if (!profile) {
+      // Fallback: start a regular new game if no profile exists
+      await get().startNewGame(config);
+      return;
+    }
+
+    // Apply legacy perks to config
+    const perkResult = applyLegacyPerksEngine(config, profile, selectedPerkIds);
+    const modifiedConfig = perkResult.config;
+
+    // Start the game with the modified config (uses the existing startNewGame flow)
+    await get().startNewGame(modifiedConfig);
+
+    // Now apply post-generation bonuses that can't be expressed in NewGameConfig
+    const { gameState } = get();
+    if (!gameState) return;
+
+    let updatedState = { ...gameState };
+    let updatedScout = { ...updatedState.scout };
+
+    // Apply reputation bonus
+    if (perkResult.reputationBonus > 0) {
+      updatedScout.reputation = Math.min(
+        100,
+        updatedScout.reputation + perkResult.reputationBonus,
+      );
+    }
+
+    // Apply fatigue reduction
+    if (perkResult.fatigueReduction > 0) {
+      updatedScout.fatigue = Math.max(
+        0,
+        updatedScout.fatigue - perkResult.fatigueReduction,
+      );
+    }
+
+    // Apply skill bonuses (clamped to 1-20 range)
+    for (const [skill, bonus] of Object.entries(perkResult.skillBonuses)) {
+      const key = skill as keyof typeof updatedScout.skills;
+      if (key in updatedScout.skills) {
+        updatedScout.skills = {
+          ...updatedScout.skills,
+          [key]: Math.min(20, updatedScout.skills[key] + bonus),
+        };
+      }
+    }
+
+    updatedState = { ...updatedState, scout: updatedScout };
+
+    // Apply budget bonus
+    if (perkResult.budgetBonusPercent > 0 && updatedState.finances) {
+      const bonusAmount = Math.round(
+        updatedState.finances.balance * (perkResult.budgetBonusPercent / 100),
+      );
+      updatedState = {
+        ...updatedState,
+        finances: {
+          ...updatedState.finances,
+          balance: updatedState.finances.balance + bonusAmount,
+        },
+      };
+    }
+
+    // Apply regional knowledge retention
+    if (perkResult.knowledgeRetainPercent > 0 && profile.completedCareers.length > 0) {
+      // Boost all regional knowledge familiarity by the retain percentage
+      const retainFactor = perkResult.knowledgeRetainPercent / 100;
+      const updatedKnowledge = { ...updatedState.regionalKnowledge };
+      for (const [key, knowledge] of Object.entries(updatedKnowledge)) {
+        updatedKnowledge[key] = {
+          ...knowledge,
+          knowledgeLevel: Math.min(
+            100,
+            knowledge.knowledgeLevel + Math.round(25 * retainFactor),
+          ),
+        };
+      }
+      updatedState = { ...updatedState, regionalKnowledge: updatedKnowledge };
+    }
+
+    // Apply extra contacts via generateContactForType
+    if (perkResult.extraContacts > 0) {
+      const contactRng = createRNG(`${config.worldSeed}-legacy-contacts`);
+      const contactTypes: Array<"agent" | "clubStaff" | "journalist" | "scout"> = [
+        "agent", "clubStaff", "journalist", "scout",
+      ];
+      const contactMap = { ...updatedState.contacts };
+      for (let i = 0; i < perkResult.extraContacts; i++) {
+        const cType = contactTypes[i % contactTypes.length];
+        const newContact = generateContactForType(
+          contactRng,
+          cType,
+          "Legacy Network",
+          undefined,
+        );
+        contactMap[newContact.id] = newContact;
+      }
+      updatedState = { ...updatedState, contacts: contactMap };
+    }
+
+    // Add a welcome message noting New Game+ mode
+    const ngPlusMessage = {
+      id: "ng-plus-welcome",
+      week: updatedState.currentWeek,
+      season: updatedState.currentSeason,
+      type: "event" as const,
+      title: "New Game+ Active",
+      body: [
+        "Your legacy carries forward into this new career.",
+        "",
+        `Career #${profile.completedCareers.length + 1} begins with the wisdom of your past.`,
+        selectedPerkIds.length > 0
+          ? `Active perks: ${selectedPerkIds.length} legacy bonus${selectedPerkIds.length > 1 ? "es" : ""} applied.`
+          : "No legacy perks selected — starting fresh with your earned knowledge.",
+        "",
+        "Prove yourself once more. The scouting world awaits.",
+      ].join("\n"),
+      read: false,
+      actionRequired: false,
+    };
+
+    updatedState = {
+      ...updatedState,
+      inbox: [ngPlusMessage, ...updatedState.inbox],
+    };
+
+    set({ gameState: updatedState });
+  },
+
 }));

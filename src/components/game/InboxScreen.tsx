@@ -18,8 +18,10 @@ import {
   MailOpen,
   Zap,
   X,
+  AlertTriangle,
+  Link2,
 } from "lucide-react";
-import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType } from "@/engine/core/types";
+import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain } from "@/engine/core/types";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -37,6 +39,7 @@ const MESSAGE_TYPE_CONFIG: Record<
   transferUpdate: { label: "Transfer Update", icon: Newspaper, color: "text-sky-400" },
   analystReport: { label: "Analyst Report", icon: ClipboardList, color: "text-cyan-400" },
   predictionResult: { label: "Prediction Result", icon: Zap, color: "text-amber-400" },
+  warning: { label: "Warning", icon: AlertTriangle, color: "text-red-400" },
 };
 
 // ─── Narrative event type config ─────────────────────────────────────────────
@@ -113,12 +116,21 @@ function timeAgo(
 
 interface NarrativeEventCardProps {
   event: NarrativeEvent;
+  chain?: EventChain;
   onAcknowledge: () => void;
   onChoice: (index: number) => void;
 }
 
+/** Escalation badge colour and label. */
+const ESCALATION_CONFIG: Record<number, { label: string; className: string }> = {
+  0: { label: "", className: "" },
+  1: { label: "Escalating", className: "border-amber-500/60 text-amber-400 bg-amber-500/10" },
+  2: { label: "Critical", className: "border-red-500/60 text-red-400 bg-red-500/10" },
+};
+
 function NarrativeEventCard({
   event,
+  chain,
   onAcknowledge,
   onChoice,
 }: NarrativeEventCardProps) {
@@ -126,17 +138,62 @@ function NarrativeEventCard({
   const hasChoices = event.choices && event.choices.length > 0;
   const choiceResolved = event.selectedChoice !== undefined;
 
+  const isChainEvent = !!event.chainId;
+  const escalation = event.escalationLevel ?? 0;
+  const escalationConfig = ESCALATION_CONFIG[escalation] ?? ESCALATION_CONFIG[0];
+
+  // Determine chain step display (e.g. "Part 2 of 4")
+  const chainStepLabel = isChainEvent && chain
+    ? `Part ${event.chainStep ?? 1} of ${chain.maxSteps}`
+    : null;
+
+  // Border colour escalation: normal=purple, warning=amber, critical=red
+  const borderClass = escalation >= 2
+    ? "border-red-500/40 bg-red-500/5"
+    : escalation === 1
+      ? "border-amber-500/40 bg-amber-500/5"
+      : "border-purple-500/30 bg-purple-500/5";
+
   return (
-    <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 p-4">
+    <div className={`rounded-lg border p-4 ${borderClass}`}>
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <Zap size={14} className="shrink-0 text-purple-400" aria-hidden="true" />
           <span className="font-semibold text-white truncate">{event.title}</span>
         </div>
-        <Badge variant="outline" className={`shrink-0 text-[10px] border-current ${typeConfig.color}`}>
-          {typeConfig.label}
-        </Badge>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* F2: Chain indicator badge */}
+          {isChainEvent && chainStepLabel && (
+            <Badge variant="outline" className="text-[10px] border-sky-500/50 text-sky-400 bg-sky-500/10">
+              <Link2 size={9} className="mr-0.5" aria-hidden="true" />
+              {chainStepLabel}
+            </Badge>
+          )}
+          {/* F2: Escalation badge */}
+          {escalation > 0 && escalationConfig.label && (
+            <Badge variant="outline" className={`text-[10px] ${escalationConfig.className}`}>
+              <AlertTriangle size={9} className="mr-0.5" aria-hidden="true" />
+              {escalationConfig.label}
+            </Badge>
+          )}
+          <Badge variant="outline" className={`text-[10px] border-current ${typeConfig.color}`}>
+            {typeConfig.label}
+          </Badge>
+        </div>
       </div>
+
+      {/* F2: Show previous chain choices as context */}
+      {isChainEvent && chain && chain.choiceHistory.length > 0 && (
+        <div className="mb-2 rounded bg-zinc-800/50 px-2.5 py-1.5 text-xs text-zinc-400">
+          <span className="font-medium text-zinc-300">Previous choices:</span>{" "}
+          {chain.choiceHistory.map((choiceIdx, stepIdx) => (
+            <span key={stepIdx} className="text-zinc-500">
+              {stepIdx > 0 ? " > " : ""}
+              Step {stepIdx + 1}: Option {choiceIdx + 1}
+            </span>
+          ))}
+        </div>
+      )}
 
       <p className="mb-3 text-sm text-zinc-300 leading-relaxed">
         {event.description}
@@ -168,7 +225,7 @@ function NarrativeEventCard({
       ) : choiceResolved ? (
         <div className="flex items-center justify-between">
           <p className="text-xs text-zinc-500">
-            Choice made: {event.choices?.[event.selectedChoice!]?.label ?? "—"}
+            Choice made: {event.choices?.[event.selectedChoice!]?.label ?? "--"}
           </p>
           <Button
             size="sm"
@@ -401,6 +458,12 @@ export function InboxScreen() {
 
   const { inbox, currentWeek, currentSeason, narrativeEvents } = gameState;
 
+  // F2: Build a lookup map for event chains
+  const chainMap = new Map<string, EventChain>();
+  for (const chain of gameState.eventChains ?? []) {
+    chainMap.set(chain.id, chain);
+  }
+
   // Sort messages by most recent (week desc, season desc)
   const sorted = [...inbox].sort((a, b) => {
     if (b.season !== a.season) return b.season - a.season;
@@ -463,6 +526,7 @@ export function InboxScreen() {
                 <NarrativeEventCard
                   key={event.id}
                   event={event}
+                  chain={event.chainId ? chainMap.get(event.chainId) : undefined}
                   onAcknowledge={() => acknowledgeNarrativeEvent(event.id)}
                   onChoice={(index) =>
                     resolveNarrativeEventChoice(event.id, index)

@@ -35,3 +35,14 @@ export {
   updateAnalystMorale,
   getAnalystSalaryCost,
 } from "./analyticsTeam";
+
+// Visualization data preparation (F20)
+export type { ScatterFilter } from "./visualizationData";
+export {
+  generateScatterData,
+  generateAgePotentialScatter,
+  generateCoverageHeatMap,
+  generateDevelopmentTrends,
+  generateLeagueComparison,
+  generatePlayerRadar,
+} from "./visualizationData";

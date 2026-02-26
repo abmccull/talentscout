@@ -38,10 +38,17 @@ interface CountryBias {
 const COUNTRY_BIASES: Record<string, CountryBias> = {
   // Core countries
   Brazil: {
-    bonusAttributes: { dribbling: 2, firstTouch: 2 },
+    bonusAttributes: { dribbling: 2, firstTouch: 2, balance: 2 },
     positionWeights: {
       GK: 6, CB: 8, LB: 8, RB: 8, CDM: 9, CM: 12,
       CAM: 13, LW: 12, RW: 12, ST: 12,
+    },
+  },
+  Italy: {
+    bonusAttributes: { marking: 2, tackling: 2, anticipation: 1 },
+    positionWeights: {
+      GK: 8, CB: 12, LB: 10, RB: 10, CDM: 11, CM: 11,
+      CAM: 10, LW: 9, RW: 9, ST: 10,
     },
   },
   England: {
@@ -52,28 +59,28 @@ const COUNTRY_BIASES: Record<string, CountryBias> = {
     },
   },
   Spain: {
-    bonusAttributes: { passing: 2, positioning: 2 },
+    bonusAttributes: { passing: 2, positioning: 2, vision: 2 },
     positionWeights: {
       GK: 7, CB: 10, LB: 9, RB: 9, CDM: 10, CM: 14,
       CAM: 12, LW: 10, RW: 10, ST: 9,
     },
   },
   Germany: {
-    bonusAttributes: { workRate: 2, composure: 2 },
+    bonusAttributes: { workRate: 2, composure: 2, anticipation: 1, teamwork: 2 },
     positionWeights: {
       GK: 8, CB: 12, LB: 9, RB: 9, CDM: 12, CM: 11,
       CAM: 9, LW: 9, RW: 9, ST: 12,
     },
   },
   Argentina: {
-    bonusAttributes: { dribbling: 2, composure: 2 },
+    bonusAttributes: { dribbling: 2, composure: 2, balance: 1 },
     positionWeights: {
       GK: 7, CB: 9, LB: 8, RB: 8, CDM: 10, CM: 12,
       CAM: 13, LW: 11, RW: 11, ST: 11,
     },
   },
   France: {
-    bonusAttributes: { pace: 2, strength: 1, agility: 1 },
+    bonusAttributes: { pace: 2, strength: 1, agility: 1, balance: 1 },
     positionWeights: {
       GK: 7, CB: 11, LB: 10, RB: 10, CDM: 11, CM: 11,
       CAM: 10, LW: 10, RW: 10, ST: 10,
@@ -103,7 +110,7 @@ const COUNTRY_BIASES: Record<string, CountryBias> = {
   },
   // West Africa — physical powerhouses
   Nigeria: {
-    bonusAttributes: { pace: 2, strength: 2 },
+    bonusAttributes: { pace: 2, strength: 2, jumping: 1 },
     positionWeights: {
       GK: 7, CB: 11, LB: 9, RB: 9, CDM: 10, CM: 11,
       CAM: 10, LW: 11, RW: 11, ST: 11,
@@ -154,14 +161,14 @@ const COUNTRY_BIASES: Record<string, CountryBias> = {
   },
   // East Asia
   Japan: {
-    bonusAttributes: { passing: 2, workRate: 1 },
+    bonusAttributes: { passing: 2, workRate: 1, teamwork: 2 },
     positionWeights: {
       GK: 7, CB: 10, LB: 10, RB: 10, CDM: 10, CM: 13,
       CAM: 12, LW: 10, RW: 10, ST: 8,
     },
   },
   "South Korea": {
-    bonusAttributes: { stamina: 2, workRate: 1 },
+    bonusAttributes: { stamina: 2, workRate: 1, teamwork: 1 },
     positionWeights: {
       GK: 8, CB: 11, LB: 10, RB: 10, CDM: 11, CM: 12,
       CAM: 10, LW: 9, RW: 9, ST: 10,

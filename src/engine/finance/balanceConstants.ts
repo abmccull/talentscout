@@ -94,6 +94,7 @@ export const EMPLOYEE_SALARY_RANGES: Record<AgencyEmployeeRole, [number, number]
   analyst: [400, 1500],
   administrator: [300, 1000],
   relationshipManager: [600, 2500],
+  mentee: [200, 600],
 };
 
 export const INSURANCE_PER_EMPLOYEE = 50;

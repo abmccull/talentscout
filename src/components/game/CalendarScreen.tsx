@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,12 @@ import {
   Info,
   CalendarDays,
   MapPin,
+  Eye,
+  Target,
+  Zap,
+  Sparkles,
+  Wand2,
+  FastForward,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { Activity, ActivityType } from "@/engine/core/types";
@@ -31,6 +37,9 @@ import { ActivityPanel } from "./calendar/ActivityPanel";
 import { useTranslations } from "next-intl";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isScoutAbroad } from "@/engine/world/travel";
+import { generateWeekPreview } from "@/engine/core/weekPreview";
+import type { WeekPreview } from "@/engine/core/weekPreview";
+import { BatchSummary } from "./BatchSummary";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -65,6 +74,10 @@ export function CalendarScreen() {
     getAvailableCalendarActivities,
     pendingCalendarActivity,
     setPendingCalendarActivity,
+    autoSchedule,
+    batchAdvance,
+    batchSummary,
+    dismissBatchSummary,
   } = useGameStore();
 
   const t = useTranslations("calendar");
@@ -73,25 +86,20 @@ export function CalendarScreen() {
   // League filter for fixture activities — must be called before early return
   const [selectedLeagueId, setSelectedLeagueId] = useState<string>("all");
 
-  // Auto-schedule pending activity from PlayerProfile quick actions
+  // When navigating from PlayerProfile quick actions, clear pending on unmount
+  // so it doesn't persist if the user navigates away without scheduling.
+  // The pending activity is surfaced in the ActivityPanel as a highlighted suggestion.
   useEffect(() => {
-    if (!pendingCalendarActivity || !gameState) return;
-    const activities = gameState.schedule.activities ?? [];
-    // Find first empty slot
-    const firstEmpty = activities.findIndex((a) => a === null);
-    if (firstEmpty === -1) {
-      setPendingCalendarActivity(null);
-      return;
-    }
-    const activity: Activity = {
-      type: pendingCalendarActivity.type as Activity["type"],
-      description: pendingCalendarActivity.label,
-      slots: 1,
-      targetId: pendingCalendarActivity.targetId,
-    };
-    scheduleActivity(activity, firstEmpty);
-    setPendingCalendarActivity(null);
-  }, [pendingCalendarActivity, gameState, scheduleActivity, setPendingCalendarActivity]);
+    return () => { setPendingCalendarActivity(null); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Week preview panel collapsed state
+  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+
+  // Batch advance dialog state
+  const [showBatchDialog, setShowBatchDialog] = useState(false);
+  const [batchWeeks, setBatchWeeks] = useState(4);
 
   // Empty-day warning dialog
   const [showEmptyDayWarning, setShowEmptyDayWarning] = useState(false);
@@ -109,6 +117,18 @@ export function CalendarScreen() {
   const resolveClubName = useCallback(
     (id: string) => getClub(id)?.name ?? id,
     [getClub],
+  );
+
+  // Week preview — computed once per render from game state.
+  // Must be called before any early return to satisfy Rules of Hooks.
+  // Returns a stub when gameState is null; keeps hooks unconditional.
+  const weekPreview: WeekPreview = useMemo(
+    () =>
+      gameState
+        ? generateWeekPreview(gameState)
+        : { relevantMatches: [], totalFixtures: 0, congestion: "light" as const, fatigueWarning: false, isAbroad: false, suggestions: [] },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gameState?.currentWeek, gameState?.watchlist, gameState?.managerDirectives, gameState?.scout?.fatigue],
   );
 
   if (!gameState) return null;
@@ -151,6 +171,14 @@ export function CalendarScreen() {
   const handleSchedule = (activity: Activity, dayIndex: number) => {
     if (!canScheduleAt(activity, dayIndex)) return;
     scheduleActivity(activity, dayIndex);
+  };
+
+  const handleApplySuggestions = () => {
+    for (const suggestion of weekPreview?.suggestions ?? []) {
+      if (canScheduleAt(suggestion.activity, suggestion.dayIndex)) {
+        scheduleActivity(suggestion.activity, suggestion.dayIndex);
+      }
+    }
   };
 
   return (
@@ -298,17 +326,31 @@ export function CalendarScreen() {
               Week {currentWeek} — Season {currentSeason}
             </p>
           </div>
-          <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
-            <Button onClick={() => {
-              const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
-              if (emptyCount > 0) {
-                setShowEmptyDayWarning(true);
-              } else {
-                playSFX("calendar-slide");
-                startWeekSimulation();
-              }
-            }} data-tutorial-id="advance-week">Advance Week</Button>
-          </Tooltip>
+          <div className="flex items-center gap-2">
+            <Tooltip content="Auto-fill empty days with optimal activities based on your watchlist and priorities." side="bottom">
+              <Button variant="outline" size="sm" onClick={() => autoSchedule()} className="gap-1.5">
+                <Wand2 size={14} />
+                Auto-Schedule
+              </Button>
+            </Tooltip>
+            <Tooltip content="Auto-schedule and advance multiple weeks at once." side="bottom">
+              <Button variant="outline" size="sm" onClick={() => setShowBatchDialog(true)} className="gap-1.5">
+                <FastForward size={14} />
+                Batch
+              </Button>
+            </Tooltip>
+            <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
+              <Button onClick={() => {
+                const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
+                if (emptyCount > 0) {
+                  setShowEmptyDayWarning(true);
+                } else {
+                  playSFX("calendar-slide");
+                  startWeekSimulation();
+                }
+              }} data-tutorial-id="advance-week">Advance Week</Button>
+            </Tooltip>
+          </div>
         </div>
 
         {/* Abroad location indicator */}
@@ -347,6 +389,159 @@ export function CalendarScreen() {
                 ? "Assessment requests are more frequent. Don't miss any."
                 : "Clubs are making signings. Check your Inbox for urgent assessment requests (+3 reputation)."}
             </p>
+          </div>
+        )}
+
+        {/* Week Preview Panel (F16) */}
+        {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (
+          <div className="mb-6 rounded-lg border border-violet-500/20 bg-violet-500/5 p-4">
+            <button
+              onClick={() => setPreviewCollapsed(!previewCollapsed)}
+              className="mb-2 flex w-full items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Eye size={14} className="text-violet-400" aria-hidden="true" />
+                <span className="text-sm font-semibold text-violet-300">Week Preview</span>
+                <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-400">
+                  {weekPreview.totalFixtures} fixture{weekPreview.totalFixtures !== 1 ? "s" : ""}
+                </Badge>
+                {weekPreview.relevantMatches.length > 0 && (
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-400">
+                    {weekPreview.relevantMatches.length} with targets
+                  </Badge>
+                )}
+                {weekPreview.congestion === "heavy" && (
+                  <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-400">
+                    Heavy schedule
+                  </Badge>
+                )}
+              </div>
+              <span className="text-xs text-zinc-500">{previewCollapsed ? "Show" : "Hide"}</span>
+            </button>
+
+            {!previewCollapsed && (
+              <div className="space-y-3">
+                {/* Congestion / fatigue alerts */}
+                {weekPreview.fatigueWarning && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+                    <AlertTriangle size={12} className="shrink-0" aria-hidden="true" />
+                    High fatigue ({Math.round(scout.fatigue)}%) — consider scheduling a rest day for recovery.
+                  </div>
+                )}
+                {weekPreview.congestion === "heavy" && (
+                  <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+                    <Zap size={12} className="shrink-0" aria-hidden="true" />
+                    Heavy fixture congestion ({weekPreview.totalFixtures} matches) — many scouting opportunities but watch your fatigue.
+                  </div>
+                )}
+
+                {/* Relevant matches */}
+                {weekPreview.relevantMatches.length > 0 && (
+                  <div>
+                    <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                      Key Matches This Week
+                    </p>
+                    <div className="space-y-1.5">
+                      {weekPreview.relevantMatches.slice(0, 5).map((pm) => {
+                        const home = gameState.clubs[pm.homeClubId];
+                        const away = gameState.clubs[pm.awayClubId];
+                        const league = gameState.leagues[pm.leagueId];
+                        return (
+                          <div
+                            key={pm.fixtureId}
+                            className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-2"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-medium text-white">
+                                {home?.shortName ?? "?"} vs {away?.shortName ?? "?"}
+                              </span>
+                              {league && (
+                                <Badge variant="outline" className="text-[9px]">
+                                  {league.shortName}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {pm.watchlistPlayerIds.length > 0 && (
+                                <Tooltip
+                                  content={`Watchlist: ${pm.watchlistPlayerIds
+                                    .map((pid) => {
+                                      const p = gameState.players[pid];
+                                      return p ? `${p.firstName} ${p.lastName}` : pid.slice(0, 8);
+                                    })
+                                    .join(", ")}`}
+                                  side="top"
+                                >
+                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                                    <Target size={10} aria-hidden="true" />
+                                    {pm.watchlistPlayerIds.length}
+                                  </span>
+                                </Tooltip>
+                              )}
+                              {pm.directivePlayerIds.length > 0 && (
+                                <Tooltip
+                                  content={`Directive targets: ${pm.directivePlayerIds
+                                    .map((pid) => {
+                                      const p = gameState.players[pid];
+                                      return p ? `${p.firstName} ${p.lastName}` : pid.slice(0, 8);
+                                    })
+                                    .join(", ")}`}
+                                  side="top"
+                                >
+                                  <span className="inline-flex items-center gap-0.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-1.5 py-0.5 text-[10px] text-blue-400">
+                                    <Sparkles size={10} aria-hidden="true" />
+                                    {pm.directivePlayerIds.length}
+                                  </span>
+                                </Tooltip>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Suggested schedule */}
+                {weekPreview.suggestions.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                        Suggested Schedule
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-6 px-2 text-[10px]"
+                        onClick={handleApplySuggestions}
+                      >
+                        Apply All
+                      </Button>
+                    </div>
+                    <div className="space-y-1">
+                      {weekPreview.suggestions.map((s, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-1.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-semibold text-zinc-500 uppercase w-6">
+                              {DAY_KEYS[s.dayIndex] ?? `D${s.dayIndex}`}
+                            </span>
+                            <span className="text-xs text-white">{s.activity.description}</span>
+                          </div>
+                          <Tooltip content={s.reason} side="left">
+                            <span className="max-w-[180px] truncate text-[10px] text-zinc-500">
+                              {s.reason}
+                            </span>
+                          </Tooltip>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
@@ -485,6 +680,7 @@ export function CalendarScreen() {
           fixtureLeagueById={fixtureLeagueById}
           onLeagueFilterChange={setSelectedLeagueId}
           resolveClubName={resolveClubName}
+          highlightTargetId={pendingCalendarActivity?.targetId}
         />
         </div>
       </div>
@@ -523,6 +719,50 @@ export function CalendarScreen() {
             </div>
           </div>
         </div>
+      )}
+      {/* Batch advance dialog */}
+      {showBatchDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg border border-blue-500/30 bg-zinc-900 p-6 shadow-xl">
+            <div className="mb-3 flex items-center gap-2 text-blue-400">
+              <FastForward size={18} />
+              <h3 className="text-lg font-semibold">Batch Advance</h3>
+            </div>
+            <p className="mb-4 text-sm text-zinc-300">
+              Auto-schedule and advance multiple weeks. Activities are chosen based
+              on your watchlist and current priorities.
+            </p>
+            <div className="mb-5">
+              <label className="mb-1 block text-xs text-zinc-500">Weeks to advance</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  value={batchWeeks}
+                  onChange={(e) => setBatchWeeks(Number(e.target.value))}
+                  className="flex-1 accent-blue-500"
+                />
+                <span className="min-w-[2rem] text-center text-lg font-bold text-white">{batchWeeks}</span>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowBatchDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={() => {
+                setShowBatchDialog(false);
+                batchAdvance(batchWeeks);
+              }}>
+                Advance {batchWeeks} Week{batchWeeks !== 1 ? "s" : ""}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Batch summary overlay */}
+      {batchSummary && (
+        <BatchSummary result={batchSummary} onDismiss={dismissBatchSummary} />
       )}
     </GameLayout>
   );

@@ -6,6 +6,12 @@
  * international callup, wonderkid status) and generates inbox messages when
  * milestones are achieved.
  *
+ * F12 extends this with:
+ *  - Career update timeline (debut, goals, injury, captaincy, etc.)
+ *  - Status tracking (academy, firstTeam, loaned, released, retired, transferred)
+ *  - Season-by-season stats generation
+ *  - Alumni-to-contact promotion for high-achievers
+ *
  * All functions are pure: no side effects, no mutation.
  */
 
@@ -14,7 +20,12 @@ import type {
   AlumniRecord,
   AlumniMilestone,
   AlumniMilestoneType,
+  AlumniCareerUpdate,
+  AlumniCareerUpdateType,
+  AlumniSeasonStats,
+  AlumniStatus,
   CareerSnapshot,
+  Contact,
   LegacyScore,
   Player,
   Club,
@@ -39,6 +50,60 @@ function makeAlumniMessageId(rng: RNG): string {
  */
 function hasMilestone(record: AlumniRecord, type: AlumniMilestoneType): boolean {
   return record.milestones.some((m) => m.type === type);
+}
+
+/**
+ * Return true if the alumni record already has a career update of the given
+ * type in the specified season (to avoid duplicates per season).
+ */
+function hasCareerUpdateInSeason(
+  record: AlumniRecord,
+  type: AlumniCareerUpdateType,
+  season: number,
+): boolean {
+  return record.careerUpdates.some(
+    (u) => u.type === type && u.season === season,
+  );
+}
+
+/**
+ * Return true if the alumni record already has a career update of the given
+ * type at any point (for once-only events like debut).
+ */
+function hasCareerUpdate(
+  record: AlumniRecord,
+  type: AlumniCareerUpdateType,
+): boolean {
+  return record.careerUpdates.some((u) => u.type === type);
+}
+
+/**
+ * Derive the current status of an alumni player based on game state signals.
+ */
+function deriveAlumniStatus(
+  record: AlumniRecord,
+  player: Player,
+  retiredPlayerIds: string[],
+): AlumniStatus {
+  // Retired takes priority
+  if (retiredPlayerIds.includes(player.id)) {
+    return "retired";
+  }
+  // Player was released (no club or club differs and CA dropped significantly)
+  if (!player.clubId) {
+    return "released";
+  }
+  // Transferred — player at a different club from where they were originally placed
+  // AND they moved away from the current tracked club
+  if (player.clubId !== record.placedClubId && player.clubId !== record.currentClubId) {
+    return "transferred";
+  }
+  // First team breakthrough
+  if (player.currentAbility >= 80 && player.age >= 17) {
+    return "firstTeam";
+  }
+  // Still in academy
+  return "academy";
 }
 
 // =============================================================================
@@ -66,6 +131,10 @@ export function createAlumniRecord(
     careerSnapshots: [],
     placedWeek: week,
     placedSeason: season,
+    careerUpdates: [],
+    currentStatus: "academy",
+    seasonStats: [],
+    becameContact: false,
   };
 }
 
@@ -75,6 +144,11 @@ export function createAlumniRecord(
  * For each alumni record, checks whether the linked player has hit any new
  * career milestones and, if so, creates the milestone entry and an inbox
  * message to notify the scout.
+ *
+ * F12 enhancements:
+ *  - Generates career updates (debut, firstGoal, injury, captaincy, etc.)
+ *  - Tracks current status (academy/firstTeam/loaned/released/retired/transferred)
+ *  - Detects alumni eligible for contact promotion
  *
  * Milestone conditions:
  *  - firstTeamDebut:      CA >= 80, age >= 17, not yet awarded
@@ -94,18 +168,18 @@ export function processAlumniWeek(
   clubs: Record<string, Club>,
   week: number,
   season: number,
+  retiredPlayerIds?: string[],
 ): {
   updatedAlumni: AlumniRecord[];
   newMilestones: AlumniMilestone[];
   newMessages: InboxMessage[];
+  contactPromotions: Array<{ alumniId: string; contact: Contact }>;
 } {
-  // Silence unused param — clubs accepted for forward-compatibility (e.g. club
-  // name look-up in future milestone descriptions without breaking the API).
-  void clubs;
-
   const updatedAlumni: AlumniRecord[] = [];
   const newMilestones: AlumniMilestone[] = [];
   const newMessages: InboxMessage[] = [];
+  const contactPromotions: Array<{ alumniId: string; contact: Contact }> = [];
+  const retired = retiredPlayerIds ?? [];
 
   for (const record of alumniRecords) {
     const player = players[record.playerId];
@@ -119,6 +193,7 @@ export function processAlumniWeek(
 
     // Accumulate any new milestones discovered this tick.
     const tickMilestones: AlumniMilestone[] = [];
+    const tickCareerUpdates: AlumniCareerUpdate[] = [];
     let currentClubId = record.currentClubId;
 
     // -----------------------------------------------------------------------
@@ -129,14 +204,22 @@ export function processAlumniWeek(
       // We allow multiple transfer milestones (each represents a new move), so
       // re-check even if one was already recorded.
       if (player.clubId !== currentClubId) {
+        const newClubName = clubs[player.clubId]?.name ?? "a new club";
         const milestone: AlumniMilestone = {
           type: "transfer",
           week,
           season,
-          description: `${player.firstName} ${player.lastName} has moved to a new club.`,
+          description: `${player.firstName} ${player.lastName} has moved to ${newClubName}.`,
           notified: false,
         };
         tickMilestones.push(milestone);
+
+        tickCareerUpdates.push({
+          week,
+          season,
+          type: "transfer",
+          description: `Transferred to ${newClubName}.`,
+        });
 
         // Update tracked club immediately so descriptions below are accurate.
         currentClubId = player.clubId;
@@ -151,14 +234,24 @@ export function processAlumniWeek(
       player.currentAbility >= 80 &&
       player.age >= 17
     ) {
+      const clubName = clubs[currentClubId]?.name ?? "their club";
       const milestone: AlumniMilestone = {
         type: "firstTeamDebut",
         week,
         season,
-        description: `${player.firstName} ${player.lastName} has made their first team debut, breaking through at age ${player.age}.`,
+        description: `${player.firstName} ${player.lastName} has made their first team debut at ${clubName}, breaking through at age ${player.age}.`,
         notified: false,
       };
       tickMilestones.push(milestone);
+
+      if (!hasCareerUpdate(record, "debut")) {
+        tickCareerUpdates.push({
+          week,
+          season,
+          type: "debut",
+          description: `Made first team debut at ${clubName} at age ${player.age}.`,
+        });
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -184,6 +277,15 @@ export function processAlumniWeek(
         notified: false,
       };
       tickMilestones.push(milestone);
+
+      if (!hasCareerUpdate(record, "firstGoal")) {
+        tickCareerUpdates.push({
+          week,
+          season,
+          type: "firstGoal",
+          description: `Scored their first professional goal.`,
+        });
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -203,6 +305,15 @@ export function processAlumniWeek(
         notified: false,
       };
       tickMilestones.push(milestone);
+
+      if (!hasCareerUpdate(record, "internationalCall")) {
+        tickCareerUpdates.push({
+          week,
+          season,
+          type: "internationalCall",
+          description: `Received first international call-up at age ${player.age}.`,
+        });
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -222,6 +333,107 @@ export function processAlumniWeek(
         notified: false,
       };
       tickMilestones.push(milestone);
+    }
+
+    // -----------------------------------------------------------------------
+    // F12: Additional career updates (beyond milestones)
+    // -----------------------------------------------------------------------
+
+    // Captaincy — high CA + leadership traits at first team, once per career
+    if (
+      !hasCareerUpdate(record, "captaincy") &&
+      player.currentAbility >= 110 &&
+      player.age >= 20 &&
+      hasDebut &&
+      rng.chance(0.02)
+    ) {
+      const clubName = clubs[currentClubId]?.name ?? "their club";
+      tickCareerUpdates.push({
+        week,
+        season,
+        type: "captaincy",
+        description: `Named captain of ${clubName}.`,
+      });
+    }
+
+    // Team of the Week — once per season, requires first team status
+    if (
+      !hasCareerUpdateInSeason(record, "teamOfWeek", season) &&
+      player.currentAbility >= 90 &&
+      hasDebut &&
+      rng.chance(0.03)
+    ) {
+      tickCareerUpdates.push({
+        week,
+        season,
+        type: "teamOfWeek",
+        description: `Selected for the Team of the Week.`,
+      });
+    }
+
+    // Injury update — if player is currently injured and we haven't noted it
+    // this season
+    if (
+      player.injured &&
+      !hasCareerUpdateInSeason(record, "injury", season)
+    ) {
+      const weeksStr = player.injuryWeeksRemaining > 0
+        ? ` Expected ${player.injuryWeeksRemaining} weeks out.`
+        : "";
+      tickCareerUpdates.push({
+        week,
+        season,
+        type: "injury",
+        description: `Picked up an injury.${weeksStr}`,
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // F12: Status derivation
+    // -----------------------------------------------------------------------
+    const newStatus = deriveAlumniStatus(record, player, retired);
+
+    // -----------------------------------------------------------------------
+    // F12: Alumni-to-contact promotion
+    // When a placed youth reaches first team + international call-up (or
+    // wonderkid status), they can become a contact in the scout's network.
+    // -----------------------------------------------------------------------
+    let becameContact = record.becameContact;
+    if (
+      !becameContact &&
+      newStatus === "firstTeam" &&
+      (hasMilestone(record, "internationalCallUp") ||
+        tickMilestones.some((m) => m.type === "internationalCallUp") ||
+        hasMilestone(record, "wonderkidStatus") ||
+        tickMilestones.some((m) => m.type === "wonderkidStatus"))
+    ) {
+      becameContact = true;
+      const clubName = clubs[currentClubId]?.name ?? "Unknown Club";
+      const contact: Contact = {
+        id: `contact_alumni_${record.id}`,
+        name: `${player.firstName} ${player.lastName}`,
+        type: "clubStaff",
+        organization: clubName,
+        relationship: 60,
+        reliability: 55,
+        knownPlayerIds: [],
+        region: player.nationality ?? undefined,
+        country: player.nationality ?? undefined,
+      };
+      contactPromotions.push({ alumniId: record.id, contact });
+
+      newMessages.push({
+        id: makeAlumniMessageId(rng),
+        week,
+        season,
+        type: "event",
+        title: `Alumni Graduated: ${player.firstName} ${player.lastName} is now a Contact`,
+        body: `Your former placement ${player.firstName} ${player.lastName} has become a well-established professional at ${clubName}. They have joined your contact network and can provide insider information on players at their club.`,
+        read: false,
+        actionRequired: false,
+        relatedId: player.id,
+        relatedEntityType: "contact",
+      });
     }
 
     // -----------------------------------------------------------------------
@@ -258,12 +470,15 @@ export function processAlumniWeek(
       ...record,
       currentClubId,
       milestones: [...record.milestones, ...tickMilestones],
+      careerUpdates: [...record.careerUpdates, ...tickCareerUpdates],
+      currentStatus: newStatus,
+      becameContact,
     };
 
     updatedAlumni.push(updatedRecord);
   }
 
-  return { updatedAlumni, newMilestones, newMessages };
+  return { updatedAlumni, newMilestones, newMessages, contactPromotions };
 }
 
 /**
@@ -298,6 +513,119 @@ export function addAlumniSnapshot(
       : [...record.careerSnapshots, snapshot];
 
   return { ...record, careerSnapshots };
+}
+
+/**
+ * F12: Generate season summary stats for an alumni.
+ *
+ * Simulates a season's worth of appearances, goals, assists, and average
+ * rating based on the player's current ability and position. Called at end
+ * of season for each active alumni.
+ *
+ * Returns a new record with the season stats appended (or replaced if a
+ * summary for that season already exists).
+ */
+export function generateAlumniSeasonSummary(
+  rng: RNG,
+  record: AlumniRecord,
+  player: Player,
+  season: number,
+): AlumniRecord {
+  // Simulated appearances based on ability — higher CA = more playing time
+  const baseAppearances = player.currentAbility >= 100
+    ? rng.nextInt(25, 38)
+    : player.currentAbility >= 80
+      ? rng.nextInt(15, 30)
+      : player.currentAbility >= 60
+        ? rng.nextInt(5, 20)
+        : rng.nextInt(0, 10);
+
+  // Reduce if injured
+  const appearances = player.injured
+    ? Math.max(0, baseAppearances - rng.nextInt(5, 15))
+    : baseAppearances;
+
+  // Goals and assists depend on position and ability
+  const isAttacker = player.position === "ST" || player.position === "LW" || player.position === "RW";
+  const isMidfielder = player.position === "CM" || player.position === "CAM" || player.position === "CDM";
+
+  let goals = 0;
+  let assists = 0;
+
+  if (appearances > 0) {
+    if (isAttacker) {
+      goals = Math.round(appearances * (0.2 + (player.currentAbility / 200) * 0.4) * (0.7 + rng.next() * 0.6));
+      assists = Math.round(appearances * (0.1 + rng.next() * 0.15));
+    } else if (isMidfielder) {
+      goals = Math.round(appearances * (0.05 + (player.currentAbility / 200) * 0.15) * (0.7 + rng.next() * 0.6));
+      assists = Math.round(appearances * (0.1 + (player.currentAbility / 200) * 0.2) * (0.7 + rng.next() * 0.6));
+    } else {
+      // Defenders and GK
+      goals = rng.chance(0.15) ? rng.nextInt(1, 3) : 0;
+      assists = rng.chance(0.2) ? rng.nextInt(1, 4) : 0;
+    }
+  }
+
+  // Average rating on 1-10 scale, based on ability
+  const baseRating = 5.0 + (player.currentAbility / 200) * 3.5;
+  const avgRating = Math.round((baseRating + (rng.next() - 0.5) * 1.0) * 10) / 10;
+
+  const stats: AlumniSeasonStats = {
+    season,
+    appearances,
+    goals,
+    assists,
+    avgRating: Math.max(1, Math.min(10, avgRating)),
+    clubId: player.clubId,
+  };
+
+  // Replace existing season entry or append
+  const existingIdx = record.seasonStats.findIndex((s) => s.season === season);
+  const seasonStats =
+    existingIdx >= 0
+      ? [
+          ...record.seasonStats.slice(0, existingIdx),
+          stats,
+          ...record.seasonStats.slice(existingIdx + 1),
+        ]
+      : [...record.seasonStats, stats];
+
+  return { ...record, seasonStats };
+}
+
+/**
+ * F12: Check if an alumni is eligible for contact promotion.
+ *
+ * Criteria: first team status + either international call-up or wonderkid
+ * status milestone. Must not have already been promoted.
+ */
+export function isEligibleForContactPromotion(record: AlumniRecord): boolean {
+  if (record.becameContact) return false;
+  if (record.currentStatus !== "firstTeam") return false;
+
+  return (
+    record.milestones.some(
+      (m) => m.type === "internationalCallUp" || m.type === "wonderkidStatus",
+    )
+  );
+}
+
+/**
+ * F12: Compute placement success rate for all alumni.
+ *
+ * Success is defined as reaching firstTeam status or having achieved
+ * the firstTeamDebut milestone.
+ */
+export function calculatePlacementSuccessRate(
+  alumniRecords: AlumniRecord[],
+): number {
+  if (alumniRecords.length === 0) return 0;
+  const successes = alumniRecords.filter(
+    (r) =>
+      r.currentStatus === "firstTeam" ||
+      r.milestones.some((m) => m.type === "firstTeamDebut"),
+  ).length;
+  return Math.round((successes / alumniRecords.length) * 100);
 }
 
 /**
