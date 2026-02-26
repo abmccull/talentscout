@@ -13,6 +13,10 @@ export {
   purchaseEquipmentUpgrade,
   getEquipmentObservationBonus,
   isBroke,
+  takeBusinessLoan,
+  repayLoan,
+  applyFirstReportBonus,
+  applyFirstPlacementBonus,
 } from "./expenses";
 
 export {
@@ -109,3 +113,20 @@ export {
   processAssistantScoutWeek,
   MAX_ASSISTANT_SCOUTS,
 } from "./assistantScouts";
+
+export {
+  getIncomeMultiplier,
+  applySpecBonus,
+  calculateSpecMonthlyBonus,
+  calculateSpecUniqueIncome,
+  canAddAcademyPartnership,
+  getMaxAcademyPartnerships,
+  calculateTransferBonus,
+  getSpecIncomeDescription,
+  getSpecIncomeLabel,
+  getSpecTier3Label,
+  TRANSFER_WINDOW_BONUS_RATE,
+  PREDICTIVE_REPORT_MULTIPLIER,
+} from "./specializationIncome";
+
+export type { IncomeSource } from "./specializationIncome";

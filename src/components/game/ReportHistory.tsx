@@ -7,7 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, X, ChevronDown, ChevronUp, DollarSign, GitCompareArrows } from "lucide-react";
-import type { ScoutReport, ConvictionLevel, ReportListing } from "@/engine/core/types";
+import type { ScoutReport, ConvictionLevel, ReportListing, TransferRecord } from "@/engine/core/types";
+import {
+  OUTCOME_COLORS,
+  OUTCOME_REASON_COLORS,
+  OUTCOME_REASON_SHORT_LABELS,
+} from "@/engine/firstTeam";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
@@ -37,10 +42,11 @@ function qualityColor(score: number): string {
 interface ReportDetailModalProps {
   report: ScoutReport;
   playerName: string;
+  transferRecord?: TransferRecord;
   onClose: () => void;
 }
 
-function ReportDetailModal({ report, playerName, onClose }: ReportDetailModalProps) {
+function ReportDetailModal({ report, playerName, transferRecord, onClose }: ReportDetailModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -101,6 +107,35 @@ function ReportDetailModal({ report, playerName, onClose }: ReportDetailModalPro
               </Badge>
             )}
           </div>
+
+          {/* Transfer Outcome */}
+          {transferRecord?.outcome && (
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+                Transfer Outcome
+              </h3>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`inline-block rounded px-2 py-1 text-xs font-semibold border ${OUTCOME_COLORS[transferRecord.outcome]}`}>
+                  {transferRecord.outcome.charAt(0).toUpperCase() + transferRecord.outcome.slice(1)}
+                </span>
+                {transferRecord.outcomeReason && (
+                  <span className={`inline-block rounded px-2 py-1 text-xs border ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}>
+                    {OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}
+                  </span>
+                )}
+                {transferRecord.appearances != null && (
+                  <span className="text-xs text-zinc-400">
+                    {transferRecord.appearances} appearances
+                  </span>
+                )}
+                {transferRecord.currentCA != null && transferRecord.caAtTransfer != null && (
+                  <span className={`text-xs font-semibold ${transferRecord.currentCA >= transferRecord.caAtTransfer ? "text-emerald-400" : "text-red-400"}`}>
+                    CA: {transferRecord.caAtTransfer} → {transferRecord.currentCA}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Summary */}
           {report.summary && (
@@ -309,6 +344,12 @@ export function ReportHistory() {
     (a, b) => b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason
   );
 
+  // Build lookup of transfer records by report ID for outcome display
+  const transferByReportId = new Map<string, TransferRecord>();
+  for (const tr of gameState.transferRecords ?? []) {
+    transferByReportId.set(tr.reportId, tr);
+  }
+
   const totalReports = reports.length;
   const avgQuality =
     totalReports > 0
@@ -430,6 +471,7 @@ export function ReportHistory() {
                       <th className="px-4 py-3 font-medium">Rep</th>
                       <th className="px-4 py-3 font-medium">Week</th>
                       <th className="px-4 py-3 font-medium">Club Response</th>
+                      <th className="px-4 py-3 font-medium">Transfer Outcome</th>
                       <th className="px-4 py-3 font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -508,6 +550,25 @@ export function ReportHistory() {
                             )}
                           </td>
                           <td className="px-4 py-3">
+                            {(() => {
+                              const tr = transferByReportId.get(report.id);
+                              if (!tr) return <span className="text-zinc-600 text-xs">—</span>;
+                              if (!tr.outcome) return <span className="text-zinc-500 text-xs">Pending</span>;
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border ${OUTCOME_COLORS[tr.outcome]}`}>
+                                    {tr.outcome.charAt(0).toUpperCase() + tr.outcome.slice(1)}
+                                  </span>
+                                  {tr.outcomeReason && (
+                                    <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] border ${OUTCOME_REASON_COLORS[tr.outcomeReason]}`}>
+                                      {OUTCOME_REASON_SHORT_LABELS[tr.outcomeReason]}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                          <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
                               <Button
                                 size="sm"
@@ -572,6 +633,7 @@ export function ReportHistory() {
         <ReportDetailModal
           report={selectedReport}
           playerName={selectedPlayerName}
+          transferRecord={transferByReportId.get(selectedReport.id)}
           onClose={() => setSelectedReport(null)}
         />
       )}

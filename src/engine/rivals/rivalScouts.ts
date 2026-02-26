@@ -40,6 +40,22 @@ export interface RivalWeekResult {
   poachWarnings: { rivalId: string; playerId: string }[];
   /** New player targets a rival discovered this week. */
   discoveries: { rivalId: string; playerId: string }[];
+  /** Rival signings of players the scout has previously reported on (poach events). */
+  poachSignings: { rivalId: string; playerId: string }[];
+}
+
+/**
+ * Result of resolving a poach counter-bid.
+ */
+export interface PoachBidResult {
+  /** Whether the counter-bid succeeded. */
+  success: boolean;
+  /** Cost of the counter-bid (150% of market value). */
+  cost: number;
+  /** Reputation change for the scout. */
+  reputationChange: number;
+  /** Updated rival with adjusted rivalry stats. */
+  updatedRival: RivalScout;
 }
 
 /** Enhanced result from processRivalScoutWeek (F8). */
@@ -55,6 +71,8 @@ export interface RivalScoutWeekResult {
   newMessages: InboxMessage[];
   /** Player IDs that rivals have completed scouting and signed (lost opportunities). */
   lostPlayerIds: string[];
+  /** Rival signings of players the scout has previously reported on (poach events). */
+  poachSignings: { rivalId: string; playerId: string }[];
 }
 
 // =============================================================================
@@ -93,6 +111,27 @@ const POACH_CHANCE = 0.1;
 /** Reputation gain range per week (0–2). */
 const REP_GAIN_MIN = 0;
 const REP_GAIN_MAX = 2;
+
+/**
+ * Weekly probability a rival "signs" a shared-target player (completing a poach).
+ * Only fires on players the scout has previously reported on.
+ */
+const POACH_SIGNING_CHANCE = 0.08;
+
+/**
+ * Added to the discovery chance when both scout and rival target the same player.
+ * Represents the rival's increased urgency on contested targets.
+ */
+const SHARED_TARGET_URGENCY_BOOST = 0.1;
+
+/** Counter-bid costs 150% of market value. */
+const COUNTER_BID_COST_MULTIPLIER = 1.5;
+
+/** Base success rate for a counter-bid. */
+const COUNTER_BID_BASE_SUCCESS = 0.4;
+
+/** Nemesis threshold — losses before the "nemesis" event triggers. */
+const NEMESIS_THRESHOLD = 3;
 
 /**
  * CA threshold for "high CA" targets.
@@ -217,6 +256,8 @@ export function generateRivalScouts(
       scoutingProgress: {},
       aggressiveness,
       budgetTier,
+      winsAgainstPlayer: 0,
+      lossesToPlayer: 0,
     };
     rivalIds.push(id);
   }
@@ -271,17 +312,35 @@ export function processRivalWeek(
   const updatedRivals: Record<string, RivalScout> = {};
   const poachWarnings: { rivalId: string; playerId: string }[] = [];
   const discoveries: { rivalId: string; playerId: string }[] = [];
+  const poachSignings: { rivalId: string; playerId: string }[] = [];
 
   // Build the set of player IDs the scout has reported on (for poach logic)
   const reportedPlayerIds = new Set<string>(
     Object.values(state.reports).map((r) => r.playerId),
   );
 
-  for (const rival of Object.values(rivals)) {
-    let updatedRival = rival;
+  // Build the set of players the scout is actively tracking (observations + reports)
+  const scoutPlayerIds = new Set<string>();
+  for (const obs of Object.values(state.observations)) {
+    scoutPlayerIds.add(obs.playerId);
+  }
+  for (const report of Object.values(state.reports)) {
+    scoutPlayerIds.add(report.playerId);
+  }
 
-    // --- Discovery ---
-    if (rng.chance(DISCOVERY_CHANCE)) {
+  for (const rival of Object.values(rivals)) {
+    let updatedRival = { ...rival, winsAgainstPlayer: rival.winsAgainstPlayer ?? 0, lossesToPlayer: rival.lossesToPlayer ?? 0 };
+
+    // Check if this rival shares any targets with the scout (for urgency boost)
+    const hasSharedTargets = updatedRival.targetPlayerIds.some((pid) =>
+      scoutPlayerIds.has(pid),
+    );
+
+    // --- Discovery (boosted by 10% if rival shares targets with scout) ---
+    const effectiveDiscoveryChance = hasSharedTargets
+      ? DISCOVERY_CHANCE + SHARED_TARGET_URGENCY_BOOST
+      : DISCOVERY_CHANCE;
+    if (rng.chance(effectiveDiscoveryChance)) {
       const newTarget = discoverNewTarget(rng, rival, state);
       if (newTarget !== null) {
         const alreadyTracking = rival.targetPlayerIds.includes(newTarget);
@@ -304,11 +363,25 @@ export function processRivalWeek(
     );
     updatedRival = { ...updatedRival, competingForPlayers };
 
-    // --- Poach check ---
+    // --- Poach warning check ---
     if (rng.chance(POACH_CHANCE)) {
       if (competingForPlayers.length > 0) {
         const targetId = rng.pick(competingForPlayers);
         poachWarnings.push({ rivalId: rival.id, playerId: targetId });
+      }
+    }
+
+    // --- Poach signing check (rival completes a signing of a reported player) ---
+    const signingChance = hasSharedTargets
+      ? POACH_SIGNING_CHANCE + SHARED_TARGET_URGENCY_BOOST
+      : POACH_SIGNING_CHANCE;
+    if (rng.chance(signingChance)) {
+      const reportedSharedIds = updatedRival.targetPlayerIds.filter((pid) =>
+        reportedPlayerIds.has(pid),
+      );
+      if (reportedSharedIds.length > 0) {
+        const signedPlayerId = rng.pick(reportedSharedIds);
+        poachSignings.push({ rivalId: rival.id, playerId: signedPlayerId });
       }
     }
 
@@ -322,7 +395,7 @@ export function processRivalWeek(
     updatedRivals[rival.id] = updatedRival;
   }
 
-  return { updatedRivals, poachWarnings, discoveries };
+  return { updatedRivals, poachWarnings, discoveries, poachSignings };
 }
 
 // =============================================================================
@@ -347,6 +420,7 @@ export function processRivalScoutWeek(
   const updatedRivals: Record<string, RivalScout> = {};
   const poachWarnings: { rivalId: string; playerId: string }[] = [];
   const discoveries: { rivalId: string; playerId: string }[] = [];
+  const poachSignings: { rivalId: string; playerId: string }[] = [];
   const newActivities: RivalActivity[] = [];
   const newMessages: InboxMessage[] = [];
   const lostPlayerIds: string[] = [];
@@ -355,6 +429,15 @@ export function processRivalScoutWeek(
   const reportedPlayerIds = new Set<string>(
     Object.values(state.reports).map((r) => r.playerId),
   );
+
+  // Build the set of players the scout is actively tracking (for urgency boost)
+  const scoutPlayerIds = new Set<string>();
+  for (const obs of Object.values(state.observations)) {
+    scoutPlayerIds.add(obs.playerId);
+  }
+  for (const report of Object.values(state.reports)) {
+    scoutPlayerIds.add(report.playerId);
+  }
 
   // Get this week's fixtures for match attendance logic
   // Note: Fixture type has no season field — fixtures are regenerated each
@@ -544,11 +627,28 @@ export function processRivalScoutWeek(
     );
     updatedRival = { ...updatedRival, competingForPlayers };
 
-    // --- 8. Poach check ---
+    // --- 8. Poach warning check ---
     if (rng.chance(POACH_CHANCE)) {
       if (competingForPlayers.length > 0) {
         const targetId = rng.pick(competingForPlayers);
         poachWarnings.push({ rivalId: rival.id, playerId: targetId });
+      }
+    }
+
+    // --- 8b. Poach signing check (rival completes a signing of a reported player) ---
+    const hasSharedTargets = updatedRival.targetPlayerIds.some((pid) =>
+      scoutPlayerIds.has(pid),
+    );
+    const signingChancePoach = hasSharedTargets
+      ? POACH_SIGNING_CHANCE + SHARED_TARGET_URGENCY_BOOST
+      : POACH_SIGNING_CHANCE;
+    if (rng.chance(signingChancePoach)) {
+      const reportedSharedIds = updatedRival.targetPlayerIds.filter((pid) =>
+        reportedPlayerIds.has(pid),
+      );
+      if (reportedSharedIds.length > 0) {
+        const signedPlayerId = rng.pick(reportedSharedIds);
+        poachSignings.push({ rivalId: rival.id, playerId: signedPlayerId });
       }
     }
 
@@ -569,6 +669,7 @@ export function processRivalScoutWeek(
     newActivities,
     newMessages,
     lostPlayerIds,
+    poachSignings,
   };
 }
 
@@ -641,6 +742,69 @@ export function getSharedTargets(
   }
 
   return rival.targetPlayerIds.filter((pid) => scoutPlayerIds.has(pid));
+}
+
+// =============================================================================
+// 4b. Poach Counter-Bid Resolution
+// =============================================================================
+
+/**
+ * Resolve a counter-bid attempt against a rival who has poached a player.
+ *
+ * Cost: 150% of the player's market value.
+ * Success rate: 40% base, adjusted by scout reputation vs rival quality.
+ * On success: reputation +5, rival gets a "loss".
+ * On failure: reputation -2, money wasted, rival gets a "win".
+ */
+export function resolvePoachCounterBid(
+  rng: RNG,
+  rival: RivalScout,
+  player: Player,
+  scout: Scout,
+): PoachBidResult {
+  const cost = Math.round(player.marketValue * COUNTER_BID_COST_MULTIPLIER);
+
+  // Adjust success rate based on scout reputation vs rival quality
+  const scoutFactor = scout.reputation / 100;
+  const rivalFactor = (rival.quality - 1) / 4;
+  const adjustedChance = clamp(
+    COUNTER_BID_BASE_SUCCESS + (scoutFactor - rivalFactor) * 0.2,
+    0.1,
+    0.7,
+  );
+
+  const success = rng.chance(adjustedChance);
+
+  if (success) {
+    return {
+      success: true,
+      cost,
+      reputationChange: 5,
+      updatedRival: {
+        ...rival,
+        winsAgainstPlayer: rival.winsAgainstPlayer ?? 0,
+        lossesToPlayer: (rival.lossesToPlayer ?? 0) + 1,
+      },
+    };
+  }
+
+  return {
+    success: false,
+    cost,
+    reputationChange: -2,
+    updatedRival: {
+      ...rival,
+      winsAgainstPlayer: (rival.winsAgainstPlayer ?? 0) + 1,
+      lossesToPlayer: rival.lossesToPlayer ?? 0,
+    },
+  };
+}
+
+/**
+ * Check if a rival has reached "nemesis" status (3+ wins against the player).
+ */
+export function isNemesis(rival: RivalScout): boolean {
+  return (rival.winsAgainstPlayer ?? 0) >= NEMESIS_THRESHOLD;
 }
 
 // =============================================================================

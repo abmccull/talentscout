@@ -36,8 +36,15 @@ export {
 
 // Transfer performance tracking
 export {
+  createTransferRecord,
   updateTransferRecords,
-  calculateScoutHitRate,
+  classifyOutcome,
+  applyScoutAccountability,
+  linkReportsToTransfers,
+  OUTCOME_REASON_LABELS,
+  OUTCOME_COLORS,
+  OUTCOME_REASON_COLORS,
+  OUTCOME_REASON_SHORT_LABELS,
 } from "./transferTracker";
 
 // Dynamic board expectations (F10)

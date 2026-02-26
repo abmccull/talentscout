@@ -1,322 +1,477 @@
 /**
- * Transfer tracker — monitors the performance of players signed on the scout's
- * recommendation and calculates hit-rate statistics.
- *
- * This module mirrors the alumni tracking pattern used for youth placements but
- * is tailored to first-team transfers: it generates per-season performance
- * snapshots with appearances, goals, and assists, then classifies each transfer
- * as a hit, flop, decent, or too early to judge.
+ * Transfer Tracker — tracks transfer outcomes, classifies success/failure,
+ * generates narrative reasons, and applies scout accountability.
  *
  * Design notes:
- *  - Pure functions: no side effects, no mutation of inputs.
- *  - All randomness flows through the RNG instance.
- *  - Rating scale: 0–100 (70+ = hit, 40–70 = decent, <40 = flop).
+ *  - Pure functional: no mutations, no side effects.
+ *  - All randomness flows through the RNG instance passed in.
+ *  - Outcome classification uses player CA trajectory, appearances, and
+ *    injury history to determine WHY a transfer succeeded or failed.
+ *
+ * Flow:
+ *  1. createTransferRecord()  — called when a transfer occurs for a scouted player.
+ *  2. updateTransferRecords() — called at end-of-season to update CA and appearances.
+ *  3. classifyOutcome()       — determines hit/decent/flop and narrative reason.
+ *  4. applyScoutAccountability() — adjusts scout reputation based on outcome + conviction.
  */
 
 import type { RNG } from "@/engine/rng";
-import type { Player, Position, TransferRecord, PlayerMatchRating } from "@/engine/core/types";
+import type {
+  TransferRecord,
+  TransferOutcome,
+  TransferOutcomeReason,
+  ConvictionLevel,
+  Player,
+  InboxMessage,
+} from "@/engine/core/types";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-/** Seasons required before an outcome can be classified as anything but tooEarly. */
-const MIN_SEASONS_FOR_OUTCOME = 2;
-
-/** Rating thresholds for outcome classification. */
-const RATING_THRESHOLDS = {
-  HIT: 70,
-  FLOP: 40,
-} as const;
+/**
+ * Minimum seasons after a transfer before an outcome is classified.
+ * Players need time to adapt; classifying too early would be unfair.
+ */
+const MIN_SEASONS_FOR_CLASSIFICATION = 2;
 
 /**
- * Typical season appearance ranges by position.
- * First-team regulars appear 25–38 times; fringe players 8–24.
- * These are baseline ranges before CA-relative modifiers.
+ * CA gain threshold to classify as a "hit" (player improved significantly).
  */
-const BASE_APPEARANCE_RANGE: Record<Position, [number, number]> = {
-  GK:  [20, 38],
-  CB:  [22, 38],
-  LB:  [20, 36],
-  RB:  [20, 36],
-  CDM: [22, 36],
-  CM:  [20, 34],
-  CAM: [18, 34],
-  LW:  [18, 34],
-  RW:  [18, 34],
-  ST:  [18, 34],
-} as const;
+const HIT_CA_GAIN_THRESHOLD = 10;
 
 /**
- * Goals-per-appearance probability ranges by position.
- * Defenders / keepers rarely score; forwards score frequently.
- * Values are (goalsPerApp) — multiplied by appearances to give season total.
+ * CA loss threshold to classify as a "flop" (player regressed or stagnated).
  */
-const GOALS_PER_APPEARANCE: Record<Position, [number, number]> = {
-  GK:  [0.00, 0.01],
-  CB:  [0.01, 0.05],
-  LB:  [0.01, 0.06],
-  RB:  [0.01, 0.06],
-  CDM: [0.02, 0.08],
-  CM:  [0.04, 0.14],
-  CAM: [0.08, 0.22],
-  LW:  [0.12, 0.32],
-  RW:  [0.12, 0.32],
-  ST:  [0.20, 0.55],
-} as const;
+const FLOP_CA_CHANGE_THRESHOLD = -5;
 
 /**
- * Assists-per-appearance probability ranges by position.
+ * Appearance threshold below which a player is considered to have had
+ * "low appearances" — suggests tactical mismatch or character issues.
  */
-const ASSISTS_PER_APPEARANCE: Record<Position, [number, number]> = {
-  GK:  [0.00, 0.01],
-  CB:  [0.01, 0.04],
-  LB:  [0.03, 0.12],
-  RB:  [0.03, 0.12],
-  CDM: [0.03, 0.10],
-  CM:  [0.05, 0.18],
-  CAM: [0.10, 0.28],
-  LW:  [0.08, 0.22],
-  RW:  [0.08, 0.22],
-  ST:  [0.04, 0.14],
-} as const;
+const LOW_APPEARANCES_THRESHOLD = 15;
+
+/**
+ * Scout accountability reputation deltas.
+ * Keyed by conviction level, then outcome.
+ */
+const ACCOUNTABILITY_DELTAS: Record<
+  ConvictionLevel,
+  Partial<Record<TransferOutcome, number>>
+> = {
+  tablePound: { hit: 8, flop: -5 },
+  strongRecommend: { hit: 5, flop: -3 },
+  recommend: { hit: 3 },
+  note: {},
+};
 
 // =============================================================================
-// HELPERS
+// 1. createTransferRecord
 // =============================================================================
 
-/** Bound a number within [min, max]. */
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+/**
+ * Create a new TransferRecord when a player the scout reported on is transferred.
+ *
+ * @param rng             Seeded RNG instance for generating unique IDs.
+ * @param playerId        The player being transferred.
+ * @param scoutId         The scout who recommended the player.
+ * @param fromClubId      Source club.
+ * @param toClubId        Destination club.
+ * @param fee             Transfer fee.
+ * @param week            Week the transfer occurred.
+ * @param season          Season the transfer occurred.
+ * @param conviction      Conviction level from the scout's report.
+ * @param reportId        The report that led to the transfer.
+ * @param playerCA        Player's current ability at time of transfer.
+ */
+export function createTransferRecord(
+  rng: RNG,
+  playerId: string,
+  scoutId: string,
+  fromClubId: string,
+  toClubId: string,
+  fee: number,
+  week: number,
+  season: number,
+  conviction: ConvictionLevel,
+  reportId: string,
+  playerCA: number,
+): TransferRecord {
+  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let suffix = "";
+  for (let i = 0; i < 8; i++) {
+    suffix += chars[rng.nextInt(0, chars.length - 1)];
+  }
+
+  return {
+    id: `tr_${playerId}_${suffix}`,
+    playerId,
+    scoutId,
+    fromClubId,
+    toClubId,
+    fee,
+    transferWeek: week,
+    transferSeason: season,
+    scoutConviction: conviction,
+    reportId,
+    caAtTransfer: playerCA,
+    currentCA: playerCA,
+    seasonsSinceTransfer: 0,
+    appearances: undefined,
+    outcome: undefined,
+    outcomeReason: undefined,
+    accountabilityApplied: false,
+  };
 }
 
-/**
- * Compute the average current ability of all players currently at a club.
- * Returns 100 as neutral default when squad is empty.
- */
-function squadAverageCA(
-  clubId: string,
-  players: Record<string, Player>,
-): number {
-  const squad = Object.values(players).filter((p) => p.clubId === clubId);
-  if (squad.length === 0) return 100;
-  const total = squad.reduce((sum, p) => sum + p.currentAbility, 0);
-  return total / squad.length;
-}
+// =============================================================================
+// 2. generateSeasonSnapshot — update records with current player data
+// =============================================================================
 
 /**
- * Generate a seasonal performance snapshot for a player at their current club.
+ * Simulated appearance count for a player over a season.
+ * Based on injury weeks and form — healthy, in-form players get more appearances.
  *
- * Rating is computed as:
- *   base = (player.currentAbility / 200) * 100   — pure CA-based floor
- *   CA ratio bonus: if CA > squadAvg → +5; if CA < squadAvg * 0.8 → −10
- *   form modifier: player.form in [-3, 3] → each unit adds ±3 to rating
- *   gaussian noise: ±8 std-dev to simulate season variance
- *
- * Appearances are randomised within position-appropriate ranges, compressed
- * downward when the player is significantly below squad average CA (a weaker
- * player will spend more time on the bench or loaned out).
+ * A full season of 38 match weeks with no injuries ≈ 30–38 appearances.
+ * Injuries and poor form reduce this significantly.
  */
-function generateSeasonSnapshot(
+function simulateAppearances(
   rng: RNG,
   player: Player,
-  clubId: string,
-  allPlayers: Record<string, Player>,
-  season: number,
-  playerMatchRatings?: PlayerMatchRating[],
-): TransferRecord["seasonPerformance"][number] {
-  // When ≥5 real match ratings exist, use them instead of synthetic generation
-  if (playerMatchRatings && playerMatchRatings.length >= 5) {
-    const avgMatchRating =
-      playerMatchRatings.reduce((s, r) => s + r.rating, 0) / playerMatchRatings.length;
-    // Map 1-10 scale → 0-100
-    const rating = clamp(Math.round(((avgMatchRating - 1) / 9) * 100), 0, 100);
-    const appearances = playerMatchRatings.length;
-    let goals = 0;
-    let assists = 0;
-    for (const r of playerMatchRatings) {
-      goals += r.stats.goals ?? 0;
-      assists += r.stats.assists ?? 0;
-    }
-    return { season, rating, appearances, goals, assists, avgMatchRating };
-  }
+  seasonsSinceTransfer: number,
+): number {
+  // Base appearances for a full season
+  const BASE_APPEARANCES = 30;
 
-  const sqAvg = squadAverageCA(clubId, allPlayers);
+  // Injury penalty: if currently injured, appearances drop significantly
+  const injuryPenalty = player.injured
+    ? Math.min(BASE_APPEARANCES, player.injuryWeeksRemaining * 2)
+    : 0;
 
-  // Base rating from CA
-  let rating = (player.currentAbility / 200) * 100;
+  // Form modifier: form ranges [-3, 3]; negative form reduces appearances
+  const formModifier = Math.max(-8, Math.min(5, player.form * 2));
 
-  // CA relative to squad
-  if (player.currentAbility > sqAvg) {
-    rating += 5;
-  } else if (player.currentAbility < sqAvg * 0.8) {
-    rating -= 10;
-  }
+  // First-season adjustment: new signings may take time to integrate
+  const adaptationPenalty = seasonsSinceTransfer === 1 ? rng.nextInt(3, 8) : 0;
 
-  // Form modifier
-  rating += player.form * 3;
+  // Professionalism affects consistency of selection
+  const profBonus = Math.max(0, (player.attributes.professionalism - 10) / 2);
 
-  // Gaussian noise (season variance)
-  rating += rng.gaussian(0, 8);
+  const appearances = Math.round(
+    BASE_APPEARANCES - injuryPenalty + formModifier - adaptationPenalty + profBonus,
+  );
 
-  rating = clamp(Math.round(rating), 0, 100);
-
-  // Appearances — scale by how well the player fits the squad quality
-  const [appMin, appMax] = BASE_APPEARANCE_RANGE[player.position];
-  let appearances = rng.nextInt(appMin, appMax);
-
-  // Below-average players get fewer appearances
-  if (player.currentAbility < sqAvg * 0.8) {
-    appearances = Math.round(appearances * 0.6);
-  } else if (player.currentAbility < sqAvg) {
-    appearances = Math.round(appearances * 0.85);
-  }
-
-  appearances = clamp(appearances, 0, 38);
-
-  // Goals and assists based on position-specific rates
-  const [gpaMin, gpaMax] = GOALS_PER_APPEARANCE[player.position];
-  const [apaMin, apaMax] = ASSISTS_PER_APPEARANCE[player.position];
-
-  const goalsPerApp = rng.nextFloat(gpaMin, gpaMax);
-  const assistsPerApp = rng.nextFloat(apaMin, apaMax);
-
-  // Scale by a quality factor: higher CA relative to position average → better output
-  const qualityFactor = clamp(player.currentAbility / (sqAvg || 100), 0.4, 1.8);
-  const goals = Math.round(appearances * goalsPerApp * qualityFactor);
-  const assists = Math.round(appearances * assistsPerApp * qualityFactor);
-
-  return { season, rating, appearances, goals, assists };
+  return Math.max(0, Math.min(38, appearances));
 }
 
 /**
- * Classify a transfer outcome based on accumulated season performance.
+ * Update all transfer records with end-of-season data.
+ * Increments seasonsSinceTransfer, updates CA and appearances, and
+ * classifies outcome when enough data exists.
  *
- * Rules:
- *  - "tooEarly" if fewer than MIN_SEASONS_FOR_OUTCOME snapshots exist.
- *  - "hit"    if average rating >= 70.
- *  - "flop"   if average rating <  40.
- *  - "decent" otherwise (40–70).
- */
-function classifyOutcome(
-  snapshots: TransferRecord["seasonPerformance"],
-): TransferRecord["outcome"] {
-  if (snapshots.length < MIN_SEASONS_FOR_OUTCOME) return "tooEarly";
-
-  const avgRating =
-    snapshots.reduce((sum, s) => sum + s.rating, 0) / snapshots.length;
-
-  if (avgRating >= RATING_THRESHOLDS.HIT) return "hit";
-  if (avgRating < RATING_THRESHOLDS.FLOP) return "flop";
-  return "decent";
-}
-
-// =============================================================================
-// PUBLIC API
-// =============================================================================
-
-/**
- * Update transfer records for the current season.
- *
- * For each active record (outcome === "tooEarly" or undefined):
- *  1. Check the player still exists in the world.  If not, leave the record
- *     unchanged (player may have retired or moved outside the tracked pool).
- *  2. Generate a seasonal performance snapshot using RNG.
- *  3. Append the snapshot to seasonPerformance.
- *  4. Re-classify the outcome based on all accumulated snapshots.
- *
- * Records already classified as "hit", "flop", or "decent" are not
- * re-processed unless the caller opts in by removing the outcome field before
- * passing — this keeps the function idempotent per season.
- *
- * @param rng           - Seeded PRNG instance.
- * @param records       - All existing transfer records.
- * @param players       - All players in the game world.
- * @param currentSeason - The season year being processed.
+ * Returns updated records — input is not mutated.
  */
 export function updateTransferRecords(
   rng: RNG,
   records: TransferRecord[],
   players: Record<string, Player>,
-  currentSeason: number,
-  matchRatings?: Record<string, Record<string, PlayerMatchRating>>,
 ): TransferRecord[] {
   return records.map((record) => {
-    // Skip records that have already been fully classified and processed
-    // (caller can clear outcome to force reprocessing)
-    if (record.outcome === "hit" || record.outcome === "flop" || record.outcome === "decent") {
-      return record;
-    }
-
     const player = players[record.playerId];
+    if (!player) return record;
 
-    if (!player) {
-      // Player no longer in world — retain record as-is for historical display
-      return record;
-    }
+    const newSeasonsSince = record.seasonsSinceTransfer + 1;
+    const newAppearances = simulateAppearances(rng, player, newSeasonsSince);
 
-    // Check if a snapshot for this season already exists (idempotency guard)
-    const alreadySnapped = record.seasonPerformance.some(
-      (s) => s.season === currentSeason,
-    );
-    if (alreadySnapped) {
-      return record;
-    }
+    // Accumulate appearances across seasons
+    const totalAppearances = (record.appearances ?? 0) + newAppearances;
 
-    // Collect real match ratings for this player from all fixtures this season
-    let playerMatchRatings: PlayerMatchRating[] | undefined;
-    if (matchRatings) {
-      const collected: PlayerMatchRating[] = [];
-      for (const fixtureRatings of Object.values(matchRatings)) {
-        const r = fixtureRatings[record.playerId];
-        if (r) collected.push(r);
-      }
-      if (collected.length > 0) playerMatchRatings = collected;
-    }
-
-    // Generate a fresh seasonal snapshot (uses real data when ≥5 ratings exist)
-    const snapshot = generateSeasonSnapshot(
-      rng,
-      player,
-      record.toClubId,
-      players,
-      currentSeason,
-      playerMatchRatings,
-    );
-
-    const updatedPerformance = [...record.seasonPerformance, snapshot];
-    const outcome = classifyOutcome(updatedPerformance);
-
-    return {
+    let updated: TransferRecord = {
       ...record,
-      seasonPerformance: updatedPerformance,
-      outcome,
+      currentCA: player.currentAbility,
+      seasonsSinceTransfer: newSeasonsSince,
+      appearances: totalAppearances,
     };
+
+    // Classify outcome once we have enough data and outcome is not yet set
+    if (
+      newSeasonsSince >= MIN_SEASONS_FOR_CLASSIFICATION &&
+      updated.outcome === undefined
+    ) {
+      const classified = classifyOutcome(rng, updated, player);
+      updated = { ...updated, ...classified };
+    }
+
+    return updated;
   });
 }
 
+// =============================================================================
+// 3. classifyOutcome — determine hit/decent/flop and narrative reason
+// =============================================================================
+
 /**
- * Calculate aggregate hit-rate statistics for a scout's transfer record history.
+ * Classify a transfer outcome and determine the narrative reason.
  *
- * Only records with a resolved outcome (not "tooEarly") are counted in the
- * totals; records that are "tooEarly" are still included in the `total` count
- * so the caller can display pending / early-stage records.
+ * Classification logic:
+ *  - Hit:    CA increased by >= HIT_CA_GAIN_THRESHOLD since transfer
+ *  - Flop:   CA decreased by >= |FLOP_CA_CHANGE_THRESHOLD| since transfer
+ *  - Decent: Everything in between
  *
- * @param records - Transfer records to aggregate.
+ * Reason logic depends on outcome and contextual factors:
+ *  - Flop + low appearances → "tacticalMismatch" or "characterIssues"
+ *  - Flop + player injured  → "injury"
+ *  - Flop + decent appearances but low rating → "overrated"
+ *  - Hit + high rating → "perfectFit" or "exceededExpectations"
+ *  - Decent + improving trend → "slowAdaptation" or "lateBloom"
  */
-export function calculateScoutHitRate(
-  records: TransferRecord[],
-): { total: number; hits: number; flops: number; rate: number } {
-  const total = records.length;
-  const hits = records.filter((r) => r.outcome === "hit").length;
-  const flops = records.filter((r) => r.outcome === "flop").length;
+export function classifyOutcome(
+  rng: RNG,
+  record: TransferRecord,
+  player: Player,
+): { outcome: TransferOutcome; outcomeReason: TransferOutcomeReason } {
+  const caChange = (record.currentCA ?? player.currentAbility) - record.caAtTransfer;
+  const appearances = record.appearances ?? 0;
 
-  // Rate = hits / resolved records (exclude tooEarly and undefined)
-  const resolved = records.filter(
-    (r) => r.outcome === "hit" || r.outcome === "flop" || r.outcome === "decent",
-  ).length;
+  // Determine outcome classification
+  let outcome: TransferOutcome;
+  if (caChange >= HIT_CA_GAIN_THRESHOLD) {
+    outcome = "hit";
+  } else if (caChange <= FLOP_CA_CHANGE_THRESHOLD) {
+    outcome = "flop";
+  } else {
+    outcome = "decent";
+  }
 
-  const rate = resolved === 0 ? 0 : Math.round((hits / resolved) * 100);
+  // Determine narrative reason
+  let outcomeReason: TransferOutcomeReason;
 
-  return { total, hits, flops, rate };
+  if (outcome === "flop") {
+    if (player.injured || player.injuryWeeksRemaining > 0) {
+      // Player has injury history — that's the primary reason
+      outcomeReason = "injury";
+    } else if (appearances < LOW_APPEARANCES_THRESHOLD * record.seasonsSinceTransfer) {
+      // Low appearances suggests the player didn't fit
+      outcomeReason = rng.chance(0.5) ? "tacticalMismatch" : "characterIssues";
+    } else {
+      // Had appearances but performed poorly — simply overrated
+      outcomeReason = "overrated";
+    }
+  } else if (outcome === "hit") {
+    // High-performing transfer
+    if (caChange >= HIT_CA_GAIN_THRESHOLD * 2) {
+      outcomeReason = "exceededExpectations";
+    } else {
+      outcomeReason = rng.chance(0.6) ? "perfectFit" : "exceededExpectations";
+    }
+  } else {
+    // Decent outcome — check if the trend is improving
+    if (caChange > 0) {
+      outcomeReason = rng.chance(0.5) ? "slowAdaptation" : "lateBloom";
+    } else {
+      // Stagnated or slight decline, but not a flop
+      outcomeReason = rng.chance(0.5) ? "slowAdaptation" : "tacticalMismatch";
+    }
+  }
+
+  return { outcome, outcomeReason };
 }
+
+// =============================================================================
+// 4. applyScoutAccountability
+// =============================================================================
+
+/**
+ * Apply scout accountability for classified transfer outcomes.
+ * Returns the reputation delta and any inbox messages to generate.
+ *
+ * Rules:
+ *  - tablePound + flop:   reputation -5
+ *  - tablePound + hit:    reputation +8
+ *  - strongRecommend + flop: reputation -3
+ *  - strongRecommend + hit:  reputation +5
+ *  - recommend + hit:     reputation +3
+ *
+ * Generates an inbox message describing the outcome and its effect on reputation.
+ */
+export function applyScoutAccountability(
+  records: TransferRecord[],
+  players: Record<string, Player>,
+  clubs: Record<string, { name: string; shortName: string }>,
+  currentWeek: number,
+  currentSeason: number,
+): {
+  updatedRecords: TransferRecord[];
+  reputationDelta: number;
+  messages: InboxMessage[];
+} {
+  let reputationDelta = 0;
+  const messages: InboxMessage[] = [];
+
+  const updatedRecords = records.map((record) => {
+    // Only process records that have an outcome but accountability not yet applied
+    if (!record.outcome || record.accountabilityApplied) return record;
+
+    const delta =
+      ACCOUNTABILITY_DELTAS[record.scoutConviction]?.[record.outcome] ?? 0;
+
+    if (delta === 0) {
+      // No accountability impact — just mark as applied
+      return { ...record, accountabilityApplied: true };
+    }
+
+    reputationDelta += delta;
+
+    // Build inbox message
+    const player = players[record.playerId];
+    const toClub = clubs[record.toClubId];
+    const playerName = player
+      ? `${player.firstName} ${player.lastName}`
+      : "Unknown Player";
+    const clubName = toClub?.name ?? "Unknown Club";
+
+    const reasonLabel = OUTCOME_REASON_LABELS[record.outcomeReason ?? "overrated"];
+    const isPositive = delta > 0;
+
+    messages.push({
+      id: `accountability_${record.id}_s${currentSeason}w${currentWeek}`,
+      week: currentWeek,
+      season: currentSeason,
+      type: "feedback",
+      title: `Transfer Outcome: ${playerName}`,
+      body:
+        `Your recommendation of ${playerName} to ${clubName} has been classified as a ${record.outcome}. ` +
+        `${reasonLabel}. ` +
+        `Your reputation has ${isPositive ? "increased" : "decreased"} by ${Math.abs(delta)}.`,
+      read: false,
+      actionRequired: false,
+      relatedId: record.playerId,
+    });
+
+    return { ...record, accountabilityApplied: true };
+  });
+
+  return { updatedRecords, reputationDelta, messages };
+}
+
+// =============================================================================
+// 5. linkReportsToTransfers
+// =============================================================================
+
+/**
+ * Check whether any of the transfers this week match reports the scout has
+ * submitted. If a transferred player has a scout report with conviction
+ * "recommend" or higher and clubResponse "signed", create a TransferRecord.
+ *
+ * This function links the scout's reports to actual transfer activity so
+ * that accountability can be tracked.
+ */
+export function linkReportsToTransfers(
+  rng: RNG,
+  transfers: Array<{
+    playerId: string;
+    fromClubId: string;
+    toClubId: string;
+    fee: number;
+  }>,
+  reports: Record<string, { playerId: string; scoutId: string; conviction: ConvictionLevel; clubResponse?: string; id: string }>,
+  players: Record<string, Player>,
+  scoutId: string,
+  currentWeek: number,
+  currentSeason: number,
+  existingRecordPlayerIds: Set<string>,
+): TransferRecord[] {
+  const newRecords: TransferRecord[] = [];
+
+  for (const transfer of transfers) {
+    // Skip if we already have a record for this player
+    if (existingRecordPlayerIds.has(transfer.playerId)) continue;
+
+    // Find a matching scout report for this player
+    const matchingReport = Object.values(reports).find(
+      (r) =>
+        r.playerId === transfer.playerId &&
+        r.scoutId === scoutId &&
+        r.conviction !== "note" &&
+        (r.clubResponse === "signed" || r.clubResponse === "shortlisted" || r.clubResponse === undefined),
+    );
+
+    if (!matchingReport) continue;
+
+    const player = players[transfer.playerId];
+    if (!player) continue;
+
+    newRecords.push(
+      createTransferRecord(
+        rng,
+        transfer.playerId,
+        scoutId,
+        transfer.fromClubId,
+        transfer.toClubId,
+        transfer.fee,
+        currentWeek,
+        currentSeason,
+        matchingReport.conviction,
+        matchingReport.id,
+        player.currentAbility,
+      ),
+    );
+  }
+
+  return newRecords;
+}
+
+// =============================================================================
+// DISPLAY HELPERS
+// =============================================================================
+
+/**
+ * Human-readable labels for outcome reasons.
+ */
+export const OUTCOME_REASON_LABELS: Record<TransferOutcomeReason, string> = {
+  injury: "Persistent injuries prevented the player from establishing themselves",
+  tacticalMismatch: "The player did not fit the club's tactical system",
+  characterIssues: "Off-field character issues hindered their adaptation",
+  overrated: "The player's ability was overestimated in the scouting report",
+  perfectFit: "The player was a perfect fit for the club's system and culture",
+  exceededExpectations: "The player exceeded all expectations and developed rapidly",
+  slowAdaptation: "The player needed time to adapt but is showing steady improvement",
+  lateBloom: "A late bloomer who is now beginning to fulfil their potential",
+};
+
+/**
+ * Badge color class for each outcome.
+ */
+export const OUTCOME_COLORS: Record<TransferOutcome, string> = {
+  hit: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+  decent: "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  flop: "bg-red-500/20 text-red-400 border-red-500/30",
+};
+
+/**
+ * Badge color class for each outcome reason.
+ */
+export const OUTCOME_REASON_COLORS: Record<TransferOutcomeReason, string> = {
+  injury: "bg-red-500/10 text-red-300 border-red-500/20",
+  tacticalMismatch: "bg-orange-500/10 text-orange-300 border-orange-500/20",
+  characterIssues: "bg-rose-500/10 text-rose-300 border-rose-500/20",
+  overrated: "bg-red-500/10 text-red-400 border-red-500/20",
+  perfectFit: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+  exceededExpectations: "bg-cyan-500/10 text-cyan-300 border-cyan-500/20",
+  slowAdaptation: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+  lateBloom: "bg-blue-500/10 text-blue-300 border-blue-500/20",
+};
+
+/**
+ * Short labels for outcome reasons, suitable for badge text.
+ */
+export const OUTCOME_REASON_SHORT_LABELS: Record<TransferOutcomeReason, string> = {
+  injury: "Injury",
+  tacticalMismatch: "Tactical Mismatch",
+  characterIssues: "Character Issues",
+  overrated: "Overrated",
+  perfectFit: "Perfect Fit",
+  exceededExpectations: "Exceeded Expectations",
+  slowAdaptation: "Slow Adaptation",
+  lateBloom: "Late Bloom",
+};

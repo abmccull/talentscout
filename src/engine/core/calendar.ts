@@ -24,6 +24,8 @@ import type {
   Player,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import { rollActivityQuality } from "@/engine/core/activityQuality";
+import { calculateAccumulation } from "@/engine/insight/insight";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -117,6 +119,8 @@ export interface WeekProcessingResult {
   followUpSessionsExecuted: number;
   /** Number of parent/coach meetings held this week */
   parentCoachMeetingsExecuted: number;
+  /** Total Insight Points earned from all activities performed this week */
+  insightPointsEarned: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -912,6 +916,63 @@ export function getAvailableActivities(
   return activities;
 }
 
+// ---------------------------------------------------------------------------
+// Insight Point helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps an activity type to its Insight Point accumulation source.
+ * Returns null for activities that generate no IP (rest, travel, study).
+ */
+function getInsightSource(
+  activityType: ActivityType,
+): "observation" | "report" | "assignment" | null {
+  switch (activityType) {
+    case "attendMatch":
+    case "watchVideo":
+    case "trainingVisit":
+    case "reserveMatch":
+    case "trialMatch":
+    case "scoutingMission":
+    case "schoolMatch":
+    case "grassrootsTournament":
+    case "streetFootball":
+    case "academyTrialDay":
+    case "youthFestival":
+    case "followUpSession":
+    case "parentCoachMeeting":
+    case "databaseQuery":
+    case "deepVideoAnalysis":
+    case "algorithmCalibration":
+    case "marketInefficiency":
+    case "oppositionAnalysis":
+    case "agentShowcase":
+    case "academyVisit":
+    case "youthTournament":
+    case "statsBriefing":
+    case "dataConference":
+    case "contractNegotiation":
+    case "networkMeeting":
+    case "analyticsTeamMeeting":
+      return "observation";
+    case "writeReport":
+    case "writePlacementReport":
+      return "report";
+    case "assignTerritory":
+    case "managerMeeting":
+    case "boardPresentation":
+    case "reviewNPCReport":
+      return "assignment";
+    case "rest":
+    case "travel":
+    case "study":
+    case "internationalTravel":
+      return null;
+    default:
+      return null;
+  }
+}
+
 /**
  * Process a completed week's schedule, returning the effects on the scout.
  *
@@ -968,6 +1029,7 @@ export function processCompletedWeek(
       youthFestivalsExecuted: 0,
       followUpSessionsExecuted: 0,
       parentCoachMeetingsExecuted: 0,
+      insightPointsEarned: 0,
     };
   }
 
@@ -1016,6 +1078,9 @@ export function processCompletedWeek(
   let youthFestivalsExecuted = 0;
   let followUpSessionsExecuted = 0;
   let parentCoachMeetingsExecuted = 0;
+
+  // Insight Points
+  let totalInsightPoints = 0;
 
   const endurance = scout.attributes.endurance; // 1–20
 
@@ -1184,6 +1249,14 @@ export function processCompletedWeek(
       default:
         break;
     }
+
+    // Accumulate Insight Points for this activity
+    const ipSource = getInsightSource(activity.type);
+    if (ipSource) {
+      const qualityResult = rollActivityQuality(rng, activity.type, scout);
+      const ipResult = calculateAccumulation(ipSource, qualityResult.tier, scout);
+      totalInsightPoints += ipResult.totalEarned;
+    }
   }
 
   // High fatigue suppresses skill XP gains (bad conditions, tired scouts).
@@ -1237,6 +1310,7 @@ export function processCompletedWeek(
     youthFestivalsExecuted,
     followUpSessionsExecuted,
     parentCoachMeetingsExecuted,
+    insightPointsEarned: totalInsightPoints,
   };
 }
 

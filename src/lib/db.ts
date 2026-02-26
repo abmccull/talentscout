@@ -172,6 +172,9 @@ export function migrateSaveState(raw: unknown): GameState {
   // Interactive match tracking — fixture IDs played via MatchScreen
   if (!state.playedFixtures) state.playedFixtures = [];
 
+  // Interactive observation sessions — activity instance IDs completed via ObservationScreen
+  if (!state.completedInteractiveSessions) state.completedInteractiveSessions = [];
+
   // Watchlist — player bookmarks
   if (!state.watchlist) state.watchlist = [];
 

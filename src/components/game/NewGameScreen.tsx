@@ -4,7 +4,8 @@ import { useState, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import type { Specialization, NewGameConfig, ScoutSkill } from "@/engine/core/types";
+import type { Specialization, NewGameConfig, ScoutSkill, DifficultyLevel } from "@/engine/core/types";
+import { DIFFICULTY_DESCRIPTIONS } from "@/engine/core/difficulty";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
 import { IS_DEMO, DEMO_ALLOWED_SPECS } from "@/lib/demo";
 import {
@@ -123,6 +124,26 @@ const SPECIALIZATIONS: {
     keyStrength: "Data Literacy — the best at interpreting statistics and spotting anomalies",
   },
 ];
+
+/** Income focus descriptions per spec, shown during specialization selection. */
+const SPEC_INCOME_INFO: Record<Specialization, { focus: string; tier3: string }> = {
+  youth: {
+    focus: "Placement Fees +50% | Report Sales -25%",
+    tier3: "Academy Advisory partnerships (500/mo each)",
+  },
+  firstTeam: {
+    focus: "Transfer Bonuses +50% | Placement Fees -25%",
+    tier3: "Transfer Window Bonus (2% of transfer fees)",
+  },
+  regional: {
+    focus: "Report Sales +50% | Transfer Bonuses -25%",
+    tier3: "Regional Expertise Fee (300/mo)",
+  },
+  data: {
+    focus: "Consulting Fees +50% | Placement Fees -25%",
+    tier3: "Predictive Reports (2x price + consulting)",
+  },
+};
 
 const NATIONALITY_OPTIONS: string[] = [
   "English",
@@ -375,7 +396,7 @@ export function NewGameScreen() {
 
   // World settings
   const [seed, setSeed] = useState(() => Math.random().toString(36).substring(2, 10));
-  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>("normal");
 
   const totalClubs = COUNTRY_OPTIONS
     .filter((c) => selectedCountries.includes(c.key))
@@ -886,6 +907,13 @@ export function NewGameScreen() {
                                 <span className="text-emerald-300">{spec.keyStrength}</span>
                               </p>
                             </div>
+                            <div className="rounded-md border border-[var(--border)] bg-[var(--muted)] p-2">
+                              <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-1">
+                                Income Focus
+                              </p>
+                              <p className="text-xs text-emerald-400">{SPEC_INCOME_INFO[spec.id].focus}</p>
+                              <p className="text-[10px] text-blue-400 mt-0.5">Tier 3: {SPEC_INCOME_INFO[spec.id].tier3}</p>
+                            </div>
                           </div>
                         )}
 
@@ -1228,38 +1256,41 @@ export function NewGameScreen() {
                     </div>
                   </div>
 
-                  {/* World seed + difficulty */}
-                  <div className="mt-6 grid grid-cols-2 gap-4">
-                    <div>
-                      <label htmlFor="world-seed" className="mb-1 block text-sm text-zinc-400">World Seed</label>
-                      <input
-                        id="world-seed"
-                        type="text"
-                        value={seed}
-                        onChange={(e) => setSeed(e.target.value)}
-                        className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                      />
-                      <p className="mt-1 text-xs text-zinc-500">Same seed = same world. Share with friends.</p>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm text-zinc-400">Difficulty</label>
-                      <div className="flex gap-2">
-                        {(["easy", "normal", "hard"] as const).map((d) => (
+                  {/* Difficulty */}
+                  <div className="mt-6 mb-6">
+                    <p className="mb-2 text-sm font-semibold text-zinc-300">Difficulty</p>
+                    <div className="grid grid-cols-2 gap-4">
+                      {(["casual", "normal", "hard", "ironman"] as const).map((d) => {
+                        const info = DIFFICULTY_DESCRIPTIONS[d];
+                        return (
                           <button
                             key={d}
                             onClick={() => setDifficulty(d)}
-                            aria-pressed={difficulty === d}
-                            className={`cursor-pointer flex-1 rounded-md border px-3 py-2 text-sm capitalize transition ${
+                            className={`cursor-pointer rounded-lg border p-4 text-left transition ${
                               difficulty === d
-                                ? "border-emerald-500 bg-emerald-500/10 text-white"
-                                : "border-[var(--border)] text-zinc-400 hover:text-white"
+                                ? "border-emerald-500 bg-emerald-500/10"
+                                : "border-[var(--border)] hover:border-zinc-600"
                             }`}
                           >
-                            {d}
+                            <h3 className="mb-1 font-semibold text-white">{info.name}</h3>
+                            <p className="text-sm text-zinc-400">{info.description}</p>
                           </button>
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
+                  </div>
+
+                  {/* World seed */}
+                  <div>
+                    <label htmlFor="world-seed" className="mb-1 block text-sm text-zinc-400">World Seed</label>
+                    <input
+                      id="world-seed"
+                      type="text"
+                      value={seed}
+                      onChange={(e) => setSeed(e.target.value)}
+                      className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                    />
+                    <p className="mt-1 text-xs text-zinc-500">Same seed = same world. Share with friends.</p>
                   </div>
                 </CardContent>
               </Card>

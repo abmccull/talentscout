@@ -304,6 +304,32 @@ const agentDeceptionTemplate: EventTemplate = {
   choices: undefined,
 };
 
+/**
+ * rivalPoachBid — generated when a rival completes a signing of a player
+ * the scout has already reported on. The scout can counter-bid or concede.
+ * Note: this template is NOT included in the random event pool (EVENT_TEMPLATES)
+ * because it is generated deterministically by the rival system, not by the
+ * weekly random event roll.
+ */
+export const rivalPoachBidTemplate: EventTemplate = {
+  type: "rivalPoachBid",
+  titleTemplate: "Rival Poach Alert",
+  descriptionTemplate: (ctx) => {
+    const player = ctx.playerName ?? "a player you reported on";
+    const rival = ctx.rivalName ?? "A rival scout";
+    return (
+      `${rival} has signed ${player} — a player you previously reported on. ` +
+      `You can counter-bid or let them go. A counter-bid costs 50% more than ` +
+      `market value and has a limited chance of success based on your reputation.`
+    );
+  },
+  prerequisites: (state) => Object.keys(state.reports).length > 0,
+  choices: [
+    { label: "Counter-Bid", effect: "counterBid" },
+    { label: "Concede", effect: "concede" },
+  ],
+};
+
 // =============================================================================
 // Template definitions — Scout Personal Life (6 new)
 // =============================================================================
@@ -1016,6 +1042,7 @@ export function buildEventContext(
 
   switch (type) {
     case "rivalPoach":
+    case "rivalPoachBid":
       return {
         playerName: firstReportPlayerName(state),
         rivalName,
@@ -1290,6 +1317,7 @@ export function extractRelatedIds(
 
   switch (type) {
     case "rivalPoach":
+    case "rivalPoachBid":
     case "debutHatTrick":
     case "playerHomesick":
     case "playerControversy":

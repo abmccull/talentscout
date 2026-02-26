@@ -9,6 +9,7 @@ import { NewGameScreen } from "@/components/game/NewGameScreen";
 import { Dashboard } from "@/components/game/Dashboard";
 import { CalendarScreen } from "@/components/game/CalendarScreen";
 import { MatchScreen } from "@/components/game/MatchScreen";
+import { ObservationScreen } from "@/components/game/ObservationScreen";
 import { PlayerProfile } from "@/components/game/PlayerProfile";
 import { PlayerDatabase } from "@/components/game/PlayerDatabase";
 import { ReportWriter } from "@/components/game/ReportWriter";
@@ -40,6 +41,7 @@ import { RivalsScreen } from "@/components/game/RivalsScreen";
 import { ReportComparison } from "@/components/game/ReportComparison";
 import { NegotiationScreen } from "@/components/game/NegotiationScreen";
 import { SeasonAwardsScreen } from "@/components/game/SeasonAwardsScreen";
+import { ScoutPerformanceDashboard } from "@/components/game/ScoutPerformanceDashboard";
 import { AchievementToast } from "@/components/game/AchievementToast";
 import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
@@ -86,6 +88,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <CalendarScreen />;
     case "match":
       return <MatchScreen />;
+    case "observation":
+      return <ObservationScreen />;
     case "matchSummary":
       return <MatchSummaryScreen />;
     case "playerProfile":
@@ -148,6 +152,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <NegotiationScreen />;
     case "seasonAwards":
       return <SeasonAwardsScreen />;
+    case "performance":
+      return <ScoutPerformanceDashboard />;
     default:
       return <MainMenu />;
   }

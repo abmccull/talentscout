@@ -141,6 +141,8 @@ export function perceiveAttribute(
   context: ObservationContext,
   /** Scout fatigue (0–100). Values above 50 widen the error range. */
   scoutFatigue = 0,
+  /** Breakthrough bonus from diverse contexts / focused lenses. Applied on top of the plateau. */
+  breakthroughBonus = 0,
 ): { perceivedValue: number; confidence: number } {
   const skill = Math.max(1, Math.min(20, scoutSkill));
   const obsCount = Math.max(1, observationCount);
@@ -161,16 +163,99 @@ export function perceiveAttribute(
   const rawPerceived = rng.gaussian(trueValue + formBias, stddev);
   const perceivedValue = Math.min(20, Math.max(1, Math.round(rawPerceived)));
 
-  // Confidence 0–1
-  const rawConfidence =
-    (skill / 20) * 0.5 +
-    Math.min(0.35, (1 - 1 / Math.sqrt(obsCount)) * 0.35) +
-    contextDiversity * 0.1 +
-    (context === "trainingGround" ? 0.05 : context === "videoAnalysis" ? -0.05 : 0);
+  // ── Confidence 0–1 (with revelation plateau at 0.65) ──────────────
+  //
+  // The base confidence uses a logarithmic curve that plateaus at 0.65:
+  //   baseConfidence = min(0.65, 0.30 + 0.15 * ln(obsCount + 1))
+  //
+  // Skill still matters: it scales the observation-based component.
+  // A skill-20 scout reaches the plateau faster than a skill-5 scout.
+  //
+  // To break through the 0.65 plateau, scouts need diverse observation
+  // contexts and/or focused lens usage (applied via breakthroughBonus).
+
+  const skillFactor = 0.5 + (skill / 20) * 0.5; // 0.5 at skill 1, 1.0 at skill 20
+  const logComponent = 0.15 * Math.log(obsCount + 1);
+  const baseConfidence = Math.min(0.65, 0.30 + logComponent * skillFactor);
+
+  // Context bonus (small, within the plateau)
+  const contextBonus =
+    context === "trainingGround" ? 0.02 : context === "videoAnalysis" ? -0.02 : 0;
+
+  // Breakthrough bonus pushes beyond the 0.65 plateau
+  const rawConfidence = baseConfidence + contextBonus + breakthroughBonus;
 
   const confidence = Math.min(1, Math.max(0, rawConfidence));
 
   return { perceivedValue, confidence };
+}
+
+// ---------------------------------------------------------------------------
+// Scouting Revelation Plateau — Breakthrough Bonus Calculation
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute the breakthrough bonus that allows a scout to push past the 65%
+ * confidence plateau for a specific player.
+ *
+ * Breakthroughs are earned by:
+ *  1. Observing the player in 3+ different contexts (match, training, video, etc.)
+ *     -> +0.10 at 3 unique contexts, +0.05 more at 4+
+ *  2. Using a focused lens on this player in 2+ separate observations
+ *     -> +0.08
+ *
+ * Returns { bonus, isBreakthrough } where isBreakthrough is true if this
+ * observation would push the player past the plateau for the first time.
+ */
+export function computeScoutingBreakthroughBonus(
+  existingObservations: Observation[],
+  playerId: string,
+  currentContext: ObservationContext,
+  currentFocusLens?: string,
+): { bonus: number; isBreakthrough: boolean; previousMaxConfidence: number } {
+  const playerObs = existingObservations.filter((o) => o.playerId === playerId);
+
+  // ── Context diversity ──────────────────────────────────────────────
+  // Count unique context types across all existing observations + the current one
+  const contextSet = new Set<ObservationContext>(playerObs.map((o) => o.context));
+  contextSet.add(currentContext);
+  const uniqueContexts = contextSet.size;
+
+  let bonus = 0;
+  if (uniqueContexts >= 3) {
+    bonus += 0.10; // Breaks through 65% to 75%
+  }
+  if (uniqueContexts >= 4) {
+    bonus += 0.05; // Up to 80%
+  }
+
+  // ── Focused lens breakthrough ──────────────────────────────────────
+  // Count how many existing observations used a focused (non-general) lens
+  let focusedLensCount = playerObs.filter((o) => o.focusLens != null).length;
+  if (currentFocusLens && currentFocusLens !== "general") {
+    focusedLensCount += 1;
+  }
+  if (focusedLensCount >= 2) {
+    bonus += 0.08; // Focused observation breaks plateau further
+  }
+
+  // ── Determine if this is a breakthrough moment ─────────────────────
+  // Check the previous max confidence across all readings for this player
+  let previousMaxConfidence = 0;
+  for (const obs of playerObs) {
+    for (const reading of obs.attributeReadings) {
+      if (reading.confidence > previousMaxConfidence) {
+        previousMaxConfidence = reading.confidence;
+      }
+    }
+  }
+
+  // A breakthrough occurs when:
+  // 1. The player's previous max confidence was below the plateau (0.65)
+  // 2. The bonus would push them past it
+  const isBreakthrough = previousMaxConfidence < 0.65 && bonus > 0;
+
+  return { bonus, isBreakthrough, previousMaxConfidence };
 }
 
 // ---------------------------------------------------------------------------
@@ -408,6 +493,8 @@ export function observePlayer(
   focusedPhases: number[],
   context: ObservationContext,
   existingObservations: Observation[],
+  /** The focus lens used for this observation, if any. Pass undefined for general/unfocused. */
+  focusLens?: string,
 ): Observation {
   // Count prior readings for this player
   const priorCounts = new Map<PlayerAttribute, number>();
@@ -419,8 +506,19 @@ export function observePlayer(
     }
   }
 
-  // Context diversity: count distinct context types seen for this player
-  const contextDiversity = new Set(existingObservations.filter((o) => o.playerId === player.id).map((o) => o.context)).size / 6;
+  // Context diversity: normalized count of unique context types for this player (0–1)
+  const playerObs = existingObservations.filter((o) => o.playerId === player.id);
+  const uniqueContextTypes = new Set<ObservationContext>(playerObs.map((o) => o.context));
+  uniqueContextTypes.add(context);
+  const contextDiversity = Math.min(1, uniqueContextTypes.size / 5); // 5 possible context types
+
+  // Compute breakthrough bonus (breaks the 65% plateau)
+  const { bonus: breakthroughBonus } = computeScoutingBreakthroughBonus(
+    existingObservations,
+    player.id,
+    context,
+    focusLens,
+  );
 
   // Accumulate readings
   const sessionReadings = new Map<PlayerAttribute, { values: number[]; confidences: number[] }>();
@@ -436,14 +534,14 @@ export function observePlayer(
       // Passive observation: only off-ball attributes
       for (const attr of ["positioning", "workRate", "offTheBall"] as PlayerAttribute[]) {
         if (HIDDEN_SET.has(attr)) continue;
-        addReading(rng, sessionReadings, attr, player.attributes[attr], scout, priorCounts.get(attr) ?? 0, contextDiversity, player.form, context, 1.5);
+        addReading(rng, sessionReadings, attr, player.attributes[attr], scout, priorCounts.get(attr) ?? 0, contextDiversity, player.form, context, 1.5, breakthroughBonus);
       }
       continue;
     }
 
     const visibleAttrs = getVisibleAttributes(phase, context, scout.skills);
     for (const attr of visibleAttrs) {
-      addReading(rng, sessionReadings, attr, player.attributes[attr], scout, priorCounts.get(attr) ?? 0, contextDiversity, player.form, context, 1.0);
+      addReading(rng, sessionReadings, attr, player.attributes[attr], scout, priorCounts.get(attr) ?? 0, contextDiversity, player.form, context, 1.0, breakthroughBonus);
     }
 
     // Flag notable events
@@ -526,6 +624,11 @@ export function observePlayer(
     }
   }
 
+  // Determine the stored focus lens (only non-general lenses are stored)
+  const storedLens = focusLens && focusLens !== "general"
+    ? focusLens as Observation["focusLens"]
+    : undefined;
+
   return {
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
@@ -540,6 +643,7 @@ export function observePlayer(
     abilityReading,
     revealedPersonalityTrait,
     updatedPersonalityProfile,
+    focusLens: storedLens,
   };
 }
 
@@ -558,13 +662,14 @@ function addReading(
   playerForm: number,
   context: ObservationContext,
   extraNoise: number,
+  breakthroughBonus = 0,
 ): void {
   const domain = ATTRIBUTE_DOMAINS[attr];
   const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
   const skillLevel = scout.skills[skillKey as ScoutSkill];
   const effectiveSkill = extraNoise > 1 ? Math.max(1, skillLevel - Math.round((extraNoise - 1) * 5)) : skillLevel;
 
-  const { perceivedValue, confidence } = perceiveAttribute(rng, trueValue, effectiveSkill, priorCount + 1, contextDiversity, playerForm, context, scout.fatigue);
+  const { perceivedValue, confidence } = perceiveAttribute(rng, trueValue, effectiveSkill, priorCount + 1, contextDiversity, playerForm, context, scout.fatigue, breakthroughBonus);
 
   const bucket = readings.get(attr) ?? { values: [], confidences: [] };
   bucket.values.push(perceivedValue);

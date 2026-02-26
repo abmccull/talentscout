@@ -58,6 +58,7 @@ const NARRATIVE_TYPE_CONFIG: Record<
 > = {
   // Original 8
   rivalPoach:                  { label: "Rival Activity",      color: "text-red-400" },
+  rivalPoachBid:               { label: "Poach Alert",          color: "text-red-500" },
   managerFired:                { label: "Management Change",   color: "text-amber-400" },
   exclusiveTip:                { label: "Exclusive Tip",       color: "text-emerald-400" },
   debutHatTrick:               { label: "Player Form",         color: "text-blue-400" },

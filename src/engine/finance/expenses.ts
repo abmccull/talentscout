@@ -16,10 +16,15 @@ import type {
   CareerPath,
   LifestyleConfig,
   Office,
+  BusinessLoan,
 } from "../core/types";
 import { getEquipmentMonthlyTotal } from "./equipmentBonuses";
 import { DEFAULT_LOADOUT, DEFAULT_OWNED_ITEMS } from "./equipmentCatalog";
 import type { EquipmentInventory } from "./equipmentCatalog";
+import {
+  calculateSpecMonthlyBonus,
+  calculateSpecUniqueIncome,
+} from "./specializationIncome";
 
 // =============================================================================
 // CONSTANTS
@@ -57,7 +62,7 @@ const EQUIPMENT_OBSERVATION_BONUSES: readonly number[] = [
  * Tier 1 (freelance, home office) → lowest; tier 5 (sporting director) → highest.
  */
 const TIER_RENT: Record<CareerTier, number> = {
-  1: 200,
+  1: 100,
   2: 350,
   3: 500,
   4: 650,
@@ -69,7 +74,7 @@ const TIER_RENT: Record<CareerTier, number> = {
  * Higher tiers attend more matches and travel to wider territories.
  */
 const TIER_TRAVEL_BASE: Record<CareerTier, number> = {
-  1: 100,
+  1: 50,
   2: 175,
   3: 250,
   4: 325,
@@ -88,8 +93,12 @@ const EQUIPMENT_SUBSCRIPTION_COST: Record<number, number> = {
   5: 200,
 };
 
-/** Flat "other" monthly expense (minor incidentals). */
+/**
+ * Flat "other" monthly expense (minor incidentals / lifestyle).
+ * Tier 1 pays a reduced rate to ease the early-game poverty trap.
+ */
 const FLAT_OTHER_EXPENSE = 50;
+const TIER_1_OTHER_EXPENSE = 35;
 
 /**
  * NPC salary cost band per scout managed.
@@ -107,7 +116,7 @@ const NPC_SALARY_PER_SCOUT: Record<4 | 5, number> = {
 /**
  * Create a starting FinancialRecord for a scout based on their career tier.
  *
- * Tier 1 scouts start with a balance of 500 and a monthly income derived from
+ * Tier 1 scouts start with a balance of 2000 and a monthly income derived from
  * their salary. Equipment begins at level 1 (no bonus). The expense record is
  * populated with initial estimates for the first month.
  */
@@ -125,7 +134,7 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
 
   // Build a temporary record so we can calculate initial expenses
   const stub: FinancialRecord = {
-    balance: 500,
+    balance: 2000,
     monthlyIncome,
     expenses: emptyExpenses(),
     equipmentLevel: 1,
@@ -158,6 +167,14 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
     pendingEmployeeEvents: [],
     satelliteOffices: [],
     awards: [],
+    // B2: Economy / Loans
+    loans: [],
+    starterBonus: { firstReportBonusUsed: false, firstPlacementBonusUsed: false },
+    // B9: Specialization income tracking fields
+    specBonusApplied: 0,
+    specUniqueIncome: 0,
+    academyPartnerships: 0,
+    regionalExpertiseRegion: undefined,
   };
 
   const expenses = calculateMonthlyExpenses(scout, stub);
@@ -218,7 +235,7 @@ export function calculateMonthlyExpenses(
   }
 
   // --- Other ---
-  const other = FLAT_OTHER_EXPENSE;
+  const other = tier === 1 ? TIER_1_OTHER_EXPENSE : FLAT_OTHER_EXPENSE;
 
   // --- Lifestyle (overrides rent for revamped saves) ---
   const lifestyle = finances.lifestyle ? finances.lifestyle.monthlyCost : 0;
@@ -288,27 +305,52 @@ export function processWeeklyFinances(
   const totalExpenses = sumExpenses(currentExpenses);
   const monthlyIncome = scout.salary * 4;
 
-  const incomeTransaction: FinancialRecord["transactions"][number] = {
+  // Specialization income bonus/penalty (B9: lock income sources by spec)
+  const specBonus = calculateSpecMonthlyBonus(scout);
+  const specUniqueIncome = calculateSpecUniqueIncome(scout, finances);
+  const totalSpecIncome = specBonus + specUniqueIncome;
+
+  const transactions: FinancialRecord["transactions"] = [];
+
+  transactions.push({
     week: currentWeek,
     season: currentSeason,
     amount: monthlyIncome,
     description: "Monthly salary",
-  };
+  });
 
-  const expenseTransaction: FinancialRecord["transactions"][number] = {
+  if (totalSpecIncome !== 0) {
+    transactions.push({
+      week: currentWeek,
+      season: currentSeason,
+      amount: totalSpecIncome,
+      description: totalSpecIncome >= 0
+        ? "Specialization income bonus"
+        : "Specialization income penalty",
+    });
+  }
+
+  transactions.push({
     week: currentWeek,
     season: currentSeason,
     amount: -totalExpenses,
     description: "Monthly expenses",
-  };
+  });
 
-  return {
+  let result: FinancialRecord = {
     ...finances,
-    balance: finances.balance + monthlyIncome - totalExpenses,
+    balance: finances.balance + monthlyIncome + totalSpecIncome - totalExpenses,
     monthlyIncome,
     expenses: currentExpenses,
-    transactions: [...finances.transactions, incomeTransaction, expenseTransaction],
+    specBonusApplied: specBonus,
+    specUniqueIncome,
+    transactions: [...finances.transactions, ...transactions],
   };
+
+  // Process monthly loan interest accrual
+  result = processLoanInterest(result, currentWeek, currentSeason);
+
+  return result;
 }
 
 /**
@@ -387,6 +429,203 @@ export function getEquipmentObservationBonus(equipmentLevel: number): number {
  */
 export function isBroke(finances: FinancialRecord): boolean {
   return finances.balance < BROKE_THRESHOLD;
+}
+
+// =============================================================================
+// BUSINESS LOANS
+// =============================================================================
+
+/** Default monthly interest rate for business loans (3%). */
+const DEFAULT_LOAN_INTEREST_RATE = 0.03;
+
+/**
+ * Take out a new business loan. The principal is added to the scout's balance
+ * and the loan is tracked for monthly interest + repayment processing.
+ *
+ * Returns an updated FinancialRecord with the loan proceeds credited.
+ */
+export function takeBusinessLoan(
+  finances: FinancialRecord,
+  principal: number,
+  currentWeek: number,
+  currentSeason: number,
+): FinancialRecord {
+  const loan: BusinessLoan = {
+    id: `loan_w${currentWeek}_s${currentSeason}_${finances.loans.length}`,
+    principal,
+    remainingBalance: principal,
+    monthlyInterestRate: DEFAULT_LOAN_INTEREST_RATE,
+    originWeek: currentWeek,
+    originSeason: currentSeason,
+  };
+
+  const loanTransaction: FinancialRecord["transactions"][number] = {
+    week: currentWeek,
+    season: currentSeason,
+    amount: principal,
+    description: `Business loan received (${principal} at ${DEFAULT_LOAN_INTEREST_RATE * 100}% monthly)`,
+  };
+
+  return {
+    ...finances,
+    balance: finances.balance + principal,
+    loans: [...finances.loans, loan],
+    transactions: [...finances.transactions, loanTransaction],
+  };
+}
+
+/**
+ * Make a payment toward a specific loan. Deducts from balance and reduces
+ * the loan's remaining balance. Returns null if insufficient funds.
+ */
+export function repayLoan(
+  finances: FinancialRecord,
+  loanId: string,
+  amount: number,
+  currentWeek: number,
+  currentSeason: number,
+): FinancialRecord | null {
+  if (!canAfford(finances, amount)) return null;
+
+  const loanIndex = finances.loans.findIndex((l) => l.id === loanId);
+  if (loanIndex === -1) return null;
+
+  const loan = finances.loans[loanIndex];
+  const paymentAmount = Math.min(amount, loan.remainingBalance);
+  const updatedLoan: BusinessLoan = {
+    ...loan,
+    remainingBalance: loan.remainingBalance - paymentAmount,
+  };
+
+  // Remove fully repaid loans
+  const updatedLoans =
+    updatedLoan.remainingBalance <= 0
+      ? finances.loans.filter((_, i) => i !== loanIndex)
+      : finances.loans.map((l, i) => (i === loanIndex ? updatedLoan : l));
+
+  const repayTransaction: FinancialRecord["transactions"][number] = {
+    week: currentWeek,
+    season: currentSeason,
+    amount: -paymentAmount,
+    description: `Loan repayment`,
+  };
+
+  return {
+    ...finances,
+    balance: finances.balance - paymentAmount,
+    loans: updatedLoans,
+    transactions: [...finances.transactions, repayTransaction],
+  };
+}
+
+/**
+ * Process monthly interest accrual on all active loans.
+ * Called internally by processWeeklyFinances on the monthly cycle.
+ * Interest is added to each loan's remaining balance (compounding).
+ */
+function processLoanInterest(
+  finances: FinancialRecord,
+  currentWeek: number,
+  currentSeason: number,
+): FinancialRecord {
+  if (finances.loans.length === 0) return finances;
+
+  let totalInterest = 0;
+  const updatedLoans = finances.loans.map((loan) => {
+    const interest = Math.round(loan.remainingBalance * loan.monthlyInterestRate);
+    totalInterest += interest;
+    return { ...loan, remainingBalance: loan.remainingBalance + interest };
+  });
+
+  if (totalInterest === 0) return finances;
+
+  const interestTransaction: FinancialRecord["transactions"][number] = {
+    week: currentWeek,
+    season: currentSeason,
+    amount: -totalInterest,
+    description: "Loan interest",
+  };
+
+  return {
+    ...finances,
+    balance: finances.balance - totalInterest,
+    loans: updatedLoans,
+    transactions: [...finances.transactions, interestTransaction],
+  };
+}
+
+// =============================================================================
+// STARTER BONUS
+// =============================================================================
+
+/** Bonus multiplier for the first report sold (50% extra). */
+const FIRST_REPORT_BONUS_MULTIPLIER = 0.50;
+
+/** Bonus multiplier for the first placement fee (25% extra). */
+const FIRST_PLACEMENT_BONUS_MULTIPLIER = 0.25;
+
+/**
+ * Apply the starter bonus for a report sale.
+ * Returns an updated FinancialRecord with the bonus credited, or the
+ * original record if the bonus has already been used.
+ *
+ * @param basePayment The base payment amount for the report sold.
+ */
+export function applyFirstReportBonus(
+  finances: FinancialRecord,
+  basePayment: number,
+  currentWeek: number,
+  currentSeason: number,
+): FinancialRecord {
+  if (finances.starterBonus.firstReportBonusUsed) return finances;
+
+  const bonus = Math.round(basePayment * FIRST_REPORT_BONUS_MULTIPLIER);
+
+  const bonusTransaction: FinancialRecord["transactions"][number] = {
+    week: currentWeek,
+    season: currentSeason,
+    amount: bonus,
+    description: "Welcome Package: first report bonus (+50%)",
+  };
+
+  return {
+    ...finances,
+    balance: finances.balance + bonus,
+    starterBonus: { ...finances.starterBonus, firstReportBonusUsed: true },
+    transactions: [...finances.transactions, bonusTransaction],
+  };
+}
+
+/**
+ * Apply the starter bonus for a placement fee.
+ * Returns an updated FinancialRecord with the bonus credited, or the
+ * original record if the bonus has already been used.
+ *
+ * @param baseFee The base placement fee amount.
+ */
+export function applyFirstPlacementBonus(
+  finances: FinancialRecord,
+  baseFee: number,
+  currentWeek: number,
+  currentSeason: number,
+): FinancialRecord {
+  if (finances.starterBonus.firstPlacementBonusUsed) return finances;
+
+  const bonus = Math.round(baseFee * FIRST_PLACEMENT_BONUS_MULTIPLIER);
+
+  const bonusTransaction: FinancialRecord["transactions"][number] = {
+    week: currentWeek,
+    season: currentSeason,
+    amount: bonus,
+    description: "Welcome Package: first placement bonus (+25%)",
+  };
+
+  return {
+    ...finances,
+    balance: finances.balance + bonus,
+    starterBonus: { ...finances.starterBonus, firstPlacementBonusUsed: true },
+    transactions: [...finances.transactions, bonusTransaction],
+  };
 }
 
 // =============================================================================

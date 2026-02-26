@@ -37,7 +37,7 @@ import {
 } from "lucide-react";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { Tooltip } from "@/components/ui/tooltip";
-import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS } from "@/engine/finance";
+import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS, getSpecIncomeLabel, getSpecTier3Label } from "@/engine/finance";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
@@ -196,7 +196,7 @@ export function Dashboard() {
   // firstTeam: recent transfer records (max 3)
   const recentTransfers = specialization === "firstTeam"
     ? [...gameState.transferRecords]
-        .sort((a, b) => b.season - a.season || b.week - a.week)
+        .sort((a, b) => b.transferSeason - a.transferSeason || b.transferWeek - a.transferWeek)
         .slice(0, 3)
     : [];
 
@@ -557,6 +557,44 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
+
+                {/* Specialization income bonuses (B9) */}
+                {(() => {
+                  const specBonus = finances.specBonusApplied ?? 0;
+                  const specUnique = finances.specUniqueIncome ?? 0;
+                  const totalSpec = specBonus + specUnique;
+                  if (totalSpec === 0 && scout.careerTier < 3) return null;
+                  return (
+                    <div className="mt-3 rounded-md border border-[#27272a] bg-[#0f0f0f] p-3">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-2">
+                        Specialization Income
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Badge variant="secondary" className="text-[10px]">
+                          {getSpecIncomeLabel(scout.primarySpecialization)}
+                        </Badge>
+                        {specBonus !== 0 && (
+                          <span className={specBonus >= 0 ? "text-emerald-400" : "text-red-400"}>
+                            {specBonus >= 0 ? "+" : ""}{formatMoney(Math.abs(specBonus))}/mo bonus
+                          </span>
+                        )}
+                        {scout.careerTier >= 3 && (
+                          <>
+                            <span className="text-zinc-600">|</span>
+                            <span className="text-blue-400">
+                              {getSpecTier3Label(scout.primarySpecialization)}
+                            </span>
+                            {specUnique > 0 && (
+                              <span className="text-emerald-400">
+                                +{formatMoney(specUnique)}/mo
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {broke && (
                   <p className="mt-3 text-xs text-red-400">
@@ -1319,9 +1357,6 @@ export function Dashboard() {
                     const player = gameState.players[record.playerId];
                     const fromClub = gameState.clubs[record.fromClubId];
                     const toClub = gameState.clubs[record.toClubId];
-                    const latestPerf = record.seasonPerformance.length > 0
-                      ? record.seasonPerformance[record.seasonPerformance.length - 1]
-                      : null;
                     return (
                       <div key={record.id} className="rounded-md border border-[#27272a] p-3">
                         <div className="flex items-start justify-between gap-2 mb-1">
@@ -1347,10 +1382,11 @@ export function Dashboard() {
                         </div>
                         <p className="text-xs text-zinc-500">
                           {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"}
+                          {record.fee > 0 && <span className="ml-1">· £{record.fee.toLocaleString()}</span>}
                         </p>
-                        {latestPerf && (
-                          <p className={`mt-1 text-xs font-semibold ${performanceRatingColor(latestPerf.rating)}`}>
-                            S{latestPerf.season}: {latestPerf.rating}/100
+                        {record.appearances != null && (
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {record.appearances} appearances · S{record.transferSeason}
                           </p>
                         )}
                       </div>

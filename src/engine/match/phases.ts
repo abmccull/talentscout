@@ -66,12 +66,12 @@ export const EVENT_REVEALED: Record<MatchEventType, PlayerAttribute[]> = {
 };
 
 const PHASE_EVENT_WEIGHTS: Record<MatchPhaseType, Partial<Record<MatchEventType, number>>> = {
-  buildUp:          { pass: 5, positioning: 3, dribble: 2, cross: 2, throughBall: 2, leadership: 1, holdUp: 1 },
-  transition:       { sprint: 5, pass: 4, dribble: 3, tackle: 3, shot: 2, error: 2, interception: 2 },
-  setpiece:         { header: 4, aerialDuel: 4, shot: 4, cross: 3, tackle: 2, goal: 1 },
-  pressingSequence: { tackle: 5, interception: 4, sprint: 4, pass: 3, error: 3, positioning: 2, leadership: 1 },
-  counterAttack:    { sprint: 5, dribble: 4, pass: 3, shot: 3, goal: 2, throughBall: 2, cross: 1 },
-  possession:       { pass: 5, positioning: 5, throughBall: 3, dribble: 2, cross: 2, holdUp: 1, leadership: 1 },
+  buildUp:          { pass: 5, positioning: 3, dribble: 2, cross: 2, throughBall: 2, assist: 1, save: 1, leadership: 1, holdUp: 1 },
+  transition:       { sprint: 5, pass: 4, dribble: 3, tackle: 3, shot: 2, save: 2, error: 2, interception: 2, foul: 1, assist: 1 },
+  setpiece:         { header: 4, aerialDuel: 4, shot: 4, cross: 3, save: 2, tackle: 2, foul: 1, goal: 1, assist: 1 },
+  pressingSequence: { tackle: 5, interception: 4, sprint: 4, pass: 3, error: 3, positioning: 2, foul: 2, save: 1, leadership: 1 },
+  counterAttack:    { sprint: 5, dribble: 4, pass: 3, shot: 3, goal: 2, save: 2, assist: 2, throughBall: 2, cross: 1 },
+  possession:       { pass: 5, positioning: 5, throughBall: 3, dribble: 2, cross: 2, assist: 1, save: 1, holdUp: 1, leadership: 1 },
 };
 
 const WEATHER_NOISE: Record<Weather, number> = {
@@ -82,6 +82,70 @@ const WEATHER_NOISE: Record<Weather, number> = {
   snow: 1.8,
   windy: 1.4,
 };
+
+// ---------------------------------------------------------------------------
+// Position-weighted event distribution
+// ---------------------------------------------------------------------------
+// Each position defines relative weights for event types it favours.
+// Unlisted event types receive a minimum floor (MIN_POSITION_WEIGHT) so every
+// event type can still fire for any position — just at a much lower rate.
+
+const MIN_POSITION_WEIGHT = 0.02;
+
+const POSITION_EVENT_WEIGHTS: Record<Position, Partial<Record<MatchEventType, number>>> = {
+  GK: {
+    save: 0.30, positioning: 0.25, pass: 0.15, error: 0.10,
+    leadership: 0.10, header: 0.04, foul: 0.04,
+  },
+  CB: {
+    tackle: 0.20, header: 0.18, positioning: 0.15, leadership: 0.12,
+    pass: 0.10, error: 0.08, sprint: 0.05, foul: 0.05, cross: 0.03,
+  },
+  LB: {
+    cross: 0.16, tackle: 0.15, sprint: 0.14, positioning: 0.12,
+    pass: 0.10, dribble: 0.10, foul: 0.05, header: 0.05, error: 0.05,
+  },
+  RB: {
+    cross: 0.16, tackle: 0.15, sprint: 0.14, positioning: 0.12,
+    pass: 0.10, dribble: 0.10, foul: 0.05, header: 0.05, error: 0.05,
+  },
+  CDM: {
+    tackle: 0.20, pass: 0.16, positioning: 0.14, header: 0.10,
+    leadership: 0.10, sprint: 0.08, foul: 0.06, error: 0.06,
+  },
+  CM: {
+    pass: 0.22, positioning: 0.12, tackle: 0.10, dribble: 0.10,
+    shot: 0.10, sprint: 0.08, leadership: 0.08, cross: 0.06, error: 0.06,
+  },
+  CAM: {
+    pass: 0.16, dribble: 0.14, shot: 0.14, assist: 0.12,
+    positioning: 0.10, sprint: 0.08, cross: 0.06, goal: 0.06,
+    error: 0.04, leadership: 0.04,
+  },
+  LW: {
+    dribble: 0.18, sprint: 0.15, cross: 0.14, shot: 0.12,
+    goal: 0.10, pass: 0.08, assist: 0.06, positioning: 0.05,
+    foul: 0.04, error: 0.04,
+  },
+  RW: {
+    dribble: 0.18, sprint: 0.15, cross: 0.14, shot: 0.12,
+    goal: 0.10, pass: 0.08, assist: 0.06, positioning: 0.05,
+    foul: 0.04, error: 0.04,
+  },
+  ST: {
+    shot: 0.20, goal: 0.18, header: 0.12, dribble: 0.10,
+    positioning: 0.10, sprint: 0.08, assist: 0.06, pass: 0.05,
+    foul: 0.04, error: 0.04,
+  },
+};
+
+/**
+ * Return the position weight for a given event type, falling back to the
+ * minimum floor for event types the position doesn't explicitly list.
+ */
+function getPositionWeight(position: Position, eventType: MatchEventType): number {
+  return POSITION_EVENT_WEIGHTS[position]?.[eventType] ?? MIN_POSITION_WEIGHT;
+}
 
 // ---------------------------------------------------------------------------
 // Position eligibility — which positions can realistically perform each event
@@ -189,11 +253,21 @@ const SET_PIECE_EVENT_WEIGHTS: Record<SetPieceVariant, Partial<Record<MatchEvent
 // Helpers
 // ---------------------------------------------------------------------------
 
-function pickEventType(rng: RNG, phaseType: MatchPhaseType): MatchEventType {
-  const weights = PHASE_EVENT_WEIGHTS[phaseType];
-  const items = (Object.entries(weights) as [MatchEventType, number][])
+function pickEventType(
+  rng: RNG,
+  phaseType: MatchPhaseType,
+  position: Position,
+): MatchEventType {
+  const phaseWeights = PHASE_EVENT_WEIGHTS[phaseType];
+  // Combine phase weights with position weights multiplicatively.
+  // The phase defines which event types are plausible in this game state;
+  // the position biases which of those the player is most likely to perform.
+  const items = (Object.entries(phaseWeights) as [MatchEventType, number][])
     .filter(([, w]) => w > 0)
-    .map(([type, weight]) => ({ item: type, weight }));
+    .map(([type, phaseW]) => ({
+      item: type,
+      weight: phaseW * getPositionWeight(position, type),
+    }));
   return rng.pickWeighted(items);
 }
 
@@ -205,7 +279,19 @@ function computeEventQuality(
 ): number {
   const vals = revealed.map((attr) => player.attributes[attr] ?? 10);
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
-  const base = (avg / 20) * 10;
+  let base = (avg / 20) * 10;
+
+  // Form momentum subtly shifts event quality:
+  //   Rising momentum (hot streak):  +0.3 to base quality
+  //   Falling momentum (cold streak): -0.2 to base quality
+  const momentum = player.formMomentum ?? 0;
+  const trend = player.formTrend ?? "stable";
+  if (trend === "rising" && momentum > 0) {
+    base += 0.3;
+  } else if (trend === "falling" && momentum > 0) {
+    base -= 0.2;
+  }
+
   const noisy = rng.gaussian(base, 0.8 * WEATHER_NOISE[weather]);
   return Math.min(10, Math.max(1, Math.round(noisy)));
 }
@@ -388,16 +474,24 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
     const events: MatchEvent[] = [];
 
     for (let e = 0; e < eventCount; e++) {
-      // Use effective weights for event type selection
-      const weightItems = (Object.entries(effectiveWeights) as [MatchEventType, number][])
-        .filter(([, w]) => w > 0)
-        .map(([type, weight]) => ({ item: type, weight }));
-      const eventType = rng.pickWeighted(weightItems);
-      const revealed = EVENT_REVEALED[eventType];
-
+      // Select the primary player FIRST so their position can influence the
+      // event type distribution — this is what makes GKs, CBs, and STs feel
+      // distinct during a match.
       const involved = involvedPlayerIds
         .map((id) => allPlayers.get(id))
         .filter((p): p is Player => !!p);
+
+      const primaryForPick = involved.length > 0 ? rng.pick(involved) : rng.pick([...allPlayers.values()]);
+
+      // Combine phase weights with position weights multiplicatively
+      const weightItems = (Object.entries(effectiveWeights) as [MatchEventType, number][])
+        .filter(([, w]) => w > 0)
+        .map(([type, phaseW]) => ({
+          item: type,
+          weight: phaseW * getPositionWeight(primaryForPick.position, type),
+        }));
+      const eventType = rng.pickWeighted(weightItems);
+      const revealed = EVENT_REVEALED[eventType];
 
       const primary = pickEligiblePlayer(rng, eventType, involved, allPlayers);
       const secondary = involved.find((p) => p.id !== primary.id);

@@ -54,7 +54,15 @@ export type PerkEffect =
   /** Scout can request clubs to hold dedicated trial days for recommended youth. */
   | { type: "trialDayAccess"; enabled: true }
   /** Gut feelings include a PA estimate within a given margin of the true value. */
-  | { type: "paEstimate"; enabled: true; margin: number };
+  | { type: "paEstimate"; enabled: true; margin: number }
+  /** Flat bonus to Insight Points earned per observation activity. */
+  | { type: "insightBonus"; bonus: number }
+  /** Reduce the Insight cooldown period (in weeks) to the given value. */
+  | { type: "insightCooldownReduction"; reduction: number }
+  /** Raise the fatigue level at which an Insight action fizzles. */
+  | { type: "insightFizzleThreshold"; threshold: number }
+  /** Reduce the IP cost of all Insight actions by a flat amount. */
+  | { type: "insightCostReduction"; reduction: number };
 
 export interface Perk {
   id: string;
@@ -118,6 +126,14 @@ export interface PerkModifiers {
   hasPAEstimate: boolean;
   /** Margin of error for PA estimate */
   paEstimateMargin: number;
+  /** Flat IP bonus earned per observation activity (stacks additively) */
+  insightPointBonus: number;
+  /** Minimum cooldown in weeks after using an Insight action (take smallest active perk) */
+  insightCooldownReduction: number;
+  /** Fatigue level at which Insight actions fizzle (default 70; take highest active perk) */
+  insightFizzleThreshold: number;
+  /** Flat reduction applied to all Insight action IP costs (stacks additively) */
+  insightCostReduction: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +474,42 @@ export const ALL_PERKS: Perk[] = [
     specialization: "data",
     effect: { type: "alertSystem", alertType: "patternMatch" },
   },
+
+  // -------------------------------------------------------------------------
+  // Insight Perks (cross-specialization, one per tree)
+  // -------------------------------------------------------------------------
+  {
+    id: "insightfulObserver",
+    name: "Insightful Observer",
+    description: "+1 Insight Point per observation activity",
+    level: 5,
+    specialization: "youth",
+    effect: { type: "insightBonus", bonus: 1 },
+  },
+  {
+    id: "deepFocus",
+    name: "Deep Focus",
+    description: "Insight cooldown reduced to 1 week",
+    level: 9,
+    specialization: "firstTeam",
+    effect: { type: "insightCooldownReduction", reduction: 1 },
+  },
+  {
+    id: "eurekaMastery",
+    name: "Eureka Mastery",
+    description: "Insight fizzle threshold raised from 70 to 85 fatigue",
+    level: 15,
+    specialization: "data",
+    effect: { type: "insightFizzleThreshold", threshold: 85 },
+  },
+  {
+    id: "insightEfficiency",
+    name: "Insight Efficiency",
+    description: "All insight action costs reduced by 5 IP",
+    level: 18,
+    specialization: "regional",
+    effect: { type: "insightCostReduction", reduction: 5 },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -532,6 +584,12 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
   let hasTrialDayAccess = false;
   let hasPAEstimate = false;
   let paEstimateMargin = 0;
+
+  // Insight modifier accumulators
+  let insightPointBonus = 0;
+  let insightCooldownReduction = 0;
+  let insightFizzleThreshold = 70;
+  let insightCostReduction = 0;
 
   for (const perk of perks) {
     const effect = perk.effect;
@@ -642,6 +700,30 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
             ? effect.margin
             : Math.min(paEstimateMargin, effect.margin);
         break;
+
+      case "insightBonus":
+        insightPointBonus += effect.bonus;
+        break;
+
+      case "insightCooldownReduction":
+        // Use the most aggressive (smallest) cooldown from any active perk
+        insightCooldownReduction = Math.max(
+          insightCooldownReduction,
+          effect.reduction
+        );
+        break;
+
+      case "insightFizzleThreshold":
+        // Use the highest (most permissive) threshold from any active perk
+        insightFizzleThreshold = Math.max(
+          insightFizzleThreshold,
+          effect.threshold
+        );
+        break;
+
+      case "insightCostReduction":
+        insightCostReduction += effect.reduction;
+        break;
     }
   }
 
@@ -678,5 +760,9 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
     hasTrialDayAccess,
     hasPAEstimate,
     paEstimateMargin,
+    insightPointBonus,
+    insightCooldownReduction,
+    insightFizzleThreshold,
+    insightCostReduction,
   };
 }

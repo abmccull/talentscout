@@ -1299,14 +1299,11 @@ export function CareerScreen() {
                   <CardContent>
                     <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {[...transferRecords]
-                        .sort((a, b) => b.season - a.season || b.week - a.week)
+                        .sort((a, b) => b.transferSeason - a.transferSeason || b.transferWeek - a.transferWeek)
                         .map((record) => {
                           const player = gameState.players[record.playerId];
                           const fromClub = gameState.clubs[record.fromClubId];
                           const toClub = gameState.clubs[record.toClubId];
-                          const latestPerf = record.seasonPerformance.length > 0
-                            ? record.seasonPerformance[record.seasonPerformance.length - 1]
-                            : null;
                           return (
                             <div key={record.id} className="rounded-md border border-[#27272a] p-3">
                               <div className="flex items-start justify-between gap-2">
@@ -1315,16 +1312,14 @@ export function CareerScreen() {
                                     {player ? `${player.firstName} ${player.lastName}` : "Unknown Player"}
                                   </p>
                                   <p className="text-xs text-zinc-500">
-                                    {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"} · S{record.season}
-                                    {record.isLoan && <span className="ml-1 text-zinc-600">(Loan)</span>}
+                                    {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"} · S{record.transferSeason}
+                                    {record.fee > 0 && <span className="ml-1 text-zinc-400">£{record.fee.toLocaleString()}</span>}
                                   </p>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  {latestPerf && (
-                                    <span className={`text-xs font-semibold ${
-                                      latestPerf.rating >= 70 ? "text-emerald-400" : latestPerf.rating >= 40 ? "text-amber-400" : "text-red-400"
-                                    }`}>
-                                      {latestPerf.rating}/100
+                                  {record.appearances != null && (
+                                    <span className="text-xs text-zinc-500">
+                                      {record.appearances} apps
                                     </span>
                                   )}
                                   {record.outcome && (

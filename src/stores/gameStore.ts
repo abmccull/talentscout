@@ -53,7 +53,16 @@ import type {
   GossipAction,
   ChainConsequence,
   BoardSatisfactionDelta,
+  DifficultyLevel,
 } from "@/engine/core/types";
+import type { ObservationSession, SessionFlaggedMoment, LensType } from "@/engine/observation/types";
+import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, completeSession, getSessionResult } from "@/engine/observation/session";
+import { populateFullObservationPhases } from "@/engine/observation/fullObservation";
+import { generateReflection } from "@/engine/observation/reflection";
+import { ACTIVITY_MODE_MAP, INTERACTIVE_ACTIVITIES } from "@/engine/observation/types";
+import { createInsightState, accumulateInsight, calculateCapacity, canUseInsight, spendInsight, tickCooldown } from "@/engine/insight/insight";
+import { executeInsightAction } from "@/engine/insight/actions";
+import type { InsightActionId } from "@/engine/insight/types";
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import {
   generateDirectives,
@@ -61,6 +70,8 @@ import {
   generateClubResponse,
   processTrialOutcome,
   updateTransferRecords,
+  linkReportsToTransfers,
+  applyScoutAccountability,
 } from "@/engine/firstTeam";
 import * as negotiationEngine from "@/engine/firstTeam/negotiation";
 import { processBoardMeeting, generateBoardProfile } from "@/engine/firstTeam/boardAI";
@@ -77,6 +88,7 @@ import {
   createPrediction,
   generatePredictionSuggestions,
 } from "@/engine/data";
+import { getDifficultyModifiers } from "@/engine/core/difficulty";
 import { createRNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
@@ -107,6 +119,7 @@ import { calculateAttendedMatchRatings, computeFormFromRatings } from "@/engine/
 import { generateCardEvents, processCardAccumulation } from "@/engine/match/discipline";
 import type { CardEvent } from "@/engine/core/types";
 import { processFocusedObservations } from "@/engine/match/focus";
+import { computeScoutingBreakthroughBonus } from "@/engine/scout/perception";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { generateReportContent, finalizeReport, calculateReportQuality, trackPostTransfer } from "@/engine/reports/reporting";
 import { updateReputation, generateJobOffers, calculatePerformanceReview, type TierReviewContext } from "@/engine/career/progression";
@@ -230,6 +243,8 @@ import {
   generateRivalScouts,
   processRivalScoutWeek,
   generateRivalIntelligence,
+  resolvePoachCounterBid,
+  isNemesis,
 } from "@/engine/rivals";
 import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
@@ -279,6 +294,7 @@ export type GameScreen =
   | "dashboard"
   | "calendar"
   | "match"
+  | "observation"
   | "matchSummary"
   | "playerProfile"
   | "playerDatabase"
@@ -293,6 +309,7 @@ export type GameScreen =
   | "discoveries"
   | "leaderboard"
   | "analytics"
+  | "performance"
   | "fixtureBrowser"
   | "youthScouting"
   | "alumniDashboard"
@@ -409,6 +426,23 @@ interface GameStore {
   advancePhase: () => void;
   setFocus: (playerId: string, lens: FocusSelection["lens"]) => void;
   endMatch: () => void;
+
+  // Observation session actions
+  activeSession: ObservationSession | null;
+  lastReflectionResult: any | null;
+  startObservationSession: (activityType: string, playerPool: Array<{ playerId: string; name: string; position: string }>, targetPlayerId?: string) => void;
+  beginSession: () => void;
+  advanceSessionPhase: () => void;
+  allocateSessionFocus: (playerId: string, lens: LensType) => void;
+  removeSessionFocus: (playerId: string) => void;
+  flagSessionMoment: (momentId: string, reaction: SessionFlaggedMoment['reaction']) => void;
+  addSessionNote: (note: string) => void;
+  endObservationSession: () => void;
+
+  // Insight actions
+  useInsight: (actionId: InsightActionId) => void;
+  lastInsightResult: any | null;
+  dismissInsightResult: () => void;
 
   // Report actions
   startReport: (playerId: string) => void;
@@ -1072,6 +1106,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   gameState: null,
   isLoaded: false,
   activeMatch: null,
+  activeSession: null,
+  lastReflectionResult: null,
+  lastInsightResult: null,
   lastWeekSummary: null,
   dismissWeekSummary: () => set({ lastWeekSummary: null }),
   batchSummary: null,
@@ -1317,6 +1354,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: effectiveConfig.worldSeed,
       currentWeek: 1,
       currentSeason: 1,
+      difficulty: effectiveConfig.difficulty,
       scout,
       leagues,
       clubs,
@@ -1344,6 +1382,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       transferWindow: initialTransferWindow,
       discoveryRecords: [],
       performanceHistory: [],
+      transferRecords: [],
       playedFixtures: [],
       watchlist: [],
       contactIntel: {},
@@ -1369,7 +1408,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // First-Team Scouting System
       managerDirectives: [],
       clubResponses: [],
-      transferRecords: [],
       systemFitCache: {},
       // Transfer Negotiation System (F4)
       activeNegotiations: [],
@@ -1394,6 +1432,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gossipItems: [],
       // Board satisfaction tracking (A4)
       satisfactionHistory: [],
+      // Interactive observation sessions
+      completedInteractiveSessions: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -1476,6 +1516,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "",
             "Good luck, scout. The pitch is waiting.",
           ].join("\n"),
+          read: false,
+          actionRequired: false,
+        },
+        {
+          id: "starter-bonus",
+          week: 1,
+          season: 1,
+          type: "event",
+          title: "Welcome Package",
+          body: "Welcome to scouting! As part of your starter package, your first report sold will earn a 50% bonus payment, and your first placement fee will earn a 25% bonus. Make them count!",
           read: false,
           actionRequired: false,
         },
@@ -1745,6 +1795,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // ── Gate: interactive observation activities must be played first ───
+    // Similar to attendMatch gating, check if any interactive activities
+    // are scheduled but not yet completed via observation sessions.
+    const completedSessions = gameState.completedInteractiveSessions ?? [];
+    const pendingInteractiveActivities = gameState.schedule.activities
+      .filter((a): a is Activity =>
+        a !== null &&
+        INTERACTIVE_ACTIVITIES.has(a.type) &&
+        a.type !== "attendMatch" && // already handled above
+        a.instanceId !== undefined &&
+        !completedSessions.includes(a.instanceId)
+      );
+    // For now, don't gate these — interactive observation is opt-in.
+    // The player can choose to attend interactively or let it auto-simulate.
+    // This differs from attendMatch which is always interactive.
+    void pendingInteractiveActivities;
+
     const rng = createRNG(`${gameState.seed}-week-${gameState.currentWeek}-${gameState.currentSeason}`);
 
     // Process scheduled activities → fatigue, skill XP, attribute XP
@@ -1862,6 +1929,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
           fatigue: Math.max(0, updatedScout.fatigue - totalReduction),
         };
       }
+    }
+
+    // Tick insight cooldown
+    const currentInsightForTick = updatedScout.insightState;
+    if (currentInsightForTick) {
+      updatedScout = {
+        ...updatedScout,
+        insightState: tickCooldown(currentInsightForTick as any) as any,
+      };
+    }
+
+    // Accumulate Insight Points earned during the week
+    if (weekResult.insightPointsEarned > 0) {
+      const insightForAccum = (updatedScout.insightState ?? createInsightState()) as any;
+      const ipCapacity = calculateCapacity(updatedScout.attributes.intuition);
+      updatedScout = {
+        ...updatedScout,
+        insightState: accumulateInsight(insightForAccum, weekResult.insightPointsEarned, ipCapacity) as any,
+      };
     }
 
     let stateWithScheduleApplied = { ...gameState, scout: updatedScout };
@@ -4669,18 +4755,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let stateWithPhase2 = stateWithInternational;
 
     // 1. Process finances (only acts on weeks that are multiples of 4)
+    //    Difficulty modifiers adjust income and expenses.
     if (stateWithPhase2.finances) {
       const financeRng = createRNG(
         `${gameState.seed}-finance-${gameState.currentWeek}-${gameState.currentSeason}`,
       );
       void financeRng; // seed is consumed for determinism; finance is pure math
+      // Migrate old saves that lack the new loans/starterBonus fields
+      const migratedFinances = {
+        ...stateWithPhase2.finances,
+        loans: stateWithPhase2.finances.loans ?? [],
+        starterBonus: stateWithPhase2.finances.starterBonus ?? { firstReportBonusUsed: false, firstPlacementBonusUsed: false },
+      };
       const updatedFinances = processWeeklyFinances(
-        stateWithPhase2.finances,
+        migratedFinances,
         stateWithPhase2.scout,
         stateWithPhase2.currentWeek,
         stateWithPhase2.currentSeason,
       );
-      stateWithPhase2 = { ...stateWithPhase2, finances: updatedFinances };
+
+      // Apply difficulty multipliers to income/expenses on pay weeks
+      const diffMods = getDifficultyModifiers(stateWithPhase2.difficulty);
+      if (stateWithPhase2.currentWeek % 4 === 0) {
+        const baseIncome = updatedFinances.monthlyIncome;
+        const baseExpenseTotal = Object.values(updatedFinances.expenses).reduce((s, v) => s + v, 0);
+        // Compute the difference caused by difficulty multipliers
+        const incomeAdjustment = Math.round(baseIncome * (diffMods.incomeMultiplier - 1));
+        const expenseAdjustment = Math.round(baseExpenseTotal * (diffMods.expenseMultiplier - 1));
+        const adjustedFinances = {
+          ...updatedFinances,
+          balance: updatedFinances.balance + incomeAdjustment - expenseAdjustment,
+        };
+        stateWithPhase2 = { ...stateWithPhase2, finances: adjustedFinances };
+      } else {
+        stateWithPhase2 = { ...stateWithPhase2, finances: updatedFinances };
+      }
     }
 
     // 1a. Economics revamp: process marketplace, retainers, loans, consulting, courses, agency, economic events
@@ -4948,6 +5057,61 @@ export const useGameStore = create<GameStore>((set, get) => ({
       inbox: [...stateWithPhase2.inbox, ...rivalInboxMessages],
     };
 
+    // 2b. Process poach signings — generate rivalPoachBid narrative events
+    if (rivalResult.poachSignings && rivalResult.poachSignings.length > 0) {
+      const poachNarrativeEvents: NarrativeEvent[] = [];
+      const poachInboxMessages: InboxMessage[] = [];
+
+      for (const signing of rivalResult.poachSignings) {
+        const rivalScout = stateWithPhase2.rivalScouts[signing.rivalId];
+        const player = stateWithPhase2.players[signing.playerId];
+        const rivalName = rivalScout?.name ?? "A rival scout";
+        const playerName = player
+          ? `${player.firstName} ${player.lastName}`
+          : "a player you reported on";
+
+        const eventId = `poach-bid-${signing.rivalId}-${signing.playerId}-w${stateWithPhase2.currentWeek}`;
+
+        const narrativeEvent: NarrativeEvent = {
+          id: eventId,
+          type: "rivalPoachBid",
+          week: stateWithPhase2.currentWeek,
+          season: stateWithPhase2.currentSeason,
+          title: `Rival Poach Alert: ${playerName}`,
+          description:
+            `${rivalName} has signed ${playerName} — a player you previously reported on. ` +
+            `You can counter-bid or let them go.`,
+          relatedIds: [signing.playerId, signing.rivalId],
+          acknowledged: false,
+          choices: [
+            { label: "Counter-Bid", effect: "counterBid" },
+            { label: "Concede", effect: "concede" },
+          ],
+          selectedChoice: undefined,
+        };
+
+        poachNarrativeEvents.push(narrativeEvent);
+
+        poachInboxMessages.push({
+          id: `narrative-${eventId}`,
+          week: stateWithPhase2.currentWeek,
+          season: stateWithPhase2.currentSeason,
+          type: "event" as const,
+          title: narrativeEvent.title,
+          body: narrativeEvent.description,
+          read: false,
+          actionRequired: true,
+          relatedId: narrativeEvent.id,
+        });
+      }
+
+      stateWithPhase2 = {
+        ...stateWithPhase2,
+        narrativeEvents: [...stateWithPhase2.narrativeEvents, ...poachNarrativeEvents],
+        inbox: [...stateWithPhase2.inbox, ...poachInboxMessages],
+      };
+    }
+
     // 3. Generate narrative event (12% weekly chance, with F2 chain support)
     const eventRng = createRNG(
       `${gameState.seed}-events-${gameState.currentWeek}-${gameState.currentSeason}`,
@@ -5170,6 +5334,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const tickResult = processWeeklyTick(stateWithPhase2, rng);
     let newState = advanceWeek(stateWithPhase2, tickResult);
 
+    // ── B10: Link transfers to scout reports for accountability tracking ────
+    if (tickResult.transfers.length > 0) {
+      const transferLinkRng = createRNG(
+        `${gameState.seed}-trlink-${gameState.currentWeek}-${gameState.currentSeason}`,
+      );
+      const existingPlayerIds = new Set(
+        newState.transferRecords.map((r: TransferRecord) => r.playerId),
+      );
+      const newTransferRecords = linkReportsToTransfers(
+        transferLinkRng,
+        tickResult.transfers,
+        newState.reports,
+        newState.players,
+        newState.scout.id,
+        newState.currentWeek,
+        newState.currentSeason,
+        existingPlayerIds,
+      );
+      if (newTransferRecords.length > 0) {
+        newState = {
+          ...newState,
+          transferRecords: [...newState.transferRecords, ...newTransferRecords],
+        };
+      }
+    }
+
     // ── Monthly performance snapshot (uses post-tick state for accuracy) ────
     const monthlySnapshot = processMonthlySnapshot(newState);
     if (monthlySnapshot) {
@@ -5188,6 +5378,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
         stateWithPhase2.currentSeason,
       );
       newState = { ...newState, discoveryRecords: updatedDiscoveryRecords };
+
+      // B10: Update transfer records with season data and classify outcomes
+      const trUpdateRng = createRNG(
+        `${gameState.seed}-trupdate-${stateWithPhase2.currentSeason}`,
+      );
+      const updatedTransferRecs = updateTransferRecords(
+        trUpdateRng,
+        newState.transferRecords,
+        newState.players,
+      );
+      newState = { ...newState, transferRecords: updatedTransferRecs };
+
+      // B10: Apply scout accountability for newly classified outcomes
+      const accountabilityResult = applyScoutAccountability(
+        newState.transferRecords,
+        newState.players,
+        newState.clubs,
+        newState.currentWeek,
+        newState.currentSeason,
+      );
+      if (accountabilityResult.reputationDelta !== 0 || accountabilityResult.messages.length > 0) {
+        const newReputation = Math.max(
+          0,
+          Math.min(100, newState.scout.reputation + accountabilityResult.reputationDelta),
+        );
+        newState = {
+          ...newState,
+          transferRecords: accountabilityResult.updatedRecords,
+          scout: { ...newState.scout, reputation: newReputation },
+          inbox: [...newState.inbox, ...accountabilityResult.messages],
+        };
+      }
 
       const seasonEndMessages: InboxMessage[] = [];
       const completedSeason = stateWithPhase2.currentSeason;
@@ -5213,6 +5435,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...newState,
         performanceReviews: [...newState.performanceReviews, review],
       };
+
+      // Ironman permadeath: if fired at end-of-season, trigger game over
+      if (
+        review.outcome === "fired" &&
+        getDifficultyModifiers(newState.difficulty).permadeath
+      ) {
+        set({
+          gameState: null,
+          isLoaded: false,
+          currentScreen: "mainMenu",
+        });
+        return;
+      }
 
       // Apply reputation change from review
       const reviewedScout = updateReputation(newState.scout, {
@@ -5357,6 +5592,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         transferWindow: newTransferWindow,
         // Reset at the start of each new season — every fixture is fresh
         playedFixtures: [],
+        completedInteractiveSessions: [],
       };
 
       // ── Generate unsigned youth and academy intakes for the new season ──────
@@ -5456,8 +5692,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             transferRecordRng,
             newState.transferRecords,
             newState.players,
-            completedSeason,
-            newState.matchRatings,
           );
           newState = { ...newState, transferRecords: updatedTransferRecords };
         }
@@ -6480,6 +6714,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const rng = createRNG(`${gameState.seed}-observe-${activeMatch.fixtureId}`);
     const newObservations = { ...gameState.observations };
+    const breakthroughMessages: InboxMessage[] = [];
     const updatedPlayers = { ...gameState.players };
     const traitDiscoveries: Array<{ playerName: string; trait: string }> = [];
 
@@ -6496,6 +6731,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const existingObs = Object.values(gameState.observations).filter(
         (o) => o.playerId === focus.playerId
       );
+
+      // Check for breakthrough BEFORE creating the observation
+      const { isBreakthrough } = computeScoutingBreakthroughBonus(
+        existingObs,
+        focus.playerId,
+        "liveMatch",
+        focus.lens,
+      );
+
       const observation = processFocusedObservations(
         rng,
         player,
@@ -6508,6 +6752,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       observation.week = gameState.currentWeek;
       observation.season = gameState.currentSeason;
       observation.matchId = activeMatch.fixtureId;
+
+      // Generate breakthrough inbox message
+      if (isBreakthrough) {
+        breakthroughMessages.push({
+          id: `breakthrough_${player.id}_s${gameState.currentSeason}w${gameState.currentWeek}`,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+          type: "feedback",
+          title: `Breakthrough: ${player.firstName} ${player.lastName}`,
+          body: `By observing ${player.firstName} ${player.lastName} across multiple settings, you've gained deeper insight into their true ability. Your confidence in this player's assessment has broken through to a new level.`,
+          read: false,
+          actionRequired: false,
+          relatedId: player.id,
+        });
+      }
 
       // Apply tool confidence bonus + equipment observation bonus to readings
       const confBoost = (toolBonuses.confidenceBonus ?? 0) + equipBonus;
@@ -6591,6 +6850,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       observations: newObservations,
       fixtures: { ...gameState.fixtures, [fixture.id]: updatedFixture },
       playedFixtures: updatedPlayedFixtures,
+      inbox: [...gameState.inbox, ...breakthroughMessages],
     };
 
     // --- Data anomaly validation ---
@@ -6743,6 +7003,173 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Observation Session Actions
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  startObservationSession: (activityType, playerPool, targetPlayerId) => {
+    const { gameState } = get();
+    if (!gameState) return;
+
+    const rng = createRNG(`${gameState.seed}-session-${gameState.currentWeek}-${activityType}`);
+
+    const config = {
+      activityType: activityType as any,
+      specialization: gameState.scout.primarySpecialization,
+      playerPool,
+      targetPlayerId,
+      seed: `${gameState.seed}-session-${gameState.currentWeek}-${activityType}`,
+      week: gameState.currentWeek,
+      season: gameState.currentSeason,
+    };
+
+    let session = createSession(config, rng);
+
+    // Populate phases for Full Observation mode
+    if (session.mode === "fullObservation") {
+      session = populateFullObservationPhases(session, rng);
+    }
+
+    set({
+      activeSession: session,
+      currentScreen: "observation" as GameScreen,
+    });
+  },
+
+  beginSession: () => {
+    const { activeSession } = get();
+    if (!activeSession) return;
+    set({ activeSession: startSession(activeSession) });
+  },
+
+  advanceSessionPhase: () => {
+    const { activeSession } = get();
+    if (!activeSession) return;
+    const updated = advanceSessionPhase(activeSession);
+    set({ activeSession: updated });
+
+    // If we transitioned to reflection, generate reflection content
+    if (updated.state === "reflection" && activeSession.state === "active") {
+      const { gameState } = get();
+      if (!gameState) return;
+      const rng = createRNG(`${gameState.seed}-reflection-${gameState.currentWeek}`);
+      const reflectionResult = generateReflection(
+        updated,
+        rng,
+        gameState.scout.attributes.intuition,
+        gameState.scout.specializationLevel,
+      );
+      set({ lastReflectionResult: reflectionResult });
+    }
+  },
+
+  allocateSessionFocus: (playerId, lens) => {
+    const { activeSession } = get();
+    if (!activeSession) return;
+    set({ activeSession: allocateFocus(activeSession, playerId, lens) });
+  },
+
+  removeSessionFocus: (playerId) => {
+    const { activeSession } = get();
+    if (!activeSession) return;
+    set({ activeSession: removeFocus(activeSession, playerId) });
+  },
+
+  flagSessionMoment: (momentId, reaction) => {
+    const { activeSession } = get();
+    if (!activeSession) return;
+    set({ activeSession: flagMoment(activeSession, momentId, reaction) });
+  },
+
+  addSessionNote: (note) => {
+    const { activeSession } = get();
+    if (!activeSession) return;
+    set({ activeSession: addReflectionNote(activeSession, note) });
+  },
+
+  endObservationSession: () => {
+    const { activeSession, gameState } = get();
+    if (!activeSession || !gameState) return;
+
+    const completed = completeSession(activeSession);
+    const result = getSessionResult(completed);
+
+    // Accumulate insight points
+    const scout = gameState.scout;
+    const currentInsight = (scout.insightState ?? createInsightState()) as any;
+    const capacity = calculateCapacity(scout.attributes.intuition);
+    const updatedInsight = accumulateInsight(currentInsight, result.insightPointsEarned, capacity) as any;
+
+    // Track the completed session
+    const completedSessions = gameState.completedInteractiveSessions ?? [];
+
+    set({
+      activeSession: null,
+      lastReflectionResult: null,
+      currentScreen: "dashboard" as GameScreen,
+      gameState: {
+        ...gameState,
+        scout: {
+          ...scout,
+          insightState: updatedInsight,
+        },
+        completedInteractiveSessions: [...completedSessions, completed.id],
+      },
+    });
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Insight Actions
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  useInsight: (actionId) => {
+    const { activeSession, gameState } = get();
+    if (!activeSession || !gameState) return;
+
+    const scout = gameState.scout;
+    const insightState = (scout.insightState ?? createInsightState()) as any;
+
+    // Check if can use
+    const check = canUseInsight(insightState, actionId, scout as any, activeSession.mode);
+    if (!check.canUse) return;
+
+    // Spend IP and check for fizzle
+    const rng = createRNG(`${gameState.seed}-insight-${gameState.currentWeek}-${actionId}`);
+    const { state: newInsightState, fizzled } = spendInsight(
+      insightState, actionId, scout as any,
+      gameState.currentWeek, gameState.currentSeason, rng
+    );
+
+    // Execute the action
+    const context = {
+      scout: scout as any,
+      session: activeSession,
+      targetPlayerId: activeSession.focusTokens.allocations[0]?.playerId,
+      players: gameState.players,
+      contacts: gameState.contacts,
+    };
+    const result = executeInsightAction(actionId, context, rng, fizzled);
+
+    // Update scout fatigue
+    const newFatigue = Math.min(100, scout.fatigue + 8);
+
+    set({
+      gameState: {
+        ...gameState,
+        scout: {
+          ...scout,
+          fatigue: newFatigue,
+          insightState: newInsightState,
+        },
+      },
+      lastInsightResult: result,
+    });
+  },
+
+  dismissInsightResult: () => {
+    set({ lastInsightResult: null });
+  },
+
   // Reports
   startReport: (playerId) => {
     set({ selectedPlayerId: playerId, currentScreen: "reportWriter" });
@@ -6782,7 +7209,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
       type: "reportSubmitted",
       quality,
     });
-    const updatedScout = { ...baseUpdatedScout, reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1 };
+    // Apply difficulty reputation multiplier to the delta
+    const repDelta = baseUpdatedScout.reputation - gameState.scout.reputation;
+    const diffMods = getDifficultyModifiers(gameState.difficulty);
+    const adjustedRep = Math.max(0, Math.min(100,
+      gameState.scout.reputation + Math.round(repDelta * diffMods.reputationMultiplier),
+    ));
+    const updatedScout = {
+      ...baseUpdatedScout,
+      reputation: adjustedRep,
+      reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1,
+    };
     const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
     const scoredReport = { ...report, qualityScore: quality, reputationDelta };
 
@@ -6957,10 +7394,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       contractEndSeason: gameState.currentSeason + offer.contractLength,
     };
 
+    // B9: Auto-initialize tier 3+ specialization income fields on promotion
+    let updatedFinances = gameState.finances;
+    if (offer.tier >= 3 && gameState.scout.careerTier < 3 && updatedFinances) {
+      const spec = updatedScout.primarySpecialization;
+      if (spec === "youth" && (updatedFinances.academyPartnerships ?? 0) === 0) {
+        updatedFinances = { ...updatedFinances, academyPartnerships: 1 };
+      } else if (spec === "regional" && !updatedFinances.regionalExpertiseRegion) {
+        const homeCountry = gameState.countries[0] ?? "england";
+        updatedFinances = { ...updatedFinances, regionalExpertiseRegion: homeCountry };
+      }
+    }
+
     set({
       gameState: {
         ...gameState,
         scout: updatedScout,
+        finances: updatedFinances,
         jobOffers: gameState.jobOffers.filter((o) => o.id !== offerId),
         inbox: [
           ...gameState.inbox,
@@ -7309,6 +7759,113 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (resolvedEvent?.consequences && resolvedEvent.consequences.length > 0) {
       finalState = applyConsequences(finalState, resolvedEvent.consequences);
     }
+
+    // ── Special handling for rivalPoachBid events ────────────────────────
+    if (event.type === "rivalPoachBid" && event.relatedIds && event.relatedIds.length >= 2) {
+      const playerId = event.relatedIds[0];
+      const rivalId = event.relatedIds[1];
+      const rival = finalState.rivalScouts[rivalId];
+      const player = finalState.players[playerId];
+      const choice = event.choices?.[choiceIndex];
+
+      if (rival && player && choice) {
+        const updatedRivals = { ...finalState.rivalScouts };
+
+        if (choice.effect === "counterBid") {
+          const bidRng = createRNG(
+            `${gameState.seed}-poach-bid-${eventId}-${choiceIndex}`,
+          );
+          const bidResult = resolvePoachCounterBid(
+            bidRng,
+            rival,
+            player,
+            finalState.scout,
+          );
+
+          updatedRivals[rivalId] = bidResult.updatedRival;
+          const bidRep = Math.min(
+            100,
+            Math.max(0, finalState.scout.reputation + bidResult.reputationChange),
+          );
+
+          const outcomeMessage: InboxMessage = {
+            id: `poach-bid-result-${eventId}`,
+            week: finalState.currentWeek,
+            season: finalState.currentSeason,
+            type: "event" as const,
+            title: bidResult.success
+              ? `Counter-Bid Successful: ${player.firstName} ${player.lastName}`
+              : `Counter-Bid Failed: ${player.firstName} ${player.lastName}`,
+            body: bidResult.success
+              ? `Your counter-bid of ${bidResult.cost.toLocaleString()} succeeded! ` +
+                `${player.firstName} ${player.lastName} will join your club. ` +
+                `Your decisive action has boosted your reputation.`
+              : `Your counter-bid of ${bidResult.cost.toLocaleString()} was rejected. ` +
+                `${rival.name} secured the deal. The cost has been absorbed and ` +
+                `your reputation takes a hit.`,
+            read: false,
+            actionRequired: false,
+            relatedId: playerId,
+          };
+
+          finalState = {
+            ...finalState,
+            scout: { ...finalState.scout, reputation: bidRep },
+            rivalScouts: updatedRivals,
+            inbox: [...finalState.inbox, outcomeMessage],
+          };
+
+          // Check if rival has become a nemesis
+          const updatedRival = updatedRivals[rivalId];
+          if (updatedRival && !bidResult.success && isNemesis(updatedRival)) {
+            const nemesisMsg: InboxMessage = {
+              id: `nemesis-${rivalId}-w${finalState.currentWeek}`,
+              week: finalState.currentWeek,
+              season: finalState.currentSeason,
+              type: "event" as const,
+              title: `Nemesis: ${rival.name}`,
+              body: `You've lost ${updatedRival.winsAgainstPlayer} players to ${rival.name}. They're becoming your nemesis.`,
+              read: false,
+              actionRequired: false,
+            };
+            finalState = {
+              ...finalState,
+              inbox: [...finalState.inbox, nemesisMsg],
+            };
+          }
+        } else if (choice.effect === "concede") {
+          updatedRivals[rivalId] = {
+            ...rival,
+            winsAgainstPlayer: (rival.winsAgainstPlayer ?? 0) + 1,
+            lossesToPlayer: rival.lossesToPlayer ?? 0,
+          };
+
+          finalState = {
+            ...finalState,
+            rivalScouts: updatedRivals,
+          };
+
+          const concedeRival = updatedRivals[rivalId];
+          if (concedeRival && isNemesis(concedeRival)) {
+            const nemesisMsg: InboxMessage = {
+              id: `nemesis-${rivalId}-w${finalState.currentWeek}`,
+              week: finalState.currentWeek,
+              season: finalState.currentSeason,
+              type: "event" as const,
+              title: `Nemesis: ${rival.name}`,
+              body: `You've lost ${concedeRival.winsAgainstPlayer} players to ${rival.name}. They're becoming your nemesis.`,
+              read: false,
+              actionRequired: false,
+            };
+            finalState = {
+              ...finalState,
+              inbox: [...finalState.inbox, nemesisMsg],
+            };
+          }
+        }
+      }
+    }
+
     set({ gameState: finalState });
   },
 
@@ -7747,10 +8304,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return;
     }
     const result = negotiationEngine.applyCompletedTransfer(neg, gameState);
+    const transferPlayer = gameState.players[neg.playerId];
     const transferRecord: TransferRecord = {
-      id: `tr_${neg.id}`, playerId: neg.playerId, reportId: "", directiveId: undefined,
-      fromClubId: neg.fromClubId, toClubId: neg.toClubId, transferFee: result.transferFee,
-      season: gameState.currentSeason, week: gameState.currentWeek, isLoan: false, seasonPerformance: [],
+      id: `tr_${neg.id}`, playerId: neg.playerId, reportId: "",
+      scoutId: gameState.scout.id,
+      fromClubId: neg.fromClubId, toClubId: neg.toClubId, fee: result.transferFee,
+      transferSeason: gameState.currentSeason, transferWeek: gameState.currentWeek,
+      scoutConviction: "recommend",
+      caAtTransfer: transferPlayer?.currentAbility ?? 0,
+      seasonsSinceTransfer: 0,
+      accountabilityApplied: false,
     };
     const updatedNegs = negotiations.map((n) => n.id === negotiationId ? { ...n, phase: "completed" as const } : n);
     set({

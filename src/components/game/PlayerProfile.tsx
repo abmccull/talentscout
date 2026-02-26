@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake } from "lucide-react";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake } from "lucide-react";
 import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill, DisciplinaryRecord } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
@@ -1126,6 +1126,25 @@ export function PlayerProfile() {
                   </span>
                 ) : null}
                 <FormIndicator form={player.form} />
+                {/* Form momentum badge */}
+                {player.formTrend === "rising" && (player.formMomentum ?? 0) > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400"
+                    title={`${(player.formMomentum ?? 0) + 3} consecutive strong performances`}
+                  >
+                    <Flame size={12} />
+                    Hot Streak ({(player.formMomentum ?? 0) + 3} matches)
+                  </span>
+                )}
+                {player.formTrend === "falling" && (player.formMomentum ?? 0) > 0 && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-xs font-medium text-sky-400"
+                    title={`${(player.formMomentum ?? 0) + 3} consecutive poor performances`}
+                  >
+                    <Snowflake size={12} />
+                    Cold Streak ({(player.formMomentum ?? 0) + 3} matches)
+                  </span>
+                )}
               </div>
             </div>
           </div>

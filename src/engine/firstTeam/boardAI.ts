@@ -236,7 +236,7 @@ export function evaluateBoardSatisfaction(
   // Count successful transfer records (finds that performed well)
   const successfulFindsThisSeason = state.transferRecords.filter(
     (tr) =>
-      tr.season === state.currentSeason &&
+      tr.transferSeason === state.currentSeason &&
       (tr.outcome === "hit" || tr.outcome === "decent"),
   );
   if (successfulFindsThisSeason.length > 0) {
@@ -261,7 +261,7 @@ export function evaluateBoardSatisfaction(
   // Check for failed transfer records (flops)
   const recentFlops = state.transferRecords.filter(
     (tr) =>
-      tr.season === state.currentSeason && tr.outcome === "flop",
+      tr.transferSeason === state.currentSeason && tr.outcome === "flop",
   );
   if (recentFlops.length > 0) {
     satisfactionDelta -= config.failureLoss * recentFlops.length;

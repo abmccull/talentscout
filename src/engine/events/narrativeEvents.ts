@@ -373,6 +373,18 @@ export function resolveEventChoice(
       );
       break;
 
+    case "rivalPoachBid":
+      reputationChange = resolveRivalPoachBidChoice(effect);
+      messages.push(
+        buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          rivalPoachBidOutcomeBody(effect),
+        ),
+      );
+      break;
+
     case "exclusiveTip":
       reputationChange = resolveExclusiveTipChoice(effect);
       messages.push(
@@ -919,6 +931,8 @@ type EventEffect =
   | "doubleDealLeverage"
   | "journalistCooperate"
   | "journalistRefuse"
+  | "counterBid"
+  | "concede"
   | string; // fallback for any future template additions
 
 // ---------------------------------------------------------------------------
@@ -945,6 +959,32 @@ function rivalPoachOutcomeBody(effect: EventEffect): string {
     "You elected not to rush. The rival scout submitted their report first, " +
     "and the club is now considering their recommendation. Your earlier " +
     "groundwork may still carry weight, but momentum is against you."
+  );
+}
+
+function resolveRivalPoachBidChoice(effect: EventEffect): number {
+  // counterBid: resolved later via the game store (actual bid resolution),
+  //   but the narrative system provides a baseline reputation signal.
+  //   The real reputation change is applied by the game store based on bid outcome.
+  //   Return 0 here — the store handles the actual delta.
+  // concede: reputation -2 (letting the rival have the player)
+  if (effect === "counterBid") return 0;
+  if (effect === "concede") return -2;
+  return 0;
+}
+
+function rivalPoachBidOutcomeBody(effect: EventEffect): string {
+  if (effect === "counterBid") {
+    return (
+      "You've submitted a counter-bid for the player. The outcome will depend " +
+      "on your reputation and the strength of your offer. Check back shortly " +
+      "for the result."
+    );
+  }
+  return (
+    "You've decided to let the rival have the player. It stings, but sometimes " +
+    "discretion is the better part of valour. The rival's victory has been noted " +
+    "in scouting circles, and your reputation takes a small hit."
   );
 }
 

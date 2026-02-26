@@ -21,6 +21,7 @@ import type {
   Club,
   InboxMessage,
   PlayerAttribute,
+  PhysicalAttribute,
   AttributeDeltas,
   StandingEntry,
   Weather,
@@ -43,6 +44,8 @@ import type {
   Contact,
   BoardSatisfactionDelta,
 } from "./types";
+import { ALL_ATTRIBUTES } from "./types";
+import { getDifficultyModifiers } from "./difficulty";
 import {
   processNPCScoutingWeek,
   restNPCScout,
@@ -99,6 +102,19 @@ export interface InjuryResult {
   injury: Injury;
 }
 
+export interface BreakthroughResult {
+  playerId: string;
+  changes: AttributeDeltas;
+  abilityChange: number;
+  /** The attribute names that improved, used for the notification message. */
+  improvedAttributes: PlayerAttribute[];
+}
+
+export interface InjurySetbackResult {
+  playerId: string;
+  changes: AttributeDeltas;
+}
+
 export interface SimulatedFixture extends Fixture {
   played: true;
   homeGoals: number;
@@ -140,16 +156,22 @@ export interface TickResult {
   fixturesPlayed: SimulatedFixture[];
   standingsUpdated: boolean;
   playerDevelopment: PlayerDevelopmentResult[];
+  /** Rare breakthrough events for young in-form players. */
+  breakthroughs: BreakthroughResult[];
   transfers: Transfer[];
   injuries: InjuryResult[];
   newMessages: InboxMessage[];
   reputationChange: number;
+  /** Physical attribute setbacks for players recovering from serious injuries. */
+  injurySetbacks: InjurySetbackResult[];
   /** Whether end-of-season processing was triggered this tick. */
   endOfSeasonTriggered: boolean;
   /** Per-NPC-scout results: updated scouts and any new reports (tier 4+). */
   npcScoutResults: NPCScoutWeekResult[];
   /** Board directive evaluation result, set only at season-end for tier 5. */
   boardDirectiveResult?: BoardDirectiveEvaluationResult;
+  /** Form momentum updates for all players this week. */
+  formMomentumUpdates: FormMomentumUpdate[];
   /** Itemised reputation changes this week with human-readable reasons (A4). */
   satisfactionDeltas: BoardSatisfactionDelta[];
   /** Youth aging results: auto-signed, retired, updated pool. */
@@ -230,6 +252,18 @@ const BASE_INJURY_PROBABILITY = 0.02;
 
 /** Baseline probability of an AI club completing a transfer in any week. */
 const AI_TRANSFER_PROBABILITY = 0.04;
+
+/** Weekly probability of a breakthrough event for an eligible young player. */
+const BREAKTHROUGH_CHANCE = 0.015;
+
+/** Minimum club reputation to grant the coaching environment bonus. */
+const HIGH_REPUTATION_THRESHOLD = 70;
+
+/** Development chance multiplier for players at high-reputation clubs. */
+const COACHING_BONUS_MULTIPLIER = 1.15;
+
+/** Minimum injury duration (weeks) to trigger a physical setback on recovery. */
+const SERIOUS_INJURY_THRESHOLD = 4;
 
 // =============================================================================
 // INTERNAL HELPERS
@@ -556,6 +590,170 @@ export function buildStandings(
 }
 
 // =============================================================================
+// FORM MOMENTUM
+// =============================================================================
+
+/**
+ * Compute updated form momentum for a player based on the quality of their
+ * recent match events. Called once per week during the tick.
+ *
+ * Streak rules:
+ *  - Track consecutive matches at similar quality (within 1.0 of each other).
+ *  - If 4+ consecutive matches above 7.0 quality: rising trend, momentum = matches - 3.
+ *  - If 4+ consecutive matches below 5.0 quality: falling trend, momentum = matches - 3.
+ *  - Otherwise: stable trend, momentum decays by 1 per week toward 0.
+ *
+ * Form locking:
+ *  - When a player transitions into a streak (momentum reaches 1+), form is
+ *    "locked" for 2 extra weeks — it cannot swing in the opposite direction.
+ *  - formLockWeeks decrements each week; while > 0 form is held steady.
+ */
+interface FormMomentumUpdate {
+  playerId: string;
+  formMomentum: number;
+  formTrend: "rising" | "stable" | "falling";
+  formLockWeeks: number;
+  /** Adjusted form value (may be clamped by lock). */
+  form: number;
+}
+
+function computeFormMomentum(
+  player: Player,
+  weekFixtures: SimulatedFixture[],
+  allPlayers: Record<string, Player>,
+  rng: RNG,
+): FormMomentumUpdate {
+  const currentMomentum = player.formMomentum ?? 0;
+  const currentTrend = player.formTrend ?? "stable";
+  const currentLock = player.formLockWeeks ?? 0;
+
+  // Find if this player's club played this week and determine match quality
+  const clubFixture = weekFixtures.find(
+    (f) => f.homeClubId === player.clubId || f.awayClubId === player.clubId,
+  );
+
+  if (!clubFixture || player.injured) {
+    // No match this week — momentum decays, lock ticks down
+    const decayedMomentum = Math.max(0, currentMomentum - 1);
+    const decayedLock = Math.max(0, currentLock - 1);
+    const trend: "rising" | "stable" | "falling" =
+      decayedMomentum === 0 ? "stable" : currentTrend;
+
+    return {
+      playerId: player.id,
+      formMomentum: decayedMomentum,
+      formTrend: trend,
+      formLockWeeks: decayedLock,
+      form: player.form,
+    };
+  }
+
+  // Simulate a match quality rating for this player (7.0 +/- noise based on CA)
+  // Higher CA players tend toward higher ratings
+  const baseRating = 5.0 + (player.currentAbility / 200) * 3.0;
+  const matchRating = rng.gaussian(baseRating, 1.2);
+  const clampedRating = Math.min(10, Math.max(1, matchRating));
+
+  // Determine new streak state
+  const isHotMatch = clampedRating >= 7.0;
+  const isColdMatch = clampedRating < 5.0;
+
+  let newMomentum: number;
+  let newTrend: "rising" | "stable" | "falling";
+  let newLock: number;
+  let newForm: number;
+
+  if (isHotMatch && (currentTrend === "rising" || currentTrend === "stable")) {
+    // Continuing or starting a hot streak
+    const consecutiveHot = currentTrend === "rising" ? currentMomentum + 3 + 1 : 1;
+    if (consecutiveHot >= 4) {
+      newMomentum = Math.min(10, consecutiveHot - 3);
+      newTrend = "rising";
+      // Lock form when first entering a streak or continuing
+      newLock = newMomentum >= 1 && currentTrend !== "rising" ? 2 : Math.max(0, currentLock - 1);
+      if (currentTrend !== "rising" && newMomentum >= 1) {
+        // Just entered hot streak — lock for 2 weeks
+        newLock = 2;
+      }
+    } else {
+      newMomentum = 0;
+      newTrend = "stable";
+      newLock = Math.max(0, currentLock - 1);
+    }
+  } else if (isColdMatch && (currentTrend === "falling" || currentTrend === "stable")) {
+    // Continuing or starting a cold streak
+    const consecutiveCold = currentTrend === "falling" ? currentMomentum + 3 + 1 : 1;
+    if (consecutiveCold >= 4) {
+      newMomentum = Math.min(10, consecutiveCold - 3);
+      newTrend = "falling";
+      newLock = newMomentum >= 1 && currentTrend !== "falling" ? 2 : Math.max(0, currentLock - 1);
+      if (currentTrend !== "falling" && newMomentum >= 1) {
+        newLock = 2;
+      }
+    } else {
+      newMomentum = 0;
+      newTrend = "stable";
+      newLock = Math.max(0, currentLock - 1);
+    }
+  } else {
+    // Streak broken or neither hot nor cold
+    if (currentLock > 0) {
+      // Form is locked — resist the change, keep current trend
+      newMomentum = currentMomentum;
+      newTrend = currentTrend;
+      newLock = currentLock - 1;
+    } else {
+      // No lock — reset to stable, decay momentum
+      newMomentum = Math.max(0, currentMomentum - 1);
+      newTrend = newMomentum > 0 ? currentTrend : "stable";
+      newLock = 0;
+    }
+  }
+
+  // Compute new form value
+  // Base form from match rating: map [1,10] to [-3,3]
+  const rawForm = ((clampedRating - 5.5) / 4.5) * 3;
+
+  if (newLock > 0 || (currentLock > 0 && newTrend !== "stable")) {
+    // Form is locked — keep it at current level (resist swings)
+    newForm = player.form;
+  } else {
+    // Blend old form with new: weighted average for smoother transitions
+    newForm = Math.round((player.form * 0.4 + rawForm * 0.6) * 10) / 10;
+    newForm = Math.min(3, Math.max(-3, newForm));
+  }
+
+  void allPlayers; // reserved for future cross-team comparisons
+
+  return {
+    playerId: player.id,
+    formMomentum: newMomentum,
+    formTrend: newTrend,
+    formLockWeeks: newLock,
+    form: newForm,
+  };
+}
+
+/**
+ * Process form momentum updates for all players in the world.
+ */
+function processFormMomentum(
+  state: GameState,
+  weekFixtures: SimulatedFixture[],
+  rng: RNG,
+): FormMomentumUpdate[] {
+  const results: FormMomentumUpdate[] = [];
+
+  for (const player of Object.values(state.players)) {
+    results.push(
+      computeFormMomentum(player, weekFixtures, state.players, rng),
+    );
+  }
+
+  return results;
+}
+
+// =============================================================================
 // PLAYER DEVELOPMENT
 // =============================================================================
 
@@ -615,13 +813,30 @@ function developmentMultiplier(
  */
 function computePlayerDevelopment(
   player: Player,
+  club: Club | undefined,
   rng: RNG,
+  developmentRateModifier: number = 1.0,
 ): PlayerDevelopmentResult {
-  const mult = developmentMultiplier(player.age, player.developmentProfile, rng);
+  const baseMult = developmentMultiplier(player.age, player.developmentProfile, rng);
+  // Apply difficulty development rate modifier (only to growth, not decline)
+  const mult = baseMult > 0 ? baseMult * developmentRateModifier : baseMult;
 
   // Weekly development chance — form bonus: +3 → 20%, baseline 15%, -3 → 10%
   const formBonus = player.form * 0.017;
-  const developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
+  let developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
+  // B6: Coaching environment bonus: players at high-reputation clubs develop 15% faster.
+  if (club && club.reputation > HIGH_REPUTATION_THRESHOLD) {
+    developmentChance *= COACHING_BONUS_MULTIPLIER;
+  }
+  // B7: Form momentum modifies development chance
+  const momentum = player.formMomentum ?? 0;
+  const trend = player.formTrend ?? "stable";
+  if (trend === "rising" && momentum > 0) {
+    developmentChance += Math.min(0.15, momentum * 0.03);
+  } else if (trend === "falling" && momentum > 0) {
+    developmentChance -= momentum * 0.02;
+  }
+  developmentChance = Math.max(0.01, developmentChance); // floor at 1%
   if (!rng.chance(developmentChance)) {
     return { playerId: player.id, changes: {}, abilityChange: 0 };
   }
@@ -668,6 +883,108 @@ function computePlayerDevelopment(
 }
 
 /**
+ * Check for a rare development breakthrough for a young, in-form player.
+ *
+ * Eligibility:
+ *  - Age 17-25
+ *  - form >= +1 (player is performing well)
+ *  - 1.5% weekly chance (~once per season for a player in sustained good form)
+ *
+ * When triggered, 2-3 random attributes gain +2-3 points each (may exceed
+ * the normal ceiling), and currentAbility increases by +3-5.
+ */
+function computeBreakthroughDevelopment(
+  player: Player,
+  rng: RNG,
+): BreakthroughResult | null {
+  // Eligibility gates
+  if (player.age < 17 || player.age > 25) return null;
+  if (player.form < 1) return null;
+  if (!rng.chance(BREAKTHROUGH_CHANCE)) return null;
+
+  const changes: AttributeDeltas = {};
+  const improvedAttributes: PlayerAttribute[] = [];
+
+  // Pick 2-3 random attributes to boost
+  const shuffled = rng.shuffle([...ALL_ATTRIBUTES]);
+  const count = rng.nextInt(2, 3);
+  const selected = shuffled.slice(0, count);
+
+  for (const attr of selected) {
+    const boost = rng.nextInt(2, 3);
+    changes[attr] = boost;
+    improvedAttributes.push(attr);
+  }
+
+  // Current ability boost (+3-5)
+  const abilityChange = rng.nextInt(3, 5);
+
+  return {
+    playerId: player.id,
+    changes,
+    abilityChange,
+    improvedAttributes,
+  };
+}
+
+/**
+ * When a player recovers from a serious injury (duration > 4 weeks),
+ * reduce 1-2 physical attributes by 1 point. This creates meaningful
+ * injury consequences for scouting decisions.
+ */
+function computeInjurySetback(
+  player: Player,
+  originalDuration: number,
+  rng: RNG,
+): InjurySetbackResult | null {
+  if (originalDuration <= SERIOUS_INJURY_THRESHOLD) return null;
+
+  const changes: AttributeDeltas = {};
+
+  // Physical attributes most affected by serious injuries
+  const physicalCandidates: PhysicalAttribute[] = ["pace", "stamina", "agility"];
+  const shuffled = rng.shuffle(physicalCandidates);
+  const count = rng.nextInt(1, 2);
+  const selected = shuffled.slice(0, count);
+
+  for (const attr of selected) {
+    if (player.attributes[attr] > 1) {
+      changes[attr] = -1;
+    }
+  }
+
+  if (Object.keys(changes).length === 0) return null;
+
+  return { playerId: player.id, changes };
+}
+
+/**
+ * Generate an inbox message for a player breakthrough event.
+ */
+function generateBreakthroughMessage(
+  player: Player,
+  breakthrough: BreakthroughResult,
+  state: GameState,
+  rng: RNG,
+): InboxMessage {
+  const attrNames = breakthrough.improvedAttributes
+    .map((a) => a.replace(/([A-Z])/g, " $1").toLowerCase().trim())
+    .join(" and ");
+
+  return {
+    id: makeMessageId("breakthrough", rng),
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "news",
+    title: `Development Breakthrough: ${player.firstName} ${player.lastName}`,
+    body: `${player.firstName} ${player.lastName} has shown remarkable improvement! Their ${attrNames} ${breakthrough.improvedAttributes.length > 1 ? "have" : "has"} significantly improved.`,
+    read: false,
+    actionRequired: false,
+    relatedId: player.id,
+  };
+}
+
+/**
  * Process development for all players in the world.
  * Only processes young players (under 32) for performance reasons;
  * older players have stable or predictably declining attributes.
@@ -675,8 +992,11 @@ function computePlayerDevelopment(
 function processPlayerDevelopment(
   state: GameState,
   rng: RNG,
-): PlayerDevelopmentResult[] {
-  const results: PlayerDevelopmentResult[] = [];
+): { development: PlayerDevelopmentResult[]; breakthroughs: BreakthroughResult[]; breakthroughMessages: InboxMessage[] } {
+  const development: PlayerDevelopmentResult[] = [];
+  const breakthroughs: BreakthroughResult[] = [];
+  const breakthroughMessages: InboxMessage[] = [];
+  const devRateMod = getDifficultyModifiers(state.difficulty).developmentRate;
 
   for (const player of Object.values(state.players)) {
     // Skip heavily injured players — no development during long-term injury
@@ -684,18 +1004,29 @@ function processPlayerDevelopment(
     // Skip players past their useful development window
     if (player.age > 35) continue;
 
-    const result = computePlayerDevelopment(player, rng);
+    const club = state.clubs[player.clubId];
+    const result = computePlayerDevelopment(player, club, rng, devRateMod);
 
     // Only include results that actually have changes
     const hasChanges =
       Object.keys(result.changes).length > 0 || result.abilityChange !== 0;
 
     if (hasChanges) {
-      results.push(result);
+      development.push(result);
+    }
+
+    // Breakthrough check — after normal development, young in-form players
+    // have a rare chance to exceed their ceiling.
+    const breakthrough = computeBreakthroughDevelopment(player, rng);
+    if (breakthrough) {
+      breakthroughs.push(breakthrough);
+      breakthroughMessages.push(
+        generateBreakthroughMessage(player, breakthrough, state, rng),
+      );
     }
   }
 
-  return results;
+  return { development, breakthroughs, breakthroughMessages };
 }
 
 // =============================================================================
@@ -1656,8 +1987,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     allCardEvents, currentDisciplinary, state.currentSeason,
   );
 
-  // 3. Player development
-  const playerDevelopment = processPlayerDevelopment(state, rng);
+  // 3. Player development (normal growth + rare breakthroughs)
+  const { development: playerDevelopment, breakthroughs, breakthroughMessages } =
+    processPlayerDevelopment(state, rng);
 
   // 4. AI transfers
   const transfers = processAITransfers(state, rng);
@@ -1665,9 +1997,27 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 5. Injuries
   const injuries = processInjuries(state, rng);
 
+  // 5b. Injury setbacks: when a new serious injury occurs (duration > 4 weeks),
+  //     compute physical attribute reductions applied alongside the injury.
+  const injurySetbacks: InjurySetbackResult[] = [];
+  for (const injury of injuries) {
+    if (injury.weeksOut > SERIOUS_INJURY_THRESHOLD) {
+      const player = state.players[injury.playerId];
+      if (player) {
+        const setback = computeInjurySetback(player, injury.weeksOut, rng);
+        if (setback) {
+          injurySetbacks.push(setback);
+        }
+      }
+    }
+  }
+
   // 6. Inbox messages (after computing transfers and injuries so we can ref them)
   const endOfSeasonTriggered = isEndOfSeason(state.currentWeek, state.fixtures);
   const newMessages = generateInboxMessages(state, transfers, injuries, rng);
+
+  // Append breakthrough notifications
+  newMessages.push(...breakthroughMessages);
 
   if (endOfSeasonTriggered) {
     newMessages.push(generateEndOfSeasonMessage(state, rng));
@@ -1839,17 +2189,23 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
 
   const f3UpdatedContacts = exclusiveResult.updatedContacts;
 
+  // 19. Form momentum updates for all players.
+  const formMomentumUpdates = processFormMomentum(state, fixturesPlayed, rng);
+
   return {
     fixturesPlayed,
     standingsUpdated,
     playerDevelopment,
+    breakthroughs,
     transfers,
     injuries,
+    injurySetbacks,
     newMessages,
     reputationChange,
     endOfSeasonTriggered,
     npcScoutResults,
     boardDirectiveResult,
+    formMomentumUpdates,
     satisfactionDeltas,
     youthAgingResult: {
       autoSigned: youthAgingResult.autoSigned,
@@ -1941,6 +2297,70 @@ export function advanceWeek(
         1,
         200,
       ),
+    };
+  }
+
+  // ---- Breakthroughs: rare jumps that can exceed the normal ceiling ----
+  for (const bt of tickResult.breakthroughs) {
+    const player = updatedPlayers[bt.playerId];
+    if (!player) continue;
+
+    const updatedAttributes = { ...player.attributes };
+    for (const [attr, delta] of Object.entries(bt.changes) as Array<
+      [PlayerAttribute, number | undefined]
+    >) {
+      if (delta === undefined) continue;
+      updatedAttributes[attr] = clamp(
+        updatedAttributes[attr] + delta,
+        1,
+        20,
+      );
+    }
+
+    updatedPlayers[bt.playerId] = {
+      ...player,
+      attributes: updatedAttributes,
+      currentAbility: clamp(
+        player.currentAbility + bt.abilityChange,
+        1,
+        200,
+      ),
+    };
+  }
+
+  // ---- Injury setbacks: physical attribute reductions from serious injuries ----
+  for (const setback of tickResult.injurySetbacks) {
+    const player = updatedPlayers[setback.playerId];
+    if (!player) continue;
+
+    const updatedAttributes = { ...player.attributes };
+    for (const [attr, delta] of Object.entries(setback.changes) as Array<
+      [PlayerAttribute, number | undefined]
+    >) {
+      if (delta === undefined) continue;
+      updatedAttributes[attr] = clamp(
+        updatedAttributes[attr] + delta,
+        1,
+        20,
+      );
+    }
+
+    updatedPlayers[setback.playerId] = {
+      ...player,
+      attributes: updatedAttributes,
+    };
+  }
+
+  // ---- Form momentum: apply momentum, trend, lock, and form updates ----
+  for (const fmUpdate of tickResult.formMomentumUpdates) {
+    const player = updatedPlayers[fmUpdate.playerId];
+    if (!player) continue;
+    updatedPlayers[fmUpdate.playerId] = {
+      ...player,
+      form: clamp(Math.round(fmUpdate.form * 10) / 10, -3, 3),
+      formMomentum: fmUpdate.formMomentum,
+      formTrend: fmUpdate.formTrend,
+      formLockWeeks: fmUpdate.formLockWeeks,
     };
   }
 
@@ -2176,13 +2596,17 @@ export function advanceWeek(
   // Board directive evaluation may add an additional reputation change (tier 5).
   // Note: fatigue recovery is handled by the calendar system (applyWeekResults),
   // so we only apply reputation changes here.
+  // Difficulty multiplier scales reputation gains/losses.
   // Season event effects may also modify scout reputation and fatigue.
+  const diffMods = getDifficultyModifiers(state.difficulty);
   const boardReputationChange = tickResult.boardDirectiveResult?.reputationChange ?? 0;
+  const rawRepChange = tickResult.reputationChange + boardReputationChange;
+  const scaledRepChange = Math.round(rawRepChange * diffMods.reputationMultiplier);
   const seasonScout = tickResult.seasonEventState?.scout ?? state.scout;
   const updatedScout = {
     ...seasonScout,
     reputation: clamp(
-      seasonScout.reputation + tickResult.reputationChange + boardReputationChange,
+      seasonScout.reputation + scaledRepChange,
       0,
       100,
     ),

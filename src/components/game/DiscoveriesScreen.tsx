@@ -7,7 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trophy, Star, TrendingUp } from "lucide-react";
 import { getDiscoveryStats } from "@/engine/career/index";
-import type { DiscoveryRecord } from "@/engine/core/types";
+import type { DiscoveryRecord, TransferRecord } from "@/engine/core/types";
+import {
+  OUTCOME_COLORS,
+  OUTCOME_REASON_COLORS,
+  OUTCOME_REASON_SHORT_LABELS,
+} from "@/engine/firstTeam";
 
 // ─── Sort options ─────────────────────────────────────────────────────────────
 
@@ -64,9 +69,10 @@ interface DiscoveryCardProps {
   record: DiscoveryRecord;
   playerName: string;
   currentCA: number | undefined;
+  transferRecord?: TransferRecord;
 }
 
-function DiscoveryCard({ record, playerName, currentCA }: DiscoveryCardProps) {
+function DiscoveryCard({ record, playerName, currentCA, transferRecord }: DiscoveryCardProps) {
   const latestSnapshot =
     record.careerSnapshots.length > 0
       ? record.careerSnapshots[record.careerSnapshots.length - 1]
@@ -147,6 +153,29 @@ function DiscoveryCard({ record, playerName, currentCA }: DiscoveryCardProps) {
         </div>
       )}
 
+      {/* Transfer outcome */}
+      {transferRecord?.outcome && (
+        <div>
+          <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-1.5">
+            Transfer Outcome
+          </p>
+          <div className="flex items-center gap-1.5">
+            <span
+              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase ${OUTCOME_COLORS[transferRecord.outcome]}`}
+            >
+              {transferRecord.outcome}
+            </span>
+            {transferRecord.outcomeReason && (
+              <span
+                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}
+              >
+                {OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Career snapshots */}
       {record.careerSnapshots.length > 0 && (
         <div>
@@ -180,6 +209,12 @@ export function DiscoveriesScreen() {
   const discoveries = gameState?.discoveryRecords ?? [];
   const stats = getDiscoveryStats(discoveries);
   const sorted = sortDiscoveries(discoveries, sort);
+
+  // Build lookup of transfer records by player ID for outcome display
+  const transferByPlayerId = new Map<string, TransferRecord>();
+  for (const tr of (gameState?.transferRecords ?? [])) {
+    transferByPlayerId.set(tr.playerId, tr);
+  }
 
   if (!gameState) return null;
 
@@ -266,6 +301,7 @@ export function DiscoveriesScreen() {
                   record={record}
                   playerName={playerName}
                   currentCA={player?.currentAbility}
+                  transferRecord={transferByPlayerId.get(record.playerId)}
                 />
               );
             })}

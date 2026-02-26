@@ -13,6 +13,7 @@ export {
   perceiveAttribute,
   calculateConfidenceRange,
   observePlayer,
+  computeScoutingBreakthroughBonus,
 } from './perception';
 
 export {

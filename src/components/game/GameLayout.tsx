@@ -29,6 +29,7 @@ import {
   BookOpen,
   Swords,
   Lock,
+  Activity,
 } from "lucide-react";
 
 // ─── Sectioned Navigation ────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ function getNavSections(specialization: string): NavSection[] {
       label: "Career",
       items: [
         { screen: "career", label: "My Scout", icon: Briefcase },
+        { screen: "performance", label: "Performance", icon: Activity },
         { screen: "equipment", label: "Equipment", icon: Wrench },
         { screen: "training", label: "Training", icon: BookOpen },
         { screen: "finances", label: "Finances", icon: Wallet },

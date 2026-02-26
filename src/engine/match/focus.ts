@@ -69,6 +69,7 @@ export function processFocusedObservations(
     focus.phases,
     context,
     existingObservations,
+    focus.lens, // Pass the lens through so breakthrough bonus and focusLens are tracked
   );
 
   // Apply domain accuracy bonus: tighten confidence for attributes in the lens domain

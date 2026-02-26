@@ -142,7 +142,9 @@ export type {
   TickResult,
   Transfer,
   PlayerDevelopmentResult,
+  BreakthroughResult,
   InjuryResult,
+  InjurySetbackResult,
   SimulatedFixture,
 } from "./gameLoop";
 
