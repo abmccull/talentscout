@@ -531,7 +531,7 @@ function AnalysisContent({ dataPoints, onDataPointSelect }: AnalysisContentProps
               : "border-zinc-700/50 hover:border-zinc-600/70",
             selectedId === point.id && "ring-1 ring-[var(--primary)]/50",
           )}
-          aria-pressed={selectedId === point.id}
+          aria-current={selectedId === point.id ? "true" : undefined}
           aria-label={`${point.label}: ${point.value}`}
         >
           {/* Golden left border for highlighted points */}

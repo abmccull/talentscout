@@ -33,6 +33,8 @@ import type {
   DialogueNode,
   StrategicChoice,
 } from "@/engine/observation/types";
+import type { InsightActionId } from "@/engine/insight/types";
+import { getAvailableActions as getAvailableInsightActions } from "@/engine/insight/insight";
 import { getSessionResult, isHalfTimePhase } from "@/engine/observation/session";
 
 // ---------------------------------------------------------------------------
@@ -492,7 +494,6 @@ const FocusPanel = memo(function FocusPanel({
                   <select
                     value={lens}
                     onChange={(e) =>
-                      // TODO: Wire to gameStore session actions (allocateSessionFocus)
                       onAllocateFocus(player.playerId, e.target.value as LensType)
                     }
                     className={`w-full rounded bg-[#0a0a0a] border border-[#27272a] px-2 py-1 text-xs ${LENS_COLORS[lens]} focus:outline-none focus:ring-1 focus:ring-emerald-500`}
@@ -786,15 +787,8 @@ const CompleteView = memo(function CompleteView({ session, onContinue }: Complet
 // ---------------------------------------------------------------------------
 
 export function ObservationScreen() {
-  // TODO: Wire to gameStore session actions — activeSession will be added to GameStore
-  // when the observation engine is integrated. The cast to `unknown` then
-  // `ObservationSession | null` is intentional: this component is written ahead of
-  // the store update and the property does not exist on GameStore yet. Remove the
-  // intermediate cast once GameStore exports `activeSession`.
-  const activeSession = useGameStore(
-    // Cast through unknown: property is intentionally missing from GameStore until wired.
-    (s) => (s as unknown as { activeSession: ObservationSession | null }).activeSession ?? null,
-  );
+  const activeSession = useGameStore((s) => s.activeSession);
+  const gameState = useGameStore((s) => s.gameState);
 
   // Local UI state — all hooks must be called before any early return
   const [showInsightOverlay, setShowInsightOverlay] = useState(false);
@@ -824,42 +818,47 @@ export function ObservationScreen() {
     setShowInsightOverlay(false);
   }, [activeSession?.id]);
 
-  // ── Store action stubs (TODO: replace with real store actions) ─────────────
-  // TODO: Wire to gameStore session actions
+  // ── Store actions ────────────────────────────────────────────────────────
 
   const handleBegin = useCallback(() => {
-    // TODO: Wire — call gameStore.advanceSessionPhase() or startSession action
+    useGameStore.getState().beginSession();
   }, []);
 
   const handleAdvancePhase = useCallback(() => {
-    // TODO: Wire — call gameStore.advanceSessionPhase()
+    useGameStore.getState().advanceSessionPhase();
   }, []);
 
   const handleAllocateFocus = useCallback((playerId: string, lens: LensType) => {
-    // TODO: Wire — call gameStore.allocateSessionFocus(playerId, lens)
+    useGameStore.getState().allocateSessionFocus(playerId, lens);
   }, []);
 
   const handleRemoveFocus = useCallback((playerId: string) => {
-    // TODO: Wire — call gameStore.removeSessionFocus(playerId)
+    useGameStore.getState().removeSessionFocus(playerId);
   }, []);
 
   const handleFlagMoment = useCallback(
     (momentId: string, reaction: SessionFlaggedMoment["reaction"]) => {
-      // TODO: Wire — call gameStore.flagSessionMoment(momentId, reaction)
+      useGameStore.getState().flagSessionMoment(momentId, reaction);
     },
     [],
   );
 
   const handleCompleteReflection = useCallback(() => {
-    // TODO: Wire — call gameStore.completeSession() or equivalent
+    useGameStore.getState().endObservationSession();
   }, []);
 
   const handleEndSession = useCallback(() => {
-    // TODO: Wire — call gameStore.endSession()
+    useGameStore.getState().endObservationSession();
   }, []);
 
   const handleContinue = useCallback(() => {
-    // TODO: Wire — call gameStore.endSession() / navigate away
+    useGameStore.getState().endObservationSession();
+    useGameStore.getState().setScreen("calendar");
+  }, []);
+
+  const handleUseInsight = useCallback((actionId: InsightActionId) => {
+    useGameStore.getState().useInsight(actionId);
+    setShowInsightOverlay(false);
   }, []);
 
   // ── Guard ──────────────────────────────────────────────────────────────────
@@ -1107,15 +1106,43 @@ export function ObservationScreen() {
                   </button>
                 </div>
                 <p className="text-xs text-zinc-400 mb-4">
-                  {/* TODO: Wire to gameStore.useInsight(actionId) for available insight actions */}
                   Available:{" "}
                   <span className="text-amber-400 font-semibold">
-                    {activeSession.insightPointsEarned} IP
+                    {gameState?.scout.insightState?.points ?? 0} IP
                   </span>
                 </p>
-                <p className="text-xs text-zinc-600 text-center py-4">
-                  Insight actions will appear here once wired to gameStore.
-                </p>
+                {gameState ? (
+                  <div className="space-y-2">
+                    {getAvailableInsightActions(
+                      (gameState.scout.insightState ?? { points: 0, capacity: 40, cooldownWeeksRemaining: 0, lifetimeUsed: 0, lifetimeEarned: 0, lastUsedWeek: 0, history: [] }) as any,
+                      gameState.scout as any,
+                      activeSession.mode,
+                    ).map((action) => (
+                      <button
+                        key={action.id}
+                        onClick={() => handleUseInsight(action.id)}
+                        className="w-full text-left rounded border border-amber-800/40 bg-amber-950/30 p-2 hover:bg-amber-900/40 transition"
+                      >
+                        <span className="text-xs font-semibold text-amber-300">{action.name}</span>
+                        <span className="text-xs text-zinc-400 ml-2">({action.cost} IP)</span>
+                        <p className="text-xs text-zinc-500 mt-0.5">{action.description}</p>
+                      </button>
+                    ))}
+                    {getAvailableInsightActions(
+                      (gameState.scout.insightState ?? { points: 0, capacity: 40, cooldownWeeksRemaining: 0, lifetimeUsed: 0, lifetimeEarned: 0, lastUsedWeek: 0, history: [] }) as any,
+                      gameState.scout as any,
+                      activeSession.mode,
+                    ).length === 0 && (
+                      <p className="text-xs text-zinc-600 text-center py-4">
+                        No insight actions available right now.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-600 text-center py-4">
+                    No insight actions available.
+                  </p>
+                )}
                 <Button
                   variant="outline"
                   size="sm"

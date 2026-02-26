@@ -74,6 +74,14 @@ import {
   applyScoutAccountability,
 } from "@/engine/firstTeam";
 import * as negotiationEngine from "@/engine/firstTeam/negotiation";
+import {
+  initiateFreeAgentNegotiation as initFANegotiation,
+  advanceFreeAgentNegotiation,
+  calculateFreeAgentAcceptance,
+  processFreeAgentSigning,
+  generateNegotiationMessage,
+} from "@/engine/freeAgents/negotiation";
+import { processContactFreeAgentTip } from "@/engine/freeAgents/discovery";
 import { processBoardMeeting, generateBoardProfile } from "@/engine/firstTeam/boardAI";
 import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import {
@@ -167,6 +175,7 @@ import {
   getScoutHomeCountry as getScoutHome,
   processCrossCountryTransfers,
   processInternationalWeek,
+  classifyStandingZone,
 } from "@/engine/world/index";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
 import { generateSeasonFixtures } from "@/engine/world/fixtures";
@@ -226,6 +235,12 @@ import {
 } from "@/engine/finance";
 import type { EquipmentItemId } from "@/engine/finance";
 import type { EmployeeAssignment, ClientRelationship } from "@/engine/core/types";
+import { processMonthlyCredit, creditForLoanRepayment, getCreditScore } from "@/engine/finance/creditScore";
+import { processDistress, sellEquipmentForCash as sellEquipmentForCashEngine } from "@/engine/finance/distress";
+import { shouldGeneratePulse, generatePerformancePulse, applyPulseConsequences } from "@/engine/career/performancePulse";
+import { evaluateFatigueConsequences, rollBurnoutIllness } from "@/engine/core/calendar";
+import { checkRetainerDeliverables } from "@/engine/finance/clientRelationships";
+import { getLifestyleEffects } from "@/engine/finance/expenses";
 import {
   generateWeeklyEvent,
   resolveEventChoice,
@@ -326,7 +341,8 @@ export type GameScreen =
   | "rivals"
   | "reportComparison"
   | "negotiation"
-  | "seasonAwards";
+  | "seasonAwards"
+  | "freeAgents";
 
 interface GameStore {
   // Navigation
@@ -518,6 +534,7 @@ interface GameStore {
 
   takeLoanAction: (type: LoanType, amount: number) => void;
   repayLoanAction: () => void;
+  sellEquipmentForCashAction: (itemValue: number) => void;
   acceptConsultingContract: (contract: ConsultingContract) => void;
   declineRetainerOffer: (contractId: string) => void;
   declineConsultingOffer: (contractId: string) => void;
@@ -539,6 +556,10 @@ interface GameStore {
   submitTransferOffer: (negotiationId: string, amount: number, addOns?: import("@/engine/core/types").TransferAddOn[]) => void;
   acceptNegotiation: (negotiationId: string) => void;
   walkAway: (negotiationId: string) => void;
+
+  // Free Agent actions
+  initiateFreeAgentNegotiation: (playerId: string, wage: number, bonus: number, contractLength: number) => void;
+  submitFreeAgentOffer: (playerId: string, wage: number, bonus: number, contractLength: number) => void;
 
   // Cross-screen fixture filter (set from PlayerProfile → consumed by FixtureBrowser)
   pendingFixtureClubFilter: string | null;
@@ -622,6 +643,8 @@ export interface ClubStanding {
   goalsAgainst: number;
   goalDifference: number;
   points: number;
+  /** Relegation/promotion zone classification for UI coloring. */
+  zone: "promotion" | "relegation" | "normal";
 }
 
 type SimulationChoiceId = ActivityChoiceId;
@@ -1413,6 +1436,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeNegotiations: [],
       // Match Rating System
       matchRatings: {},
+      // F14: Financial Strategy Layer
+      scoutingInfrastructure: {
+        dataSubscription: "none" as const,
+        travelBudget: "economy" as const,
+        officeEquipment: "basic" as const,
+        investmentCosts: { weekly: 0, oneTime: 0 },
+      },
+      assistantScouts: [],
       // Data Scouting System
       predictions: [],
       dataAnalysts: [],
@@ -1434,6 +1465,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       satisfactionHistory: [],
       // Interactive observation sessions
       completedInteractiveSessions: [],
+      // Free Agent System
+      freeAgentPool: {
+        agents: [],
+        lastRefreshSeason: 1,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      },
+      freeAgentNegotiations: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -1623,6 +1663,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // eslint-disable-next-line
     (migrated as any).boardReactions ??= [];
     // boardProfile is optional — generated on first tier 5 promotion or board meeting
+    // Migration: Deep Systems Overhaul — credit score, distress, accuracy, morale
+    if (migrated.finances) {
+      if (migrated.finances.creditScore === undefined) migrated.finances.creditScore = 50;
+      if (migrated.finances.distressLevel === undefined) migrated.finances.distressLevel = "healthy";
+      if (migrated.finances.weeksInDistress === undefined) migrated.finances.weeksInDistress = 0;
+      if (migrated.finances.failedContractCount === undefined) migrated.finances.failedContractCount = 0;
+      if (migrated.finances.blacklistedClubs === undefined) migrated.finances.blacklistedClubs = [];
+      if (migrated.finances.bankruptcyRecoveryCooldown === undefined) migrated.finances.bankruptcyRecoveryCooldown = 0;
+    }
+    if (!migrated.scout.accuracyHistory) migrated.scout.accuracyHistory = [];
+    if (!migrated.scout.performancePulses) migrated.scout.performancePulses = [];
     set({ gameState: migrated, isLoaded: true, currentScreen: "dashboard" });
   },
 
@@ -2103,6 +2154,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
                     : [...youth.discoveredBy, stateWithScheduleApplied.scout.id],
                 },
               },
+            };
+          }
+        }
+
+        // Wire "contractRunningDown" tips to free agent pool discovery
+        for (const tip of result.tips) {
+          if (tip.tipType === "contractRunningDown" && stateWithScheduleApplied.freeAgentPool) {
+            stateWithScheduleApplied = {
+              ...stateWithScheduleApplied,
+              freeAgentPool: processContactFreeAgentTip(
+                stateWithScheduleApplied.freeAgentPool,
+                tip.playerId,
+              ),
             };
           }
         }
@@ -5316,12 +5380,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const predRng = createRNG(
           `${gameState.seed}-predresolve-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
+        const faPlayerIds = new Set(
+          (stateWithPhase2.freeAgentPool?.agents ?? []).map((a) => a.playerId),
+        );
         const resolvedPredictions = resolvePredictions(
           stateWithPhase2.predictions,
           stateWithPhase2.players,
           stateWithPhase2.currentSeason,
           stateWithPhase2.currentWeek,
           predRng,
+          faPlayerIds,
         );
         if (resolvedPredictions.some((p, i) => p !== stateWithPhase2.predictions[i])) {
           stateWithPhase2 = { ...stateWithPhase2, predictions: resolvedPredictions };
@@ -5369,6 +5437,113 @@ export const useGameStore = create<GameStore>((set, get) => ({
       };
     }
 
+    // ── Deep Systems: Financial consequences, performance pulse, fatigue ────
+    if (newState.finances) {
+      let updatedFinances = newState.finances;
+      let updatedScout = newState.scout;
+      const dsMessages: InboxMessage[] = [];
+
+      // Monthly credit score processing (every 4 weeks)
+      if (newState.currentWeek % 4 === 0) {
+        updatedFinances = processMonthlyCredit(updatedFinances);
+
+        // Check retainer deliverables for failures
+        const deliverableResult = checkRetainerDeliverables(
+          updatedFinances,
+          newState.currentWeek,
+          newState.currentSeason,
+        );
+        updatedFinances = deliverableResult.finances;
+        for (const msg of deliverableResult.messages) {
+          dsMessages.push({
+            id: `retainer_fail_${newState.currentWeek}_${newState.currentSeason}_${Math.random().toString(36).slice(2, 8)}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "financial" as any,
+            title: msg.title,
+            body: msg.body,
+            read: false,
+            actionRequired: true,
+          });
+          // Reputation penalty for failed contracts
+          if (msg.title === "Contract Terminated") {
+            updatedScout = {
+              ...updatedScout,
+              reputation: Math.max(0, updatedScout.reputation - 5),
+            };
+          }
+        }
+      }
+
+      // Financial distress processing (every week)
+      const distressResult = processDistress(
+        updatedFinances,
+        updatedScout,
+        newState.currentWeek,
+        newState.currentSeason,
+      );
+      updatedFinances = distressResult.finances;
+      updatedScout = distressResult.scout;
+      dsMessages.push(...distressResult.messages);
+
+      // Performance pulse (every 4 weeks)
+      if (shouldGeneratePulse(newState.currentWeek)) {
+        const pulse = generatePerformancePulse(newState, updatedScout);
+        const pulseResult = applyPulseConsequences(
+          updatedScout,
+          pulse,
+          newState.currentWeek,
+          newState.currentSeason,
+        );
+        updatedScout = pulseResult.scout;
+        dsMessages.push(...pulseResult.messages);
+      }
+
+      // Fatigue hard consequences
+      const fatigueResult = evaluateFatigueConsequences(
+        updatedScout.fatigue,
+        0, // consecutive rest weeks tracked elsewhere
+      );
+      if (fatigueResult.burnoutRisk) {
+        const burnoutRng = createRNG(
+          `${gameState.seed}-burnout-${newState.currentWeek}-${newState.currentSeason}`,
+        );
+        const burnout = rollBurnoutIllness(updatedScout, burnoutRng);
+        if (burnout.triggered) {
+          updatedScout = burnout.updatedScout;
+          dsMessages.push({
+            id: `burnout_${newState.currentWeek}_${newState.currentSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "health" as any,
+            title: "Burnout Illness",
+            body: `The relentless pace has caught up with you. You've fallen ill and your ${burnout.affectedAttribute} has permanently decreased by 2. Take better care of yourself.`,
+            read: false,
+            actionRequired: true,
+          });
+        }
+      }
+      if (fatigueResult.forcedRest) {
+        dsMessages.push({
+          id: `forced_rest_${newState.currentWeek}_${newState.currentSeason}`,
+          week: newState.currentWeek,
+          season: newState.currentSeason,
+          type: "health" as any,
+          title: fatigueResult.status === "burnout_risk" ? "Burnout Warning — Forced Rest" : "Exhaustion — Forced Rest",
+          body: "You are too exhausted to work effectively. You must rest next week. All scheduled activities have been cleared.",
+          read: false,
+          actionRequired: true,
+        });
+      }
+
+      newState = {
+        ...newState,
+        finances: updatedFinances,
+        scout: updatedScout,
+        inbox: [...newState.inbox, ...dsMessages],
+      };
+    }
+
     // ── Season transition: regenerate events, fixtures, and transfer windows ─
     if (tickResult.endOfSeasonTriggered) {
       // Process end-of-season discoveries before transitioning
@@ -5387,6 +5562,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         trUpdateRng,
         newState.transferRecords,
         newState.players,
+        newState.matchRatings,
       );
       newState = { ...newState, transferRecords: updatedTransferRecs };
 
@@ -5692,6 +5868,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             transferRecordRng,
             newState.transferRecords,
             newState.players,
+            newState.matchRatings,
           );
           newState = { ...newState, transferRecords: updatedTransferRecords };
         }
@@ -5752,12 +5929,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const endSeasonPredRng = createRNG(
             `${gameState.seed}-predend-s${completedSeason}`,
           );
+          const faPlayerIdsEnd = new Set(
+            (newState.freeAgentPool?.agents ?? []).map((a) => a.playerId),
+          );
           const resolvedAtSeasonEnd = resolvePredictions(
             newState.predictions,
             newState.players,
             completedSeason,
             newState.currentWeek,
             endSeasonPredRng,
+            faPlayerIdsEnd,
           );
           newState = { ...newState, predictions: resolvedAtSeasonEnd };
         }
@@ -8133,8 +8314,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gameState.finances, gameState.currentWeek, gameState.currentSeason,
     );
     if (updated) {
-      set({ gameState: { ...gameState, finances: updated } });
+      // Credit score boost for loan repayment
+      const withCredit = creditForLoanRepayment(updated);
+      set({ gameState: { ...gameState, finances: withCredit } });
     }
+  },
+
+  sellEquipmentForCashAction: (itemValue: number) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const updated = sellEquipmentForCashEngine(
+      gameState.finances, itemValue, gameState.currentWeek, gameState.currentSeason,
+    );
+    set({ gameState: { ...gameState, finances: updated } });
   },
 
   acceptConsultingContract: (contract: ConsultingContract) => {
@@ -8344,6 +8536,135 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
+  // ── Free Agent Negotiation actions ────────────────────────────────────────
+
+  initiateFreeAgentNegotiation: (playerId: string, wage: number, bonus: number, contractLength: number) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.scout.currentClubId) return;
+    const pool = gameState.freeAgentPool;
+    const agent = pool.agents.find((a) => a.playerId === playerId && a.status === "available");
+    if (!agent) return;
+    const player = gameState.players[playerId];
+    if (!player) return;
+    const club = gameState.clubs[gameState.scout.currentClubId];
+    if (!club) return;
+
+    // Check club acceptance first (conviction-based)
+    const observations = Object.values(gameState.observations).filter((o) => o.playerId === playerId);
+    const acceptanceChance = calculateFreeAgentAcceptance(player, club, gameState.scout, observations);
+    const acceptRng = createRNG(`${gameState.seed}-fa-accept-${playerId}-${gameState.currentWeek}`);
+    if (!acceptRng.chance(acceptanceChance)) {
+      const rejectMsg: InboxMessage = {
+        id: `fa_club_reject_${playerId}_${gameState.currentWeek}`,
+        week: gameState.currentWeek, season: gameState.currentSeason,
+        type: "clubResponse" as const,
+        title: `${club.name} Declines Free Agent Pursuit`,
+        body: `The club has decided not to pursue ${player.firstName} ${player.lastName} as a free agent signing at this time. Build more conviction through additional observations.`,
+        read: false, actionRequired: false,
+      };
+      set({ gameState: { ...gameState, inbox: [...gameState.inbox, rejectMsg] } });
+      return;
+    }
+
+    const rng = createRNG(`${gameState.seed}-fa-neg-${playerId}-${gameState.currentWeek}`);
+    const negotiation = initFANegotiation(agent, player, wage, bonus, contractLength, gameState.currentWeek, rng);
+    const message = generateNegotiationMessage(negotiation, player, club, rng, gameState.currentWeek, gameState.currentSeason);
+
+    // Mark agent as in negotiation
+    const updatedAgents = pool.agents.map((a) =>
+      a.playerId === playerId ? { ...a, status: "inNegotiation" as const } : a,
+    );
+
+    if (negotiation.status === "accepted") {
+      // Immediate acceptance — process signing
+      const updatedPlayer = processFreeAgentSigning(player, gameState.scout.currentClubId, wage, contractLength, gameState.currentSeason);
+      const signedAgents = updatedAgents.map((a) =>
+        a.playerId === playerId ? { ...a, status: "signed" as const } : a,
+      );
+      const updatedClub = { ...club, playerIds: [...club.playerIds, playerId] };
+      set({
+        gameState: {
+          ...gameState,
+          players: { ...gameState.players, [playerId]: updatedPlayer },
+          clubs: { ...gameState.clubs, [club.id]: updatedClub },
+          freeAgentPool: { ...pool, agents: signedAgents, totalSignedThisSeason: pool.totalSignedThisSeason + 1 },
+          freeAgentNegotiations: gameState.freeAgentNegotiations.filter((n) => n.freeAgentId !== playerId),
+          inbox: [...gameState.inbox, message],
+        },
+      });
+    } else {
+      set({
+        gameState: {
+          ...gameState,
+          freeAgentPool: { ...pool, agents: updatedAgents },
+          freeAgentNegotiations: [...gameState.freeAgentNegotiations, negotiation],
+          inbox: [...gameState.inbox, message],
+        },
+      });
+    }
+  },
+
+  submitFreeAgentOffer: (playerId: string, wage: number, bonus: number, contractLength: number) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.scout.currentClubId) return;
+    const negIndex = gameState.freeAgentNegotiations.findIndex((n) => n.freeAgentId === playerId);
+    if (negIndex === -1) return;
+    const negotiation = gameState.freeAgentNegotiations[negIndex];
+    if (negotiation.status !== "countered") return;
+
+    const pool = gameState.freeAgentPool;
+    const agent = pool.agents.find((a) => a.playerId === playerId);
+    if (!agent) return;
+    const player = gameState.players[playerId];
+    if (!player) return;
+    const club = gameState.clubs[gameState.scout.currentClubId];
+    if (!club) return;
+
+    const rng = createRNG(`${gameState.seed}-fa-offer-${playerId}-${negotiation.round}`);
+    const updated = advanceFreeAgentNegotiation(negotiation, agent, player, wage, bonus, contractLength, rng);
+    const message = generateNegotiationMessage(updated, player, club, rng, gameState.currentWeek, gameState.currentSeason);
+
+    if (updated.status === "accepted") {
+      const updatedPlayer = processFreeAgentSigning(player, gameState.scout.currentClubId, wage, contractLength, gameState.currentSeason);
+      const signedAgents = pool.agents.map((a) =>
+        a.playerId === playerId ? { ...a, status: "signed" as const } : a,
+      );
+      const updatedClub = { ...club, playerIds: [...club.playerIds, playerId] };
+      set({
+        gameState: {
+          ...gameState,
+          players: { ...gameState.players, [playerId]: updatedPlayer },
+          clubs: { ...gameState.clubs, [club.id]: updatedClub },
+          freeAgentPool: { ...pool, agents: signedAgents, totalSignedThisSeason: pool.totalSignedThisSeason + 1 },
+          freeAgentNegotiations: gameState.freeAgentNegotiations.filter((n) => n.freeAgentId !== playerId),
+          inbox: [...gameState.inbox, message],
+        },
+      });
+    } else if (updated.status === "rejected") {
+      const releasedAgents = pool.agents.map((a) =>
+        a.playerId === playerId ? { ...a, status: "available" as const } : a,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          freeAgentPool: { ...pool, agents: releasedAgents },
+          freeAgentNegotiations: gameState.freeAgentNegotiations.filter((n) => n.freeAgentId !== playerId),
+          inbox: [...gameState.inbox, message],
+        },
+      });
+    } else {
+      const updatedNegotiations = [...gameState.freeAgentNegotiations];
+      updatedNegotiations[negIndex] = updated;
+      set({
+        gameState: {
+          ...gameState,
+          freeAgentNegotiations: updatedNegotiations,
+          inbox: [...gameState.inbox, message],
+        },
+      });
+    }
+  },
+
   // Helpers
 
   getPendingMatches: () => {
@@ -8412,7 +8733,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const league = gameState.leagues[leagueId];
     if (!league) return [];
 
-    const standings: Record<string, ClubStanding> = {};
+    const standings: Record<string, Omit<ClubStanding, "zone">> = {};
     for (const clubId of league.clubIds) {
       const club = gameState.clubs[clubId];
       standings[clubId] = {
@@ -8461,9 +8782,29 @@ export const useGameStore = create<GameStore>((set, get) => ({
       away.goalDifference = away.goalsFor - away.goalsAgainst;
     }
 
-    return Object.values(standings).sort(
+    const sorted = Object.values(standings).sort(
       (a, b) => b.points - a.points || b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor
     );
+
+    // Determine if paired tiers exist in the same country for zone classification
+    const hasLowerTier = Object.values(gameState.leagues).some(
+      (l) => l.country === league.country && l.tier === league.tier + 1,
+    );
+    const hasUpperTier = Object.values(gameState.leagues).some(
+      (l) => l.country === league.country && l.tier === league.tier - 1,
+    );
+
+    // Classify each row's relegation/promotion zone
+    return sorted.map((entry, index) => ({
+      ...entry,
+      zone: classifyStandingZone(
+        index,
+        sorted.length,
+        league.tier,
+        hasLowerTier,
+        hasUpperTier,
+      ),
+    }));
   },
 
   getNPCScout: (id) => get().gameState?.npcScouts[id],

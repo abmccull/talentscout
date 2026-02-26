@@ -22,6 +22,7 @@ import type {
   TransferOutcomeReason,
   ConvictionLevel,
   Player,
+  PlayerMatchRating,
   InboxMessage,
 } from "@/engine/core/types";
 
@@ -165,9 +166,29 @@ function simulateAppearances(
 }
 
 /**
+ * Compute average match rating for a player from per-fixture match ratings.
+ * Returns undefined if fewer than 5 ratings exist (insufficient data).
+ */
+function computeAvgMatchRating(
+  playerId: string,
+  matchRatings: Record<string, Record<string, PlayerMatchRating>>,
+): number | undefined {
+  const ratings: number[] = [];
+  for (const fixtureRatings of Object.values(matchRatings)) {
+    const r = fixtureRatings[playerId];
+    if (r) ratings.push(r.rating);
+  }
+  if (ratings.length < 5) return undefined;
+  return Math.round((ratings.reduce((s, v) => s + v, 0) / ratings.length) * 10) / 10;
+}
+
+/**
  * Update all transfer records with end-of-season data.
  * Increments seasonsSinceTransfer, updates CA and appearances, and
  * classifies outcome when enough data exists.
+ *
+ * When matchRatings are provided and a player has ≥5 real ratings,
+ * the avgMatchRating is stored on the record for richer outcome analysis.
  *
  * Returns updated records — input is not mutated.
  */
@@ -175,6 +196,7 @@ export function updateTransferRecords(
   rng: RNG,
   records: TransferRecord[],
   players: Record<string, Player>,
+  matchRatings?: Record<string, Record<string, PlayerMatchRating>>,
 ): TransferRecord[] {
   return records.map((record) => {
     const player = players[record.playerId];
@@ -186,11 +208,17 @@ export function updateTransferRecords(
     // Accumulate appearances across seasons
     const totalAppearances = (record.appearances ?? 0) + newAppearances;
 
+    // Use real match ratings when available (≥5 ratings)
+    const avgRating = matchRatings
+      ? computeAvgMatchRating(record.playerId, matchRatings)
+      : undefined;
+
     let updated: TransferRecord = {
       ...record,
       currentCA: player.currentAbility,
       seasonsSinceTransfer: newSeasonsSince,
       appearances: totalAppearances,
+      ...(avgRating !== undefined ? { avgMatchRating: avgRating } : {}),
     };
 
     // Classify outcome once we have enough data and outcome is not yet set
@@ -246,6 +274,9 @@ export function classifyOutcome(
   // Determine narrative reason
   let outcomeReason: TransferOutcomeReason;
 
+  // avgMatchRating from real match data, when available
+  const avgRating = record.avgMatchRating;
+
   if (outcome === "flop") {
     if (player.injured || player.injuryWeeksRemaining > 0) {
       // Player has injury history — that's the primary reason
@@ -258,15 +289,15 @@ export function classifyOutcome(
       outcomeReason = "overrated";
     }
   } else if (outcome === "hit") {
-    // High-performing transfer
-    if (caChange >= HIT_CA_GAIN_THRESHOLD * 2) {
+    // High-performing transfer — use match rating to strengthen reason
+    if (caChange >= HIT_CA_GAIN_THRESHOLD * 2 || (avgRating !== undefined && avgRating >= 7.5)) {
       outcomeReason = "exceededExpectations";
     } else {
       outcomeReason = rng.chance(0.6) ? "perfectFit" : "exceededExpectations";
     }
   } else {
     // Decent outcome — check if the trend is improving
-    if (caChange > 0) {
+    if (caChange > 0 || (avgRating !== undefined && avgRating >= 6.5)) {
       outcomeReason = rng.chance(0.5) ? "slowAdaptation" : "lateBloom";
     } else {
       // Stagnated or slight decline, but not a flop

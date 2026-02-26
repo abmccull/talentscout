@@ -895,6 +895,24 @@ export function processWeeklyContactDecay(
       };
     }
 
+    // Relationship decay: contacts lose relationship if not maintained
+    if (weeksSinceInteraction > 4 && contact.relationship > 0) {
+      const isHighValue = ["agent", "sportingDirector", "academyDirector"].includes(contact.type);
+      const decayRate = isHighValue ? 2 : 1;
+      const newRelationship = Math.max(0, contact.relationship - decayRate);
+      updated = {
+        ...updated,
+        relationship: newRelationship,
+        // Mark dormant if relationship drops too low
+        dormant: newRelationship < 20 ? true : (updated.dormant ?? false),
+      };
+    }
+
+    // Reactivate if relationship recovers above 20
+    if (updated.relationship >= 20 && updated.dormant) {
+      updated = { ...updated, dormant: false };
+    }
+
     // Recalculate betrayal risk based on trust and loyalty
     updated = {
       ...updated,

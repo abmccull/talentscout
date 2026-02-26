@@ -82,6 +82,8 @@ export const ACTIVITY_DISPLAY: Record<
   algorithmCalibration: { label: "Algorithm Calibration", icon: Book,           color: "text-cyan-400" },
   marketInefficiency:   { label: "Market Scan",           icon: Book,           color: "text-lime-400" },
   analyticsTeamMeeting: { label: "Analytics Meeting",     icon: Users,          color: "text-purple-400" },
+  // Free agent activities
+  freeAgentOutreach:    { label: "Free Agent Outreach",   icon: Users,          color: "text-amber-400" },
 };
 
 interface ActivityCardProps {

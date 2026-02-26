@@ -119,6 +119,12 @@ export interface WeekProcessingResult {
   followUpSessionsExecuted: number;
   /** Number of parent/coach meetings held this week */
   parentCoachMeetingsExecuted: number;
+
+  // --- Free agent ---
+
+  /** Number of free agent outreach sessions this week */
+  freeAgentOutreachExecuted: number;
+
   /** Total Insight Points earned from all activities performed this week */
   insightPointsEarned: number;
 }
@@ -167,6 +173,8 @@ export const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   algorithmCalibration:1,
   marketInefficiency: 1,
   analyticsTeamMeeting:1,
+  // Free agent activities
+  freeAgentOutreach:  2,
 };
 
 /** Passive fatigue recovery per empty (unscheduled) day */
@@ -212,6 +220,8 @@ export const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   algorithmCalibration:4,
   marketInefficiency: 3,
   analyticsTeamMeeting:3,
+  // Free agent activities
+  freeAgentOutreach:  10,
 };
 
 /** Skills that each activity type directly develops */
@@ -247,6 +257,8 @@ export const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<Scou
   algorithmCalibration:{ dataLiteracy: 5 },
   marketInefficiency:  { dataLiteracy: 3, playerJudgment: 2 },
   analyticsTeamMeeting:{ dataLiteracy: 2, psychologicalRead: 1 },
+  // Free agent activities
+  freeAgentOutreach:   { playerJudgment: 3, psychologicalRead: 2, technicalEye: 1 },
 };
 
 /** Scout attributes that each activity type develops */
@@ -283,6 +295,8 @@ export const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<
   algorithmCalibration:{ memory: 3, intuition: 2 },
   marketInefficiency:  { intuition: 3, memory: 1 },
   analyticsTeamMeeting:{ networking: 1, persuasion: 1 },
+  // Free agent activities
+  freeAgentOutreach:   { networking: 2, persuasion: 2, intuition: 1 },
 };
 
 const TOTAL_WEEK_SLOTS = 7;
@@ -852,6 +866,16 @@ export function getAvailableActivities(
     }
   }
 
+  // ── Free agent outreach (available to all non-youth scouts) ─────────────────
+
+  if (scout.primarySpecialization !== "youth") {
+    activities.push({
+      type: "freeAgentOutreach",
+      slots: ACTIVITY_SLOT_COSTS.freeAgentOutreach,
+      description: "Visit a free agent's training ground — conduct a detailed observation session",
+    });
+  }
+
   // ── Data-exclusive activities ───────────────────────────────────────────────
 
   if (scout.primarySpecialization === "data") {
@@ -952,6 +976,7 @@ function getInsightSource(
     case "statsBriefing":
     case "dataConference":
     case "contractNegotiation":
+    case "freeAgentOutreach":
     case "networkMeeting":
     case "analyticsTeamMeeting":
       return "observation";
@@ -1029,6 +1054,7 @@ export function processCompletedWeek(
       youthFestivalsExecuted: 0,
       followUpSessionsExecuted: 0,
       parentCoachMeetingsExecuted: 0,
+      freeAgentOutreachExecuted: 0,
       insightPointsEarned: 0,
     };
   }
@@ -1078,6 +1104,7 @@ export function processCompletedWeek(
   let youthFestivalsExecuted = 0;
   let followUpSessionsExecuted = 0;
   let parentCoachMeetingsExecuted = 0;
+  let freeAgentOutreachExecuted = 0;
 
   // Insight Points
   let totalInsightPoints = 0;
@@ -1245,6 +1272,9 @@ export function processCompletedWeek(
       case "parentCoachMeeting":
         parentCoachMeetingsExecuted++;
         break;
+      case "freeAgentOutreach":
+        freeAgentOutreachExecuted++;
+        break;
 
       default:
         break;
@@ -1310,6 +1340,7 @@ export function processCompletedWeek(
     youthFestivalsExecuted,
     followUpSessionsExecuted,
     parentCoachMeetingsExecuted,
+    freeAgentOutreachExecuted,
     insightPointsEarned: totalInsightPoints,
   };
 }
@@ -1379,6 +1410,102 @@ export function applyWeekResults(
     attributes: updatedAttributes,
     attributeXp: updatedAttributeXp,
     fatigue: newFatigue,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fatigue Hard Consequences
+// ---------------------------------------------------------------------------
+
+export interface FatigueConsequences {
+  /** If true, scout is forced to rest next week (fatigue >= 85). */
+  forcedRest: boolean;
+  /** If true, report quality is capped at "good" (fatigue >= 70). */
+  qualityCapped: boolean;
+  /** If true, scout risks burnout illness (fatigue >= 95). */
+  burnoutRisk: boolean;
+  /** If true, scout earned a "refreshed" buff from consecutive rest. */
+  refreshedBuff: boolean;
+  /** Status label for display. */
+  status: "normal" | "tired" | "exhausted" | "burnout_risk";
+}
+
+/**
+ * Evaluate fatigue-based consequences for the current week.
+ * Called during advanceWeek to determine restrictions.
+ */
+export function evaluateFatigueConsequences(
+  fatigue: number,
+  consecutiveRestWeeks: number,
+): FatigueConsequences {
+  if (fatigue >= 95) {
+    return {
+      forcedRest: true,
+      qualityCapped: true,
+      burnoutRisk: true,
+      refreshedBuff: false,
+      status: "burnout_risk",
+    };
+  }
+  if (fatigue >= 85) {
+    return {
+      forcedRest: true,
+      qualityCapped: true,
+      burnoutRisk: false,
+      refreshedBuff: false,
+      status: "exhausted",
+    };
+  }
+  if (fatigue >= 70) {
+    return {
+      forcedRest: false,
+      qualityCapped: true,
+      burnoutRisk: false,
+      refreshedBuff: false,
+      status: "tired",
+    };
+  }
+  return {
+    forcedRest: false,
+    qualityCapped: false,
+    burnoutRisk: false,
+    refreshedBuff: consecutiveRestWeeks >= 2,
+    status: "normal",
+  };
+}
+
+/**
+ * Process burnout risk — 50% chance of illness causing 2-week absence
+ * and permanent -2 to a random attribute.
+ */
+export function rollBurnoutIllness(
+  scout: Scout,
+  rng: { chance: (p: number) => boolean; pick: <T>(arr: T[]) => T },
+): { triggered: boolean; affectedAttribute?: string; updatedScout: Scout } {
+  if (!rng.chance(0.5)) {
+    return { triggered: false, updatedScout: scout };
+  }
+
+  const attributes: ScoutAttribute[] = [
+    "intuition", "endurance", "adaptability",
+    "networking", "persuasion", "memory",
+  ];
+
+  const attr = rng.pick(attributes);
+  const current = scout.attributes[attr] ?? 1;
+  const updatedAttributes = {
+    ...scout.attributes,
+    [attr]: Math.max(1, current - 2),
+  };
+
+  return {
+    triggered: true,
+    affectedAttribute: attr,
+    updatedScout: {
+      ...scout,
+      attributes: updatedAttributes,
+      fatigue: Math.min(100, scout.fatigue), // fatigue stays high during illness
+    },
   };
 }
 

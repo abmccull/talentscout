@@ -108,6 +108,7 @@ export function hireAssistantScout(
     salary,
     fatigue: 0,
     reportsCompleted: 0,
+    morale: 70,
   };
 
   // Deduct signing bonus (first week salary)
@@ -197,6 +198,9 @@ export function unassignAssistantScout(
  * - Assigned scouts generate lower-quality observations
  * - Scouts gain fatigue from assignments
  * - Unassigned scouts recover fatigue
+ * - Morale adjusts based on workload, fatigue, and assignment status
+ * - Skills grow (+0.1/week assigned, -0.05/week idle, capped 1-10)
+ * - Low morale (< 30) sets a warning flag for the calling code
  * - Salary costs are deducted
  *
  * Returns updated GameState with new observations and financial changes.
@@ -263,12 +267,67 @@ export function processAssistantScoutWeek(
       });
     }
 
+    // --- Morale Processing ---
+    const isAssigned = !!(assistant.assignedPlayerId || assistant.assignedRegion);
+    const didCompleteReport =
+      !!(assistant.assignedPlayerId && newFatigue < 90 && state.players[assistant.assignedPlayerId]);
+
+    let newMorale = assistant.morale ?? 70;
+
+    if (didCompleteReport) {
+      // Positive results: completing reports boosts morale
+      newMorale += 1;
+    }
+    if (newFatigue > 80) {
+      // Overworked penalty
+      newMorale -= 2;
+    }
+    if (newFatigue < 30 && isAssigned) {
+      // Well-rested and productive
+      newMorale += 1;
+    }
+    if (!isAssigned) {
+      // Feeling ignored — base decay when unassigned
+      newMorale -= 1;
+    }
+
+    // Clamp morale to 0-100
+    newMorale = Math.max(0, Math.min(100, newMorale));
+
+    // --- Skill Growth ---
+    let newSkill = assistant.skill;
+    if (isAssigned) {
+      // Gradual improvement from active work (cap at 10)
+      newSkill = Math.min(10, newSkill + 0.1);
+    } else {
+      // Slight decay when idle (floor at 1)
+      newSkill = Math.max(1, newSkill - 0.05);
+    }
+
+    // Low morale warning flag (< 30 = at risk of quitting)
+    const lowMorale = newMorale < 30;
+
+    // Send low morale warning message (only on the transition into low morale)
+    if (lowMorale && !(assistant.morale !== undefined && assistant.morale < 30)) {
+      messages.push({
+        id: `asst-morale-${assistant.id}-w${state.currentWeek}`,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "feedback" as const,
+        title: `Low Morale: ${assistant.name}`,
+        body: `${assistant.name} is unhappy and may consider leaving. Current morale: ${newMorale}/100.`,
+        read: false,
+        actionRequired: true,
+      });
+    }
+
     updatedAssistants.push({
       ...assistant,
       fatigue: newFatigue,
-      reportsCompleted: assistant.reportsCompleted + (
-        (assistant.assignedPlayerId && newFatigue < 90 && state.players[assistant.assignedPlayerId]) ? 1 : 0
-      ),
+      skill: newSkill,
+      morale: newMorale,
+      lowMorale,
+      reportsCompleted: assistant.reportsCompleted + (didCompleteReport ? 1 : 0),
     });
   }
 

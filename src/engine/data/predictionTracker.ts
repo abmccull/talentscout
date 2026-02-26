@@ -89,6 +89,8 @@ export function resolvePredictions(
   currentSeason: number,
   currentWeek: number,
   rng: RNG,
+  /** IDs of players currently in the free agent pool (used to resolve transfer predictions). */
+  freeAgentPlayerIds?: Set<string>,
 ): Prediction[] {
   return predictions.map((prediction) => {
     // Skip already-resolved predictions
@@ -133,10 +135,11 @@ export function resolvePredictions(
       }
 
       case "transfer": {
-        // Transfer: we check if the player appears to be unsettled (low morale)
-        // or if their contract has expired relative to the prediction season.
-        // Without historic club tracking, we use morale < 5 as "unsettled" proxy.
+        // Transfer: check if the player became a free agent, is unsettled,
+        // or has an expired contract.
+        const isFreeAgent = freeAgentPlayerIds?.has(prediction.playerId) ?? false;
         wasCorrect =
+          isFreeAgent ||
           player.morale <= 4 ||
           player.contractExpiry <= currentSeason;
         break;

@@ -1,0 +1,554 @@
+# TalentScout Trailer — Veo 3 Shot List (Production-Ready)
+
+10 shots, each ~8 seconds. Stitch in sequence for ~80-second trailer.
+All voiceover, music, and designed sound added in post-production.
+
+---
+
+## VISUAL BIBLE — Read This First
+
+Every Veo 3 prompt references this locked description. Copy-paste the relevant
+sections into each prompt to maintain consistency across clips.
+
+### The Scout (appears in shots 1, 2, 4a/b/c, 5, 9)
+
+```
+A man in his late 40s, weathered face, short grey-flecked dark hair, clean-shaven.
+He wears a dark navy wool overcoat over a charcoal sweater, dark trousers, and
+worn brown leather shoes. He carries a small leather-bound notebook and a red pen.
+He is lean, average height, quiet posture — not athletic, not imposing. He looks
+like someone who watches for a living. His face is never fully lit — always partial
+shadow, side-lit, or silhouetted. We see his profile, his back, his hands — never
+a clean front-facing close-up.
+```
+
+### The Pitch (appears in shots 1, 2, 3, 9)
+
+```
+A small South American youth football ground at night. Concrete terraces with no
+seats — just stepped concrete. No dugouts. Two tall floodlight poles with warm
+amber tungsten bulbs, not modern white LED. The pitch is natural grass, worn and
+slightly muddy. White line markings are faded. A chain-link fence runs along one
+side. The sky is deep blue-black, overcast, no stars. Heavy rain is falling
+steadily. The floodlights create visible amber light shafts through the rain.
+Puddles reflect the amber light on the concrete. This is not a professional
+stadium — it is a modest local ground that holds maybe 500 people.
+```
+
+### The Young Player (appears in shots 2, 3)
+
+```
+A teenage male footballer, approximately 16 years old, slim athletic build, dark
+hair, wearing a plain dark navy jersey with no visible logos, dark shorts, dark
+socks. He is always seen from behind, from the side, or at a distance — his face
+is never clearly visible. He moves with calm intelligence, not flashy speed.
+```
+
+### Color & Grade (apply to ALL Veo 3 shots)
+
+```
+Cinematic color grading: deep navy-black shadows (#0A1628), warm amber-tungsten
+highlights (#D4A843), desaturated muted green for grass (#2D5A3D). Heavy film
+grain. Anamorphic widescreen look with subtle horizontal lens flares from light
+sources. Contrast is high — deep blacks, limited midtones, warm highlights only
+where light falls. The overall feeling is a 35mm film shot in available light
+at night.
+```
+
+### Audio Rule (CRITICAL — apply to ALL Veo 3 shots)
+
+```
+AUDIO: Ambient environmental sound only. Sound of steady rain hitting concrete
+and metal. Distant muffled crowd murmur. No dialogue. No voiceover. No narration.
+No one speaks. No music. No soundtrack.
+```
+
+### Universal Negative Prompts (include with every generation)
+
+```
+No text on screen. No titles. No graphics. No UI overlays. No watermarks. No
+subtitles. No logos on jerseys or buildings. No modern LED floodlights — only
+warm amber tungsten. No bright saturated colors. No daylight. No sunshine. No
+one looks directly at the camera. No one speaks or mouths words.
+```
+
+---
+
+## Shot 1 / 10 — COLD OPEN (0:00–0:08)
+
+**VO (added in post):** "Rain in Rosario. A youth cup semifinal. Nobody's watching."
+
+**Veo 3 prompt:**
+```
+A slow cinematic dolly forward toward a youth football pitch at night, viewed
+through a chain-link fence. The camera starts tight on the diamond pattern of the
+fence with the pitch blurred behind it, then slowly racks focus to reveal the
+pitch as the camera drifts forward. Heavy steady rain falls through two tall
+amber tungsten floodlight beams, creating visible golden light shafts. The pitch
+is natural grass, slightly muddy, with faded white line markings. About thirty
+to forty people stand scattered along the far touchline — small dark figures, no
+umbrellas, just watching in the rain. Two coaches in dark rain jackets stand at
+the edge of the pitch. No dugouts. Concrete stepped terraces on both sides, mostly
+empty. A youth football match is in progress — teenage players in dark jerseys
+move in the middle distance, but they are not the focus. The focus is the
+atmosphere: the rain, the amber light, the emptiness, the isolation of this
+small ground at night. Deep blue-black sky, overcast. Puddles on the concrete
+reflect amber light. Shot on 35mm anamorphic lens, heavy film grain, shallow
+depth of field transitioning to deep focus. The camera movement is slow and
+steady — no handheld shake. Color: deep navy blacks, warm amber tungsten
+highlights, desaturated muted green grass.
+
+AUDIO: Steady rain on metal and concrete. Distant muffled crowd murmur. A
+referee whistle in the far distance. No dialogue. No voiceover. No music.
+No one speaks.
+
+No text on screen. No titles. No logos. No modern LED lights.
+```
+
+**Camera:** Slow dolly forward, rack focus from fence to pitch
+**Duration:** 8 seconds
+
+---
+
+## Shot 2 / 10 — THE NOTEBOOK (0:08–0:16)
+
+**VO (added in post):** "Except you." *(2-sec beat of silence)* "A left-footed centre-back. Sixteen years old."
+
+**Veo 3 prompt:**
+```
+Extreme close-up of a man's hands holding open a small leather-bound notebook in
+the rain at night. The hands belong to a man in his late 40s — weathered skin,
+no rings, short clean nails. He holds a red pen in his right hand. The notebook
+page is filled with small handwritten notes — abbreviations, arrows, a circled
+word. Raindrops land on the open page, wetting the edges. The man slowly and
+deliberately underlines a word on the page with the red pen, pressing firmly.
+The camera holds tight on the notebook for four seconds, then begins a slow
+tilt upward — past the man's dark navy wool overcoat sleeve, past his chest,
+continuing up and over his shoulder to reveal a rain-soaked youth football pitch
+in the background, out of focus with warm amber floodlight bokeh. Small dark
+figures of teenage players move on the pitch in the soft background blur. The
+man never turns around — we see only the back of his head and his grey-flecked
+dark hair. Rain continues falling through the amber light. The camera completes
+its tilt with the pitch filling the upper frame and the notebook filling the
+lower frame. Shot on 35mm anamorphic lens, heavy film grain. Shallow depth of
+field — the notebook is razor sharp, everything beyond the man's hands is soft
+bokeh.
+
+AUDIO: Close-up sound of rain hitting paper and leather. The scratch of pen on
+paper. Distant muffled crowd in the background. No dialogue. No voiceover. No
+music. No one speaks.
+
+No text on screen. No titles. No graphics. No readable words on the notebook
+page — just the impression of handwriting.
+```
+
+**Camera:** Static close-up, slow tilt up over shoulder
+**Duration:** 8 seconds
+
+---
+
+## Shot 3 / 10 — THE PLAYER (0:16–0:24)
+
+**VO (added in post):** "Reads the game two seconds ahead of everyone on that pitch."
+
+**Veo 3 prompt:**
+```
+Slow motion cinematic shot of a teenage male footballer, approximately 16 years
+old, slim athletic build, dark hair, wearing a plain dark navy jersey, dark
+shorts, dark socks. He stands on a rain-soaked grass pitch at night under warm
+amber tungsten floodlights. The camera is at his waist height, positioned to
+his left side, slowly tracking alongside him. He is looking away from camera,
+scanning the pitch — his head turns smoothly from left to right, reading the
+space ahead of him. His body language is calm and composed. A football rolls
+toward him from off-screen right. Without looking down at the ball, he receives
+it with his left foot and in one fluid motion plays a long diagonal pass forward
+with his left foot. The pass leaves frame. He continues scanning the pitch after
+the pass, already thinking about the next movement. Rain falls steadily through
+the amber floodlight beams behind him, creating golden light shafts. Other
+players are blurred dark shapes moving in the background. His face is mostly in
+shadow — we see his profile and jawline but not a clear frontal view. The slow
+motion makes the rain droplets hang in the amber light around him. Shot on 35mm
+anamorphic lens, heavy film grain. Horizontal lens flare from the floodlight
+behind him. Deep navy-black shadows, warm amber highlights on his shoulders
+and the rain.
+
+AUDIO: Muffled slow-motion ambient sound. The thud of a football being kicked.
+Rain in slow motion — deep, low-frequency patter. No dialogue. No voiceover.
+No music. No one speaks.
+
+No text on screen. No titles. No logos on the jersey. His face is never fully
+visible — always side-lit or in shadow.
+```
+
+**Camera:** Low angle, slow lateral track, slow motion
+**Duration:** 8 seconds
+
+---
+
+## Shot 4A / 10 — THE JOURNEY: SOUTH AMERICA (0:24–0:28)
+
+**VO (added in post, across 4A+4B+4C):** "Everyone talks about the manager. The tactics. The transfers. The trophies."
+
+**NOTE:** The original script calls for a 3-location montage. Veo 3 cannot do
+cuts or dissolves within a single clip. Generate THREE separate 4-second clips
+(4A, 4B, 4C) and cut between them in post. Use 4A+4B together for this 8-second
+window. 4C opens the next window.
+
+**Veo 3 prompt:**
+```
+A lone man in his late 40s walks through a rusted metal turnstile into a small
+open-air South American football ground during golden hour. He wears a dark navy
+wool overcoat over a charcoal sweater, dark trousers, and carries a small
+leather-bound notebook in his left hand. The camera is positioned inside the
+ground, facing the turnstile, so we see him enter toward us. The ground has
+open concrete terraces with faded painted walls in pale blue and white. Warm
+golden sunlight comes from a low angle behind him, casting a long shadow. The
+terraces are nearly empty — maybe a dozen people scattered around. A grass
+pitch is visible behind the camera's position, out of focus. Dust motes float
+in the golden light. The man walks with purpose, alone, looking toward the
+pitch. His face is side-lit by the setting sun — profile visible but not a
+front-on portrait. The mood is warm but solitary. Shot on 35mm anamorphic lens,
+heavy film grain. Color: warm golden amber light, faded concrete blues and
+whites, deep shadows in the turnstile area.
+
+AUDIO: Distant Latin American crowd chatter. Metal turnstile clicking. Footsteps
+on concrete. No dialogue. No voiceover. No music. No one speaks.
+
+No text on screen. No titles. No logos. No modern elements.
+```
+
+**Camera:** Static medium shot, man walks toward camera
+**Duration:** 4 seconds (trim in post)
+
+---
+
+## Shot 4B / 10 — THE JOURNEY: ENGLAND (0:28–0:32)
+
+**Veo 3 prompt:**
+```
+A lone man in his late 40s sits alone in metal stadium seats at a cold, grey
+English non-league football ground during a daytime match. He wears a dark navy
+wool overcoat over a charcoal sweater, collar turned up against the cold. His
+breath is visible in the cold air. He holds a small leather-bound notebook open
+on his knee and watches the pitch intently. The camera is positioned three rows
+behind him and slightly to the right, looking past his shoulder toward the pitch.
+The stands are almost entirely empty — six or seven other spectators are scattered
+far apart, bundled in coats and scarves. The sky is flat overcast grey. The pitch
+below is muddy and worn. A simple metal railing runs along the front of the stand.
+No fancy stadium — this is a ground that holds a few hundred people. The man is
+still, focused, writing something in his notebook without looking down. Shot on
+35mm anamorphic lens, heavy film grain. Color: cold desaturated grey-blue overall,
+the man's dark navy coat is the darkest element, no warm tones — this is cold
+English football.
+
+AUDIO: Cold wind. Sparse distant shouts from the pitch. A football being kicked.
+No dialogue. No voiceover. No music. No one speaks.
+
+No text on screen. No titles. No logos. No modern LED advertising boards.
+```
+
+**Camera:** Static over-the-shoulder from behind, slightly elevated
+**Duration:** 4 seconds (trim in post)
+
+---
+
+## Shot 4C / 10 — THE JOURNEY: ACADEMY (0:32–0:36)
+
+**Veo 3 prompt:**
+```
+A lone man in his late 40s walks down a long modern football academy corridor.
+He wears a dark navy wool overcoat over a charcoal sweater, carrying a small
+leather-bound notebook. The corridor has floor-to-ceiling glass walls on the
+right side, revealing perfectly manicured green training pitches outside under
+grey sky. The interior is clean, modern — polished concrete floor, minimal
+design, recessed lighting. The camera tracks alongside him from the left at
+walking pace, a medium shot from the waist up. He looks through the glass at
+the training pitches as he walks, observing. His reflection is faintly visible
+in the glass. He is the only person in the corridor. Through the glass, small
+figures of players train in the distance on the pitch outside. The contrast is
+the point: this is sterile, corporate, institutional — the opposite of the
+rainy pitches. The man looks slightly out of place in this sleek environment.
+Shot on 35mm anamorphic lens, heavy film grain. Color: cool neutral tones inside,
+desaturated green through the glass, soft diffused light from the overcast sky
+outside.
+
+AUDIO: Footsteps on polished concrete echoing in the corridor. Muffled sounds
+of training — distant shouts, ball kicks — coming through the glass. No dialogue.
+No voiceover. No music. No one speaks.
+
+No text on screen. No titles. No logos. No brand names visible on walls.
+```
+
+**Camera:** Lateral tracking shot, walking pace, medium shot
+**Duration:** 4 seconds (trim in post)
+
+---
+
+## Shot 5 / 10 — THE INVISIBLE MAN (0:36–0:44)
+
+**VO (added in post):** "Nobody talks about the person who found him."
+
+**Veo 3 prompt:**
+```
+Interior of a parked car on a grey overcast day. The camera is mounted on the
+outside of the windshield looking in through the glass. A man in his late 40s
+sits in the driver's seat. He wears a dark navy wool overcoat. He is a dark
+silhouette against the grey light coming through the rear window. He holds a
+folded newspaper in both hands, reading it — we can see the large format of
+the paper but cannot read any text on it. The camera slowly pulls backward,
+away from the windshield, revealing more of the car exterior and the setting:
+the car is parked alone in an empty grey car park outside a football training
+ground. In the background beyond the car, a chain-link fence and tall
+floodlight poles are visible. The car park is wet — it has recently rained.
+The sky is flat grey. No other cars. No other people. The man is completely
+alone. As the camera pulls back, rain begins to lightly fall on the windshield,
+distorting the view of the man inside. He becomes a blurred dark shape behind
+the rain-streaked glass. Shot on 35mm anamorphic lens, heavy film grain. Color:
+cold desaturated grey-blue, muted, the darkest element is the man's silhouette.
+No warm tones in this shot — it is deliberately cold and lonely.
+
+AUDIO: Light rain beginning to fall on glass and metal. A car engine ticking
+as it cools. Distant traffic. No dialogue. No voiceover. No music. No one
+speaks.
+
+No text on screen. No titles. No readable text on the newspaper — it is just
+a folded broadsheet shape. No logos on the car.
+```
+
+**Camera:** Slow pull-back from windshield exterior
+**Duration:** 8 seconds
+
+---
+
+## Shot 6 / 10 — GAME REVEAL (0:44–0:52)
+
+**VO (added in post):** "TalentScout. You're not the manager. You don't pick the team. You don't set tactics."
+
+**GAME FOOTAGE — not Veo 3.**
+
+Screen-capture sequence from the game build (2 sec per cut):
+1. Scouting report screen filling in — transition from the newspaper in Shot 5
+2. Career selection screen — four specialization paths visible
+3. World map with scouting assignment pins across countries
+4. Calendar view populating with upcoming fixtures
+
+**Edit note:** Crossfade from Shot 5's rain-blurred windshield into the game UI.
+The blurred silhouette dissolves into a scouting report on a dark screen. The
+"real world" becomes the game world.
+
+---
+
+## Shot 7 / 10 — GAME SCOPE (0:52–1:00)
+
+**VO (added in post):** "You're the reason the manager has anyone worth picking."
+
+**GAME FOOTAGE — not Veo 3.**
+
+Rapid gameplay montage (1.5 sec per cut):
+- Player profile with attribute estimates and uncertainty ranges
+- Shortlist screen with multiple player cards
+- Rival scout notification — "Manchester City's scout attended the same match"
+- Reputation meter visibly climbing
+- Youth tournament bracket view
+
+**Edit note:** Cuts are faster here. Music is building. Energy rises.
+
+---
+
+## Shot 8 / 10 — CAREER ARC (1:00–1:08)
+
+**VO (added in post):** "Start at the bottom. Non-league pitches. Youth tournaments nobody filmed. Prove yourself one report at a time."
+
+**GAME FOOTAGE — not Veo 3.**
+
+Career progression montage (1.5 sec per cut):
+- Early career: small match, basic report submitted
+- Feedback notification: "Good eye — the club signed him"
+- Data dashboard with statistical filters
+- Network map of contacts — agents, coaches, journalists
+- News headline: a player you scouted making a first-team debut
+- Career tier advancing from Tier 1 to Tier 3
+
+**Edit note:** Visual progression — screens get more complex, grounds get bigger,
+stakes get higher as the montage advances.
+
+---
+
+## Shot 9A / 10 — THE CLOSE pt.1 (1:08–1:16)
+
+**VO (added in post):** "Twenty-two countries. Three hundred and fifty clubs. Thousands of players who could be the next big thing. Or they could be nothing."
+
+**Veo 3 prompt:**
+```
+Cinematic wide shot of a lone man sitting in empty concrete football terraces at
+night in the rain. This is the same small South American youth ground from Shot 1:
+concrete stepped terraces with no seats, two tall amber tungsten floodlight poles,
+chain-link fence along one side, natural grass pitch. The match is over — the
+pitch is empty, no players, no ball. The man sits alone in the middle of the
+empty terrace, small in the wide frame. He wears a dark navy wool overcoat,
+collar turned up. He holds a closed leather-bound notebook on his knee. Heavy
+rain falls steadily through the amber floodlight beams. The concrete around him
+is wet and reflective. The camera is positioned at a distance — a wide static
+shot that emphasizes how alone and small he is in the empty ground. He is still
+for four seconds, then slowly closes the notebook, tucks it inside his coat,
+and stands up. He begins walking to the right, toward a dark exit tunnel at the
+end of the terrace. The camera does not follow — it holds static. He walks away
+and gets smaller in the frame. Shot on 35mm anamorphic lens, heavy film grain.
+Color: deep navy-black shadows, warm amber floodlight pools on the wet concrete,
+the man is a dark silhouette against the amber-lit pitch behind him.
+
+AUDIO: Heavy rain on concrete. Dripping water. A distant metal gate creaking.
+Complete silence otherwise — no crowd, no players, the match is over. No
+dialogue. No voiceover. No music. No one speaks.
+
+No text on screen. No titles. No logos. The man's face is not visible — he is
+a silhouette and a dark shape at distance.
+```
+
+**Camera:** Wide static shot, no camera movement
+**Duration:** 8 seconds
+
+---
+
+## Shot 9B / 10 — THE CLOSE pt.2 (1:16–1:20)
+
+**VO (added in post):** *(quiet, almost to himself)* "That's the job. Knowing the difference."
+
+**Veo 3 prompt:**
+```
+Continuation of the previous shot. The same small South American youth football
+ground at night in the rain. Same amber tungsten floodlights, same concrete
+terraces, same empty pitch. The man has now walked away — he is gone. The camera
+holds on the exact same wide static frame. In the center of the empty terrace
+where the man was sitting, there is now just an empty space — wet concrete, a
+small puddle where he sat. The pitch glows amber-green behind the terraces under
+the floodlights. Rain continues falling through the light beams. The ground is
+completely deserted. No people anywhere. Just the empty terraces, the empty
+pitch, the rain, and the amber light. The camera holds perfectly still for the
+full duration. The composition emphasizes the absence — where the man was, now
+there is nothing. Shot on 35mm anamorphic lens, heavy film grain. Shallow focus
+slowly shifts from the empty terrace seat area to the pitch behind it during
+the shot. Color: deep navy-black, warm amber pools, wet reflective surfaces.
+
+AUDIO: Rain on concrete, slowly fading quieter. A distant metal door closing
+with a dull clang. Then just rain. No dialogue. No voiceover. No music.
+No one speaks.
+
+No text on screen. No titles. No logos.
+```
+
+**Camera:** Wide static hold, slow rack focus to pitch
+**Duration:** 4 seconds
+
+---
+
+## Shot 10 / 10 — TAG (1:20–1:28)
+
+**Motion graphics — not Veo 3.**
+
+Create in After Effects, CapCut, or Canva:
+
+- 0:00 — Fade to black from Shot 9B (1 sec)
+- 0:01 — Title fades in center screen:
+  **TALENTSCOUT**
+  (Condensed bold sans-serif, all-caps, #F0EBE3 on #0A1628, tight letter-spacing)
+- 0:02 — Tagline fades in below title:
+  *Every club needs a manager. But someone had to find Messi first.*
+  (#8A9BAE, regular weight, sentence case)
+- 0:05 — Steam logo fades in below: "Available in Early Access"
+- 0:06 — Small text fades in at bottom: **You spotted him first.**
+- 0:08 — Fade to black
+
+---
+
+## Assembly Order
+
+| # | Type | Duration | Source | Notes |
+|---|------|----------|--------|-------|
+| 1 | Veo 3 | 8 sec | Clip 1 | Dolly through fence |
+| 2 | Veo 3 | 8 sec | Clip 2 | Notebook close-up |
+| 3 | Veo 3 | 8 sec | Clip 3 | Player in slow-mo |
+| 4A | Veo 3 | 4 sec | Clip 4A | South American ground |
+| 4B | Veo 3 | 4 sec | Clip 4B | English non-league |
+| 4C | Veo 3 | 4 sec | Clip 4C | Modern academy |
+| 5 | Veo 3 | 8 sec | Clip 5 | Car / newspaper |
+| 6 | Game capture | 8 sec | Screen rec | UI reveal |
+| 7 | Game capture | 8 sec | Screen rec | Gameplay montage |
+| 8 | Game capture | 8 sec | Screen rec | Career progression |
+| 9A | Veo 3 | 8 sec | Clip 9A | Scout stands, walks away |
+| 9B | Veo 3 | 4 sec | Clip 9B | Empty seat hold |
+| 10 | Motion gfx | 8 sec | AE/CapCut | Title card |
+
+**Veo 3 clips to generate:** 9 clips (6 full 8-sec, 3 short 4-sec)
+**Total assembled runtime:** ~84 seconds
+
+---
+
+## Veo 3 Generation Strategy
+
+### Consistency Across Clips
+
+The biggest risk is visual inconsistency between clips. To minimize rework:
+
+1. **Generate Shot 1 first.** This establishes the look — the rain, the floodlight
+   color, the film grain, the overall grade. If Shot 1 looks right, use it as the
+   style reference for all subsequent night shots.
+
+2. **Night shots group** (1, 2, 3, 9A, 9B): These all share the same location,
+   same rain, same floodlights. Generate them in sequence and describe them as
+   the same location every time. Include "same small South American youth football
+   ground" in every prompt.
+
+3. **Journey shots group** (4A, 4B, 4C): Different locations but same character.
+   Include the full scout character description in each. These are the hardest for
+   consistency — if the man looks different across the three, try generating 4B
+   (English ground) as the anchor and matching 4A and 4C to it.
+
+4. **Shot 5** (car) is isolated — consistency with the scout's coat and build is
+   the main concern. Since he's a silhouette, it's more forgiving.
+
+### Per-Shot Generation Tips
+
+| Shot | Likely Issues | Mitigation |
+|------|--------------|------------|
+| 1 | Floodlights might render as modern white LED | Emphasize "amber tungsten" and "warm golden" in prompt |
+| 2 | Notebook text might generate readable gibberish | Specify "impression of handwriting, not readable text" |
+| 3 | Player's face might be too visible | Emphasize "side-lit, profile only, face in shadow" |
+| 4A | Man might not match across 4A/4B/4C | Lock the outfit description, generate from same session |
+| 4B | English ground might look too modern | Specify "non-league, metal stands, no advertising boards" |
+| 4C | Corridor might look like an office, not academy | Specify "training pitches visible through glass" |
+| 5 | Newspaper text will be AI gibberish | Specify "no readable text, just folded broadsheet shape" |
+| 9A | Man might do too much in 8 seconds | Keep action minimal: sit still 4 sec, then stand and walk |
+| 9B | Empty shot might feel dead/boring | The slow rack focus gives it visual interest |
+
+### Audio in Veo 3
+
+Veo 3 generates audio by default. The prompts specify ambient sound only.
+In post-production, you will likely:
+- Keep the rain/ambient audio from Veo 3 as a foundation layer
+- Layer in additional designed rain, crowd, and atmosphere SFX
+- Add the voiceover track on top
+- Add the music bed underneath everything
+
+If Veo 3's generated audio sounds wrong (too clean, wrong reverb, unwanted
+sounds), mute it entirely and rebuild from scratch with sound design.
+
+---
+
+## Post-Production Checklist
+
+- [ ] Generate Shot 1 — establish the visual benchmark
+- [ ] Generate Shots 2, 3, 9A, 9B — same location, same session if possible
+- [ ] Generate Shots 4A, 4B, 4C — same session, verify scout consistency
+- [ ] Generate Shot 5 — isolated, more forgiving
+- [ ] Review all 9 clips for color/grain consistency before proceeding
+- [ ] Capture game footage for Shots 6, 7, 8
+- [ ] Record voiceover (male, late 40s, British or South American accent, reflective)
+- [ ] License or commission ambient/indie rock track (Mogwai, EITS, slow build)
+- [ ] Sound design: rain ambience, crowd murmur, referee whistles, floodlight hum
+- [ ] Assemble timeline (DaVinci Resolve / Premiere / CapCut)
+- [ ] Add crossfade between Shot 5 and Shot 6 (real-to-game transition)
+- [ ] Color grade for consistency across all Veo 3 clips and game footage
+- [ ] Create Shot 10 title card
+- [ ] Add Steam end card with wishlist CTA
+- [ ] Export: 1080p and 4K versions

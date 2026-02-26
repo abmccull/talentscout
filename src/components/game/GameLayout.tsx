@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import {
@@ -30,6 +30,7 @@ import {
   Swords,
   Lock,
   Activity,
+  Menu,
 } from "lucide-react";
 
 // ─── Sectioned Navigation ────────────────────────────────────────────────────
@@ -149,9 +150,9 @@ function getNavVisibility(
     case "inbox":
       return effectiveWeek >= 3;
 
-    // Agency: visible for all independent path players (locked UI until tier 3)
+    // Agency: visible for all career paths after week 3
     case "agency":
-      return careerPath === "independent";
+      return effectiveWeek >= 3;
 
     // Tier 2+ items
     case "network":
@@ -186,15 +187,11 @@ function getNavVisibility(
 }
 
 function getNavLockState(
-  screen: GameScreen,
-  tier: number,
-  careerPath: string,
+  _screen: GameScreen,
+  _tier: number,
+  _careerPath: string,
 ): "unlocked" | "preview" | "locked" | null {
-  if (screen === "agency" && careerPath === "independent") {
-    if (tier >= 3) return "unlocked";
-    if (tier === 2) return "preview";
-    return "locked";
-  }
+  // Agency is now always unlocked (gating is internal via tabs)
   return null;
 }
 
@@ -205,6 +202,28 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
 
   // All hooks must be called before any early return
   const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Prevent body scroll when sidebar overlay is open on mobile
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [sidebarOpen]);
 
   if (!gameState) return null;
 
@@ -240,16 +259,50 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       saveSeenNav(next);
     }
     setScreen(screen);
+    setSidebarOpen(false);
   }
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar */}
-      <aside className="flex w-56 flex-col border-r border-[var(--border)] bg-[#0c0c0c]">
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setSidebarOpen(true)}
+        className="fixed left-3 top-3 z-40 flex md:hidden items-center justify-center rounded-md bg-[#0c0c0c] border border-[var(--border)] p-2 text-zinc-400 hover:text-white transition"
+        aria-label="Open navigation menu"
+      >
+        <Menu size={20} />
+      </button>
+
+      {/* Mobile backdrop overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar — desktop: static, mobile: slide-over overlay */}
+      <aside className={`
+        fixed inset-y-0 left-0 z-50 flex w-64 md:w-56 flex-col bg-[#0c0c0c] border-r border-[var(--border)]
+        transform transition-transform duration-200 ease-in-out
+        md:static md:translate-x-0
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+      `}>
         <div className="border-b border-[var(--border)] p-4">
-          <h1 className="text-lg font-bold">
-            Talent<span className="text-emerald-500">Scout</span>
-          </h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-bold">
+              Talent<span className="text-emerald-500">Scout</span>
+            </h1>
+            {/* Close button visible only on mobile */}
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="md:hidden rounded-md p-1 text-zinc-400 hover:text-white transition"
+              aria-label="Close sidebar"
+            >
+              <X size={18} />
+            </button>
+          </div>
           <p className="mt-0.5 text-xs text-zinc-500">
             Week {gameState.currentWeek} — Season {gameState.currentSeason}
           </p>
@@ -277,7 +330,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
                     onClick={() => !isLocked && handleNavClick(screen)}
                     disabled={isLocked}
                     title={isLocked ? "Unlocks at Tier 3" : undefined}
-                    className={`mb-0.5 flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition ${
+                    className={`mb-0.5 flex w-full items-center gap-3 rounded-md px-3 py-2.5 md:py-2 text-sm transition ${
                       isLocked
                         ? "cursor-not-allowed opacity-40 text-zinc-600"
                         : currentScreen === screen
@@ -347,8 +400,8 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+      {/* Main Content — extra top padding on mobile for hamburger button */}
+      <main className="min-w-0 flex-1 overflow-auto pt-12 md:pt-0">
         {autosaveError !== null && (
           <div
             role="alert"

@@ -6,15 +6,18 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft, X, Sparkles, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, X, Sparkles, TrendingUp, TrendingDown, Minus, Lightbulb } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading, PlayerAttribute } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import {
   generateReportContent,
+  estimateReportQuality,
   STRENGTH_DESCRIPTORS,
   WEAKNESS_DESCRIPTORS,
 } from "@/engine/reports";
+import type { QualityBreakdown } from "@/engine/reports";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -29,6 +32,32 @@ function confidenceColor(confidence: number): string {
   if (confidence >= 0.4) return "text-amber-400";
   return "text-red-400";
 }
+
+function qualityScoreColor(score: number): string {
+  if (score >= 70) return "text-emerald-400";
+  if (score >= 40) return "text-amber-400";
+  return "text-red-400";
+}
+
+function qualityScoreBg(score: number): string {
+  if (score >= 70) return "bg-emerald-500";
+  if (score >= 40) return "bg-amber-500";
+  return "bg-red-500";
+}
+
+function qualityScoreBorder(score: number): string {
+  if (score >= 70) return "border-emerald-500/30";
+  if (score >= 40) return "border-amber-500/30";
+  return "border-red-500/30";
+}
+
+const BREAKDOWN_LABELS: Record<keyof QualityBreakdown, { label: string; max: number }> = {
+  observationDepth: { label: "Observation depth", max: 25 },
+  confidenceLevel: { label: "Confidence level", max: 20 },
+  convictionFit: { label: "Conviction fit", max: 15 },
+  detail: { label: "Detail", max: 20 },
+  scoutSkill: { label: "Scout skill", max: 20 },
+};
 
 function formatValue(n: number): string {
   if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(2)}M`;
@@ -154,6 +183,42 @@ export function ReportWriter() {
     if (!player || !gameState || observations.length === 0) return null;
     return generateReportContent(player, observations, gameState.scout);
   }, [player, gameState, observations]);
+
+  // Compute average confidence and perceived CA from merged readings
+  const { avgConfidence, perceivedCA } = useMemo(() => {
+    const readings = Array.from(merged.values());
+    if (readings.length === 0) return { avgConfidence: 0, perceivedCA: undefined };
+    const avg = readings.reduce((s, r) => s + r.confidence, 0) / readings.length;
+    const weightedAvg = readings.reduce((s, r) => s + r.perceivedValue, 0) / readings.length;
+    return { avgConfidence: avg, perceivedCA: Math.round(weightedAvg * 10) };
+  }, [merged]);
+
+  // Live quality preview -- updates whenever relevant inputs change
+  const qualityPreview = useMemo(
+    () =>
+      estimateReportQuality({
+        observationCount: observations.length,
+        avgConfidence,
+        convictionLevel: conviction,
+        strengthCount: selectedStrengths.length,
+        weaknessCount: selectedWeaknesses.length,
+        scoutSkills: gameState?.scout.skills ?? {},
+        assessedAttributeCount: merged.size,
+        position: player?.position,
+        perceivedCA,
+      }),
+    [
+      observations.length,
+      avgConfidence,
+      conviction,
+      selectedStrengths.length,
+      selectedWeaknesses.length,
+      gameState?.scout.skills,
+      merged.size,
+      player?.position,
+      perceivedCA,
+    ]
+  );
 
   // Build reverse-lookup maps: descriptor string → attribute name
   const strengthToAttribute = useMemo(() => {
@@ -821,6 +886,82 @@ export function ReportWriter() {
               <p className="mt-1 text-xs text-zinc-500">{summary.length} characters</p>
             </CardContent>
           </Card>
+
+          {/* Quality preview */}
+          {observations.length > 0 && (
+            <Card className={`border ${qualityScoreBorder(qualityPreview.score)} sticky top-4 z-10`}>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <TrendingUp size={14} className="text-zinc-400" aria-hidden="true" />
+                  Quality Preview
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-start gap-6">
+                  {/* Score circle */}
+                  <div className="flex flex-col items-center gap-1 shrink-0">
+                    <div
+                      className={`flex h-16 w-16 items-center justify-center rounded-full border-2 ${qualityScoreBorder(qualityPreview.score)}`}
+                    >
+                      <span className={`text-2xl font-bold ${qualityScoreColor(qualityPreview.score)}`}>
+                        {qualityPreview.score}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-zinc-500">/ 100</span>
+                  </div>
+
+                  {/* Breakdown bars */}
+                  <div className="flex-1 space-y-1.5 min-w-0">
+                    {(Object.keys(BREAKDOWN_LABELS) as Array<keyof QualityBreakdown>).map((key) => {
+                      const { label, max } = BREAKDOWN_LABELS[key];
+                      const value = qualityPreview.breakdown[key];
+                      const pct = (value / max) * 100;
+                      return (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="w-28 shrink-0 text-[11px] text-zinc-400 truncate">
+                            {label}
+                          </span>
+                          <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                            <div
+                              className={`absolute left-0 top-0 h-full rounded-full transition-all duration-300 ${qualityScoreBg(qualityPreview.score)}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="w-10 shrink-0 text-right text-[11px] font-mono text-zinc-400">
+                            {value}/{max}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Improvement hints */}
+                {qualityPreview.hints.length > 0 && (
+                  <div className="mt-3 rounded-md border border-[#27272a] bg-[#141414] p-2.5">
+                    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-400 mb-1.5">
+                      <Lightbulb size={12} aria-hidden="true" />
+                      Tips to improve
+                    </p>
+                    <ul className="space-y-1">
+                      {qualityPreview.hints.map((hint) => (
+                        <li key={hint} className="text-[11px] text-zinc-400 leading-tight pl-3.5 relative">
+                          <span className="absolute left-0 top-0 text-zinc-600" aria-hidden="true">
+                            &bull;
+                          </span>
+                          {hint}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <p className="mt-2 text-[10px] text-zinc-600 italic">
+                  Final score may vary slightly based on additional factors
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Conviction level */}
           <Card data-tutorial-id="report-conviction">

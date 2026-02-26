@@ -23,7 +23,6 @@ import type {
   PlayerAttribute,
   PhysicalAttribute,
   AttributeDeltas,
-  StandingEntry,
   Weather,
   DevelopmentProfile,
   NPCScout,
@@ -75,6 +74,16 @@ import { processWeeklyReferrals } from "../network/referrals";
 import { processWeeklyContactDecay, processExclusiveWindows } from "../network/contacts";
 import type { CardEvent, DisciplinaryRecord, TransferNegotiation, BoardReaction, BoardProfile, TacticalMatchup } from "./types";
 import { calculateTacticalMatchup } from "../match/tactics";
+import {
+  processRelegationPromotion,
+  applyRelegationResult,
+  getStandingsPriceModifier,
+} from "../world/relegation";
+import type { RelegationResult } from "../world/relegation";
+import { processContractExpiries } from "../freeAgents/expiry";
+import { tickFreeAgentPool } from "../freeAgents/pool";
+import { discoverFreeAgents } from "../freeAgents/discovery";
+import type { FreeAgentPool } from "./types";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -226,6 +235,18 @@ export interface TickResult {
   boardReactions?: BoardReaction[];
   /** Updated board profile after weekly evaluation (F10). */
   updatedBoardProfile?: BoardProfile;
+  /** Relegation/promotion results, set only at season-end. */
+  relegationResult?: RelegationResult;
+  /** Updated free agent pool after weekly tick (pool decay, NPC signings, discovery). */
+  updatedFreeAgentPool?: FreeAgentPool;
+  /** Player IDs signed by NPC clubs from the free agent pool this week. */
+  freeAgentNPCSignings?: { playerId: string; clubId: string }[];
+  /** Player IDs released due to contract expiry (season-end only). */
+  contractExpiryResult?: {
+    renewedPlayerIds: string[];
+    retiredPlayerIds: string[];
+    updatedPlayers: Record<string, Player>;
+  };
 }
 
 // =============================================================================
@@ -521,73 +542,9 @@ function simulateWeekFixtures(
 // STANDINGS UPDATE
 // =============================================================================
 
-/**
- * Build a standings map from all played fixtures in a league.
- * Returns a record keyed by clubId.
- */
-export function buildStandings(
-  leagueId: string,
-  fixtures: Record<string, Fixture>,
-  clubs: Record<string, Club>,
-): Record<string, StandingEntry> {
-  const standings: Record<string, StandingEntry> = {};
-
-  // Initialise an entry for every club in the league
-  for (const club of Object.values(clubs)) {
-    if (club.leagueId === leagueId) {
-      standings[club.id] = {
-        clubId: club.id,
-        played: 0,
-        won: 0,
-        drawn: 0,
-        lost: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-        points: 0,
-      };
-    }
-  }
-
-  // Tally results from played fixtures in this league
-  for (const fixture of Object.values(fixtures)) {
-    if (fixture.leagueId !== leagueId || !fixture.played) continue;
-    if (fixture.homeGoals === undefined || fixture.awayGoals === undefined) continue;
-
-    const home = standings[fixture.homeClubId];
-    const away = standings[fixture.awayClubId];
-    if (!home || !away) continue;
-
-    const hg = fixture.homeGoals;
-    const ag = fixture.awayGoals;
-
-    home.played += 1;
-    away.played += 1;
-    home.goalsFor += hg;
-    home.goalsAgainst += ag;
-    away.goalsFor += ag;
-    away.goalsAgainst += hg;
-    home.goalDifference = home.goalsFor - home.goalsAgainst;
-    away.goalDifference = away.goalsFor - away.goalsAgainst;
-
-    if (hg > ag) {
-      home.won += 1;
-      home.points += 3;
-      away.lost += 1;
-    } else if (hg < ag) {
-      away.won += 1;
-      away.points += 3;
-      home.lost += 1;
-    } else {
-      home.drawn += 1;
-      home.points += 1;
-      away.drawn += 1;
-      away.points += 1;
-    }
-  }
-
-  return standings;
-}
+// Re-export buildStandings from the extracted module for backward compatibility.
+// This avoids circular dependencies (relegation.ts also needs buildStandings).
+export { buildStandings } from "./standings";
 
 // =============================================================================
 // FORM MOMENTUM
@@ -1321,9 +1278,11 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     );
     if (!destination) continue;
 
-    // Transfer fee: market value with ±20% variance
+    // Transfer fee: market value with ±20% variance, adjusted by standings position.
+    // Bottom 5 clubs sell at -10%, top 3 clubs sell at +10%.
     const feeVariance = rng.nextFloat(0.8, 1.2);
-    const fee = Math.round(player.marketValue * feeVariance);
+    const standingsModifier = getStandingsPriceModifier(player.clubId, state);
+    const fee = Math.round(player.marketValue * feeVariance * standingsModifier);
 
     // Destination must still have budget (accounting for other transfers this tick)
     const alreadySpent = spentBudget.get(destination.id) ?? 0;
@@ -2192,6 +2151,63 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 19. Form momentum updates for all players.
   const formMomentumUpdates = processFormMomentum(state, fixturesPlayed, rng);
 
+  // 20. Relegation/promotion processing (season-end only).
+  let relegationResult: RelegationResult | undefined;
+  if (endOfSeasonTriggered) {
+    relegationResult = processRelegationPromotion(state, rng);
+    newMessages.push(...relegationResult.messages);
+  }
+
+  // 21. Free agent pool processing.
+  let updatedFreeAgentPool: FreeAgentPool | undefined;
+  let freeAgentNPCSignings: { playerId: string; clubId: string }[] | undefined;
+  let contractExpiryResult: {
+    renewedPlayerIds: string[];
+    retiredPlayerIds: string[];
+    updatedPlayers: Record<string, Player>;
+  } | undefined;
+
+  if (state.freeAgentPool) {
+    let workingPool = { ...state.freeAgentPool };
+
+    // a) Season-end: process contract expiries → new releases into pool
+    if (endOfSeasonTriggered) {
+      const expiryResult = processContractExpiries(state, rng);
+      newMessages.push(...expiryResult.messages);
+      contractExpiryResult = {
+        renewedPlayerIds: expiryResult.renewedPlayerIds,
+        retiredPlayerIds: expiryResult.retiredPlayerIds,
+        updatedPlayers: expiryResult.updatedPlayers,
+      };
+
+      // Add released players to pool
+      for (const released of expiryResult.releasedPlayers) {
+        workingPool = {
+          ...workingPool,
+          agents: [...workingPool.agents, released],
+          totalReleasedThisSeason: workingPool.totalReleasedThisSeason + 1,
+        };
+      }
+    }
+
+    // b) Weekly tick: decay pool, NPC signings, mid-season releases
+    const poolResult = tickFreeAgentPool(
+      { ...state, freeAgentPool: workingPool },
+      rng,
+    );
+    updatedFreeAgentPool = poolResult.updatedPool;
+    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
+    newMessages.push(...poolResult.messages);
+
+    // c) Discovery: specialization-based discovery of free agents
+    const discoveryResult = discoverFreeAgents(
+      { ...state, freeAgentPool: updatedFreeAgentPool },
+      rng,
+    );
+    updatedFreeAgentPool = discoveryResult.updatedPool;
+    newMessages.push(...discoveryResult.messages);
+  }
+
   return {
     fixturesPlayed,
     standingsUpdated,
@@ -2234,6 +2250,10 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     updatedContacts: f3UpdatedContacts,
     boardReactions: boardAIResult?.reactions,
     updatedBoardProfile: boardAIResult?.updatedProfile,
+    relegationResult,
+    updatedFreeAgentPool,
+    freeAgentNPCSignings,
+    contractExpiryResult,
   };
 }
 
@@ -2416,7 +2436,7 @@ export function advanceWeek(
   }
 
   // ---- Transfers: update club rosters and player clubId ----
-  const updatedClubs = { ...state.clubs };
+  let updatedClubs = { ...state.clubs };
 
   // Deduplicate transfers — a player can only move once per week
   const processedPlayerIds = new Set<string>();
@@ -2453,6 +2473,26 @@ export function advanceWeek(
       clubId: transfer.toClubId,
       morale: clamp(player.morale + 2, 1, 10), // Transfer usually boosts morale
     };
+  }
+
+  // ---- Free agent NPC signings: assign players to clubs ----
+  if (tickResult.freeAgentNPCSignings) {
+    for (const signing of tickResult.freeAgentNPCSignings) {
+      const player = updatedPlayers[signing.playerId];
+      const club = updatedClubs[signing.clubId];
+      if (!player || !club) continue;
+
+      updatedPlayers[signing.playerId] = {
+        ...player,
+        clubId: signing.clubId,
+        contractExpiry: state.currentSeason + 2,
+        wage: Math.round(player.currentAbility * 60),
+      };
+      updatedClubs[signing.clubId] = {
+        ...club,
+        playerIds: [...club.playerIds, signing.playerId],
+      };
+    }
   }
 
   // ---- NPC scouts: apply updated states and accumulate new reports ----
@@ -2562,7 +2602,7 @@ export function advanceWeek(
   ];
 
   // ---- Accumulated retired player IDs ----
-  const updatedRetiredPlayerIds = [
+  let updatedRetiredPlayerIds = [
     ...state.retiredPlayerIds,
     ...(tickResult.playerRetirements?.retiredPlayerIds ?? []),
     ...(tickResult.youthAgingResult?.retired ?? []),
@@ -2683,6 +2723,17 @@ export function advanceWeek(
       };
     }
 
+    // Apply relegation/promotion: adjust club reputations, budgets, and
+    // flag players at relegated clubs for transfer availability.
+    if (tickResult.relegationResult) {
+      const relegationChanges = applyRelegationResult(
+        { ...state, clubs: updatedClubs, players: updatedPlayers },
+        tickResult.relegationResult,
+      );
+      updatedClubs = { ...updatedClubs, ...relegationChanges.clubs };
+      updatedPlayers = { ...updatedPlayers, ...relegationChanges.players };
+    }
+
     // Update season in all leagues
     const updatedLeagues = { ...state.leagues };
     for (const [id, league] of Object.entries(updatedLeagues)) {
@@ -2691,6 +2742,31 @@ export function advanceWeek(
 
     // Clear season cards at end of season
     updatedDisciplinaryRecords = clearSeasonCards(updatedDisciplinaryRecords, nextSeason);
+
+    // Apply contract expiry results: update renewed player contracts
+    if (tickResult.contractExpiryResult) {
+      for (const [id, renewedPlayer] of Object.entries(tickResult.contractExpiryResult.updatedPlayers)) {
+        updatedPlayers[id] = { ...updatedPlayers[id], ...renewedPlayer };
+      }
+      // Add retired players to retired list
+      updatedRetiredPlayerIds = [
+        ...updatedRetiredPlayerIds,
+        ...tickResult.contractExpiryResult.retiredPlayerIds,
+      ];
+    }
+
+    // Apply free agent pool updates (includes released players from expiry)
+    let updatedFreeAgentPool = tickResult.updatedFreeAgentPool ?? state.freeAgentPool;
+    if (updatedFreeAgentPool) {
+      // Reset season counters for new season
+      updatedFreeAgentPool = {
+        ...updatedFreeAgentPool,
+        lastRefreshSeason: nextSeason,
+        totalReleasedThisSeason: 0,
+        totalSignedThisSeason: 0,
+        totalRetiredThisSeason: 0,
+      };
+    }
 
     return {
       ...state,
@@ -2725,6 +2801,7 @@ export function advanceWeek(
       boardProfile: updatedBoardProfile,
       boardReactions: updatedBoardReactions,
       satisfactionHistory: updatedSatisfactionHistory,
+      freeAgentPool: updatedFreeAgentPool,
     };
   }
 
@@ -2759,5 +2836,6 @@ export function advanceWeek(
     boardProfile: updatedBoardProfile,
     boardReactions: updatedBoardReactions,
     satisfactionHistory: updatedSatisfactionHistory,
+    freeAgentPool: tickResult.updatedFreeAgentPool ?? state.freeAgentPool,
   };
 }

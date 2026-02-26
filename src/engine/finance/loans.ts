@@ -8,6 +8,7 @@ import type {
   Loan,
   LoanType,
 } from "../core/types";
+import { getCreditScore, checkLoanEligibility } from "./creditScore";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -31,31 +32,38 @@ const LOAN_CONFIGS: Record<LoanType, LoanConfig> = {
 
 /**
  * Check what loan types the scout is eligible for.
+ * Now factors in credit score and income for underwriting.
  */
 export function getLoanEligibility(
   finances: FinancialRecord,
-): { eligible: boolean; types: LoanType[] } {
+  careerTier?: number,
+): { eligible: boolean; types: LoanType[]; creditScore: number; maxAmount: number } {
   // Can't take a loan if already has one
   if (finances.activeLoan) {
-    return { eligible: false, types: [] };
+    return { eligible: false, types: [], creditScore: getCreditScore(finances), maxAmount: 0 };
   }
 
+  const score = getCreditScore(finances);
   const types: LoanType[] = [];
 
-  // Business loan requires positive balance history
-  if (finances.balance >= 0) {
+  // Business loan requires positive balance and decent credit
+  if (finances.balance >= 0 && score >= (careerTier && careerTier >= 4 ? 40 : 30)) {
     types.push("business");
   }
 
-  // Equipment loan is always available
-  types.push("equipment");
+  // Equipment loan available if credit score is at least 20
+  if (score >= 20) {
+    types.push("equipment");
+  }
 
-  // Emergency loan available when balance is low
+  // Emergency loan available when balance is low (less restrictive)
   if (finances.balance < 500) {
     types.push("emergency");
   }
 
-  return { eligible: types.length > 0, types };
+  const maxAmount = Math.min(20000, finances.monthlyIncome * 6);
+
+  return { eligible: types.length > 0, types, creditScore: score, maxAmount };
 }
 
 // ---------------------------------------------------------------------------
@@ -78,8 +86,15 @@ export function takeLoan(
   if (amount > config.maxAmount) return null;
   if (amount <= 0) return null;
 
+  // Dynamic interest rate based on credit score
+  const score = getCreditScore(finances);
+  const baseRate = config.monthlyInterestRate;
+  // Better credit = lower rate (up to 40% reduction at score 100)
+  const creditModifier = 1 - (score / 100) * 0.4;
+  const effectiveRate = baseRate * creditModifier;
+
   // Calculate monthly payment (simple amortization)
-  const totalInterest = amount * config.monthlyInterestRate * config.termMonths;
+  const totalInterest = amount * effectiveRate * config.termMonths;
   const totalRepayment = amount + totalInterest;
   const monthlyPayment = Math.round(totalRepayment / config.termMonths);
 
@@ -87,7 +102,7 @@ export function takeLoan(
     id: `loan_${type}_${week}_${season}`,
     type,
     principal: amount,
-    monthlyInterestRate: config.monthlyInterestRate,
+    monthlyInterestRate: effectiveRate,
     remainingBalance: totalRepayment,
     monthlyPayment,
     startWeek: week,
@@ -104,7 +119,7 @@ export function takeLoan(
         week,
         season,
         amount,
-        description: `${type.charAt(0).toUpperCase() + type.slice(1)} loan received`,
+        description: `${type.charAt(0).toUpperCase() + type.slice(1)} loan received (${Math.round(effectiveRate * 100)}% interest)`,
       },
     ],
   };

@@ -16,6 +16,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
+import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip";
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -1251,12 +1252,25 @@ export function PlayerProfile() {
               </p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-zinc-500">Contract Expires</p>
-              <p className="mt-1 font-semibold">Season {player.contractExpiry}</p>
-            </CardContent>
-          </Card>
+          {player.clubId && player.contractExpiry > 0 && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-zinc-500">Contract Expires</p>
+                <p className="mt-1 font-semibold">Season {player.contractExpiry}</p>
+              </CardContent>
+            </Card>
+          )}
+          {/* Free Agent Badge */}
+          {!player.clubId && player.contractExpiry === 0 && gameState.freeAgentPool?.agents.some(
+            (a) => a.playerId === player.id && a.status === "available"
+          ) && (
+            <Card className="border-emerald-500/20 bg-emerald-500/5">
+              <CardContent className="p-4">
+                <p className="text-xs text-emerald-400">Free Agent</p>
+                <p className="mt-1 text-sm text-zinc-300">Available to sign</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Unsigned Youth Details */}
@@ -1339,7 +1353,10 @@ export function PlayerProfile() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-zinc-500">Current Ability</p>
+                  <p className="flex items-center gap-1 text-xs text-zinc-500">
+                    Current Ability
+                    <HelpTooltip text="A player's current ability level on a 1-5 star scale. Higher stars = better player right now." />
+                  </p>
                   <div
                     className={`h-2 w-2 rounded-full ${confidenceColor(aggregatedAbility.caConfidence)}`}
                     title={`${confidenceLabel(aggregatedAbility.caConfidence)} confidence`}
@@ -1395,8 +1412,9 @@ export function PlayerProfile() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Attribute table */}
           <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-zinc-500">
               Scouting Data
+              <HelpTooltip text="Confidence shows how certain you are about this player's attributes. Higher confidence means more accurate readings. Observe in multiple contexts to increase confidence." />
             </h2>
             {DOMAIN_ORDER.map((domain) => {
               const domainAttrs = byDomain.get(domain) ?? [];
@@ -1441,11 +1459,13 @@ export function PlayerProfile() {
                                     }}
                                   />
                                 </div>
-                                <span className="w-10 shrink-0 text-right text-xs font-mono font-medium text-white">
-                                  {reading.rangeLow != null && reading.rangeHigh != null && reading.rangeLow !== reading.rangeHigh
-                                    ? `${reading.rangeLow}-${reading.rangeHigh}`
-                                    : reading.perceivedValue}
-                                </span>
+                                <AttributeValueTooltip value={reading.perceivedValue} confidence={reading.confidence}>
+                                  <span className="w-10 shrink-0 text-right text-xs font-mono font-medium text-white cursor-help">
+                                    {reading.rangeLow != null && reading.rangeHigh != null && reading.rangeLow !== reading.rangeHigh
+                                      ? `${reading.rangeLow}-${reading.rangeHigh}`
+                                      : reading.perceivedValue}
+                                  </span>
+                                </AttributeValueTooltip>
                                 <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500" title={`${reading.observationCount} observation${reading.observationCount !== 1 ? "s" : ""}`}>
                                   {reading.observationCount}x
                                 </span>
@@ -1710,8 +1730,9 @@ export function PlayerProfile() {
                           </Badge>
                           <span className="text-xs text-zinc-500">W{r.submittedWeek}</span>
                         </div>
-                        <p className="text-xs text-zinc-400">
+                        <p className="flex items-center gap-1 text-xs text-zinc-400">
                           Quality: {r.qualityScore}/100
+                          <HelpTooltip text="Report quality based on observation count, accuracy, and conviction. Higher quality reports earn more income and reputation." />
                         </p>
                         {r.clubResponse && (
                           <p className="text-xs text-zinc-500 capitalize mt-0.5">

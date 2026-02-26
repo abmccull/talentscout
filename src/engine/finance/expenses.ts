@@ -628,6 +628,80 @@ export function applyFirstPlacementBonus(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Lifestyle Gameplay Effects
+// ---------------------------------------------------------------------------
+
+export interface LifestyleEffects {
+  /** Modifier to contact acquisition rate. Negative = harder to meet contacts. */
+  contactAcquisitionModifier: number;
+  /** Modifier to retainer contract value (percentage). */
+  retainerValueModifier: number;
+  /** Modifier to consulting fee (percentage). */
+  consultingFeeModifier: number;
+  /** Bonus relationship points per contact interaction. */
+  relationshipBonusPerInteraction: number;
+  /** Credit score floor penalty (subtracted from effective score). */
+  creditScoreFloorPenalty: number;
+}
+
+/**
+ * Get gameplay effects based on current lifestyle level.
+ * Higher lifestyle provides professional advantages but may carry financial risk.
+ */
+export function getLifestyleEffects(lifestyleLevel: number): LifestyleEffects {
+  switch (lifestyleLevel) {
+    case 1: // Frugal
+      return {
+        contactAcquisitionModifier: -0.05,
+        retainerValueModifier: 0,
+        consultingFeeModifier: 0,
+        relationshipBonusPerInteraction: 0,
+        creditScoreFloorPenalty: 0,
+      };
+    case 2: // Modest
+      return {
+        contactAcquisitionModifier: 0,
+        retainerValueModifier: 0,
+        consultingFeeModifier: 0,
+        relationshipBonusPerInteraction: 0,
+        creditScoreFloorPenalty: 0,
+      };
+    case 3: // Comfortable
+      return {
+        contactAcquisitionModifier: 0,
+        retainerValueModifier: 0.05,
+        consultingFeeModifier: 0,
+        relationshipBonusPerInteraction: 1,
+        creditScoreFloorPenalty: 0,
+      };
+    case 4: // Upscale
+      return {
+        contactAcquisitionModifier: 0,
+        retainerValueModifier: 0.05,
+        consultingFeeModifier: 0.10,
+        relationshipBonusPerInteraction: 2,
+        creditScoreFloorPenalty: 0,
+      };
+    case 5: // Lavish
+      return {
+        contactAcquisitionModifier: 0,
+        retainerValueModifier: 0.15,
+        consultingFeeModifier: 0.15,
+        relationshipBonusPerInteraction: 3,
+        creditScoreFloorPenalty: 10,
+      };
+    default:
+      return {
+        contactAcquisitionModifier: 0,
+        retainerValueModifier: 0,
+        consultingFeeModifier: 0,
+        relationshipBonusPerInteraction: 0,
+        creditScoreFloorPenalty: 0,
+      };
+  }
+}
+
 // =============================================================================
 // INTERNAL HELPERS
 // =============================================================================

@@ -209,6 +209,52 @@ const PHASE_DESCRIPTIONS: Record<MatchPhaseType, string[]> = {
 };
 
 // ---------------------------------------------------------------------------
+// Fatigue system -- players with low stamina degrade over 90 minutes
+// ---------------------------------------------------------------------------
+
+const FATIGUE_COMMENTARY: ((name: string, minute: number) => string)[] = [
+  (n, m) => `${m}' -- ${n} is visibly tiring, his pace has dropped noticeably.`,
+  (n, m) => `${m}' -- ${n} is blowing hard, hands on knees at every stoppage.`,
+  (n, m) => `${m}' -- ${n} looks leggy now, struggling to close down space.`,
+  (n, m) => `${m}' -- The tank is running empty for ${n} -- movement has become laboured.`,
+  (n, m) => `${m}' -- ${n} can barely muster a jog back into position.`,
+];
+
+const SUBSTITUTION_COMMENTARY: ((name: string, minute: number) => string)[] = [
+  (n, m) => `${m}' -- Substitution. ${n} trudges off to a round of applause, clearly spent.`,
+  (n, m) => `${m}' -- ${n} is replaced -- he's given everything today but has nothing left.`,
+  (n, m) => `${m}' -- The manager signals the change. ${n} makes way, legs heavy.`,
+];
+
+/**
+ * Compute the base fatigue penalty for a given phase position in the match.
+ * Returns 0-0.15 representing the maximum penalty for a player with stamina 0.
+ */
+function computeFatiguePenalty(phaseIndex: number, phaseCount: number): number {
+  const normalizedPosition = phaseIndex / Math.max(1, phaseCount - 1);
+  const approxMinute = normalizedPosition * 90;
+
+  if (approxMinute <= 45) return 0;
+  if (approxMinute <= 60) return 0.05;
+  if (approxMinute <= 75) return 0.10;
+  return 0.15;
+}
+
+/**
+ * Get the effective fatigue multiplier for a player at a given phase.
+ * Returns 0.85-1.0 that is multiplied into event quality.
+ * Stamina 20 = immune, stamina 0 = full penalty.
+ */
+function getFatigueMultiplier(player: Player, phaseIndex: number, phaseCount: number): number {
+  const basePenalty = computeFatiguePenalty(phaseIndex, phaseCount);
+  if (basePenalty === 0) return 1;
+
+  const stamina = player.attributes.stamina ?? 10;
+  const effectivePenalty = basePenalty * (1 - stamina / 20);
+  return 1 - effectivePenalty;
+}
+
+// ---------------------------------------------------------------------------
 // 4c. Set piece variants
 // ---------------------------------------------------------------------------
 
@@ -276,6 +322,7 @@ function computeEventQuality(
   player: Player,
   revealed: PlayerAttribute[],
   weather: Weather,
+  fatigueMultiplier = 1,
 ): number {
   const vals = revealed.map((attr) => player.attributes[attr] ?? 10);
   const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
@@ -292,7 +339,9 @@ function computeEventQuality(
     base -= 0.2;
   }
 
-  const noisy = rng.gaussian(base, 0.8 * WEATHER_NOISE[weather]);
+  // Apply fatigue: reduces the base quality before noise is added
+  const fatigued = base * fatigueMultiplier;
+  const noisy = rng.gaussian(fatigued, 0.8 * WEATHER_NOISE[weather]);
   return Math.min(10, Math.max(1, Math.round(noisy)));
 }
 
@@ -444,14 +493,24 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
 
   const phases: MatchPhase[] = [];
 
-  // Track recent event qualities for momentum computation
-  const recentQualities: number[] = [];
+  // Track recent event qualities per team for momentum computation
+  const recentHomeQualities: number[] = [];
+  const recentAwayQualities: number[] = [];
+
+  // Fatigue tracking: players who received fatigue commentary (once per player)
+  const fatigueMentioned = new Set<string>();
+  // Players who have been substituted (removed from future phases)
+  const substituted = new Set<string>();
 
   for (let i = 0; i < phaseCount; i++) {
     const minute = startMinutes[i];
     const endMinute = i < phaseCount - 1 ? startMinutes[i + 1] - 1 : 90;
     const phaseType = rng.pick(phaseTypePool);
-    const involvedPlayerIds = selectInvolvedPlayers(rng, homePlayers, awayPlayers);
+
+    // Filter out substituted players from being selected
+    const activeHomePlayers = homePlayers.filter((p) => !substituted.has(p.id));
+    const activeAwayPlayers = awayPlayers.filter((p) => !substituted.has(p.id));
+    const involvedPlayerIds = selectInvolvedPlayers(rng, activeHomePlayers, activeAwayPlayers);
 
     // Set piece variant selection
     let setPieceVariant: SetPieceVariant | undefined;
@@ -475,13 +534,16 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
 
     for (let e = 0; e < eventCount; e++) {
       // Select the primary player FIRST so their position can influence the
-      // event type distribution — this is what makes GKs, CBs, and STs feel
+      // event type distribution -- this is what makes GKs, CBs, and STs feel
       // distinct during a match.
       const involved = involvedPlayerIds
         .map((id) => allPlayers.get(id))
-        .filter((p): p is Player => !!p);
+        .filter((p): p is Player => !!p && !substituted.has(p.id));
 
-      const primaryForPick = involved.length > 0 ? rng.pick(involved) : rng.pick([...allPlayers.values()]);
+      const allActive = [...allPlayers.values()].filter((p) => !substituted.has(p.id));
+      const primaryForPick = involved.length > 0
+        ? rng.pick(involved)
+        : (allActive.length > 0 ? rng.pick(allActive) : rng.pick([...allPlayers.values()]));
 
       // Combine phase weights with position weights multiplicatively
       const weightItems = (Object.entries(effectiveWeights) as [MatchEventType, number][])
@@ -499,8 +561,9 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
       const phaseWidth = Math.max(1, endMinute - minute);
       const eventMinute = minute + Math.floor((phaseWidth / eventCount) * e);
 
-      // Compute base quality, then apply tactical matchup modifier
-      let quality = computeEventQuality(rng, primary, revealed, weather);
+      // Compute base quality with fatigue, then apply tactical matchup modifier
+      const fatigueMultiplier = getFatigueMultiplier(primary, i, phaseCount);
+      let quality = computeEventQuality(rng, primary, revealed, weather, fatigueMultiplier);
       if (tacticalMatchup) {
         const tacticalBonus = getTacticalQualityModifier(
           tacticalMatchup,
@@ -509,13 +572,18 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
         );
         quality = Math.min(10, Math.max(1, Math.round(quality + tacticalBonus)));
       }
-      recentQualities.push(quality);
+      if (homePlayerIds.has(primary.id)) {
+        recentHomeQualities.push(quality);
+      } else {
+        recentAwayQualities.push(quality);
+      }
 
       // Generate position-aware, form-aware, scouting-relevant commentary
-      const description = generateCommentary({
+      const primaryName = `${primary.firstName} ${primary.lastName}`;
+      let description = generateCommentary({
         eventType,
         minute: eventMinute,
-        playerName: `${primary.firstName} ${primary.lastName}`,
+        playerName: primaryName,
         position: primary.position,
         form: primary.form,
         isScoutingTarget: scoutedSet.has(primary.id),
@@ -523,6 +591,14 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
           ? `${secondary.firstName} ${secondary.lastName}`
           : undefined,
       });
+
+      // Append fatigue commentary when penalty is significant (>10%)
+      const fatiguePenalty = 1 - fatigueMultiplier;
+      if (fatiguePenalty >= 0.10 && !fatigueMentioned.has(primary.id)) {
+        fatigueMentioned.add(primary.id);
+        const fatigueTemplate = rng.pick(FATIGUE_COMMENTARY);
+        description += " " + fatigueTemplate(primaryName, eventMinute);
+      }
 
       events.push({
         type: eventType,
@@ -580,12 +656,49 @@ export function generateMatchPhases(rng: RNG, context: MatchContext): MatchPhase
       }
     }
 
-    // Compute momentum from recent event qualities (last ~8 events)
-    const recentSlice = recentQualities.slice(-8);
-    const avgQuality = recentSlice.length > 0
-      ? recentSlice.reduce((s, v) => s + v, 0) / recentSlice.length
+    // Fatigue-based substitutions: in later phases, check if any involved
+    // player's effective quality has dropped significantly
+    if (i >= Math.floor(phaseCount * 0.65)) {
+      for (const pid of involvedPlayerIds) {
+        if (substituted.has(pid)) continue;
+        const player = allPlayers.get(pid);
+        if (!player) continue;
+
+        const fm = getFatigueMultiplier(player, i, phaseCount);
+        const penalty = 1 - fm;
+        // Substitute if penalty > 15% and RNG agrees (60% chance)
+        if (penalty > 0.15 && rng.chance(0.6)) {
+          substituted.add(pid);
+          const playerName = `${player.firstName} ${player.lastName}`;
+          const subMinute = endMinute > minute ? minute + Math.floor((endMinute - minute) * 0.8) : minute;
+          const subTemplate = rng.pick(SUBSTITUTION_COMMENTARY);
+          events.push({
+            type: "substitution" as MatchEventType,
+            playerId: pid,
+            attributesRevealed: EVENT_REVEALED.substitution,
+            quality: Math.max(1, Math.round(fm * 5)),
+            description: subTemplate(playerName, subMinute),
+            minute: subMinute,
+          });
+          // Only one substitution per phase
+          break;
+        }
+      }
+    }
+
+    // Compute per-team momentum from recent event qualities (last ~8 per team)
+    const homeSlice = recentHomeQualities.slice(-8);
+    const awaySlice = recentAwayQualities.slice(-8);
+    const homeAvg = homeSlice.length > 0
+      ? homeSlice.reduce((s, v) => s + v, 0) / homeSlice.length
       : 5;
-    const momentum = Math.round(Math.min(100, Math.max(0, (avgQuality / 10) * 100)));
+    const awayAvg = awaySlice.length > 0
+      ? awaySlice.reduce((s, v) => s + v, 0) / awaySlice.length
+      : 5;
+    const momentum = {
+      home: Math.round(Math.min(100, Math.max(0, (homeAvg / 10) * 100))),
+      away: Math.round(Math.min(100, Math.max(0, (awayAvg / 10) * 100))),
+    };
 
     // Use variant-specific description for set pieces
     const phaseDescription = setPieceVariant

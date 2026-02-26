@@ -28,6 +28,7 @@ import {
   Shield,
   Megaphone,
 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import type {
   JobOffer,
   PerformanceReview,
@@ -396,7 +397,10 @@ export function CareerScreen() {
                 {currentClub && (
                   <div>
                     <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-zinc-500">Club Trust</span>
+                      <span className="flex items-center gap-1 text-zinc-500">
+                        Club Trust
+                        <HelpTooltip text="How happy your employer is with your work. Drops from idle weeks, rises from quality reports and successful signings." />
+                      </span>
                       <span className="text-blue-400 font-semibold">
                         {Math.round(scout.clubTrust)}/100
                       </span>

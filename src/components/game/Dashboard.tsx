@@ -43,6 +43,8 @@ import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { SeasonTimeline } from "./SeasonTimeline";
 import { ConnectedScenarioProgressPanel } from "./ScenarioProgressPanel";
+import { HelpTooltip } from "@/components/ui/HelpTooltip";
+import { LeagueStandingsWidget } from "./LeagueStandingsWidget";
 import { useTranslations } from "next-intl";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -241,9 +243,9 @@ export function Dashboard() {
 
   return (
     <GameLayout>
-      <div className="p-6" data-tutorial-id="dashboard-overview">
+      <div className="p-4 md:p-6" data-tutorial-id="dashboard-overview">
         {/* Header */}
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-4 md:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
               {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
@@ -254,7 +256,7 @@ export function Dashboard() {
                 />
               )}
               <div>
-                <h1 className="text-2xl font-bold">Dashboard</h1>
+                <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
                 {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
                   <p className="text-xs text-zinc-500">
                     {gameState.clubs[scout.currentClubId]!.name}
@@ -303,11 +305,24 @@ export function Dashboard() {
           </div>
         )}
 
+        {/* Free agent alert */}
+        {gameState.freeAgentPool?.agents.some(
+          (a) => a.discoveredByScout && a.status === "available"
+        ) && (
+          <button
+            onClick={() => setScreen("freeAgents")}
+            className="mb-4 flex w-full items-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-left text-sm text-emerald-300 transition hover:border-emerald-500/50"
+          >
+            <Users size={14} className="shrink-0" aria-hidden="true" />
+            Free agents discovered — View available players
+          </button>
+        )}
+
         {/* Scenario Progress — only shown when a scenario is active */}
         <ConnectedScenarioProgressPanel />
 
         {/* Quick Stats */}
-        <div className="mb-6 grid grid-cols-4 gap-4">
+        <div className="mb-4 md:mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card
             data-tutorial-id="dashboard-reputation"
             className="cursor-pointer hover:border-zinc-600 transition"
@@ -462,6 +477,7 @@ export function Dashboard() {
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <DollarSign size={14} className="text-emerald-400" aria-hidden="true" />
                   Finances
+                  <HelpTooltip text="Your weekly budget comes from salary, report sales, and placement fees. Manage expenses to build savings." />
                   {broke && (
                     <Badge variant="destructive" className="ml-auto text-[10px]">
                       <AlertTriangle size={10} className="mr-1" aria-hidden="true" />
@@ -1650,6 +1666,10 @@ export function Dashboard() {
             </Card>
           </div>
         )}
+        {/* League Standings with Relegation/Promotion Zones */}
+        <div className="mt-6">
+          <LeagueStandingsWidget />
+        </div>
       </div>
     </GameLayout>
   );

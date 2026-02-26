@@ -80,6 +80,8 @@ const PRIMARY_SKILL_MAP: Partial<Record<ActivityType, ScoutSkill>> = {
   agentShowcase: "playerJudgment",
   trialMatch: "playerJudgment",
   contractNegotiation: "psychologicalRead",
+  // Free agent activities
+  freeAgentOutreach: "playerJudgment",
   // Data-exclusive
   databaseQuery: "dataLiteracy",
   deepVideoAnalysis: "dataLiteracy",

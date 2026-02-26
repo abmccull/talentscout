@@ -305,17 +305,6 @@ export function LeaderboardScreen() {
           )}
         </div>
 
-        {/* Score formula reference */}
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <p className="text-xs text-zinc-500">
-              Score formula:{" "}
-              <span className="font-mono text-zinc-300">
-                reputation × 2 + discoveries × 5 + accuracy × 1.5
-              </span>
-            </p>
-          </CardContent>
-        </Card>
 
         {/* ── Tab switcher ──────────────────────────────────────────────── */}
         <div

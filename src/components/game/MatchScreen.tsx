@@ -283,6 +283,16 @@ export function MatchScreen() {
               <span className="ml-2 text-zinc-600 capitalize">· {weather}</span>
             )}
           </div>
+
+          {/* Momentum indicator */}
+          {currentPhase?.momentum && (
+            <MomentumBar
+              home={currentPhase.momentum.home}
+              away={currentPhase.momentum.away}
+              homeLabel={homeClub?.shortName ?? "HOME"}
+              awayLabel={awayClub?.shortName ?? "AWAY"}
+            />
+          )}
         </div>
 
         {/* ── Match stats bar (collapsible) ─────────────────────────────── */}
@@ -413,12 +423,19 @@ export function MatchScreen() {
                       homeGoals={homeGoals}
                       awayGoals={awayGoals}
                       homePlayerIds={homePlayerIdSet}
-                      momentum={currentPhase.momentum ?? 50}
-                      prevMomentum={
-                        activeMatch.currentPhase > 0
-                          ? (activeMatch.phases[activeMatch.currentPhase - 1]?.momentum ?? 50)
+                      momentum={
+                        currentPhase.momentum
+                          ? Math.round((currentPhase.momentum.home + currentPhase.momentum.away) / 2)
                           : 50
                       }
+                      prevMomentum={(() => {
+                        const prev = activeMatch.currentPhase > 0
+                          ? activeMatch.phases[activeMatch.currentPhase - 1]?.momentum
+                          : undefined;
+                        return prev
+                          ? Math.round((prev.home + prev.away) / 2)
+                          : 50;
+                      })()}
                     />
                   ) : (
                     <p className="text-xs text-zinc-600 py-4 text-center">{t("noEvents")}</p>
@@ -647,5 +664,62 @@ export function MatchScreen() {
         </div>{/* close relative z-10 wrapper */}
       </div>
     </GameLayout>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Momentum Bar — visual indicator of match flow
+// ---------------------------------------------------------------------------
+
+function momentumColor(value: number): string {
+  if (value >= 70) return "bg-emerald-500";
+  if (value >= 55) return "bg-emerald-700";
+  if (value <= 30) return "bg-red-500";
+  if (value <= 45) return "bg-red-700";
+  return "bg-zinc-500";
+}
+
+function MomentumBar({
+  home,
+  away,
+  homeLabel,
+  awayLabel,
+}: {
+  home: number;
+  away: number;
+  homeLabel: string;
+  awayLabel: string;
+}) {
+  const total = home + away || 1;
+  const homePercent = Math.round((home / total) * 100);
+
+  return (
+    <div className="mt-2">
+      <div className="mb-1 flex items-center justify-between text-[10px] text-zinc-500 uppercase tracking-wider">
+        <span>
+          {homeLabel}{" "}
+          <span className={home > 70 ? "text-emerald-400" : home < 30 ? "text-red-400" : ""}>
+            {home}
+          </span>
+        </span>
+        <span className="text-zinc-600">Momentum</span>
+        <span>
+          <span className={away > 70 ? "text-emerald-400" : away < 30 ? "text-red-400" : ""}>
+            {away}
+          </span>{" "}
+          {awayLabel}
+        </span>
+      </div>
+      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-[#1a1a1a]">
+        <div
+          className={`transition-all duration-500 ${momentumColor(home)}`}
+          style={{ width: `${homePercent}%` }}
+        />
+        <div
+          className={`transition-all duration-500 ${momentumColor(away)}`}
+          style={{ width: `${100 - homePercent}%` }}
+        />
+      </div>
+    </div>
   );
 }

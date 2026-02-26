@@ -183,7 +183,7 @@ export function CalendarScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6 relative">
+      <div className="p-4 md:p-6 relative">
         {/* Week Summary Overlay */}
         {lastWeekSummary && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

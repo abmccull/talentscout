@@ -40,6 +40,7 @@ import { TrainingScreen } from "@/components/game/TrainingScreen";
 import { RivalsScreen } from "@/components/game/RivalsScreen";
 import { ReportComparison } from "@/components/game/ReportComparison";
 import { NegotiationScreen } from "@/components/game/NegotiationScreen";
+import { FreeAgentScreen } from "@/components/game/FreeAgentScreen";
 import { SeasonAwardsScreen } from "@/components/game/SeasonAwardsScreen";
 import { ScoutPerformanceDashboard } from "@/components/game/ScoutPerformanceDashboard";
 import { AchievementToast } from "@/components/game/AchievementToast";
@@ -152,6 +153,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <NegotiationScreen />;
     case "seasonAwards":
       return <SeasonAwardsScreen />;
+    case "freeAgents":
+      return <FreeAgentScreen />;
     case "performance":
       return <ScoutPerformanceDashboard />;
     default:

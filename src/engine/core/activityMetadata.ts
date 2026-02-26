@@ -75,6 +75,9 @@ export const ACTIVITY_CATEGORIES: Record<ActivityType, ActivityCategory> = {
   dataConference: "scouting",
   analyticsTeamMeeting: "scouting",
 
+  // Free agent activities
+  freeAgentOutreach: "scouting",
+
   // Scouting — universal
   watchVideo: "scouting",
   trainingVisit: "scouting",

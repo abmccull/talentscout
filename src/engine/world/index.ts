@@ -56,3 +56,11 @@ export type {
   YouthTournamentResult,
   InternationalWeekResult,
 } from './international';
+
+export {
+  processRelegationPromotion,
+  applyRelegationResult,
+  getStandingsPriceModifier,
+  classifyStandingZone,
+} from './relegation';
+export type { RelegationEvent, RelegationResult, StandingZone } from './relegation';

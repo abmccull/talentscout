@@ -42,6 +42,24 @@ export interface ReportDraft {
 }
 
 // ---------------------------------------------------------------------------
+// Quality preview types
+// ---------------------------------------------------------------------------
+
+export interface QualityBreakdown {
+  observationDepth: number;   // 0-25
+  confidenceLevel: number;    // 0-20
+  convictionFit: number;      // 0-15
+  detail: number;             // 0-20
+  scoutSkill: number;         // 0-20
+}
+
+export interface QualityPreviewResult {
+  score: number;              // 0-100
+  breakdown: QualityBreakdown;
+  hints: string[];
+}
+
+// ---------------------------------------------------------------------------
 // Position average attribute baselines
 // ---------------------------------------------------------------------------
 
@@ -334,6 +352,115 @@ export function calculateReportQuality(
   const quality = baseQuality + personalityBonus + (reportQualityBonus ?? 0) * 100;
 
   return Math.round(Math.max(0, Math.min(100, quality)));
+}
+
+/**
+ * Estimate report quality from the scout's perspective BEFORE submission.
+ *
+ * Unlike `calculateReportQuality` (which requires true player attributes),
+ * this function works entirely from information available to the scout during
+ * the report-writing process. The estimate is intentionally approximate --
+ * the real score also factors in accuracy against hidden true values.
+ *
+ * Breakdown (sums to 100 max):
+ *   Observation depth:       0-25   (how many observations and attribute coverage)
+ *   Confidence level:        0-20   (average confidence across readings)
+ *   Conviction appropriateness: 0-15 (conviction vs. perceived CA alignment)
+ *   Detail (strengths/weaknesses): 0-20 (how many editorial details provided)
+ *   Scout skill:             0-20   (average of scout's five core skills)
+ */
+export function estimateReportQuality(params: {
+  observationCount: number;
+  avgConfidence: number;
+  convictionLevel: ConvictionLevel;
+  strengthCount: number;
+  weaknessCount: number;
+  scoutSkills: Record<string, number>;
+  assessedAttributeCount?: number;
+  position?: Position;
+  perceivedCA?: number;
+}): QualityPreviewResult {
+  const {
+    observationCount,
+    avgConfidence,
+    convictionLevel,
+    strengthCount,
+    weaknessCount,
+    scoutSkills,
+    assessedAttributeCount = 0,
+    position,
+    perceivedCA,
+  } = params;
+
+  // --- Observation depth: 0-25 ---
+  const obsFactor = Math.min(1, observationCount / 5);
+  const coverageFactor = position
+    ? Math.min(1, assessedAttributeCount / Math.max(1, getRelevantAttributes(position).length))
+    : Math.min(1, assessedAttributeCount / 8);
+  const observationDepth = Math.round((obsFactor * 0.5 + coverageFactor * 0.5) * 25);
+
+  // --- Confidence level: 0-20 ---
+  const confidenceLevel = Math.round(avgConfidence * 20);
+
+  // --- Conviction appropriateness: 0-15 ---
+  let convictionFit = 10;
+  if (perceivedCA !== undefined) {
+    const expectedConviction = getExpectedConviction(perceivedCA);
+    const levels: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
+    const diff = Math.abs(levels.indexOf(convictionLevel) - levels.indexOf(expectedConviction));
+    convictionFit = Math.round(Math.max(3, 15 - diff * 4));
+  }
+
+  // --- Detail (strengths/weaknesses): 0-20 ---
+  const strengthScore = Math.min(1, strengthCount / 3);
+  const weaknessScore = Math.min(1, weaknessCount / 2);
+  const detail = Math.round((strengthScore * 0.5 + weaknessScore * 0.5) * 20);
+
+  // --- Scout skill: 0-20 ---
+  const skillValues = Object.values(scoutSkills);
+  const avgSkill = skillValues.length > 0
+    ? skillValues.reduce((s, v) => s + v, 0) / skillValues.length
+    : 10;
+  const scoutSkill = Math.round((avgSkill / 20) * 20);
+
+  const breakdown: QualityBreakdown = {
+    observationDepth,
+    confidenceLevel,
+    convictionFit,
+    detail,
+    scoutSkill,
+  };
+
+  const score = Math.max(0, Math.min(100,
+    observationDepth + confidenceLevel + convictionFit + detail + scoutSkill,
+  ));
+
+  // --- Generate hints ---
+  const hints: string[] = [];
+  if (score < 70) {
+    if (observationCount < 3) {
+      hints.push("Add more observations to improve depth score");
+    }
+    if (strengthCount < 3 || weaknessCount < 2) {
+      hints.push("Include at least 3 strengths and 2 weaknesses");
+    }
+    if (avgConfidence < 0.5) {
+      hints.push("Observe more matches to increase attribute confidence");
+    }
+    if (perceivedCA !== undefined) {
+      const expectedConviction = getExpectedConviction(perceivedCA);
+      const levels: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
+      const diff = Math.abs(levels.indexOf(convictionLevel) - levels.indexOf(expectedConviction));
+      if (diff >= 2) {
+        hints.push("Higher conviction with sufficient evidence improves score");
+      }
+    }
+    if (assessedAttributeCount < 6) {
+      hints.push("Assess more attributes for better positional coverage");
+    }
+  }
+
+  return { score, breakdown, hints };
 }
 
 /**

@@ -96,9 +96,10 @@ export function PlayerDatabase() {
     [specFilteredPlayers],
   );
 
+  const observations = gameState?.observations;
   const allObs = useMemo(
-    () => (gameState ? Object.values(gameState.observations) : []),
-    [gameState?.observations],
+    () => (observations ? Object.values(observations) : []),
+    [observations],
   );
 
   const rows: PlayerRow[] = useMemo(() => {
@@ -276,6 +277,16 @@ export function PlayerDatabase() {
             >
               All Players
             </Button>
+            {gameState.freeAgentPool?.agents.some((a) => a.status === "available") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setScreen("freeAgents")}
+              >
+                <Users size={12} className="mr-1 text-emerald-400" aria-hidden="true" />
+                Free Agents
+              </Button>
+            )}
           </div>
         </div>
 

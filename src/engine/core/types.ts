@@ -766,6 +766,12 @@ export interface Scout {
   boardDirectives: BoardDirective[];
   /** Current international travel booking (null if at home). */
   travelBooking?: TravelBooking;
+
+  // --- Deep Systems Overhaul ---
+  /** Rolling accuracy tracking for recent reports. */
+  accuracyHistory?: { week: number; season: number; predictedCA: number; actualCA: number }[];
+  /** Monthly performance pulse grades. */
+  performancePulses?: PerformancePulse[];
 }
 
 // =============================================================================
@@ -1036,6 +1042,8 @@ export interface Contact {
     playerId: string;
     expiresWeek: number;
   };
+  /** Whether the contact is dormant (relationship too low to provide intel). */
+  dormant?: boolean;
 }
 
 // =============================================================================
@@ -1100,7 +1108,9 @@ export type ActivityType =
   | "dataConference"
   | "algorithmCalibration"
   | "marketInefficiency"
-  | "analyticsTeamMeeting";
+  | "analyticsTeamMeeting"
+  // Free agent activities
+  | "freeAgentOutreach";
 
 export interface Activity {
   /**
@@ -1183,8 +1193,8 @@ export interface MatchPhase {
   events: MatchEvent[];
   /** Attributes that are generally observable during this phase type. */
   observableAttributes: PlayerAttribute[];
-  /** Momentum value 0–100 computed from recent event quality. */
-  momentum?: number;
+  /** Momentum values 0–100 per team, computed from recent event quality. */
+  momentum?: { home: number; away: number };
   /** For setpiece phases, the specific variant. */
   setPieceVariant?: SetPieceVariant;
 }
@@ -1488,6 +1498,98 @@ export interface GameState {
 
   /** Generated at end of season for the awards ceremony screen. */
   seasonAwardsData?: SeasonAwardsData;
+
+  // --- Free Agent System ---
+
+  /** Global free agent pool. */
+  freeAgentPool: FreeAgentPool;
+  /** Active free agent negotiations. */
+  freeAgentNegotiations: FreeAgentNegotiation[];
+}
+
+// =============================================================================
+// FREE AGENT SYSTEM
+// =============================================================================
+
+/** How the scout discovered a free agent. */
+export type FreeAgentDiscoverySource =
+  | "familiarity"
+  | "contactTip"
+  | "dataQuery"
+  | "territoryScan";
+
+/** NPC club interest in signing a free agent. */
+export interface FreeAgentNPCInterest {
+  clubId: string;
+  offerWeek: number;
+  accepted: boolean;
+}
+
+/**
+ * A player who has been released from their club and is available to sign
+ * on a free transfer. Part of the global FreeAgentPool.
+ */
+export interface FreeAgent {
+  playerId: string;
+  /** Country key (e.g. "england", "brazil") — used for visibility gating. */
+  country: string;
+  /** Club ID they were released from. */
+  releasedFrom: string;
+  /** Season in which the player was released. */
+  releasedSeason: number;
+  /** Weeks spent in the pool since release. */
+  weeksInPool: number;
+  /** Maximum duration before the player drops out or retires. */
+  maxWeeksInPool: number;
+  /** Weekly wage demand (decreases over time). */
+  wageExpectation: number;
+  /** One-time signing bonus demand. */
+  signingBonusExpectation: number;
+  /** How the scout discovered this player (null if not yet discovered). */
+  discoverySource: FreeAgentDiscoverySource | null;
+  /** Whether the player's scout has discovered them. */
+  discoveredByScout: boolean;
+  /** NPC clubs interested in signing this player. */
+  npcInterest: FreeAgentNPCInterest[];
+  /** Current status in the pool. */
+  status: "available" | "inNegotiation" | "signed" | "retired" | "droppedOut";
+}
+
+/**
+ * Global pool of free agents across all countries.
+ */
+export interface FreeAgentPool {
+  agents: FreeAgent[];
+  lastRefreshSeason: number;
+  totalReleasedThisSeason: number;
+  totalSignedThisSeason: number;
+  totalRetiredThisSeason: number;
+}
+
+/**
+ * An active negotiation between the scout (representing their club) and
+ * a free agent. Simpler than club-to-club transfers: no selling club,
+ * no transfer fee — only salary and signing bonus.
+ */
+export interface FreeAgentNegotiation {
+  /** The free agent's playerId. */
+  freeAgentId: string;
+  /** Offered weekly wage. */
+  offeredWage: number;
+  /** Offered signing bonus. */
+  offeredBonus: number;
+  /** Offered contract length in seasons. */
+  offeredContractLength: number;
+  /** Current negotiation round (1-3). */
+  round: number;
+  /** Current negotiation status. */
+  status: "pending" | "countered" | "accepted" | "rejected";
+  /** Player/agent counter-offer wage (set when status is "countered"). */
+  counterWage?: number;
+  /** Player/agent counter-offer bonus (set when status is "countered"). */
+  counterBonus?: number;
+  /** Game week by which the negotiation must conclude. */
+  deadline: number;
 }
 
 // =============================================================================
@@ -2193,6 +2295,35 @@ export interface FinancialRecord {
    * Clubs pay 300/month for regional expertise.
    */
   regionalExpertiseRegion?: string;
+
+  // --- Deep Systems Overhaul ---
+  /** Credit score 0-100, affects loan terms. */
+  creditScore?: number;
+  /** Current financial distress level. */
+  distressLevel?: DistressLevel;
+  /** Number of consecutive weeks in negative balance. */
+  weeksInDistress?: number;
+  /** Number of failed client contracts. */
+  failedContractCount?: number;
+  /** Club IDs permanently blacklisted due to repeated failures. */
+  blacklistedClubs?: string[];
+  /** Weeks remaining in bankruptcy recovery cooldown. */
+  bankruptcyRecoveryCooldown?: number;
+}
+
+export type DistressLevel = "healthy" | "warning" | "distressed" | "critical" | "bankruptcy";
+
+export interface PerformancePulse {
+  /** Which 4-week period (1-based within season). */
+  period: number;
+  season: number;
+  reportsSubmitted: number;
+  reportQualityAvg: number;
+  accuracyRate: number;
+  signingSuccess: number;
+  fatigueAvg: number;
+  grade: "A" | "B" | "C" | "D" | "F";
+  trend: "improving" | "stable" | "declining";
 }
 
 export interface BusinessLoan {
@@ -2728,6 +2859,8 @@ export interface TransferRecord {
   outcomeReason?: TransferOutcomeReason;
   /** Whether scout accountability has been applied for this record. */
   accountabilityApplied: boolean;
+  /** Average match rating from real match data (1.0-10.0), when available. */
+  avgMatchRating?: number;
 }
 
 /**
@@ -3312,6 +3445,10 @@ export interface AssistantScout {
   fatigue: number;
   /** Lifetime count of reports completed. */
   reportsCompleted: number;
+  /** Morale 0-100. Low morale = poor quality, may quit. */
+  morale?: number;
+  /** True when morale < 30 — signals the scout may quit soon. */
+  lowMorale?: boolean;
 }
 
 /** Trip quality level for individual scouting trips. */

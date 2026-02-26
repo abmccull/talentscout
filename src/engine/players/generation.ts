@@ -444,7 +444,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     secondaryPositions,
     preferredFoot,
     clubId,
-    contractExpiry: currentSeason + rng.nextInt(1, 5),
+    contractExpiry: clubId ? currentSeason + rng.nextInt(1, 5) : 0,
     wage: calculateWage(currentAbility, clubReputation),
     marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),
     attributes,

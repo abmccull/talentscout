@@ -18,6 +18,7 @@ import type {
   PlayerMatchRating,
   MatchPlayerStats,
   MatchFormEntry,
+  SeasonRatingRecord,
 } from "@/engine/core/types";
 import { applyPersonalityToMatchRating, applyPersonalityToForm } from "@/engine/players/personalityEffects";
 
@@ -485,4 +486,53 @@ export function computeFormFromRatings(
 
   // Apply personality form volatility modifier
   return applyPersonalityToForm(player?.personalityProfile, form);
+}
+
+// =============================================================================
+// SEASON CONSOLIDATION
+// =============================================================================
+
+/**
+ * Consolidate a season's worth of per-fixture match ratings into a single
+ * SeasonRatingRecord for a player.
+ *
+ * Returns null if the player had no ratings this season.
+ */
+export function consolidateSeasonRatings(
+  playerId: string,
+  season: number,
+  matchRatings: Record<string, Record<string, PlayerMatchRating>>,
+): SeasonRatingRecord | null {
+  // Collect all ratings for this player across all fixtures
+  const playerRatings: PlayerMatchRating[] = [];
+  for (const fixtureRatings of Object.values(matchRatings)) {
+    const rating = fixtureRatings[playerId];
+    if (rating) {
+      playerRatings.push(rating);
+    }
+  }
+
+  if (playerRatings.length === 0) return null;
+
+  const avgRating = Math.round(
+    (playerRatings.reduce((sum, r) => sum + r.rating, 0) / playerRatings.length) * 10,
+  ) / 10;
+
+  let goals = 0;
+  let assists = 0;
+  let cleanSheets = 0;
+  for (const r of playerRatings) {
+    goals += r.stats.goals ?? 0;
+    assists += r.stats.assists ?? 0;
+    if (r.stats.cleanSheet) cleanSheets++;
+  }
+
+  return {
+    season,
+    avgRating,
+    appearances: playerRatings.length,
+    goals,
+    assists,
+    cleanSheets,
+  };
 }
