@@ -21,6 +21,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import type { SeasonAward, LeagueAward, SeasonStats } from "@/engine/core/types";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
 // HELPERS
@@ -450,7 +451,9 @@ export function SeasonAwardsScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="relative min-h-screen bg-zinc-950">
+      <ScreenBackground src="/images/backgrounds/season-end.png" opacity={0.72} />
+      <div className="relative z-10">
       {/* CSS-only animations */}
       <style jsx>{`
         @keyframes award-enter {
@@ -579,6 +582,7 @@ export function SeasonAwardsScreen() {
             <ArrowRight size={20} />
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

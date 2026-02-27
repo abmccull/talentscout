@@ -34,12 +34,14 @@ import {
 } from "@/engine/core/transferWindow";
 import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
+import { TargetPicker } from "./calendar/TargetPicker";
 import { useTranslations } from "next-intl";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isScoutAbroad } from "@/engine/world/travel";
 import { generateWeekPreview } from "@/engine/core/weekPreview";
 import type { WeekPreview } from "@/engine/core/weekPreview";
 import { BatchSummary } from "./BatchSummary";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -66,8 +68,7 @@ export function CalendarScreen() {
     gameState,
     scheduleActivity,
     unscheduleActivity,
-    advanceWeek,
-    startWeekSimulation,
+    requestWeekAdvance,
     getClub,
     lastWeekSummary,
     dismissWeekSummary,
@@ -97,6 +98,16 @@ export function CalendarScreen() {
   // Week preview panel collapsed state
   const [previewCollapsed, setPreviewCollapsed] = useState(false);
 
+  // Click-to-place: selected activity + pending day for targetPool activities
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [selectedPendingDay, setSelectedPendingDay] = useState<number | null>(null);
+
+  // Drag-and-drop state
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+
+  // Hover state for multi-slot preview during click-to-place
+  const [hoverDay, setHoverDay] = useState<number | null>(null);
+
   // Batch advance dialog state
   const [showBatchDialog, setShowBatchDialog] = useState(false);
   const [batchWeeks, setBatchWeeks] = useState(4);
@@ -112,6 +123,19 @@ export function CalendarScreen() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [showEmptyDayWarning]);
+
+  // Escape to deselect click-to-place activity
+  useEffect(() => {
+    if (!selectedActivity) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelectedActivity(null);
+        setHoverDay(null);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedActivity]);
 
   // Stable callback for resolving club IDs to names in ActivityPanel
   const resolveClubName = useCallback(
@@ -181,9 +205,56 @@ export function CalendarScreen() {
     }
   };
 
+  // Click-to-place: user clicked an empty day slot while an activity is selected
+  const handleDaySlotClick = (dayIndex: number) => {
+    if (!selectedActivity) return;
+    if (!canScheduleAt(selectedActivity, dayIndex)) return;
+
+    if (selectedActivity.targetPool && selectedActivity.targetPool.length > 0) {
+      // Defer to TargetPicker modal
+      setSelectedPendingDay(dayIndex);
+      return;
+    }
+
+    handleSchedule(selectedActivity, dayIndex);
+    setSelectedActivity(null);
+    setHoverDay(null);
+  };
+
+  // Drag-and-drop: user dropped an activity on a day slot
+  const handleDaySlotDrop = (e: React.DragEvent, dayIndex: number) => {
+    e.preventDefault();
+    setDragOverDay(null);
+    try {
+      const droppedActivity: Activity = JSON.parse(
+        e.dataTransfer.getData("application/json"),
+      );
+      if (!canScheduleAt(droppedActivity, dayIndex)) return;
+
+      if (droppedActivity.targetPool && droppedActivity.targetPool.length > 0) {
+        // Defer to TargetPicker modal
+        setSelectedActivity(droppedActivity);
+        setSelectedPendingDay(dayIndex);
+        return;
+      }
+
+      handleSchedule(droppedActivity, dayIndex);
+    } catch { /* ignore invalid drag data */ }
+  };
+
+  // Determine picker mode for the TargetPicker modal
+  const CONTACT_TYPES = new Set(["networkMeeting"]);
+  const OPTION_TYPES = new Set(["watchVideo"]);
+  const modalPickerMode: "player" | "contact" | "option" =
+    selectedActivity && CONTACT_TYPES.has(selectedActivity.type) ? "contact"
+    : selectedActivity && OPTION_TYPES.has(selectedActivity.type) ? "option"
+    : "player";
+
   return (
     <GameLayout>
       <div className="p-4 md:p-6 relative">
+        <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.85} />
+        <div className="relative z-10">
         {/* Week Summary Overlay */}
         {lastWeekSummary && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
@@ -346,7 +417,7 @@ export function CalendarScreen() {
                   setShowEmptyDayWarning(true);
                 } else {
                   playSFX("calendar-slide");
-                  startWeekSimulation();
+                  requestWeekAdvance();
                 }
               }} data-tutorial-id="advance-week">Advance Week</Button>
             </Tooltip>
@@ -628,21 +699,58 @@ export function CalendarScreen() {
             const activity = activities[i];
             const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
             const Icon = display?.icon;
+
+            // Determine the "active" activity for hover/drag preview
+            const anchorDay = hoverDay ?? dragOverDay;
+            const activeAct = selectedActivity ?? (dragOverDay != null ? selectedActivity : null);
+
+            // Slot highlighting for click-to-place and drag-and-drop
+            const isEmpty = !activity;
+            const isAnchor = anchorDay === i && isEmpty && activeAct && canScheduleAt(activeAct, i);
+            const isMultiSlotGhost = activeAct && anchorDay != null && isEmpty
+              && i > anchorDay && i < anchorDay + activeAct.slots
+              && canScheduleAt(activeAct, anchorDay);
+            const isInvalidDrop = activeAct && anchorDay === i && isEmpty && !canScheduleAt(activeAct, i);
+
+            // Also highlight when dragging (dragOverDay is independent of selectedActivity)
+            const isDragAnchor = dragOverDay === i && isEmpty;
+            const dragActivity = isDragAnchor ? activeAct : null;
+            // For drag, we need to check multi-slot even without selectedActivity
+            // since the dragged activity comes from dataTransfer (not available during dragOver)
+            // We'll highlight the anchor slot on dragOver; multi-slot ghost requires selectedActivity
+
+            const slotClass = activity
+              ? "border-emerald-500/30 bg-emerald-500/5"
+              : isAnchor || isDragAnchor
+                ? "border-blue-500/50 bg-blue-500/10 ring-1 ring-blue-500/30 cursor-pointer"
+                : isMultiSlotGhost
+                  ? "border-blue-500/30 bg-blue-500/5"
+                  : isInvalidDrop
+                    ? "border-red-500/30 bg-red-500/5"
+                    : selectedActivity && isEmpty
+                      ? "border-[#27272a] bg-[#141414] cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5"
+                      : "border-[#27272a] bg-[#141414]";
+
             return (
               <div key={dayKey} className="flex flex-col gap-1">
                 <p className="text-center text-xs font-semibold text-zinc-500">{t(`dayLabels.${dayKey}`)}</p>
-                <Tooltip content="Drag or click to assign an activity for this day." side="top">
+                <Tooltip content={selectedActivity ? `Click to place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} here` : "Drag or click an activity card, then place it here."} side="top">
                 <div
-                  className={`min-h-[80px] rounded-lg border p-2 transition ${
-                    activity
-                      ? "border-emerald-500/30 bg-emerald-500/5"
-                      : "border-[#27272a] bg-[#141414]"
-                  }`}
+                  className={`min-h-[80px] rounded-lg border p-2 transition ${slotClass}`}
+                  onClick={() => handleDaySlotClick(i)}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                  onDragEnter={(e) => { e.preventDefault(); setDragOverDay(i); }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDay(null);
+                  }}
+                  onDrop={(e) => handleDaySlotDrop(e, i)}
+                  onMouseEnter={() => { if (selectedActivity) setHoverDay(i); }}
+                  onMouseLeave={() => { if (selectedActivity) setHoverDay(null); }}
                 >
                   {activity && display && Icon ? (
                     <div className="relative flex h-full flex-col gap-1">
                       <button
-                        onClick={() => unscheduleActivity(i)}
+                        onClick={(e) => { e.stopPropagation(); unscheduleActivity(i); }}
                         className="absolute right-0 top-0 text-zinc-600 hover:text-red-400 transition"
                         aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
                       >
@@ -659,7 +767,9 @@ export function CalendarScreen() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-center text-xs text-zinc-600 mt-2">Empty</p>
+                    <p className={`text-center text-xs mt-2 ${isAnchor || isDragAnchor ? "text-blue-400" : "text-zinc-600"}`}>
+                      {isAnchor || isDragAnchor ? "Drop here" : "Empty"}
+                    </p>
                   )}
                 </div>
                 </Tooltip>
@@ -681,7 +791,10 @@ export function CalendarScreen() {
           onLeagueFilterChange={setSelectedLeagueId}
           resolveClubName={resolveClubName}
           highlightTargetId={pendingCalendarActivity?.targetId}
+          selectedActivity={selectedActivity}
+          onSelectActivity={setSelectedActivity}
         />
+        </div>
         </div>
       </div>
       {/* Empty-day warning dialog */}
@@ -711,7 +824,7 @@ export function CalendarScreen() {
                 onClick={() => {
                   setShowEmptyDayWarning(false);
                   playSFX("calendar-slide");
-                  startWeekSimulation();
+                  requestWeekAdvance();
                 }}
               >
                 Advance
@@ -763,6 +876,30 @@ export function CalendarScreen() {
       {/* Batch summary overlay */}
       {batchSummary && (
         <BatchSummary result={batchSummary} onDismiss={dismissBatchSummary} />
+      )}
+      {/* TargetPicker modal for click-to-place / drag-and-drop with targetPool activities */}
+      {selectedActivity && selectedPendingDay != null && selectedActivity.targetPool && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm mx-4">
+            <TargetPicker
+              inline
+              targets={selectedActivity.targetPool}
+              mode={modalPickerMode}
+              onSelect={(targetId) => {
+                handleSchedule(
+                  { ...selectedActivity, targetId, targetPool: undefined },
+                  selectedPendingDay,
+                );
+                setSelectedActivity(null);
+                setSelectedPendingDay(null);
+                setHoverDay(null);
+              }}
+              onClose={() => {
+                setSelectedPendingDay(null);
+              }}
+            />
+          </div>
+        </div>
       )}
     </GameLayout>
   );

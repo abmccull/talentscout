@@ -27,6 +27,7 @@ import { ClientsTab } from "./agency/ClientsTab";
 import { EventsTab } from "./agency/EventsTab";
 import { OfficesTab } from "./agency/OfficesTab";
 import { LegacyTab } from "./agency/LegacyTab";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ─── Tab system ──────────────────────────────────────────────────────────────
 
@@ -113,7 +114,9 @@ export function AgencyScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/agency-office.png" opacity={0.80} />
+        <div className="relative z-10">
         <h1 className="text-2xl font-bold mb-1">Agency</h1>
         <p className="text-sm text-zinc-400 mb-4">
           {isIndependent
@@ -208,7 +211,7 @@ export function AgencyScreen() {
 
         {/* Summary bar */}
         {showFullAgencySummary ? (
-          <div className="mb-4 grid grid-cols-4 gap-3">
+          <div className="mb-4 grid grid-cols-4 gap-3" data-tutorial-id="agency-overview">
             <Card>
               <CardContent className="p-3">
                 <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Monthly Overhead</p>
@@ -238,7 +241,7 @@ export function AgencyScreen() {
             </Card>
           </div>
         ) : (
-          <div className="mb-4 grid grid-cols-3 gap-3">
+          <div className="mb-4 grid grid-cols-3 gap-3" data-tutorial-id="agency-overview">
             <Card>
               <CardContent className="p-3">
                 <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Weekly Infrastructure Cost</p>
@@ -306,15 +309,17 @@ export function AgencyScreen() {
         >
           {resolvedTab === "infrastructure" && <InfrastructureTab />}
 
-          {resolvedTab === "assistants" && <AssistantScoutsTab />}
+          {resolvedTab === "assistants" && <div data-tutorial-id="agency-employees"><AssistantScoutsTab /></div>}
 
           {resolvedTab === "office" && <OfficeTab />}
 
           {resolvedTab === "clients" && (
-            <ClientsTab
-              clientRelationships={clientRelationships}
-              clubs={gameState.clubs}
-            />
+            <div data-tutorial-id="agency-clients">
+              <ClientsTab
+                clientRelationships={clientRelationships}
+                clubs={gameState.clubs}
+              />
+            </div>
           )}
 
           {resolvedTab === "events" && (
@@ -343,6 +348,7 @@ export function AgencyScreen() {
               currentSeason={gameState.currentSeason}
             />
           )}
+        </div>
         </div>
       </div>
     </GameLayout>

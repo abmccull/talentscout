@@ -127,6 +127,43 @@ const POSITION_AVERAGES: Record<Position, Partial<Record<PlayerAttribute, number
 };
 
 // ---------------------------------------------------------------------------
+// Age-scaled baselines for youth evaluation
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns a multiplier (0.0–1.0) representing what fraction of adult baselines
+ * a player of this age should be measured against.
+ * Based on typical CA ranges by age from youth generation.
+ */
+function getAgeBaselineScale(age: number): number {
+  if (age >= 21) return 1.0;
+  const scaleByAge: Record<number, number> = {
+    14: 0.28, 15: 0.34, 16: 0.40, 17: 0.48, 18: 0.57, 19: 0.68, 20: 0.82,
+  };
+  return scaleByAge[age] ?? (age < 14 ? 0.25 : 1.0);
+}
+
+/**
+ * Scales position averages down by the age factor so youth players are
+ * evaluated against age-appropriate baselines instead of adult norms.
+ * At age 21+, returns POSITION_AVERAGES unchanged.
+ */
+function getAgeAdjustedAverages(
+  position: Position,
+  age: number,
+): Partial<Record<PlayerAttribute, number>> {
+  const baselines = POSITION_AVERAGES[position] ?? {};
+  if (age >= 21) return baselines;
+
+  const scale = getAgeBaselineScale(age);
+  const adjusted: Partial<Record<PlayerAttribute, number>> = {};
+  for (const [attr, avg] of Object.entries(baselines)) {
+    adjusted[attr as PlayerAttribute] = Math.max(1, Math.round(avg * scale));
+  }
+  return adjusted;
+}
+
+// ---------------------------------------------------------------------------
 // Strength/weakness descriptor templates
 // ---------------------------------------------------------------------------
 
@@ -234,9 +271,14 @@ export function generateReportContent(
     };
   }
 
-  const attributeAssessments = mergeReadingsIntoAssessments(observations);
+  const allAssessments = mergeReadingsIntoAssessments(observations);
 
-  const positionAverages = POSITION_AVERAGES[player.position] ?? {};
+  // Filter to position-relevant attributes only (GK shouldn't show finishing, etc.)
+  const positionAverages = getAgeAdjustedAverages(player.position, player.age);
+  const attributeAssessments = allAssessments.filter(
+    (a) => positionAverages[a.attribute] !== undefined,
+  );
+
   const suggestedStrengths = identifyStrengths(attributeAssessments, positionAverages);
   const suggestedWeaknesses = identifyWeaknesses(attributeAssessments, positionAverages);
 
@@ -328,10 +370,15 @@ export function calculateReportQuality(
   const perceivedCa = report.perceivedCAStars != null
     ? starsToAbility(report.perceivedCAStars)
     : estimatePerceivedCA(report.attributeAssessments);
+  const perceivedPa = report.perceivedPARange != null
+    ? starsToAbility((report.perceivedPARange[0] + report.perceivedPARange[1]) / 2)
+    : undefined;
   const convictionScore = scoreConvictionAppropriateness(
     perceivedCa,
     player.currentAbility,
     report.conviction,
+    player.age,
+    perceivedPa,
   );
 
   // Range tightness (when ranges are correct, tight is better)
@@ -379,6 +426,8 @@ export function estimateReportQuality(params: {
   assessedAttributeCount?: number;
   position?: Position;
   perceivedCA?: number;
+  age?: number;
+  perceivedPA?: number;
 }): QualityPreviewResult {
   const {
     observationCount,
@@ -390,6 +439,8 @@ export function estimateReportQuality(params: {
     assessedAttributeCount = 0,
     position,
     perceivedCA,
+    age,
+    perceivedPA,
   } = params;
 
   // --- Observation depth: 0-25 ---
@@ -405,7 +456,9 @@ export function estimateReportQuality(params: {
   // --- Conviction appropriateness: 0-15 ---
   let convictionFit = 10;
   if (perceivedCA !== undefined) {
-    const expectedConviction = getExpectedConviction(perceivedCA);
+    const expectedConviction = age !== undefined
+      ? getExpectedConvictionForAge(perceivedCA, age, perceivedPA)
+      : getExpectedConviction(perceivedCA);
     const levels: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
     const diff = Math.abs(levels.indexOf(convictionLevel) - levels.indexOf(expectedConviction));
     convictionFit = Math.round(Math.max(3, 15 - diff * 4));
@@ -448,7 +501,9 @@ export function estimateReportQuality(params: {
       hints.push("Observe more matches to increase attribute confidence");
     }
     if (perceivedCA !== undefined) {
-      const expectedConviction = getExpectedConviction(perceivedCA);
+      const expectedConviction = age !== undefined
+        ? getExpectedConvictionForAge(perceivedCA, age, perceivedPA)
+        : getExpectedConviction(perceivedCA);
       const levels: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
       const diff = Math.abs(levels.indexOf(convictionLevel) - levels.indexOf(expectedConviction));
       if (diff >= 2) {
@@ -623,7 +678,8 @@ function identifyStrengths(
 ): string[] {
   const strengths: string[] = [];
   for (const assessment of assessments) {
-    const avg = positionAverages[assessment.attribute] ?? 10;
+    const avg = positionAverages[assessment.attribute];
+    if (avg === undefined) continue; // attribute irrelevant to this position
     if (assessment.estimatedValue >= avg + 3) {
       const descriptor = STRENGTH_DESCRIPTORS[assessment.attribute];
       if (descriptor) strengths.push(descriptor);
@@ -638,7 +694,8 @@ function identifyWeaknesses(
 ): string[] {
   const weaknesses: string[] = [];
   for (const assessment of assessments) {
-    const avg = positionAverages[assessment.attribute] ?? 10;
+    const avg = positionAverages[assessment.attribute];
+    if (avg === undefined) continue; // attribute irrelevant to this position
     if (assessment.estimatedValue <= avg - 3) {
       const descriptor = WEAKNESS_DESCRIPTORS[assessment.attribute];
       if (descriptor) weaknesses.push(descriptor);
@@ -727,8 +784,12 @@ function scoreConvictionAppropriateness(
   perceivedCa: number,
   trueCa: number,
   conviction: ConvictionLevel,
+  age?: number,
+  perceivedPA?: number,
 ): number {
-  const expected = getExpectedConviction(trueCa);
+  const expected = age !== undefined
+    ? getExpectedConvictionForAge(perceivedCa, age, perceivedPA)
+    : getExpectedConviction(trueCa);
   const levels: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
   const idxActual   = levels.indexOf(conviction);
   const idxExpected = levels.indexOf(expected);
@@ -741,6 +802,31 @@ function getExpectedConviction(ca: number): ConvictionLevel {
   if (ca >= 140) return "strongRecommend";
   if (ca >= 110) return "recommend";
   return "note";
+}
+
+/**
+ * PA-aware conviction for youth. Blends current ability with potential using
+ * an age-weighted formula so high-potential youth warrant strong conviction
+ * without penalising the scout's quality score.
+ * For adults (21+) or when PA is unknown, delegates to getExpectedConviction.
+ */
+function getExpectedConvictionForAge(
+  perceivedCA: number,
+  age: number,
+  perceivedPA?: number,
+): ConvictionLevel {
+  if (age >= 21 || perceivedPA === undefined) {
+    return getExpectedConviction(perceivedCA);
+  }
+
+  // PA weight decreases as player approaches maturity
+  // age 14 → 0.85 PA weight, age 20 → 0.14 PA weight
+  const paWeight = Math.max(0, Math.min(1, (21 - age) / (21 - 14) * 0.85));
+  const caWeight = 1 - paWeight;
+
+  const effectiveCA = Math.round(perceivedCA * caWeight + perceivedPA * paWeight);
+
+  return getExpectedConviction(effectiveCA);
 }
 
 function scoreRangeTightness(

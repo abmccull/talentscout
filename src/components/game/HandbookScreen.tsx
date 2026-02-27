@@ -1252,6 +1252,22 @@ const CHAPTERS: HandbookChapter[] = [
   },
 ];
 
+// ─── Exported chapter IDs ──────────────────────────────────────────────────────
+
+export const HANDBOOK_CHAPTERS = CHAPTERS.map((c) => c.id);
+
+/** Scroll to a chapter accordion and open it. Call after navigating to the handbook screen. */
+export function scrollToChapter(chapterId: string): void {
+  requestAnimationFrame(() => {
+    const el = document.getElementById(`handbook-chapter-${chapterId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      // Dispatch a click to open the accordion if it's closed
+      el.click();
+    }
+  });
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function HandbookScreen() {
@@ -1331,7 +1347,7 @@ export function HandbookScreen() {
             No chapters match &ldquo;{search}&rdquo;
           </div>
         ) : (
-          <div className="space-y-2" role="list" aria-label="Handbook chapters">
+          <div className="space-y-2" role="list" aria-label="Handbook chapters" data-tutorial-id="handbook-chapters">
             {chaptersToShow.map(({ forceOpen, ...chapter }) => {
               const isOpen = forceOpen || openChapters.has(chapter.id);
               const ChapterIcon = chapter.icon;
@@ -1343,6 +1359,7 @@ export function HandbookScreen() {
                 >
                   {/* Chapter header */}
                   <button
+                    id={`handbook-chapter-${chapter.id}`}
                     onClick={() => toggleChapter(chapter.id)}
                     aria-expanded={isOpen}
                     aria-controls={`chapter-body-${chapter.id}`}

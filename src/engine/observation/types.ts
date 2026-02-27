@@ -428,6 +428,11 @@ export interface SessionPlayer {
 export interface ObservationSession {
   /** Unique session identifier (UUID). */
   id: string;
+  /**
+   * Scheduled activity instance key that spawned this session.
+   * Uses calendar `instanceId` where available, with a deterministic fallback.
+   */
+  activityInstanceId?: string;
   /** The interactive mode for this session. */
   mode: ObservationMode;
   /** The activity type that spawned this session. */
@@ -471,6 +476,8 @@ export interface ObservationSession {
 export interface SessionConfig {
   /** The scheduled activity type determining mode and phase count. */
   activityType: ActivityType;
+  /** Scheduled activity instance key (calendar instanceId or deterministic fallback). */
+  activityInstanceId?: string;
   /** The scout's active specialization for this session. */
   specialization: Specialization;
   /** Venue type string for atmosphere generation. Defaults to activityType. */
@@ -494,6 +501,8 @@ export interface SessionConfig {
 export interface SessionResult {
   /** ID of the session that produced this result. */
   sessionId: string;
+  /** Scheduled activity instance key resolved for this session, if supplied. */
+  activityInstanceId?: string;
   /** The mode the session ran in. */
   mode: ObservationMode;
   /** The activity type that was completed. */

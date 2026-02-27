@@ -11,6 +11,7 @@ import type { TransferNegotiation, TransferAddOn, NegotiationRound, ClubNegotiat
 import { getRecommendedOffer, getPersonalityDescription } from "@/engine/firstTeam/negotiation";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
 // HELPERS
@@ -299,7 +300,9 @@ export function NegotiationScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/negotiation-boardroom.png" opacity={0.78} />
+        <div className="relative z-10">
         {/* Back button */}
         <button
           onClick={() => setScreen("dashboard")}
@@ -606,6 +609,7 @@ export function NegotiationScreen() {
               </Card>
             )}
           </div>
+        </div>
         </div>
       </div>
     </GameLayout>

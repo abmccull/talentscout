@@ -1,9 +1,9 @@
 /**
- * Tutorial store — tracks which tutorial sequence is active, the current
- * step within that sequence, and which sequences have been completed.
+ * Tutorial store — tracks tutorial sequences, guided first-week session,
+ * per-screen guides, and contextual hints.
  *
- * `completedSequences` and `dismissed` are persisted to localStorage so the
- * user only sees each tutorial once and can permanently opt out.
+ * Persisted state (localStorage): completedSequences, dismissed,
+ * visitedScreens, dismissedHints, guidedMilestones, guidedSessionCompleted.
  */
 
 import { create } from "zustand";
@@ -46,9 +46,32 @@ export type TutorialSequenceId =
   | OnboardingSequenceId
   | AhaMomentSequenceId;
 
+export type GuidedMilestoneId =
+  | "viewedDashboard"
+  | "openedCalendar"
+  | "scheduledActivity"
+  | "advancedWeek"
+  | "attendedMatch"
+  | "focusedPlayer"
+  | "completedMatch"
+  | "wroteReport"
+  | "submittedReport"
+  | "checkedInbox";
+
+export interface ContextualHint {
+  id: string;
+  message: string;
+  cta?: { label: string; screen: string };
+  handbookChapter?: string;
+}
+
 interface PersistedTutorialData {
   completedSequences: string[];
   dismissed: boolean;
+  visitedScreens: string[];
+  dismissedHints: string[];
+  guidedMilestones: Record<string, boolean>;
+  guidedSessionCompleted: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,22 +91,40 @@ export function resolveOnboardingSequence(
 // Persistence helpers
 // ---------------------------------------------------------------------------
 
+const PERSISTED_DEFAULTS: PersistedTutorialData = {
+  completedSequences: [],
+  dismissed: false,
+  visitedScreens: [],
+  dismissedHints: [],
+  guidedMilestones: {},
+  guidedSessionCompleted: false,
+};
+
 function readPersisted(): PersistedTutorialData {
-  if (typeof window === "undefined") {
-    return { completedSequences: [], dismissed: false };
-  }
+  if (typeof window === "undefined") return { ...PERSISTED_DEFAULTS };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { completedSequences: [], dismissed: false };
+    if (!raw) return { ...PERSISTED_DEFAULTS };
     const parsed = JSON.parse(raw) as Partial<PersistedTutorialData>;
     return {
       completedSequences: Array.isArray(parsed.completedSequences)
         ? parsed.completedSequences
         : [],
       dismissed: parsed.dismissed === true,
+      visitedScreens: Array.isArray(parsed.visitedScreens)
+        ? parsed.visitedScreens
+        : [],
+      dismissedHints: Array.isArray(parsed.dismissedHints)
+        ? parsed.dismissedHints
+        : [],
+      guidedMilestones:
+        parsed.guidedMilestones && typeof parsed.guidedMilestones === "object"
+          ? parsed.guidedMilestones
+          : {},
+      guidedSessionCompleted: parsed.guidedSessionCompleted === true,
     };
   } catch {
-    return { completedSequences: [], dismissed: false };
+    return { ...PERSISTED_DEFAULTS };
   }
 }
 
@@ -122,48 +163,67 @@ export interface TutorialState {
   /** Sequence queued to start after the current one completes. */
   pendingSequence: TutorialSequenceId | null;
 
-  // -------------------------------------------------------------------------
-  // Actions
-  // -------------------------------------------------------------------------
+  // ── Guided First Week ────────────────────────────────────────────────────
 
-  /**
-   * Begin a named tutorial sequence from step 0.
-   * No-ops if `dismissed` is true or the sequence was already completed.
-   */
+  /** True while the guided first-week session is in progress. */
+  guidedSessionActive: boolean;
+
+  /** True once the guided session has been completed (persisted). */
+  guidedSessionCompleted: boolean;
+
+  /** Record of which milestones the player has reached. */
+  guidedMilestones: Record<GuidedMilestoneId, boolean>;
+
+  /** The milestone the player should work toward next. */
+  currentGuidedTask: GuidedMilestoneId | null;
+
+  // ── Screen Guides ────────────────────────────────────────────────────────
+
+  /** Screens the player has visited at least once. Persisted. */
+  visitedScreens: Set<string>;
+
+  /** The screen guide currently being displayed, or null. */
+  activeScreenGuide: string | null;
+
+  /** Current step within the active screen guide. */
+  screenGuideStep: number;
+
+  // ── Contextual Hints ─────────────────────────────────────────────────────
+
+  /** Hint IDs the player has dismissed. Persisted. */
+  dismissedHints: Set<string>;
+
+  /** The hint currently being displayed, or null. */
+  activeHint: ContextualHint | null;
+
+  // ── Mentor ───────────────────────────────────────────────────────────────
+
+  mentorName: string;
+  mentorTitle: string;
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+
   startSequence: (id: TutorialSequenceId) => void;
-
-  /**
-   * Queue a sequence. Starts immediately if no tutorial is active,
-   * otherwise waits until the current sequence completes.
-   */
   queueSequence: (id: TutorialSequenceId) => void;
-
-  /**
-   * Advance to the next step in the current sequence.
-   * Marks the sequence as completed and deactivates when the last step is
-   * acknowledged. If a pendingSequence exists, auto-starts it.
-   */
   nextStep: () => void;
-
-  /**
-   * Skip the current sequence without marking it completed.
-   * The sequence will be shown again next time `startSequence` is called.
-   */
   skipTutorial: () => void;
-
-  /**
-   * Permanently dismiss all tutorials.  Sets `dismissed = true` and persists
-   * the preference to localStorage.  No further sequences will ever start.
-   */
   dismissForever: () => void;
-
-  /**
-   * Check if the current step should auto-advance based on a condition string.
-   * Called by game actions (scheduleActivity, setFocus, submitReport) when the
-   * corresponding action completes.  If the current step's `nextStep` matches
-   * the provided condition, the tutorial advances automatically.
-   */
   checkAutoAdvance: (condition: string) => void;
+
+  // Guided session
+  startGuidedSession: (hasClub: boolean) => void;
+  completeMilestone: (id: GuidedMilestoneId) => void;
+  skipGuidedSession: () => void;
+
+  // Screen guides
+  recordScreenVisit: (screen: string) => void;
+  openScreenGuide: (screen: string) => void;
+  closeScreenGuide: () => void;
+  advanceScreenGuide: () => void;
+
+  // Hints
+  showHint: (hint: ContextualHint) => void;
+  dismissHint: (hintId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +234,61 @@ export interface TutorialState {
 // browser after hydration — localStorage is available at that point.
 const persisted = readPersisted();
 
+const MILESTONE_ORDER: GuidedMilestoneId[] = [
+  "viewedDashboard",
+  "openedCalendar",
+  "scheduledActivity",
+  "advancedWeek",
+  "attendedMatch",
+  "focusedPlayer",
+  "completedMatch",
+  "wroteReport",
+  "submittedReport",
+  "checkedInbox",
+];
+
+function nextMilestone(
+  milestones: Record<GuidedMilestoneId, boolean>,
+): GuidedMilestoneId | null {
+  for (const m of MILESTONE_ORDER) {
+    if (!milestones[m]) return m;
+  }
+  return null;
+}
+
+/** Persist all tutorial state in one write. */
+function persistAll(state: TutorialState): void {
+  writePersisted({
+    completedSequences: Array.from(state.completedSequences),
+    dismissed: state.dismissed,
+    visitedScreens: Array.from(state.visitedScreens),
+    dismissedHints: Array.from(state.dismissedHints),
+    guidedMilestones: state.guidedMilestones,
+    guidedSessionCompleted: state.guidedSessionCompleted,
+  });
+}
+
+const initialMilestones: Record<GuidedMilestoneId, boolean> = {
+  viewedDashboard: false,
+  openedCalendar: false,
+  scheduledActivity: false,
+  advancedWeek: false,
+  attendedMatch: false,
+  focusedPlayer: false,
+  completedMatch: false,
+  wroteReport: false,
+  submittedReport: false,
+  checkedInbox: false,
+};
+
+// Merge persisted milestones with defaults (handles old saves).
+const restoredMilestones: Record<GuidedMilestoneId, boolean> = {
+  ...initialMilestones,
+  ...(persisted.guidedMilestones as Record<GuidedMilestoneId, boolean>),
+};
+
 export const useTutorialStore = create<TutorialState>((set, get) => ({
+  // ── Existing tutorial sequence state ─────────────────────────────────────
   currentStep: 0,
   currentSequence: null,
   completedSequences: new Set(persisted.completedSequences),
@@ -182,20 +296,35 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   dismissed: persisted.dismissed,
   pendingSequence: null,
 
+  // ── Guided session state ─────────────────────────────────────────────────
+  guidedSessionActive: false,
+  guidedSessionCompleted: persisted.guidedSessionCompleted,
+  guidedMilestones: restoredMilestones,
+  currentGuidedTask: persisted.guidedSessionCompleted
+    ? null
+    : nextMilestone(restoredMilestones),
+
+  // ── Screen guides state ──────────────────────────────────────────────────
+  visitedScreens: new Set(persisted.visitedScreens),
+  activeScreenGuide: null,
+  screenGuideStep: 0,
+
+  // ── Hints state ──────────────────────────────────────────────────────────
+  dismissedHints: new Set(persisted.dismissedHints),
+  activeHint: null,
+
+  // ── Mentor ───────────────────────────────────────────────────────────────
+  mentorName: "Margaret Chen",
+  mentorTitle: "Director of Recruitment",
+
+  // ── Existing actions (unchanged) ─────────────────────────────────────────
+
   startSequence(id) {
     const { dismissed, completedSequences } = get();
-
-    // Respect permanent opt-out and skip already-seen sequences.
     if (dismissed) return;
-
-    // Backward compat: "firstWeek" is replaced by onboarding sequences.
-    // If called with "firstWeek", no-op — onboarding is started via the resolver.
     if (id === "firstWeek") return;
-
     if (completedSequences.has(id)) return;
 
-    // If any onboarding sequence was completed, skip all onboarding sequences.
-    // This handles old saves that completed "firstWeek" — they shouldn't see new onboarding.
     if (
       id.startsWith("onboarding:") &&
       (completedSequences.has("firstWeek") ||
@@ -231,14 +360,8 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     const totalSteps = sequence?.steps.length ?? 0;
 
     if (currentStep + 1 >= totalSteps) {
-      // Reached the end — mark completed and deactivate.
       const next = new Set(completedSequences);
       next.add(currentSequence);
-
-      writePersisted({
-        completedSequences: Array.from(next),
-        dismissed: get().dismissed,
-      });
 
       set({
         completedSequences: next,
@@ -247,8 +370,8 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
         tutorialActive: false,
         pendingSequence: null,
       });
+      persistAll(get());
 
-      // Auto-start pending sequence if one was queued.
       if (pendingSequence) {
         get().startSequence(pendingSequence);
       }
@@ -267,20 +390,17 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   },
 
   dismissForever() {
-    const { completedSequences } = get();
-
-    writePersisted({
-      completedSequences: Array.from(completedSequences),
-      dismissed: true,
-    });
-
     set({
       dismissed: true,
       currentSequence: null,
       currentStep: 0,
       tutorialActive: false,
       pendingSequence: null,
+      guidedSessionActive: false,
+      activeScreenGuide: null,
+      activeHint: null,
     });
+    persistAll(get());
   },
 
   checkAutoAdvance(condition) {
@@ -294,5 +414,95 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     if (step?.nextStep === condition) {
       get().nextStep();
     }
+  },
+
+  // ── Guided session actions ───────────────────────────────────────────────
+
+  startGuidedSession(hasClub) {
+    const { dismissed, guidedSessionCompleted } = get();
+    if (dismissed || guidedSessionCompleted) return;
+
+    set({
+      guidedSessionActive: true,
+      guidedMilestones: { ...initialMilestones },
+      currentGuidedTask: "viewedDashboard",
+      mentorName: hasClub ? "Margaret Chen" : "Tommy Reyes",
+      mentorTitle: hasClub ? "Director of Recruitment" : "Senior Scout",
+    });
+    persistAll(get());
+  },
+
+  completeMilestone(id) {
+    const { guidedSessionActive, guidedMilestones, dismissed } = get();
+    if (dismissed || !guidedSessionActive || guidedMilestones[id]) return;
+
+    const updated = { ...guidedMilestones, [id]: true };
+    const next = nextMilestone(updated);
+    const allDone = next === null;
+
+    set({
+      guidedMilestones: updated,
+      currentGuidedTask: next,
+      guidedSessionActive: !allDone,
+      guidedSessionCompleted: allDone || get().guidedSessionCompleted,
+    });
+    persistAll(get());
+  },
+
+  skipGuidedSession() {
+    set({
+      guidedSessionActive: false,
+      guidedSessionCompleted: true,
+      currentGuidedTask: null,
+    });
+    persistAll(get());
+  },
+
+  // ── Screen guide actions ─────────────────────────────────────────────────
+
+  recordScreenVisit(screen) {
+    const { visitedScreens, dismissed, guidedSessionActive } = get();
+    if (dismissed) return;
+    if (visitedScreens.has(screen)) return;
+
+    const updated = new Set(visitedScreens);
+    updated.add(screen);
+    set({ visitedScreens: updated });
+    persistAll(get());
+
+    // Auto-open screen guide on first visit (unless guided session is active).
+    if (!guidedSessionActive) {
+      get().openScreenGuide(screen);
+    }
+  },
+
+  openScreenGuide(screen) {
+    const { dismissed } = get();
+    if (dismissed) return;
+    set({ activeScreenGuide: screen, screenGuideStep: 0 });
+  },
+
+  closeScreenGuide() {
+    set({ activeScreenGuide: null, screenGuideStep: 0 });
+  },
+
+  advanceScreenGuide() {
+    set((s) => ({ screenGuideStep: s.screenGuideStep + 1 }));
+  },
+
+  // ── Hint actions ─────────────────────────────────────────────────────────
+
+  showHint(hint) {
+    const { dismissed, dismissedHints } = get();
+    if (dismissed || dismissedHints.has(hint.id)) return;
+    set({ activeHint: hint });
+  },
+
+  dismissHint(hintId) {
+    const { dismissedHints } = get();
+    const updated = new Set(dismissedHints);
+    updated.add(hintId);
+    set({ dismissedHints: updated, activeHint: null });
+    persistAll(get());
   },
 }));

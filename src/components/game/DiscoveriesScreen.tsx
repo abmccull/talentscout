@@ -13,6 +13,7 @@ import {
   OUTCOME_REASON_COLORS,
   OUTCOME_REASON_SHORT_LABELS,
 } from "@/engine/firstTeam";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ─── Sort options ─────────────────────────────────────────────────────────────
 
@@ -220,7 +221,9 @@ export function DiscoveriesScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/discoveries-trophy.png" opacity={0.78} />
+        <div className="relative z-10">
         {/* Header */}
         <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -250,7 +253,7 @@ export function DiscoveriesScreen() {
         </div>
 
         {/* Stats summary */}
-        <div className="mb-6 grid grid-cols-3 gap-4">
+        <div className="mb-6 grid grid-cols-3 gap-4" data-tutorial-id="discoveries-trajectory">
           <Card>
             <CardContent className="p-4">
               <p className="text-xs text-zinc-500">Total Discoveries</p>
@@ -289,7 +292,7 @@ export function DiscoveriesScreen() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3" data-tutorial-id="discoveries-list">
             {sorted.map((record) => {
               const player = getPlayer(record.playerId);
               const playerName = player
@@ -307,6 +310,7 @@ export function DiscoveriesScreen() {
             })}
           </div>
         )}
+        </div>
       </div>
     </GameLayout>
   );

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useGameStore } from "@/stores/gameStore";
-import type { FreeAgent, Position } from "@/engine/core/types";
+import type { FreeAgent, FreeAgentNegotiation, Position } from "@/engine/core/types";
 import { getFamiliarityVisibility } from "@/engine/freeAgents/discovery";
 import {
   Users,
@@ -16,7 +16,6 @@ import {
   ArrowLeft,
   AlertTriangle,
   Clock,
-  MapPin,
 } from "lucide-react";
 
 // =============================================================================
@@ -51,6 +50,8 @@ export function FreeAgentScreen() {
   const gameState = useGameStore((s) => s.gameState);
   const setScreen = useGameStore((s) => s.setScreen);
   const selectPlayer = useGameStore((s) => s.selectPlayer);
+  const initiateFreeAgentNegotiation = useGameStore((s) => s.initiateFreeAgentNegotiation);
+  const submitFreeAgentOffer = useGameStore((s) => s.submitFreeAgentOffer);
 
   const [search, setSearch] = useState("");
   const [positionFilter, setPositionFilter] = useState<Position | "">("");
@@ -58,14 +59,15 @@ export function FreeAgentScreen() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [discoveredOnly, setDiscoveredOnly] = useState(false);
 
-  if (!gameState) return null;
-
-  const pool = gameState.freeAgentPool;
-  const scout = gameState.scout;
-  const players = gameState.players;
+  const pool = gameState?.freeAgentPool;
+  const scout = gameState?.scout;
+  const players = gameState?.players;
+  const negotiations = gameState?.freeAgentNegotiations;
+  const hasClubContext = Boolean(gameState?.scout.currentClubId);
 
   // Build list of visible free agents
   const visibleAgents = useMemo(() => {
+    if (!pool || !scout) return [];
     return pool.agents.filter((agent) => {
       if (agent.status !== "available") return false;
 
@@ -76,10 +78,11 @@ export function FreeAgentScreen() {
       const familiarity = countryRep?.familiarity ?? 0;
       return familiarity >= 20; // Basic visibility threshold
     });
-  }, [pool.agents, scout.countryReputations]);
+  }, [pool, scout]);
 
   // Apply filters
   const filtered = useMemo(() => {
+    const playerMap = players ?? {};
     let result = visibleAgents;
 
     if (discoveredOnly) {
@@ -89,7 +92,7 @@ export function FreeAgentScreen() {
     if (search) {
       const q = search.toLowerCase();
       result = result.filter((agent) => {
-        const player = players[agent.playerId];
+        const player = playerMap[agent.playerId];
         if (!player) return false;
         const name = `${player.firstName} ${player.lastName}`.toLowerCase();
         return name.includes(q);
@@ -98,15 +101,15 @@ export function FreeAgentScreen() {
 
     if (positionFilter) {
       result = result.filter((agent) => {
-        const player = players[agent.playerId];
+        const player = playerMap[agent.playerId];
         return player?.position === positionFilter;
       });
     }
 
     // Sort
     result = [...result].sort((a, b) => {
-      const pa = players[a.playerId];
-      const pb = players[b.playerId];
+      const pa = playerMap[a.playerId];
+      const pb = playerMap[b.playerId];
       if (!pa || !pb) return 0;
 
       let cmp = 0;
@@ -136,6 +139,14 @@ export function FreeAgentScreen() {
     return result;
   }, [visibleAgents, search, positionFilter, sortKey, sortDir, discoveredOnly, players]);
 
+  const negotiationByPlayer = useMemo(() => {
+    const byPlayer = new Map<string, FreeAgentNegotiation>();
+    for (const negotiation of negotiations ?? []) {
+      byPlayer.set(negotiation.freeAgentId, negotiation);
+    }
+    return byPlayer;
+  }, [negotiations]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -153,6 +164,8 @@ export function FreeAgentScreen() {
       <ChevronDown size={12} aria-hidden="true" />
     );
   };
+
+  if (!gameState || !pool || !scout) return null;
 
   const totalAvailable = pool.agents.filter((a) => a.status === "available").length;
   const discoveredCount = visibleAgents.filter((a) => a.discoveredByScout).length;
@@ -209,7 +222,7 @@ export function FreeAgentScreen() {
       )}
 
       {/* Filters */}
-      <div className="rounded-lg border border-[#27272a] bg-[#141414] p-4">
+      <div className="rounded-lg border border-[#27272a] bg-[#141414] p-4" data-tutorial-id="freeagents-negotiate">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
@@ -262,7 +275,7 @@ export function FreeAgentScreen() {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[#27272a]">
+        <div className="overflow-x-auto rounded-lg border border-[#27272a]" data-tutorial-id="freeagents-list">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[#27272a] bg-[#0a0a0a] text-left text-zinc-500">
@@ -286,6 +299,7 @@ export function FreeAgentScreen() {
                 ))}
                 <th className="px-4 py-3 font-medium">Status</th>
                 <th className="px-4 py-3 font-medium">Intel</th>
+                <th className="px-4 py-3 font-medium">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -293,9 +307,29 @@ export function FreeAgentScreen() {
                 <FreeAgentRow
                   key={agent.playerId}
                   agent={agent}
-                  player={players[agent.playerId]}
+                  player={gameState.players[agent.playerId]}
                   scout={scout}
                   clubs={gameState.clubs}
+                  negotiation={negotiationByPlayer.get(agent.playerId)}
+                  canNegotiate={hasClubContext}
+                  onOpenTalks={() =>
+                    initiateFreeAgentNegotiation(
+                      agent.playerId,
+                      agent.wageExpectation,
+                      agent.signingBonusExpectation,
+                      3,
+                    )
+                  }
+                  onSubmitCounter={() => {
+                    const negotiation = negotiationByPlayer.get(agent.playerId);
+                    if (!negotiation) return;
+                    submitFreeAgentOffer(
+                      agent.playerId,
+                      negotiation.counterWage ?? agent.wageExpectation,
+                      negotiation.counterBonus ?? agent.signingBonusExpectation,
+                      negotiation.offeredContractLength,
+                    );
+                  }}
                   onClick={() => {
                     selectPlayer(agent.playerId);
                     setScreen("playerProfile");
@@ -319,6 +353,10 @@ function FreeAgentRow({
   player,
   scout,
   clubs,
+  negotiation,
+  canNegotiate,
+  onOpenTalks,
+  onSubmitCounter,
   onClick,
 }: {
   agent: FreeAgent;
@@ -327,6 +365,10 @@ function FreeAgentRow({
   scout: ReturnType<typeof useGameStore.getState>["gameState"] extends infer S
     ? S extends { scout: infer SC } ? SC : never : never;
   clubs: Record<string, { name: string }>;
+  negotiation?: FreeAgentNegotiation;
+  canNegotiate: boolean;
+  onOpenTalks: () => void;
+  onSubmitCounter: () => void;
   onClick: () => void;
 }) {
   if (!player) return null;
@@ -400,6 +442,44 @@ function FreeAgentRow({
           <Badge className={`${visBadge.color} text-xs`}>
             {visBadge.label}
           </Badge>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {!canNegotiate ? (
+          <span className="text-xs text-zinc-600">No club mandate</span>
+        ) : negotiation?.status === "countered" ? (
+          <div className="space-y-1">
+            <p className="text-[10px] text-amber-300">
+              Counter: {negotiation.counterWage ?? agent.wageExpectation}/wk
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={(event) => {
+                event.stopPropagation();
+                onSubmitCounter();
+              }}
+            >
+              Answer Counter
+            </Button>
+          </div>
+        ) : negotiation?.status === "pending" ? (
+          <Badge variant="outline" className="text-[10px] text-blue-300 border-blue-500/30">
+            Talks ongoing
+          </Badge>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenTalks();
+            }}
+          >
+            Open Talks
+          </Button>
         )}
       </td>
     </tr>

@@ -84,7 +84,7 @@ export function EquipmentPanel() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2" data-tutorial-id="equipment-loadout">
           {ALL_EQUIPMENT_SLOTS.map((slot) => {
             const itemId = loadout[slot];
             const item = getEquipmentItem(itemId);
@@ -135,10 +135,12 @@ export function EquipmentPanel() {
         </div>
 
         {selectedSlot && (
-          <EquipmentSlotBrowser
-            slot={selectedSlot}
-            onClose={() => setSelectedSlot(null)}
-          />
+          <div data-tutorial-id="equipment-shop">
+            <EquipmentSlotBrowser
+              slot={selectedSlot}
+              onClose={() => setSelectedSlot(null)}
+            />
+          </div>
         )}
       </CardContent>
     </Card>

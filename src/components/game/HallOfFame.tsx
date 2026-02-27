@@ -16,6 +16,7 @@ import {
   Home,
   Sparkles,
 } from "lucide-react";
+import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 
 // =============================================================================
 // TYPES
@@ -229,10 +230,10 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
 
         {/* Header */}
         <div className="mb-10 text-center">
-          {/* Trophy icon */}
+          {/* Scout avatar */}
           <div className="mb-4 flex justify-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-yellow-500/20 to-amber-600/10 ring-2 ring-yellow-500/30">
-              <Trophy size={38} className="text-yellow-400" aria-hidden="true" />
+            <div className="rounded-full ring-2 ring-yellow-500/30">
+              <ScoutAvatar avatarId={scout.avatarId ?? 1} size={96} />
             </div>
           </div>
 

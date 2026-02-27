@@ -113,6 +113,29 @@ export function migrateFinancialRecord(
 }
 
 /**
+ * Migrate existing report listings to include bidding fields.
+ * Safe to call on already-migrated records (no-op on listings with bids).
+ */
+export function migrateReportListingBids(
+  finances: FinancialRecord,
+): FinancialRecord {
+  const needsMigration = finances.reportListings.some(
+    (l) => !Array.isArray(l.bids),
+  );
+  if (!needsMigration) return finances;
+
+  return {
+    ...finances,
+    reportListings: finances.reportListings.map((l) => ({
+      ...l,
+      bids: l.bids ?? [],
+      biddingEndsWeek: l.biddingEndsWeek ?? l.listedWeek + 2,
+      biddingEndsSeason: l.biddingEndsSeason ?? l.listedSeason,
+    })),
+  };
+}
+
+/**
  * Migrate employees to have skills if they don't already.
  * Called during game load to ensure backward compatibility.
  */

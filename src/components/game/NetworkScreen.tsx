@@ -24,6 +24,7 @@ import {
 import type { Contact, ContactType, Activity, HiddenIntel, GossipItem } from "@/engine/core/types";
 import { getHiddenAttributeIntel, getContactSpecializationBonus } from "@/engine/network/contacts";
 import { RNG } from "@/engine/rng";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 const CONTACT_TYPE_CONFIG: Record<
   ContactType,
@@ -524,7 +525,9 @@ export function NetworkScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/network-lounge.png" opacity={0.82} />
+        <div className="relative z-10">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Network</h1>
           <div className="flex items-center gap-4 text-sm text-zinc-400">
@@ -551,11 +554,13 @@ export function NetworkScreen() {
         ) : (
           <div className="space-y-6">
             {/* Gossip Feed — full-width intelligence summary */}
-            <GossipFeedPanel contacts={contacts} currentWeek={currentWeek} />
+            <div data-tutorial-id="network-intel">
+              <GossipFeedPanel contacts={contacts} currentWeek={currentWeek} />
+            </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               {/* Contact list */}
-              <div className={selectedContact ? "lg:col-span-2" : "lg:col-span-3"}>
+              <div className={selectedContact ? "lg:col-span-2" : "lg:col-span-3"} data-tutorial-id="network-contacts">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {contacts.map((contact) => {
                     const config = CONTACT_TYPE_CONFIG[contact.type];
@@ -677,7 +682,7 @@ export function NetworkScreen() {
 
               {/* Detail panel */}
               {selectedContact && (
-                <div>
+                <div data-tutorial-id="network-meet">
                   <ContactDetail
                     contact={selectedContact}
                     knownPlayerNames={getKnownPlayerNames(selectedContact)}
@@ -691,6 +696,7 @@ export function NetworkScreen() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </GameLayout>
   );

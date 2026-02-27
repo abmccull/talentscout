@@ -29,3 +29,15 @@ export {
   calculateLegacyScore,
   calculateAlumniReputationBonus,
 } from "./alumni";
+
+// Tournament system — named, scheduled, discoverable youth events
+export {
+  generateSeasonTournaments,
+  discoverTournamentsPassive,
+  generateGrassrootsTournament,
+  processContactTournamentTip,
+  getActiveTournaments,
+  getTournamentActivities,
+  createAgencyShowcase,
+  estimateTournamentCost,
+} from "./tournaments";

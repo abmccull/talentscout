@@ -59,6 +59,7 @@ export const ACTIVITY_CATEGORIES: Record<ActivityType, ActivityCategory> = {
   youthFestival: "scouting",
   followUpSession: "scouting",
   writePlacementReport: "scouting",
+  agencyShowcase: "scouting",
 
   // Scouting — first-team specialist
   scoutingMission: "scouting",
@@ -77,6 +78,10 @@ export const ACTIVITY_CATEGORIES: Record<ActivityType, ActivityCategory> = {
 
   // Free agent activities
   freeAgentOutreach: "scouting",
+
+  // Loan activities
+  loanMonitoring: "scouting",
+  loanRecommendation: "scouting",
 
   // Scouting — universal
   watchVideo: "scouting",

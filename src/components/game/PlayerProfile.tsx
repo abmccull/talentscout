@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake } from "lucide-react";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X } from "lucide-react";
 import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill, DisciplinaryRecord } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
@@ -16,6 +16,9 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
+import { isTransferWindowOpen } from "@/engine/core/transferWindow";
+import { ACTIVITY_SLOT_COSTS } from "@/engine/core/calendar";
+import { canAddActivity } from "@/engine/core/calendar";
 import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip";
 
 // ---------------------------------------------------------------------------
@@ -974,7 +977,12 @@ export function PlayerProfile() {
     setPendingCalendarActivity,
     tapNetworkForPlayer,
     initiateTransferNegotiation,
+    recommendPlayerForLoan,
+    recallLoanPlayer,
+    scheduleActivity,
   } = useGameStore();
+
+  const [networkIntel, setNetworkIntel] = useState<{ title: string; body: string; contactName?: string } | null>(null);
 
   if (!gameState || !selectedPlayerId) return null;
 
@@ -1126,6 +1134,11 @@ export function PlayerProfile() {
                     {league ? ` (${league.shortName})` : ""}
                   </span>
                 ) : null}
+                {player.onLoan && player.loanParentClubId && (
+                  <Badge className="border-sky-500/40 bg-sky-500/10 text-sky-400">
+                    On Loan{getClub(player.loanParentClubId) ? ` from ${getClub(player.loanParentClubId)!.name}` : ""}
+                  </Badge>
+                )}
                 <FormIndicator form={player.form} />
                 {/* Form momentum badge */}
                 {player.formTrend === "rising" && (player.formMomentum ?? 0) > 0 && (
@@ -1169,7 +1182,10 @@ export function PlayerProfile() {
             {/* Tap Network — available for any player with contacts */}
             <Button
               variant="outline"
-              onClick={() => tapNetworkForPlayer(selectedPlayerId)}
+              onClick={() => {
+                const result = tapNetworkForPlayer(selectedPlayerId);
+                if (result) setNetworkIntel(result);
+              }}
               disabled={Object.keys(gameState.contacts).length === 0}
             >
               <Phone size={14} className="mr-2" />
@@ -1191,18 +1207,57 @@ export function PlayerProfile() {
                 Negotiate Transfer
               </Button>
             )}
+            {/* Recommend for Loan — own-club players not on loan, age < 26 */}
+            {isOwnClubPlayer && !player.onLoan && player.age < 26 && (() => {
+              const scoutClub = gameState.scout.currentClubId ? gameState.clubs[gameState.scout.currentClubId] : null;
+              const sameLeagueClubs = scoutClub
+                ? Object.values(gameState.clubs).filter(
+                    (c) => c.leagueId === scoutClub.leagueId && c.id !== scoutClub.id
+                  )
+                : [];
+              const targetClub = sameLeagueClubs.sort((a, b) => a.reputation - b.reputation)[0];
+              return targetClub ? (
+                <Button
+                  variant="outline"
+                  onClick={() => recommendPlayerForLoan(player.id, targetClub.id, "development", 20)}
+                  title={`Recommend loan to ${targetClub.name}`}
+                >
+                  <Send size={14} className="mr-2" />
+                  Recommend for Loan
+                </Button>
+              ) : null;
+            })()}
             {/* Youth-specific quick actions */}
             {unsignedYouthRecord && observations.length > 0 && (
               <>
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setPendingCalendarActivity({
-                      type: "followUpSession",
-                      targetId: unsignedYouthRecord.id,
-                      label: `Follow-Up: ${player.firstName} ${player.lastName}`,
-                    });
-                    setScreen("calendar");
+                    const activity = {
+                      type: "followUpSession" as const,
+                      slots: ACTIVITY_SLOT_COSTS.followUpSession,
+                      targetId: player.id,
+                      description: `Follow-up session: ${player.firstName} ${player.lastName}`,
+                    };
+                    // Find first available day slot
+                    let scheduled = false;
+                    for (let day = 0; day <= 7 - activity.slots; day++) {
+                      if (canAddActivity(gameState.schedule, activity, day)) {
+                        scheduleActivity(activity, day);
+                        scheduled = true;
+                        break;
+                      }
+                    }
+                    if (scheduled) {
+                      setPendingCalendarActivity({
+                        type: "followUpSession",
+                        targetId: player.id,
+                        label: `Follow-Up: ${player.firstName} ${player.lastName}`,
+                      });
+                      setScreen("calendar");
+                    } else {
+                      window.alert("No free day slot available this week. Clear a day on the calendar first.");
+                    }
                   }}
                 >
                   <CalendarPlus size={14} className="mr-2" />
@@ -1211,12 +1266,30 @@ export function PlayerProfile() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setPendingCalendarActivity({
-                      type: "parentCoachMeeting",
-                      targetId: unsignedYouthRecord.id,
-                      label: `Meeting: ${player.firstName} ${player.lastName}`,
-                    });
-                    setScreen("calendar");
+                    const activity = {
+                      type: "parentCoachMeeting" as const,
+                      slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
+                      targetId: player.id,
+                      description: `Parent/Coach meeting: ${player.firstName} ${player.lastName}`,
+                    };
+                    let scheduled = false;
+                    for (let day = 0; day <= 7 - activity.slots; day++) {
+                      if (canAddActivity(gameState.schedule, activity, day)) {
+                        scheduleActivity(activity, day);
+                        scheduled = true;
+                        break;
+                      }
+                    }
+                    if (scheduled) {
+                      setPendingCalendarActivity({
+                        type: "parentCoachMeeting",
+                        targetId: player.id,
+                        label: `Meeting: ${player.firstName} ${player.lastName}`,
+                      });
+                      setScreen("calendar");
+                    } else {
+                      window.alert("No free day slot available this week. Clear a day on the calendar first.");
+                    }
                   }}
                 >
                   <Users size={14} className="mr-2" />
@@ -1257,6 +1330,43 @@ export function PlayerProfile() {
               <CardContent className="p-4">
                 <p className="text-xs text-zinc-500">Contract Expires</p>
                 <p className="mt-1 font-semibold">Season {player.contractExpiry}</p>
+              </CardContent>
+            </Card>
+          )}
+          {/* Loan Status */}
+          {player.onLoan && player.loanParentClubId && (
+            <Card className="border-sky-500/20 bg-sky-500/5">
+              <CardContent className="p-4">
+                <p className="text-xs text-sky-400">On Loan</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-200">
+                  From {getClub(player.loanParentClubId)?.name ?? "Unknown"}
+                </p>
+                {player.loanEndWeek != null && player.loanEndSeason != null && (
+                  <p className="mt-0.5 text-xs text-zinc-400">
+                    Returns: Season {player.loanEndSeason}, Week {player.loanEndWeek}
+                  </p>
+                )}
+                {/* Recall from Loan button */}
+                {(() => {
+                  const deal = (gameState.activeLoans ?? []).find((l) => l.playerId === player.id);
+                  if (!deal?.recallClause) return null;
+                  const windowOpen = gameState.transferWindow
+                    ? isTransferWindowOpen([gameState.transferWindow], gameState.currentWeek)
+                    : false;
+                  return (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 w-full border-sky-500/30 text-sky-400 hover:bg-sky-500/10"
+                      disabled={!windowOpen}
+                      onClick={() => recallLoanPlayer(deal.id)}
+                      title={windowOpen ? "Recall player from loan" : "Transfer window is closed"}
+                    >
+                      <RotateCcw size={12} className="mr-1.5" />
+                      {windowOpen ? "Recall from Loan" : "Window Closed"}
+                    </Button>
+                  );
+                })()}
               </CardContent>
             </Card>
           )}
@@ -1362,20 +1472,12 @@ export function PlayerProfile() {
                     title={`${confidenceLabel(aggregatedAbility.caConfidence)} confidence`}
                   />
                 </div>
-                {aggregatedAbility.caHigh - aggregatedAbility.caLow > 0.5 ? (
-                  <StarRatingRange
-                    low={aggregatedAbility.caLow}
-                    high={aggregatedAbility.caHigh}
-                    confidence={aggregatedAbility.caConfidence}
-                    size="lg"
-                  />
-                ) : (
-                  <StarRating
-                    rating={aggregatedAbility.ca}
-                    confidence={aggregatedAbility.caConfidence}
-                    size="lg"
-                  />
-                )}
+                <StarRatingRange
+                  low={aggregatedAbility.caLow}
+                  high={aggregatedAbility.caHigh}
+                  confidence={aggregatedAbility.caConfidence}
+                  size="lg"
+                />
                 {aggregatedAbility.caConfidence < 0.5 && (
                   <p className="mt-2 text-[10px] text-zinc-500">
                     More observations will narrow this range
@@ -1748,6 +1850,36 @@ export function PlayerProfile() {
           </div>
         </div>
       </div>
+      {/* Network Intel Popup */}
+      {networkIntel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setNetworkIntel(null)}>
+          <div
+            className="relative mx-4 w-full max-w-md rounded-xl border border-[#27272a] bg-[#0c0c0c] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setNetworkIntel(null)}
+              className="absolute right-3 top-3 text-zinc-500 hover:text-white transition"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/15">
+                <Phone size={18} className="text-emerald-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-white">{networkIntel.title}</h3>
+            </div>
+            <p className="text-sm text-zinc-300 leading-relaxed mb-4">{networkIntel.body}</p>
+            <div className="flex items-center justify-between text-xs text-zinc-500">
+              <span>+3 fatigue{networkIntel.contactName ? ` · ${networkIntel.contactName} relationship −2` : ""}</span>
+              <Button size="sm" variant="outline" onClick={() => setNetworkIntel(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </GameLayout>
   );
 }

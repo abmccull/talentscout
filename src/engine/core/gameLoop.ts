@@ -42,6 +42,7 @@ import type {
   CulturalInsight,
   Contact,
   BoardSatisfactionDelta,
+  LoanDeal,
 } from "./types";
 import { ALL_ATTRIBUTES } from "./types";
 import { getDifficultyModifiers } from "./difficulty";
@@ -84,6 +85,13 @@ import { processContractExpiries } from "../freeAgents/expiry";
 import { tickFreeAgentPool } from "../freeAgents/pool";
 import { discoverFreeAgents } from "../freeAgents/discovery";
 import type { FreeAgentPool } from "./types";
+import { isTransferWindowOpen } from "./transferWindow";
+import {
+  processLoanReturns,
+  processAILoanDeals,
+  processLoanPerformance,
+  processLoanRecalls,
+} from "../world/loans";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -247,6 +255,15 @@ export interface TickResult {
     retiredPlayerIds: string[];
     updatedPlayers: Record<string, Player>;
   };
+
+  // --- Player Loan System ---
+
+  /** New loan deals created this week. */
+  loanDeals?: LoanDeal[];
+  /** Loans expiring this week (players returning to parent club). */
+  loanReturns?: LoanDeal[];
+  /** Loans recalled early by parent club this week. */
+  loanRecalls?: LoanDeal[];
 }
 
 // =============================================================================
@@ -737,7 +754,8 @@ function developmentMultiplier(
   let base: number;
   if (yearsFromPeak < 0) {
     // Pre-peak: growing
-    base = Math.max(0, Math.min(1, 1 - Math.abs(yearsFromPeak) * 0.08));
+    // Growth is highest far from peak (young), tapering as player approaches peak.
+    base = Math.min(1.0, 0.4 + Math.abs(yearsFromPeak) * 0.08);
   } else {
     // Post-peak: declining
     base = -yearsFromPeak * 0.02;
@@ -1953,6 +1971,19 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 4. AI transfers
   const transfers = processAITransfers(state, rng);
 
+  // 4b. Player loan system
+  const loanReturnResult = processLoanReturns(state, state.currentWeek, state.currentSeason, rng);
+  const loanWindowOpen = state.transferWindow
+    ? isTransferWindowOpen([state.transferWindow], state.currentWeek)
+    : false;
+  const loanDealResult = loanWindowOpen
+    ? processAILoanDeals(state, state.currentWeek, state.currentSeason, rng)
+    : { deals: [], messages: [] };
+  const loanRecallResult = loanWindowOpen
+    ? processLoanRecalls(state, state.currentWeek, state.currentSeason, rng)
+    : { deals: [], messages: [] };
+  const updatedActiveLoans = processLoanPerformance(state, state.currentWeek, rng);
+
   // 5. Injuries
   const injuries = processInjuries(state, rng);
 
@@ -1977,6 +2008,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
 
   // Append breakthrough notifications
   newMessages.push(...breakthroughMessages);
+
+  // Append loan system messages
+  newMessages.push(...loanReturnResult.messages, ...loanDealResult.messages, ...loanRecallResult.messages);
 
   if (endOfSeasonTriggered) {
     newMessages.push(generateEndOfSeasonMessage(state, rng));
@@ -2254,6 +2288,10 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     updatedFreeAgentPool,
     freeAgentNPCSignings,
     contractExpiryResult,
+    // Loan system
+    loanDeals: loanDealResult.deals.length > 0 ? loanDealResult.deals : undefined,
+    loanReturns: loanReturnResult.deals.length > 0 ? loanReturnResult.deals : undefined,
+    loanRecalls: loanRecallResult.deals.length > 0 ? loanRecallResult.deals : undefined,
   };
 }
 

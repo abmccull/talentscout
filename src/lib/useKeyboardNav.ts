@@ -53,7 +53,7 @@ export function useKeyboardNav(): void {
   // Subscribe to only the slice we need to avoid unnecessary re-renders
   const setScreen = useGameStore((s) => s.setScreen);
   const currentScreen = useGameStore((s) => s.currentScreen);
-  const advanceWeek = useGameStore((s) => s.advanceWeek);
+  const requestWeekAdvance = useGameStore((s) => s.requestWeekAdvance);
   const advancePhase = useGameStore((s) => s.advancePhase);
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export function useKeyboardNav(): void {
       if (key === " " || key === "Spacebar") {
         if (currentScreen === "calendar") {
           e.preventDefault();
-          void advanceWeek();
+          requestWeekAdvance();
         } else if (currentScreen === "match") {
           e.preventDefault();
           advancePhase();
@@ -134,5 +134,5 @@ export function useKeyboardNav(): void {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [setScreen, currentScreen, advanceWeek, advancePhase]);
+  }, [setScreen, currentScreen, requestWeekAdvance, advancePhase]);
 }

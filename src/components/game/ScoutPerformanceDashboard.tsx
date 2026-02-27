@@ -176,7 +176,7 @@ export function ScoutPerformanceDashboard() {
         {/* ────────────────────────────────────────────────────────────────────
             A. Career Overview
         ──────────────────────────────────────────────────────────────────── */}
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6" data-tutorial-id="performance-overview">
           <StatCard
             label="Career Tier"
             value={`Tier ${data.careerTier}`}
@@ -330,7 +330,7 @@ export function ScoutPerformanceDashboard() {
             </Card>
 
             {/* Quality Trend by Season */}
-            <Card>
+            <Card data-tutorial-id="performance-history">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <TrendingUp size={14} className="text-blue-400" aria-hidden="true" />

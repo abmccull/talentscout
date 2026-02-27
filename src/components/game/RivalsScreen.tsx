@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Swords, Star, User, Target, Eye, Clock, AlertTriangle } from "lucide-react";
 import { getRivalThreatLevel, getSharedTargets } from "@/engine/rivals";
 import type { RivalScout, RivalActivity, GameState, Scout } from "@/engine/core/types";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 const THREAT_STYLES = {
   low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30",
@@ -289,7 +290,9 @@ export function RivalsScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6 space-y-6">
+      <div className="relative p-6 space-y-6">
+        <ScreenBackground src="/images/backgrounds/rivals-binoculars.png" opacity={0.80} />
+        <div className="relative z-10">
         <div>
           <h1 className="text-2xl font-bold text-white">Rival Scouts</h1>
           <p className="text-sm text-zinc-400">
@@ -298,7 +301,7 @@ export function RivalsScreen() {
         </div>
 
         {/* Summary stats */}
-        <div className="flex gap-4">
+        <div className="flex gap-4" data-tutorial-id="rivals-intel">
           <div className="flex items-center gap-2 rounded-md bg-zinc-900 border border-zinc-800 px-3 py-2">
             <Target size={14} className="text-amber-400" />
             <span className="text-xs text-zinc-400">
@@ -351,7 +354,7 @@ export function RivalsScreen() {
         )}
 
         {/* Rival cards grid */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" data-tutorial-id="rivals-list">
           {nemesis && (
             <RivalCard
               key={nemesis.id}
@@ -376,6 +379,7 @@ export function RivalsScreen() {
               recentActivities={getRecentActivities(rival.id)}
             />
           ))}
+        </div>
         </div>
       </div>
     </GameLayout>

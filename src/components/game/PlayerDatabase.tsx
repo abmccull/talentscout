@@ -204,7 +204,8 @@ export function PlayerDatabase() {
           cmp = a.player.marketValue - b.player.marketValue;
           break;
         case "ca":
-          cmp = (a.perceived?.ca ?? 0) - (b.perceived?.ca ?? 0);
+          cmp = (a.perceived ? (a.perceived.caLow + a.perceived.caHigh) / 2 : 0)
+              - (b.perceived ? (b.perceived.caLow + b.perceived.caHigh) / 2 : 0);
           break;
         case "observations":
           cmp = a.observationCount - b.observationCount;
@@ -291,7 +292,7 @@ export function PlayerDatabase() {
         </div>
 
         {/* Filters */}
-        <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4">
+        <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4" data-tutorial-id="player-db-search">
           <div className="flex flex-wrap gap-3">
             {/* Search */}
             <div className="relative flex-1 min-w-48">
@@ -402,7 +403,7 @@ export function PlayerDatabase() {
         </div>
 
         {/* Table */}
-        <div className="rounded-lg border border-[#27272a] overflow-hidden">
+        <div className="rounded-lg border border-[#27272a] overflow-hidden" data-tutorial-id="player-db-list">
           {filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users size={32} className="mb-3 text-zinc-700" aria-hidden="true" />

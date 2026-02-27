@@ -17,6 +17,7 @@ import type {
   Observation,
   ObservationContext,
   YouthVenueType,
+  TournamentEvent,
 } from "@/engine/core/types";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { getScoutHomeCountry, isScoutAbroad } from "@/engine/world/travel";
@@ -110,6 +111,8 @@ export function getYouthVenuePool(
   /** Fractional bonus to discovery pool size from equipment (e.g. 0.10 = +10% more youth visible). */
   youthDiscoveryBonus?: number,
   currentWeek?: number,
+  /** Tournament context — applies pool size multiplier when attending a named tournament. */
+  tournament?: TournamentEvent,
 ): UnsignedYouth[] {
   // Step 1: base pool — active (not placed, not retired) youth
   const activeYouth = Object.values(unsignedYouth).filter(
@@ -178,10 +181,11 @@ export function getYouthVenuePool(
       break;
   }
 
-  // Step 4: shuffle and slice to venue pool size range (equipment bonus expands pool)
+  // Step 4: shuffle and slice to venue pool size range (equipment + tournament bonuses expand pool)
   const config = VENUE_POOL_SIZES[venueType];
   const bonusMultiplier = 1 + (youthDiscoveryBonus ?? 0);
-  const poolSize = Math.round(rng.nextInt(config.minPoolSize, config.maxPoolSize) * bonusMultiplier);
+  const tournamentMultiplier = tournament?.poolSizeMultiplier ?? 1.0;
+  const poolSize = Math.round(rng.nextInt(config.minPoolSize, config.maxPoolSize) * bonusMultiplier * tournamentMultiplier);
   const shuffled = rng.shuffle(filtered);
   return shuffled.slice(0, poolSize);
 }
@@ -203,6 +207,8 @@ export function processVenueObservation(
   season: number,
   /** Extra attributes to observe per session (e.g. focus passes reveal more). */
   extraAttributes?: number,
+  /** Tournament context — applies observation and buzz bonuses. */
+  tournament?: TournamentEvent,
 ): {
   observation: Observation;
   buzzIncrease: number;
@@ -210,13 +216,14 @@ export function processVenueObservation(
   updatedYouth: UnsignedYouth;
 } {
   // Generate the observation via the light perception pipeline
+  const totalExtraAttributes = (extraAttributes ?? 0) + (tournament?.extraAttributes ?? 0);
   const observation = observePlayerLight(
     rng,
     youth.player,
     scout,
     context,
     existingObservations,
-    extraAttributes,
+    totalExtraAttributes > 0 ? totalExtraAttributes : undefined,
   );
 
   // Stamp week and season (perception engine leaves these as 0)
@@ -226,16 +233,18 @@ export function processVenueObservation(
     season,
   };
 
-  // Buzz increase: base 3-8, with venue bonuses
+  // Buzz increase: base 3-8, with venue + tournament bonuses
   let buzzIncrease = rng.nextInt(3, 8);
   if (context === "followUpSession") buzzIncrease += 3;
   else if (context === "youthFestival") buzzIncrease += 2;
   else if (context === "grassrootsTournament") buzzIncrease += 1;
+  buzzIncrease += tournament?.observationBonus ?? 0;
 
-  // Visibility increase: base 2-5, with venue bonuses
+  // Visibility increase: base 2-5, with venue + tournament bonuses
   let visibilityIncrease = rng.nextInt(2, 5);
   if (context === "academyTrialDay") visibilityIncrease += 3;
   else if (context === "youthFestival") visibilityIncrease += 2;
+  visibilityIncrease += Math.floor((tournament?.observationBonus ?? 0) * 0.5);
 
   // Build updated youth — no mutation
   const alreadyDiscovered = youth.discoveredBy.includes(scout.id);

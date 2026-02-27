@@ -89,6 +89,11 @@ export function autoScheduleWeek(
     state.observations,
     state.unsignedYouth,
     state.players,
+    {
+      activeLoans: state.activeLoans,
+      loanRecommendations: state.loanRecommendations,
+      transferWindow: state.transferWindow,
+    },
   );
 
   // Estimate current fatigue trajectory across the week
@@ -134,6 +139,10 @@ export function autoScheduleWeek(
 
 /**
  * Build a ranked list of candidate activities based on priorities.
+ *
+ * Activities with a `targetPool` (deduplicated cards) are expanded into
+ * one candidate per target, each with `targetId` resolved and `targetPool`
+ * removed so downstream scheduling works unchanged.
  */
 function buildCandidateQueue(
   state: GameState,
@@ -142,7 +151,24 @@ function buildCandidateQueue(
 ): Activity[] {
   const candidates: Array<Activity & { _priority: number }> = [];
 
+  // Expand pooled activities into one candidate per target
+  const resolved: Activity[] = [];
   for (const act of available) {
+    if (act.targetPool && act.targetPool.length > 0 && !act.targetId) {
+      for (const target of act.targetPool) {
+        resolved.push({
+          ...act,
+          targetId: target.id,
+          targetPool: undefined,
+          description: act.description,
+        });
+      }
+    } else {
+      resolved.push(act);
+    }
+  }
+
+  for (const act of resolved) {
     let priority = 0;
 
     // Match attendance for target players gets highest priority
@@ -176,6 +202,16 @@ function buildCandidateQueue(
       if (obsCount >= MIN_OBS_FOR_REPORT) {
         priority = 70;
       }
+    }
+
+    // Youth follow-up activities
+    if (
+      (act.type === "followUpSession" ||
+        act.type === "parentCoachMeeting" ||
+        act.type === "writePlacementReport") &&
+      act.targetId
+    ) {
+      priority = 45;
     }
 
     // Study/training for weakest skills

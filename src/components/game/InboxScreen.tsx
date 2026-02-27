@@ -26,9 +26,11 @@ import {
   Target,
   ChevronDown,
   Filter,
+  DollarSign,
 } from "lucide-react";
 import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain, ChainConsequence, GossipAction, ActionableGossipItem } from "@/engine/core/types";
 import { formatConsequence } from "@/engine/events";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -48,6 +50,7 @@ const MESSAGE_TYPE_CONFIG: Record<
   predictionResult: { label: "Prediction Result", icon: Zap, color: "text-amber-400" },
   warning: { label: "Warning", icon: AlertTriangle, color: "text-red-400" },
   gossip: { label: "Gossip", icon: MessageCircle, color: "text-cyan-400" },
+  marketplaceBid: { label: "Bid Received", icon: DollarSign, color: "text-emerald-400" },
 };
 
 // ─── Narrative event type config ─────────────────────────────────────────────
@@ -107,7 +110,7 @@ const NARRATIVE_TYPE_CONFIG: Record<
 
 // ─── Filter categories (A7) ──────────────────────────────────────────────────
 
-type FilterCategory = "all" | "unread" | "assignment" | "news" | "jobOffer" | "event" | "feedback" | "gossip";
+type FilterCategory = "all" | "unread" | "assignment" | "news" | "jobOffer" | "event" | "feedback" | "gossip" | "marketplace";
 
 const FILTER_CATEGORIES: { key: FilterCategory; label: string; types?: InboxMessageType[] }[] = [
   { key: "all", label: "All" },
@@ -117,6 +120,7 @@ const FILTER_CATEGORIES: { key: FilterCategory; label: string; types?: InboxMess
   { key: "jobOffer", label: "Jobs", types: ["jobOffer"] },
   { key: "event", label: "Events", types: ["event"] },
   { key: "gossip", label: "Gossip", types: ["gossip"] },
+  { key: "marketplace", label: "Marketplace", types: ["marketplaceBid"] },
 ];
 
 // ─── Sort options (A7) ──────────────────────────────────────────────────────
@@ -412,6 +416,9 @@ interface MessageItemProps {
   onViewPlayer?: (playerId: string) => void;
   onWriteReport?: (playerId: string) => void;
   onViewCareer?: () => void;
+  onAcceptBid?: (bidId: string) => void;
+  onDeclineBid?: (bidId: string) => void;
+  onViewReports?: () => void;
   gossipItem?: ActionableGossipItem;
   onGossipAction?: (gossipId: string, action: GossipAction) => void;
 }
@@ -425,6 +432,9 @@ function MessageItem({
   onViewPlayer,
   onWriteReport,
   onViewCareer,
+  onAcceptBid,
+  onDeclineBid,
+  onViewReports,
   gossipItem,
   onGossipAction,
 }: MessageItemProps) {
@@ -549,6 +559,33 @@ function MessageItem({
                   </Button>
                 </div>
               )}
+              {message.relatedEntityType === "bid" && message.actionRequired && message.relatedId && (
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    className="text-xs h-7 bg-emerald-700 hover:bg-emerald-600"
+                    onClick={(e) => { e.stopPropagation(); onAcceptBid?.(message.relatedId!); }}
+                  >
+                    Accept Bid
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs h-7 text-zinc-400 hover:text-red-400"
+                    onClick={(e) => { e.stopPropagation(); onDeclineBid?.(message.relatedId!); }}
+                  >
+                    Decline
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onViewReports?.(); }}
+                  >
+                    View All Bids
+                  </Button>
+                </div>
+              )}
               {/* A3: Gossip action buttons — only shown for gossip messages when expanded */}
               {gossipItem && onGossipAction && (
                 <GossipActionButtons
@@ -585,6 +622,8 @@ export function InboxScreen() {
     acknowledgeNarrativeEvent,
     resolveNarrativeEventChoice,
     handleGossipAction,
+    acceptMarketplaceBid,
+    declineMarketplaceBid,
     selectPlayer,
     setScreen,
     startReport,
@@ -669,6 +708,7 @@ export function InboxScreen() {
       event: base.filter((m) => m.type === "event").length,
       feedback: 0, // merged into news
       gossip: base.filter((m) => m.type === "gossip").length,
+      marketplace: base.filter((m) => m.type === "marketplaceBid").length,
     };
     return counts;
   }, [inbox, seasonFilter]);
@@ -708,7 +748,9 @@ export function InboxScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.85} />
+        <div className="relative z-10">
         {/* ── Header ────────────────────────────────────────────────────── */}
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -757,7 +799,7 @@ export function InboxScreen() {
         )}
 
         {/* ── A7: Enhanced filter bar ──────────────────────────────────── */}
-        <div className="mb-4 space-y-3">
+        <div className="mb-4 space-y-3" data-tutorial-id="inbox-filter">
           {/* Row 1: Category filter pills + Sort + Season */}
           <div className="flex items-center gap-3 flex-wrap">
             {/* Category pills */}
@@ -906,6 +948,9 @@ export function InboxScreen() {
                       else if (message.relatedEntityType === "tool") setScreen("career");
                       else setScreen("career");
                     }}
+                    onAcceptBid={(bidId) => { acceptMarketplaceBid(bidId); }}
+                    onDeclineBid={(bidId) => { declineMarketplaceBid(bidId); }}
+                    onViewReports={() => { setScreen("reportHistory"); }}
                     gossipItem={relatedGossip}
                     onGossipAction={handleGossipAction}
                   />
@@ -914,6 +959,7 @@ export function InboxScreen() {
             })}
           </div>
         )}
+        </div>
       </div>
     </GameLayout>
   );

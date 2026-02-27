@@ -127,7 +127,9 @@ function perceiveCA(
   // Form bias: ±9 CA points at max form (form is -3 to 3)
   const formBias = player.form * 3;
   const rawPerceived = rng.gaussian(player.currentAbility + formBias, stddev);
-  const clampedCA = Math.max(1, Math.min(200, Math.round(rawPerceived)));
+  // Youth players can't realistically have senior-level ability
+  const ageCap = player.age <= 16 ? 90 : player.age <= 18 ? 120 : 200;
+  const clampedCA = Math.max(1, Math.min(ageCap, Math.round(rawPerceived)));
   const perceivedCA = abilityToStars(clampedCA);
 
   // Confidence 0–1
@@ -234,7 +236,7 @@ export function generateAbilityReading(
     (o) => o.playerId === player.id,
   );
   const obsCount = playerObs.length + 1; // +1 for current observation
-  const contextDiversity = Math.min(1, playerObs.length / 10);
+  const contextDiversity = Math.min(1, new Set(playerObs.map(o => o.context)).size / 5);
 
   const ca = perceiveCA(rng, player, scout, obsCount, contextDiversity, context);
   const pa = perceivePA(rng, player, scout, obsCount, contextDiversity, context);

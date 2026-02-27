@@ -375,6 +375,7 @@ export function NewGameScreen() {
   const [lastName, setLastName] = useState("");
   const [age, setAge] = useState(28);
   const [nationality, setNationality] = useState<string>("English");
+  const [avatarId, setAvatarId] = useState(1);
 
   // Specialization
   const [specialization, setSpecializationRaw] = useState<Specialization>("youth");
@@ -442,6 +443,7 @@ export function NewGameScreen() {
       worldSeed: seed,
       selectedCountries,
       nationality,
+      avatarId,
       ...(specialization === "regional" && { startingCountry }),
       ...(startingPosition === "club" && startingClubId && { startingClubId }),
       ...(Object.keys(skillAllocations).length > 0 && { skillAllocations }),
@@ -813,6 +815,30 @@ export function NewGameScreen() {
                           <option key={nat} value={nat}>{nat}</option>
                         ))}
                       </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="mb-2 block text-sm text-zinc-400">Your Portrait</label>
+                      <div className="grid grid-cols-6 gap-3">
+                        {[1, 2, 3, 4, 5, 6].map((id) => (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => setAvatarId(id)}
+                            className={`overflow-hidden rounded-full border-2 transition-all ${
+                              avatarId === id
+                                ? "border-emerald-500 ring-2 ring-emerald-500/40"
+                                : "border-zinc-700 hover:border-zinc-500"
+                            }`}
+                          >
+                            <img
+                              src={`/images/avatars/scout-${id}.png`}
+                              alt={`Portrait ${id}`}
+                              className="h-16 w-16 object-cover"
+                              draggable={false}
+                            />
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1307,8 +1333,17 @@ export function NewGameScreen() {
                         <h3 className="text-sm font-semibold text-zinc-300">Scout</h3>
                         <button onClick={() => goToStep(1)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
                       </div>
-                      <p className="text-white font-medium">{firstName} {lastName}</p>
-                      <p className="text-sm text-zinc-400">Age {age}, {nationality}</p>
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={`/images/avatars/scout-${avatarId}.png`}
+                          alt="Scout portrait"
+                          className="h-12 w-12 rounded-full object-cover"
+                        />
+                        <div>
+                          <p className="text-white font-medium">{firstName} {lastName}</p>
+                          <p className="text-sm text-zinc-400">Age {age}, {nationality}</p>
+                        </div>
+                      </div>
                     </CardContent>
                   </Card>
 

@@ -6,8 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft, X, Sparkles, TrendingUp, TrendingDown, Minus, Lightbulb } from "lucide-react";
-import { HelpTooltip } from "@/components/ui/HelpTooltip";
+import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading, PlayerAttribute } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
@@ -18,6 +17,7 @@ import {
   WEAKNESS_DESCRIPTORS,
 } from "@/engine/reports";
 import type { QualityBreakdown } from "@/engine/reports";
+import { starsToAbility } from "@/engine/scout/starRating";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -133,9 +133,6 @@ export function ReportWriter() {
   const [summary, setSummary] = useState("");
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
-  const [customStrength, setCustomStrength] = useState("");
-  const [customWeakness, setCustomWeakness] = useState("");
-  const [comparison, setComparison] = useState("");
   const draftApplied = useRef(false);
 
   // Derive data before any early return
@@ -206,6 +203,10 @@ export function ReportWriter() {
         assessedAttributeCount: merged.size,
         position: player?.position,
         perceivedCA,
+        age: player?.age,
+        perceivedPA: draft?.perceivedPARange
+          ? starsToAbility((draft.perceivedPARange[0] + draft.perceivedPARange[1]) / 2)
+          : undefined,
       }),
     [
       observations.length,
@@ -217,6 +218,8 @@ export function ReportWriter() {
       merged.size,
       player?.position,
       perceivedCA,
+      player?.age,
+      draft?.perceivedPARange,
     ]
   );
 
@@ -237,7 +240,7 @@ export function ReportWriter() {
     return map;
   }, []);
 
-  // Pre-populate form state from draft (one-shot)
+  // Pre-populate form state from draft (one-shot) and auto-generate summary
   useEffect(() => {
     if (!draft || draftApplied.current) return;
     draftApplied.current = true;
@@ -247,76 +250,32 @@ export function ReportWriter() {
     if (draft.suggestedWeaknesses.length > 0) {
       setSelectedWeaknesses(draft.suggestedWeaknesses);
     }
-    if (draft.comparisonSuggestions.length > 0) {
-      setComparison(draft.comparisonSuggestions[0]);
-    }
-  }, [draft]);
-
-  // Warn the user if they try to close/reload the tab while the form is dirty
-  useEffect(() => {
-    if (!isDirty) return;
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-    };
-  }, [isDirty]);
-
-  // Early return after all hooks
-  if (!gameState || !selectedPlayerId || !player) return null;
-
-  const handleBack = () => {
-    if (isDirty && !window.confirm(t("unsavedWarning"))) {
-      return;
-    }
-    setScreen("playerProfile");
-  };
-
-  const toggleStrength = (s: string) => {
-    setIsDirty(true);
-    setSelectedStrengths((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
-    );
-  };
-
-  const toggleWeakness = (w: string) => {
-    setIsDirty(true);
-    setSelectedWeaknesses((prev) =>
-      prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]
-    );
-  };
-
-  const handleGenerateDraft = () => {
-    if (!draft) return;
+    // Auto-generate summary
     const lines: string[] = [];
-    const roleStr = player.naturalRole
+    const roleStr = player?.naturalRole
       ? ` ${player.naturalRole.replace(/([A-Z])/g, " $1").trim().toLowerCase()}`
       : "";
     lines.push(
-      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player.firstName} ${player.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"}${roleStr} ${player.position}.`
+      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player?.firstName} ${player?.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"}${roleStr} ${player?.position}.`
     );
-    if (selectedStrengths.length > 0) {
-      lines.push(`Key strengths include ${selectedStrengths.slice(0, 2).map(s => {
+    if (draft.suggestedStrengths.length > 0) {
+      lines.push(`Key strengths include ${draft.suggestedStrengths.slice(0, 2).map(s => {
         const attr = strengthToAttribute.get(s);
         return attr ? attrLabel(attr).toLowerCase() : s.toLowerCase().split(" — ")[0];
       }).join(" and ")}.`);
     }
-    if (selectedWeaknesses.length > 0) {
-      lines.push(`Areas of concern: ${selectedWeaknesses.slice(0, 2).map(w => {
+    if (draft.suggestedWeaknesses.length > 0) {
+      lines.push(`Areas of concern: ${draft.suggestedWeaknesses.slice(0, 2).map(w => {
         const attr = weaknessToAttribute.get(w);
         return attr ? attrLabel(attr).toLowerCase() : w.toLowerCase().split(" — ")[0];
       }).join(" and ")}.`);
     }
-    // Behavioral traits add flavour
-    const revealedTraits = player.playerTraitsRevealed ?? [];
+    const revealedTraits = player?.playerTraitsRevealed ?? [];
     if (revealedTraits.length > 0) {
       const traitStrs = revealedTraits.slice(0, 2).map(t => t.replace(/([A-Z])/g, " $1").trim().toLowerCase());
       lines.push(`Notable tendencies: ${traitStrs.join(", ")}.`);
     }
-    // Personality character assessment
-    if (player.personalityProfile && !player.personalityProfile.hiddenUntilRevealed) {
+    if (player?.personalityProfile && !player.personalityProfile.hiddenUntilRevealed) {
       const archetypeLabel = ARCHETYPE_LABELS[player.personalityProfile.archetype];
       lines.push(`Character: ${archetypeLabel}.`);
       if (player.personalityProfile.dressingRoomImpact <= -2) {
@@ -334,33 +293,60 @@ export function ReportWriter() {
       lines.push(`Potential ceiling estimated at ${draft.perceivedPARange[0]}–${draft.perceivedPARange[1]} stars.`);
     }
     setSummary(lines.join(" "));
-    setIsDirty(true);
     playSFX("pen-scribble");
+  }, [draft, player, observations.length, strengthToAttribute, weaknessToAttribute, playSFX]);
+
+  // Warn the user if they try to close/reload the tab while the form is dirty
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isDirty]);
+
+  // Early return after all hooks — show a recoverable state instead of blank
+  if (!gameState || !selectedPlayerId || !player) {
+    return (
+      <GameLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+          <AlertTriangle size={32} className="text-amber-400 mb-3" />
+          <p className="text-sm text-zinc-400 mb-4">
+            No player selected for the report. Please go back and select a player first.
+          </p>
+          <Button variant="outline" onClick={() => setScreen("dashboard")}>
+            <ArrowLeft size={14} className="mr-2" />
+            Back to Dashboard
+          </Button>
+        </div>
+      </GameLayout>
+    );
+  }
+
+  const handleBack = () => {
+    if (isDirty && !window.confirm(t("unsavedWarning"))) {
+      return;
+    }
+    setScreen("playerProfile");
   };
 
   const handleSubmit = () => {
     if (!summary.trim()) return;
-    const fullSummary = comparison.trim()
-      ? `${summary.trim()}\n\nPlayer comparison: ${comparison.trim()}`
-      : summary.trim();
     setIsDirty(false);
     playSFX("report-submit");
-    submitReport(conviction, fullSummary, selectedStrengths, selectedWeaknesses);
+    submitReport(conviction, summary.trim(), selectedStrengths, selectedWeaknesses);
   };
 
   const isTablePound = conviction === "tablePound";
   const canSubmit = summary.trim().length > 0 && observations.length > 0;
 
-  // Determine which suggestions come from the engine vs custom
-  const engineStrengths = draft?.suggestedStrengths ?? [];
-  const engineWeaknesses = draft?.suggestedWeaknesses ?? [];
-  const customStrengthTags = selectedStrengths.filter((s) => !engineStrengths.includes(s));
-  const customWeaknessTags = selectedWeaknesses.filter((w) => !engineWeaknesses.includes(w));
-
   return (
     <GameLayout>
       <div className="relative min-h-full p-6">
-        <ScreenBackground src="/images/backgrounds/report-writer.png" opacity={0.82} />
+        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
         <div className="relative z-10 max-w-4xl mx-auto">
         <button
           onClick={handleBack}
@@ -538,106 +524,30 @@ export function ReportWriter() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {engineStrengths.length > 0 ? (
-                <div className="space-y-2" role="group" aria-label="Select strengths">
-                  {engineStrengths.map((s) => {
+              {selectedStrengths.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedStrengths.map((s) => {
                     const attr = strengthToAttribute.get(s);
-                    const selected = selectedStrengths.includes(s);
                     return (
-                      <button
+                      <div
                         key={s}
-                        onClick={() => toggleStrength(s)}
-                        aria-pressed={selected}
-                        className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition ${
-                          selected
-                            ? "border-emerald-500/50 bg-emerald-500/10"
-                            : "border-[#27272a] bg-[#141414] hover:border-zinc-600 opacity-60"
-                        }`}
+                        className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2"
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs leading-snug ${selected ? "text-emerald-300" : "text-zinc-400"}`}>
-                            {s}
-                          </p>
-                        </div>
+                        <span className="text-xs text-emerald-300">{s}</span>
                         {attr && (
-                          <Badge
-                            variant="secondary"
-                            className={`shrink-0 text-[10px] ${selected ? "bg-emerald-500/20 text-emerald-400" : ""}`}
-                          >
+                          <Badge variant="secondary" className="shrink-0 text-[10px] bg-emerald-500/20 text-emerald-400">
                             {attrLabel(attr)}
                           </Badge>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-600 mb-2">
-                  No standout strengths detected from observations. Add custom strengths below.
+                <p className="text-xs text-zinc-600">
+                  No standout strengths detected from observations.
                 </p>
               )}
-
-              {/* Custom strength tags */}
-              {customStrengthTags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {customStrengthTags.map((s) => (
-                    <span
-                      key={s}
-                      className="inline-flex items-center gap-1 rounded-full border border-emerald-500 bg-emerald-500/20 px-3 py-1 text-xs text-emerald-400"
-                    >
-                      {s}
-                      <button
-                        onClick={() =>
-                          setSelectedStrengths((prev) => prev.filter((x) => x !== s))
-                        }
-                        className="hover:text-white transition"
-                        aria-label={`Remove ${s}`}
-                      >
-                        <X size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Custom strength input */}
-              <div className="mt-3 flex gap-2">
-                <label htmlFor="custom-strength" className="sr-only">
-                  Add custom strength
-                </label>
-                <input
-                  id="custom-strength"
-                  type="text"
-                  value={customStrength}
-                  onChange={(e) => { setIsDirty(true); setCustomStrength(e.target.value.slice(0, 100)); }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && customStrength.trim()) {
-                      e.preventDefault();
-                      setIsDirty(true);
-                      setSelectedStrengths((prev) => [...prev, customStrength.trim()]);
-                      setCustomStrength("");
-                    }
-                  }}
-                  placeholder={t("addCustomStrength")}
-                  maxLength={100}
-                  className="flex-1 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (customStrength.trim()) {
-                      setIsDirty(true);
-                      setSelectedStrengths((prev) => [...prev, customStrength.trim()]);
-                      setCustomStrength("");
-                    }
-                  }}
-                  disabled={!customStrength.trim()}
-                  className="text-xs"
-                >
-                  {t("add")}
-                </Button>
-              </div>
             </CardContent>
           </Card>
 
@@ -649,147 +559,30 @@ export function ReportWriter() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {engineWeaknesses.length > 0 ? (
-                <div className="space-y-2" role="group" aria-label="Select weaknesses">
-                  {engineWeaknesses.map((w) => {
+              {selectedWeaknesses.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {selectedWeaknesses.map((w) => {
                     const attr = weaknessToAttribute.get(w);
-                    const selected = selectedWeaknesses.includes(w);
                     return (
-                      <button
+                      <div
                         key={w}
-                        onClick={() => toggleWeakness(w)}
-                        aria-pressed={selected}
-                        className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left transition ${
-                          selected
-                            ? "border-red-500/50 bg-red-500/10"
-                            : "border-[#27272a] bg-[#141414] hover:border-zinc-600 opacity-60"
-                        }`}
+                        className="flex items-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2"
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-xs leading-snug ${selected ? "text-red-300" : "text-zinc-400"}`}>
-                            {w}
-                          </p>
-                        </div>
+                        <span className="text-xs text-red-300">{w}</span>
                         {attr && (
-                          <Badge
-                            variant="secondary"
-                            className={`shrink-0 text-[10px] ${selected ? "bg-red-500/20 text-red-400" : ""}`}
-                          >
+                          <Badge variant="secondary" className="shrink-0 text-[10px] bg-red-500/20 text-red-400">
                             {attrLabel(attr)}
                           </Badge>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-600 mb-2">
-                  No notable weaknesses detected from observations. Add custom weaknesses below.
+                <p className="text-xs text-zinc-600">
+                  No notable weaknesses detected from observations.
                 </p>
               )}
-
-              {/* Custom weakness tags */}
-              {customWeaknessTags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {customWeaknessTags.map((w) => (
-                    <span
-                      key={w}
-                      className="inline-flex items-center gap-1 rounded-full border border-red-500 bg-red-500/20 px-3 py-1 text-xs text-red-400"
-                    >
-                      {w}
-                      <button
-                        onClick={() =>
-                          setSelectedWeaknesses((prev) => prev.filter((x) => x !== w))
-                        }
-                        className="hover:text-white transition"
-                        aria-label={`Remove ${w}`}
-                      >
-                        <X size={12} aria-hidden="true" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* Custom weakness input */}
-              <div className="mt-3 flex gap-2">
-                <label htmlFor="custom-weakness" className="sr-only">
-                  Add custom weakness
-                </label>
-                <input
-                  id="custom-weakness"
-                  type="text"
-                  value={customWeakness}
-                  onChange={(e) => { setIsDirty(true); setCustomWeakness(e.target.value.slice(0, 100)); }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && customWeakness.trim()) {
-                      e.preventDefault();
-                      setIsDirty(true);
-                      setSelectedWeaknesses((prev) => [...prev, customWeakness.trim()]);
-                      setCustomWeakness("");
-                    }
-                  }}
-                  placeholder={t("addCustomWeakness")}
-                  maxLength={100}
-                  className="flex-1 rounded-md border border-[#27272a] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-red-500"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    if (customWeakness.trim()) {
-                      setIsDirty(true);
-                      setSelectedWeaknesses((prev) => [...prev, customWeakness.trim()]);
-                      setCustomWeakness("");
-                    }
-                  }}
-                  disabled={!customWeakness.trim()}
-                  className="text-xs"
-                >
-                  {t("add")}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Player comparison */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">{t("playerComparison")}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {draft && draft.comparisonSuggestions.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {draft.comparisonSuggestions.map((sug) => (
-                    <button
-                      key={sug}
-                      onClick={() => { setIsDirty(true); setComparison(sug); }}
-                      className={`rounded-lg border px-3 py-1.5 text-xs text-left transition ${
-                        comparison === sug
-                          ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
-                          : "border-[#27272a] bg-[#141414] text-zinc-400 hover:border-zinc-500 hover:text-white"
-                      }`}
-                    >
-                      {sug}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-zinc-500 mb-2">
-                {t("comparisonHint")}
-              </p>
-              <label htmlFor="comparison" className="sr-only">
-                Player comparison
-              </label>
-              <input
-                id="comparison"
-                type="text"
-                value={comparison}
-                onChange={(e) => { setIsDirty(true); setComparison(e.target.value.slice(0, 200)); }}
-                placeholder={t("comparisonPlaceholder")}
-                maxLength={200}
-                className="w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
-              />
             </CardContent>
           </Card>
 
@@ -858,32 +651,15 @@ export function ReportWriter() {
               <CardTitle className="text-sm">{t("scoutSummary")}</CardTitle>
             </CardHeader>
             <CardContent>
-              {!summary.trim() && draft && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleGenerateDraft}
-                  className="mb-3 text-xs"
-                >
-                  <Sparkles size={12} className="mr-1.5" />
-                  Generate draft summary
-                </Button>
+              {summary.trim() ? (
+                <div className="rounded-md border border-[#27272a] bg-[#141414] p-3 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                  {summary}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-600 italic">
+                  Summary will be generated automatically from observations.
+                </p>
               )}
-              <label htmlFor="summary" className="sr-only">
-                Written summary
-              </label>
-              <textarea
-                id="summary"
-                value={summary}
-                onChange={(e) => { setIsDirty(true); setSummary(e.target.value.slice(0, 2000)); }}
-                onFocus={() => playSFX("pen-scribble")}
-                placeholder={t("summaryPlaceholder")}
-                rows={5}
-                maxLength={2000}
-                className="w-full rounded-md border border-[#27272a] bg-[#141414] p-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
-                aria-required="true"
-              />
-              <p className="mt-1 text-xs text-zinc-500">{summary.length} characters</p>
             </CardContent>
           </Card>
 

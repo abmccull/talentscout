@@ -44,9 +44,13 @@ import { FreeAgentScreen } from "@/components/game/FreeAgentScreen";
 import { SeasonAwardsScreen } from "@/components/game/SeasonAwardsScreen";
 import { ScoutPerformanceDashboard } from "@/components/game/ScoutPerformanceDashboard";
 import { AchievementToast } from "@/components/game/AchievementToast";
-import { TutorialOverlay } from "@/components/game/tutorial/TutorialOverlay";
+import { MentorOverlay } from "@/components/game/tutorial/MentorOverlay";
+import { GuidedChecklist } from "@/components/game/tutorial/GuidedChecklist";
+import { ScreenGuidePanel } from "@/components/game/tutorial/ScreenGuidePanel";
+import { HintToast } from "@/components/game/tutorial/HintToast";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
 import { Celebration } from "@/components/game/effects/Celebration";
+import { InsightPayoff } from "@/components/game/InsightPayoff";
 import { ScenarioOutcomeOverlay } from "@/components/game/ScenarioOutcomeOverlay";
 import { useAchievementStore } from "@/stores/achievementStore";
 import { useScreenMusic } from "@/lib/audio/useScreenMusic";
@@ -193,6 +197,8 @@ export default function Home() {
   const checkAndUnlock = useAchievementStore((s) => s.checkAndUnlock);
   const pendingCelebration = useGameStore((s) => s.pendingCelebration);
   const dismissCelebration = useGameStore((s) => s.dismissCelebration);
+  const lastInsightResult = useGameStore((s) => s.lastInsightResult);
+  const dismissInsightResult = useGameStore((s) => s.dismissInsightResult);
 
   // Check for an existing Supabase session once on mount.
   // initialize() is a no-op if the auth store has not yet been wired to
@@ -220,9 +226,14 @@ export default function Home() {
           colorblind filters, and reduced motion. Renders no visible UI. */}
       <SettingsApplier />
       <ActiveScreen />
-      {/* TutorialOverlay is a fixed overlay; it renders null when no tutorial
-          is active, so it is safe to include unconditionally on every screen. */}
-      <TutorialOverlay />
+      {/* MentorOverlay handles tutorial sequences, guided session, and screen guides. */}
+      <MentorOverlay />
+      {/* Guided first-week checklist — bottom-right corner. */}
+      <GuidedChecklist />
+      {/* Screen guide slide-in panel — right edge. */}
+      <ScreenGuidePanel />
+      {/* Contextual hint toast — bottom-left corner. */}
+      <HintToast />
       {/* AchievementToast is a fixed overlay; it renders null when there are
           no pending achievement notifications. */}
       <AchievementToast />
@@ -233,6 +244,14 @@ export default function Home() {
           title={pendingCelebration.title}
           description={pendingCelebration.description}
           onDismiss={dismissCelebration}
+        />
+      )}
+      {/* Insight payoff overlay — shows result after using an Insight action. */}
+      {lastInsightResult && (
+        <InsightPayoff
+          result={lastInsightResult}
+          actionName={lastInsightResult.actionId?.replace(/([A-Z])/g, " $1").trim() ?? "Insight"}
+          onDismiss={dismissInsightResult}
         />
       )}
       {/* Scenario outcome overlay — shows victory/failure modal at end of scenario. */}

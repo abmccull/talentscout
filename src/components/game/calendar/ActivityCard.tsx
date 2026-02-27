@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Activity, ActivityType, ScoutSkill, ScoutAttribute } from "@/engine/core/types";
 import {
@@ -19,6 +20,7 @@ import {
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
+import { TargetPicker } from "./TargetPicker";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -69,6 +71,7 @@ export const ACTIVITY_DISPLAY: Record<
   followUpSession:      { label: "Follow-Up Session",     icon: Eye,            color: "text-teal-400" },
   parentCoachMeeting:   { label: "Parent/Coach Meeting",  icon: Users,          color: "text-purple-400" },
   writePlacementReport: { label: "Placement Report",      icon: FileText,       color: "text-amber-400" },
+  agencyShowcase:       { label: "Agency Showcase",       icon: Trophy,         color: "text-amber-400" },
   reserveMatch:         { label: "Reserve Match",         icon: Eye,            color: "text-emerald-400" },
   scoutingMission:      { label: "Scouting Mission",      icon: ChevronRight,   color: "text-sky-400" },
   oppositionAnalysis:   { label: "Opposition Analysis",   icon: Eye,            color: "text-rose-400" },
@@ -84,21 +87,80 @@ export const ACTIVITY_DISPLAY: Record<
   analyticsTeamMeeting: { label: "Analytics Meeting",     icon: Users,          color: "text-purple-400" },
   // Free agent activities
   freeAgentOutreach:    { label: "Free Agent Outreach",   icon: Users,          color: "text-amber-400" },
+  // Loan activities
+  loanMonitoring:       { label: "Loan Monitoring",       icon: Eye,            color: "text-sky-400" },
+  loanRecommendation:   { label: "Loan Recommendation",   icon: FileText,       color: "text-sky-400" },
 };
+
+/** Activity types that target contacts (vs players). */
+const CONTACT_ACTIVITIES = new Set<ActivityType>(["networkMeeting"]);
+
+/** Activity types that use generic option picker (vs player/contact). */
+const OPTION_ACTIVITIES = new Set<ActivityType>(["watchVideo"]);
 
 interface ActivityCardProps {
   activity: Activity;
   canScheduleAt: (activity: Activity, dayIndex: number) => boolean;
   onSchedule: (activity: Activity, dayIndex: number) => void;
   highlighted?: boolean;
+  /** Whether this card is the currently selected card for click-to-place */
+  isSelected?: boolean;
+  /** Toggle selection for click-to-place scheduling */
+  onSelect?: (activity: Activity | null) => void;
 }
 
-export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted }: ActivityCardProps) {
+export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted, isSelected, onSelect }: ActivityCardProps) {
   const display = ACTIVITY_DISPLAY[activity.type];
   const Icon = display.icon;
   const fatigueCost = ACTIVITY_FATIGUE_COSTS[activity.type];
   const skillXp = ACTIVITY_SKILL_XP[activity.type];
   const attrXp = ACTIVITY_ATTRIBUTE_XP[activity.type];
+  const hasPool = activity.targetPool && activity.targetPool.length > 0;
+
+  // Target picker state
+  const [pendingDay, setPendingDay] = useState<number | null>(null);
+
+  const handleDayClick = useCallback(
+    (dayIdx: number) => {
+      if (hasPool) {
+        setPendingDay(dayIdx);
+      } else {
+        onSchedule(activity, dayIdx);
+      }
+    },
+    [hasPool, activity, onSchedule],
+  );
+
+  const handleTargetSelect = useCallback(
+    (targetId: string) => {
+      if (pendingDay == null) return;
+      onSchedule(
+        { ...activity, targetId, targetPool: undefined },
+        pendingDay,
+      );
+      setPendingDay(null);
+    },
+    [activity, onSchedule, pendingDay],
+  );
+
+  const handlePickerClose = useCallback(() => {
+    setPendingDay(null);
+  }, []);
+
+  // Click card body → toggle selection for click-to-place
+  const handleCardClick = useCallback(() => {
+    if (!onSelect) return;
+    onSelect(isSelected ? null : activity);
+  }, [onSelect, isSelected, activity]);
+
+  // HTML5 drag start
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      e.dataTransfer.setData("application/json", JSON.stringify(activity));
+      e.dataTransfer.effectAllowed = "move";
+    },
+    [activity],
+  );
 
   // Sort XP entries by value descending, take top 3 skills + top 2 attributes
   const topSkills = skillXp
@@ -121,9 +183,26 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted 
           ? "text-amber-400"
           : "text-red-400";
 
+  const pickerMode: "player" | "contact" | "option" = CONTACT_ACTIVITIES.has(activity.type)
+    ? "contact"
+    : OPTION_ACTIVITIES.has(activity.type)
+      ? "option"
+      : "player";
+
   return (
-    <div className={`rounded-md border px-2.5 py-2 ${highlighted ? "border-emerald-500/60 bg-emerald-500/5 ring-1 ring-emerald-500/20" : "border-[#27272a] bg-[#141414]"}`}>
-      {/* Header: icon + label + slot badge */}
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      onClick={handleCardClick}
+      className={`relative rounded-md border px-2.5 py-2 cursor-grab active:cursor-grabbing ${
+        isSelected
+          ? "border-blue-500/60 bg-blue-500/5 ring-2 ring-blue-500/30"
+          : highlighted
+            ? "border-emerald-500/60 bg-emerald-500/5 ring-1 ring-emerald-500/20"
+            : "border-[#27272a] bg-[#141414]"
+      }`}
+    >
+      {/* Header: icon + label + slot badge + target count */}
       <div className="mb-1 flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
           <Icon size={13} className={`${display.color} shrink-0`} aria-hidden="true" />
@@ -131,9 +210,18 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted 
             {display.label}
           </span>
         </div>
-        <Badge variant="outline" className="text-[9px] shrink-0 ml-1">
-          {activity.slots}s
-        </Badge>
+        <div className="flex items-center gap-1 shrink-0 ml-1">
+          {hasPool && (
+            <span className="rounded bg-[#1a1a1a] px-1 py-px text-[9px] font-medium text-zinc-400">
+              {activity.targetPool!.length}{" "}
+              {pickerMode === "contact" ? "contact" : pickerMode === "option" ? "option" : "player"}
+              {activity.targetPool!.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          <Badge variant="outline" className="text-[9px]">
+            {activity.slots}s
+          </Badge>
+        </div>
       </div>
 
       {/* Fatigue + XP badges */}
@@ -167,11 +255,13 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted 
             <button
               key={day}
               disabled={!canPlace}
-              onClick={() => onSchedule(activity, dayIdx)}
+              onClick={(e) => { e.stopPropagation(); handleDayClick(dayIdx); }}
               className={`flex-1 rounded px-0 py-px text-[9px] font-medium transition ${
                 !canPlace
                   ? "cursor-not-allowed bg-[#27272a] text-zinc-600"
-                  : "bg-[#27272a] text-zinc-300 hover:bg-emerald-500/20 hover:text-emerald-400"
+                  : pendingDay === dayIdx
+                    ? "bg-emerald-500/30 text-emerald-400 ring-1 ring-emerald-500/50"
+                    : "bg-[#27272a] text-zinc-300 hover:bg-emerald-500/20 hover:text-emerald-400"
               }`}
               aria-label={`Schedule ${display.label} on ${day}`}
             >
@@ -180,6 +270,16 @@ export function ActivityCard({ activity, canScheduleAt, onSchedule, highlighted 
           );
         })}
       </div>
+
+      {/* Target picker overlay */}
+      {pendingDay != null && hasPool && (
+        <TargetPicker
+          targets={activity.targetPool!}
+          mode={pickerMode}
+          onSelect={handleTargetSelect}
+          onClose={handlePickerClose}
+        />
+      )}
     </div>
   );
 }

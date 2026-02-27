@@ -190,7 +190,7 @@ export function SettingsScreen() {
 
   return (
     <GameLayout>
-      <div className="mx-auto max-w-2xl space-y-6 p-6">
+      <div className="mx-auto max-w-2xl space-y-6 p-6" data-tutorial-id="settings-preferences">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Settings</h1>
           <Button
@@ -762,26 +762,6 @@ export function SettingsScreen() {
                             />
                             Load
                           </Button>
-
-                          {/* Cloud sync — not yet implemented */}
-                          {isAuthenticated && cloudSaveEnabled && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled
-                              aria-label="Cloud sync coming soon"
-                              title="Cloud Sync — Coming Soon"
-                            >
-                              <Cloud
-                                size={12}
-                                className="mr-1 opacity-50"
-                                aria-hidden="true"
-                              />
-                              <span className="text-xs opacity-50">
-                                Coming Soon
-                              </span>
-                            </Button>
-                          )}
 
                           <button
                             onClick={() => deleteSlot(slot)}

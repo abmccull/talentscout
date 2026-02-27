@@ -186,10 +186,15 @@ export function createSession(
   const phases = markHalftimePhase(emptyPhases, mode);
 
   const tokensPerHalf = TOKENS_PER_HALF[mode];
-  const sessionId = makeId(config.seed, `session-${config.week}-${config.season}`);
+  const identitySuffix =
+    config.activityInstanceId
+      ? `instance-${config.activityInstanceId}`
+      : `session-${config.week}-${config.season}`;
+  const sessionId = makeId(config.seed, identitySuffix);
 
   return {
     id: sessionId,
+    activityInstanceId: config.activityInstanceId,
     mode,
     activityType: config.activityType,
     specialization: config.specialization,
@@ -638,6 +643,7 @@ export function getSessionResult(session: ObservationSession): SessionResult {
 
   return {
     sessionId: session.id,
+    activityInstanceId: session.activityInstanceId,
     mode: session.mode,
     activityType: session.activityType,
     flaggedMoments: session.flaggedMoments,

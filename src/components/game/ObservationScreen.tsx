@@ -735,6 +735,9 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
           </div>
         )}
 
+        {/* Session Notes */}
+        <SessionNoteInput />
+
         <Button onClick={onComplete} className="w-full">
           Complete Session
         </Button>
@@ -742,6 +745,49 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
     </div>
   );
 });
+
+// -- SessionNoteInput --------------------------------------------------------
+
+function SessionNoteInput() {
+  const [note, setNote] = useState("");
+  const addNote = useCallback((text: string) => {
+    if (text.trim()) {
+      useGameStore.getState().addSessionNote(text.trim());
+    }
+  }, []);
+
+  return (
+    <div className="mb-6">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">
+        Session Notes
+      </h3>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && note.trim()) {
+              addNote(note);
+              setNote("");
+            }
+          }}
+          placeholder="Record an observation..."
+          className="flex-1 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-1.5 text-xs text-white placeholder-zinc-600 focus:border-amber-500/50 focus:outline-none"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          className="shrink-0"
+          disabled={!note.trim()}
+          onClick={() => { addNote(note); setNote(""); }}
+        >
+          Add
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 // -- CompleteView ------------------------------------------------------------
 

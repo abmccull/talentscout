@@ -3,7 +3,7 @@
 import { Star } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// StarRating — renders a half-star rating with confidence opacity
+// StarRating — renders a single-value star rating (no uncertainty range)
 // ---------------------------------------------------------------------------
 
 const SIZES = {
@@ -24,7 +24,7 @@ export function StarRating({
   size = "md",
 }: StarRatingProps) {
   const px = SIZES[size];
-  const opacity = 0.4 + confidence * 0.6; // low confidence = faded
+  const opacity = 0.4 + confidence * 0.6;
 
   return (
     <div
@@ -76,7 +76,11 @@ export function StarRating({
 }
 
 // ---------------------------------------------------------------------------
-// StarRatingRange — displays a PA range like "3.0 — 4.5"
+// StarRatingRange — FM-style gold/white star display for ability ranges
+//
+// Gold stars  = certain floor (low bound)
+// White stars = uncertainty (low → high)
+// Dark stars  = remaining to 5
 // ---------------------------------------------------------------------------
 
 interface StarRatingRangeProps {
@@ -95,25 +99,76 @@ export function StarRatingRange({
   const px = SIZES[size];
   const opacity = 0.4 + confidence * 0.6;
 
-  // Defensive clamping — guards against stale saves with out-of-range values
-  const clampedLow = Math.max(0.5, Math.min(5.0, low));
-  const clampedHigh = Math.max(0.5, Math.min(5.0, high));
+  // Defensive clamping
+  const lo = Math.max(0, Math.min(5, low));
+  const hi = Math.max(lo, Math.min(5, high));
 
-  if (clampedLow === clampedHigh) {
-    return <StarRating rating={clampedLow} confidence={confidence} size={size} />;
+  // No range — delegate to solid StarRating
+  if (lo === hi) {
+    return <StarRating rating={lo} confidence={confidence} size={size} />;
   }
 
   return (
-    <div className="flex items-center gap-2" style={{ opacity }}>
-      <div className="flex items-center gap-0.5">
-        <Star size={px - 2} className="text-amber-400 fill-amber-400" strokeWidth={1.5} />
-        <span className="text-xs font-mono font-medium text-zinc-300">{clampedLow.toFixed(1)}</span>
-      </div>
-      <span className="text-zinc-600 text-xs">—</span>
-      <div className="flex items-center gap-0.5">
-        <Star size={px - 2} className="text-amber-400 fill-amber-400" strokeWidth={1.5} />
-        <span className="text-xs font-mono font-medium text-zinc-300">{clampedHigh.toFixed(1)}</span>
-      </div>
+    <div
+      className="flex items-center gap-0.5"
+      style={{ opacity }}
+      aria-label={`${lo.toFixed(1)} to ${hi.toFixed(1)} stars`}
+    >
+      {Array.from({ length: 5 }).map((_, i) => {
+        const pos = i + 1;
+        const goldFill = getFill(lo, pos);
+        const whiteFill = getFill(hi, pos);
+
+        return (
+          <div key={i} className="relative" style={{ width: px, height: px }}>
+            {/* Base: dark empty star */}
+            <Star
+              size={px}
+              className="absolute inset-0 text-zinc-700"
+              strokeWidth={1.5}
+            />
+
+            {goldFill === "full" ? (
+              // Full gold star
+              <Star
+                size={px}
+                className="absolute inset-0 text-amber-400 fill-amber-400"
+                strokeWidth={1.5}
+              />
+            ) : goldFill === "half" ? (
+              // Half gold, check if other half is white
+              <>
+                <div className="absolute inset-0 overflow-hidden" style={{ width: px / 2 }}>
+                  <Star size={px} className="text-amber-400 fill-amber-400" strokeWidth={1.5} />
+                </div>
+                {whiteFill === "full" && (
+                  <div className="absolute inset-0 overflow-hidden" style={{ marginLeft: px / 2, width: px / 2 }}>
+                    <Star size={px} className="text-zinc-400 fill-zinc-400" strokeWidth={1.5} style={{ marginLeft: -(px / 2) }} />
+                  </div>
+                )}
+              </>
+            ) : whiteFill === "full" ? (
+              // Full white star (uncertainty)
+              <Star
+                size={px}
+                className="absolute inset-0 text-zinc-400 fill-zinc-400"
+                strokeWidth={1.5}
+              />
+            ) : whiteFill === "half" ? (
+              // Half white star
+              <div className="absolute inset-0 overflow-hidden" style={{ width: px / 2 }}>
+                <Star size={px} className="text-zinc-400 fill-zinc-400" strokeWidth={1.5} />
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+function getFill(rating: number, starPos: number): "full" | "half" | "empty" {
+  if (rating >= starPos) return "full";
+  if (rating >= starPos - 0.5) return "half";
+  return "empty";
 }

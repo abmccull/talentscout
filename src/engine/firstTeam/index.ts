@@ -72,3 +72,11 @@ export {
   getPersonalityDescription,
   determineClubPersonality,
 } from "./negotiation";
+
+// Loan integration — reputation, XP, monitoring
+export {
+  calculateLoanOutcomeRewards,
+  processLoanOutcomeReputation,
+  generateLoanRecommendation,
+  processLoanMonitoringReport,
+} from "./loanIntegration";

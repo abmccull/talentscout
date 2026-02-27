@@ -181,7 +181,7 @@ function getScoutReports(state: GameState): ScoutReport[] {
  * comparative context from the game state.
  */
 export function computeScoutPerformance(state: GameState): ScoutPerformanceData {
-  const { scout, currentSeason, players, discoveryRecords, performanceReviews, finances } = state;
+  const { scout, currentSeason, players, unsignedYouth, discoveryRecords, performanceReviews, finances } = state;
   const reports = getScoutReports(state);
 
   // ─── A. Career Overview ──────────────────────────────────────────────────
@@ -303,7 +303,8 @@ export function computeScoutPerformance(state: GameState): ScoutPerformanceData 
       }
     }
     if (bestRecord) {
-      const player = players[bestRecord.playerId];
+      const player = players[bestRecord.playerId]
+        ?? unsignedYouth?.[bestRecord.playerId]?.player;
       bestDiscovery = {
         playerId: bestRecord.playerId,
         playerName: player

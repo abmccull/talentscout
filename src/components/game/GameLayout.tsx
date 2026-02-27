@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
+import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
+import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import {
   LayoutDashboard,
@@ -150,9 +152,9 @@ function getNavVisibility(
     case "inbox":
       return effectiveWeek >= 3;
 
-    // Agency: visible for all career paths after week 3
+    // Agency: always visible — internal tabs handle feature gating
     case "agency":
-      return effectiveWeek >= 3;
+      return true;
 
     // Tier 2+ items
     case "network":
@@ -381,12 +383,17 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
               <ChevronRight size={12} />
             </button>
           </div>
-          <p className="text-sm font-medium">
-            {gameState.scout.firstName} {gameState.scout.lastName}
-          </p>
-          <p className="text-xs text-zinc-500 capitalize">
-            {gameState.scout.primarySpecialization} Scout — Tier {gameState.scout.careerTier}
-          </p>
+          <div className="flex items-center gap-2.5">
+            <ScoutAvatar avatarId={gameState.scout.avatarId ?? 1} size={32} />
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">
+                {gameState.scout.firstName} {gameState.scout.lastName}
+              </p>
+              <p className="text-xs text-zinc-500 capitalize">
+                {gameState.scout.primarySpecialization} Scout — Tier {gameState.scout.careerTier}
+              </p>
+            </div>
+          </div>
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-zinc-500">Reputation</span>
             <span className="text-emerald-400">{Math.round(gameState.scout.reputation)}</span>
@@ -401,7 +408,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content — extra top padding on mobile for hamburger button */}
-      <main className="min-w-0 flex-1 overflow-auto pt-12 md:pt-0">
+      <main className="relative min-w-0 flex-1 overflow-auto pt-12 md:pt-0">
         {autosaveError !== null && (
           <div
             role="alert"
@@ -420,6 +427,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         )}
+        <ScreenHelpButton />
         {children}
       </main>
     </div>

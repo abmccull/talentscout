@@ -64,3 +64,14 @@ export {
   classifyStandingZone,
 } from './relegation';
 export type { RelegationEvent, RelegationResult, StandingZone } from './relegation';
+
+export {
+  processLoanReturns,
+  processAILoanDeals,
+  processLoanPerformance,
+  processLoanRecalls,
+  evaluateLoanOutcome,
+  isLoanEligible,
+  findLoanDestination,
+  calculateLoanTerms,
+} from './loans';

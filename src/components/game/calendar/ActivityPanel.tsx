@@ -24,6 +24,10 @@ interface ActivityPanelProps {
   resolveClubName: (id: string) => string;
   /** Highlighted activity from PlayerProfile quick action (targetId to promote) */
   highlightTargetId?: string;
+  /** Currently selected activity for click-to-place */
+  selectedActivity?: Activity | null;
+  /** Toggle activity selection for click-to-place */
+  onSelectActivity?: (activity: Activity | null) => void;
 }
 
 export function ActivityPanel({
@@ -37,6 +41,8 @@ export function ActivityPanel({
   onLeagueFilterChange,
   resolveClubName,
   highlightTargetId,
+  selectedActivity,
+  onSelectActivity,
 }: ActivityPanelProps) {
   const theme = SPECIALIZATION_THEMES[specialization];
 
@@ -94,10 +100,13 @@ export function ActivityPanel({
   const sortedGrouped = useMemo(() => {
     if (!highlightTargetId) return grouped;
     const result = { ...grouped };
+    const matchesHighlight = (a: Activity) =>
+      a.targetId === highlightTargetId ||
+      a.targetPool?.some((t) => t.id === highlightTargetId) === true;
     for (const cat of Object.keys(result) as ActivityCategory[]) {
       result[cat] = [...result[cat]].sort((a, b) => {
-        const aMatch = a.targetId === highlightTargetId ? 0 : 1;
-        const bMatch = b.targetId === highlightTargetId ? 0 : 1;
+        const aMatch = matchesHighlight(a) ? 0 : 1;
+        const bMatch = matchesHighlight(b) ? 0 : 1;
         return aMatch - bMatch;
       });
     }
@@ -165,7 +174,9 @@ export function ActivityPanel({
                       activity={activity}
                       canScheduleAt={canScheduleAt}
                       onSchedule={onSchedule}
-                      highlighted={!!highlightTargetId && activity.targetId === highlightTargetId}
+                      highlighted={!!highlightTargetId && (activity.targetId === highlightTargetId || activity.targetPool?.some((t) => t.id === highlightTargetId) === true)}
+                      isSelected={selectedActivity === activity}
+                      onSelect={onSelectActivity}
                     />
                   ))}
               </div>

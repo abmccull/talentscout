@@ -15,6 +15,7 @@ import {
   type AchievementProgress,
   type AchievementRarity,
 } from "@/engine/core/achievementEngine";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
 // CONSTANTS
@@ -232,7 +233,9 @@ export function AchievementScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/discoveries-trophy.png" opacity={0.80} />
+        <div className="relative z-10">
         {/* Page header */}
         <header className="mb-6">
           <div className="flex items-center gap-3">
@@ -300,7 +303,7 @@ export function AchievementScreen() {
         </nav>
 
         {/* Achievement grid */}
-        <section aria-label="Achievement list">
+        <section aria-label="Achievement list" data-tutorial-id="achievements-grid">
           {sortedAchievements.length === 0 ? (
             <p className="text-center text-sm text-zinc-500">
               No achievements in this category.
@@ -318,6 +321,7 @@ export function AchievementScreen() {
             </div>
           )}
         </section>
+        </div>
       </div>
     </GameLayout>
   );

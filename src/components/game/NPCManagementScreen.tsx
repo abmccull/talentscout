@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import type { NPCScout, NPCScoutReport, Territory } from "@/engine/core/types";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
 // Constants & helpers
@@ -137,6 +138,8 @@ interface NPCScoutDetailProps {
   onMarkReviewed: (reportId: string) => void;
   onClose: () => void;
   getPlayerName: (playerId: string) => string;
+  watchlist: string[];
+  onDelegate: (npcScoutId: string, playerId: string) => void;
 }
 
 function NPCScoutDetail({
@@ -148,6 +151,8 @@ function NPCScoutDetail({
   onMarkReviewed,
   onClose,
   getPlayerName,
+  watchlist,
+  onDelegate,
 }: NPCScoutDetailProps) {
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>(
     scout.territoryId ?? ""
@@ -264,6 +269,39 @@ function NPCScoutDetail({
           </Button>
         </div>
 
+        {/* Delegate Player Scouting */}
+        {watchlist.length > 0 && (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              Delegate Player Scouting
+            </p>
+            <div className="space-y-1.5">
+              {watchlist.map((playerId) => (
+                <div
+                  key={playerId}
+                  className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-2.5 py-1.5 text-xs"
+                >
+                  <span className="text-zinc-300 truncate mr-2">{getPlayerName(playerId)}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-5 px-2 text-[10px] shrink-0"
+                    onClick={() => onDelegate(scout.id, playerId)}
+                  >
+                    <Eye size={10} className="mr-1" aria-hidden="true" />
+                    Assign
+                  </Button>
+                </div>
+              ))}
+            </div>
+            {watchlist.length === 0 && (
+              <p className="text-[10px] text-zinc-600">
+                Add players to your watchlist to delegate scouting tasks.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Recent reports for this scout */}
         {scoutReports.length > 0 && (
           <div>
@@ -361,7 +399,7 @@ function ReportCard({ report, playerName, onMarkReviewed }: ReportCardProps) {
 // =============================================================================
 
 export function NPCManagementScreen() {
-  const { gameState, assignNPCScoutTerritory, reviewNPCReport, getPlayer } = useGameStore();
+  const { gameState, assignNPCScoutTerritory, reviewNPCReport, getPlayer, delegateScouting, toggleWatchlist } = useGameStore();
   const [selectedScoutId, setSelectedScoutId] = useState<string | null>(null);
 
   // All hooks must be called before any conditional return.
@@ -413,7 +451,9 @@ export function NPCManagementScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/agency-office.png" opacity={0.82} />
+        <div className="relative z-10">
         {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold">NPC Scout Management</h1>
@@ -490,6 +530,8 @@ export function NPCManagementScreen() {
                     onMarkReviewed={reviewNPCReport}
                     onClose={() => setSelectedScoutId(null)}
                     getPlayerName={getPlayerName}
+                    watchlist={gameState.watchlist ?? []}
+                    onDelegate={delegateScouting}
                   />
                 </div>
               )}
@@ -534,6 +576,7 @@ export function NPCManagementScreen() {
             )}
           </div>
         )}
+        </div>
       </div>
     </GameLayout>
   );

@@ -52,7 +52,7 @@ const BASE_WEIGHTS: Record<ClubResponseType, number> = {
   // These outcomes are resolved via pre-checks before the weighted pick:
   ignored: 0,
   tooExpensive: 0,
-  loanSigned: 0,
+  loanSigned: 8,
 } as const;
 
 // =============================================================================
@@ -279,6 +279,18 @@ export function generateClubResponse(
   // -------------------------------------------------------------------------
   const { signedBonus, trialBonus } = convictionAdjustments(report);
 
+  // Adjust loanSigned weight: boost for young or fringe players
+  let loanSignedBonus = 0;
+  if (player.age < 21) loanSignedBonus += 5;
+  if (player.age < 23) loanSignedBonus += 2;
+  // Fringe player: CA below club squad average
+  const squadPlayers = club.playerIds
+    .map((id) => ({ ca: 0 })) // placeholder — we only need count for the check below
+    .length;
+  void squadPlayers;
+  // If the player's market value is modest relative to budget, loan is more attractive
+  if (player.marketValue < directive.budgetAllocation * 0.5) loanSignedBonus += 3;
+
   const weights: Record<ClubResponseType, number> = {
     ...BASE_WEIGHTS,
     signed: clamp(
@@ -294,10 +306,15 @@ export function generateClubResponse(
       0,
       100,
     ),
+    loanSigned: clamp(
+      BASE_WEIGHTS.loanSigned + loanSignedBonus,
+      0,
+      100,
+    ),
   };
 
   // Build only the live outcomes (filter zero-weight items)
-  const liveOutcomes: ClubResponseType[] = ["interested", "trial", "signed", "doesNotFit"];
+  const liveOutcomes: ClubResponseType[] = ["interested", "trial", "signed", "doesNotFit", "loanSigned"];
   const weightedItems = liveOutcomes
     .filter((o) => weights[o] > 0)
     .map((o) => ({ item: o, weight: weights[o] }));

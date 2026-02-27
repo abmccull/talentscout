@@ -476,6 +476,17 @@ export interface Player {
 
   /** Disciplinary record tracking cards and suspensions for the current season. */
   disciplinaryRecord?: DisciplinaryRecord;
+
+  // --- Loan fields ---
+
+  /** Set when the player is on loan — the club that owns the contract. */
+  loanParentClubId?: string;
+  /** Week when the loan expires. */
+  loanEndWeek?: number;
+  /** Season when the loan expires. */
+  loanEndSeason?: number;
+  /** Quick check flag: true when the player is currently on loan. */
+  onLoan?: boolean;
 }
 
 // =============================================================================
@@ -574,6 +585,13 @@ export interface Club {
   youthAcademyRating: number;
   /** The club's tactical playing style. */
   tacticalStyle?: TacticalStyle;
+
+  // --- Loan tracking ---
+
+  /** Player IDs this club owns but has loaned out. */
+  loanedOutPlayerIds?: string[];
+  /** Player IDs on loan AT this club. */
+  loanedInPlayerIds?: string[];
 }
 
 export interface League {
@@ -701,6 +719,8 @@ export interface Scout {
   age: number;
   /** Scout's nationality (flavour / display field, not mechanically enforced). */
   nationality?: string;
+  /** Selected portrait avatar (1-6). */
+  avatarId?: number;
 
   /** Scout skill ratings on 1–20 scale. */
   skills: Record<ScoutSkill, number>;
@@ -1094,6 +1114,7 @@ export type ActivityType =
   | "followUpSession"
   | "parentCoachMeeting"
   | "writePlacementReport"
+  | "agencyShowcase"
   // First-team exclusive activities
   | "reserveMatch"
   | "scoutingMission"
@@ -1110,7 +1131,27 @@ export type ActivityType =
   | "marketInefficiency"
   | "analyticsTeamMeeting"
   // Free agent activities
-  | "freeAgentOutreach";
+  | "freeAgentOutreach"
+  // Loan activities
+  | "loanMonitoring"
+  | "loanRecommendation";
+
+export interface TargetOption {
+  id: string;
+  name: string;
+  /** Generic description for non-player/non-contact options (e.g. video sources) */
+  description?: string;
+  /** Player metadata (for player-targeted activities) */
+  age?: number;
+  position?: string;
+  caStars?: number;
+  paStars?: [number, number];
+  observations?: number;
+  /** Contact metadata (for network meetings) */
+  contactType?: string;
+  relationship?: number;
+  organization?: string;
+}
 
 export interface Activity {
   /**
@@ -1124,6 +1165,8 @@ export interface Activity {
   /** ID of the target entity: match, player, contact, etc. */
   targetId?: string;
   description: string;
+  /** Available targets for player/contact-targeted activities (deduplicated cards). */
+  targetPool?: TargetOption[];
 }
 
 export interface WeekSchedule {
@@ -1135,6 +1178,42 @@ export interface WeekSchedule {
    */
   activities: (Activity | null)[];
   completed: boolean;
+}
+
+// =============================================================================
+// YOUTH TOURNAMENT EVENTS
+// =============================================================================
+
+export type TournamentCategory = "named" | "grassroots" | "international" | "agencyShowcase";
+export type TournamentPrestige = "local" | "regional" | "national" | "international";
+
+export interface TournamentEvent {
+  id: string;
+  name: string;
+  /** Country this tournament is in (domestic) or host country (international). */
+  country: string;
+  subRegionId?: string;
+  category: TournamentCategory;
+  prestige: TournamentPrestige;
+  startWeek: number;
+  endWeek: number;
+  season: number;
+  discovered: boolean;
+  discoverySource?: "familiarity" | "contact" | "reputation" | "agency";
+  discoveryContactId?: string;
+  discoveryWeek?: number;
+  attended: boolean;
+  poolSizeMultiplier: number;
+  observationBonus: number;
+  extraAttributes: number;
+  /** For international: confederation (FIFA, UEFA, CONMEBOL, CAF, AFC, CONCACAF). */
+  confederation?: string;
+  /** For international: age group cap. */
+  ageGroup?: number;
+  /** For international: estimated total travel + accommodation cost. */
+  travelCost?: number;
+  /** For agencyShowcase: organization cost deducted from balance. */
+  organizationCost?: number;
 }
 
 // =============================================================================
@@ -1215,9 +1294,10 @@ export type InboxMessageType =
   | "analystReport"
   | "predictionResult"
   | "warning"
-  | "gossip";
+  | "gossip"
+  | "marketplaceBid";
 
-export type InboxRelatedEntity = "player" | "report" | "contact" | "jobOffer" | "tool" | "narrative" | "directive" | "transfer" | "prediction" | "analyst";
+export type InboxRelatedEntity = "player" | "report" | "contact" | "jobOffer" | "tool" | "narrative" | "directive" | "transfer" | "prediction" | "analyst" | "bid";
 
 export interface InboxMessage {
   id: string;
@@ -1291,6 +1371,75 @@ export interface DifficultyModifiers {
   rivalIntelligence: number;
   developmentRate: number;
   permadeath: boolean;
+}
+
+// =============================================================================
+// PLAYER LOAN SYSTEM
+// =============================================================================
+
+export type LoanDealStatus = "active" | "completed" | "recalled" | "terminated";
+
+export interface LoanDeal {
+  id: string;
+  playerId: string;
+  /** The club that owns the player's contract. */
+  parentClubId: string;
+  /** The club temporarily hosting the player. */
+  loanClubId: string;
+  startWeek: number;
+  startSeason: number;
+  /** Planned return week. */
+  endWeek: number;
+  endSeason: number;
+  /** One-time fee paid to parent club. */
+  loanFee: number;
+  /** Percentage of wage paid by the loan club (0–100). */
+  wageContribution: number;
+  /** Optional buy clause price. */
+  buyOptionFee?: number;
+  /** Whether the parent club can recall the player early. */
+  recallClause: boolean;
+  status: LoanDealStatus;
+  /** Scout who recommended this loan, if any. */
+  scoutId?: string;
+  performanceRecord?: LoanPerformanceRecord;
+}
+
+export interface LoanPerformanceRecord {
+  appearances: number;
+  goals: number;
+  assists: number;
+  avgRating: number;
+  /** CA change during loan. */
+  developmentDelta: number;
+  /** 0–100, parent club satisfaction with loan outcome. */
+  parentClubSatisfaction: number;
+  /** 0–100, loan club satisfaction with loan outcome. */
+  loanClubSatisfaction: number;
+}
+
+export type LoanOutcome =
+  | "successful"
+  | "neutral"
+  | "unsuccessful"
+  | "buy-option-exercised"
+  | "recalled-early"
+  | "terminated";
+
+export interface LoanRecommendation {
+  id: string;
+  playerId: string;
+  /** Recommended loan destination. */
+  targetClubId: string;
+  scoutId: string;
+  week: number;
+  season: number;
+  rationale: "development" | "playing-time" | "experience" | "squad-depth";
+  /** Suggested duration in weeks. */
+  suggestedDuration: number;
+  suggestedWageContribution: number;
+  outcome?: LoanOutcome;
+  reputationApplied: boolean;
 }
 
 // =============================================================================
@@ -1403,6 +1552,8 @@ export interface GameState {
   legacyScore: LegacyScore;
   /** Sub-regions for youth scouting depth, keyed by ID. */
   subRegions: Record<string, SubRegion>;
+  /** Youth tournaments for the current season, keyed by ID. */
+  youthTournaments: Record<string, TournamentEvent>;
   /** IDs of players who have retired. */
   retiredPlayerIds: string[];
 
@@ -1505,6 +1656,15 @@ export interface GameState {
   freeAgentPool: FreeAgentPool;
   /** Active free agent negotiations. */
   freeAgentNegotiations: FreeAgentNegotiation[];
+
+  // --- Player Loan System ---
+
+  /** Currently active loan deals across the league. */
+  activeLoans?: LoanDeal[];
+  /** Completed/terminated loan deals for history. */
+  loanHistory?: LoanDeal[];
+  /** Loan recommendations made by the scout. */
+  loanRecommendations?: LoanRecommendation[];
 }
 
 // =============================================================================
@@ -1611,6 +1771,8 @@ export interface NewGameConfig {
   startingCountry?: string;
   /** Scout's nationality (display/flavour field). */
   nationality?: string;
+  /** Selected portrait avatar (1-6). */
+  avatarId?: number;
   /**
    * If set, the scout begins employed at this club (tier 2 club scout).
    * If omitted, the scout starts as a freelancer (tier 1).
@@ -1833,6 +1995,21 @@ export type MarketTemperature = "hot" | "normal" | "cold" | "deadline";
 
 export type ReportListingStatus = "active" | "sold" | "withdrawn" | "expired";
 
+export type BidStatus = "pending" | "accepted" | "declined" | "expired" | "withdrawn";
+
+export interface MarketplaceBid {
+  id: string;
+  listingId: string;
+  clubId: string;
+  amount: number;
+  placedWeek: number;
+  placedSeason: number;
+  expiryWeek: number;
+  expirySeason: number;
+  status: BidStatus;
+  needMatchScore: number;
+}
+
 export interface ReportListing {
   id: string;
   reportId: string;
@@ -1843,6 +2020,9 @@ export interface ReportListing {
   buyerClubId?: string;
   listedWeek: number;
   listedSeason: number;
+  bids: MarketplaceBid[];
+  biddingEndsWeek: number;
+  biddingEndsSeason: number;
 }
 
 export interface PlacementFeeRecord {
@@ -3796,6 +3976,19 @@ export interface TransferNegotiation {
   season: number;
   /** Week when this negotiation started. */
   startWeek: number;
+
+  // --- Loan negotiation fields ---
+
+  /** True if this negotiation is for a loan rather than a permanent transfer. */
+  isLoan?: boolean;
+  /** Loan duration in weeks. */
+  loanDuration?: number;
+  /** Percentage of wages the loan club will contribute. */
+  loanWageContribution?: number;
+  /** Optional buy option fee. */
+  loanBuyOption?: number;
+  /** Whether a recall clause is included. */
+  loanRecallClause?: boolean;
 }
 
 // =============================================================================

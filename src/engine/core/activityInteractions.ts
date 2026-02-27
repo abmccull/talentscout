@@ -295,6 +295,17 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
       network: { relationshipModifier: 2, reportQualityModifier: 1 },
     },
   },
+  freeAgentOutreach: {
+    prompt: "How do you run this free agent outreach day?",
+    options: NEGOTIATION_OPTIONS,
+    maxFocusPlayers: 3,
+    defaultChoiceId: "focus",
+    effects: {
+      scan: { discoveryModifier: 1 },
+      focus: { discoveryModifier: 0, reportQualityModifier: 1 },
+      network: { relationshipModifier: 2, discoveryModifier: 1 },
+    },
+  },
   databaseQuery: {
     prompt: "How do you run your query cycle today?",
     options: DATA_OPTIONS,

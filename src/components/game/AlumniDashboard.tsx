@@ -472,7 +472,7 @@ export function AlumniDashboard() {
         </div>
 
         {/* Alumni List */}
-        <div>
+        <div data-tutorial-id="alumni-list">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">Alumni</h2>
             <div className="flex items-center gap-2">

@@ -215,7 +215,7 @@ export function AnalyticsScreen() {
 
         {activeTab === "overview" ? (
           /* ── OVERVIEW TAB (original content) ──────────────────────────── */
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3" data-tutorial-id="analytics-overview">
           {/* ── Left column ──────────────────────────────────────────────── */}
           <div className="space-y-4">
             {/* Overall rating */}
@@ -483,7 +483,7 @@ export function AnalyticsScreen() {
         </div>
         ) : (
           /* ── VISUALIZATIONS TAB ───────────────────────────────────────── */
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2" data-tutorial-id="analytics-charts">
             {/* Player Market Scatter */}
             <Card>
               <CardHeader className="pb-2">

@@ -39,16 +39,16 @@ function single(dir: string, name: string, ext = "mp3"): string[] {
 // ---------------------------------------------------------------------------
 
 export const MUSIC_ASSETS: Record<string, AudioAssetDef> = {
-  "title-anthem":      { srcs: variants("/audio/music", "title-anthem", 4),      loop: true },
-  "career-hub":        { srcs: variants("/audio/music", "career-hub", 8),        loop: true },
-  observation:         { srcs: variants("/audio/music", "observation", 8),       loop: true },
-  "report-writing":    { srcs: variants("/audio/music", "report-writing", 6),    loop: true },
-  "agency-theme":      { srcs: variants("/audio/music", "agency-theme", 4),      loop: true },
-  "youth-scouting":    { srcs: variants("/audio/music", "youth-scouting", 4),    loop: true },
-  "transfer-pressure": { srcs: variants("/audio/music", "transfer-pressure", 4), loop: true },
-  "network-groove":    { srcs: variants("/audio/music", "network-groove", 4),    loop: true },
-  wonderkid:           { srcs: variants("/audio/music", "wonderkid", 3),         loop: true },
-  "season-review":     { srcs: variants("/audio/music", "season-review", 3),     loop: true },
+  "title-anthem":      { srcs: variants("/audio/music", "title-anthem", 1),      loop: true },
+  "career-hub":        { srcs: variants("/audio/music", "career-hub", 1),        loop: true },
+  observation:         { srcs: variants("/audio/music", "observation", 1),       loop: true },
+  "report-writing":    { srcs: variants("/audio/music", "report-writing", 1),    loop: true },
+  "agency-theme":      { srcs: variants("/audio/music", "agency-theme", 1),      loop: true },
+  "youth-scouting":    { srcs: variants("/audio/music", "youth-scouting", 1),    loop: true },
+  "transfer-pressure": { srcs: variants("/audio/music", "transfer-pressure", 1), loop: true },
+  "network-groove":    { srcs: variants("/audio/music", "network-groove", 1),    loop: true },
+  wonderkid:           { srcs: variants("/audio/music", "wonderkid", 1),         loop: true },
+  "season-review":     { srcs: variants("/audio/music", "season-review", 1),     loop: true },
 };
 
 export const SFX_ASSETS: Record<string, AudioAssetDef> = {

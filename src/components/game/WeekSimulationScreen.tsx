@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { motion, AnimatePresence } from "framer-motion";
-import type { DayResult, ScoutSkill } from "@/engine/core/types";
+import type { DayResult, GameState, ScoutSkill } from "@/engine/core/types";
+import { INTERACTIVE_ACTIVITIES } from "@/engine/observation/types";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -138,6 +139,149 @@ function formatFatigueChange(change: number): { text: string; className: string 
   return { text: `+${change} fatigue`, className: "text-red-400" };
 }
 
+type SessionPlayerPoolEntry = {
+  playerId: string;
+  name: string;
+  position: string;
+};
+
+function buildInteractivePlayerPool(
+  dayResult: DayResult | undefined,
+  gameState: GameState | null,
+): SessionPlayerPoolEntry[] {
+  if (!dayResult?.activity || !gameState) return [];
+
+  const poolById = new Map<string, SessionPlayerPoolEntry>();
+  const addPlayer = (
+    playerId: string | undefined,
+    name: string | undefined,
+    position: string | undefined,
+  ) => {
+    if (!playerId || !name || !position) return;
+    if (!poolById.has(playerId)) {
+      poolById.set(playerId, { playerId, name, position });
+    }
+  };
+
+  for (const obs of dayResult.observations) {
+    addPlayer(obs.playerId, obs.playerName, obs.position ?? "UNK");
+  }
+
+  const targetId = dayResult.activity.targetId;
+  if (targetId && dayResult.activity.type !== "attendMatch") {
+    const senior = gameState.players[targetId];
+    if (senior) {
+      addPlayer(
+        senior.id,
+        `${senior.firstName} ${senior.lastName}`,
+        senior.position,
+      );
+    } else {
+      const youth = gameState.unsignedYouth[targetId]?.player;
+      if (youth) {
+        addPlayer(
+          youth.id,
+          `${youth.firstName} ${youth.lastName}`,
+          youth.position,
+        );
+      }
+    }
+  }
+
+  const focusedIds = dayResult.interaction?.focusedPlayerIds
+    ?? (dayResult.interaction?.focusedPlayerId ? [dayResult.interaction.focusedPlayerId] : []);
+  for (const focusedId of focusedIds) {
+    const senior = gameState.players[focusedId];
+    if (senior) {
+      addPlayer(
+        senior.id,
+        `${senior.firstName} ${senior.lastName}`,
+        senior.position,
+      );
+      continue;
+    }
+    const youth = gameState.unsignedYouth[focusedId]?.player;
+    if (youth) {
+      addPlayer(
+        youth.id,
+        `${youth.firstName} ${youth.lastName}`,
+        youth.position,
+      );
+    }
+  }
+
+  // Fallback for analysis/non-match activities: seed from known players
+  if (poolById.size === 0) {
+    const youthEntries = Object.values(gameState.unsignedYouth);
+    if (youthEntries.length > 0) {
+      for (const entry of youthEntries.slice(0, 12)) {
+        const p = entry.player;
+        addPlayer(p.id, `${p.firstName} ${p.lastName}`, p.position);
+      }
+    } else {
+      for (const p of Object.values(gameState.players).slice(0, 12)) {
+        addPlayer(p.id, `${p.firstName} ${p.lastName}`, p.position);
+      }
+    }
+  }
+
+  const obsCounts = new Map<string, number>();
+  for (const obs of Object.values(gameState.observations)) {
+    obsCounts.set(obs.playerId, (obsCounts.get(obs.playerId) ?? 0) + 1);
+  }
+
+  // Fallback: use previously observed players only (never random global pool).
+  if (poolById.size === 0) {
+    const fallbackIds = [...obsCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([id]) => id);
+    for (const playerId of fallbackIds) {
+      const senior = gameState.players[playerId];
+      if (senior) {
+        addPlayer(
+          senior.id,
+          `${senior.firstName} ${senior.lastName}`,
+          senior.position,
+        );
+        continue;
+      }
+      const youth = gameState.unsignedYouth[playerId]?.player;
+      if (youth) {
+        addPlayer(
+          youth.id,
+          `${youth.firstName} ${youth.lastName}`,
+          youth.position,
+        );
+      }
+    }
+  }
+
+  return [...poolById.values()].slice(0, 16);
+}
+
+function resolveSessionTargetId(
+  dayResult: DayResult | undefined,
+  playerPool: SessionPlayerPoolEntry[],
+): string | undefined {
+  if (!dayResult?.activity || playerPool.length === 0) return undefined;
+  const allowed = new Set(playerPool.map((p) => p.playerId));
+  const selectedFocusIds = dayResult.interaction?.focusedPlayerIds ?? [];
+  for (const focusId of selectedFocusIds) {
+    if (allowed.has(focusId)) return focusId;
+  }
+  if (dayResult.interaction?.focusedPlayerId && allowed.has(dayResult.interaction.focusedPlayerId)) {
+    return dayResult.interaction.focusedPlayerId;
+  }
+  if (dayResult.activity.targetId && allowed.has(dayResult.activity.targetId)) {
+    return dayResult.activity.targetId;
+  }
+  if (dayResult.observations[0]?.playerId && allowed.has(dayResult.observations[0].playerId)) {
+    return dayResult.observations[0].playerId;
+  }
+  return playerPool[0]?.playerId;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
@@ -229,9 +373,20 @@ interface DayCardProps {
   allDayResults: DayResult[];
   currentDay: number;
   onChooseInteraction?: (choiceId: string, focusedPlayerIds?: string[]) => void;
+  canLaunchInteractiveSession?: boolean;
+  interactiveSessionCompleted?: boolean;
+  onLaunchInteractiveSession?: () => void;
 }
 
-function DayCard({ dayResult, allDayResults, currentDay, onChooseInteraction }: DayCardProps) {
+function DayCard({
+  dayResult,
+  allDayResults,
+  currentDay,
+  onChooseInteraction,
+  canLaunchInteractiveSession,
+  interactiveSessionCompleted,
+  onLaunchInteractiveSession,
+}: DayCardProps) {
   const activityLabel = dayResult.activity
     ? getActivityLabel(dayResult.activity.type)
     : "Free Day";
@@ -466,6 +621,33 @@ function DayCard({ dayResult, allDayResults, currentDay, onChooseInteraction }: 
           </section>
         )}
 
+        {(canLaunchInteractiveSession || interactiveSessionCompleted) && (
+          <section aria-label="Live observation session">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Live Session
+            </p>
+            <div className="rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+              <p className="text-[11px] text-zinc-400">
+                Run a live scouting session for deeper reads, extra insight points, and stronger activity outcomes.
+              </p>
+              {interactiveSessionCompleted ? (
+                <Badge variant="outline" className="mt-2 border-emerald-500/30 text-emerald-400">
+                  Session Completed
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  className="mt-2 bg-blue-600 text-white hover:bg-blue-700"
+                  onClick={onLaunchInteractiveSession}
+                  disabled={!canLaunchInteractiveSession}
+                >
+                  Launch Live Session
+                </Button>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Fatigue */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-zinc-500">Fatigue:</span>
@@ -543,24 +725,64 @@ function FreeDayCard({ dayName }: { dayName: string }) {
 
 export function WeekSimulationScreen() {
   const weekSimulation = useGameStore((s) => s.weekSimulation);
+  const gameState = useGameStore((s) => s.gameState);
   const advanceDay = useGameStore((s) => s.advanceDay);
   const chooseSimulationInteraction = useGameStore((s) => s.chooseSimulationInteraction);
   const fastForwardWeek = useGameStore((s) => s.fastForwardWeek);
+  const startObservationSession = useGameStore((s) => s.startObservationSession);
   const setScreen = useGameStore((s) => s.setScreen);
 
   // All hooks must be called before any early return
   const currentDay = weekSimulation?.currentDay ?? 0;
   const dayResults = weekSimulation?.dayResults ?? EMPTY_DAY_RESULTS;
-  if (!weekSimulation) return null;
 
   const currentDayResult: DayResult | undefined = dayResults[currentDay];
   const isLastDay = currentDay >= dayResults.length - 1;
   const isComplete = currentDay >= 7;
   const interactionPending = !!currentDayResult?.interaction && !currentDayResult.interaction.selectedOptionId;
+  const interactivePlayerPool = useMemo(
+    () => buildInteractivePlayerPool(currentDayResult, gameState),
+    [currentDayResult, gameState],
+  );
+  const interactiveActivitySupported = !!currentDayResult?.activity
+    && currentDayResult.activity.type !== "attendMatch"
+    && INTERACTIVE_ACTIVITIES.has(currentDayResult.activity.type);
+  const currentActivityInstanceKey = currentDayResult?.activity
+    ? (currentDayResult.activity.instanceId
+      ?? `${currentDayResult.activity.type}-d${currentDayResult.dayIndex}`)
+    : undefined;
+  const completedInteractiveSet = useMemo(
+    () => new Set(gameState?.completedInteractiveSessions ?? []),
+    [gameState?.completedInteractiveSessions],
+  );
+  const interactiveSessionCompleted = !!currentActivityInstanceKey
+    && completedInteractiveSet.has(currentActivityInstanceKey);
+  const canLaunchInteractiveSession = interactiveActivitySupported
+    && interactivePlayerPool.length > 0
+    && !interactiveSessionCompleted;
+
+  const launchInteractiveSession = () => {
+    if (!currentDayResult?.activity || !canLaunchInteractiveSession) return;
+    const targetPlayerId = resolveSessionTargetId(currentDayResult, interactivePlayerPool);
+    const activityInstanceId =
+      currentDayResult.activity.instanceId
+      ?? `${currentDayResult.activity.type}-d${currentDayResult.dayIndex}`;
+    startObservationSession(
+      currentDayResult.activity.type,
+      interactivePlayerPool,
+      targetPlayerId,
+      {
+        activityInstanceId,
+        returnScreen: "weekSimulation",
+      },
+    );
+  };
 
   const currentBg = currentDayResult?.activity?.type
     ? ACTIVITY_BACKGROUNDS[currentDayResult.activity.type] ?? FREE_DAY_BG
     : FREE_DAY_BG;
+
+  if (!weekSimulation) return null;
 
   return (
     <GameLayout>
@@ -647,6 +869,9 @@ export function WeekSimulationScreen() {
                       allDayResults={dayResults}
                       currentDay={currentDay}
                       onChooseInteraction={chooseSimulationInteraction}
+                      canLaunchInteractiveSession={canLaunchInteractiveSession}
+                      interactiveSessionCompleted={interactiveSessionCompleted}
+                      onLaunchInteractiveSession={launchInteractiveSession}
                     />
                   ) : (
                     <FreeDayCard dayName={DAY_NAMES[currentDay] ?? "Day"} />

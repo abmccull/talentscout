@@ -26,8 +26,11 @@ import {
   calculateRevenueBreakdown,
   calculateNetWorth,
   getLoanEligibility,
+  getEquipmentItem,
+  ALL_EQUIPMENT_SLOTS,
 } from "@/engine/finance";
 import type { ExpenseType, LoanType } from "@/engine/core/types";
+import type { EquipmentSlot } from "@/engine/finance";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -127,6 +130,7 @@ export function FinancialDashboard() {
     acceptConsultingContract,
     declineRetainerOffer,
     declineConsultingOffer,
+    sellEquipmentForCashAction,
   } = useGameStore();
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [selectedLoanType, setSelectedLoanType] = useState<LoanType | null>(null);
@@ -256,6 +260,27 @@ export function FinancialDashboard() {
                     ? "Forced cutbacks active. Reputation declining. Reduce expenses or increase income."
                     : "Balance has been negative for over 2 weeks. Take action to avoid escalation."}
             </p>
+            {/* Emergency: Sell Equipment for Cash */}
+            {finances.distressLevel !== "bankruptcy" && finances.equipment && (() => {
+              const totalValue = ALL_EQUIPMENT_SLOTS.reduce((sum, slot) => {
+                const itemId = finances.equipment?.loadout[slot as EquipmentSlot];
+                const item = itemId ? getEquipmentItem(itemId) : null;
+                return sum + (item?.purchaseCost ?? 0);
+              }, 0);
+              if (totalValue <= 0) return null;
+              const saleValue = Math.floor(totalValue * 0.4);
+              return (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="mt-3"
+                  onClick={() => sellEquipmentForCashAction(totalValue)}
+                >
+                  <AlertCircle size={12} className="mr-1.5" />
+                  Emergency: Sell Equipment for £{saleValue.toLocaleString()}
+                </Button>
+              );
+            })()}
           </div>
         )}
 
@@ -265,7 +290,7 @@ export function FinancialDashboard() {
         {activeTab === "overview" && (
           <>
             {/* Overview cards */}
-            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4" data-tutorial-id="finances-overview">
               <Card>
                 <CardContent className="pt-4">
                   <div className="flex items-start justify-between">
@@ -620,7 +645,7 @@ export function FinancialDashboard() {
         {/* CONTRACTS TAB                                                  */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {activeTab === "contracts" && (
-          <>
+          <div data-tutorial-id="finances-contracts">
             {!isIndependent ? (
               <Card>
                 <CardContent className="pt-4">
@@ -862,14 +887,14 @@ export function FinancialDashboard() {
                 </Card>
               </div>
             )}
-          </>
+          </div>
         )}
 
         {/* ═══════════════════════════════════════════════════════════════ */}
         {/* REVENUE HISTORY TAB                                            */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {activeTab === "revenue" && (
-          <>
+          <div data-tutorial-id="finances-marketplace">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -945,7 +970,7 @@ export function FinancialDashboard() {
                 )}
               </CardContent>
             </Card>
-          </>
+          </div>
         )}
       </div>
     </GameLayout>

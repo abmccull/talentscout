@@ -230,6 +230,7 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
     lastName: config.scoutLastName,
     age: config.scoutAge,
     nationality: config.nationality,
+    avatarId: config.avatarId ?? 1,
 
     skills,
     attributes,

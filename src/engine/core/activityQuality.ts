@@ -94,6 +94,9 @@ const PRIMARY_SKILL_MAP: Partial<Record<ActivityType, ScoutSkill>> = {
   reviewNPCReport: "dataLiteracy",
   managerMeeting: "psychologicalRead",
   boardPresentation: "psychologicalRead",
+  // Loan activities
+  loanMonitoring: "playerJudgment",
+  loanRecommendation: "playerJudgment",
 };
 
 // =============================================================================
@@ -387,6 +390,566 @@ const NARRATIVES: Partial<
     exceptional: [
       "A masterful report! Your analysis is so precise and insightful that it could influence a transfer decision on its own.",
       "Breakthrough report writing! You synthesized data, eye-test impressions, and context into an assessment that reads like art.",
+    ],
+  },
+
+  // ── Youth activities ──────────────────────────────────────────────────────
+  followUpSession: {
+    poor: [
+      "The follow-up session was frustrating. The player seemed distracted and showed none of the promise you'd seen before.",
+      "A disappointing return visit. Nerves got the better of the youngster and you couldn't confirm your initial impressions.",
+    ],
+    average: [
+      "A steady follow-up session. The player performed as expected — no surprises, positive or negative.",
+      "Routine second look. You confirmed some earlier observations but didn't uncover anything new.",
+    ],
+    good: [
+      "A productive follow-up. The player showed consistency, reinforcing your initial positive assessment.",
+      "Good session. You noticed details you'd missed before — the player's off-the-ball movement is better than you thought.",
+    ],
+    excellent: [
+      "Excellent follow-up! The player has clearly improved since your last visit. Your early instincts were right.",
+      "Highly revealing session. Under pressure, the youngster showed composure well beyond his years.",
+    ],
+    exceptional: [
+      "A defining follow-up session! The player produced a moment of brilliance that confirmed generational potential.",
+      "Extraordinary return visit. Every doubt from your first observation has been emphatically answered.",
+    ],
+  },
+  parentCoachMeeting: {
+    poor: [
+      "An awkward meeting. The parents were defensive and the coach gave only guarded answers.",
+      "Difficult conversation. Cultural barriers made it hard to get honest information about the player's character.",
+    ],
+    average: [
+      "A standard meeting. The parents were polite and the coach confirmed what you already suspected.",
+      "Routine conversation. You learned the player's home situation is stable but gained no real edge.",
+    ],
+    good: [
+      "A productive meeting. The coach shared training insights and the parents revealed the player's strong work ethic.",
+      "Good conversation. You built rapport and learned about the player's mentality away from the pitch.",
+    ],
+    excellent: [
+      "Excellent meeting! The coach confided that this player is the hardest worker in the age group.",
+      "Highly revealing conversation. The parents' stories about the player's dedication painted a picture of real professionalism.",
+    ],
+    exceptional: [
+      "A breakthrough meeting! The coach shared tactical insights that completely reframed your assessment of the player.",
+      "Extraordinary conversation. The family's passion and the coach's conviction leave you certain this player has elite mentality.",
+    ],
+  },
+  writePlacementReport: {
+    poor: [
+      "A weak placement report. You struggled to articulate why any club should take a chance on this player.",
+      "The report reads flat. Your arguments for placement lack the conviction needed to persuade a sporting director.",
+    ],
+    average: [
+      "A serviceable placement report. The data supports your recommendation but the narrative isn't compelling.",
+      "Standard placement writing. You covered the basics but the report won't stand out on anyone's desk.",
+    ],
+    good: [
+      "A solid placement report. Your recommendations are well-reasoned and backed by observation data.",
+      "Good report. You've identified suitable clubs and your development rationale is persuasive.",
+    ],
+    excellent: [
+      "An excellent placement report! Your club-by-club analysis shows deep understanding of development pathways.",
+      "Impressive writing. The report maps the player's trajectory to specific club philosophies with real insight.",
+    ],
+    exceptional: [
+      "A masterclass in placement writing! Your report reads like a development manifesto — clubs will compete for this player.",
+      "Outstanding report. Your conviction, data, and narrative combine into the kind of document that launches careers.",
+    ],
+  },
+
+  // ── First-team activities ─────────────────────────────────────────────────
+  reserveMatch: {
+    poor: [
+      "A dull reserve match. The intensity was low and most players looked like they'd rather be elsewhere.",
+      "Disappointing reserves fixture. Poor pitch conditions made it impossible to judge technical quality.",
+    ],
+    average: [
+      "A routine reserve match. A couple of fringe players showed decent form but nothing remarkable.",
+      "Standard reserves viewing. The match lacked intensity but you gathered some useful fitness data.",
+    ],
+    good: [
+      "A useful reserve match. A returning player from injury showed encouraging signs of sharpness.",
+      "Good viewing. The reserve fixture revealed squad depth issues the first team analysis had missed.",
+    ],
+    excellent: [
+      "An excellent reserve match! A young player deputising from the academy completely outshone the senior pros.",
+      "Highly productive. You spotted a tactical wrinkle the manager is testing before deploying it in the first team.",
+    ],
+    exceptional: [
+      "A revelatory reserve match! A forgotten loanee returned with transformed confidence and elite-level performances.",
+      "Outstanding viewing. The reserve match exposed exactly the squad gaps your scouting recommendations can fill.",
+    ],
+  },
+  scoutingMission: {
+    poor: [
+      "A frustrating mission. Travel delays meant you arrived late and missed the key match entirely.",
+      "Wasted trip. The target player was injured and the backup options proved underwhelming.",
+    ],
+    average: [
+      "A standard scouting mission. You saw the target player but conditions limited your assessment.",
+      "Routine trip. The player performed within expectations — no red flags, but no excitement either.",
+    ],
+    good: [
+      "A productive mission. You got a clear look at the target and came away with a strong initial impression.",
+      "Good trip. The player's physical profile matches the brief and his technical ability surprised you.",
+    ],
+    excellent: [
+      "An excellent mission! The target exceeded expectations and you've already sketched out your recommendation.",
+      "Highly productive trip. You spotted a secondary target who might actually be the better signing.",
+    ],
+    exceptional: [
+      "A mission to remember! The player you were sent to watch is even better than the data suggested.",
+      "Outstanding scouting trip. You've found exactly what the club needs — your conviction is absolute.",
+    ],
+  },
+  oppositionAnalysis: {
+    poor: [
+      "A shallow analysis session. You couldn't find enough footage to build a reliable tactical profile.",
+      "Frustrating preparation. The opposition's recent tactical changes make your older notes obsolete.",
+    ],
+    average: [
+      "A standard opposition report. You identified their formation and key players but no obvious weaknesses.",
+      "Routine analysis. The opposition play a predictable system — your report confirms what everyone expects.",
+    ],
+    good: [
+      "A thorough analysis. You identified a pressing trigger that the coaching staff can exploit.",
+      "Good preparation. Your set-piece analysis revealed vulnerabilities the manager will find useful.",
+    ],
+    excellent: [
+      "An excellent analysis! You found a structural weakness in their build-up that could be decisive on matchday.",
+      "Highly productive session. Your individual player assessments will give the coaching staff a real tactical edge.",
+    ],
+    exceptional: [
+      "A masterful opposition report! Your tactical breakdown is so detailed it could be published as a coaching manual.",
+      "Outstanding analysis. You've found the one weakness nobody else has spotted — the manager is delighted.",
+    ],
+  },
+  agentShowcase: {
+    poor: [
+      "A wasted showcase event. The agent oversold every player and the actual talent was mediocre.",
+      "Disappointing showcase. The players were clearly coached to impress but lacked genuine quality.",
+    ],
+    average: [
+      "A routine showcase. A few decent players but nothing that warrants immediate follow-up.",
+      "Standard agent event. The hospitality was better than the football — typical for these affairs.",
+    ],
+    good: [
+      "A useful showcase. One player stood out from the crowd and is worth a second look.",
+      "Good event. The agent's network is clearly strong — several players merit further investigation.",
+    ],
+    excellent: [
+      "An excellent showcase! Two players displayed genuine first-team quality at affordable prices.",
+      "Highly productive event. You built rapport with the agent and secured first-refusal on a promising talent.",
+    ],
+    exceptional: [
+      "A remarkable showcase! You've found a hidden gem that other scouts completely overlooked.",
+      "Outstanding event. The agent privately shared intel on an off-market player who fits your club perfectly.",
+    ],
+  },
+  trialMatch: {
+    poor: [
+      "A poor trial. The player looked nervous and well below the standard needed for this level.",
+      "Disappointing trial match. The player's fitness was clearly insufficient and he faded after 30 minutes.",
+    ],
+    average: [
+      "A solid trial. The player showed he can compete at this level but didn't do enough to force a decision.",
+      "Routine trial match. Technically adequate, but the trialist lacked the intensity the manager demands.",
+    ],
+    good: [
+      "A good trial. The player adapted quickly and showed enough quality to warrant extending the assessment.",
+      "Promising trial match. The trialist's work rate and tactical intelligence impressed the coaching staff.",
+    ],
+    excellent: [
+      "An excellent trial! The player looked comfortable from the first minute — clearly a step above the other trialists.",
+      "Highly impressive trial. The player's quality was obvious and the manager is already asking about contract terms.",
+    ],
+    exceptional: [
+      "A stunning trial performance! The player dominated every phase and the club would be foolish not to sign him.",
+      "Extraordinary trial. Your recommendation has been vindicated — this player is ready for the first team immediately.",
+    ],
+  },
+  contractNegotiation: {
+    poor: [
+      "A tense negotiation that went nowhere. The agent's demands are unrealistic and talks have stalled.",
+      "Frustrating session. Miscommunication over wage structure means you'll need to start over.",
+    ],
+    average: [
+      "A standard negotiation. Both sides stated positions but significant gaps remain on key terms.",
+      "Routine contract talks. Progress was slow but at least neither party walked away from the table.",
+    ],
+    good: [
+      "A productive negotiation. You found common ground on the basic terms and clauses are nearly agreed.",
+      "Good session. The agent was reasonable and you're close to a deal the club can afford.",
+    ],
+    excellent: [
+      "An excellent negotiation! You secured favourable performance-based clauses that protect the club's investment.",
+      "Highly productive talks. The agent respected your preparation and you've agreed terms below the initial asking price.",
+    ],
+    exceptional: [
+      "A masterclass in negotiation! You secured the player at well below market rate with sell-on clauses that guarantee future value.",
+      "Outstanding contract work. Both sides leave satisfied — a rare win-win that strengthens your reputation significantly.",
+    ],
+  },
+
+  // ── Data activities ───────────────────────────────────────────────────────
+  databaseQuery: {
+    poor: [
+      "A frustrating database session. Your search parameters were too broad and the results were noise.",
+      "Wasted time at the screen. Server issues meant half your queries timed out before returning data.",
+    ],
+    average: [
+      "A routine database query. You generated a long shortlist but nothing obviously exciting jumped out.",
+      "Standard data mining session. The filters worked but the results mostly confirmed what you already knew.",
+    ],
+    good: [
+      "A productive query session. Your refined parameters surfaced three players worth deeper analysis.",
+      "Good database work. Cross-referencing age curves with performance data revealed an undervalued profile.",
+    ],
+    excellent: [
+      "An excellent query session! Your algorithm flagged a statistical outlier that every other scout has missed.",
+      "Highly productive mining. The data tells a clear story — this player's underlying metrics far exceed his reputation.",
+    ],
+    exceptional: [
+      "A breakthrough database session! You've identified a market inefficiency that could save the club millions.",
+      "Outstanding data work. Your query uncovered a player whose statistical profile is genuinely world-class for his age bracket.",
+    ],
+  },
+  deepVideoAnalysis: {
+    poor: [
+      "A difficult video session. The footage quality was poor and you couldn't track player movement reliably.",
+      "Frustrating analysis. You spent hours watching clips but the tactical context was impossible to assess from these angles.",
+    ],
+    average: [
+      "A standard video review. You confirmed the player's basic profile but the footage didn't reveal anything new.",
+      "Routine session. The statistical overlay matched the eye test — solid but unspectacular.",
+    ],
+    good: [
+      "A productive video analysis. Frame-by-frame review revealed decision-making patterns invisible at full speed.",
+      "Good session. The heat map data combined with your eye test gave you a much richer player profile.",
+    ],
+    excellent: [
+      "An excellent video session! Your analysis revealed elite-level off-the-ball positioning that metrics alone can't capture.",
+      "Highly productive review. Slow-motion analysis of pressing triggers showed this player reads the game two steps ahead.",
+    ],
+    exceptional: [
+      "A masterful video analysis! You've built a complete tactical profile that tells a story no data point could alone.",
+      "Extraordinary session. Your video evidence is so compelling it could change the club's entire transfer strategy.",
+    ],
+  },
+  statsBriefing: {
+    poor: [
+      "A flat briefing. The analysts' presentation was surface-level and you couldn't extract actionable insights.",
+      "Disappointing session. The statistics presented were lagging indicators that don't help with forward-looking decisions.",
+    ],
+    average: [
+      "A routine stats briefing. The numbers confirmed your existing views but didn't challenge your thinking.",
+      "Standard analytics session. Useful context for your ongoing assessments but nothing game-changing.",
+    ],
+    good: [
+      "A useful briefing. The analytics team highlighted xG trends that explain a player's recent form change.",
+      "Good session. The statistical models flagged regression risks in two targets you were previously optimistic about.",
+    ],
+    excellent: [
+      "An excellent briefing! The new predictive model identified development trajectories that reshape your shortlist.",
+      "Highly productive session. The analysts presented a statistical comparison that perfectly validates your gut feeling.",
+    ],
+    exceptional: [
+      "A transformative briefing! The data revealed a pattern across your entire shortlist that changes your scouting approach.",
+      "Outstanding analytics session. The predictive model's output is so strong you can make recommendations with near-certainty.",
+    ],
+  },
+  dataConference: {
+    poor: [
+      "A disappointing conference. Most presentations were basic and you didn't learn anything your tools can't already do.",
+      "Wasted trip. The sessions were too academic and disconnected from practical scouting applications.",
+    ],
+    average: [
+      "A standard data conference. A couple of interesting talks but mostly confirmation of industry best practices.",
+      "Routine event. The networking was better than the content — you made some useful contacts at least.",
+    ],
+    good: [
+      "A useful conference. One presentation on progressive carrying metrics gave you a new analytical lens.",
+      "Good event. You learned about a new expected threat model that could improve your evaluations.",
+    ],
+    excellent: [
+      "An excellent conference! A workshop on machine learning for player projection genuinely expanded your capabilities.",
+      "Highly productive event. You connected with a data scientist whose models could give your club a real edge.",
+    ],
+    exceptional: [
+      "A career-defining conference! You were invited to present your methodology and it was extremely well received.",
+      "Outstanding event. The techniques you learned will fundamentally upgrade your analytical toolkit.",
+    ],
+  },
+  algorithmCalibration: {
+    poor: [
+      "A frustrating calibration session. Your model adjustments made predictions worse, not better.",
+      "Poor session. Overfitting to recent results has degraded your algorithm's long-term accuracy.",
+    ],
+    average: [
+      "A routine calibration. Minor parameter tweaks produced marginal improvements in prediction accuracy.",
+      "Standard maintenance session. The model is stable but you haven't found the breakthrough you're looking for.",
+    ],
+    good: [
+      "A productive calibration. Reweighting your age-curve assumptions improved prediction accuracy by a meaningful margin.",
+      "Good session. Your backtesting reveals the model now handles league-level transitions much more reliably.",
+    ],
+    excellent: [
+      "An excellent calibration! Your new weighting scheme dramatically reduces false positives for development potential.",
+      "Highly productive tuning. The algorithm now identifies high-ceiling players with significantly greater precision.",
+    ],
+    exceptional: [
+      "A breakthrough calibration! Your refined model outperforms every commercial tool you've tested against.",
+      "Outstanding session. The algorithm's accuracy is now so high that your predictions are practically a cheat code.",
+    ],
+  },
+  marketInefficiency: {
+    poor: [
+      "A dead end. The supposed market inefficiency turned out to be explained by factors your model missed.",
+      "Frustrating research. Every undervalued player you identified has a hidden red flag explaining the low price.",
+    ],
+    average: [
+      "A modest discovery. The inefficiency exists but the margin is too small to justify action.",
+      "Routine analysis. You confirmed a known market pattern but haven't found a way to exploit it uniquely.",
+    ],
+    good: [
+      "A useful finding. You've identified a league where player values consistently lag behind actual quality.",
+      "Good research. The transfer fee arbitrage opportunity is clear and your club could benefit.",
+    ],
+    excellent: [
+      "An excellent discovery! A structural market inefficiency means your club can acquire proven quality at youth prices.",
+      "Highly productive analysis. The data proves that clubs consistently undervalue this profile — and you've found three examples.",
+    ],
+    exceptional: [
+      "A stunning market insight! You've found a systematic pricing error that could fund an entire window's business.",
+      "Outstanding research. This inefficiency is so significant that acting on it could transform the club's competitive position.",
+    ],
+  },
+  analyticsTeamMeeting: {
+    poor: [
+      "A tense meeting. Disagreements over methodology meant no actionable conclusions were reached.",
+      "Frustrating session. The team couldn't align on which metrics matter most and the discussion went in circles.",
+    ],
+    average: [
+      "A routine team meeting. Updates were shared and tasks assigned but no new insights emerged.",
+      "Standard session. The analytics team is functioning but isn't generating the innovative work you'd hoped for.",
+    ],
+    good: [
+      "A productive meeting. The team aligned on a new framework for evaluating defensive contributions.",
+      "Good session. Collaborative discussion surfaced a data blind spot that you can now address systematically.",
+    ],
+    excellent: [
+      "An excellent team meeting! A junior analyst presented findings that challenge conventional wisdom on player aging curves.",
+      "Highly productive session. The team's combined expertise produced a shortlist methodology that's genuinely innovative.",
+    ],
+    exceptional: [
+      "An outstanding team meeting! The group achieved a breakthrough in predictive modelling that puts you ahead of rival clubs.",
+      "Remarkable session. The team's synergy produced insights no individual could have reached alone.",
+    ],
+  },
+
+  // ── General activities ────────────────────────────────────────────────────
+  freeAgentOutreach: {
+    poor: [
+      "A wasted outreach day. Every agent you contacted was unavailable or uninterested in your club's offer.",
+      "Frustrating calls. The free agents on your list have already agreed terms elsewhere.",
+    ],
+    average: [
+      "A routine outreach session. You made contact with a few agents but nobody is rushing to commit.",
+      "Standard networking. The free agent market is thin this week but you've kept your name in circulation.",
+    ],
+    good: [
+      "A productive outreach day. An agent confirmed their client is interested and open to talks.",
+      "Good session. You identified a free agent whose profile perfectly matches an upcoming squad need.",
+    ],
+    excellent: [
+      "An excellent outreach session! You've secured an exclusive first meeting with a highly sought-after free agent.",
+      "Highly productive calls. Two agents came to you — your reputation is clearly opening doors.",
+    ],
+    exceptional: [
+      "A remarkable outreach day! A top free agent's camp contacted you directly, citing your reputation as the deciding factor.",
+      "Outstanding networking. You've positioned your club as the preferred destination for a player rivals are desperate to sign.",
+    ],
+  },
+  loanMonitoring: {
+    poor: [
+      "A difficult monitoring visit. The loan player looked disinterested and the host club's coaches were evasive.",
+      "Frustrating check-in. The player's playing time has dropped and nobody at the loan club will explain why.",
+    ],
+    average: [
+      "A routine monitoring report. The loan player is getting minutes but development progress is modest.",
+      "Standard check-in. The player is settling in but hasn't yet shown the growth you'd hoped for.",
+    ],
+    good: [
+      "A positive monitoring visit. The loan player is thriving in his new environment and getting regular starts.",
+      "Good check-in. The host club's coaching staff are delighted with the player's attitude and development.",
+    ],
+    excellent: [
+      "An excellent monitoring report! The player has become a key figure at the loan club and his confidence has soared.",
+      "Highly encouraging visit. Statistical indicators and the eye test both confirm accelerated development.",
+    ],
+    exceptional: [
+      "An outstanding monitoring session! The loan player is performing so well the host club wants to discuss a permanent deal.",
+      "Remarkable progress. The loan has been transformative — this player will return as a genuine first-team contender.",
+    ],
+  },
+  loanRecommendation: {
+    poor: [
+      "A weak recommendation. You couldn't find a suitable club that matches the player's development needs.",
+      "Frustrating process. The clubs you approached either lack playing time or the right competitive level.",
+    ],
+    average: [
+      "A serviceable recommendation. You've found a loan destination, though it's not the ideal environment.",
+      "Standard process. The recommendation is solid on paper but you have reservations about the coaching setup.",
+    ],
+    good: [
+      "A well-researched recommendation. The target club's style of play is perfect for the player's development.",
+      "Good work. You've matched the player to a club where he'll play regularly in his natural position.",
+    ],
+    excellent: [
+      "An excellent recommendation! The target club's manager specifically requested this player after seeing your report.",
+      "Highly targeted work. Your analysis of the loan club's squad gaps proves this player will be first choice immediately.",
+    ],
+    exceptional: [
+      "A masterful recommendation! You've orchestrated the perfect development loan — playing time, coaching quality, and competition level all align.",
+      "Outstanding placement work. The loan deal includes a development plan that both clubs have bought into enthusiastically.",
+    ],
+  },
+  rest: {
+    poor: [
+      "A restless day off. You couldn't stop thinking about the upcoming fixtures and barely recovered.",
+      "Poor rest. Phone calls from agents and late-night video sessions meant you didn't actually switch off.",
+    ],
+    average: [
+      "A quiet rest day. You managed to step away from scouting for a few hours and recharge somewhat.",
+      "Standard recovery. Not the most relaxing day but at least you're not running on fumes tomorrow.",
+    ],
+    good: [
+      "A good rest day. You disconnected completely and feel noticeably sharper for it.",
+      "Proper recovery. A long walk and early night have done wonders for your focus.",
+    ],
+    excellent: [
+      "An excellent rest day! You feel completely refreshed and ready to attack the next assignment.",
+      "Deeply restorative. The break gave you mental clarity — you can already see patterns you'd been too tired to notice.",
+    ],
+    exceptional: [
+      "A perfect rest day. You return to work feeling like a new person — energised, sharp, and motivated.",
+      "The kind of break every scout needs. Your mind is clear and your enthusiasm for the work has been totally renewed.",
+    ],
+  },
+
+  // ── Career activities ─────────────────────────────────────────────────────
+  reviewNPCReport: {
+    poor: [
+      "A sloppy report review. Your junior scout's work was below standard and your feedback was equally unfocused.",
+      "Frustrating review session. The NPC report lacked detail and you struggled to extract useful insights.",
+    ],
+    average: [
+      "A routine report review. The scout's observations were competent but unremarkable.",
+      "Standard review. You corrected a few assessment errors and filed the report without much excitement.",
+    ],
+    good: [
+      "A useful report review. Your scout identified a genuine prospect and your feedback sharpened the assessment.",
+      "Good review session. The report was well-structured and your annotations added strategic context.",
+    ],
+    excellent: [
+      "An excellent review! Your feedback transformed a decent report into a persuasive document the board will act on.",
+      "Highly productive review. The scout's raw data combined with your expertise produced a compelling player profile.",
+    ],
+    exceptional: [
+      "An outstanding review session! Your scout has found someone special, and your editorial guidance made the case irrefutable.",
+      "Remarkable review. The combination of your scout's groundwork and your strategic vision is the best work your department has produced.",
+    ],
+  },
+  managerMeeting: {
+    poor: [
+      "An awkward meeting. The manager seemed distracted and your transfer recommendations fell on deaf ears.",
+      "Tense discussion. A disagreement over player priorities left the relationship slightly strained.",
+    ],
+    average: [
+      "A routine meeting with the manager. He acknowledged your input but made no commitments.",
+      "Standard catch-up. The manager listened politely but you're not sure how much influence you really have.",
+    ],
+    good: [
+      "A productive meeting. The manager showed genuine interest in your latest scouting targets.",
+      "Good discussion. You aligned on transfer priorities and the manager values your perspective.",
+    ],
+    excellent: [
+      "An excellent meeting! The manager asked you to lead the search for a specific position — real trust.",
+      "Highly productive discussion. Your tactical analysis impressed the manager and he's reshaping his shortlist based on your input.",
+    ],
+    exceptional: [
+      "A career-defining meeting. The manager told the board that your scouting is the club's biggest competitive advantage.",
+      "Outstanding session. The manager has given you full autonomy on the next signing — the ultimate vote of confidence.",
+    ],
+  },
+  boardPresentation: {
+    poor: [
+      "A nervy presentation. You stumbled over the numbers and the board seemed unconvinced by your analysis.",
+      "Difficult session. Tough questions from the chairman exposed gaps in your preparation.",
+    ],
+    average: [
+      "A routine board presentation. The directors listened attentively but asked few follow-up questions.",
+      "Standard presentation. You delivered the key metrics clearly but didn't generate much enthusiasm.",
+    ],
+    good: [
+      "A well-received presentation. The board appreciated your thoroughness and approved continued investment.",
+      "Good session. Your data-driven approach impressed the finance director and your budget looks secure.",
+    ],
+    excellent: [
+      "An excellent presentation! The board increased your scouting budget based on the ROI you demonstrated.",
+      "Highly impressive session. The chairman specifically praised the quality of your department's work.",
+    ],
+    exceptional: [
+      "A triumphant board presentation! Your track record is so strong the board has offered expanded responsibilities.",
+      "Outstanding session. The directors are talking about making your scouting model a blueprint for the entire club.",
+    ],
+  },
+  assignTerritory: {
+    poor: [
+      "A poorly planned territory assignment. The region you chose has limited fixtures and sparse talent.",
+      "Frustrating planning session. Logistics issues mean your scouts can't cover the assigned territory efficiently.",
+    ],
+    average: [
+      "A routine territory assignment. The coverage plan is adequate but not particularly strategic.",
+      "Standard planning. Your scouts have their marching orders but the territory lacks obvious high-value targets.",
+    ],
+    good: [
+      "A smart territory assignment. Your scouts are well-positioned to cover key matches in a talent-rich area.",
+      "Good planning. The territory offers a strong mix of established leagues and emerging talent pathways.",
+    ],
+    excellent: [
+      "An excellent territory strategy! Your coverage plan maximises exposure to the region's best young talent.",
+      "Highly strategic assignment. Your scouts will have first-mover advantage in an under-scouted region.",
+    ],
+    exceptional: [
+      "A visionary territory assignment! You've identified a region that rival clubs have completely neglected.",
+      "Outstanding planning. Your strategic territory coverage gives the club access to talent pipelines nobody else is monitoring.",
+    ],
+  },
+  internationalTravel: {
+    poor: [
+      "A gruelling trip. Delays, cancellations, and jet lag meant you arrived too exhausted to scout effectively.",
+      "Difficult travel. The logistics were a nightmare and you lost a full day to administrative problems.",
+    ],
+    average: [
+      "A routine international trip. Travel was uneventful and you arrived in good time for your assignments.",
+      "Standard journey. Long hours in transit but you used the time to review video footage on your laptop.",
+    ],
+    good: [
+      "A productive trip. Smooth travel meant you arrived fresh and immediately immersed yourself in the local scene.",
+      "Good travel. You struck up a conversation with a local journalist who shared valuable intel about the youth setup.",
+    ],
+    excellent: [
+      "An excellent trip! Your advance planning paid off — every connection was seamless and you maximised your time on the ground.",
+      "Highly efficient travel. You used transit time for deep video analysis and arrived fully prepared.",
+    ],
+    exceptional: [
+      "A perfect international trip! Everything aligned — contacts, logistics, and timing — setting up a week of world-class scouting.",
+      "Outstanding journey. A chance encounter at the airport with a legendary scout led to an invaluable exchange of knowledge.",
     ],
   },
 };

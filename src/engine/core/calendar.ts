@@ -22,10 +22,18 @@ import type {
   Observation,
   UnsignedYouth,
   Player,
+  LoanDeal,
+  LoanRecommendation,
+  TransferWindowState,
+  AbilityReading,
+  TargetOption,
+  TournamentEvent,
 } from "@/engine/core/types";
+import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { RNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
 import { calculateAccumulation } from "@/engine/insight/insight";
+import { getTournamentActivities } from "@/engine/youth/tournaments";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -119,11 +127,20 @@ export interface WeekProcessingResult {
   followUpSessionsExecuted: number;
   /** Number of parent/coach meetings held this week */
   parentCoachMeetingsExecuted: number;
+  /** Number of agency showcases hosted this week */
+  agencyShowcasesExecuted: number;
 
   // --- Free agent ---
 
   /** Number of free agent outreach sessions this week */
   freeAgentOutreachExecuted: number;
+
+  // --- Loan ---
+
+  /** Number of loan monitoring reports submitted this week */
+  loanMonitoringExecuted: number;
+  /** Number of loan recommendations made this week */
+  loanRecommendationsExecuted: number;
 
   /** Total Insight Points earned from all activities performed this week */
   insightPointsEarned: number;
@@ -158,6 +175,7 @@ export const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   followUpSession:    1,
   parentCoachMeeting: 1,
   writePlacementReport:1,
+  agencyShowcase:     3,
   // First-team exclusive
   reserveMatch:       2,
   scoutingMission:    3,
@@ -175,6 +193,9 @@ export const ACTIVITY_SLOT_COSTS: Record<ActivityType, number> = {
   analyticsTeamMeeting:1,
   // Free agent activities
   freeAgentOutreach:  2,
+  // Loan activities
+  loanMonitoring:     1,
+  loanRecommendation: 2,
 };
 
 /** Passive fatigue recovery per empty (unscheduled) day */
@@ -205,6 +226,7 @@ export const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   followUpSession:    5,
   parentCoachMeeting: 3,
   writePlacementReport:4,
+  agencyShowcase:     16,
   // First-team exclusive
   reserveMatch:       8,
   scoutingMission:    12,
@@ -222,6 +244,9 @@ export const ACTIVITY_FATIGUE_COSTS: Record<ActivityType, number> = {
   analyticsTeamMeeting:3,
   // Free agent activities
   freeAgentOutreach:  10,
+  // Loan activities
+  loanMonitoring:     5,
+  loanRecommendation: 15,
 };
 
 /** Skills that each activity type directly develops */
@@ -242,6 +267,7 @@ export const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<Scou
   followUpSession:    { technicalEye: 3, psychologicalRead: 2 },
   parentCoachMeeting: { psychologicalRead: 3 },
   writePlacementReport: { dataLiteracy: 3 },
+  agencyShowcase:      { technicalEye: 3, physicalAssessment: 3, potentialAssessment: 3, psychologicalRead: 1 },
   // First-team exclusive
   reserveMatch:        { technicalEye: 2, physicalAssessment: 2, playerJudgment: 3 },
   scoutingMission:     { technicalEye: 2, tacticalUnderstanding: 3, playerJudgment: 2, physicalAssessment: 1 },
@@ -259,6 +285,9 @@ export const ACTIVITY_SKILL_XP: Partial<Record<ActivityType, Partial<Record<Scou
   analyticsTeamMeeting:{ dataLiteracy: 2, psychologicalRead: 1 },
   // Free agent activities
   freeAgentOutreach:   { playerJudgment: 3, psychologicalRead: 2, technicalEye: 1 },
+  // Loan activities
+  loanMonitoring:      { playerJudgment: 2, dataLiteracy: 1 },
+  loanRecommendation:  { playerJudgment: 3, dataLiteracy: 2, tacticalUnderstanding: 1 },
 };
 
 /** Scout attributes that each activity type develops */
@@ -280,6 +309,7 @@ export const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<
   followUpSession:    { intuition: 3, memory: 2 },
   parentCoachMeeting: { persuasion: 3, networking: 2 },
   writePlacementReport: { persuasion: 2, memory: 1 },
+  agencyShowcase:      { intuition: 3, endurance: 2, networking: 2 },
   // First-team exclusive
   reserveMatch:        { memory: 2, endurance: 1 },
   scoutingMission:     { endurance: 3, adaptability: 2, networking: 1 },
@@ -297,6 +327,9 @@ export const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<
   analyticsTeamMeeting:{ networking: 1, persuasion: 1 },
   // Free agent activities
   freeAgentOutreach:   { networking: 2, persuasion: 2, intuition: 1 },
+  // Loan activities
+  loanMonitoring:      { memory: 2, networking: 1 },
+  loanRecommendation:  { persuasion: 2, memory: 1, intuition: 1 },
 };
 
 const TOTAL_WEEK_SLOTS = 7;
@@ -558,6 +591,21 @@ function topObservedUnsignedYouth(
   return results.slice(0, maxCount);
 }
 
+/** Find the highest-confidence ability reading for a player across all observations. */
+function getBestAbilityReading(
+  playerId: string,
+  observations?: Record<string, Observation>,
+): AbilityReading | undefined {
+  let best: AbilityReading | undefined;
+  for (const obs of Object.values(observations ?? {})) {
+    if (obs.playerId !== playerId || !obs.abilityReading) continue;
+    if (!best || obs.abilityReading.caConfidence > best.caConfidence) {
+      best = obs.abilityReading;
+    }
+  }
+  return best;
+}
+
 /**
  * Build the list of activities the scout can currently schedule.
  *
@@ -588,6 +636,12 @@ export function getAvailableActivities(
   observations?: Record<string, Observation>,
   unsignedYouth?: Record<string, UnsignedYouth>,
   players?: Record<string, Player>,
+  loanContext?: {
+    activeLoans?: LoanDeal[];
+    loanRecommendations?: LoanRecommendation[];
+    transferWindow?: TransferWindowState;
+  },
+  youthTournaments?: Record<string, TournamentEvent>,
 ): Activity[] {
   const activities: Activity[] = [];
   const observedCounts = collectObservedPlayerCounts(observations);
@@ -627,20 +681,12 @@ export function getAvailableActivities(
     activities.push({
       type: "watchVideo",
       slots: ACTIVITY_SLOT_COSTS.watchVideo,
-      targetId: "video-academy",
-      description: "Review academy footage — higher-profile youth with buzz",
-    });
-    activities.push({
-      type: "watchVideo",
-      slots: ACTIVITY_SLOT_COSTS.watchVideo,
-      targetId: "video-grassroots",
-      description: "Watch grassroots tournament highlights — broader regional pool",
-    });
-    activities.push({
-      type: "watchVideo",
-      slots: ACTIVITY_SLOT_COSTS.watchVideo,
-      targetId: "video-school",
-      description: "Study school match recordings — discover low-visibility gems (14-16)",
+      description: "Watch video footage of youth talent",
+      targetPool: [
+        { id: "video-academy", name: "Academy Footage", description: "Higher-profile youth with buzz" },
+        { id: "video-grassroots", name: "Grassroots Highlights", description: "Broader regional pool from tournaments" },
+        { id: "video-school", name: "School Match Recordings", description: "Discover low-visibility gems (14-16)" },
+      ],
     });
   } else {
     activities.push({
@@ -650,30 +696,44 @@ export function getAvailableActivities(
     });
   }
 
-  // Write report (targeted)
-  for (const candidate of reportCandidates) {
-    const player = players?.[candidate.playerId];
-    const playerLabel = player
-      ? `${player.firstName} ${player.lastName}`
-      : `Player ${candidate.playerId.slice(0, 6)}`;
+  // Write report (deduplicated — one card, target picker selects player)
+  if (reportCandidates.length > 0) {
     activities.push({
       type: "writeReport",
       slots: ACTIVITY_SLOT_COSTS.writeReport,
-      targetId: candidate.playerId,
-      description: `Write report: ${playerLabel} (${candidate.observations} observation${candidate.observations !== 1 ? "s" : ""})`,
+      description: "Write a scouting report on an observed player",
+      targetPool: reportCandidates.map((c) => {
+        const p = players?.[c.playerId];
+        const bestAbility = getBestAbilityReading(c.playerId, observations);
+        return {
+          id: c.playerId,
+          name: p ? `${p.firstName} ${p.lastName}` : `Player ${c.playerId.slice(0, 6)}`,
+          age: p?.age,
+          position: p?.position,
+          caStars: bestAbility?.perceivedCA,
+          paStars: bestAbility
+            ? ([bestAbility.perceivedPALow, bestAbility.perceivedPAHigh] as [number, number])
+            : undefined,
+          observations: c.observations,
+        };
+      }),
     });
   }
 
-  // Network meetings
+  // Network meetings (deduplicated — one card, target picker selects contact)
   if (contacts.length > 0) {
-    for (const contact of contacts.slice(0, 4)) {
-      activities.push({
-        type: "networkMeeting",
-        slots: ACTIVITY_SLOT_COSTS.networkMeeting,
-        targetId: contact.id,
-        description: `Meet with ${contact.name} (${contact.type})`,
-      });
-    }
+    activities.push({
+      type: "networkMeeting",
+      slots: ACTIVITY_SLOT_COSTS.networkMeeting,
+      description: "Meet with a contact in your network",
+      targetPool: contacts.slice(0, 4).map((c) => ({
+        id: c.id,
+        name: c.name,
+        contactType: c.type,
+        relationship: c.relationship,
+        organization: c.organization,
+      })),
+    });
   }
 
   // Training visit
@@ -733,16 +793,17 @@ export function getAvailableActivities(
     description: "Watch a school match — observe untapped youth talent in their natural setting",
   });
 
-  // grassrootsTournament: requires youth specialization with spec level >= 1
-  if (
-    scout.primarySpecialization === "youth" &&
-    scout.specializationLevel >= 1
-  ) {
-    activities.push({
-      type: "grassrootsTournament",
-      slots: ACTIVITY_SLOT_COSTS.grassrootsTournament,
-      description: "Scout a grassroots tournament — high yield of youth talent across multiple teams",
-    });
+  // grassrootsTournament: requires discovered local/regional tournament active THIS week
+  if (scout.primarySpecialization === "youth" && scout.specializationLevel >= 1 && youthTournaments) {
+    const { grassroots } = getTournamentActivities(youthTournaments, week);
+    for (const tournament of grassroots) {
+      activities.push({
+        type: "grassrootsTournament",
+        slots: ACTIVITY_SLOT_COSTS.grassrootsTournament,
+        targetId: tournament.id,
+        description: `Scout ${tournament.name}`,
+      });
+    }
   }
 
   // streetFootball: requires any sub-region with familiarity >= 20
@@ -771,40 +832,76 @@ export function getAvailableActivities(
     });
   }
 
-  // youthFestival: requires careerTier >= 2
-  if (scout.careerTier >= 2) {
-    activities.push({
-      type: "youthFestival",
-      slots: ACTIVITY_SLOT_COSTS.youthFestival,
-      description: "Attend a youth festival — multi-team event with large pool of scoutable youth",
-    });
+  // youthFestival: requires discovered national/international tournament active THIS week
+  if (scout.careerTier >= 2 && youthTournaments) {
+    const { festivals } = getTournamentActivities(youthTournaments, week);
+    for (const tournament of festivals) {
+      const costStr = tournament.travelCost
+        ? ` (est. £${tournament.travelCost.toLocaleString()} travel + accommodation)`
+        : "";
+      activities.push({
+        type: "youthFestival",
+        slots: ACTIVITY_SLOT_COSTS.youthFestival,
+        targetId: tournament.id,
+        description: `Attend ${tournament.name}${costStr}`,
+      });
+    }
+  }
+
+  // agencyShowcase: requires youth specialization and active showcase tournament
+  if (scout.primarySpecialization === "youth" && youthTournaments) {
+    const showcases = Object.values(youthTournaments).filter(
+      t => t.category === "agencyShowcase" && t.startWeek <= week && t.endWeek >= week && t.discovered && !t.attended,
+    );
+    for (const showcase of showcases) {
+      activities.push({
+        type: "agencyShowcase",
+        slots: ACTIVITY_SLOT_COSTS.agencyShowcase,
+        targetId: showcase.id,
+        description: `Host ${showcase.name} — your agency's exclusive youth showcase`,
+      });
+    }
   }
 
   // followUpSession / parentCoachMeeting / writePlacementReport:
   // requires at least 1 observation of an unsigned (unplaced) youth player
+  // Deduplicated — one card per activity type, target picker selects player
   const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, 5);
 
-  for (const entry of targetedYouth) {
-    const player = entry.youth.player;
-    const label = `${player.firstName} ${player.lastName}`;
+  if (targetedYouth.length > 0) {
+    const youthPool: TargetOption[] = targetedYouth.map((entry) => {
+      const p = entry.youth.player;
+      const bestAbility = getBestAbilityReading(p.id, observations);
+      return {
+        id: p.id,
+        name: `${p.firstName} ${p.lastName}`,
+        age: p.age,
+        position: p.position,
+        caStars: bestAbility?.perceivedCA,
+        paStars: bestAbility
+          ? ([bestAbility.perceivedPALow, bestAbility.perceivedPAHigh] as [number, number])
+          : undefined,
+        observations: entry.observations,
+      };
+    });
 
     activities.push({
       type: "followUpSession",
       slots: ACTIVITY_SLOT_COSTS.followUpSession,
-      targetId: player.id,
-      description: `Follow-up: ${label} (${entry.observations} observation${entry.observations !== 1 ? "s" : ""})`,
+      description: "Follow up on a previously observed youth player",
+      targetPool: youthPool,
     });
     activities.push({
       type: "parentCoachMeeting",
       slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
-      targetId: player.id,
-      description: `Parent/Coach meeting: ${label}`,
+      description: "Meet the parent or coach of a youth prospect",
+      targetPool: youthPool,
     });
     activities.push({
       type: "writePlacementReport",
       slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
-      targetId: player.id,
-      description: `Placement report: ${label}`,
+      description: "Write a placement report for a youth prospect",
+      targetPool: youthPool,
     });
   }
 
@@ -937,6 +1034,42 @@ export function getAvailableActivities(
     }
   }
 
+  // ── Loan activities (available to all specializations) ──────────────────────
+
+  if (loanContext) {
+    const activeLoans = loanContext.activeLoans ?? [];
+    const windowOpen = loanContext.transferWindow
+      ? isTransferWindowOpen([loanContext.transferWindow], week)
+      : false;
+
+    // Loan monitoring — available when scout has active loans at their club
+    // or loans they recommended
+    const monitorableLoans = activeLoans.filter(
+      (deal) =>
+        deal.status === "active" &&
+        (deal.scoutId === scout.id ||
+          deal.parentClubId === scout.currentClubId ||
+          deal.loanClubId === scout.currentClubId),
+    );
+    if (monitorableLoans.length > 0) {
+      activities.push({
+        type: "loanMonitoring",
+        slots: ACTIVITY_SLOT_COSTS.loanMonitoring,
+        description: `Monitor a loaned player's progress — check on ${monitorableLoans.length} active loan${monitorableLoans.length > 1 ? "s" : ""}`,
+      });
+    }
+
+    // Loan recommendation — available during transfer windows for scouts
+    // at tier 2+ with a club assignment
+    if (windowOpen && scout.currentClubId && scout.careerTier >= 2) {
+      activities.push({
+        type: "loanRecommendation",
+        slots: ACTIVITY_SLOT_COSTS.loanRecommendation,
+        description: "Recommend a player for loan — identify a target and suggest a loan destination",
+      });
+    }
+  }
+
   return activities;
 }
 
@@ -977,8 +1110,11 @@ function getInsightSource(
     case "dataConference":
     case "contractNegotiation":
     case "freeAgentOutreach":
+    case "agencyShowcase":
     case "networkMeeting":
     case "analyticsTeamMeeting":
+    case "loanMonitoring":
+    case "loanRecommendation":
       return "observation";
     case "writeReport":
     case "writePlacementReport":
@@ -1054,7 +1190,10 @@ export function processCompletedWeek(
       youthFestivalsExecuted: 0,
       followUpSessionsExecuted: 0,
       parentCoachMeetingsExecuted: 0,
+      agencyShowcasesExecuted: 0,
       freeAgentOutreachExecuted: 0,
+      loanMonitoringExecuted: 0,
+      loanRecommendationsExecuted: 0,
       insightPointsEarned: 0,
     };
   }
@@ -1104,7 +1243,12 @@ export function processCompletedWeek(
   let youthFestivalsExecuted = 0;
   let followUpSessionsExecuted = 0;
   let parentCoachMeetingsExecuted = 0;
+  let agencyShowcasesExecuted = 0;
   let freeAgentOutreachExecuted = 0;
+
+  // Loan activities
+  let loanMonitoringExecuted = 0;
+  let loanRecommendationsExecuted = 0;
 
   // Insight Points
   let totalInsightPoints = 0;
@@ -1272,8 +1416,20 @@ export function processCompletedWeek(
       case "parentCoachMeeting":
         parentCoachMeetingsExecuted++;
         break;
+      case "agencyShowcase":
+        agencyShowcasesExecuted++;
+        break;
       case "freeAgentOutreach":
         freeAgentOutreachExecuted++;
+        break;
+
+      // ---- Loan activities ----
+
+      case "loanMonitoring":
+        loanMonitoringExecuted++;
+        break;
+      case "loanRecommendation":
+        loanRecommendationsExecuted++;
         break;
 
       default:
@@ -1340,7 +1496,10 @@ export function processCompletedWeek(
     youthFestivalsExecuted,
     followUpSessionsExecuted,
     parentCoachMeetingsExecuted,
+    agencyShowcasesExecuted,
     freeAgentOutreachExecuted,
+    loanMonitoringExecuted,
+    loanRecommendationsExecuted,
     insightPointsEarned: totalInsightPoints,
   };
 }

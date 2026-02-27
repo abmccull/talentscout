@@ -22,6 +22,7 @@ import {
   hasRequiredCoursesForTier,
 } from "@/engine/career/courses";
 import type { Course, CourseEffect } from "@/engine/core/types";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // Category labels and tab keys
 const CATEGORY_TABS = [
@@ -122,7 +123,9 @@ export function TrainingScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6 space-y-6">
+      <div className="relative p-6 space-y-6">
+        <ScreenBackground src="/images/backgrounds/training-classroom.png" opacity={0.82} />
+        <div className="relative z-10">
         <div>
           <h1 className="text-2xl font-bold text-white">Training & Courses</h1>
           <p className="text-sm text-zinc-400">
@@ -132,7 +135,7 @@ export function TrainingScreen() {
 
         {/* Active Course */}
         {activeCourse && activeEnrollment && (
-          <Card className="border-emerald-500/30 bg-emerald-500/5">
+          <Card className="border-emerald-500/30 bg-emerald-500/5" data-tutorial-id="training-progress">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <BookOpen size={14} className="text-emerald-400" />
@@ -237,7 +240,7 @@ export function TrainingScreen() {
           </Card>
 
           {/* Course Catalog */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2" data-tutorial-id="training-courses">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
@@ -410,6 +413,7 @@ export function TrainingScreen() {
               </CardContent>
             </Card>
           </div>
+        </div>
         </div>
       </div>
     </GameLayout>

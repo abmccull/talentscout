@@ -3,10 +3,13 @@
 import type { PerceivedAbility } from "@/engine/scout/perceivedAbility";
 
 /**
- * Compact uncertainty-aware star rating for table cells.
+ * FM-style compact star rating for table cells.
  *
- * Shows ranges, fading, and "?" states depending on the scout's
- * confidence and the width of the perceived range.
+ * Gold (★) = certain ability (low bound).
+ * White (☆) = uncertainty range (low → high).
+ * Dark  (★) = empty (remaining to 5).
+ *
+ * Half-star support: .5 values render as half-width stars.
  */
 
 interface MiniStarRangeProps {
@@ -19,110 +22,71 @@ export function MiniStarRange({ perceived, mode }: MiniStarRangeProps) {
     return <span className="text-zinc-600">?</span>;
   }
 
-  const opacity = mode === "ca"
-    ? 0.4 + perceived.caConfidence * 0.6
-    : 0.4 + perceived.paConfidence * 0.6;
+  const low = mode === "ca" ? perceived.caLow : perceived.paLow;
+  const high = mode === "ca" ? perceived.caHigh : perceived.paHigh;
 
-  if (mode === "ca") {
-    return <CADisplay perceived={perceived} opacity={opacity} />;
-  }
-  return <PADisplay perceived={perceived} opacity={opacity} />;
+  return <FMStars low={low} high={high} />;
 }
 
-// ─── CA display ─────────────────────────────────────────────────────────────
+// ─── FM-style star rendering ────────────────────────────────────────────────
 
-function CADisplay({
-  perceived,
-  opacity,
-}: {
-  perceived: PerceivedAbility;
-  opacity: number;
-}) {
-  const spread = perceived.caHigh - perceived.caLow;
-
-  // Wide range: show text range
-  if (spread > 1.5) {
-    return (
-      <span
-        className="inline-flex items-center gap-0.5 text-[10px] font-mono text-zinc-300"
-        style={{ opacity }}
-      >
-        <span className="text-amber-400">★</span>
-        {perceived.caLow.toFixed(1)}-{perceived.caHigh.toFixed(1)}
-      </span>
-    );
-  }
-
-  // Medium range: show stars with spread indicator
-  if (spread > 0.5) {
-    return (
-      <span
-        className="inline-flex items-center gap-0.5 text-[10px]"
-        style={{ opacity }}
-      >
-        <MiniStarsInline rating={perceived.ca} />
-        <span className="text-zinc-500 font-mono ml-0.5">
-          ±{(spread / 2).toFixed(1)}
-        </span>
-      </span>
-    );
-  }
-
-  // Narrow range: solid stars
-  return (
-    <span style={{ opacity }}>
-      <MiniStarsInline rating={perceived.ca} />
-    </span>
-  );
+interface FMStarsProps {
+  low: number;   // certain floor (0.5–5.0)
+  high: number;  // uncertain ceiling (0.5–5.0)
 }
 
-// ─── PA display ─────────────────────────────────────────────────────────────
+function FMStars({ low, high }: FMStarsProps) {
+  // Clamp values
+  const lo = Math.max(0, Math.min(5, low));
+  const hi = Math.max(lo, Math.min(5, high));
 
-function PADisplay({
-  perceived,
-  opacity,
-}: {
-  perceived: PerceivedAbility;
-  opacity: number;
-}) {
-  const spread = perceived.paHigh - perceived.paLow;
-
-  // Wide range: show text range
-  if (spread > 0.5) {
-    return (
-      <span
-        className="inline-flex items-center gap-0.5 text-[10px] font-mono text-zinc-300"
-        style={{ opacity }}
-      >
-        <span className="text-amber-400">★</span>
-        {perceived.paLow.toFixed(1)}-{perceived.paHigh.toFixed(1)}
-      </span>
-    );
-  }
-
-  // Narrow range: solid stars
-  return (
-    <span style={{ opacity }}>
-      <MiniStarsInline rating={perceived.paLow} />
-    </span>
-  );
-}
-
-// ─── Shared star rendering ──────────────────────────────────────────────────
-
-function MiniStarsInline({ rating }: { rating: number }) {
-  const full = Math.floor(rating);
-  const half = rating % 1 >= 0.5;
-  const empty = 5 - full - (half ? 1 : 0);
   return (
     <span className="inline-flex items-center gap-px text-[10px]">
-      {Array.from({ length: full }, (_, i) => (
-        <span key={`f${i}`} className="text-amber-400">★</span>
-      ))}
-      {half && <span className="text-amber-400/60">★</span>}
-      {Array.from({ length: empty }, (_, i) => (
-        <span key={`e${i}`} className="text-zinc-700">★</span>
-      ))}
+      {Array.from({ length: 5 }, (_, i) => {
+        const pos = i + 1;
+        // Determine what this star position represents
+        const goldFill = getFill(lo, pos);
+        const whiteFill = getFill(hi, pos);
+
+        if (goldFill === "full") {
+          return <span key={i} className="text-amber-400">★</span>;
+        }
+        if (goldFill === "half") {
+          // Half gold + check if the other half is white
+          if (whiteFill === "full") {
+            return <HalfStar key={i} leftClass="text-amber-400" rightClass="text-zinc-400" />;
+          }
+          return <HalfStar key={i} leftClass="text-amber-400" rightClass="text-zinc-700" />;
+        }
+        // No gold — check white
+        if (whiteFill === "full") {
+          return <span key={i} className="text-zinc-400">★</span>;
+        }
+        if (whiteFill === "half") {
+          return <HalfStar key={i} leftClass="text-zinc-400" rightClass="text-zinc-700" />;
+        }
+        // Empty
+        return <span key={i} className="text-zinc-700">★</span>;
+      })}
+    </span>
+  );
+}
+
+/** Determine if a star position is fully filled, half filled, or empty given a rating. */
+function getFill(rating: number, starPos: number): "full" | "half" | "empty" {
+  if (rating >= starPos) return "full";
+  if (rating >= starPos - 0.5) return "half";
+  return "empty";
+}
+
+/** Render a star split into two halves with different colors. */
+function HalfStar({ leftClass, rightClass }: { leftClass: string; rightClass: string }) {
+  return (
+    <span className="relative inline-block w-[10px] h-[10px]">
+      {/* Right half (background) */}
+      <span className={`absolute inset-0 ${rightClass}`}>★</span>
+      {/* Left half (foreground, clipped) */}
+      <span className={`absolute inset-0 overflow-hidden w-[5px] ${leftClass}`}>★</span>
     </span>
   );
 }

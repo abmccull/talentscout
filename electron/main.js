@@ -122,7 +122,7 @@ function createWindow() {
           ...details.responseHeaders,
           "Content-Security-Policy": [
             "default-src 'self' file: data: blob:; " +
-              "script-src 'self' 'unsafe-inline' file:; " +
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' file:; " +
               "style-src 'self' 'unsafe-inline' file:; " +
               "img-src 'self' file: data: blob:; " +
               "font-src 'self' file: data:; " +

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, X, ChevronDown, ChevronUp, DollarSign, GitCompareArrows } from "lucide-react";
-import type { ScoutReport, ConvictionLevel, ReportListing, TransferRecord } from "@/engine/core/types";
+import { FileText, X, ChevronDown, ChevronUp, DollarSign, GitCompareArrows, Gavel } from "lucide-react";
+import type { ScoutReport, ConvictionLevel, ReportListing, TransferRecord, MarketplaceBid } from "@/engine/core/types";
 import {
   OUTCOME_COLORS,
   OUTCOME_REASON_COLORS,
@@ -323,9 +323,10 @@ function ListForSaleModal({ reportId: _reportId, playerName, onConfirm, onClose 
 }
 
 export function ReportHistory() {
-  const { gameState, selectPlayer, setScreen, listReportForSale, withdrawReportListing, comparisonReportIds, addToComparison, removeFromComparison, clearComparison } = useGameStore();
+  const { gameState, selectPlayer, setScreen, listReportForSale, withdrawReportListing, acceptMarketplaceBid, declineMarketplaceBid, comparisonReportIds, addToComparison, removeFromComparison, clearComparison } = useGameStore();
   const [selectedReport, setSelectedReport] = useState<ScoutReport | null>(null);
   const [listingReport, setListingReport] = useState<ScoutReport | null>(null);
+  const [expandedBidsListingId, setExpandedBidsListingId] = useState<string | null>(null);
 
   if (!gameState) return null;
 
@@ -366,14 +367,16 @@ export function ReportHistory() {
 
   const selectedPlayerName = selectedReport
     ? (() => {
-        const p = gameState.players[selectedReport.playerId];
+        const p = gameState.players[selectedReport.playerId]
+          ?? gameState.unsignedYouth[selectedReport.playerId]?.player;
         return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
       })()
     : "";
 
   const listingPlayerName = listingReport
     ? (() => {
-        const p = gameState.players[listingReport.playerId];
+        const p = gameState.players[listingReport.playerId]
+          ?? gameState.unsignedYouth[listingReport.playerId]?.player;
         return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
       })()
     : "";
@@ -420,7 +423,7 @@ export function ReportHistory() {
 
         {/* Comparison action bar */}
         {comparisonReportIds.length > 0 && (
-          <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3">
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3" data-tutorial-id="reporthistory-compare">
             <GitCompareArrows size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
             <span className="text-sm text-zinc-300">
               {comparisonReportIds.length} report{comparisonReportIds.length > 1 ? "s" : ""} selected for comparison
@@ -447,7 +450,7 @@ export function ReportHistory() {
         )}
 
         {/* Reports table */}
-        <Card>
+        <Card data-tutorial-id="reporthistory-list">
           <CardContent className="p-0">
             {reports.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -477,7 +480,8 @@ export function ReportHistory() {
                   </thead>
                   <tbody>
                     {reports.map((report) => {
-                      const player = gameState.players[report.playerId];
+                      const player = gameState.players[report.playerId]
+                        ?? gameState.unsignedYouth[report.playerId]?.player;
                       const playerName = player
                         ? `${player.firstName} ${player.lastName}`
                         : "Unknown";
@@ -485,8 +489,8 @@ export function ReportHistory() {
                       const isInComparison = comparisonReportIds.includes(report.id);
                       const comparisonFull = comparisonReportIds.length >= 3 && !isInComparison;
                       return (
+                        <React.Fragment key={report.id}>
                         <tr
-                          key={report.id}
                           className={`border-b border-[#27272a] transition hover:bg-[#141414] ${isInComparison ? "bg-emerald-950/20" : ""}`}
                         >
                           <td className="w-10 px-2 py-3 text-center">
@@ -613,11 +617,84 @@ export function ReportHistory() {
                                       Listed
                                     </Badge>
                                   )}
+                                  {listing?.status === "active" && listing.bids.filter((b) => b.status === "pending").length > 0 && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setExpandedBidsListingId(
+                                        expandedBidsListingId === listing.id ? null : listing.id,
+                                      )}
+                                      className="text-xs h-6 gap-1 text-amber-400 hover:text-amber-300"
+                                    >
+                                      <Gavel size={12} aria-hidden="true" />
+                                      {listing.bids.filter((b) => b.status === "pending").length} bid{listing.bids.filter((b) => b.status === "pending").length > 1 ? "s" : ""}
+                                    </Button>
+                                  )}
                                 </>
                               )}
                             </div>
                           </td>
                         </tr>
+                        {listing && expandedBidsListingId === listing.id && listing.bids.length > 0 && (
+                          <tr key={`${report.id}-bids`} className="bg-zinc-900/60">
+                            <td colSpan={9} className="px-6 py-3">
+                              <div className="space-y-2">
+                                <p className="text-xs font-medium text-zinc-400 mb-2">
+                                  Bids on this listing ({listing.bids.filter((b) => b.status === "pending").length} pending)
+                                </p>
+                                {listing.bids.map((bid: MarketplaceBid) => {
+                                  const club = gameState.clubs[bid.clubId];
+                                  const clubName = club?.name ?? "Unknown Club";
+                                  return (
+                                    <div
+                                      key={bid.id}
+                                      className="flex items-center gap-3 rounded border border-[#27272a] bg-[#141414] p-2 text-xs"
+                                    >
+                                      <span className="text-zinc-300 font-medium min-w-[120px]">{clubName}</span>
+                                      <span className="text-emerald-400 font-bold">${bid.amount.toLocaleString()}</span>
+                                      <Badge
+                                        variant={
+                                          bid.status === "pending" ? "warning"
+                                          : bid.status === "accepted" ? "success"
+                                          : bid.status === "declined" ? "destructive"
+                                          : "outline"
+                                        }
+                                        className="text-[10px]"
+                                      >
+                                        {bid.status}
+                                      </Badge>
+                                      {bid.status === "pending" && (
+                                        <span className="text-zinc-500">
+                                          expires wk {bid.expiryWeek}
+                                        </span>
+                                      )}
+                                      {bid.status === "pending" && (
+                                        <div className="ml-auto flex gap-1">
+                                          <Button
+                                            size="sm"
+                                            className="text-[10px] h-6 bg-emerald-700 hover:bg-emerald-600"
+                                            onClick={() => acceptMarketplaceBid(bid.id)}
+                                          >
+                                            Accept
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="text-[10px] h-6 text-zinc-400 hover:text-red-400"
+                                            onClick={() => declineMarketplaceBid(bid.id)}
+                                          >
+                                            Decline
+                                          </Button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                       );
                     })}
                   </tbody>

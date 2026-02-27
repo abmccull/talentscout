@@ -27,6 +27,7 @@ import {
   BarChart3,
   Shield,
   Megaphone,
+  Trophy,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import type {
@@ -40,11 +41,13 @@ import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
 // EquipmentPanel now has its own dedicated screen
 import { Tooltip } from "@/components/ui/tooltip";
+import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
 import { calculatePreferenceAlignment } from "@/engine/analytics/dataTension";
 import { calculateManagerSatisfaction } from "@/engine/career/management";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -292,7 +295,9 @@ export function CareerScreen() {
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="relative p-6">
+        <ScreenBackground src="/images/backgrounds/career-journey.png" opacity={0.80} />
+        <div className="relative z-10">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Career</h1>
           <p className="text-sm text-zinc-400">Season {currentSeason}</p>
@@ -333,7 +338,7 @@ export function CareerScreen() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3" data-tutorial-id="career-overview">
           {/* ── Left column ─────────────────────────────────────────────── */}
           <div className="space-y-4">
             {/* Scout profile */}
@@ -342,11 +347,14 @@ export function CareerScreen() {
                 <CardTitle className="text-sm">Scout Profile</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div>
-                  <p className="text-lg font-bold">
-                    {scout.firstName} {scout.lastName}
-                  </p>
-                  <p className="text-sm text-zinc-400">Age {scout.age}</p>
+                <div className="flex items-center gap-4">
+                  <ScoutAvatar avatarId={scout.avatarId ?? 1} size={96} />
+                  <div>
+                    <p className="text-lg font-bold">
+                      {scout.firstName} {scout.lastName}
+                    </p>
+                    <p className="text-sm text-zinc-400">Age {scout.age}</p>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div>
@@ -533,6 +541,22 @@ export function CareerScreen() {
               </CardContent>
             </Card>
 
+            {/* Hall of Fame — tier 3+ */}
+            {scout.careerTier >= 3 && (
+              <Card
+                className="cursor-pointer hover:border-amber-500/30 transition"
+                onClick={() => setScreen("hallOfFame")}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Trophy size={16} className="text-amber-400" aria-hidden="true" />
+                    <span className="text-sm font-medium">View Hall of Fame</span>
+                  </div>
+                  <ChevronRight size={14} className="text-zinc-500" />
+                </CardContent>
+              </Card>
+            )}
+
             {/* Manager Alignment (Data Tension) */}
             {managerAlignment !== null && currentClubManager && (
               <Card>
@@ -602,7 +626,7 @@ export function CareerScreen() {
           {/* ── Center column ────────────────────────────────────────────── */}
           <div className="space-y-4">
             {/* Skills */}
-            <Card>
+            <Card data-tutorial-id="career-skills">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">Observation Skills</CardTitle>
               </CardHeader>
@@ -842,7 +866,7 @@ export function CareerScreen() {
           {/* ── Right column ─────────────────────────────────────────────── */}
           <div className="space-y-4">
             {/* Specialization */}
-            <Card>
+            <Card data-tutorial-id="career-perk-tree">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Star size={14} className="text-amber-400" aria-hidden="true" />
@@ -936,7 +960,7 @@ export function CareerScreen() {
 
             {/* Mastery perks — tier 3+ */}
             {scout.careerTier >= 3 && (
-              <Card>
+              <Card data-tutorial-id="career-tier-benefits">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm">Mastery Perks</CardTitle>
                 </CardHeader>
@@ -1465,6 +1489,7 @@ export function CareerScreen() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </GameLayout>
   );

@@ -23,13 +23,13 @@ import {
   LayoutGrid,
   List,
 } from "lucide-react";
-import type { UnsignedYouth, SubRegion, Observation } from "@/engine/core/types";
+import type { UnsignedYouth, SubRegion, Observation, TournamentEvent } from "@/engine/core/types";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { MiniStarRange } from "@/components/ui/MiniStarRange";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = "unsigned" | "subRegions" | "venues";
+type Tab = "unsigned" | "subRegions" | "venues" | "tournaments";
 type SortOption = "buzz" | "age" | "country" | "visibility" | "pipeline";
 type PipelineStage = "discovered" | "observed" | "reported" | "placed";
 type ViewMode = "card" | "list";
@@ -58,8 +58,8 @@ const VENUES: VenueInfo[] = [
     slots: 3,
     fatigue: 12,
     description:
-      "Multi-day events with diverse youth talent. Requires Youth spec level 1+.",
-    requirement: "Youth specialization level 1+",
+      "Named local/regional tournament events. Discovered via contacts and regional knowledge.",
+    requirement: "Discovered tournament active this week + Youth spec level 1+",
   },
   {
     name: "Street Football",
@@ -81,8 +81,15 @@ const VENUES: VenueInfo[] = [
     name: "Youth Festival",
     slots: 3,
     fatigue: 14,
-    description: "Major youth showcases. Requires career tier 2+.",
-    requirement: "Career tier 2+",
+    description: "National and international tournament events with large talent pools.",
+    requirement: "Discovered national/international tournament active this week + Career tier 2+",
+  },
+  {
+    name: "Agency Showcase",
+    slots: 3,
+    fatigue: 16,
+    description: "Your agency's exclusive youth showcase. Large, high-quality pool.",
+    requirement: "Professional/HQ office, 3+ employees, costs £3,000",
   },
   {
     name: "Follow-Up Session",
@@ -453,8 +460,18 @@ function UnsignedYouthTab({
           case "age": cmp = a.player.age - b.player.age; break;
           case "nationality": cmp = a.player.nationality.localeCompare(b.player.nationality); break;
           case "value": cmp = a.player.marketValue - b.player.marketValue; break;
-          case "ca": cmp = (perceivedMap.get(a.player.id)?.ca ?? 0) - (perceivedMap.get(b.player.id)?.ca ?? 0); break;
-          case "pa": cmp = (perceivedMap.get(a.player.id)?.paHigh ?? 0) - (perceivedMap.get(b.player.id)?.paHigh ?? 0); break;
+          case "ca": {
+            const aP = perceivedMap.get(a.player.id);
+            const bP = perceivedMap.get(b.player.id);
+            cmp = ((aP ? (aP.caLow + aP.caHigh) / 2 : 0)) - ((bP ? (bP.caLow + bP.caHigh) / 2 : 0));
+            break;
+          }
+          case "pa": {
+            const aP = perceivedMap.get(a.player.id);
+            const bP = perceivedMap.get(b.player.id);
+            cmp = ((aP ? (aP.paLow + aP.paHigh) / 2 : 0)) - ((bP ? (bP.paLow + bP.paHigh) / 2 : 0));
+            break;
+          }
           case "buzz": cmp = a.buzzLevel - b.buzzLevel; break;
           case "visibility": cmp = a.visibility - b.visibility; break;
           case "pipeline": {
@@ -836,6 +853,106 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
   );
 }
 
+const PRESTIGE_COLORS: Record<string, string> = {
+  local: "text-zinc-400",
+  regional: "text-blue-400",
+  national: "text-amber-400",
+  international: "text-purple-400",
+};
+
+function TournamentsTab({ currentWeek, tournaments }: { currentWeek: number; tournaments: Record<string, TournamentEvent> }) {
+  const tournamentList = Object.values(tournaments);
+  const discovered = tournamentList.filter(t => t.discovered);
+  const upcoming = discovered.filter(t => !t.attended && t.endWeek >= currentWeek).sort((a, b) => a.startWeek - b.startWeek);
+  const past = discovered.filter(t => t.attended || t.endWeek < currentWeek).sort((a, b) => b.startWeek - a.startWeek);
+  const undiscovered = tournamentList.filter(t => !t.discovered && t.endWeek >= currentWeek);
+
+  return (
+    <div className="space-y-6">
+      {/* Upcoming / Active */}
+      <div>
+        <h3 className="mb-3 text-sm font-semibold text-zinc-300">Upcoming & Active ({upcoming.length})</h3>
+        {upcoming.length === 0 ? (
+          <p className="text-xs text-zinc-500">No discovered tournaments upcoming. Meet contacts or build regional familiarity to discover events.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {upcoming.map(t => {
+              const isActive = t.startWeek <= currentWeek && t.endWeek >= currentWeek;
+              return (
+                <Card key={t.id} className={`border-zinc-700/50 bg-zinc-800/50 ${isActive ? "ring-1 ring-emerald-500/40" : ""}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-medium text-zinc-100">{t.name}</CardTitle>
+                      {isActive && <Badge className="bg-emerald-500/20 text-emerald-400 text-[10px]">Active</Badge>}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-xs text-zinc-400">
+                    <div className="flex justify-between">
+                      <span>Prestige</span>
+                      <span className={PRESTIGE_COLORS[t.prestige] ?? "text-zinc-400"}>{t.prestige}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Country</span>
+                      <span className="capitalize">{t.country}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Weeks</span>
+                      <span>{t.startWeek}–{t.endWeek}</span>
+                    </div>
+                    {t.travelCost != null && t.travelCost > 0 && (
+                      <div className="flex justify-between">
+                        <span>Est. Cost</span>
+                        <span className="text-amber-400">£{t.travelCost.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {t.confederation && (
+                      <div className="flex justify-between">
+                        <span>Confederation</span>
+                        <span>{t.confederation}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span>Source</span>
+                      <span className="capitalize">{t.discoverySource ?? "unknown"}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Undiscovered hint */}
+      {undiscovered.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold text-zinc-300">Undiscovered ({undiscovered.length})</h3>
+          <p className="text-xs text-zinc-500">
+            {undiscovered.length} tournament{undiscovered.length > 1 ? "s" : ""} remain undiscovered this season. Build regional familiarity and meet contacts to uncover them.
+          </p>
+        </div>
+      )}
+
+      {/* Past tournaments */}
+      {past.length > 0 && (
+        <div>
+          <h3 className="mb-3 text-sm font-semibold text-zinc-300">Past ({past.length})</h3>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {past.map(t => (
+              <div key={t.id} className="flex items-center justify-between rounded border border-zinc-700/30 bg-zinc-800/30 px-3 py-2 text-xs">
+                <span className="text-zinc-300">{t.name}</span>
+                <Badge className={t.attended ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-600/20 text-zinc-500"}>
+                  {t.attended ? "Attended" : "Missed"}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VenuesTab() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -916,6 +1033,7 @@ export function YouthScoutingScreen() {
     { id: "unsigned", label: "Unsigned Youth", icon: Users },
     { id: "subRegions", label: "Sub-Regions", icon: Globe },
     { id: "venues", label: "Venues", icon: School },
+    { id: "tournaments", label: "Tournaments", icon: Trophy },
   ];
 
   return (
@@ -1052,6 +1170,7 @@ export function YouthScoutingScreen() {
             <SubRegionsTab subRegions={subRegionList} />
           )}
           {activeTab === "venues" && <VenuesTab />}
+          {activeTab === "tournaments" && <TournamentsTab currentWeek={gameState?.currentWeek ?? 1} tournaments={gameState?.youthTournaments ?? {}} />}
         </div>
       </div>
     </GameLayout>

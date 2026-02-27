@@ -84,7 +84,7 @@ export function FixtureBrowser() {
         </div>
 
         {/* Filters */}
-        <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4">
+        <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4" data-tutorial-id="fixture-filter">
           <div className="flex flex-wrap gap-3">
             <select
               value={leagueFilter}
@@ -147,13 +147,13 @@ export function FixtureBrowser() {
         </div>
 
         {/* Table */}
-        <div className="rounded-lg border border-[#27272a] overflow-hidden">
+        <div className="rounded-lg border border-[#27272a] overflow-hidden" data-tutorial-id="fixture-calendar">
           {fixtures.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <p className="text-sm text-zinc-500">No fixtures match your filters.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" data-tutorial-id="fixture-select">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[#27272a] bg-[#141414] text-left text-xs text-zinc-500">

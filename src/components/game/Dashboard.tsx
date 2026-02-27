@@ -36,16 +36,19 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { ClubCrest } from "@/components/game/ClubCrest";
+import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { Tooltip } from "@/components/ui/tooltip";
 import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS, getSpecIncomeLabel, getSpecTier3Label } from "@/engine/finance";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { SeasonTimeline } from "./SeasonTimeline";
+import { InsightMeter } from "./InsightMeter";
 import { ConnectedScenarioProgressPanel } from "./ScenarioProgressPanel";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { LeagueStandingsWidget } from "./LeagueStandingsWidget";
 import { useTranslations } from "next-intl";
+import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,11 +125,12 @@ export function Dashboard() {
     setScreen,
     getUpcomingFixtures,
     getLeagueStandings,
-    advanceWeek,
+    requestWeekAdvance,
     scheduleMatch,
     markMessageRead,
     selectPlayer,
     meetBoard,
+    submitLoanMonitoringReport,
   } = useGameStore();
   const [expandedExpenses, setExpandedExpenses] = useState(false);
   const [showSatisfactionHistory, setShowSatisfactionHistory] = useState(false);
@@ -243,11 +247,14 @@ export function Dashboard() {
 
   return (
     <GameLayout>
-      <div className="p-4 md:p-6" data-tutorial-id="dashboard-overview">
+      <div className="relative p-4 md:p-6" data-tutorial-id="dashboard-overview">
+        <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.82} />
+        <div className="relative z-10">
         {/* Header */}
         <div className="mb-4 md:mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
+              <ScoutAvatar avatarId={scout.avatarId ?? 1} size={48} />
               {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
                 <ClubCrest
                   clubId={scout.currentClubId}
@@ -282,7 +289,7 @@ export function Dashboard() {
               <Calendar size={16} className="mr-2" aria-hidden="true" />
               Planner
             </Button>
-            <Button onClick={() => advanceWeek()}>Advance Week</Button>
+            <Button onClick={() => requestWeekAdvance()}>Advance Week</Button>
           </div>
         </div>
 
@@ -461,6 +468,13 @@ export function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* ── Insight Meter ─────────────────────────────────────────────────── */}
+        {scout.insightState && scout.insightState.points > 0 && (
+          <div className="mb-6">
+            <InsightMeter insightState={scout.insightState as any} compact />
+          </div>
+        )}
 
         {/* ── T8.2: Financial summary card ─────────────────────────────────── */}
         {finances && (
@@ -1669,6 +1683,86 @@ export function Dashboard() {
         {/* League Standings with Relegation/Promotion Zones */}
         <div className="mt-6">
           <LeagueStandingsWidget />
+        </div>
+
+        {/* Active Loans */}
+        {(gameState.activeLoans ?? []).length > 0 && (
+          <div className="mt-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Eye size={14} className="text-sky-400" />
+                  Active Loans
+                  <Badge variant="outline" className="ml-auto text-[10px]">
+                    {gameState.activeLoans!.length}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {gameState.activeLoans!.slice(0, 8).map((deal) => {
+                  const loanPlayer = gameState.players[deal.playerId];
+                  const parentClub = gameState.clubs[deal.parentClubId];
+                  const loanClub = gameState.clubs[deal.loanClubId];
+                  const perf = deal.performanceRecord;
+                  if (!loanPlayer) return null;
+                  return (
+                    <div
+                      key={deal.id}
+                      className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-xs cursor-pointer hover:border-sky-500/30"
+                      onClick={() => {
+                        selectPlayer(deal.playerId);
+                        setScreen("playerProfile");
+                      }}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-zinc-200 truncate">
+                          {loanPlayer.firstName} {loanPlayer.lastName}
+                          <span className="ml-1 text-zinc-500">({loanPlayer.age})</span>
+                        </p>
+                        <p className="text-[10px] text-zinc-500 truncate">
+                          {parentClub?.name ?? "?"} → {loanClub?.name ?? "?"}
+                          {" · "}Ends S{deal.endSeason} W{deal.endWeek}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        {perf && (
+                          <>
+                            <span className="text-zinc-400">{perf.appearances} apps</span>
+                            {perf.avgRating > 0 && (
+                              <span className={perf.avgRating >= 7 ? "text-emerald-400" : perf.avgRating >= 6 ? "text-amber-400" : "text-red-400"}>
+                                {perf.avgRating.toFixed(1)}
+                              </span>
+                            )}
+                            {perf.developmentDelta !== 0 && (
+                              <span className={perf.developmentDelta > 0 ? "text-emerald-400" : "text-red-400"}>
+                                {perf.developmentDelta > 0 ? "+" : ""}{perf.developmentDelta} CA
+                              </span>
+                            )}
+                          </>
+                        )}
+                        {(deal.scoutId === gameState.scout.id ||
+                          deal.parentClubId === gameState.scout.currentClubId ||
+                          deal.loanClubId === gameState.scout.currentClubId) && (
+                          <button
+                            className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-sky-500/40 hover:text-sky-400 transition"
+                            title="Submit monitoring report"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              submitLoanMonitoringReport(deal.id);
+                            }}
+                          >
+                            <ClipboardList size={10} className="inline mr-0.5" />
+                            Monitor
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          </div>
+        )}
         </div>
       </div>
     </GameLayout>

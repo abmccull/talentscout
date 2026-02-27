@@ -48,10 +48,19 @@ export function LeagueStandingsWidget() {
     );
   }, [gameState]);
 
-  // Determine which league to show: prefer selected, fall back to first
+  // Default to the top-tier league in the scout's home country
+  const homeCountry = gameState?.countries[0] ?? "";
+  const homeLeagueId = useMemo(() => {
+    const home = leagues.find(
+      (l) => l.country.toLowerCase() === homeCountry.toLowerCase() && l.tier === 1,
+    );
+    return home?.id ?? leagues[0]?.id ?? "";
+  }, [leagues, homeCountry]);
+
+  // Determine which league to show: prefer selected, fall back to home league
   const activeLeagueId = selectedLeagueId && gameState?.leagues[selectedLeagueId]
     ? selectedLeagueId
-    : leagues[0]?.id ?? "";
+    : homeLeagueId;
 
   const standings = getLeagueStandings(activeLeagueId);
   const selectedLeague = gameState?.leagues[activeLeagueId];
@@ -86,7 +95,7 @@ export function LeagueStandingsWidget() {
             >
               {leagues.map((l) => (
                 <option key={l.id} value={l.id}>
-                  {l.shortName} (T{l.tier})
+                  {l.name}
                 </option>
               ))}
             </select>
