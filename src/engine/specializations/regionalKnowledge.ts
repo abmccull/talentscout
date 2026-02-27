@@ -234,6 +234,8 @@ export function initializeRegionalKnowledge(
 export function processRegionalKnowledgeGrowth(
   state: GameState,
   rng: RNG,
+  /** Equipment bonus: flat additive increase to weekly familiarity gain (integer). */
+  familiarityGainBonus = 0,
 ): {
   regionalKnowledge: Record<string, RegionalKnowledge>;
   newDiscoveries: Array<{ countryId: string; leagueId: string; leagueName: string }>;
@@ -276,6 +278,11 @@ export function processRegionalKnowledgeGrowth(
       countryId === currentCountry
     ) {
       knowledgeGain += 1;
+    }
+
+    // Equipment familiarity bonus (only for the active country)
+    if (familiarityGainBonus > 0 && countryId === currentCountry) {
+      knowledgeGain += familiarityGainBonus;
     }
 
     if (knowledgeGain === 0) continue;

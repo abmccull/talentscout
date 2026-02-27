@@ -661,9 +661,11 @@ export function InboxScreen() {
     if (!gameState) return;
     const audio = AudioEngine.getInstance();
     if (hasDramaticEvent) {
+      // Override to tension track for dramatic events
       audio.playMusic("transfer-pressure");
     } else {
-      audio.playMusic("career-hub");
+      // Resume soundtrack rotation for normal inbox browsing
+      audio.playMusic("soundtrack");
     }
   }, [hasDramaticEvent, gameState]);
 

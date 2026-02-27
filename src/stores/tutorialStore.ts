@@ -506,3 +506,8 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     persistAll(get());
   },
 }));
+
+// Expose store for E2E testing (dev only — stripped in production builds)
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as any).__TUTORIAL_STORE__ = useTutorialStore;
+}

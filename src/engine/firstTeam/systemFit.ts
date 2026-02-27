@@ -25,6 +25,7 @@ import type {
   SystemFitResult,
   TacticalIdentity,
 } from "@/engine/core/types";
+import type { RNG } from "@/engine/rng";
 import { calculateRoleSuitability, getBestRole } from "@/engine/players/roles";
 
 // =============================================================================
@@ -324,10 +325,25 @@ function buildFitWeaknesses(
 // =============================================================================
 
 /**
+ * Apply perception noise to a raw dimension score.
+ *
+ * Without an RNG the score passes through unchanged (deterministic / tests).
+ * The `accuracyBonus` (0–1) scales the noise down — better equipment = less noise.
+ */
+function applyNoise(rawScore: number, rng: RNG | undefined, accuracyBonus: number): number {
+  if (!rng) return rawScore;
+  const noise = rng.nextInt(-5, 5) * (1 - accuracyBonus);
+  return clamp(Math.round(rawScore + noise), 0, 100);
+}
+
+/**
  * Calculate the tactical system fit for a player at a given club.
  *
  * New formula (v2):
  *   overallFit = positionFit(25%) + roleFit(30%) + tacticalFit(25%) + ageFit(20%)
+ *
+ * @param accuracyBonus  Equipment/perk accuracy bonus (0–1). Higher = less noise. Default 0.
+ * @param rng            Optional seeded PRNG for deterministic noise. When omitted scores are exact.
  */
 export function calculateSystemFit(
   player: Player,
@@ -335,12 +351,14 @@ export function calculateSystemFit(
   manager: ManagerProfile,
   _allPlayers: Record<string, Player>,
   preferredRole?: PlayerRole,
+  accuracyBonus: number = 0,
+  rng?: RNG,
 ): SystemFitResult {
-  const positionFit = Math.round(scorePositionFit(player, manager));
+  const positionFit = applyNoise(Math.round(scorePositionFit(player, manager)), rng, accuracyBonus);
   const { score: roleFitScore, suggestedRole } = scoreRoleFit(player, preferredRole);
-  const roleFit = Math.round(roleFitScore);
-  const tacticalFit = Math.round(scoreTacticalFit(player, club));
-  const ageFit = Math.round(scoreAgeFit(player, club));
+  const roleFit = applyNoise(Math.round(roleFitScore), rng, accuracyBonus);
+  const tacticalFit = applyNoise(Math.round(scoreTacticalFit(player, club)), rng, accuracyBonus);
+  const ageFit = applyNoise(Math.round(scoreAgeFit(player, club)), rng, accuracyBonus);
 
   // Style fit kept for backward compatibility — uses tactical fit value
   const styleFit = tacticalFit;

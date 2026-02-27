@@ -6,9 +6,9 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { ConvictionLevel, AttributeReading, PlayerAttribute } from "@/engine/core/types";
+import type { ConvictionLevel, AttributeReading, PlayerAttribute, SystemFitResult } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import {
   generateReportContent,
@@ -145,6 +145,15 @@ export function ReportWriter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [selectedPlayerId, gameState?.observations]
   );
+
+  // System fit data for first-team scouts
+  const systemFit: SystemFitResult | undefined = useMemo(() => {
+    if (!gameState || !selectedPlayerId) return undefined;
+    if (gameState.scout.primarySpecialization !== "firstTeam") return undefined;
+    const clubId = gameState.scout.currentClubId ?? "";
+    const key = `${selectedPlayerId}:${clubId}`;
+    return gameState.systemFitCache[key] ?? undefined;
+  }, [gameState, selectedPlayerId]);
 
   const merged = useMemo<Map<string, AttributeReading>>(() => {
     const map = new Map<string, AttributeReading>();
@@ -735,6 +744,77 @@ export function ReportWriter() {
                 <p className="mt-2 text-[10px] text-zinc-600 italic">
                   Final score may vary slightly based on additional factors
                 </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* System Fit compact display (first-team scouts only) */}
+          {systemFit && (
+            <Card className="border-blue-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Target size={14} className="text-blue-400" aria-hidden="true" />
+                  System Fit
+                  <span
+                    className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                      systemFit.overallFit >= 70
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : systemFit.overallFit >= 40
+                        ? "bg-amber-500/15 text-amber-400"
+                        : "bg-red-500/15 text-red-400"
+                    }`}
+                  >
+                    {systemFit.overallFit}%
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {/* Compact dimension bars */}
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {(
+                    [
+                      ["Position", systemFit.positionFit],
+                      ["Role", systemFit.roleFit],
+                      ["Tactical", systemFit.tacticalFit],
+                      ["Age", systemFit.ageFit],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <span className="w-14 shrink-0 text-[10px] text-zinc-500">{label}</span>
+                      <div className="flex-1 h-1 rounded-full bg-[#27272a] overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            value >= 70 ? "bg-emerald-500" : value >= 40 ? "bg-amber-500" : "bg-red-500"
+                          }`}
+                          style={{ width: `${value}%` }}
+                        />
+                      </div>
+                      <span className={`w-8 text-right text-[10px] font-mono font-semibold ${
+                        value >= 70 ? "text-emerald-400" : value >= 40 ? "text-amber-400" : "text-red-400"
+                      }`}>
+                        {value}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Top strengths & weaknesses */}
+                <div className="flex gap-4 text-[11px] leading-tight">
+                  {systemFit.fitStrengths.length > 0 && (
+                    <div className="flex-1 min-w-0">
+                      {systemFit.fitStrengths.slice(0, 2).map((s, i) => (
+                        <p key={i} className="text-emerald-400 truncate">+ {s}</p>
+                      ))}
+                    </div>
+                  )}
+                  {systemFit.fitWeaknesses.length > 0 && (
+                    <div className="flex-1 min-w-0">
+                      {systemFit.fitWeaknesses.slice(0, 2).map((w, i) => (
+                        <p key={i} className="text-red-400 truncate">- {w}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}

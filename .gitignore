@@ -36,3 +36,7 @@ steam_api64.dll
 steam_api64.lib
 libsteam_api.dylib
 libsteam_api.so
+
+# Playwright
+playwright-report/
+test-results/

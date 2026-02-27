@@ -49,6 +49,21 @@ export const MUSIC_ASSETS: Record<string, AudioAssetDef> = {
   "network-groove":    { srcs: variants("/audio/music", "network-groove", 1),    loop: true },
   wonderkid:           { srcs: variants("/audio/music", "wonderkid", 1),         loop: true },
   "season-review":     { srcs: variants("/audio/music", "season-review", 1),     loop: true },
+
+  // Virtual playlist asset — contains all gameplay tracks for soundtrack rotation.
+  // The multi-variant playlist system in AudioEngine will crossfade between them.
+  soundtrack: {
+    srcs: [
+      "/audio/music/career-hub_1.mp3",
+      "/audio/music/report-writing_1.mp3",
+      "/audio/music/agency-theme_1.mp3",
+      "/audio/music/youth-scouting_1.mp3",
+      "/audio/music/transfer-pressure_1.mp3",
+      "/audio/music/network-groove_1.mp3",
+      "/audio/music/wonderkid_1.mp3",
+      "/audio/music/season-review_1.mp3",
+    ],
+  },
 };
 
 export const SFX_ASSETS: Record<string, AudioAssetDef> = {

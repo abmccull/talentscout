@@ -88,6 +88,19 @@ export function useKeyboardNav(): void {
           "youthScouting",
           "alumniDashboard",
           "finances",
+          "handbook",
+          "equipment",
+          "agency",
+          "training",
+          "rivals",
+          "performance",
+          "achievements",
+          "reportComparison",
+          "freeAgents",
+          "seasonAwards",
+          "negotiation",
+          "weekSimulation",
+          "matchSummary",
         ];
         if (inGameScreens.includes(currentScreen)) {
           e.preventDefault();

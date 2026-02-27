@@ -312,6 +312,41 @@ export function ReflectionScreen({
               />
               <p className="text-[10px] text-amber-400/60">{gutFeelingCandidate.triggerReason}</p>
             </div>
+
+            {/* PA Estimate — only when perk is active */}
+            {gutFeelingCandidate.paEstimate && (
+              <div
+                className="mt-4 rounded-lg border border-dashed border-amber-600/30 bg-amber-950/30 p-3 space-y-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Brain size={14} className="shrink-0 text-amber-500/70" aria-hidden="true" />
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-500/70">
+                    Potential Estimate
+                  </span>
+                </div>
+                <p className="text-sm font-semibold text-amber-200">
+                  Estimated PA: {gutFeelingCandidate.paEstimate.low} &ndash; {gutFeelingCandidate.paEstimate.high}
+                </p>
+                {/* Visual range bar on a 1–200 scale */}
+                <div className="relative h-2 w-full rounded-full bg-zinc-800/80">
+                  <div
+                    className="absolute inset-y-0 rounded-full bg-gradient-to-r from-amber-600/60 to-amber-400/60"
+                    style={{
+                      left: `${((gutFeelingCandidate.paEstimate.low - 1) / 199) * 100}%`,
+                      right: `${(1 - (gutFeelingCandidate.paEstimate.high - 1) / 199) * 100}%`,
+                    }}
+                    aria-hidden="true"
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] text-zinc-500">
+                  <span>1</span>
+                  <span>200</span>
+                </div>
+                <p className="text-[10px] text-amber-500/50 italic">
+                  Heuristic estimate based on instinct — not a data-driven assessment.
+                </p>
+              </div>
+            )}
           </div>
         </section>
       )}

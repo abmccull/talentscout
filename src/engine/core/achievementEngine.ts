@@ -220,7 +220,7 @@ export function getAchievementRarity(achievementId: string): AchievementRarity {
   const uncommon = new Set([
     "reach-tier-2", "reach-tier-3", "season-1", "reports-10",
     "countries-3", "wonderkid-found", "rep-50", "home-mastery",
-    "dual-threat", "all-activities", "matches-25", "observations-50",
+    "secondary-spec", "all-activities", "matches-25", "observations-50",
   ]);
 
   if (legendary.has(achievementId)) return "legendary";

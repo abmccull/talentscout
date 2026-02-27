@@ -54,9 +54,10 @@ import type {
   ChainConsequence,
   BoardSatisfactionDelta,
   DifficultyLevel,
+  CareerTier,
 } from "@/engine/core/types";
 import type { ObservationSession, SessionFlaggedMoment, LensType } from "@/engine/observation/types";
-import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, completeSession, getSessionResult } from "@/engine/observation/session";
+import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, addHypothesis, completeSession, getSessionResult } from "@/engine/observation/session";
 import { populateFullObservationPhases } from "@/engine/observation/fullObservation";
 import { populateAnalysisPhases } from "@/engine/observation/analysis";
 import { populateInvestigationPhases } from "@/engine/observation/investigation";
@@ -77,6 +78,7 @@ import {
   applyScoutAccountability,
   generateLoanRecommendation,
   processLoanMonitoringReport,
+  calculateSystemFit,
 } from "@/engine/firstTeam";
 import * as negotiationEngine from "@/engine/firstTeam/negotiation";
 import {
@@ -156,6 +158,7 @@ import {
   canUnlockSecondarySpec,
   unlockSecondarySpecialization,
   processManagerMeeting,
+  generateBoardDirectives,
   recordDiscovery,
   processSeasonDiscoveries,
   processMonthlySnapshot,
@@ -169,7 +172,12 @@ import {
   writeLegacyProfile,
 } from "@/engine/career/legacy";
 import { chooseCareerPath, canChooseIndependentPath } from "@/engine/career/pathChoice";
-import { processWeeklyCourseProgress, enrollInCourse } from "@/engine/career/courses";
+import {
+  processWeeklyCourseProgress,
+  enrollInCourse,
+  hasRequiredCoursesForTier,
+  COURSE_CATALOG,
+} from "@/engine/career/courses";
 import {
   createLeaderboardEntry,
   submitLeaderboardEntry,
@@ -183,6 +191,7 @@ import {
   classifyStandingZone,
 } from "@/engine/world/index";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
+import { ALL_PERKS } from "@/engine/specializations/perks";
 import { generateSeasonFixtures } from "@/engine/world/fixtures";
 import {
   initializeFinances,
@@ -229,6 +238,21 @@ import {
   assignEmployeeToSatellite,
   processAnnualAwards,
   ensureClientRelationship,
+  recordRetainerDelivery,
+  recordClientDelivery,
+  completeConsulting,
+  calculatePerformanceBonusAmount,
+  calculateSigningBonus,
+  calculateDiscoveryBonus,
+  calculateDepartmentBonusPool,
+  calculateGoldenParachute,
+  triggerPlacementFee,
+  processSellOnClauses,
+  checkPlacementFeeEligibility,
+  calculatePlacementFee,
+  calculateSellOnPercentage,
+  getLifestyleReputationPenalty,
+  getLifestyleNetworkingBonus,
   // F14: Financial Strategy Layer
   purchaseDataSubscription,
   upgradeTravelBudget,
@@ -475,6 +499,7 @@ interface GameStore {
   removeSessionFocus: (playerId: string) => void;
   flagSessionMoment: (momentId: string, reaction: SessionFlaggedMoment['reaction']) => void;
   addSessionNote: (note: string) => void;
+  addSessionHypothesis: (playerId: string, text: string, domain: string) => void;
   endObservationSession: () => void;
 
   // Insight actions
@@ -562,6 +587,7 @@ interface GameStore {
   acceptConsultingContract: (contract: ConsultingContract) => void;
   declineRetainerOffer: (contractId: string) => void;
   declineConsultingOffer: (contractId: string) => void;
+  completeConsultingContract: (contractId: string) => void;
 
   // F14: Financial Strategy Layer — infrastructure investments
   purchaseDataSubscriptionAction: (tier: DataSubscriptionTier) => void;
@@ -1946,7 +1972,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   scheduleActivity: (activity, dayIndex) => {
     const { gameState } = get();
     if (!gameState) return;
-    const schedule = addActivity(gameState.schedule, activity, dayIndex);
+    // Equipment travelSlotReduction: reduce slot cost for travel activities
+    let effectiveActivity = activity;
+    if (activity.type === "travel" || activity.type === "internationalTravel") {
+      const travelEquipBonuses = gameState.finances?.equipment
+        ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+        : undefined;
+      const slotReduction = travelEquipBonuses?.travelSlotReduction ?? 0;
+      if (slotReduction > 0 && activity.slots > 1) {
+        effectiveActivity = { ...activity, slots: Math.max(1, activity.slots - slotReduction) };
+      }
+    }
+    const schedule = addActivity(gameState.schedule, effectiveActivity, dayIndex);
     set({ gameState: { ...gameState, schedule } });
 
     // Tutorial auto-advance — generic and specialization-specific conditions.
@@ -2236,16 +2273,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     let updatedScout = applyWeekResults(gameState.scout, weekResult);
 
+    // Central equipment bonus aggregation for the week
+    const weekEquipBonuses = gameState.finances?.equipment
+      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+      : undefined;
+
     // Issue 5c+5d: Apply tool fatigue reduction bonuses
     const weekToolBonuses = getActiveToolBonuses(gameState.unlockedTools);
     const fatigueReduction = weekToolBonuses.fatigueReduction ?? 0;
     const travelFatigueReduction = weekToolBonuses.travelFatigueReduction ?? 0;
-    if (fatigueReduction > 0 || travelFatigueReduction > 0) {
+
+    // Equipment fatigueReduction: per-activity-type reductions from equipped items
+    let equipFatigueReduction = 0;
+    if (weekEquipBonuses?.fatigueReduction) {
+      const seenTypes = new Set<string>();
+      for (const activity of gameState.schedule.activities) {
+        if (activity && !seenTypes.has(activity.type)) {
+          seenTypes.add(activity.type);
+          const activityReduction = weekEquipBonuses.fatigueReduction[activity.type] ?? 0;
+          if (activityReduction > 0) equipFatigueReduction += activityReduction;
+        }
+      }
+    }
+
+    if (fatigueReduction > 0 || travelFatigueReduction > 0 || equipFatigueReduction > 0) {
       // Check if any travel activities were scheduled this week
       const hasTravelActivity = gameState.schedule.activities.some(
         (a) => a?.type === "internationalTravel" || a?.type === "travel",
       );
-      const totalReduction = fatigueReduction + (hasTravelActivity ? travelFatigueReduction : 0);
+      const totalReduction = fatigueReduction + (hasTravelActivity ? travelFatigueReduction : 0) + equipFatigueReduction;
       if (totalReduction > 0) {
         updatedScout = {
           ...updatedScout,
@@ -2345,10 +2401,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
         // Issue 5b: Apply relationship gain bonus from tools + equipment
         const interactionRelBonus = (choiceRelationshipModifiers.get("networkMeeting") ?? 0) * 0.05;
+        // W3f: Apply lifestyle networking bonus
+        const lifestyleNetBonus = stateWithScheduleApplied.finances
+          ? getLifestyleNetworkingBonus(stateWithScheduleApplied.finances.lifestyle)
+          : 0;
         const relBonus =
           (meetingToolBonuses.relationshipGainBonus ?? 0)
           + (meetingEquipBonuses?.relationshipGainBonus ?? 0)
-          + interactionRelBonus;
+          + interactionRelBonus
+          + lifestyleNetBonus;
         const adjustedChange = result.relationshipChange >= 0
           ? Math.round(result.relationshipChange * (1 + relBonus))
           : result.relationshipChange;
@@ -2375,9 +2436,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         };
 
         // Issue 7: Store contact intel entries
+        // Equipment intelReliabilityBonus: boosts reliability of intel received
+        const intelRelBonus = meetingEquipBonuses?.intelReliabilityBonus ?? 0;
         for (const hint of result.intel) {
-          const existing = updatedIntel[hint.playerId] ?? [];
-          updatedIntel[hint.playerId] = [...existing, hint];
+          const boostedHint = intelRelBonus > 0
+            ? { ...hint, reliability: Math.min(1, hint.reliability + intelRelBonus) }
+            : hint;
+          const existing = updatedIntel[boostedHint.playerId] ?? [];
+          updatedIntel[boostedHint.playerId] = [...existing, boostedHint];
         }
 
         // Build meeting summary message
@@ -2621,9 +2687,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
           playerId,
         );
         const qualityMod = choiceReportQualityModifiers.get("writeReport") ?? 0;
-        // F14: Include infrastructure report quality bonus
+        // F14: Include infrastructure report quality bonus + equipment reportQuality bonus
         const infraReportBonus = calculateInfrastructureEffects(stateWithScheduleApplied.scoutingInfrastructure).reportQualityBonus;
-        const quality = Math.max(0, Math.min(100, calculateReportQuality(report, player, infraReportBonus) + qualityMod));
+        const equipReportBonus = weekEquipBonuses?.reportQuality ?? 0;
+        const quality = Math.max(0, Math.min(100, calculateReportQuality(report, player, infraReportBonus + equipReportBonus) + qualityMod));
         const scoredReport = { ...report, qualityScore: quality };
         updatedReports[scoredReport.id] = scoredReport;
 
@@ -2752,6 +2819,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const existingObs = Object.values(updatedObservations);
       const observedPlayerIds = new Set(existingObs.map((o) => o.playerId));
       const currentScout = stateWithScheduleApplied.scout;
+
+      // Equipment attributesPerSession bonus: extra attributes revealed per observation
+      const extraAttrsPerSession = weekEquipBonuses?.attributesPerSession ?? 0;
 
       // Lookup aggregated quality for a given activity type.
       // Aggregation is built from day-level rolls to keep outcomes consistent
@@ -2956,7 +3026,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           for (let i = 0; i < count; i++) {
             const player = prioritizedPlayers[i];
 
-            const obs = observePlayerLight(actObsRng, player, currentScout, "academyVisit", Object.values(updatedObservations));
+            const obs = observePlayerLight(actObsRng, player, currentScout, "academyVisit", Object.values(updatedObservations), extraAttrsPerSession);
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
             updatedObservations[obs.id] = obs;
@@ -3005,6 +3075,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 currentScout,
                 "academyVisit",
                 Object.values(updatedObservations),
+                extraAttrsPerSession,
               );
               focusObs.week = stateWithScheduleApplied.currentWeek;
               focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3118,7 +3189,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           for (let i = 0; i < count; i++) {
             const player = prioritizedPlayers[i];
 
-            const obs = observePlayerLight(actObsRng, player, currentScout, "youthTournament", Object.values(updatedObservations));
+            const obs = observePlayerLight(actObsRng, player, currentScout, "youthTournament", Object.values(updatedObservations), extraAttrsPerSession);
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
             updatedObservations[obs.id] = obs;
@@ -3167,6 +3238,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 currentScout,
                 "youthTournament",
                 Object.values(updatedObservations),
+                extraAttrsPerSession,
               );
               focusObs.week = stateWithScheduleApplied.currentWeek;
               focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3198,7 +3270,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "trainingGround", Object.values(updatedObservations));
+          const obs = observePlayerLight(actObsRng, player, currentScout, "trainingGround", Object.values(updatedObservations), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
           updatedObservations[obs.id] = obs;
@@ -3247,6 +3319,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "trainingGround",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3259,6 +3332,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // --- Video Analysis: base 1-2, modified by quality ---
       if (weekResult.videoSessionsExecuted > 0) {
+        // Equipment videoConfidence bonus: boost confidence on video-sourced observations
+        const videoConfBoost = weekEquipBonuses?.videoConfidence ?? 0;
         const qr = qualityMap.get("watchVideo");
         const discMod = (qr?.discoveryModifier ?? 0) + choiceDiscoveryMod("watchVideo");
         const [rangeMin, rangeMax] = adjustedRange(1, 2, discMod);
@@ -3300,6 +3375,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 actObsRng, currentScout, youth, "videoAnalysis",
                 existingObsForYouth, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason,
               );
+              // Apply equipment videoConfidence boost
+              if (videoConfBoost > 0) {
+                result.observation.attributeReadings = result.observation.attributeReadings.map((r) => ({
+                  ...r,
+                  confidence: Math.min(1, r.confidence + videoConfBoost),
+                }));
+              }
               updatedObservations[result.observation.id] = result.observation;
               weekObservationsGenerated++;
               const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === youth.player.id);
@@ -3387,9 +3469,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
           for (let i = 0; i < count; i++) {
             const player = prioritizedPlayers[i];
 
-            const obs = observePlayerLight(actObsRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations));
+            const obs = observePlayerLight(actObsRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations), extraAttrsPerSession);
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
+            // Apply equipment videoConfidence boost
+            if (videoConfBoost > 0) {
+              obs.attributeReadings = obs.attributeReadings.map((r) => ({
+                ...r,
+                confidence: Math.min(1, r.confidence + videoConfBoost),
+              }));
+            }
             updatedObservations[obs.id] = obs;
             observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
@@ -3429,6 +3518,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 currentScout,
                 "videoAnalysis",
                 Object.values(updatedObservations),
+                extraAttrsPerSession,
               );
               focusObs.week = stateWithScheduleApplied.currentWeek;
               focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3460,7 +3550,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "reserveMatch", Object.values(updatedObservations));
+          const obs = observePlayerLight(actObsRng, player, currentScout, "reserveMatch", Object.values(updatedObservations), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
           updatedObservations[obs.id] = obs;
@@ -3508,6 +3598,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "reserveMatch",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3544,7 +3635,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "liveMatch", Object.values(updatedObservations));
+          const obs = observePlayerLight(actObsRng, player, currentScout, "liveMatch", Object.values(updatedObservations), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
           updatedObservations[obs.id] = obs;
@@ -3592,6 +3683,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "liveMatch",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3628,7 +3720,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "oppositionAnalysis", Object.values(updatedObservations));
+          const obs = observePlayerLight(actObsRng, player, currentScout, "oppositionAnalysis", Object.values(updatedObservations), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
           updatedObservations[obs.id] = obs;
@@ -3676,6 +3768,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "oppositionAnalysis",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3702,7 +3795,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "agentShowcase", Object.values(updatedObservations));
+          const obs = observePlayerLight(actObsRng, player, currentScout, "agentShowcase", Object.values(updatedObservations), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
           updatedObservations[obs.id] = obs;
@@ -3750,6 +3843,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "agentShowcase",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3776,7 +3870,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "trialMatch", Object.values(updatedObservations));
+          const obs = observePlayerLight(actObsRng, player, currentScout, "trialMatch", Object.values(updatedObservations), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
           updatedObservations[obs.id] = obs;
@@ -3850,6 +3944,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "trialMatch",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
@@ -3878,10 +3973,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // --- Database Query: generate statistical profiles for league players ---
       if (weekResult.databaseQueriesExecuted > 0) {
+        // Equipment dataAccuracy bonus: extra profiles discovered per query
+        const dbDataAccBonus = weekEquipBonuses?.dataAccuracy ?? 0;
         const dbRng = createRNG(
           `${gameState.seed}-dbquery-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
-        const queryProfileMod = choiceProfileMod("databaseQuery");
+        const queryProfileMod = choiceProfileMod("databaseQuery") + (dbDataAccBonus > 0 ? Math.round(dbDataAccBonus * 5) : 0);
         const queryAnomalyMod = choiceAnomalyMod("databaseQuery");
         const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
         if (leagueIds.length > 0) {
@@ -3985,6 +4082,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // --- Deep Video Analysis: enhanced statistical profile + observation ---
       if (weekResult.deepVideoAnalysesExecuted > 0) {
+        // Equipment videoConfidence + dataAccuracy bonuses for deep video analysis
+        const deepVideoConfBoost = weekEquipBonuses?.videoConfidence ?? 0;
+        const deepDataAccBoost = weekEquipBonuses?.dataAccuracy ?? 0;
         const deepVideoRng = createRNG(
           `${gameState.seed}-deepvideo-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
@@ -4020,9 +4120,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
               currentScout,
               "videoAnalysis",
               Object.values(updatedObservations),
+              extraAttrsPerSession,
             );
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
+            // Apply equipment videoConfidence + dataAccuracy boost for deep video
+            if (deepVideoConfBoost > 0 || deepDataAccBoost > 0) {
+              obs.attributeReadings = obs.attributeReadings.map((r) => ({
+                ...r,
+                confidence: Math.min(1, r.confidence + deepVideoConfBoost + deepDataAccBoost),
+              }));
+            }
             updatedObservations[obs.id] = obs;
             observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
@@ -4055,10 +4163,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // --- Stats Briefing: generate anomaly flags and highlights ---
       if (weekResult.statsBriefingsExecuted > 0) {
+        // Equipment dataAccuracy bonus: extra anomalies found during briefing
+        const briefingDataAccBonus = weekEquipBonuses?.dataAccuracy ?? 0;
         const briefingRng = createRNG(
           `${gameState.seed}-briefing-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
-        const anomalyMod = choiceAnomalyMod("statsBriefing");
+        const anomalyMod = choiceAnomalyMod("statsBriefing") + (briefingDataAccBonus > 0 ? Math.round(briefingDataAccBonus * 3) : 0);
         const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
         if (leagueIds.length > 0) {
           const targetLeagueId = leagueIds[briefingRng.nextInt(0, leagueIds.length - 1)];
@@ -4182,11 +4292,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // --- Algorithm Calibration: improve accuracy of statistical profiles ---
       if (weekResult.algorithmCalibrationsExecuted > 0) {
+        // Equipment anomalyDetectionRate bonus: extra anomalies from calibration
+        const calibAnomalyBonus = weekEquipBonuses?.anomalyDetectionRate ?? 0;
         const calibrationRng = createRNG(
           `${gameState.seed}-calibration-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
         const calibrationProfileMod = choiceProfileMod("algorithmCalibration");
-        const calibrationAnomalyMod = choiceAnomalyMod("algorithmCalibration");
+        const calibrationAnomalyMod = choiceAnomalyMod("algorithmCalibration") + (calibAnomalyBonus > 0 ? Math.round(calibAnomalyBonus * 3) : 0);
         // Reduce noise in existing profiles by re-running deep analysis on a sample
         const profiledPlayerIds = Object.keys(stateWithScheduleApplied.statisticalProfiles);
         const targetCalibrations = Math.max(1, 3 + calibrationProfileMod);
@@ -4253,11 +4365,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
       // --- Market Inefficiency Scan: identify undervalued players ---
       if (weekResult.marketInefficienciesExecuted > 0) {
+        // Equipment anomalyDetectionRate + valuationAccuracy bonuses for market scans
+        const marketAnomalyEquipBonus = weekEquipBonuses?.anomalyDetectionRate ?? 0;
+        const marketValuationBonus = weekEquipBonuses?.valuationAccuracy ?? 0;
         const marketRng = createRNG(
           `${gameState.seed}-market-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
-        const marketProfileMod = choiceProfileMod("marketInefficiency");
-        const marketAnomalyMod = choiceAnomalyMod("marketInefficiency");
+        const marketProfileMod = choiceProfileMod("marketInefficiency") + (marketValuationBonus > 0 ? Math.round(marketValuationBonus * 5) : 0);
+        const marketAnomalyMod = choiceAnomalyMod("marketInefficiency") + (marketAnomalyEquipBonus > 0 ? Math.round(marketAnomalyEquipBonus * 3) : 0);
         const marketQualityMod = choiceReportQualityMod("marketInefficiency");
         // Find players whose CA significantly exceeds their market value expectations
         const undervalued = allPlayers
@@ -4701,18 +4816,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
         );
 
         // Deduct travel cost for international tournaments (first attendance)
+        // Equipment travelCostReduction bonus reduces the cost
         if (tournament?.travelCost && stateWithScheduleApplied.finances) {
+          const travelCostReductionRate = weekEquipBonuses?.travelCostReduction ?? 0;
+          const reducedTravelCost = Math.round(tournament.travelCost * (1 - travelCostReductionRate));
           stateWithScheduleApplied = {
             ...stateWithScheduleApplied,
             finances: {
               ...stateWithScheduleApplied.finances,
-              balance: stateWithScheduleApplied.finances.balance - tournament.travelCost,
+              balance: stateWithScheduleApplied.finances.balance - reducedTravelCost,
               transactions: [
                 ...stateWithScheduleApplied.finances.transactions,
                 {
                   week: stateWithScheduleApplied.currentWeek,
                   season: stateWithScheduleApplied.currentSeason,
-                  amount: -tournament.travelCost,
+                  amount: -reducedTravelCost,
                   description: `Travel + accommodation: ${tournament.name}`,
                 },
               ],
@@ -5410,7 +5528,87 @@ export const useGameStore = create<GameStore>((set, get) => ({
       econFinances = processConsultingDeadline(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
 
       // Course progress
+      const prevCompletedCourses = econFinances.completedCourses;
       econFinances = processWeeklyCourseProgress(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
+
+      // Apply course effects if a new course just completed
+      if (econFinances.completedCourses.length > prevCompletedCourses.length) {
+        const newCourseId = econFinances.completedCourses[econFinances.completedCourses.length - 1];
+        const completedCourse = COURSE_CATALOG.find((c) => c.id === newCourseId);
+        if (completedCourse) {
+          // Apply only the newly completed course's effects (delta, not cumulative)
+          let updatedScout = { ...stateWithPhase2.scout };
+          for (const effect of completedCourse.effects) {
+            switch (effect.type) {
+              case "reputationBonus":
+                updatedScout = {
+                  ...updatedScout,
+                  reputation: Math.min(100, updatedScout.reputation + effect.value),
+                };
+                break;
+              case "skillBonus":
+                if (effect.target && effect.target in updatedScout.skills) {
+                  updatedScout = {
+                    ...updatedScout,
+                    skills: {
+                      ...updatedScout.skills,
+                      [effect.target]: Math.min(
+                        20,
+                        updatedScout.skills[effect.target as keyof typeof updatedScout.skills] + effect.value,
+                      ),
+                    },
+                  };
+                }
+                break;
+              case "attributeBonus":
+                if (effect.target && effect.target in updatedScout.attributes) {
+                  updatedScout = {
+                    ...updatedScout,
+                    attributes: {
+                      ...updatedScout.attributes,
+                      [effect.target]: Math.min(
+                        20,
+                        updatedScout.attributes[effect.target as keyof typeof updatedScout.attributes] + effect.value,
+                      ),
+                    },
+                  };
+                }
+                break;
+            }
+          }
+          stateWithPhase2 = { ...stateWithPhase2, scout: updatedScout };
+
+          // Build a summary of applied bonuses
+          const bonusParts: string[] = [];
+          for (const effect of completedCourse.effects) {
+            if (effect.type === "reputationBonus") {
+              bonusParts.push(`Reputation +${effect.value}`);
+            } else if (effect.type === "skillBonus" && effect.target) {
+              bonusParts.push(`${effect.target} +${effect.value}`);
+            } else if (effect.type === "attributeBonus" && effect.target) {
+              bonusParts.push(`${effect.target} +${effect.value}`);
+            }
+          }
+          const bonusSummary = bonusParts.length > 0 ? ` Bonuses applied: ${bonusParts.join(", ")}.` : "";
+
+          stateWithPhase2 = {
+            ...stateWithPhase2,
+            inbox: [
+              {
+                id: `course_complete_${stateWithPhase2.currentWeek}_${newCourseId}`,
+                week: stateWithPhase2.currentWeek,
+                season: stateWithPhase2.currentSeason,
+                type: "event" as const,
+                title: "Course Completed",
+                body: `Course completed: ${completedCourse.name}.${bonusSummary}`,
+                read: false,
+                actionRequired: false,
+              },
+              ...stateWithPhase2.inbox,
+            ],
+          };
+        }
+      }
 
       // Agency employee processing
       if (econFinances.employees.length > 0) {
@@ -5527,6 +5725,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
           stateWithPhase2 = { ...stateWithPhase2, scout: advancedScout };
           econFinances = advancedFinances;
         }
+      }
+
+      // W3f: Apply lifestyle reputation penalty for living below station (weekly)
+      const lifestyleRepPenalty = getLifestyleReputationPenalty(
+        econFinances.lifestyle.level,
+        stateWithPhase2.scout.careerTier,
+      );
+      if (lifestyleRepPenalty !== 0) {
+        const newRep = Math.max(
+          0,
+          Math.min(100, stateWithPhase2.scout.reputation + lifestyleRepPenalty),
+        );
+        stateWithPhase2 = {
+          ...stateWithPhase2,
+          scout: { ...stateWithPhase2.scout, reputation: newRep },
+        };
       }
 
       stateWithPhase2 = { ...stateWithPhase2, finances: econFinances };
@@ -5891,6 +6105,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const faPlayerIds = new Set(
           (stateWithPhase2.freeAgentPool?.agents ?? []).map((a) => a.playerId),
         );
+        const predAccuracyBonus = weekEquipBonuses?.predictionAccuracy ?? 0;
         const resolvedPredictions = resolvePredictions(
           stateWithPhase2.predictions,
           stateWithPhase2.players,
@@ -5898,6 +6113,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           stateWithPhase2.currentWeek,
           predRng,
           faPlayerIds,
+          predAccuracyBonus,
         );
         if (resolvedPredictions.some((p, i) => p !== stateWithPhase2.predictions[i])) {
           stateWithPhase2 = { ...stateWithPhase2, predictions: resolvedPredictions };
@@ -5933,6 +6149,144 @@ export const useGameStore = create<GameStore>((set, get) => ({
           ...newState,
           transferRecords: [...newState.transferRecords, ...newTransferRecords],
         };
+      }
+
+      // W3d: Discovery bonus for club scouts when their reports match transfers
+      // W3e: Placement fees for independent scouts when their reports match transfers
+      if (newState.finances) {
+        let transferFinances = newState.finances;
+        const transferBonusMessages: InboxMessage[] = [];
+
+        for (const transfer of tickResult.transfers) {
+          // Check if the scout has a report on this transferred player
+          const matchingReport = checkPlacementFeeEligibility(
+            transfer.playerId,
+            newState.reports,
+            newState.scout.id,
+          );
+          if (!matchingReport) continue;
+
+          const transferPlayer = newState.players[transfer.playerId];
+          const playerName = transferPlayer
+            ? `${transferPlayer.firstName} ${transferPlayer.lastName}`
+            : "a player";
+
+          if (newState.scout.careerPath === "club") {
+            // W3d: Discovery bonus for club scouts
+            const discoveryBonus = calculateDiscoveryBonus(
+              transfer.fee,
+              newState.scout.careerTier,
+              matchingReport.conviction,
+            );
+            if (discoveryBonus > 0) {
+              transferFinances = {
+                ...transferFinances,
+                balance: transferFinances.balance + discoveryBonus,
+                bonusRevenue: transferFinances.bonusRevenue + discoveryBonus,
+                transactions: [
+                  ...transferFinances.transactions,
+                  {
+                    week: newState.currentWeek,
+                    season: newState.currentSeason,
+                    amount: discoveryBonus,
+                    description: `Discovery bonus (${playerName})`,
+                  },
+                ],
+              };
+              transferBonusMessages.push({
+                id: `discovery-bonus-${transfer.playerId}-w${newState.currentWeek}`,
+                week: newState.currentWeek,
+                season: newState.currentSeason,
+                type: "event" as const,
+                title: "Discovery Bonus",
+                body: `Your scouting report on ${playerName} contributed to a successful transfer (£${transfer.fee.toLocaleString()}). You've received a £${discoveryBonus.toLocaleString()} discovery bonus.`,
+                read: false,
+                actionRequired: false,
+              });
+            }
+          } else if (newState.scout.careerPath === "independent") {
+            // W3e: Placement fee for independent scouts
+            const weeksAgo = (newState.currentSeason * 52 + newState.currentWeek)
+              - (matchingReport.submittedSeason * 52 + matchingReport.submittedWeek);
+            const fee = calculatePlacementFee(
+              transfer.fee,
+              matchingReport,
+              newState.scout,
+              weeksAgo,
+              false, // not exclusive
+            );
+            const sellOnPct = transferPlayer
+              ? calculateSellOnPercentage(transferPlayer.age, matchingReport.conviction)
+              : 0;
+
+            transferFinances = triggerPlacementFee(
+              transferFinances,
+              fee,
+              transfer.playerId,
+              transfer.toClubId,
+              transfer.fee,
+              sellOnPct,
+              newState.currentWeek,
+              newState.currentSeason,
+            );
+
+            transferBonusMessages.push({
+              id: `placement-fee-${transfer.playerId}-w${newState.currentWeek}`,
+              week: newState.currentWeek,
+              season: newState.currentSeason,
+              type: "event" as const,
+              title: "Placement Fee Earned",
+              body: `Your scouting report on ${playerName} led to a transfer (£${transfer.fee.toLocaleString()}). You've earned a £${fee.toLocaleString()} placement fee.${sellOnPct > 0 ? ` A ${(sellOnPct * 100).toFixed(1)}% sell-on clause has been registered.` : ""}`,
+              read: false,
+              actionRequired: false,
+            });
+          }
+        }
+
+        newState = {
+          ...newState,
+          finances: transferFinances,
+          inbox: [...newState.inbox, ...transferBonusMessages],
+        };
+      }
+
+      // W3e: Process sell-on clauses from this week's transfers
+      if (newState.finances && newState.finances.placementFeeRecords.length > 0) {
+        const sellOnTransfers = tickResult.transfers.map((t) => ({
+          playerId: t.playerId,
+          fee: t.fee,
+        }));
+        if (sellOnTransfers.length > 0) {
+          const afterSellOn = processSellOnClauses(
+            newState.finances,
+            sellOnTransfers,
+            newState.currentWeek,
+            newState.currentSeason,
+          );
+          // Check if sell-on revenue increased
+          if (afterSellOn.sellOnRevenue > newState.finances.sellOnRevenue) {
+            const sellOnEarned = afterSellOn.sellOnRevenue - newState.finances.sellOnRevenue;
+            newState = {
+              ...newState,
+              finances: afterSellOn,
+              inbox: [
+                ...newState.inbox,
+                {
+                  id: `sell-on-w${newState.currentWeek}-s${newState.currentSeason}`,
+                  week: newState.currentWeek,
+                  season: newState.currentSeason,
+                  type: "event" as const,
+                  title: "Sell-On Clause Payment",
+                  body: `A player you previously placed has been transferred. You've received £${sellOnEarned.toLocaleString()} from sell-on clauses.`,
+                  read: false,
+                  actionRequired: false,
+                },
+              ],
+            };
+          } else {
+            newState = { ...newState, finances: afterSellOn };
+          }
+        }
       }
     }
 
@@ -6104,6 +6458,59 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...newState,
         inbox: [...newState.inbox, ...alumniMessages],
       };
+    }
+
+    // ── Network: Relationship decay warnings (5b) ────────────────────────────
+    // Compare pre-tick and post-tick contact states to detect first-time
+    // threshold crossings. Warnings fire once per contact per threshold.
+    {
+      const decayWarnings: InboxMessage[] = [];
+      for (const [contactId, postContact] of Object.entries(newState.contacts)) {
+        const preContact = gameState.contacts[contactId];
+        if (!preContact) continue;
+
+        // Warning 1: Contact has gone dormant for the first time
+        if (postContact.dormant && !preContact.dormant) {
+          decayWarnings.push({
+            id: `decay-dormant-${contactId}-w${newState.currentWeek}-s${newState.currentSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "warning" as const,
+            title: `Contact Gone Dormant: ${postContact.name}`,
+            body: `Your contact ${postContact.name} has gone dormant. Schedule a meeting to rebuild the relationship.`,
+            read: false,
+            actionRequired: false,
+            relatedId: contactId,
+            relatedEntityType: "contact" as const,
+          });
+        }
+
+        // Warning 2: Relationship crossed below 30 (approaching dormant threshold of 20)
+        if (
+          preContact.relationship >= 30 &&
+          postContact.relationship < 30 &&
+          !postContact.dormant
+        ) {
+          decayWarnings.push({
+            id: `decay-fading-${contactId}-w${newState.currentWeek}-s${newState.currentSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "warning" as const,
+            title: `Relationship Fading: ${postContact.name}`,
+            body: `Your relationship with ${postContact.name} is fading. Consider reaching out.`,
+            read: false,
+            actionRequired: false,
+            relatedId: contactId,
+            relatedEntityType: "contact" as const,
+          });
+        }
+      }
+      if (decayWarnings.length > 0) {
+        newState = {
+          ...newState,
+          inbox: [...newState.inbox, ...decayWarnings],
+        };
+      }
     }
 
     // ── Monthly performance snapshot (uses post-tick state for accuracy) ────
@@ -6303,16 +6710,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return;
       }
 
+      // Enforce tier gate: block promotion if required courses not completed
+      let effectiveReview = review;
+      if (review.outcome === "promoted" && newState.scout.careerTier < 5) {
+        const targetTier = (newState.scout.careerTier + 1) as CareerTier;
+        if (!hasRequiredCoursesForTier(newState.finances?.completedCourses ?? [], targetTier)) {
+          effectiveReview = { ...review, outcome: "retained" };
+          // Update the stored review with the blocked outcome
+          newState = {
+            ...newState,
+            performanceReviews: [
+              ...newState.performanceReviews.slice(0, -1),
+              effectiveReview,
+            ],
+          };
+          seasonEndMessages.push({
+            id: `promotion-blocked-s${completedSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "feedback" as const,
+            title: "Promotion Blocked",
+            body: "Your performance merited a promotion, but you lack the required course qualifications for the next tier. Complete the necessary courses to advance.",
+            read: false,
+            actionRequired: false,
+          });
+        }
+      }
+
       // Apply reputation change from review
       const reviewedScout = updateReputation(newState.scout, {
         type: "seasonEnd",
-        reviewOutcome: review.outcome,
+        reviewOutcome: effectiveReview.outcome,
       });
       newState = { ...newState, scout: reviewedScout };
 
       // If promoted, advance career tier
-      if (review.outcome === "promoted" && newState.scout.careerTier < 5) {
-        const newTier = (newState.scout.careerTier + 1) as 1 | 2 | 3 | 4 | 5;
+      if (effectiveReview.outcome === "promoted" && newState.scout.careerTier < 5) {
+        const newTier = (newState.scout.careerTier + 1) as CareerTier;
         newState = {
           ...newState,
           scout: {
@@ -6332,11 +6766,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
 
       const reviewOutcomeText =
-        review.outcome === "promoted"
+        effectiveReview.outcome === "promoted"
           ? "Congratulations! You have been promoted."
-          : review.outcome === "retained"
+          : effectiveReview.outcome === "retained"
             ? "You have been retained for next season."
-            : review.outcome === "warning"
+            : effectiveReview.outcome === "warning"
               ? "You have received a formal warning. Improve your performance next season."
               : "Your contract has been terminated.";
       seasonEndMessages.push({
@@ -6349,6 +6783,89 @@ export const useGameStore = create<GameStore>((set, get) => ({
         read: false,
         actionRequired: false,
       });
+
+      // W3d: Performance bonus for club-path scouts
+      if (newState.scout.careerPath === "club" && newState.finances) {
+        const perfBonus = calculatePerformanceBonusAmount(
+          effectiveReview,
+          newState.scout.careerTier,
+        );
+        if (perfBonus > 0) {
+          newState = {
+            ...newState,
+            finances: {
+              ...newState.finances,
+              balance: newState.finances.balance + perfBonus,
+              bonusRevenue: newState.finances.bonusRevenue + perfBonus,
+              transactions: [
+                ...newState.finances.transactions,
+                {
+                  week: newState.currentWeek,
+                  season: newState.currentSeason,
+                  amount: perfBonus,
+                  description: `Performance bonus (${effectiveReview.outcome})`,
+                },
+              ],
+            },
+          };
+          seasonEndMessages.push({
+            id: `perf-bonus-s${completedSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "event" as const,
+            title: "Performance Bonus",
+            body: `You've received a £${perfBonus.toLocaleString()} performance bonus based on your season review.`,
+            read: false,
+            actionRequired: false,
+          });
+        }
+      }
+
+      // W3d: Golden parachute for tier 5 club scouts who are fired
+      if (
+        effectiveReview.outcome === "fired" &&
+        newState.scout.careerPath === "club" &&
+        newState.finances &&
+        newState.scout.careerTier === 5
+      ) {
+        const remainingSeasons = Math.max(
+          0,
+          (newState.scout.contractEndSeason ?? newState.currentSeason) - newState.currentSeason,
+        );
+        const parachute = calculateGoldenParachute(
+          newState.scout.salary,
+          remainingSeasons,
+        );
+        if (parachute > 0) {
+          newState = {
+            ...newState,
+            finances: {
+              ...newState.finances,
+              balance: newState.finances.balance + parachute,
+              bonusRevenue: newState.finances.bonusRevenue + parachute,
+              transactions: [
+                ...newState.finances.transactions,
+                {
+                  week: newState.currentWeek,
+                  season: newState.currentSeason,
+                  amount: parachute,
+                  description: "Golden parachute severance",
+                },
+              ],
+            },
+          };
+          seasonEndMessages.push({
+            id: `golden-parachute-s${completedSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "event" as const,
+            title: "Golden Parachute",
+            body: `Your contract included a golden parachute clause. You've received £${parachute.toLocaleString()} in severance pay for ${remainingSeasons} remaining season(s).`,
+            read: false,
+            actionRequired: false,
+          });
+        }
+      }
 
       // ── Issue 1: Generate job offers ─────────────────────────────────────
       const seasonEndRng = createRNG(`${gameState.seed}-seasonend-${completedSeason}`);
@@ -6399,6 +6916,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
           });
         }
         newState = { ...newState, reports: updatedReports };
+      }
+
+      // W3d: Department bonus pool for tier 4+ club scouts at season end
+      if (
+        newState.scout.careerPath === "club" &&
+        newState.scout.careerTier >= 4 &&
+        newState.finances
+      ) {
+        // Count successful signings from transfer records this season
+        const seasonSuccesses = newState.transferRecords.filter(
+          (tr) =>
+            tr.transferSeason === completedSeason &&
+            tr.reportId &&
+            (tr.outcome === "hit" || tr.outcome === "decent"),
+        ).length;
+        const deptBonus = calculateDepartmentBonusPool(
+          seasonSuccesses,
+          newState.scout.careerTier,
+        );
+        if (deptBonus > 0) {
+          newState = {
+            ...newState,
+            finances: {
+              ...newState.finances,
+              balance: newState.finances.balance + deptBonus,
+              bonusRevenue: newState.finances.bonusRevenue + deptBonus,
+              transactions: [
+                ...newState.finances.transactions,
+                {
+                  week: newState.currentWeek,
+                  season: newState.currentSeason,
+                  amount: deptBonus,
+                  description: `Department bonus pool (${seasonSuccesses} successful signings)`,
+                },
+              ],
+            },
+          };
+          seasonEndMessages.push({
+            id: `dept-bonus-s${completedSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "event" as const,
+            title: "Department Bonus",
+            body: `Your department achieved ${seasonSuccesses} successful signing(s) this season. You've received a £${deptBonus.toLocaleString()} department bonus.`,
+            read: false,
+            actionRequired: false,
+          });
+        }
       }
 
       // A8: Generate season awards data before transitioning
@@ -6558,6 +7123,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
       }
 
+      // ── Board directives for tier 5+ scouts ────────────────────────────────
+      if (newState.scout.careerTier >= 5) {
+        const boardDirRng = createRNG(
+          `${gameState.seed}-board-directives-s${newState.currentSeason}`,
+        );
+        const directives = generateBoardDirectives(boardDirRng, newState.scout, newState.currentSeason);
+        newState = {
+          ...newState,
+          scout: { ...newState.scout, boardDirectives: directives },
+        };
+      }
+
       // ── Season consolidation: matchRatings → player.seasonRatings, then wipe ──
       if (Object.keys(newState.matchRatings).length > 0) {
         const consolidatedPlayers = { ...newState.players };
@@ -6616,6 +7193,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const faPlayerIdsEnd = new Set(
             (newState.freeAgentPool?.agents ?? []).map((a) => a.playerId),
           );
+          const endPredAccBonus = weekEquipBonuses?.predictionAccuracy ?? 0;
           const resolvedAtSeasonEnd = resolvePredictions(
             newState.predictions,
             newState.players,
@@ -6623,6 +7201,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             newState.currentWeek,
             endSeasonPredRng,
             faPlayerIdsEnd,
+            endPredAccBonus,
           );
           newState = { ...newState, predictions: resolvedAtSeasonEnd };
         }
@@ -8039,11 +8618,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const { gameState } = get();
       if (!gameState) return;
       const rng = createRNG(`${gameState.seed}-reflection-${gameState.currentWeek}`);
+      // Equipment gutFeelingBonus: boost effective intuition for gut feeling trigger chance
+      // checkGutFeelingTrigger uses intuition/200 as bonus, so multiply equipment bonus by 200
+      const reflEquipBonuses = gameState.finances?.equipment
+        ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+        : undefined;
+      const gutBoost = (reflEquipBonuses?.gutFeelingBonus ?? 0) * 200;
+
+      // Check if scout has the PA estimate perk (Generational Eye)
+      const hasPAEstimatePerk = gameState.scout.unlockedPerks.some((perkId) => {
+        const perk = ALL_PERKS.find((p) => p.id === perkId);
+        return perk?.effect.type === "paEstimate";
+      });
+      const paAccuracyBonus = reflEquipBonuses?.paEstimateAccuracy ?? 0;
+
       const reflectionResult = generateReflection(
         updated,
         rng,
-        gameState.scout.attributes.intuition,
+        gameState.scout.attributes.intuition + gutBoost,
         gameState.scout.specializationLevel,
+        { paEstimate: hasPAEstimatePerk },
+        paAccuracyBonus,
+        gameState.players,
       );
       set({ lastReflectionResult: reflectionResult });
     }
@@ -8071,6 +8667,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { activeSession } = get();
     if (!activeSession) return;
     set({ activeSession: addReflectionNote(activeSession, note) });
+  },
+
+  addSessionHypothesis: (playerId, text, domain) => {
+    const { activeSession, gameState } = get();
+    if (!activeSession || !gameState) return;
+    const week = gameState.currentWeek;
+    set({ activeSession: addHypothesis(activeSession, playerId, text, domain as import("@/engine/core/types").AttributeDomain, week) });
   },
 
   endObservationSession: () => {
@@ -8146,6 +8749,40 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Update scout fatigue
     const newFatigue = Math.min(100, scout.fatigue + 8);
 
+    // If "perfectFit" insight succeeded and scout is first-team with a club,
+    // calculate full system fit and populate cache
+    let updatedFitCache = gameState.systemFitCache;
+    if (
+      result.actionId === "perfectFit" &&
+      result.systemFitData &&
+      scout.primarySpecialization === "firstTeam" &&
+      scout.currentClubId &&
+      context.targetPlayerId
+    ) {
+      const targetPlayer = gameState.players[context.targetPlayerId];
+      const club = gameState.clubs[scout.currentClubId];
+      const manager = gameState.managerProfiles[scout.currentClubId];
+      if (targetPlayer && club && manager) {
+        const fitRng = createRNG(
+          `${gameState.seed}-sysfit-insight-${context.targetPlayerId}-${scout.currentClubId}`,
+        );
+        const equipBonuses = gameState.finances?.equipment
+          ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+          : undefined;
+        const fitResult = calculateSystemFit(
+          targetPlayer,
+          club,
+          manager,
+          gameState.players,
+          undefined,
+          equipBonuses?.systemFitAccuracy ?? 0,
+          fitRng,
+        );
+        const cacheKey = `${context.targetPlayerId}:${scout.currentClubId}`;
+        updatedFitCache = { ...updatedFitCache, [cacheKey]: fitResult };
+      }
+    }
+
     set({
       gameState: {
         ...gameState,
@@ -8154,6 +8791,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           fatigue: newFatigue,
           insightState: newInsightState,
         },
+        systemFitCache: updatedFitCache,
       },
       lastInsightResult: result,
     });
@@ -8195,9 +8833,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedPlayerId
     );
 
-    // F14: Include infrastructure report quality bonus
+    // F14: Include infrastructure + equipment report quality bonus
     const infraEffectsForReport = calculateInfrastructureEffects(gameState.scoutingInfrastructure);
-    const quality = calculateReportQuality(report, player, infraEffectsForReport.reportQualityBonus);
+    const submitEquipBonuses = gameState.finances?.equipment
+      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+      : undefined;
+    const quality = calculateReportQuality(report, player, infraEffectsForReport.reportQualityBonus + (submitEquipBonuses?.reportQuality ?? 0));
 
     const repBefore = gameState.scout.reputation;
     const baseUpdatedScout = updateReputation(gameState.scout, {
@@ -8216,7 +8857,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1,
     };
     const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
-    const scoredReport = { ...report, qualityScore: quality, reputationDelta };
+    let scoredReport = { ...report, qualityScore: quality, reputationDelta };
 
     // Record discovery if this player has not been tracked before
     const alreadyDiscovered = gameState.discoveryRecords.some(
@@ -8235,6 +8876,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     let responseInboxMessage: InboxMessage | null = null;
     let updatedScoutAfterResponse = updatedScout;
     let firstTeamAhaTriggered = false;
+    let updatedSystemFitCache = gameState.systemFitCache;
 
     if (
       gameState.scout.primarySpecialization === "firstTeam" &&
@@ -8248,6 +8890,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const responseManager = gameState.managerProfiles[gameState.scout.currentClubId];
 
       if (responsePlayer && responseClub && responseManager) {
+        // Calculate system fit for this player-club combination
+        const fitRng = createRNG(
+          `${gameState.seed}-sysfit-${selectedPlayerId}-${gameState.scout.currentClubId}`,
+        );
+        const fitAccuracy = submitEquipBonuses?.systemFitAccuracy ?? 0;
+        const systemFitResult = calculateSystemFit(
+          responsePlayer,
+          responseClub,
+          responseManager,
+          gameState.players,
+          undefined,
+          fitAccuracy,
+          fitRng,
+        );
+        const fitCacheKey = `${selectedPlayerId}:${gameState.scout.currentClubId}`;
+        updatedSystemFitCache = { ...updatedSystemFitCache, [fitCacheKey]: systemFitResult };
+        scoredReport = { ...scoredReport, systemFitScore: systemFitResult.overallFit };
+
         const directiveMatch = evaluateReportAgainstDirectives(
           scoredReport,
           gameState.managerDirectives,
@@ -8265,6 +8925,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           responseManager,
           matchedDirective,
           updatedScout,
+          systemFitResult.overallFit,
         );
 
         // First-outcome guarantee: first report with conviction >= recommend
@@ -8350,14 +9011,45 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
+    // W3a/W3b: Wire retainer and client delivery tracking
+    let updatedFinances = gameState.finances;
+    if (updatedFinances && player.clubId) {
+      // W3a: Record retainer delivery if an active retainer matches the player's club
+      const hasActiveRetainer = updatedFinances.retainerContracts.some(
+        (c) => c.clubId === player.clubId && c.status === "active",
+      );
+      if (hasActiveRetainer) {
+        updatedFinances = recordRetainerDelivery(updatedFinances, player.clubId);
+      }
+
+      // W3b: Record client delivery — ensure relationship exists then record
+      if (gameState.scout.careerPath === "independent") {
+        updatedFinances = ensureClientRelationship(
+          updatedFinances,
+          player.clubId,
+          gameState.currentWeek,
+          gameState.currentSeason,
+        );
+        updatedFinances = recordClientDelivery(
+          updatedFinances,
+          player.clubId,
+          0, // revenue: report-based delivery, not directly monetized
+          gameState.currentWeek,
+          gameState.currentSeason,
+        );
+      }
+    }
+
     set({
       gameState: {
         ...gameState,
         reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
         scout: updatedScoutAfterResponse,
+        finances: updatedFinances,
         discoveryRecords: updatedDiscoveryRecords,
         clubResponses: updatedClubResponses,
         predictions: updatedPredictions,
+        systemFitCache: updatedSystemFitCache,
         inbox: responseInboxMessage
           ? [...gameState.inbox, responseInboxMessage]
           : gameState.inbox,
@@ -8388,6 +9080,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       careerTier: offer.tier,
       salary: offer.salary,
       contractEndSeason: gameState.currentSeason + offer.contractLength,
+      clubTrust: 50,
+      reportsSubmitted: 0,
+      successfulFinds: 0,
     };
 
     // B9: Auto-initialize tier 3+ specialization income fields on promotion
@@ -8399,6 +9094,38 @@ export const useGameStore = create<GameStore>((set, get) => ({
       } else if (spec === "regional" && !updatedFinances.regionalExpertiseRegion) {
         const homeCountry = gameState.countries[0] ?? "england";
         updatedFinances = { ...updatedFinances, regionalExpertiseRegion: homeCountry };
+      }
+    }
+
+    // W3d: Signing bonus for tier 3+ club-path scouts
+    const signingBonusMessages: InboxMessage[] = [];
+    if (updatedFinances) {
+      const signingBonus = calculateSigningBonus(offer);
+      if (signingBonus > 0) {
+        updatedFinances = {
+          ...updatedFinances,
+          balance: updatedFinances.balance + signingBonus,
+          bonusRevenue: updatedFinances.bonusRevenue + signingBonus,
+          transactions: [
+            ...updatedFinances.transactions,
+            {
+              week: gameState.currentWeek,
+              season: gameState.currentSeason,
+              amount: signingBonus,
+              description: `Signing bonus (${offer.role})`,
+            },
+          ],
+        };
+        signingBonusMessages.push({
+          id: `signing-bonus-${offerId}`,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+          type: "event" as const,
+          title: "Signing Bonus",
+          body: `You've received a £${signingBonus.toLocaleString()} signing bonus for joining ${gameState.clubs[offer.clubId]?.name}.`,
+          read: false,
+          actionRequired: false,
+        });
       }
     }
 
@@ -8420,6 +9147,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             read: false,
             actionRequired: false,
           },
+          ...signingBonusMessages,
         ],
       },
     });
@@ -9013,12 +9741,31 @@ export const useGameStore = create<GameStore>((set, get) => ({
   enrollInCourse: (courseId: string) => {
     const { gameState } = get();
     if (!gameState || !gameState.finances) return;
-    const updated = enrollInCourse(
+    const result = enrollInCourse(
       gameState.finances, courseId,
       gameState.currentWeek, gameState.currentSeason,
+      gameState.scout.careerTier,
     );
-    if (updated) {
-      set({ gameState: { ...gameState, finances: updated } });
+    if (result.success) {
+      set({ gameState: { ...gameState, finances: result.finances } });
+    } else {
+      // Send inbox message with the failure reason
+      const msg: InboxMessage = {
+        id: `enroll_fail_${gameState.currentWeek}_${courseId}`,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+        type: "event" as const,
+        title: "Enrollment Failed",
+        body: result.reason,
+        read: false,
+        actionRequired: false,
+      };
+      set({
+        gameState: {
+          ...gameState,
+          inbox: [msg, ...gameState.inbox],
+        },
+      });
     }
   },
 
@@ -9204,6 +9951,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
       (c) => c.id !== contractId,
     );
     set({ gameState: { ...gameState, finances: { ...gameState.finances, pendingConsultingOffers: pending } } });
+  },
+
+  // W3c: Complete a consulting contract and receive payment
+  completeConsultingContract: (contractId: string) => {
+    const { gameState } = get();
+    if (!gameState || !gameState.finances) return;
+    const contract = gameState.finances.consultingContracts.find(
+      (c) => c.id === contractId && c.status === "active",
+    );
+    if (!contract) return;
+    const updated = completeConsulting(
+      gameState.finances,
+      contractId,
+      gameState.currentWeek,
+      gameState.currentSeason,
+    );
+    set({
+      gameState: {
+        ...gameState,
+        finances: updated,
+        inbox: [
+          ...gameState.inbox,
+          {
+            id: `consulting-complete-${contractId}`,
+            week: gameState.currentWeek,
+            season: gameState.currentSeason,
+            type: "event" as const,
+            title: "Consulting Contract Completed",
+            body: `You've completed a ${contract.type.replace(/([A-Z])/g, " $1").toLowerCase()} consulting engagement. Payment of £${contract.fee.toLocaleString()} received.`,
+            read: false,
+            actionRequired: false,
+          },
+        ],
+      },
+    });
   },
 
   // F14: Financial Strategy Layer — infrastructure investments
@@ -10033,3 +10815,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
 }));
+
+// Expose store for E2E testing (dev only — stripped in production builds)
+if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+  (window as any).__GAME_STORE__ = useGameStore;
+}

@@ -20,6 +20,7 @@ import {
   MessageCircle,
   UserPlus,
   Lock,
+  Clock,
 } from "lucide-react";
 import type { Contact, ContactType, Activity, HiddenIntel, GossipItem } from "@/engine/core/types";
 import { getHiddenAttributeIntel, getContactSpecializationBonus } from "@/engine/network/contacts";
@@ -155,9 +156,14 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, currentWeek, o
   const referralCount = (contact.referralNetwork ?? []).length;
   const exclusiveWindow = contact.exclusiveWindow;
   const risk = betrayalRiskLabel(betrayalRisk);
+  const weeksSinceContact = contact.lastInteractionWeek != null
+    ? currentWeek - contact.lastInteractionWeek
+    : null;
+  const isDormant = contact.dormant === true;
+  const isRelationshipFading = contact.relationship < 30 && !isDormant;
 
   return (
-    <Card className="border-emerald-500/20">
+    <Card className={isDormant ? "border-red-500/20" : "border-emerald-500/20"}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -189,7 +195,41 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, currentWeek, o
               <span className="text-white">{contact.region}</span>
             </div>
           )}
+          {weeksSinceContact != null && (
+            <div>
+              <span className="text-zinc-500">Last contact: </span>
+              <span className="text-white">
+                {weeksSinceContact === 0
+                  ? "This week"
+                  : `${weeksSinceContact} week${weeksSinceContact !== 1 ? "s" : ""} ago`}
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* Relationship status warnings */}
+        {isDormant && (
+          <div className="rounded-md border border-red-500/20 bg-red-500/5 p-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <AlertTriangle size={12} className="text-red-400" aria-hidden="true" />
+              <span className="font-medium text-red-400">Dormant</span>
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-500">
+              This contact has gone dormant due to low relationship. Schedule a meeting to rebuild the connection.
+            </p>
+          </div>
+        )}
+        {isRelationshipFading && (
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <AlertTriangle size={12} className="text-amber-400" aria-hidden="true" />
+              <span className="font-medium text-amber-400">Relationship Fading</span>
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-500">
+              Your relationship is deteriorating. Consider reaching out before this contact goes dormant.
+            </p>
+          </div>
+        )}
 
         {/* Specialization bonus (A6) */}
         {(() => {
@@ -575,6 +615,11 @@ export function NetworkScreen() {
                     const hasExclusive =
                       contact.exclusiveWindow &&
                       contact.exclusiveWindow.expiresWeek > currentWeek;
+                    const weeksSinceContact = contact.lastInteractionWeek != null
+                      ? currentWeek - contact.lastInteractionWeek
+                      : null;
+                    const isDormant = contact.dormant === true;
+                    const isRelationshipFading = contact.relationship < 30 && !isDormant;
 
                     return (
                       <button
@@ -658,6 +703,16 @@ export function NetworkScreen() {
 
                         {/* Status indicators */}
                         <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {isDormant && (
+                            <Badge variant="outline" className="text-[10px] border-red-500/40 bg-red-500/10 text-red-400">
+                              Dormant
+                            </Badge>
+                          )}
+                          {isRelationshipFading && (
+                            <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-400">
+                              Fading
+                            </Badge>
+                          )}
                           {(contactIntelMap.get(contact.id)?.length ?? 0) > 0 && (
                             <span className="flex items-center gap-1 text-xs text-cyan-400">
                               <Eye size={11} aria-hidden="true" />
@@ -672,6 +727,14 @@ export function NetworkScreen() {
                           )}
                           {wasScheduled && (
                             <span className="text-xs text-emerald-400">Meeting scheduled</span>
+                          )}
+                          {weeksSinceContact != null && (
+                            <span className="flex items-center gap-1 text-[10px] text-zinc-500">
+                              <Clock size={10} aria-hidden="true" />
+                              {weeksSinceContact === 0
+                                ? "This week"
+                                : `${weeksSinceContact}w ago`}
+                            </span>
                           )}
                         </div>
                       </button>

@@ -12,6 +12,7 @@
 
 import type { GameState, Position } from "@/engine/core/types";
 import { ALL_PERKS } from "@/engine/specializations/perks";
+import { getScenarioById, checkScenarioObjectives } from "@/engine/scenarios";
 
 // =============================================================================
 // TYPES
@@ -492,15 +493,18 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "all-perks-tree",
-    name: "Complete Tree",
-    description: "Unlock all perks in one specialization tree.",
-    hint: "Fully explore a single specialization from top to bottom.",
+    name: "Polymath",
+    description: "Complete perk trees in 2 or more specializations.",
+    hint: "Fully explore at least two different specialization trees.",
     category: "specializationMastery",
     icon: "🌳",
-    check: (state) =>
-      (["youth", "firstTeam", "regional", "data"] as const).some((spec) =>
+    check: (state) => {
+      const specs = ["youth", "firstTeam", "regional", "data"] as const;
+      const completedCount = specs.filter((spec) =>
         hasCompletedTree(state, spec),
-      ),
+      ).length;
+      return completedCount >= 2;
+    },
   },
   {
     id: "mastery-perk",
@@ -824,9 +828,15 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "hidden",
     icon: "🎲",
     hidden: true,
-    check: (state) =>
-      state.activeScenarioId !== undefined &&
-      state.scout.careerTier >= 5,
+    check: (state) => {
+      const scenarioId = state.activeScenarioId;
+      if (!scenarioId) return false;
+      const scenario = getScenarioById(scenarioId);
+      if (!scenario) return false;
+      if (scenario.difficulty !== "hard" && scenario.difficulty !== "expert") return false;
+      const progress = checkScenarioObjectives(state, scenarioId);
+      return progress.allRequiredComplete;
+    },
   },
   {
     id: "streak-5",

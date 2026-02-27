@@ -249,6 +249,10 @@ export function evaluateGossipAccuracy(
 /**
  * Process weekly gossip generation for all contacts.
  * Returns updated contacts with new gossip items and inbox messages.
+ *
+ * Before removing expired gossip, evaluates accuracy of each expiring item
+ * and applies trust deltas to the source contact. This rewards contacts who
+ * provided accurate gossip and penalises unreliable sources.
  */
 export function processWeeklyGossip(
   state: GameState,
@@ -257,9 +261,36 @@ export function processWeeklyGossip(
   const updatedContacts: Record<string, Contact> = {};
   const gossipMessages: InboxMessage[] = [];
 
-  // First, decay expired gossip
-  const decayed = processGossipDecay(state.contacts, state.currentWeek);
+  // Phase 1: Evaluate accuracy of expiring gossip items and accumulate trust deltas.
+  // A gossip item expires when expiresWeek <= currentWeek.
+  const trustDeltaByContact: Record<string, number> = {};
+  for (const [id, contact] of Object.entries(state.contacts)) {
+    const queue = contact.gossipQueue ?? [];
+    for (const item of queue) {
+      if (item.expiresWeek <= state.currentWeek) {
+        const delta = evaluateGossipAccuracy(item, state);
+        trustDeltaByContact[id] = (trustDeltaByContact[id] ?? 0) + delta;
+      }
+    }
+  }
 
+  // Phase 2: Apply trust deltas from accuracy evaluation, then decay expired gossip.
+  const contactsWithTrust: Record<string, Contact> = {};
+  for (const [id, contact] of Object.entries(state.contacts)) {
+    const delta = trustDeltaByContact[id] ?? 0;
+    if (delta !== 0) {
+      const currentTrust = contact.trustLevel ?? contact.relationship;
+      contactsWithTrust[id] = {
+        ...contact,
+        trustLevel: clamp(currentTrust + delta, 0, 100),
+      };
+    } else {
+      contactsWithTrust[id] = contact;
+    }
+  }
+  const decayed = processGossipDecay(contactsWithTrust, state.currentWeek);
+
+  // Phase 3: Generate new gossip for each contact.
   for (const [id, contact] of Object.entries(decayed)) {
     const gossipItem = generateGossip(rng, contact, state);
 

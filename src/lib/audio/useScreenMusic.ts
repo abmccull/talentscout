@@ -22,101 +22,39 @@ export function useScreenMusic(screen: string, weather?: string): void {
     let track: string | null = null;
     let ambience: string | null = null;
 
+    // Screens that don't have ambient office hum (celebrations, reflection, career)
+    const noAmbienceScreens = new Set([
+      "discoveries", "achievements", "hallOfFame", "career", "leaderboard", "demoEnd",
+    ]);
+
     switch (screen) {
-      // Title / pre-game
+      // Pre-game — dedicated title track
       case "mainMenu":
       case "newGame":
       case "scenarioSelect":
         track = "title-anthem";
         break;
 
-      // Core gameplay hub
-      case "dashboard":
-      case "calendar":
-      case "inbox":
-      case "weekSimulation":
-      case "handbook":
-        track = "career-hub";
-        ambience = "office";
-        break;
-
-      // Match observation
+      // Match — dedicated observation track + stadium ambience
       case "match":
         track = "observation";
-        if (weather === "rain" || weather === "heavyRain" || weather === "snow") {
-          ambience = "rain-stadium";
-        } else {
-          ambience = "stadium-crowd";
-        }
+        ambience = (weather === "rain" || weather === "heavyRain" || weather === "snow")
+          ? "rain-stadium" : "stadium-crowd";
         break;
 
-      // Post-match — keep match music playing, just stop ambience
+      // Post-match — keep match music playing, stop ambience
       case "matchSummary":
         audio.stopAmbience();
         return;
-
-      // Report / analysis screens
-      case "reportWriter":
-      case "reportHistory":
-      case "analytics":
-      case "playerProfile":
-      case "playerDatabase":
-        track = "report-writing";
-        ambience = "office";
-        break;
-
-      // Business / agency
-      case "agency":
-      case "finances":
-      case "equipment":
-        track = "agency-theme";
-        ambience = "office";
-        break;
-
-      // Youth development
-      case "youthScouting":
-      case "alumniDashboard":
-      case "training":
-        track = "youth-scouting";
-        ambience = "office";
-        break;
-
-      // Fixtures / transfer pressure
-      case "fixtureBrowser":
-        track = "transfer-pressure";
-        ambience = "office";
-        break;
-
-      // Network / contacts
-      case "network":
-      case "npcManagement":
-      case "internationalView":
-      case "rivals":
-        track = "network-groove";
-        ambience = "office";
-        break;
-
-      // Celebration / payoff
-      case "discoveries":
-      case "achievements":
-        track = "wonderkid";
-        break;
-
-      // Reflection / career
-      case "hallOfFame":
-      case "career":
-      case "leaderboard":
-      case "demoEnd":
-        track = "season-review";
-        break;
 
       // Settings — keep whatever is currently playing
       case "settings":
         return;
 
+      // Everything else — full soundtrack rotation
       default:
-        track = "career-hub";
-        ambience = "office";
+        track = "soundtrack";
+        ambience = noAmbienceScreens.has(screen) ? null : "office";
         break;
     }
 

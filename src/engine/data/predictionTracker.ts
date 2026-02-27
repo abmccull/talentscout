@@ -91,6 +91,12 @@ export function resolvePredictions(
   rng: RNG,
   /** IDs of players currently in the free agent pool (used to resolve transfer predictions). */
   freeAgentPlayerIds?: Set<string>,
+  /**
+   * Equipment bonus: additive chance (0-1) to salvage an incorrect prediction.
+   * When a prediction resolves as incorrect, a second roll at this probability
+   * can flip it to correct — modelling better analytical equipment.
+   */
+  predictionAccuracyBonus = 0,
 ): Prediction[] {
   return predictions.map((prediction) => {
     // Skip already-resolved predictions
@@ -191,6 +197,12 @@ export function resolvePredictions(
         );
         break;
       }
+    }
+
+    // Equipment prediction accuracy bonus: if the prediction would be incorrect,
+    // the bonus gives a second-chance roll to salvage it (better analytical tools)
+    if (!wasCorrect && predictionAccuracyBonus > 0) {
+      wasCorrect = rng.chance(predictionAccuracyBonus);
     }
 
     void currentWeek; // used by caller context, kept for API symmetry

@@ -87,7 +87,7 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   },
   {
     id: "advancedWeek",
-    target: "calendar-advance-btn",
+    target: "advance-week",
     title: "Advance the week",
     mentorText:
       "Activity scheduled. Now advance the week — click the button to play out your schedule and head to the match.",

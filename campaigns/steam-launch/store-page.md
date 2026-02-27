@@ -4,22 +4,24 @@ campaign: steam-launch
 target_audience: FM players, simulation junkies, football youth development obsessives
 positioning_angle: The Untold Role
 awareness_level: solution-aware
-variant: control
+variant: control-v2
 platform: steam
-word_count: 1284
-date: 2026-02-25
+word_count: 1580
+date: 2026-02-27
 status: draft
+score: pending
+notes: Full rewrite incorporating economics, equipment, courses, weekly planner, agency path, perception engine, and all post-launch feature additions
 ---
 
-# TalentScout — Steam Store Page Copy
+# TalentScout — Steam Store Page Copy (v2)
 
 ---
 
 ## Short Description
 
-Every football game puts you in the dugout. This one puts you in the stands with a notebook. Build your scouting career from non-league touchlines to Champions League shortlists. Watch matches. Judge talent. Stake your reputation on the players you believe in.
+Every football game puts you in the dugout. This one puts you in the stands with a notebook. Four scouting careers. 22 countries. Build your reputation from non-league touchlines to Champions League shortlists. Your eye for talent is the whole game.
 
-(267 characters)
+(248 characters)
 
 ---
 
@@ -31,53 +33,93 @@ You see it. Nobody else does.
 
 That's the job. That's the whole game.
 
-TalentScout puts you in the role every football game skips over. You're not the manager. You don't pick the team. You don't set tactics. You're the person who finds the talent that makes all of that possible. Someone had to spot Messi before Messi was Messi. In this game, that someone is you.
+**You're not the manager. You're the reason the manager has anyone worth picking.**
+
+TalentScout puts you in the role every football game skips over. You don't pick the team. You don't set tactics. You find the talent that makes all of that possible. Someone had to spot Messi before Messi was Messi. In this game, that someone is you.
 
 **Watch. Judge. Report.**
 
-Attend matches and observe players in real time. No attribute screen tells you whether a 17-year-old has the composure to play two leagues higher. That's your call. Write scouting reports based on what your eyes tell you. Get it right and clubs come calling. Get it wrong and your phone goes quiet.
+Attend matches and observe players in real time. Track their first touch, their movement off the ball, their composure under pressure. Flag the moments that matter — the tackle that reads the play two passes ahead, the run nobody else in the ground noticed. Piece it together into a scouting report that puts your reputation on the line.
 
-Your career starts at the bottom. Non-league grounds. Youth tournaments with no floodlights. You prove yourself one report at a time, building a reputation that opens doors to bigger clubs, better assignments, and players who'll actually end up on a first-team pitch.
+No star ratings. No attribute screens. Your perception sharpens with every match watched, every player studied. But the readings are never certain — just confidence levels that improve the more you observe. Know when you've seen enough. Know when to trust your gut.
 
-Four paths. One obsession.
+**Build Your Career — Two Ways**
 
-Go deep into youth scouting — the academy circuits, the U-17 tournaments, the 15-year-olds with ceilings nobody else can see yet. Or work first-team assignments where the manager needs a left-back under 28 for less than 20 million and you've got a week to find one. Become the regional expert who knows every pitch and every prospect in your territory. Or build a data scouting operation — query databases, detect statistical anomalies, predict breakouts before they happen.
+*The Club Path:* Start as a freelancer at non-league grounds. Earn a part-time contract. Prove yourself into a full-time role. Rise to Head of Scouting with a department budget and a team of analysts under you. Reach Director of Football and shape the club's transfer strategy for a decade.
 
-Each path plays differently. All of them feed the same addiction: being right about a player before anyone else.
+*The Independent Path:* Register your own scouting agency. Sell reports on the open market. Build a client list of clubs on retainer. Hire scouts, analysts, and relationship managers. Grow from a home office into an agency HQ. Price your intel, manage your overhead, and survive on the strength of your reputation alone.
 
-**A living football world.**
+Both paths have five tiers. Both start at the bottom. What changes is who you answer to — a club board, or your bank balance.
 
-22 countries. 350+ clubs. Transfer windows open and close. Players develop, decline, transfer, retire. Rival scouts are hunting the same wonderkids you are. Your network of agents, coaches, and contacts grows with every relationship you invest in — and every one of those relationships is a door that opens or closes based on your reputation.
+**Four Ways to Scout. Each One a Different Game.**
 
-Every report you submit is a bet. Discover a future star and your name carries weight for years. Miss a red flag on a flop signing and you'll spend seasons earning that trust back.
+*Youth Scout* — Academy circuits. U-17 tournaments. Grassroots festivals. School matches with no floodlights. Find the wonderkids while they're still playing for their local club. Assess potential ceilings that won't be obvious for years. Place them in academies and earn sell-on clauses when they make it big.
 
-This is the game for people who watch U-17 tournaments on purpose. Who know what PA means without being told. Who have a spreadsheet of Brazilian second-division wonderkids they update for fun.
+*First Team Scout* — The manager needs a left-back, under 28, for less than £20M. You've got a week. Miss the deadline and someone else fills your seat. Hit it and you're the reason the squad gets stronger. Opposition analysis, tactical fit assessment, transfer advisory during the window.
+
+*Regional Expert* — Own your territory. Learn the language. Know every pitch, every prospect, every coach with an opinion. Your local contacts open doors that no database can. Sell regional intelligence packages to multiple clubs. Open satellite offices in your assigned regions.
+
+*Data Scout* — Query databases. Detect statistical anomalies. Build predictive models for player development. Identify breakouts before they happen. Sell analytics packages and anomaly alert subscriptions. Earn Oracle status through prediction accuracy.
+
+**A Week in the Life**
+
+Plan every week on a drag-and-drop schedule. 45+ activities compete for your time — attend matches, visit academies, run database queries, meet contacts, study for your UEFA A license, negotiate retainer deals, review your analysts' reports, or just rest before a week of international travel.
+
+Every activity costs time. Some cost money. All of them move your career forward — or don't. Choosing what to prioritize is the game within the game.
+
+**Sharpen Your Tools**
+
+Your scouting gets better as you invest in it. Earn progressive licenses from FA Level 1 to UEFA Pro. Take specialization courses — Youth Development Psychology, Tactical Analysis Masterclass, Data Science for Football, language courses that unlock new regions. Upgrade your equipment loadout across five slots: notebook quality, video packages, database access, travel gear, and office space. Every upgrade sharpens your edge.
+
+**The Money Matters**
+
+This isn't just a scouting game — it's a career simulation. Earn income from salaries, report sales, placement fees, retainer contracts, consulting gigs, and sell-on clauses that pay out years after the initial find. Manage expenses: travel, equipment, office rent, employee salaries, course fees, business insurance. Take out loans when cash is tight. Go bankrupt and it's game over for independents.
+
+Your financial health ranges from thriving to overdraft. Every report you sell, every placement you land, every retainer you sign keeps the lights on. Or doesn't.
+
+**A Living Football World**
+
+22 countries across five regions. 350+ clubs with finances, philosophies, and transfer budgets. Seasonal calendars with 38-week seasons, transfer windows that heat and cool, mid-season breaks, and end-of-season shake-ups.
+
+Players develop along realistic arcs — early bloomers, steady growers, late developers. They get injured, lose form, transfer, and retire. The world moves whether you're watching or not.
+
+Rival scouts are hunting the same hidden gems. Your network of agents, coaches, managers, and journalists grows with every relationship you invest in — and decays when you neglect it. High trust unlocks exclusive intel windows. Burned bridges close doors for good.
+
+**Your Reputation Is Everything**
+
+Every report is a bet. Write with low conviction and it's a footnote. Write with table-pound conviction and you're staking your entire career on one assessment. Get it right and your name opens boardrooms. Get it wrong and you'll spend seasons rebuilding trust.
+
+Discover a future star and watch them rise through the ranks — your alumni page tracks every player you found who made it. Miss a red flag on a flop signing and the calls stop coming.
+
+**Built for the Obsessives**
+
+45+ achievements across six categories, from common milestones to legendary feats. 10+ challenge scenarios with unique objectives — The Rescue Job, Wonderkid Hunter, Moneyball, The Last Season. Hall of Fame legacy tracking. Narrative events that chain across seasons — transfer sagas, rivalry battles, personal milestones, economic upheavals.
+
+Community-moddable data files. Create your own leagues, clubs, and player pools. Full accessibility: font scaling, colorblind modes, keyboard navigation. 10 original vocal tracks on the soundtrack.
+
+This is the game for people who watch U-17 tournaments on purpose.
 
 Build your scouting empire. Find the wonderkid before the world does.
 
-You spotted him first.
+**You spotted him first.**
 
-(472 words)
+(~960 words)
 
 ---
 
 ## Key Features
 
-- YOUR EYES, YOUR JUDGMENT — Attend matches and evaluate players through observation, not star ratings. Trust the eye test. Write reports that put your reputation on the line.
-
-- FOUR SCOUTING CAREERS — Youth Scout hunting wonderkids in academy circuits. First Team Scout filling the manager's shortlist on deadline. Regional Expert who knows every pitch in the territory. Data Scout detecting breakouts before they happen.
-
-- FROM NON-LEAGUE TO CHAMPIONS LEAGUE — Five-tier career progression. Start at muddy school pitches with no reputation. End as a Chief Scout shaping a club's transfer strategy for a decade.
-
-- GO CLUB OR GO INDEPENDENT — Work your way up inside a club's scouting department, or go freelance and sell reports on the open market. Build your own scouting operation with analysts and contacts.
-
-- RIVAL SCOUTS, REAL PRESSURE — Other scouts are hunting the same hidden gems. Spot talent first or watch someone else take the credit. Financial pressure and narrative events mean no two careers play the same.
-
-- 22 COUNTRIES, 350+ CLUBS — A procedurally generated football world with seasonal calendars, transfer windows, and player development arcs. Players rise, decline, and retire. The world moves whether you're watching or not.
-
-- YOUR NETWORK IS YOUR CURRENCY — Build relationships with agents, coaches, managers, and journalists. Your contacts open doors that stats databases never will. Burn a bridge and lose access for good.
-
-- MODDABLE FROM DAY ONE — Community-editable data files. Create your own leagues, clubs, and player pools. The scouting world is yours to shape.
+- YOUR EYES, YOUR JUDGMENT — Observe players in live matches. Flag moments. Assess attributes through perception, not stat screens. Confidence improves with every observation — but certainty is never guaranteed.
+- FOUR SCOUTING CAREERS — Youth Scout finding wonderkids in academy circuits. First Team Scout filling the manager's shortlist against the clock. Regional Expert who owns their territory. Data Scout predicting breakouts through statistical anomaly detection.
+- CLUB PATH OR INDEPENDENT PATH — Rise through a club's hierarchy from freelancer to Director of Football. Or build your own scouting agency with employees, offices, retainers, and clients. Five tiers each. Completely different economics.
+- WEEKLY PLANNER, 45+ ACTIVITIES — Drag-and-drop scheduling across match observation, academy visits, database queries, networking, training courses, travel, report writing, and more. Time is your most limited resource.
+- DEEP FINANCIAL SIMULATION — Earn from salaries, report sales, placement fees, retainers, consulting, and sell-on clauses. Manage expenses, take loans, upgrade equipment. Financial health ranges from thriving to bankrupt.
+- PROGRESSIVE SKILL DEVELOPMENT — Earn scouting licenses from FA Level 1 to UEFA Pro. 12+ specialization courses. 5-slot equipment loadout with tiered upgrades. Your tools get sharper as your career grows.
+- 22 COUNTRIES, 350+ CLUBS — A procedurally generated football world with seasonal calendars, transfer windows, promotion and relegation. Players develop, decline, transfer, and retire on realistic arcs.
+- YOUR NETWORK IS YOUR CURRENCY — Build relationships with agents, coaches, managers, and journalists. Trust unlocks exclusive intel. Neglect decays the relationship. Rivals compete for the same contacts and the same discoveries.
+- REPUTATION THAT COMPOUNDS — Every report builds or erodes your credibility. Table-pound conviction bets your career on one player. Alumni tracking follows your discoveries through their professional careers.
+- 45+ ACHIEVEMENTS, 10+ SCENARIOS — Challenge scenarios with unique objectives. Hall of Fame legacy tracking. Narrative events that chain across seasons. No two careers play the same way.
+- MODDABLE FROM DAY ONE — Community-editable data files for leagues, clubs, and player pools. Full accessibility with font scaling, colorblind modes, and keyboard navigation.
 
 ---
 
@@ -89,7 +131,7 @@ TalentScout is a niche game for a niche audience. We know who you are because we
 
 **What's playable now:**
 
-The core scouting loop is in and working. Four career paths. Match observation and report writing. Career progression across five tiers. 22 countries with full league structures. Contact networks, financial management, and rival scout competition. You can play a complete scouting career from non-league to chief scout right now.
+The full scouting career is in and working. Four specialization paths with unique mechanics. Dual career modes — club employment or independent agency. Five-tier progression from non-league to elite. Match observation with the full perception engine. Report writing with conviction levels. Weekly planner with 45+ activity types. Financial simulation with income, expenses, and loans. Equipment and course progression systems. Contact networks with relationship mechanics. 22 countries with procedural leagues. Rival scout competition. 45+ achievements and 10+ challenge scenarios. You can play hundreds of hours right now.
 
 **What's coming:**
 
@@ -97,10 +139,14 @@ Deeper narrative events. Expanded player personality systems. Historical scenari
 
 **How long?**
 
-We're planning 8-12 months of Early Access. Updates will be frequent and the community will have direct input on what gets built next. Your feedback shapes the game.
+We're planning 8-12 months of Early Access. Updates will be frequent and the community will have direct input on what gets built next.
 
 **Will the price change?**
 
 Yes. The price will increase as content is added. Getting in during Early Access means you get the full game at the lowest price it will ever be.
 
-(167 words)
+---
+
+## About Developer
+
+We built this because Football Manager never let us be the scout. So we made a whole game about it. TalentScout is an indie project built by people who watch youth tournaments for fun, who have opinions about Brazilian second-division left-backs, and who think the person who found the player deserves their own game. Every system is designed to capture the reality of talent identification — the patience, the gut calls, the reputation that takes years to build and one bad report to damage.

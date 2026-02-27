@@ -239,27 +239,64 @@ export function getAvailableCourses(
 // Enrollment
 // ---------------------------------------------------------------------------
 
+export type EnrollmentResult =
+  | { success: true; finances: FinancialRecord }
+  | { success: false; reason: string };
+
 /**
  * Enroll in a course. Deducts the cost and sets the active enrollment.
- * Returns null if the scout can't afford it or is already enrolled.
+ * Validates prerequisites, tier requirements, affordability, and enrollment state.
+ * Returns a structured result with either updated finances or an error reason.
  */
 export function enrollInCourse(
   finances: FinancialRecord,
   courseId: string,
   week: number,
   season: number,
-): FinancialRecord | null {
+  scoutTier?: CareerTier,
+): EnrollmentResult {
   // Already enrolled in a course
-  if (finances.activeEnrollment) return null;
+  if (finances.activeEnrollment) {
+    return { success: false, reason: "Already enrolled in a course." };
+  }
 
   const course = COURSE_CATALOG.find((c) => c.id === courseId);
-  if (!course) return null;
-
-  // Can't afford
-  if (finances.balance < course.cost) return null;
+  if (!course) {
+    return { success: false, reason: "Course not found." };
+  }
 
   // Already completed
-  if (finances.completedCourses.includes(courseId)) return null;
+  if (finances.completedCourses.includes(courseId)) {
+    return { success: false, reason: "Course already completed." };
+  }
+
+  // Prerequisite check
+  for (const prereqId of course.prerequisites) {
+    if (!finances.completedCourses.includes(prereqId)) {
+      const prereqCourse = COURSE_CATALOG.find((c) => c.id === prereqId);
+      const prereqName = prereqCourse?.name ?? prereqId;
+      return {
+        success: false,
+        reason: `Missing prerequisite: ${prereqName}.`,
+      };
+    }
+  }
+
+  // Tier requirement check
+  if (scoutTier !== undefined && scoutTier < course.minTier) {
+    return {
+      success: false,
+      reason: `Requires career tier ${course.minTier}. Current tier: ${scoutTier}.`,
+    };
+  }
+
+  // Can't afford
+  if (finances.balance < course.cost) {
+    return {
+      success: false,
+      reason: `Insufficient funds. Need £${course.cost}, have £${Math.floor(finances.balance)}.`,
+    };
+  }
 
   const enrollment: CourseEnrollment = {
     courseId,
@@ -270,18 +307,21 @@ export function enrollInCourse(
   };
 
   return {
-    ...finances,
-    balance: finances.balance - course.cost,
-    activeEnrollment: enrollment,
-    transactions: [
-      ...finances.transactions,
-      {
-        week,
-        season,
-        amount: -course.cost,
-        description: `Enrolled in ${course.name}`,
-      },
-    ],
+    success: true,
+    finances: {
+      ...finances,
+      balance: finances.balance - course.cost,
+      activeEnrollment: enrollment,
+      transactions: [
+        ...finances.transactions,
+        {
+          week,
+          season,
+          amount: -course.cost,
+          description: `Enrolled in ${course.name}`,
+        },
+      ],
+    },
   };
 }
 

@@ -217,6 +217,7 @@ export function generateClubResponse(
   manager: ManagerProfile,
   directive: ManagerDirective | undefined,
   scout: Scout,
+  systemFitScore?: number,
 ): ClubResponse {
   const week = report.submittedWeek;
   const season = report.submittedSeason;
@@ -313,6 +314,28 @@ export function generateClubResponse(
     ),
   };
 
+  // -------------------------------------------------------------------------
+  // 4b. System fit weight adjustment
+  //     High fit boosts positive outcomes; poor fit penalises them.
+  // -------------------------------------------------------------------------
+  if (systemFitScore !== undefined) {
+    const POSITIVE_OUTCOMES: ClubResponseType[] = ["signed", "trial", "interested", "loanSigned"];
+    let fitMultiplier = 1.0;
+    if (systemFitScore >= 80) fitMultiplier = 1.2;
+    else if (systemFitScore >= 60) fitMultiplier = 1.05;
+    else if (systemFitScore < 40) fitMultiplier = 0.85;
+
+    for (const outcome of POSITIVE_OUTCOMES) {
+      weights[outcome] = clamp(Math.round(weights[outcome] * fitMultiplier), 0, 100);
+    }
+    // Inversely adjust doesNotFit when fit is strong or weak
+    if (systemFitScore >= 80) {
+      weights.doesNotFit = clamp(Math.round(weights.doesNotFit * 0.7), 0, 100);
+    } else if (systemFitScore < 40) {
+      weights.doesNotFit = clamp(Math.round(weights.doesNotFit * 1.5), 0, 100);
+    }
+  }
+
   // Build only the live outcomes (filter zero-weight items)
   const liveOutcomes: ClubResponseType[] = ["interested", "trial", "signed", "doesNotFit", "loanSigned"];
   const weightedItems = liveOutcomes
@@ -321,11 +344,23 @@ export function generateClubResponse(
 
   const response: ClubResponseType = rng.pickWeighted(weightedItems);
 
+  // Build feedback text, appending system fit context when available
+  let feedback = buildFeedbackText(response, player, directive, club);
+  if (systemFitScore !== undefined) {
+    if (systemFitScore >= 80) {
+      feedback += " The tactical analysis shows an excellent system fit.";
+    } else if (systemFitScore >= 60) {
+      feedback += " The player shows reasonable compatibility with the club's system.";
+    } else if (systemFitScore < 40) {
+      feedback += " There are concerns about the player's tactical fit in the current system.";
+    }
+  }
+
   return {
     reportId: report.id,
     directiveId: directive.id,
     response,
-    feedback: buildFeedbackText(response, player, directive, club),
+    feedback,
     reputationDelta: REPUTATION_DELTAS[response],
     week,
     season,

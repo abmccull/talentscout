@@ -10,7 +10,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { AttributeDomain } from "@/engine/core/types";
+import type { AttributeDomain, Player } from "@/engine/core/types";
 import type {
   ObservationSession,
   Hypothesis,
@@ -43,6 +43,12 @@ export interface GutFeelingCandidate {
   reliability: number;
   /** Short explanation of what triggered the feeling. */
   triggerReason: string;
+  /**
+   * Optional PA estimate range, present only when the scout has the
+   * "Generational Eye" perk (paEstimate effect). Shows a heuristic
+   * low–high range around the player's true potential ability.
+   */
+  paEstimate?: { low: number; high: number };
 }
 
 /**
@@ -367,6 +373,9 @@ export function checkGutFeelingTrigger(
   session: ObservationSession,
   scoutIntuition: number,
   scoutSpecLevel: number,
+  perkModifiers?: { paEstimate: boolean },
+  paEstimateAccuracyBonus?: number,
+  players?: Record<string, Player>,
 ): GutFeelingCandidate | null {
   const flaggedCount = session.flaggedMoments.length;
 
@@ -448,6 +457,20 @@ export function checkGutFeelingTrigger(
       ? `Triggered by: ${triggerReasonParts.join(", ")}.`
       : "Triggered during general reflection.";
 
+  // --- Optional PA estimate when perk is active ---
+  let paEstimate: { low: number; high: number } | undefined;
+  if (perkModifiers?.paEstimate === true && players) {
+    const player = players[targetPlayer.playerId];
+    if (player) {
+      const pa = player.potentialAbility;
+      const margin = Math.max(1, Math.floor(5 * (1 - (paEstimateAccuracyBonus ?? 0))));
+      paEstimate = {
+        low: Math.max(1, pa - margin),
+        high: Math.min(200, pa + margin),
+      };
+    }
+  }
+
   return {
     playerId: targetPlayer.playerId,
     playerName: targetPlayer.name,
@@ -455,6 +478,7 @@ export function checkGutFeelingTrigger(
     narrative,
     reliability,
     triggerReason,
+    paEstimate,
   };
 }
 
@@ -577,6 +601,9 @@ export function generateReflection(
   rng: RNG,
   scoutIntuition: number,
   scoutSpecLevel: number,
+  perkModifiers?: { paEstimate: boolean },
+  paEstimateAccuracyBonus?: number,
+  players?: Record<string, Player>,
 ): ReflectionResult {
   // --- Auto-generate hypotheses from flagged moments ---
   // Group flagged moments by playerId + domain, then build one hypothesis per group.
@@ -624,6 +651,9 @@ export function generateReflection(
     session,
     scoutIntuition,
     scoutSpecLevel,
+    perkModifiers,
+    paEstimateAccuracyBonus,
+    players,
   );
 
   // --- Generate reflection prompts ---

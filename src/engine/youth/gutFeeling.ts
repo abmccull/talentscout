@@ -311,14 +311,17 @@ export function formatGutFeelingWithPA(
   gutFeeling: GutFeeling,
   youth: UnsignedYouth,
   perkModifiers?: GutFeelingPerkModifiers,
+  /** Fractional equipment bonus to PA estimate accuracy (e.g. 0.10 = +10%). */
+  accuracyBonus?: number,
 ): string {
   if (perkModifiers?.paEstimate !== true) {
     return gutFeeling.narrative;
   }
 
   const pa = youth.player.potentialAbility;
-  const low = Math.max(1, pa - 5);
-  const high = pa + 5;
+  const margin = Math.max(1, Math.floor(5 * (1 - (accuracyBonus ?? 0))));
+  const low = Math.max(1, pa - margin);
+  const high = Math.min(200, pa + margin);
 
   return `${gutFeeling.narrative} My best guess? Somewhere between ${low} and ${high} potential ability.`;
 }

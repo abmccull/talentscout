@@ -51,6 +51,14 @@ const ACTIVITY_LABELS: Record<string, string> = {
   analyticsTeamMeeting:   "Analytics Team Meeting",
   travel:                 "Travel",
   internationalTravel:    "International Travel",
+  agencyShowcase:         "Agency Showcase",
+  freeAgentOutreach:      "Free Agent Outreach",
+  loanMonitoring:         "Loan Monitoring",
+  loanRecommendation:     "Loan Recommendation",
+  reviewNPCReport:        "NPC Report Review",
+  managerMeeting:         "Manager Meeting",
+  boardPresentation:      "Board Presentation",
+  assignTerritory:        "Territory Assignment",
 };
 
 // ---------------------------------------------------------------------------
@@ -95,6 +103,14 @@ const ACTIVITY_BACKGROUNDS: Record<string, string> = {
   // Conferences
   dataConference:         "/images/backgrounds/activities/conference.png",
   boardPresentation:      "/images/backgrounds/activities/conference.png",
+  // Agency & management activities
+  agencyShowcase:         "/images/backgrounds/activities/youth-festival.png",
+  freeAgentOutreach:      "/images/backgrounds/activities/training.png",
+  loanMonitoring:         "/images/backgrounds/activities/data-room.png",
+  loanRecommendation:     "/images/backgrounds/activities/meeting.png",
+  reviewNPCReport:        "/images/backgrounds/activities/rest.png",
+  managerMeeting:         "/images/backgrounds/activities/meeting.png",
+  assignTerritory:        "/images/backgrounds/activities/data-room.png",
   // Reports & study → existing desk
   writeReport:            "/images/backgrounds/reports-desk.png",
   writePlacementReport:   "/images/backgrounds/reports-desk.png",

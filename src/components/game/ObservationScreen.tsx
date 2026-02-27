@@ -36,6 +36,8 @@ import type {
 import type { InsightActionId } from "@/engine/insight/types";
 import { getAvailableActions as getAvailableInsightActions } from "@/engine/insight/insight";
 import { getSessionResult, isHalfTimePhase } from "@/engine/observation/session";
+import type { ReflectionResult } from "@/engine/observation/reflection";
+import { ReflectionScreen } from "./ReflectionScreen";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -665,8 +667,35 @@ interface ReflectionViewProps {
 }
 
 const ReflectionView = memo(function ReflectionView({ session, onComplete }: ReflectionViewProps) {
-  const result = getSessionResult(session);
+  const lastReflectionResult = useGameStore((s) => s.lastReflectionResult) as ReflectionResult | null;
 
+  const handleAddHypothesis = useCallback((playerId: string, text: string, domain: string) => {
+    useGameStore.getState().addSessionHypothesis(playerId, text, domain);
+  }, []);
+
+  const handleAddNote = useCallback((note: string) => {
+    useGameStore.getState().addSessionNote(note);
+  }, []);
+
+  // If we have a full reflection result, render the dedicated ReflectionScreen
+  if (lastReflectionResult) {
+    return (
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="mx-auto max-w-2xl">
+          <ReflectionScreen
+            session={session}
+            reflectionResult={lastReflectionResult}
+            onAddHypothesis={handleAddHypothesis}
+            onAddNote={handleAddNote}
+            onComplete={onComplete}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: minimal reflection view when no reflection result is available
+  const result = getSessionResult(session);
   return (
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-2xl">
@@ -696,44 +725,6 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
             <p className="text-[10px] text-zinc-500 mt-0.5">Quality Tier</p>
           </div>
         </div>
-
-        {/* Flagged moments review */}
-        {result.flaggedMoments.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-3">
-              Flagged Moments
-            </h3>
-            <div className="space-y-2">
-              {result.flaggedMoments.map((fm) => {
-                const config = REACTION_CONFIG[fm.reaction];
-                const Icon = config.icon;
-                return (
-                  <div
-                    key={fm.id}
-                    className="rounded-md border border-[#27272a] bg-[#0f0f0f] p-3"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Icon size={14} className={`mt-0.5 shrink-0 ${config.className}`} aria-hidden="true" />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-xs font-medium ${config.className}`}>
-                            {config.label}
-                          </span>
-                          <span className="text-[10px] text-zinc-600">
-                            {fm.minute}&apos;
-                          </span>
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-snug">
-                          {fm.moment.description}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* Session Notes */}
         <SessionNoteInput />

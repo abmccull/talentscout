@@ -92,6 +92,7 @@ import {
   processLoanPerformance,
   processLoanRecalls,
 } from "../world/loans";
+import { getActiveEquipmentBonuses } from "../finance/equipmentBonuses";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -2106,7 +2107,12 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 15. Regional knowledge growth (F13)
   let regionalKnowledgeResult: TickResult["regionalKnowledgeResult"];
   if (state.regionalKnowledge && Object.keys(state.regionalKnowledge).length > 0) {
-    const rkResult = processRegionalKnowledgeGrowth(state, rng);
+    // Equipment bonus: familiarityGainBonus increases weekly regional knowledge gain
+    const rkEquipBonuses = state.finances?.equipment
+      ? getActiveEquipmentBonuses(state.finances.equipment.loadout)
+      : undefined;
+    const familiarityBonus = rkEquipBonuses?.familiarityGainBonus ?? 0;
+    const rkResult = processRegionalKnowledgeGrowth(state, rng, familiarityBonus);
     regionalKnowledgeResult = rkResult;
 
     // Generate inbox messages for discoveries and insights

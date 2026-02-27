@@ -150,6 +150,7 @@ function getNavVisibility(
     case "equipment":
     case "training":
     case "inbox":
+    case "performance":
       return effectiveWeek >= 3;
 
     // Agency: always visible — internal tabs handle feature gating
