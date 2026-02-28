@@ -66,7 +66,7 @@ import type {
 } from "@/engine/core/types";
 import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import type { LensType } from "@/engine/observation/types";
-import type { InsightActionId } from "@/engine/insight/types";
+import type { InsightActionId, InsightActionResult } from "@/engine/insight/types";
 import type { CardEvent } from "@/engine/core/types";
 import type { ActivityChoiceId } from "@/engine/core/activityInteractions";
 import type { ActivityQualityResult, ActivityQualityTier } from "@/engine/core/activityQuality";
@@ -292,7 +292,7 @@ export interface GameStoreState {
 
   // Insight actions
   useInsight: (actionId: InsightActionId) => void;
-  lastInsightResult: any | null;
+  lastInsightResult: InsightActionResult | null;
   dismissInsightResult: () => void;
 
   // Report actions

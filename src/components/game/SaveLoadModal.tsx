@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -140,6 +140,9 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("save");
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
   const [successSlot, setSuccessSlot] = useState<number | null>(null);
+  const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(successTimerRef.current), []);
 
   // Refresh save slots on mount
   useEffect(() => {
@@ -186,7 +189,8 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       const name = `Manual Save - S${gameState.currentSeason} W${gameState.currentWeek}`;
       await saveToSlot(slot, name);
       setSuccessSlot(slot);
-      setTimeout(() => setSuccessSlot(null), 2000);
+      clearTimeout(successTimerRef.current);
+      successTimerRef.current = setTimeout(() => setSuccessSlot(null), 2000);
     },
     [gameState, findSlot, saveToSlot],
   );
@@ -197,7 +201,8 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
     await saveToSlot(confirm.slot, name);
     setConfirm(null);
     setSuccessSlot(confirm.slot);
-    setTimeout(() => setSuccessSlot(null), 2000);
+    clearTimeout(successTimerRef.current);
+    successTimerRef.current = setTimeout(() => setSuccessSlot(null), 2000);
   }, [gameState, confirm, saveToSlot]);
 
   // ── Load handler ──────────────────────────────────────────────────────────

@@ -263,14 +263,21 @@ class SaveProviderImpl implements SaveProvider {
 
     // ---- Secondary write: Supabase ----------------------------------------
     if (supabase && this.userId) {
+      markCloudSyncPending();
       const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
-      supabaseProvider.uploadSave(slot, state).catch((err: unknown) => {
-        console.warn(
-          `SaveProvider: Supabase write failed for slot "${slotName}":`,
-          err,
-        );
-        captureException(err);
-      });
+      supabaseProvider
+        .uploadSave(slot, state)
+        .then(() => {
+          markCloudSyncComplete();
+        })
+        .catch((err: unknown) => {
+          markCloudSyncFailed();
+          console.warn(
+            `SaveProvider: Supabase write failed for slot "${slotName}":`,
+            err,
+          );
+          captureException(err);
+        });
     }
   }
 
@@ -529,6 +536,33 @@ class SaveProviderImpl implements SaveProvider {
 
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Cloud sync status tracking
+// ---------------------------------------------------------------------------
+
+interface CloudSyncStatus {
+  lastSync: Date | null;
+  pending: boolean;
+}
+
+let _cloudSyncStatus: CloudSyncStatus = { lastSync: null, pending: false };
+
+export function getLastCloudSyncStatus(): CloudSyncStatus {
+  return { ..._cloudSyncStatus };
+}
+
+function markCloudSyncPending(): void {
+  _cloudSyncStatus = { ..._cloudSyncStatus, pending: true };
+}
+
+function markCloudSyncComplete(): void {
+  _cloudSyncStatus = { lastSync: new Date(), pending: false };
+}
+
+function markCloudSyncFailed(): void {
+  _cloudSyncStatus = { ..._cloudSyncStatus, pending: false };
 }
 
 // ---------------------------------------------------------------------------

@@ -8,7 +8,8 @@
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStore";
 import type { LensType, ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
-import type { InsightActionId } from "@/engine/insight/types";
+import type { InsightActionId, InsightState, InsightActionResult } from "@/engine/insight/types";
+import type { ActivityType } from "@/engine/core/types";
 import type { AttributeDomain } from "@/engine/core/types";
 import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, addHypothesis, completeSession, getSessionResult } from "@/engine/observation/session";
 import { populateFullObservationPhases } from "@/engine/observation/fullObservation";
@@ -62,7 +63,7 @@ export function createObservationActions(get: GetState, set: SetState) {
       const rng = createRNG(`${gameState.seed}-session-${seedKey}`);
 
       const config = {
-        activityType: activityType as any,
+        activityType: activityType as ActivityType,
         activityInstanceId,
         specialization: gameState.scout.primarySpecialization,
         playerPool: dedupedPool,
@@ -182,9 +183,9 @@ export function createObservationActions(get: GetState, set: SetState) {
 
       // Accumulate insight points
       const scout = gameState.scout;
-      const currentInsight = (scout.insightState ?? createInsightState()) as any;
+      const currentInsight = (scout.insightState ?? createInsightState()) as InsightState;
       const capacity = calculateCapacity(scout.attributes.intuition);
-      const updatedInsight = accumulateInsight(currentInsight, result.insightPointsEarned, capacity) as any;
+      const updatedInsight = accumulateInsight(currentInsight, result.insightPointsEarned, capacity);
 
       // Track the completed session
       const completedSessions = new Set(gameState.completedInteractiveSessions ?? []);
@@ -220,22 +221,22 @@ export function createObservationActions(get: GetState, set: SetState) {
       if (!activeSession || !gameState) return;
 
       const scout = gameState.scout;
-      const insightState = (scout.insightState ?? createInsightState()) as any;
+      const insightState = (scout.insightState ?? createInsightState()) as InsightState;
 
       // Check if can use
-      const check = canUseInsight(insightState, actionId, scout as any, activeSession.mode);
+      const check = canUseInsight(insightState, actionId, scout, activeSession.mode);
       if (!check.canUse) return;
 
       // Spend IP and check for fizzle
       const rng = createRNG(`${gameState.seed}-insight-${gameState.currentWeek}-${actionId}`);
       const { state: newInsightState, fizzled } = spendInsight(
-        insightState, actionId, scout as any,
+        insightState, actionId, scout,
         gameState.currentWeek, gameState.currentSeason, rng
       );
 
       // Execute the action
       const context = {
-        scout: scout as any,
+        scout,
         session: activeSession,
         targetPlayerId: activeSession.focusTokens.allocations[0]?.playerId,
         players: gameState.players,

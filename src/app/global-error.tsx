@@ -5,6 +5,8 @@
  * Catches errors in the root layout itself — renders outside the <html> tag.
  */
 
+import { APP_VERSION } from "@/config/version";
+
 export default function GlobalError({
   error,
   reset,
@@ -63,7 +65,7 @@ export default function GlobalError({
           </div>
 
           <p className="mt-16 text-xs text-zinc-600">
-            TalentScout v0.1.0
+            TalentScout v{APP_VERSION}
           </p>
         </div>
       </body>

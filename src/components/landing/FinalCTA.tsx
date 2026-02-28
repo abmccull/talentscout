@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ScrollReveal } from "./ScrollReveal";
 
-const STEAM_URL = "https://store.steampowered.com/app/talentscout";
+const STEAM_URL = "https://store.steampowered.com/app/4455570";
 
 export function FinalCTA() {
   return (

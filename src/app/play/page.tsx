@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -54,7 +54,9 @@ import { InsightPayoff } from "@/components/game/InsightPayoff";
 import { ScenarioOutcomeOverlay } from "@/components/game/ScenarioOutcomeOverlay";
 import { useAchievementStore } from "@/stores/achievementStore";
 import { useScreenMusic } from "@/lib/audio/useScreenMusic";
-import { useKeyboardNav } from "@/lib/useKeyboardNav";
+import { useKeyboardNav, setFeedbackOpenHandler } from "@/lib/useKeyboardNav";
+import { FeedbackModal } from "@/components/game/FeedbackModal";
+import { ScreenErrorBoundary } from "@/components/game/ScreenErrorBoundary";
 
 /**
  * Null-safe wrapper for HallOfFame.
@@ -194,11 +196,27 @@ function ActiveScreen() {
 export default function Home() {
   const initialize = useAuthStore((s) => s.initialize);
   const gameState = useGameStore((s) => s.gameState);
+  const setScreen = useGameStore((s) => s.setScreen);
   const checkAndUnlock = useAchievementStore((s) => s.checkAndUnlock);
   const pendingCelebration = useGameStore((s) => s.pendingCelebration);
   const dismissCelebration = useGameStore((s) => s.dismissCelebration);
   const lastInsightResult = useGameStore((s) => s.lastInsightResult);
   const dismissInsightResult = useGameStore((s) => s.dismissInsightResult);
+
+  // Feedback modal state (opened via F1 or Settings)
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+
+  // Register the F1 → feedback handler
+  const openFeedback = useCallback(() => setIsFeedbackOpen(true), []);
+  useEffect(() => {
+    setFeedbackOpenHandler(openFeedback);
+    return () => setFeedbackOpenHandler(null);
+  }, [openFeedback]);
+
+  // ScreenErrorBoundary recovery: navigate back to dashboard
+  const handleErrorRecover = useCallback(() => {
+    setScreen("dashboard");
+  }, [setScreen]);
 
   // Check for an existing Supabase session once on mount.
   // initialize() is a no-op if the auth store has not yet been wired to
@@ -207,7 +225,7 @@ export default function Home() {
     initialize();
   }, [initialize]);
 
-  // Register global keyboard shortcuts (Esc, 1-8, Space, ?).
+  // Register global keyboard shortcuts (Esc, 1-8, Space, ?, F1).
   // Called here — at the root — so the listener is active on every screen.
   useKeyboardNav();
 
@@ -225,7 +243,9 @@ export default function Home() {
       {/* SettingsApplier applies CSS classes to <html> for font size,
           colorblind filters, and reduced motion. Renders no visible UI. */}
       <SettingsApplier />
-      <ActiveScreen />
+      <ScreenErrorBoundary onRecover={handleErrorRecover}>
+        <ActiveScreen />
+      </ScreenErrorBoundary>
       {/* MentorOverlay handles tutorial sequences, guided session, and screen guides. */}
       <MentorOverlay />
       {/* Guided first-week checklist — bottom-right corner. */}
@@ -256,6 +276,11 @@ export default function Home() {
       )}
       {/* Scenario outcome overlay — shows victory/failure modal at end of scenario. */}
       <ScenarioOutcomeOverlay />
+      {/* Feedback modal — opened via F1 shortcut or Settings screen */}
+      <FeedbackModal
+        isOpen={isFeedbackOpen}
+        onClose={() => setIsFeedbackOpen(false)}
+      />
     </>
   );
 }

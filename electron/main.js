@@ -109,6 +109,8 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
+      // sandbox: false is required for Steamworks SDK native bindings in the
+      // preload script. Security is maintained via contextIsolation + no nodeIntegration.
       sandbox: false,
     },
   });
@@ -131,6 +133,22 @@ function createWindow() {
         },
       });
     });
+  } else {
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          "Content-Security-Policy": [
+            "default-src 'self' app: data: blob:; " +
+              "script-src 'self' app:; " +
+              "style-src 'self' 'unsafe-inline' app:; " +
+              "img-src 'self' app: data: blob:; " +
+              "font-src 'self' app: data:; " +
+              "connect-src 'self' app: https: wss:;",
+          ],
+        },
+      });
+    });
   }
 
   // ----- Load URL -----
@@ -146,6 +164,14 @@ function createWindow() {
     if (input.type === "keyDown" && input.key === "F11") {
       mainWindow.setFullScreen(!mainWindow.isFullScreen());
     }
+  });
+
+  // Show a fallback error page if the renderer fails to load (e.g. missing
+  // static export, corrupted asar, or dev server not running).
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription) => {
+    mainWindow.loadURL(
+      `data:text/html,<html><body style="background:#0c0c0c;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h1>TalentScout failed to load</h1><p>${encodeURIComponent(errorDescription)} (${errorCode})</p><p>Please restart the application.</p></div></body></html>`,
+    );
   });
 
   mainWindow.on("closed", () => {

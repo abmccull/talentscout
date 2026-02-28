@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Trash2, LogOut } from "lucide-react";
 import type { SaveRecord } from "@/lib/db";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { APP_VERSION } from "@/config/version";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
@@ -223,7 +224,7 @@ export function MainMenu() {
       )}
 
       <p className="mt-16 text-xs text-zinc-600">
-        v0.1.0 — The scout&apos;s eye sees what others miss
+        v{APP_VERSION} — The scout&apos;s eye sees what others miss
       </p>
 
       {/* Auth modal */}

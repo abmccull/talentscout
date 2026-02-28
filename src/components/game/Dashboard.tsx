@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,6 +137,34 @@ export function Dashboard() {
   const t = useTranslations("dashboard");
   const tCal = useTranslations("calendar");
 
+  // useMemo hooks MUST be called before any early return to satisfy React's
+  // Rules of Hooks (hooks must be called in the same order every render).
+  const recentReports = useMemo(
+    () =>
+      gameState
+        ? Object.values(gameState.reports)
+            .sort((a, b) => b.submittedWeek - a.submittedWeek)
+            .slice(0, 5)
+        : [],
+    [gameState?.reports],
+  );
+  const observedPlayerCount = useMemo(
+    () =>
+      gameState
+        ? new Set(
+            Object.values(gameState.observations).map((o) => o.playerId),
+          ).size
+        : 0,
+    [gameState?.observations],
+  );
+  const unreviewedNPCReports = useMemo(
+    () =>
+      gameState
+        ? Object.values(gameState.npcReports).filter((r) => !r.reviewed)
+        : [],
+    [gameState?.npcReports],
+  );
+
   if (!gameState) return null;
 
   const { scout, currentWeek, currentSeason } = gameState;
@@ -144,21 +172,10 @@ export function Dashboard() {
     ? getUpcomingFixtures(currentWeek, 8)
     : [];
   const thisWeekFixtures = upcoming.filter((f) => f.week === currentWeek);
-  const recentReports = Object.values(gameState.reports)
-    .sort((a, b) => b.submittedWeek - a.submittedWeek)
-    .slice(0, 5);
   const unreadMessages = gameState.inbox.filter((m) => !m.read);
-  const observedPlayerCount = new Set(
-    Object.values(gameState.observations).map((o) => o.playerId),
-  ).size;
 
   // Board satisfaction history -- most recent 5 entries
   const satisfactionHistory = (gameState.satisfactionHistory ?? []).slice(-5);
-
-  // Phase 1 widgets
-  const unreviewedNPCReports = Object.values(gameState.npcReports).filter(
-    (r) => !r.reviewed,
-  );
   const hasMultipleCountries = gameState.countries.length > 1;
   const { travelBooking } = scout;
 

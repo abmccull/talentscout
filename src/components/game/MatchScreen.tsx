@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Button } from "@/components/ui/button";
@@ -89,6 +89,53 @@ export function MatchScreen() {
     }
   }, [isComplete, endMatch, playSFX]);
 
+  // Compute running match totals before the guard clause so the useEffect
+  // hooks that depend on them can be called unconditionally (Rules of Hooks).
+  const totalGoals = useMemo(() => {
+    if (!gameState || !activeMatch) return 0;
+    const fixture = gameState.fixtures[activeMatch.fixtureId];
+    if (!fixture) return 0;
+    const homeClub = getClub(fixture.homeClubId);
+    const homePlayerIds = homeClub?.playerIds ?? [];
+    let home = 0;
+    let away = 0;
+    for (let i = 0; i <= activeMatch.currentPhase && i < activeMatch.phases.length; i++) {
+      for (const event of activeMatch.phases[i].events) {
+        if (event.type === "goal") {
+          if (homePlayerIds.includes(event.playerId)) home++;
+          else away++;
+        }
+      }
+    }
+    return home + away;
+  }, [gameState, activeMatch, getClub]);
+
+  const totalShots = useMemo(() => {
+    if (!activeMatch) return 0;
+    let shots = 0;
+    for (let i = 0; i <= activeMatch.currentPhase && i < activeMatch.phases.length; i++) {
+      for (const ev of activeMatch.phases[i].events) {
+        if (ev.type === "shot") shots++;
+      }
+    }
+    return shots;
+  }, [activeMatch]);
+
+  // Play crowd reaction SFX when goals/shots change.
+  useEffect(() => {
+    if (totalGoals > prevGoalCountRef.current) {
+      playSFX("crowd-goal");
+    }
+    prevGoalCountRef.current = totalGoals;
+  }, [totalGoals, playSFX]);
+
+  useEffect(() => {
+    if (totalShots > prevShotCountRef.current) {
+      playSFX("crowd-miss");
+    }
+    prevShotCountRef.current = totalShots;
+  }, [totalShots, playSFX]);
+
   // ── Guard clauses (all hooks called above) ──────────────────────────────
 
   if (!gameState || !activeMatch) return null;
@@ -117,29 +164,6 @@ export function MatchScreen() {
         else awayGoals++;
       }
     }
-  }
-
-  // Detect new goals and play crowd reaction SFX
-  const totalGoals = homeGoals + awayGoals;
-  if (totalGoals > prevGoalCountRef.current) {
-    prevGoalCountRef.current = totalGoals;
-    playSFX("crowd-goal");
-  } else {
-    prevGoalCountRef.current = totalGoals;
-  }
-
-  // Detect shots that didn't result in goals → play crowd-miss
-  let totalShots = 0;
-  for (let i = 0; i <= activeMatch.currentPhase && i < activeMatch.phases.length; i++) {
-    for (const ev of activeMatch.phases[i].events) {
-      if (ev.type === "shot") totalShots++;
-    }
-  }
-  if (totalShots > prevShotCountRef.current) {
-    prevShotCountRef.current = totalShots;
-    playSFX("crowd-miss");
-  } else {
-    prevShotCountRef.current = totalShots;
   }
 
   const allInvolvedPlayerIds = currentPhase

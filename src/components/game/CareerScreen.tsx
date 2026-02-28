@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -290,6 +290,8 @@ export function CareerScreen() {
 
   // Present to board state
   const [boardPresented, setBoardPresented] = useState(false);
+  const boardTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(boardTimerRef.current), []);
 
   if (!gameState || !scout) return null;
 
@@ -1171,7 +1173,8 @@ export function CareerScreen() {
                     onClick={() => {
                       presentToBoard();
                       setBoardPresented(true);
-                      setTimeout(() => setBoardPresented(false), 3000);
+                      clearTimeout(boardTimerRef.current);
+                      boardTimerRef.current = setTimeout(() => setBoardPresented(false), 3000);
                     }}
                   >
                     <Megaphone size={14} className="mr-2" />

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ChevronDown } from "lucide-react";
 
-const STEAM_URL = "https://store.steampowered.com/app/talentscout";
+const STEAM_URL = "https://store.steampowered.com/app/4455570";
 
 export function Hero() {
   return (

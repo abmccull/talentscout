@@ -51,7 +51,7 @@ export default function Error({
     } catch {
       // Silently ignore — this is a best-effort read.
     }
-  }, []);
+  }, [error]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#0a0a0a] to-[#0f1a0f] px-6">

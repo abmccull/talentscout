@@ -64,7 +64,7 @@ export function DemoEndScreen() {
             className="w-full bg-emerald-600 text-base hover:bg-emerald-500"
             onClick={() => {
               window.open(
-                "https://store.steampowered.com/app/talentscout",
+                "https://store.steampowered.com/app/4455570",
                 "_blank",
               );
             }}

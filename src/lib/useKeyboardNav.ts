@@ -49,6 +49,17 @@ function isTypingTarget(el: Element | null): boolean {
 // Hook
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Module-level callback ref for F1 feedback shortcut
+// ---------------------------------------------------------------------------
+
+let _onFeedbackOpen: (() => void) | null = null;
+
+/** Register a callback that F1 will invoke to open the feedback modal. */
+export function setFeedbackOpenHandler(handler: (() => void) | null): void {
+  _onFeedbackOpen = handler;
+}
+
 export function useKeyboardNav(): void {
   // Subscribe to only the slice we need to avoid unnecessary re-renders
   const setScreen = useGameStore((s) => s.setScreen);
@@ -148,6 +159,16 @@ export function useKeyboardNav(): void {
         if (!noGameScreens.includes(currentScreen)) {
           e.preventDefault();
           setScreen("settings");
+        }
+        return;
+      }
+
+      // ── F1 — open feedback modal ────────────────────────────────────────
+      if (key === "F1") {
+        const noGameScreens: GameScreen[] = ["mainMenu", "newGame"];
+        if (!noGameScreens.includes(currentScreen) && _onFeedbackOpen) {
+          e.preventDefault();
+          _onFeedbackOpen();
         }
         return;
       }

@@ -1,4 +1,6 @@
-const STEAM_URL = "https://store.steampowered.com/app/talentscout";
+import { APP_VERSION } from "@/config/version";
+
+const STEAM_URL = "https://store.steampowered.com/app/4455570";
 
 export function Footer() {
   return (
@@ -21,7 +23,7 @@ export function Footer() {
         </div>
         <div className="flex items-center gap-4 text-xs text-zinc-600">
           <span>&copy; 2026 TalentScout. All rights reserved.</span>
-          <span>v0.1.0</span>
+          <span>v{APP_VERSION}</span>
         </div>
       </div>
     </footer>

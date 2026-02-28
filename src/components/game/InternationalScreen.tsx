@@ -146,6 +146,9 @@ export function InternationalScreen() {
   // SVG ref for coordinate conversion
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const bookTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(bookTimerRef.current), []);
 
   // Popup state
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -190,7 +193,8 @@ export function InternationalScreen() {
     bookInternationalTravel(selectedCountry);
     setJustBooked(true);
     // Auto-dismiss after 1.5s
-    setTimeout(() => {
+    clearTimeout(bookTimerRef.current);
+    bookTimerRef.current = setTimeout(() => {
       setSelectedCountry(null);
       setPopupPos(null);
       setJustBooked(false);

@@ -381,6 +381,10 @@ function buildScoutQualityData(scout: Scout, countryKey?: string): ScoutQualityD
 
 export function createWeeklyActions(get: GetState, set: SetState) {
   return {
+  // ══════════════════════════════════════════════════════════════════════════
+  // Schedule Management (scheduleActivity, unscheduleActivity)
+  // ══════════════════════════════════════════════════════════════════════════
+
   scheduleActivity: (activity: Activity, dayIndex: number) => {
     const { gameState } = get();
     if (!gameState) return;
@@ -427,6 +431,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     set({ gameState: { ...gameState, schedule } });
   },
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Week Advancement (requestWeekAdvance, resolveSeasonEvent, advanceWeek)
+  // ══════════════════════════════════════════════════════════════════════════
+
   requestWeekAdvance: () => {
     const { weekSimulation } = get();
     if (weekSimulation) {
@@ -446,6 +454,13 @@ export function createWeeklyActions(get: GetState, set: SetState) {
   advanceWeek: () => {
     const { gameState } = get();
     if (!gameState) return;
+
+    // Checkpoint autosave before processing — if the game crashes during week
+    // simulation the player has a save from immediately before.
+    dbAutosave(gameState).catch((err) => {
+      console.warn("Pre-advance checkpoint autosave failed:", err);
+    });
+
     const simState = get().weekSimulation;
 
     // Keep progression consistent across all entry points:
@@ -6432,6 +6447,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     });
   },
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Week Simulation — Interaction & Day Advancement
+  // ══════════════════════════════════════════════════════════════════════════
+
   chooseSimulationInteraction: (optionId: string, focusedPlayerIds?: string[]) => {
     const { weekSimulation, gameState } = get();
     if (!weekSimulation || !gameState) return;
@@ -6662,7 +6681,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     }
   },
 
-  // Match scheduling (calendar-based)
+  // ══════════════════════════════════════════════════════════════════════════
+  // Match Lifecycle (scheduleMatch, startMatch, advancePhase, setFocus, endMatch)
+  // ══════════════════════════════════════════════════════════════════════════
+
   scheduleMatch: (fixtureId: string) => {
     const { gameState } = get();
     if (!gameState) return false;

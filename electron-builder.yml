@@ -31,8 +31,9 @@ extraResources:
 # Replace the placeholder URL with the real CDN / S3 bucket before shipping.
 # ---------------------------------------------------------------------------
 publish:
-  provider: generic
-  url: https://releases.talentscout.game/latest
+  provider: github
+  owner: abmccull
+  repo: talentscout
 
 # ---------------------------------------------------------------------------
 # Windows

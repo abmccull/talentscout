@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -27,6 +27,7 @@ import {
   Accessibility,
   Gamepad2,
   Bell,
+  MessageSquarePlus,
 } from "lucide-react";
 import { MAX_MANUAL_SLOTS } from "@/lib/db";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -39,6 +40,8 @@ import {
 } from "@/lib/modLoader";
 import { getCountryData, getAvailableCountries } from "@/data/index";
 import { SaveLoadModal } from "./SaveLoadModal";
+import { FeedbackModal } from "./FeedbackModal";
+import { getLastCloudSyncStatus } from "@/lib/saveProvider";
 
 // ---------------------------------------------------------------------------
 // Small reusable primitives used only within SettingsScreen
@@ -140,6 +143,14 @@ export function SettingsScreen() {
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [moddedKeys, setModdedKeys] = useState<string[]>([]);
   const [modStatus, setModStatus] = useState<string | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const modTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => {
+    clearTimeout(saveTimerRef.current);
+    clearTimeout(modTimerRef.current);
+  }, []);
 
   const { volumes, setVolume, toggleMute } = useAudio();
 
@@ -159,7 +170,8 @@ export function SettingsScreen() {
     const name = `Save ${slot}`;
     await saveToSlot(slot, name);
     setSaveStatus(`Saved to slot ${slot}`);
-    setTimeout(() => setSaveStatus(null), 2000);
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
   };
 
   const handleQuickSave = async () => {
@@ -269,6 +281,30 @@ export function SettingsScreen() {
                     />
                   </button>
                 </div>
+
+                {/* Cloud sync status indicator */}
+                {cloudSaveEnabled && (() => {
+                  const syncStatus = getLastCloudSyncStatus();
+                  if (syncStatus.pending) {
+                    return (
+                      <p className="text-xs text-amber-400">
+                        Cloud sync: Pending...
+                      </p>
+                    );
+                  }
+                  if (syncStatus.lastSync) {
+                    const ago = Math.round(
+                      (Date.now() - syncStatus.lastSync.getTime()) / 60_000,
+                    );
+                    return (
+                      <p className="text-xs text-zinc-500">
+                        Cloud sync: Last synced{" "}
+                        {ago < 1 ? "just now" : `${ago} min ago`}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
 
               </>
             ) : (
@@ -492,6 +528,7 @@ export function SettingsScreen() {
                       ["Space", "Advance week (Calendar screen)"],
                       ["?", "Open Settings"],
                       ["Ctrl+S", "Open Settings (save management)"],
+                      ["F1", "Send Feedback"],
                     ] as [string, string][]
                   ).map(([key, desc]) => (
                     <li key={key} className="flex items-center gap-3">
@@ -613,7 +650,8 @@ export function SettingsScreen() {
                       if (result.errors.length > 0) {
                         setModStatus(result.errors.join(", "));
                       }
-                      setTimeout(() => setModStatus(null), 4000);
+                      clearTimeout(modTimerRef.current);
+                      modTimerRef.current = setTimeout(() => setModStatus(null), 4000);
                     });
                   };
                   input.click();
@@ -631,7 +669,8 @@ export function SettingsScreen() {
                     void resetModData().then(() => {
                       setModdedKeys([]);
                       setModStatus("Reset to default data");
-                      setTimeout(() => setModStatus(null), 3000);
+                      clearTimeout(modTimerRef.current);
+                      modTimerRef.current = setTimeout(() => setModStatus(null), 3000);
                     });
                   }}
                 >
@@ -790,6 +829,28 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
+        {/* ── Feedback & Support ───────────────────────────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <MessageSquarePlus size={18} className="text-emerald-500" aria-hidden="true" />
+              Feedback &amp; Support
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-xs text-zinc-500">
+              Found a bug? Have a suggestion? We&apos;d love to hear from you.
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => setShowFeedbackModal(true)}
+            >
+              <MessageSquarePlus size={14} className="mr-2" aria-hidden="true" />
+              Send Feedback
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* ── Quit to Menu ────────────────────────────────────────────────── */}
         <Card>
           <CardContent className="p-4">
@@ -820,6 +881,12 @@ export function SettingsScreen() {
           onClose={() => setShowSaveLoadModal(false)}
         />
       )}
+
+      {/* Feedback modal */}
+      <FeedbackModal
+        isOpen={showFeedbackModal}
+        onClose={() => setShowFeedbackModal(false)}
+      />
     </GameLayout>
   );
 }
