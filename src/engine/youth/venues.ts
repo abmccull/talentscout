@@ -82,6 +82,66 @@ const CHARACTER_NOTE_POOL: readonly string[] = [
 const HIDDEN_ATTRIBUTE_KEYS = Object.keys(HIDDEN_INTEL_POOLS) as Array<keyof typeof HIDDEN_INTEL_POOLS>;
 
 // =============================================================================
+// SCOUT QUALITY DATA FOR POOL WEIGHTING
+// =============================================================================
+
+/** Scout attributes that influence the quality of youth surfaced in venue pools. */
+export interface ScoutQualityData {
+  /** Scout's intuition attribute (1–20). */
+  intuition: number;
+  /** Regional knowledge level for the venue's country (0–100). */
+  regionalKnowledge: number;
+  /** Scout's specialization level (0–50). */
+  specializationLevel: number;
+  /** Whether the scout is a youth specialist. */
+  isYouthSpecialist: boolean;
+}
+
+/**
+ * Compute a 0–1 quality weight that determines how much the pool
+ * selection favours higher-PA youth.
+ *
+ * - Low weight (~0.1): nearly random — scout can't distinguish talent.
+ * - High weight (~0.7): strong bias toward higher PA.
+ * - Max (~1.0): almost always sees the best available.
+ */
+function computeQualityWeight(data: ScoutQualityData): number {
+  // Base: intuition normalized from 1–20 to 0–1
+  let weight = (data.intuition - 1) / 19;
+
+  // Regional knowledge bonus
+  if (data.regionalKnowledge >= 80) weight += 0.30;
+  else if (data.regionalKnowledge >= 50) weight += 0.15;
+
+  // Youth specialization bonus: up to +0.2 at level 50
+  if (data.isYouthSpecialist) {
+    weight += (data.specializationLevel / 50) * 0.2;
+  }
+
+  return Math.min(1, Math.max(0, weight));
+}
+
+/**
+ * Weighted shuffle: biases selection toward higher-PA youth based on
+ * the scout's quality weight. Each youth gets a sort score that blends
+ * their PA rank with randomness. Higher quality weight = less randomness.
+ */
+function weightedShuffle(
+  rng: RNG,
+  pool: UnsignedYouth[],
+  qualityWeight: number,
+): UnsignedYouth[] {
+  const scored = pool.map((y) => ({
+    youth: y,
+    score:
+      (y.player.potentialAbility / 200) * qualityWeight +
+      rng.next() * (1 - qualityWeight),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.youth);
+}
+
+// =============================================================================
 // PUBLIC FUNCTIONS
 // =============================================================================
 
@@ -113,6 +173,8 @@ export function getYouthVenuePool(
   currentWeek?: number,
   /** Tournament context — applies pool size multiplier when attending a named tournament. */
   tournament?: TournamentEvent,
+  /** Scout quality data for quality-weighted pool selection. */
+  scoutQualityData?: ScoutQualityData,
 ): UnsignedYouth[] {
   // Step 1: base pool — active (not placed, not retired) youth
   const activeYouth = Object.values(unsignedYouth).filter(
@@ -181,13 +243,18 @@ export function getYouthVenuePool(
       break;
   }
 
-  // Step 4: shuffle and slice to venue pool size range (equipment + tournament bonuses expand pool)
+  // Step 4: quality-weighted selection + slice to venue pool size
   const config = VENUE_POOL_SIZES[venueType];
   const bonusMultiplier = 1 + (youthDiscoveryBonus ?? 0);
   const tournamentMultiplier = tournament?.poolSizeMultiplier ?? 1.0;
   const poolSize = Math.round(rng.nextInt(config.minPoolSize, config.maxPoolSize) * bonusMultiplier * tournamentMultiplier);
-  const shuffled = rng.shuffle(filtered);
-  return shuffled.slice(0, poolSize);
+
+  // If scout quality data is provided, use weighted shuffle to bias toward higher-PA youth.
+  // Otherwise, fall back to pure random shuffle (backwards compatible).
+  const sorted = scoutQualityData
+    ? weightedShuffle(rng, filtered, computeQualityWeight(scoutQualityData))
+    : rng.shuffle(filtered);
+  return sorted.slice(0, poolSize);
 }
 
 /**

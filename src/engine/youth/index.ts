@@ -41,3 +41,7 @@ export {
   createAgencyShowcase,
   estimateTournamentCost,
 } from "./tournaments";
+
+// Gut feeling mechanic — narrative flash moments during youth scouting
+export { rollGutFeeling, formatGutFeelingWithPA } from "./gutFeeling";
+export type { GutFeelingPerkModifiers } from "./gutFeeling";

@@ -20,6 +20,7 @@ export const DIFFICULTY_CONFIGS: Record<DifficultyLevel, DifficultyModifiers> = 
     reputationMultiplier: 1.5,
     rivalIntelligence: 0.5,
     developmentRate: 1.3,
+    wonderkidRateMultiplier: 1.5,
     permadeath: false,
   },
   normal: {
@@ -28,6 +29,7 @@ export const DIFFICULTY_CONFIGS: Record<DifficultyLevel, DifficultyModifiers> = 
     reputationMultiplier: 1.0,
     rivalIntelligence: 1.0,
     developmentRate: 1.0,
+    wonderkidRateMultiplier: 1.0,
     permadeath: false,
   },
   hard: {
@@ -36,6 +38,7 @@ export const DIFFICULTY_CONFIGS: Record<DifficultyLevel, DifficultyModifiers> = 
     reputationMultiplier: 0.7,
     rivalIntelligence: 1.5,
     developmentRate: 0.8,
+    wonderkidRateMultiplier: 0.7,
     permadeath: false,
   },
   ironman: {
@@ -44,6 +47,7 @@ export const DIFFICULTY_CONFIGS: Record<DifficultyLevel, DifficultyModifiers> = 
     reputationMultiplier: 0.7,
     rivalIntelligence: 2.0,
     developmentRate: 0.8,
+    wonderkidRateMultiplier: 0.5,
     permadeath: true,
   },
 };

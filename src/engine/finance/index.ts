@@ -17,6 +17,7 @@ export {
   repayLoan,
   applyFirstReportBonus,
   applyFirstPlacementBonus,
+  processStarterStipend,
 } from "./expenses";
 
 export {

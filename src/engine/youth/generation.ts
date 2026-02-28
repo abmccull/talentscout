@@ -268,20 +268,36 @@ function pickPosition(rng: RNG, bias: CountryBias): Position {
 }
 
 /**
- * Sample a potential ability using the heavy-tail distribution specified
- * in the design:
- *   60% journeyman   → PA  40–99
- *   25% qualityPro   → PA 100–149
- *   12% worldClass   → PA 150–179
- *    3% generational → PA 180–200
+ * Sample a potential ability using a heavy-tail distribution.
+ *
+ * Base rates (wonderkidMultiplier = 1.0):
+ *   55%   journeyman   → PA  40–99
+ *   40.5% qualityPro   → PA 100–149
+ *    4%   worldClass   → PA 150–179
+ *    0.5% generational → PA 180–200
+ *
+ * The wonderkidMultiplier scales the worldClass and generational rates.
+ * Remainder is redistributed to qualityPro so all rates sum to 1.0.
  */
-function sampleYouthPA(rng: RNG): number {
+function sampleYouthPA(rng: RNG, wonderkidMultiplier: number = 1.0): number {
+  // Base wonderkid rates
+  const baseWorldClass = 0.04;
+  const baseGenerational = 0.005;
+
+  // Apply multiplier, clamp so total wonderkid rate stays under 0.40
+  const worldClass = Math.min(baseWorldClass * wonderkidMultiplier, 0.30);
+  const generational = Math.min(baseGenerational * wonderkidMultiplier, 0.10);
+
+  // Fixed journeyman rate; qualityPro absorbs remainder
+  const journeyman = 0.55;
+  const qualityPro = Math.max(0, 1.0 - journeyman - worldClass - generational);
+
   const roll = rng.next();
-  if (roll < 0.60) {
+  if (roll < journeyman) {
     return rng.nextInt(40, 99);
-  } else if (roll < 0.85) {
+  } else if (roll < journeyman + qualityPro) {
     return rng.nextInt(100, 149);
-  } else if (roll < 0.97) {
+  } else if (roll < journeyman + qualityPro + worldClass) {
     return rng.nextInt(150, 179);
   } else {
     return rng.nextInt(180, 200);
@@ -378,6 +394,7 @@ export function generateRegionalYouth(
   season: number,
   week: number,
   subRegions: SubRegion[],
+  wonderkidMultiplier: number = 1.0,
 ): UnsignedYouth[] {
   // 30% chance this country produces youth this week
   if (!rng.chance(0.3)) {
@@ -390,7 +407,7 @@ export function generateRegionalYouth(
 
   for (let i = 0; i < batchCount; i++) {
     const age = rng.nextInt(14, 17);
-    const pa = sampleYouthPA(rng);
+    const pa = sampleYouthPA(rng, wonderkidMultiplier);
     // CA is always in [10, 60] but capped at PA
     const ca = sampleYouthCA(rng, 10, 60, pa);
     const position = pickPosition(rng, bias);

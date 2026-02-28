@@ -38,6 +38,7 @@ import {
   getModdedKeys,
 } from "@/lib/modLoader";
 import { getCountryData, getAvailableCountries } from "@/data/index";
+import { SaveLoadModal } from "./SaveLoadModal";
 
 // ---------------------------------------------------------------------------
 // Small reusable primitives used only within SettingsScreen
@@ -136,6 +137,7 @@ export function SettingsScreen() {
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [moddedKeys, setModdedKeys] = useState<string[]>([]);
   const [modStatus, setModStatus] = useState<string | null>(null);
 
@@ -489,6 +491,7 @@ export function SettingsScreen() {
                       ["8", "Settings"],
                       ["Space", "Advance week (Calendar screen)"],
                       ["?", "Open Settings"],
+                      ["Ctrl+S", "Open Settings (save management)"],
                     ] as [string, string][]
                   ).map(([key, desc]) => (
                     <li key={key} className="flex items-center gap-3">
@@ -681,6 +684,13 @@ export function SettingsScreen() {
                 )}
                 Quick Save
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowSaveLoadModal(true)}
+              >
+                <Download size={14} className="mr-2" aria-hidden="true" />
+                Manage Saves
+              </Button>
               {saveStatus && (
                 <span className="flex items-center gap-1 text-sm text-emerald-400">
                   <Check size={14} aria-hidden="true" />
@@ -802,6 +812,14 @@ export function SettingsScreen() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
       />
+
+      {/* Save/Load modal */}
+      {showSaveLoadModal && (
+        <SaveLoadModal
+          isOpen={showSaveLoadModal}
+          onClose={() => setShowSaveLoadModal(false)}
+        />
+      )}
     </GameLayout>
   );
 }

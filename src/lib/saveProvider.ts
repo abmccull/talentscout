@@ -33,6 +33,7 @@ import { getSteam } from "@/lib/steam/steamInterface";
 import { supabase } from "@/lib/supabase";
 import { SupabaseCloudSaveProvider } from "@/lib/supabaseCloudSave";
 import { saveGame, loadGame, listSaves, migrateSaveState } from "@/lib/db";
+import { captureException } from "@/lib/sentry";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -268,6 +269,7 @@ class SaveProviderImpl implements SaveProvider {
           `SaveProvider: Supabase write failed for slot "${slotName}":`,
           err,
         );
+        captureException(err);
       });
     }
   }
@@ -314,6 +316,7 @@ class SaveProviderImpl implements SaveProvider {
       };
     } catch (err) {
       console.warn("SaveProvider: IndexedDB load error:", err);
+      captureException(err);
       return null;
     }
   }
@@ -331,6 +334,7 @@ class SaveProviderImpl implements SaveProvider {
       return { data: raw, source: "steam", timestamp };
     } catch (err) {
       console.warn("SaveProvider: Steam Cloud load error:", err);
+      captureException(err);
       return null;
     }
   }
@@ -356,6 +360,7 @@ class SaveProviderImpl implements SaveProvider {
       };
     } catch (err) {
       console.warn("SaveProvider: Supabase load error:", err);
+      captureException(err);
       return null;
     }
   }

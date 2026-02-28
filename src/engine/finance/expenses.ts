@@ -17,6 +17,7 @@ import type {
   LifestyleConfig,
   Office,
   BusinessLoan,
+  DifficultyLevel,
 } from "../core/types";
 import { getEquipmentMonthlyTotal } from "./equipmentBonuses";
 import { DEFAULT_LOADOUT, DEFAULT_OWNED_ITEMS } from "./equipmentCatalog";
@@ -113,14 +114,32 @@ const NPC_SALARY_PER_SCOUT: Record<4 | 5, number> = {
 // PUBLIC API
 // =============================================================================
 
+// =============================================================================
+// DIFFICULTY-SCALED FINANCIAL CONSTANTS
+// =============================================================================
+
+const STARTING_CASH: Record<DifficultyLevel, number> = {
+  casual: 4000,
+  normal: 2000,
+  hard: 2000,
+  ironman: 2000,
+};
+
+const STARTER_STIPEND: Record<DifficultyLevel, number> = {
+  casual: 500,
+  normal: 300,
+  hard: 200,
+  ironman: 150,
+};
+
 /**
  * Create a starting FinancialRecord for a scout based on their career tier.
  *
- * Tier 1 scouts start with a balance of 2000 and a monthly income derived from
- * their salary. Equipment begins at level 1 (no bonus). The expense record is
+ * Starting cash scales by difficulty (casual gets 4000, others get 2000).
+ * Equipment begins at level 1 (no bonus). The expense record is
  * populated with initial estimates for the first month.
  */
-export function initializeFinances(scout: Scout, careerPath?: CareerPath): FinancialRecord {
+export function initializeFinances(scout: Scout, careerPath?: CareerPath, difficulty?: DifficultyLevel): FinancialRecord {
   const monthlyIncome = scout.salary * 4; // weekly salary × 4 weeks
   const path = careerPath ?? scout.careerPath ?? "club";
 
@@ -134,7 +153,7 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
 
   // Build a temporary record so we can calculate initial expenses
   const stub: FinancialRecord = {
-    balance: 2000,
+    balance: STARTING_CASH[difficulty ?? "normal"],
     monthlyIncome,
     expenses: emptyExpenses(),
     equipmentLevel: 1,
@@ -169,7 +188,7 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
     awards: [],
     // B2: Economy / Loans
     loans: [],
-    starterBonus: { firstReportBonusUsed: false, firstPlacementBonusUsed: false },
+    starterBonus: { firstReportBonusUsed: false, firstPlacementBonusUsed: false, starterStipendWeeksRemaining: 4 },
     // B9: Specialization income tracking fields
     specBonusApplied: 0,
     specUniqueIncome: 0,
@@ -180,6 +199,33 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath): Finan
   const expenses = calculateMonthlyExpenses(scout, stub);
 
   return { ...stub, expenses };
+}
+
+/**
+ * Process the weekly starter stipend — a guaranteed minimum income for the
+ * first 4 weeks representing an introductory retainer from the league.
+ * Returns the updated FinancialRecord (or the original if no stipend remains).
+ *
+ * Existing saves that lack `starterStipendWeeksRemaining` are treated as
+ * having 0 weeks remaining (stipend exhausted).
+ */
+export function processStarterStipend(
+  finances: FinancialRecord,
+  difficulty: DifficultyLevel,
+): FinancialRecord {
+  const weeksRemaining = finances.starterBonus?.starterStipendWeeksRemaining ?? 0;
+  if (!finances.starterBonus || weeksRemaining <= 0) {
+    return finances;
+  }
+  const stipend = STARTER_STIPEND[difficulty] ?? STARTER_STIPEND.normal;
+  return {
+    ...finances,
+    balance: finances.balance + stipend,
+    starterBonus: {
+      ...finances.starterBonus,
+      starterStipendWeeksRemaining: weeksRemaining - 1,
+    },
+  };
 }
 
 function defaultLifestyleForTier(tier: CareerTier): LifestyleConfig {

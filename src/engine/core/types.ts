@@ -1370,6 +1370,7 @@ export interface DifficultyModifiers {
   reputationMultiplier: number;
   rivalIntelligence: number;
   developmentRate: number;
+  wonderkidRateMultiplier: number;
   permadeath: boolean;
 }
 
@@ -2525,6 +2526,8 @@ export interface StarterBonus {
   firstReportBonusUsed: boolean;
   /** Whether the 25% first-placement-fee bonus has been consumed. */
   firstPlacementBonusUsed: boolean;
+  /** Weeks remaining for the introductory league stipend (0 = exhausted). */
+  starterStipendWeeksRemaining: number;
 }
 
 export type ExpenseType =
@@ -2693,7 +2696,13 @@ export type SeasonEventType =
   | "januaryWindowFrenzy"
   | "springRevival"
   | "titleRacePressure"
-  | "seasonAwardsBuildUp";
+  | "seasonAwardsBuildUp"
+  | "earlySeasonAssessment"
+  | "domesticCupRounds"
+  | "fixtureCongestion"
+  | "midSeasonReview"
+  | "relegationBattle"
+  | "europeanQuarterFinals";
 
 // =============================================================================
 // PHASE 4: LEGACY & ANALYTICS

@@ -61,6 +61,16 @@ export function useKeyboardNav(): void {
       // Never fire shortcuts while the user is typing
       if (isTypingTarget(document.activeElement)) return;
 
+      // Ctrl+S / Cmd+S — navigate to settings (save management)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        const noGameScreens: GameScreen[] = ["mainMenu", "newGame"];
+        if (!noGameScreens.includes(currentScreen)) {
+          e.preventDefault();
+          setScreen("settings");
+        }
+        return;
+      }
+
       // Never fire when modifier keys are held (avoid browser/OS shortcuts)
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 

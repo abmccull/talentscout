@@ -29,6 +29,12 @@ const EVENT_TYPE_COLORS: Record<SeasonEventType, string> = {
   springRevival: "bg-lime-500",
   titleRacePressure: "bg-yellow-500",
   seasonAwardsBuildUp: "bg-indigo-500",
+  earlySeasonAssessment: "bg-sky-500",
+  domesticCupRounds: "bg-rose-500",
+  fixtureCongestion: "bg-orange-400",
+  midSeasonReview: "bg-violet-500",
+  relegationBattle: "bg-red-600",
+  europeanQuarterFinals: "bg-blue-600",
 };
 
 /** Tailwind text colour classes for event labels (matching their bar colour). */
@@ -46,6 +52,12 @@ const EVENT_TYPE_TEXT_COLORS: Record<SeasonEventType, string> = {
   springRevival: "text-lime-400",
   titleRacePressure: "text-yellow-400",
   seasonAwardsBuildUp: "text-indigo-400",
+  earlySeasonAssessment: "text-sky-400",
+  domesticCupRounds: "text-rose-400",
+  fixtureCongestion: "text-orange-300",
+  midSeasonReview: "text-violet-400",
+  relegationBattle: "text-red-400",
+  europeanQuarterFinals: "text-blue-400",
 };
 
 /** Human-readable labels for effect types. */

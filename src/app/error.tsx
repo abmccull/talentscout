@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { captureException } from "@/lib/sentry";
 
 export default function Error({
   error,
@@ -17,6 +18,7 @@ export default function Error({
   const [lastSaveTime, setLastSaveTime] = useState<string | null>(null);
 
   useEffect(() => {
+    captureException(error);
     // Attempt to read the last autosave timestamp (best-effort).
     try {
       const openReq = indexedDB.open("TalentScoutDB");

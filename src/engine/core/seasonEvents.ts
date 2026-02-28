@@ -107,6 +107,18 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       "Last-minute deals create inflated prices as clubs scramble to complete signings before the window shuts",
   },
   {
+    type: "earlySeasonAssessment",
+    name: "Early Season Assessment",
+    startWeek: 9,
+    endWeek: 9,
+    description:
+      "Clubs assess early results — reputation rewards for accurate predictions on player form",
+    effects: [
+      { type: "reputationBonus", value: 2, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.15, targetScope: "global" },
+    ],
+  },
+  {
     type: "internationalBreak",
     name: "International Break 1",
     startWeek: 10,
@@ -128,12 +140,75 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       "Clubs assess scouting department performance at the halfway mark of the first half",
   },
   {
+    type: "domesticCupRounds",
+    name: "Domestic Cup Rounds",
+    startWeek: 13,
+    endWeek: 14,
+    description:
+      "Cup matches offer lower-pressure observation opportunities with increased youth squad rotation",
+    effects: [
+      { type: "youthIntake", value: 0.3, targetScope: "global" },
+      { type: "scoutingCostModifier", value: -0.15, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Focus on Cup Upsets",
+        description:
+          "Scout cup underdogs for hidden gems performing above their level.",
+        effects: [
+          { type: "attributeRevealBonus", value: 0.3, targetScope: "global" },
+          { type: "youthIntake", value: 0.4, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Maintain League Focus",
+        description:
+          "Ignore the cup distraction and stay focused on league talent.",
+        effects: [
+          { type: "reputationBonus", value: 2, targetScope: "global" },
+          { type: "scoutingCostModifier", value: -0.1, targetScope: "global" },
+        ],
+      },
+    ],
+  },
+  {
     type: "injuryCrisisPeriod",
     name: "Injury Crisis Period",
     startWeek: 15,
     endWeek: 15,
     description:
       "Fixture congestion leads to higher injury rates across all leagues, affecting player availability",
+  },
+  {
+    type: "fixtureCongestion",
+    name: "Fixture Congestion",
+    startWeek: 16,
+    endWeek: 17,
+    description:
+      "Heavy schedule means more matches to scout but higher fatigue risk for your team",
+    effects: [
+      { type: "fatigueModifier", value: 0.15, targetScope: "global" },
+      { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Double Down on Scouting",
+        description:
+          "Take advantage of the packed schedule to observe more players.",
+        effects: [
+          { type: "attributeRevealBonus", value: 0.35, targetScope: "global" },
+          { type: "fatigueModifier", value: 0.3, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Rotate and Rest",
+        description:
+          "Manage fatigue by attending fewer matches this period.",
+        effects: [
+          { type: "fatigueModifier", value: -0.1, targetScope: "global" },
+        ],
+      },
+    ],
   },
   {
     type: "internationalBreak",
@@ -166,6 +241,17 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
           { type: "fatigueModifier", value: -0.3, targetScope: "global" },
         ],
       },
+    ],
+  },
+  {
+    type: "midSeasonReview",
+    name: "Mid-Season Review",
+    startWeek: 19,
+    endWeek: 19,
+    description:
+      "Board evaluates the scouting department at the halfway point of the season",
+    effects: [
+      { type: "reputationBonus", value: 3, targetScope: "global" },
     ],
   },
   {
@@ -208,6 +294,38 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       "Clubs desperate after a poor first half look to sell, creating opportunities for shrewd scouts",
   },
   {
+    type: "relegationBattle",
+    name: "Relegation Battle",
+    startWeek: 26,
+    endWeek: 27,
+    description:
+      "Bottom clubs grow desperate and are willing to sell at a discount, creating bargain opportunities",
+    effects: [
+      { type: "transferPriceModifier", value: -0.2, targetScope: "global" },
+      { type: "scoutingCostModifier", value: 0.1, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Target Distressed Clubs",
+        description:
+          "Focus scouting on relegation-threatened clubs for bargain signings.",
+        effects: [
+          { type: "transferPriceModifier", value: -0.35, targetScope: "global" },
+          { type: "scoutingCostModifier", value: 0.15, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Focus on Emerging Talent",
+        description:
+          "Look for young players breaking through in the relegation fight.",
+        effects: [
+          { type: "youthIntake", value: 0.3, targetScope: "global" },
+          { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
+        ],
+      },
+    ],
+  },
+  {
     type: "internationalBreak",
     name: "International Break 3",
     startWeek: 28,
@@ -217,6 +335,38 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
       { type: "playerAvailability", value: -0.15, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.2, targetScope: "global" },
       { type: "fatigueModifier", value: -0.1, targetScope: "global" },
+    ],
+  },
+  {
+    type: "europeanQuarterFinals",
+    name: "European Quarter-Finals",
+    startWeek: 29,
+    endWeek: 29,
+    description:
+      "Continental competition creates high-profile scouting opportunities against elite opposition",
+    effects: [
+      { type: "attributeRevealBonus", value: 0.3, targetScope: "global" },
+      { type: "scoutingCostModifier", value: 0.2, targetScope: "global" },
+    ],
+    choices: [
+      {
+        label: "Attend European Matches",
+        description:
+          "Scout elite European fixtures for top-tier talent assessment.",
+        effects: [
+          { type: "attributeRevealBonus", value: 0.5, targetScope: "global" },
+          { type: "scoutingCostModifier", value: 0.35, targetScope: "global" },
+        ],
+      },
+      {
+        label: "Scout Domestic Underdogs",
+        description:
+          "While rivals focus on Europe, find domestic talent with less competition.",
+        effects: [
+          { type: "scoutingCostModifier", value: -0.15, targetScope: "global" },
+          { type: "reputationBonus", value: 2, targetScope: "global" },
+        ],
+      },
     ],
   },
   {
