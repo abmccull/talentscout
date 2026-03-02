@@ -71,7 +71,7 @@ const commonIntro: TutorialStep[] = [
     targetSelector: "dashboard-overview",
     title: "Welcome to Your Hub",
     description:
-      "Reputation, fatigue, and upcoming matches. Check in each week before planning.",
+      "[[reputation]], [[fatigue]], and upcoming matches. Check in each week before planning.",
     position: "right",
   },
   {
@@ -92,7 +92,7 @@ const clubFork: TutorialStep[] = [
     targetSelector: "dashboard-club-header",
     title: "Your Employer",
     description:
-      "Employed with a weekly salary. Your manager issues directives \u2014 priorities you should fulfil to build trust.",
+      "Employed with a weekly salary. Your manager issues [[directive]]s \u2014 priorities you should fulfil to build trust.",
     position: "bottom",
   },
   {
@@ -157,7 +157,7 @@ const youthMission: TutorialStep[] = [
     targetSelector: "youth-pipeline-list",
     title: "Place Your Discoveries",
     description:
-      "When confident in a prospect, write a Placement Report to recommend them to an academy. Successful placements earn fees.",
+      "When confident in a prospect, write a [[placement-report]] to recommend them to an academy. Successful placements earn fees.",
     position: "right",
   },
   {
@@ -166,7 +166,7 @@ const youthMission: TutorialStep[] = [
     targetSelector: "youth-legacy-score",
     title: "The Long Game",
     description:
-      "Your Legacy Score grows as placed youth make debuts, score goals, and earn international caps. This is what separates you.",
+      "Your [[legacy-score]] grows as placed youth make debuts, score goals, and earn international caps. This is what separates you.",
     position: "bottom",
   },
 ];
@@ -197,7 +197,7 @@ const firstTeamMission: TutorialStep[] = [
     targetSelector: "nav-reportHistory",
     title: "Report with Conviction",
     description:
-      "After observing, write a report. Conviction determines club response strength. A \u2018Table Pound\u2019 stakes your career.",
+      "After observing, write a report. [[conviction-level]] determines club response strength. A [[table-pound]] stakes your career.",
     position: "bottom",
   },
   {
@@ -206,7 +206,7 @@ const firstTeamMission: TutorialStep[] = [
     targetSelector: "nav-inbox",
     title: "Club Responses",
     description:
-      "Check inbox after submitting reports. Club responds: interested, trial, signed, or passed. Signings boost reputation + bonuses.",
+      "Check inbox after submitting reports. Club responds: interested, trial, signed, or passed. Signings boost [[reputation]] + bonuses.",
     position: "bottom",
   },
 ];
@@ -218,7 +218,7 @@ const regionalMission: TutorialStep[] = [
     targetSelector: "nav-internationalView",
     title: "Your Territory",
     description:
-      "Open International View to see your territory. Sub-regions have familiarity scores \u2014 higher familiarity = better accuracy.",
+      "Open International View to see your territory. Sub-regions have [[familiarity]] scores \u2014 higher familiarity = better [[accuracy]].",
     position: "bottom",
   },
   {
@@ -246,7 +246,7 @@ const regionalMission: TutorialStep[] = [
     targetSelector: "nav-finances",
     title: "Retainer Contracts",
     description:
-      "Clubs hire Regional Experts on retainer for territory coverage. Build regional reputation to attract better offers.",
+      "Clubs hire Regional Experts on [[retainer]] for territory coverage. Build regional [[reputation]] to attract better offers.",
     position: "bottom",
   },
 ];
@@ -305,7 +305,7 @@ const ahaMomentYouth: TutorialSequence = {
       targetSelector: "inbox-latest",
       title: "Youth Placed!",
       description:
-        "A club accepted your placement. You earned a fee and started tracking their career. If they make a debut, you earn Legacy Score. This is your superpower.",
+        "A club accepted your [[placement-report]]. You earned a fee and started tracking their career. If they make a debut, you earn [[legacy-score]]. This is your superpower.",
       position: "right",
     },
   ],
@@ -321,7 +321,7 @@ const ahaMomentFirstTeam: TutorialSequence = {
       targetSelector: "inbox-latest",
       title: "Club Signed Your Recommendation!",
       description:
-        "The club acted on your report. Reputation jumped, bonus earned. This is First Team scouting \u2014 shaping your club\u2019s squad.",
+        "The club acted on your report. [[reputation]] jumped, bonus earned. This is First Team scouting \u2014 shaping your club\u2019s squad.",
       position: "right",
     },
   ],
@@ -337,7 +337,7 @@ const ahaMomentRegional: TutorialSequence = {
       targetSelector: "match-summary-accuracy",
       title: "Regional Knowledge Paid Off",
       description:
-        "Your familiarity gave you an accuracy bonus. Others see wider confidence ranges. Deep local knowledge is your edge.",
+        "Your [[familiarity]] gave you an [[accuracy]] bonus. Others see wider [[confidence]] ranges. Deep [[regional-knowledge]] is your edge.",
       position: "right",
     },
   ],
@@ -353,7 +353,7 @@ const ahaMomentData: TutorialSequence = {
       targetSelector: "inbox-latest",
       title: "Anomaly Validated!",
       description:
-        "Your statistical flag was correct. Live observation confirms the data. Prediction bounty earned. Flag, observe, validate, profit.",
+        "Your [[anomaly-detection]] flag was correct. Live [[observation]] confirms the data. [[prediction]] bounty earned. Flag, observe, validate, profit.",
       position: "right",
     },
   ],
@@ -411,7 +411,7 @@ const firstReport: TutorialSequence = {
       targetSelector: "report-conviction",
       title: "Conviction Levels",
       description:
-        "Choose how strongly you back this player. Higher conviction stakes your reputation \u2014 be accurate or pay the price.",
+        "Choose how strongly you back this player. Higher [[conviction-level]] stakes your [[reputation]] \u2014 be accurate or pay the price.",
       position: "right",
     },
     {
@@ -420,7 +420,7 @@ const firstReport: TutorialSequence = {
       targetSelector: "report-attributes",
       title: "Attribute Confidence",
       description:
-        "Each attribute shows your confidence level based on observations. Low-confidence attributes carry more risk in your report.",
+        "Each attribute shows your [[confidence]] level based on [[observation]]s. Low-confidence attributes carry more risk in your report.",
       position: "bottom",
     },
     {
@@ -455,7 +455,7 @@ const careerProgression: TutorialSequence = {
       targetSelector: "career-tier-benefits",
       title: "New Tier Benefits",
       description:
-        "You\u2019ve reached a new career tier. Each tier unlocks access to higher-profile leagues, more club contacts, and greater weekly budgets.",
+        "You\u2019ve reached a new [[career-tier]]. Each tier unlocks access to higher-profile leagues, more club [[contact]]s, and greater weekly budgets.",
       position: "bottom",
     },
     {
@@ -464,7 +464,7 @@ const careerProgression: TutorialSequence = {
       targetSelector: "career-perk-tree",
       title: "Perk Tree",
       description:
-        "Spend earned perk points to specialise your scout. Perks compound over time \u2014 choose a path that suits your playstyle.",
+        "Spend earned [[perk]] points to specialise your scout. Perks compound over time \u2014 choose a path that suits your playstyle.",
       position: "right",
     },
     {
@@ -534,7 +534,7 @@ const firstMatch: TutorialSequence = {
       targetSelector: "match-focus-lens",
       title: "Choose a Lens",
       description:
-        "Choose a lens to focus your observation: Technical, Physical, Mental, Tactical, or General. The lens determines which attributes are deepened.",
+        "Choose a [[focus-lens]] to focus your [[observation]]: Technical, Physical, Mental, Tactical, or General. The lens determines which attributes are deepened.",
       position: "left",
     },
     {
@@ -568,7 +568,7 @@ const firstReportWriting: TutorialSequence = {
       targetSelector: "report-observation-summary",
       title: "Select a Player",
       description:
-        "This shows how many times you\u2019ve observed this player and from which contexts. More sessions mean higher confidence.",
+        "This shows how many times you\u2019ve observed this player and from which contexts. More [[observation]]s mean higher [[confidence]].",
       position: "bottom",
     },
     {
@@ -586,7 +586,7 @@ const firstReportWriting: TutorialSequence = {
       targetSelector: "report-conviction",
       title: "Conviction Level",
       description:
-        "Choose your conviction. Higher conviction means bigger reputation stakes \u2014 a Table Pound is your career on the line.",
+        "Choose your [[conviction-level]]. Higher conviction means bigger [[reputation]] stakes \u2014 a [[table-pound]] is your career on the line.",
       position: "right",
     },
     {
@@ -604,7 +604,7 @@ const firstReportWriting: TutorialSequence = {
       targetSelector: "report-submit",
       title: "Submit Your Report",
       description:
-        "Your report goes to the club. Their response depends on report quality, your reputation, and conviction level.",
+        "Your report goes to the club. Their response depends on [[report-quality]], your [[reputation]], and [[conviction-level]].",
       position: "top",
       nextStep: "reportSubmitted",
     },
@@ -625,7 +625,7 @@ const firstTravel: TutorialSequence = {
       targetSelector: "travel-world-map",
       title: "The World Map",
       description:
-        "This is your world map. Countries are coloured by your familiarity \u2014 higher familiarity means better scouting accuracy when you visit.",
+        "This is your world map. Countries are coloured by your [[familiarity]] \u2014 higher familiarity means better scouting [[accuracy]] when you visit.",
       position: "bottom",
     },
     {
@@ -653,7 +653,7 @@ const firstTravel: TutorialSequence = {
       targetSelector: "travel-familiarity",
       title: "Familiarity Matters",
       description:
-        "Your familiarity with a country affects scouting accuracy. Submit reports, make contacts, and find talent abroad to grow familiarity. Low familiarity means wider confidence ranges on your attribute readings.",
+        "Your [[familiarity]] with a country affects scouting [[accuracy]]. Submit reports, make [[contact]]s, and find talent abroad to grow familiarity. Low familiarity means wider [[confidence]] ranges on your attribute readings.",
       position: "left",
     },
     {
@@ -664,6 +664,323 @@ const firstTravel: TutorialSequence = {
       description:
         "When your trip ends, you return home automatically. Plan your calendar around travel \u2014 you\u2019ll need rest days after long trips.",
       position: "bottom",
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Contextual mini-tutorials (Phase 4A)
+// ---------------------------------------------------------------------------
+
+const equipmentGuide: TutorialSequence = {
+  id: "contextual:equipment",
+  name: "Equipment Guide",
+  steps: [
+    {
+      id: "equip-1",
+      screen: "equipment",
+      targetSelector: "equipment-loadout",
+      title: "Your Loadout",
+      description:
+        "You have 5 [[equipment-slot]]s: Notebook, Video, Travel, Network, and Analysis. Each item provides passive [[equipment-bonus]]es to your scouting.",
+      position: "bottom",
+    },
+    {
+      id: "equip-2",
+      screen: "equipment",
+      targetSelector: "equipment-shop",
+      title: "Upgrade Strategy",
+      description:
+        "Higher-tier items cost more but compound your edge. Prioritise items that align with your [[specialization]].",
+      position: "right",
+    },
+    {
+      id: "equip-3",
+      screen: "equipment",
+      targetSelector: "equipment-loadout",
+      title: "Fill Every Slot",
+      description:
+        "Empty slots mean missed [[accuracy]] bonuses. Fill every slot before a big scouting week.",
+      position: "bottom",
+    },
+  ],
+};
+
+const npcManagementGuide: TutorialSequence = {
+  id: "contextual:npcManagement",
+  name: "NPC Scout Management",
+  steps: [
+    {
+      id: "npc-1",
+      screen: "npcManagement",
+      targetSelector: "npc-roster",
+      title: "Your Assistant Scouts",
+      description:
+        "[[npc-scout]]s work territories you assign. They generate reports automatically, freeing you to focus on priority targets.",
+      position: "bottom",
+    },
+    {
+      id: "npc-2",
+      screen: "npcManagement",
+      targetSelector: "npc-territory",
+      title: "Territory Assignment",
+      description:
+        "Assign each scout to a league or region. Their skills affect [[report-quality]] — match their strengths to the right territory.",
+      position: "right",
+    },
+    {
+      id: "npc-3",
+      screen: "npcManagement",
+      targetSelector: "npc-reports",
+      title: "Review Their Work",
+      description:
+        "Check NPC reports regularly. They flag players worth your personal attention. Good scouts save you weeks of searching.",
+      position: "left",
+    },
+  ],
+};
+
+const freeAgentGuide: TutorialSequence = {
+  id: "contextual:freeAgent",
+  name: "Free Agent System",
+  steps: [
+    {
+      id: "fa-1",
+      screen: "agency",
+      targetSelector: "freeagents-list",
+      title: "Free Agent Pool",
+      description:
+        "Players without a club are available here. No [[transfer-window]] needed — they can be placed any time.",
+      position: "bottom",
+    },
+    {
+      id: "fa-2",
+      screen: "agency",
+      targetSelector: "freeagents-negotiate",
+      title: "Negotiate Terms",
+      description:
+        "When a client is interested, open negotiations. Your [[reputation]] and the player's situation determine your leverage.",
+      position: "right",
+    },
+    {
+      id: "fa-3",
+      screen: "agency",
+      targetSelector: "freeagents-list",
+      title: "Hidden Gems",
+      description:
+        "Some free agents are overlooked talent. Strong [[observation]]s and correct [[conviction-level]]s on free agents build your [[reputation]] fast.",
+      position: "bottom",
+    },
+  ],
+};
+
+const networkGuide: TutorialSequence = {
+  id: "contextual:network",
+  name: "Network Basics",
+  steps: [
+    {
+      id: "net-1",
+      screen: "network",
+      targetSelector: "network-contacts",
+      title: "Your Contacts",
+      description:
+        "Every [[contact]] you meet is catalogued here. 11 types exist: agents, scouts, club staff, journalists, and more.",
+      position: "bottom",
+    },
+    {
+      id: "net-2",
+      screen: "network",
+      targetSelector: "network-meet",
+      title: "Build Relationships",
+      description:
+        "Schedule meetings to build [[relationship]] scores. High scores unlock exclusive [[intel]] and referrals.",
+      position: "right",
+    },
+    {
+      id: "net-3",
+      screen: "network",
+      targetSelector: "network-intel",
+      title: "Intel Network",
+      description:
+        "Trusted contacts share transfer rumours, player tips, and competitive intelligence. Not all intel is accurate — learn who to trust.",
+      position: "left",
+    },
+  ],
+};
+
+const rivalGuide: TutorialSequence = {
+  id: "contextual:rival",
+  name: "Rival System",
+  steps: [
+    {
+      id: "rival-1",
+      screen: "rivals",
+      targetSelector: "rivals-list",
+      title: "Known Rivals",
+      description:
+        "[[rival-scout]]s compete for the same targets. Track who they are and what they're watching.",
+      position: "bottom",
+    },
+    {
+      id: "rival-2",
+      screen: "rivals",
+      targetSelector: "rivals-intel",
+      title: "Competitive Intelligence",
+      description:
+        "Your [[contact]] network warns you when rivals are closing in. Use advance warning to move faster on priority targets.",
+      position: "right",
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// New aha moments (Phase 4C)
+// ---------------------------------------------------------------------------
+
+const ahaMomentEquipment: TutorialSequence = {
+  id: "ahaMoment:equipment",
+  name: "Equipment Bonus Active!",
+  steps: [
+    {
+      id: "aha-equipment",
+      screen: "dashboard",
+      targetSelector: "dashboard-overview",
+      title: "Equipment Bonus Active!",
+      description:
+        "Your new gear just improved your [[accuracy]]! [[equipment-bonus]]es compound — fill every [[equipment-slot]] for maximum effect.",
+      position: "right",
+    },
+  ],
+};
+
+const ahaMomentNpcReport: TutorialSequence = {
+  id: "ahaMoment:npcReport",
+  name: "NPC Scout Report!",
+  steps: [
+    {
+      id: "aha-npc",
+      screen: "inbox",
+      targetSelector: "inbox-latest",
+      title: "Your Scout Delivered!",
+      description:
+        "Your [[npc-scout]] submitted their first report. Review it — they may have found someone worth your personal attention.",
+      position: "right",
+    },
+  ],
+};
+
+const ahaMomentFreeAgent: TutorialSequence = {
+  id: "ahaMoment:freeAgent",
+  name: "Free Agent Signed!",
+  steps: [
+    {
+      id: "aha-freeagent",
+      screen: "inbox",
+      targetSelector: "inbox-latest",
+      title: "Free Agent Signed!",
+      description:
+        "You discovered and placed a free agent. No [[transfer-window]] needed, no fee — pure [[reputation]] gain.",
+      position: "right",
+    },
+  ],
+};
+
+const ahaMomentSeasonAward: TutorialSequence = {
+  id: "ahaMoment:seasonAward",
+  name: "Season Award!",
+  steps: [
+    {
+      id: "aha-award",
+      screen: "dashboard",
+      targetSelector: "dashboard-reputation",
+      title: "Season Award!",
+      description:
+        "You won a season award! Your [[reputation]] just got a significant boost. Keep delivering quality work.",
+      position: "bottom",
+    },
+  ],
+};
+
+const ahaMomentContactIntel: TutorialSequence = {
+  id: "ahaMoment:contactIntel",
+  name: "Contact Intel Confirmed!",
+  steps: [
+    {
+      id: "aha-contact-intel",
+      screen: "network",
+      targetSelector: "network-intel",
+      title: "Intel Confirmed!",
+      description:
+        "Your [[contact]]'s tip was right. Build that [[relationship]] — reliable [[intel]] sources are invaluable.",
+      position: "right",
+    },
+  ],
+};
+
+const ahaMomentPerkActivated: TutorialSequence = {
+  id: "ahaMoment:perkActivated",
+  name: "Perk Activated!",
+  steps: [
+    {
+      id: "aha-perk",
+      screen: "match",
+      targetSelector: "match-focus-panel",
+      title: "Perk Activated!",
+      description:
+        "Your [[perk]] just kicked in during the match! [[specialization]] perks compound over time — each one makes you better at what you do.",
+      position: "left",
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// Weekly mentor check-ins (Phase 5C)
+// ---------------------------------------------------------------------------
+
+const weeklyCheckinWeek2: TutorialSequence = {
+  id: "mentorCheckin:week2",
+  name: "Week 2 Check-in",
+  steps: [
+    {
+      id: "checkin-w2",
+      screen: "dashboard",
+      targetSelector: "dashboard-overview",
+      title: "Good First Week",
+      description:
+        "Solid start. Now let's talk about building your network. [[contact]]s share [[intel]] and open doors — schedule a meeting when you can.",
+      position: "right",
+    },
+  ],
+};
+
+const weeklyCheckinWeek3: TutorialSequence = {
+  id: "mentorCheckin:week3",
+  name: "Week 3 Check-in",
+  steps: [
+    {
+      id: "checkin-w3",
+      screen: "dashboard",
+      targetSelector: "dashboard-overview",
+      title: "Finding Your Rhythm",
+      description:
+        "You're getting the hang of it. Time to think about your career path. Check your [[career-tier]] progress and explore your [[perk]] options.",
+      position: "right",
+    },
+  ],
+};
+
+const weeklyCheckinWeek4: TutorialSequence = {
+  id: "mentorCheckin:week4",
+  name: "Week 4 Check-in",
+  steps: [
+    {
+      id: "checkin-w4",
+      screen: "dashboard",
+      targetSelector: "dashboard-overview",
+      title: "Building Momentum",
+      description:
+        "You've been at this for a month now. Your [[reputation]] is taking shape. Keep submitting quality reports — clubs are starting to notice.",
+      position: "right",
     },
   ],
 };
@@ -683,6 +1000,23 @@ export const TUTORIAL_SEQUENCES: TutorialSequence[] = [
   ahaMomentFirstTeam,
   ahaMomentRegional,
   ahaMomentData,
+  // Phase 4A: Contextual mini-tutorials
+  equipmentGuide,
+  npcManagementGuide,
+  freeAgentGuide,
+  networkGuide,
+  rivalGuide,
+  // Phase 4C: New aha moments
+  ahaMomentEquipment,
+  ahaMomentNpcReport,
+  ahaMomentFreeAgent,
+  ahaMomentSeasonAward,
+  ahaMomentContactIntel,
+  ahaMomentPerkActivated,
+  // Phase 5C: Weekly mentor check-ins
+  weeklyCheckinWeek2,
+  weeklyCheckinWeek3,
+  weeklyCheckinWeek4,
 ];
 
 /** Map for O(1) lookup by id. */

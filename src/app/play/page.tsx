@@ -28,7 +28,7 @@ import { FixtureBrowser } from "@/components/game/FixtureBrowser";
 import { YouthScoutingScreen } from "@/components/game/YouthScoutingScreen";
 import { AlumniDashboard } from "@/components/game/AlumniDashboard";
 import { FinancialDashboard } from "@/components/game/FinancialDashboard";
-import { HandbookScreen } from "@/components/game/HandbookScreen";
+import { WikiScreen } from "@/components/game/wiki/WikiScreen";
 import { AchievementScreen } from "@/components/game/AchievementScreen";
 import { ScenarioSelect } from "@/components/game/ScenarioSelect";
 import { HallOfFame } from "@/components/game/HallOfFame";
@@ -134,7 +134,7 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
     case "finances":
       return <FinancialDashboard />;
     case "handbook":
-      return <HandbookScreen />;
+      return <WikiScreen />;
     case "achievements":
       return <AchievementScreen />;
     case "scenarioSelect":

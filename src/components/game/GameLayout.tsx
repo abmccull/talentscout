@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
+import { useTutorialStore, type TutorialSequenceId } from "@/stores/tutorialStore";
 import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
@@ -101,8 +102,6 @@ const ALWAYS_VISIBLE = new Set<GameScreen>([
   "dashboard",
   "calendar",
   "playerDatabase",
-  "fixtureBrowser",
-  "finances",
   "achievements",
   "handbook",
   "settings",
@@ -129,60 +128,87 @@ function saveSeenNav(seen: Set<GameScreen>): void {
   }
 }
 
+/** Extra game state needed for refined progressive disclosure gating. */
+interface NavGateContext {
+  tier: number;
+  effectiveWeek: number;
+  countryCount: number;
+  careerPath: string;
+  specialization: string;
+  observationCount: number;
+  reportCount: number;
+  hasScheduledActivity: boolean;
+  hasAttendedMatch: boolean;
+}
+
 /** Returns true if the nav item should be shown given current game state. */
 function getNavVisibility(
   screen: GameScreen,
-  tier: number,
-  effectiveWeek: number,
-  countryCount: number,
-  careerPath: string,
-  specialization: string,
+  ctx: NavGateContext,
 ): boolean {
   if (ALWAYS_VISIBLE.has(screen)) return true;
 
+  const { tier, effectiveWeek, countryCount, specialization, observationCount, reportCount, hasScheduledActivity, hasAttendedMatch } = ctx;
+
   switch (screen) {
-    // Always visible (reports encourage early writing)
-    case "reportHistory":
-      return effectiveWeek >= 3;
-
-    // Week 3+ items
-    case "career":
-    case "equipment":
-    case "training":
+    // Inbox: always visible (essential for directives)
     case "inbox":
-    case "performance":
-      return effectiveWeek >= 3;
-
-    // Agency: always visible — internal tabs handle feature gating
-    case "agency":
       return true;
 
-    // Tier 2+ items
+    // Match and Report Writer unlock after first scheduled activity
+    case "fixtureBrowser":
+      return hasAttendedMatch || effectiveWeek >= 2;
+
+    // Report History: after first report or week 3+
+    case "reportHistory":
+      return reportCount > 0 || effectiveWeek >= 3;
+
+    // Career, Performance: after week 2
+    case "career":
+    case "performance":
+      return effectiveWeek >= 2;
+
+    // Equipment, Training: Tier 2+ (rep 25)
+    case "equipment":
+    case "training":
+      return tier >= 2 || effectiveWeek >= 6;
+
+    // Finances: after week 3
+    case "finances":
+      // Override ALWAYS_VISIBLE — finances is in that set but we want progressive
+      return effectiveWeek >= 3;
+
+    // International: Tier 2+ or multiple countries
+    case "internationalView":
+      return tier >= 2 || countryCount > 1;
+
+    // Network, Rivals: Tier 2+
     case "network":
+      return tier >= 2 || effectiveWeek >= 4;
     case "rivals":
       return tier >= 2;
 
-    // Leaderboard always visible
-    case "leaderboard":
-      return true;
-
-    // Youth Hub: always visible for youth scouts, tier 3+ for others
+    // Youth Hub: always for youth scouts, tier 3+ otherwise
     case "youthScouting":
       return specialization === "youth" || tier >= 3;
 
-    // Tier 3+ items
+    // Discoveries, Analytics, Alumni: Tier 3+
     case "discoveries":
     case "analytics":
     case "alumniDashboard":
       return tier >= 3;
 
-    // Tier 4+ item
+    // Agency: Tier 3+
+    case "agency":
+      return tier >= 3 || effectiveWeek >= 12;
+
+    // NPC Management: Tier 4+
     case "npcManagement":
       return tier >= 4;
 
-    // Country-gated item
-    case "internationalView":
-      return countryCount > 1;
+    // Leaderboard: after season 1 (effective week > 52)
+    case "leaderboard":
+      return effectiveWeek > 52;
 
     default:
       return true;
@@ -244,18 +270,31 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   const effectiveWeek =
     (gameState.currentSeason - 1) * 52 + gameState.currentWeek;
 
+  const navCtx: NavGateContext = {
+    tier,
+    effectiveWeek,
+    countryCount,
+    careerPath,
+    specialization,
+    observationCount: Object.keys(gameState.observations ?? {}).length,
+    reportCount: Object.keys(gameState.reports ?? {}).length,
+    hasScheduledActivity: gameState.schedule?.activities?.some((a: any) => a != null) ?? false,
+    hasAttendedMatch: (gameState.playedFixtures?.length ?? 0) > 0,
+  };
+
   // Build visible sections — only include sections that have at least one visible item
   const navSections = getNavSections(specialization);
   const visibleSections = navSections.map((section) => ({
     ...section,
     visibleItems: section.items.filter(({ screen }) =>
-      getNavVisibility(screen, tier, effectiveWeek, countryCount, careerPath, specialization),
+      getNavVisibility(screen, navCtx),
     ),
   })).filter((section) => section.visibleItems.length > 0);
 
   function handleNavClick(screen: GameScreen): void {
     if (screen !== currentScreen) playSFX("click");
-    if (!seenNav.has(screen)) {
+    const isFirstVisit = !seenNav.has(screen);
+    if (isFirstVisit) {
       const next = new Set(seenNav);
       next.add(screen);
       setSeenNav(next);
@@ -263,6 +302,28 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     }
     setScreen(screen);
     setSidebarOpen(false);
+
+    // Auto-open screen guide on first click of a newly-visible nav item.
+    if (isFirstVisit) {
+      setTimeout(() => {
+        useTutorialStore.getState().recordScreenVisit(screen);
+      }, 300);
+
+      // Contextual mini-tutorials for specific screens on first visit.
+      const contextualTriggers: Partial<Record<GameScreen, TutorialSequenceId>> = {
+        equipment: "contextual:equipment",
+        npcManagement: "contextual:npcManagement",
+        freeAgents: "contextual:freeAgent",
+        network: "contextual:network",
+        rivals: "contextual:rival",
+      };
+      const seqId = contextualTriggers[screen];
+      if (seqId) {
+        setTimeout(() => {
+          useTutorialStore.getState().startSequence(seqId);
+        }, 800);
+      }
+    }
   }
 
   return (

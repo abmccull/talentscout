@@ -5,6 +5,7 @@ import { X, ArrowRight, BookOpen } from "lucide-react";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore } from "@/stores/gameStore";
 import type { GameScreen } from "@/stores/gameStore";
+import { parseConceptText } from "@/components/ui/GameTerm";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -127,11 +128,11 @@ export function HintToast() {
 
           {/* Hint message */}
           <p className="text-sm leading-relaxed text-zinc-300">
-            {activeHint.message}
+            {parseConceptText(activeHint.message)}
           </p>
 
           {/* Action row: CTA button + Learn more link */}
-          {(activeHint.cta ?? activeHint.handbookChapter) && (
+          {(activeHint.cta ?? activeHint.wikiArticle) && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {activeHint.cta && (
                 <button
@@ -143,10 +144,15 @@ export function HintToast() {
                 </button>
               )}
 
-              {activeHint.handbookChapter && (
+              {activeHint.wikiArticle && (
                 <button
                   onClick={() => {
                     setScreen("handbook");
+                    requestAnimationFrame(() => {
+                      import("@/components/game/wiki/WikiScreen").then(({ navigateToWikiArticle }) => {
+                        navigateToWikiArticle(activeHint.wikiArticle!);
+                      });
+                    });
                     handleDismiss();
                   }}
                   className="flex items-center gap-1 text-xs text-zinc-400 underline underline-offset-2 hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"

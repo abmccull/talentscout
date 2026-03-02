@@ -34,7 +34,25 @@ export type AhaMomentSequenceId =
   | "ahaMoment:youth"
   | "ahaMoment:firstTeam"
   | "ahaMoment:regional"
-  | "ahaMoment:data";
+  | "ahaMoment:data"
+  | "ahaMoment:equipment"
+  | "ahaMoment:npcReport"
+  | "ahaMoment:freeAgent"
+  | "ahaMoment:seasonAward"
+  | "ahaMoment:contactIntel"
+  | "ahaMoment:perkActivated";
+
+export type ContextualTutorialId =
+  | "contextual:equipment"
+  | "contextual:npcManagement"
+  | "contextual:freeAgent"
+  | "contextual:network"
+  | "contextual:rival";
+
+export type MentorCheckinId =
+  | "mentorCheckin:week2"
+  | "mentorCheckin:week3"
+  | "mentorCheckin:week4";
 
 export type TutorialSequenceId =
   | "firstWeek"
@@ -44,7 +62,9 @@ export type TutorialSequenceId =
   | "firstReportWriting"
   | "firstTravel"
   | OnboardingSequenceId
-  | AhaMomentSequenceId;
+  | AhaMomentSequenceId
+  | ContextualTutorialId
+  | MentorCheckinId;
 
 export type GuidedMilestoneId =
   | "viewedDashboard"
@@ -62,6 +82,8 @@ export interface ContextualHint {
   id: string;
   message: string;
   cta?: { label: string; screen: string };
+  wikiArticle?: string;
+  /** @deprecated Use wikiArticle instead */
   handbookChapter?: string;
 }
 
@@ -72,6 +94,8 @@ interface PersistedTutorialData {
   dismissedHints: string[];
   guidedMilestones: Record<string, boolean>;
   guidedSessionCompleted: boolean;
+  /** Features the player discovered organically (without a tutorial). */
+  discoveredFeatures: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +122,7 @@ const PERSISTED_DEFAULTS: PersistedTutorialData = {
   dismissedHints: [],
   guidedMilestones: {},
   guidedSessionCompleted: false,
+  discoveredFeatures: [],
 };
 
 function readPersisted(): PersistedTutorialData {
@@ -122,6 +147,9 @@ function readPersisted(): PersistedTutorialData {
           ? parsed.guidedMilestones
           : {},
       guidedSessionCompleted: parsed.guidedSessionCompleted === true,
+      discoveredFeatures: Array.isArray(parsed.discoveredFeatures)
+        ? parsed.discoveredFeatures
+        : [],
     };
   } catch {
     return { ...PERSISTED_DEFAULTS };
@@ -196,6 +224,18 @@ export interface TutorialState {
   /** The hint currently being displayed, or null. */
   activeHint: ContextualHint | null;
 
+  /** Screen guide queued during guided session, to show after milestone completes. */
+  pendingScreenGuide: string | null;
+
+  // ── Feature Discovery Tracking ──────────────────────────────────────────
+
+  /**
+   * Features the player has discovered organically (without a tutorial).
+   * When a feature is in this set, its contextual tutorial is skipped.
+   * Persisted to localStorage.
+   */
+  discoveredFeatures: Set<string>;
+
   // ── Mentor ───────────────────────────────────────────────────────────────
 
   mentorName: string;
@@ -224,6 +264,9 @@ export interface TutorialState {
   // Hints
   showHint: (hint: ContextualHint) => void;
   dismissHint: (hintId: string) => void;
+
+  // Feature discovery
+  recordFeatureDiscovery: (feature: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -265,6 +308,7 @@ function persistAll(state: TutorialState): void {
     dismissedHints: Array.from(state.dismissedHints),
     guidedMilestones: state.guidedMilestones,
     guidedSessionCompleted: state.guidedSessionCompleted,
+    discoveredFeatures: Array.from(state.discoveredFeatures),
   });
 }
 
@@ -313,6 +357,12 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   dismissedHints: new Set(persisted.dismissedHints),
   activeHint: null,
 
+  // ── Pending screen guide (queued during guided session) ─────────────────
+  pendingScreenGuide: null,
+
+  // ── Feature discovery tracking ─────────────────────────────────────────
+  discoveredFeatures: new Set(persisted.discoveredFeatures),
+
   // ── Mentor ───────────────────────────────────────────────────────────────
   mentorName: "Margaret Chen",
   mentorTitle: "Director of Recruitment",
@@ -320,16 +370,26 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   // ── Existing actions (unchanged) ─────────────────────────────────────────
 
   startSequence(id) {
-    const { dismissed, completedSequences } = get();
+    const { dismissed, completedSequences, tutorialActive, guidedSessionActive, discoveredFeatures } = get();
     if (dismissed) return;
     if (id === "firstWeek") return;
     if (completedSequences.has(id)) return;
 
-    if (
-      id.startsWith("onboarding:") &&
-      (completedSequences.has("firstWeek") ||
-        Array.from(completedSequences).some((s) => s.startsWith("onboarding:")))
-    ) {
+    // Skip contextual tutorials if the player already discovered the feature organically.
+    if (id.startsWith("contextual:")) {
+      const feature = id.slice("contextual:".length);
+      if (discoveredFeatures.has(feature)) return;
+    }
+
+    // Don't start new sequences while one is already playing.
+    if (tutorialActive) {
+      get().queueSequence(id);
+      return;
+    }
+
+    // Don't start onboarding during the guided session (queue it instead).
+    if (id.startsWith("onboarding:") && guidedSessionActive) {
+      set({ pendingSequence: id as TutorialSequenceId });
       return;
     }
 
@@ -433,7 +493,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   },
 
   completeMilestone(id) {
-    const { guidedSessionActive, guidedMilestones, dismissed } = get();
+    const { guidedSessionActive, guidedMilestones, dismissed, pendingScreenGuide } = get();
     if (dismissed || !guidedSessionActive || guidedMilestones[id]) return;
 
     const updated = { ...guidedMilestones, [id]: true };
@@ -447,6 +507,13 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       guidedSessionCompleted: allDone || get().guidedSessionCompleted,
     });
     persistAll(get());
+
+    // Flush any screen guide that was queued during the guided session.
+    if (pendingScreenGuide) {
+      set({ pendingScreenGuide: null });
+      // Brief delay so the milestone spotlight dismisses before the guide opens.
+      setTimeout(() => get().openScreenGuide(pendingScreenGuide), 400);
+    }
   },
 
   skipGuidedSession() {
@@ -467,13 +534,16 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
 
     const updated = new Set(visitedScreens);
     updated.add(screen);
-    set({ visitedScreens: updated });
-    persistAll(get());
 
-    // Auto-open screen guide on first visit (unless guided session is active).
-    if (!guidedSessionActive) {
+    if (guidedSessionActive) {
+      // Queue the screen guide to show after the current milestone spotlight.
+      set({ visitedScreens: updated, pendingScreenGuide: screen });
+    } else {
+      set({ visitedScreens: updated });
+      persistAll(get());
       get().openScreenGuide(screen);
     }
+    persistAll(get());
   },
 
   openScreenGuide(screen) {
@@ -503,6 +573,17 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
     const updated = new Set(dismissedHints);
     updated.add(hintId);
     set({ dismissedHints: updated, activeHint: null });
+    persistAll(get());
+  },
+
+  // ── Feature discovery actions ──────────────────────────────────────────
+
+  recordFeatureDiscovery(feature) {
+    const { discoveredFeatures } = get();
+    if (discoveredFeatures.has(feature)) return;
+    const updated = new Set(discoveredFeatures);
+    updated.add(feature);
+    set({ discoveredFeatures: updated });
     persistAll(get());
   },
 }));

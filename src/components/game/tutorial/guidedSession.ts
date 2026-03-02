@@ -46,11 +46,11 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     title: "View your dashboard",
     mentorText:
       "Welcome to your club. I'm Margaret Chen, Director of Recruitment. " +
-      "This is your hub — reputation, fatigue, and finances at a glance. " +
+      "This is your hub — [[reputation]], [[fatigue]], and finances at a glance. " +
       "Let's get you started.",
     mentorTextFreelance:
       "Welcome to the scouting life. I'm Tommy Reyes — been doing this 20 years. " +
-      "This dashboard shows everything you need: reputation, fatigue, and your savings. " +
+      "This dashboard shows everything you need: [[reputation]], [[fatigue]], and your [[savings]]. " +
       "Let me show you the ropes.",
     position: "right",
     interactive: false,
@@ -102,7 +102,7 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     target: "match-scoreboard",
     title: "Attend a match",
     mentorText:
-      "Here we are. The match is broken into phases. " +
+      "Here we are. The match is broken into [[match-phase]]s. " +
       "Watch the play, read the commentary — you're here to assess players, not enjoy the football.",
     mentorTextFreelance:
       "This is it — your first scouting assignment. " +
@@ -118,7 +118,7 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     mentorText:
       "Now focus on a player. " +
       "Click someone on the pitch or use the focus panel. " +
-      "Focused players reveal more — choose your lens wisely.",
+      "Focused players reveal more — choose your [[focus-lens]] wisely.",
     mentorTextFreelance:
       "Pick a player to focus on. You can track up to three. " +
       "Focused players give you better reads on their attributes.",
@@ -132,9 +132,9 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     title: "Complete the match",
     mentorText:
       "Keep advancing through phases. " +
-      "When the match ends, all your observations are saved automatically.",
+      "When the match ends, all your [[observation]]s are saved automatically.",
     mentorTextFreelance:
-      "Work through each phase. When the final whistle goes, your observations are locked in.",
+      "Work through each phase. When the final whistle goes, your [[observation]]s are locked in.",
     position: "top",
     interactive: true,
     screen: "match",
@@ -145,9 +145,9 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     title: "Write a report",
     mentorText:
       "Time to write your report. " +
-      "Choose your conviction level carefully — higher conviction means higher stakes for your reputation.",
+      "Choose your [[conviction-level]] carefully — higher conviction means higher stakes for your [[reputation]].",
     mentorTextFreelance:
-      "Here's where your opinion matters. Pick a conviction level. " +
+      "Here's where your opinion matters. Pick a [[conviction-level]]. " +
       "If you're confident, stake your reputation. If you're unsure, play it safe.",
     position: "right",
     interactive: false,
@@ -159,7 +159,7 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     title: "Submit the report",
     mentorText:
       "Fill in your assessment and submit. " +
-      "The manager will respond based on your report quality and conviction.",
+      "The manager will respond based on your [[report-quality]] and [[conviction-level]].",
     mentorTextFreelance:
       "Write your strengths and weaknesses, then submit. " +
       "Your report goes to whoever's listening — make it count.",

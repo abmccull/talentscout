@@ -10,6 +10,7 @@ import type { ScreenGuideStep } from "./screenGuides";
 import { getGuidedMilestone } from "./guidedSession";
 import type { GuidedMilestoneDefinition } from "./guidedSession";
 import type { GuidedMilestoneId } from "@/stores/tutorialStore";
+import { parseConceptText } from "@/components/ui/GameTerm";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -437,7 +438,7 @@ export function MentorOverlay() {
         {/* Speech bubble */}
         <div className="mb-4 rounded-lg bg-zinc-800/60 px-4 py-3">
           <h2 className="mb-1 text-sm font-bold text-white">{title}</h2>
-          <p className="text-sm leading-relaxed text-zinc-400">{description}</p>
+          <p className="text-sm leading-relaxed text-zinc-400">{parseConceptText(description)}</p>
         </div>
 
         {/* Progress dots (tutorial + screen guide only) */}

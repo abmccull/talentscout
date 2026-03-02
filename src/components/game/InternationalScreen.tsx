@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
-import { useTutorialStore } from "@/stores/tutorialStore";
+import { useTutorialStore, resolveOnboardingSequence } from "@/stores/tutorialStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
 import { Globe, MapPin, Wallet, Plane } from "lucide-react";
@@ -245,9 +245,14 @@ export function InternationalScreen() {
     return () => window.removeEventListener("resize", handler);
   }, [selectedCountry, popupPos]);
 
-  // ── Tutorial trigger on first visit ──────────────────────────────────────
+  // ── Tutorial triggers on first visit ─────────────────────────────────────
   useEffect(() => {
     startSequence("firstTravel");
+    // Regional scouts: trigger specialization onboarding on first International visit
+    const gs = useGameStore.getState().gameState;
+    if (gs?.scout.primarySpecialization === "regional") {
+      startSequence(resolveOnboardingSequence("regional", !!gs.scout.currentClubId));
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Early return after all hooks ──────────────────────────────────────────

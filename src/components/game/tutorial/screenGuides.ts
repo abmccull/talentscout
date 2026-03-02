@@ -22,8 +22,8 @@ export interface ScreenGuideStep {
   description: string;
   /** Card position relative to target */
   position: "top" | "bottom" | "left" | "right";
-  /** Optional handbook chapter ID for "Learn more" link */
-  handbookChapter?: string;
+  /** Optional wiki article slug for "Learn more" link */
+  wikiArticle?: string;
 }
 
 export interface ScreenGuide {
@@ -44,15 +44,15 @@ const dashboardGuide: ScreenGuide = {
       description:
         "This gauge reflects how the football world sees you. Every accurate report, strong recommendation, and successful placement pushes it higher — and every miss costs you.",
       position: "bottom",
-      handbookChapter: "getting-started",
+      wikiArticle: "the-game-loop",
     },
     {
       target: "dashboard-fatigue",
       title: "Fatigue",
       description:
-        "Scouting is demanding work. Watch this bar carefully — push past the red zone and your report quality suffers. Use rest days and light weeks to recover.",
+        "Scouting is demanding work. Watch this bar carefully — push past the red zone and your [[report-quality]] suffers. Use [[rest-day]]s and light weeks to recover.",
       position: "bottom",
-      handbookChapter: "getting-started",
+      wikiArticle: "the-game-loop",
     },
     {
       target: "dashboard-finances",
@@ -60,15 +60,15 @@ const dashboardGuide: ScreenGuide = {
       description:
         "Your current cash position. Travel, equipment, and staff all have running costs. A healthy balance gives you options; a tight one forces hard choices.",
       position: "bottom",
-      handbookChapter: "getting-started",
+      wikiArticle: "the-game-loop",
     },
     {
       target: "dashboard-directives",
       title: "Active Directives",
       description:
-        "Your client's current priorities live here. Check these before planning your week — a directive pointing you toward right-backs means wasted effort watching strikers.",
+        "Your client's current priorities live here. Check these before planning your [[game-week]] — a [[directive]] pointing you toward right-backs means wasted effort watching strikers.",
       position: "right",
-      handbookChapter: "getting-started",
+      wikiArticle: "the-game-loop",
     },
     {
       target: "nav-calendar",
@@ -89,7 +89,7 @@ const calendarGuide: ScreenGuide = {
       description:
         "Each column is a day. Drag activities into slots to build your week. Match days are fixed; everything else is up to you.",
       position: "bottom",
-      handbookChapter: "scheduling",
+      wikiArticle: "scheduling-your-week",
     },
     {
       target: "calendar-activities",
@@ -97,7 +97,7 @@ const calendarGuide: ScreenGuide = {
       description:
         "This panel lists every activity available to you this week — fixtures to attend, training sessions, meetings, and admin tasks. Drag them onto the grid to schedule.",
       position: "left",
-      handbookChapter: "scheduling",
+      wikiArticle: "scheduling-your-week",
     },
     {
       target: "calendar-advance-btn",
@@ -105,7 +105,7 @@ const calendarGuide: ScreenGuide = {
       description:
         "When you're happy with your schedule, hit this button. The engine resolves all your activities, updates player data, and moves time forward.",
       position: "top",
-      handbookChapter: "scheduling",
+      wikiArticle: "scheduling-your-week",
     },
     {
       target: "calendar-rest-info",
@@ -131,7 +131,7 @@ const playerDatabaseGuide: ScreenGuide = {
       target: "player-db-list",
       title: "Player Cards",
       description:
-        "Each card shows key attributes alongside your scouting confidence. Low confidence means the data is based on limited observations — schedule more watchings to firm up your assessment.",
+        "Each card shows key attributes alongside your scouting [[confidence]]. Low confidence means the data is based on limited [[observation]]s — schedule more watchings to firm up your assessment.",
       position: "right",
     },
     {
@@ -153,7 +153,7 @@ const careerGuide: ScreenGuide = {
       description:
         "Your professional history at a glance — tier, total placements, and current reputation score. This is the foundation clients assess before they hire you.",
       position: "bottom",
-      handbookChapter: "career-progression",
+      wikiArticle: "career-tiers",
     },
     {
       target: "career-skills",
@@ -161,23 +161,23 @@ const careerGuide: ScreenGuide = {
       description:
         "Active skills directly influence your scouting outcomes. Technical Analysis improves attribute accuracy; Negotiation unlocks better contract terms. Invest XP where your current role demands it most.",
       position: "right",
-      handbookChapter: "career-progression",
+      wikiArticle: "career-tiers",
     },
     {
       target: "career-tier-benefits",
       title: "Tier Benefits",
       description:
-        "Reaching a new tier unlocks tangible advantages — access to higher-calibre fixtures, larger client retainers, and exclusive network contacts. Your next tier threshold is shown here.",
+        "Reaching a new tier unlocks tangible advantages — access to higher-calibre fixtures, larger client [[retainer]]s, and exclusive network [[contact]]s. Your next tier threshold is shown here.",
       position: "bottom",
-      handbookChapter: "career-progression",
+      wikiArticle: "career-tiers",
     },
     {
       target: "career-perk-tree",
       title: "Perk Tree",
       description:
-        "Perks are passive modifiers that compound over a career. Choose them carefully — some synergise strongly with specific specialisations, and you can't unlock everything.",
+        "[[perk]]s are passive modifiers that compound over a career. Choose them carefully — some synergise strongly with specific [[specialization]]s, and you can't unlock everything.",
       position: "left",
-      handbookChapter: "career-progression",
+      wikiArticle: "career-tiers",
     },
   ],
 };
@@ -191,7 +191,7 @@ const financesGuide: ScreenGuide = {
       description:
         "Income versus expenditure for the current season. A healthy margin funds growth; a deficit forces you to cut activity or defer equipment upgrades.",
       position: "bottom",
-      handbookChapter: "finances",
+      wikiArticle: "income-sources",
     },
     {
       target: "finances-contracts",
@@ -199,7 +199,7 @@ const financesGuide: ScreenGuide = {
       description:
         "Your retainer and per-placement agreements live here. Retainers provide predictable income; placement fees are larger but contingent on success. Balance both for stability.",
       position: "right",
-      handbookChapter: "finances",
+      wikiArticle: "income-sources",
     },
     {
       target: "finances-marketplace",
@@ -245,9 +245,9 @@ const networkGuide: ScreenGuide = {
       target: "network-contacts",
       title: "Contacts",
       description:
-        "Every person you've met in football is catalogued here. Relationship strength determines what they'll share with you and whether they'll return your calls.",
+        "Every person you've met in football is catalogued here. [[relationship]] strength determines what they'll share with you and whether they'll return your calls.",
       position: "bottom",
-      handbookChapter: "networking",
+      wikiArticle: "contact-types",
     },
     {
       target: "network-meet",
@@ -313,9 +313,9 @@ const equipmentGuide: ScreenGuide = {
       target: "equipment-loadout",
       title: "Active Loadout",
       description:
-        "Your equipped items — video software, data subscriptions, travel gear — each provide passive bonuses to specific scouting activities. Fill every slot before a big week.",
+        "Your equipped items — video software, data subscriptions, travel gear — each provide passive [[equipment-bonus]]es to specific scouting activities. Fill every [[equipment-slot]] before a big week.",
       position: "bottom",
-      handbookChapter: "equipment",
+      wikiArticle: "equipment-overview",
     },
     {
       target: "equipment-shop",
@@ -323,7 +323,7 @@ const equipmentGuide: ScreenGuide = {
       description:
         "Browse available tools and upgrades. Higher-tier items cost more but compound your edge over time. Prioritise items that align with your current specialisation.",
       position: "right",
-      handbookChapter: "equipment",
+      wikiArticle: "equipment-overview",
     },
   ],
 };
@@ -501,7 +501,7 @@ const internationalViewGuide: ScreenGuide = {
       target: "travel-familiarity",
       title: "Regional Familiarity",
       description:
-        "The more time you spend in a region, the better your local knowledge — which improves attribute accuracy and unlocks regional contacts. Familiarity decays slowly without return visits.",
+        "The more time you spend in a region, the better your [[regional-knowledge]] — which improves attribute [[accuracy]] and unlocks regional [[contact]]s. [[familiarity]] decays slowly without return visits.",
       position: "right",
     },
   ],
@@ -534,7 +534,7 @@ const alumniDashboardGuide: ScreenGuide = {
       target: "alumni-list",
       title: "Alumni Network",
       description:
-        "Players you've placed or developed who have moved on. Strong alumni relationships generate referrals and unsolicited intel — they remember who gave them their opportunity.",
+        "Players you've placed or developed who have moved on. Strong [[alumni]] relationships generate referrals and unsolicited [[intel]] — they remember who gave them their opportunity.",
       position: "bottom",
     },
   ],

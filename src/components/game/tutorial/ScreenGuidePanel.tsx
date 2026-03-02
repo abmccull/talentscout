@@ -4,6 +4,7 @@ import { X, ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore } from "@/stores/gameStore";
 import { getScreenGuide } from "./screenGuides";
+import { parseConceptText } from "@/components/ui/GameTerm";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -14,7 +15,7 @@ import { getScreenGuide } from "./screenGuides";
  *
  * Renders when `activeScreenGuide` is set in the tutorial store.
  * Shows mentor avatar, step title, description, step navigation, an optional
- * "Learn more" link to the handbook, and a close button.
+ * "Learn more" link to the wiki, and a close button.
  *
  * When the user clicks Next on the final step, the panel closes automatically.
  */
@@ -63,9 +64,16 @@ export function ScreenGuidePanel() {
   }
 
   function handleLearnMore() {
-    if (!step?.handbookChapter) return;
+    const article = step?.wikiArticle;
+    if (!article) return;
     closeScreenGuide();
     setScreen("handbook");
+    // Navigate to the specific wiki article after screen transition
+    requestAnimationFrame(() => {
+      import("@/components/game/wiki/WikiScreen").then(({ navigateToWikiArticle }) => {
+        navigateToWikiArticle(article);
+      });
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -143,7 +151,7 @@ export function ScreenGuidePanel() {
           <>
             <h2 className="mb-2 text-sm font-bold text-white">{step.title}</h2>
             <p className="text-sm leading-relaxed text-zinc-400">
-              {step.description}
+              {parseConceptText(step.description)}
             </p>
 
             {/* Progress dots */}
@@ -168,13 +176,13 @@ export function ScreenGuidePanel() {
             )}
 
             {/* Learn more link */}
-            {step.handbookChapter != null && (
+            {step.wikiArticle != null && (
               <button
                 onClick={handleLearnMore}
                 className="mt-4 flex items-center gap-1.5 text-xs text-emerald-400 underline-offset-2 transition hover:text-emerald-300 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
               >
                 <BookOpen size={13} aria-hidden="true" />
-                Learn more in the Handbook
+                Learn more in the Wiki
               </button>
             )}
           </>

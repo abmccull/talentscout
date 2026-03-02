@@ -222,7 +222,7 @@ import {
   type ScoutQualityData,
 } from "@/engine/youth/venues";
 import { getCountryDataSync, getSecondaryCountries, getAvailableCountries } from "@/data/index";
-import { useTutorialStore } from "@/stores/tutorialStore";
+import { useTutorialStore, resolveOnboardingSequence } from "@/stores/tutorialStore";
 import { evaluateHints } from "@/components/game/tutorial/hintConditions";
 import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
 import {
@@ -413,6 +413,9 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     ]);
     if (YOUTH_ACTIVITIES.has(activity.type)) {
       tutorial.checkAutoAdvance("youthActivityScheduled");
+      // Contextual trigger: first youth activity → specialization onboarding
+      const hasClub = !!gameState.scout.currentClubId;
+      tutorial.startSequence(resolveOnboardingSequence("youth", hasClub));
     }
 
     const DATA_ACTIVITIES = new Set([
@@ -421,6 +424,18 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     ]);
     if (DATA_ACTIVITIES.has(activity.type)) {
       tutorial.checkAutoAdvance("dataActivityScheduled");
+      // Contextual trigger: first data activity → specialization onboarding
+      const hasClub = !!gameState.scout.currentClubId;
+      tutorial.startSequence(resolveOnboardingSequence("data", hasClub));
+    }
+
+    // Contextual trigger: first opposition analysis → first team onboarding
+    const FT_ACTIVITIES = new Set([
+      "oppositionAnalysis", "reserveMatch", "tacticalBriefing",
+    ]);
+    if (FT_ACTIVITIES.has(activity.type)) {
+      const hasClub = !!gameState.scout.currentClubId;
+      tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
     }
   },
 
@@ -5926,9 +5941,34 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     // ── Guided session milestone ──────────────────────────────────────────────
     useTutorialStore.getState().completeMilestone("advancedWeek");
 
+    // ── Weekly mentor check-ins (first season only) ─────────────────────────
+    if (newState.currentSeason === 1) {
+      const week = newState.currentWeek;
+      if (week === 2) useTutorialStore.getState().startSequence("mentorCheckin:week2");
+      else if (week === 3) useTutorialStore.getState().startSequence("mentorCheckin:week3");
+      else if (week === 4) useTutorialStore.getState().startSequence("mentorCheckin:week4");
+    }
+
     // ── Tutorial trigger: career progression ─────────────────────────────────
     if (tierPromoted) {
       useTutorialStore.getState().startSequence("careerProgression");
+    }
+
+    // ── Feature discovery tracking ─────────────────────────────────────────
+    // Record organic feature discoveries based on game state changes so that
+    // contextual tutorials are skipped for features the player already figured out.
+    {
+      const tut = useTutorialStore.getState();
+      if ((newState.finances?.equipment?.ownedItems.length ?? 0) > 0)
+        tut.recordFeatureDiscovery("equipment");
+      if (Object.keys(newState.npcScouts).length > 0)
+        tut.recordFeatureDiscovery("npcManagement");
+      if (newState.freeAgentPool?.agents.some((a) => a.discoveredByScout))
+        tut.recordFeatureDiscovery("freeAgent");
+      if (Object.values(newState.contacts).some((c) => c.relationship > 0))
+        tut.recordFeatureDiscovery("network");
+      if (Object.keys(newState.rivalScouts).length > 0)
+        tut.recordFeatureDiscovery("rival");
     }
 
     // ── Aha moment triggers ────────────────────────────────────────────────
@@ -5960,6 +6000,64 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       tutorialState.queueSequence("ahaMoment:data");
     }
 
+    // Equipment aha: first equipment bonus applied (equipment purchased this week)
+    if (
+      !tutorialState.completedSequences.has("ahaMoment:equipment") &&
+      !gameState.finances?.equipment?.ownedItems.length &&
+      (newState.finances?.equipment?.ownedItems.length ?? 0) > 0
+    ) {
+      tutorialState.queueSequence("ahaMoment:equipment");
+    }
+
+    // NPC report aha: first NPC scout auto-report appeared
+    if (
+      !tutorialState.completedSequences.has("ahaMoment:npcReport") &&
+      Object.keys(gameState.npcReports).length === 0 &&
+      Object.keys(newState.npcReports).length > 0
+    ) {
+      tutorialState.queueSequence("ahaMoment:npcReport");
+    }
+
+    // Free agent aha: first free agent signed (status changed to "signed" by scout)
+    if (
+      !tutorialState.completedSequences.has("ahaMoment:freeAgent") &&
+      newState.freeAgentPool?.agents.some(
+        (a) => a.discoveredByScout && a.status === "signed",
+      ) &&
+      !gameState.freeAgentPool?.agents.some(
+        (a) => a.discoveredByScout && a.status === "signed",
+      )
+    ) {
+      tutorialState.queueSequence("ahaMoment:freeAgent");
+    }
+
+    // Season award aha: first season awards data generated
+    if (
+      !tutorialState.completedSequences.has("ahaMoment:seasonAward") &&
+      !gameState.seasonAwardsData &&
+      newState.seasonAwardsData
+    ) {
+      tutorialState.queueSequence("ahaMoment:seasonAward");
+    }
+
+    // Contact intel aha: first hidden intel received from a contact
+    if (
+      !tutorialState.completedSequences.has("ahaMoment:contactIntel") &&
+      Object.keys(gameState.contactIntel).length === 0 &&
+      Object.keys(newState.contactIntel).length > 0
+    ) {
+      tutorialState.queueSequence("ahaMoment:contactIntel");
+    }
+
+    // Perk activated aha: first specialization perk unlocked
+    if (
+      !tutorialState.completedSequences.has("ahaMoment:perkActivated") &&
+      gameState.scout.unlockedPerks.length === 0 &&
+      newState.scout.unlockedPerks.length > 0
+    ) {
+      tutorialState.queueSequence("ahaMoment:perkActivated");
+    }
+
     set({
       gameState: newState,
       lastWeekSummary: weekSummary,
@@ -5973,6 +6071,22 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     // ── Evaluate contextual hints ────────────────────────────────────────────
     {
       const tutState = useTutorialStore.getState();
+      const npcHiredCount = Object.keys(newState.npcScouts).length;
+      const totalNpcSlots = Object.values(newState.territories).reduce(
+        (sum, t) => sum + t.maxScouts, 0,
+      );
+      const freeAgents = newState.freeAgentPool?.agents.filter(
+        (a) => a.status === "available",
+      ) ?? [];
+      const equipment = newState.finances?.equipment;
+      const emptySlots = equipment
+        ? (["notebook", "video", "travel", "network", "analysis"] as const).filter(
+            (slot) => !equipment.loadout[slot],
+          ).length
+        : 0;
+      const loanWindowOpen = !!(
+        newState.transferWindow?.isOpen && newState.activeLoans !== undefined
+      );
       const hint = evaluateHints(
         {
           currentWeek: newState.currentWeek,
@@ -5995,6 +6109,20 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             : null,
           unsubmittedReportCount: 0,
           specialization: newState.scout.primarySpecialization,
+          // Phase 4B expanded fields
+          unclaimedPerks: 0, // TODO: wire to perk system when unclaimed perk tracking is added
+          emptyEquipmentSlots: emptySlots,
+          discoveryCount: newState.discoveryRecords.length,
+          alumniCount: newState.alumniRecords.length,
+          hasCheckedAlumni: tutState.visitedScreens.has("alumniDashboard"),
+          hasCheckedLeaderboard: tutState.visitedScreens.has("leaderboard"),
+          npcSlotsAvailable: Math.max(0, totalNpcSlots - npcHiredCount),
+          npcHiredCount,
+          freeAgentCount: freeAgents.length,
+          hasBrowsedFreeAgents: tutState.visitedScreens.has("freeAgents"),
+          loanMarketActive: loanWindowOpen,
+          hasBrowsedLoans: tutState.visitedScreens.has("loans"),
+          careerTier: newState.scout.careerTier,
         },
         tutState.dismissedHints,
       );
