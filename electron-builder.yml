@@ -51,8 +51,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   # Install for all users by default (requires admin elevation).
   perMachine: true
-  # Omitting `license` key — no LICENSE file exists in the repo yet.
-  # Add `license: LICENSE` once a LICENSE file is committed.
+  license: LICENSE
   menuCategory: Games
   shortcutName: TalentScout
   artifactName: "TalentScout-Setup-${version}.${ext}"

@@ -113,7 +113,7 @@ const freelanceFork: TutorialStep[] = [
     targetSelector: "dashboard-finances",
     title: "Your Finances",
     description:
-      "\u00A35,000 in savings, no salary. Earn by selling reports on the marketplace or placing youth at clubs.",
+      "\u00A35,000 in savings, no salary. Your monthly costs start around \u00A3235 \u2014 rent, travel, and equipment. Your first few reports will cover them.",
     position: "bottom",
   },
   {

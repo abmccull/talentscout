@@ -60,16 +60,21 @@ export async function submitCloudLeaderboardEntry(
   entry: LeaderboardEntry,
 ): Promise<void> {
   if (!supabase) return;
-  const { error } = await supabase.from("leaderboard_entries").insert({
-    id: entry.id,
-    user_id: userId,
-    scout_name: entry.scoutName,
-    score: entry.score,
-    season: entry.season,
-    reputation: entry.reputation,
-    total_discoveries: entry.totalDiscoveries,
-    prediction_accuracy: entry.predictionAccuracy,
-    submitted_at: entry.submittedAt,
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Leaderboard submit failed: not authenticated");
+
+  const { error } = await supabase.functions.invoke("submit-score", {
+    body: {
+      id: entry.id,
+      scoutName: entry.scoutName,
+      score: entry.score,
+      season: entry.season,
+      reputation: entry.reputation,
+      totalDiscoveries: entry.totalDiscoveries,
+      predictionAccuracy: entry.predictionAccuracy,
+      submittedAt: entry.submittedAt,
+    },
   });
 
   if (error) throw new Error(`Leaderboard submit failed: ${error.message}`);
