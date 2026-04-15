@@ -1439,7 +1439,7 @@ export function processCompletedWeek(
     // Accumulate Insight Points for this activity
     const ipSource = getInsightSource(activity.type);
     if (ipSource) {
-      const qualityResult = rollActivityQuality(rng, activity.type, scout);
+      const qualityResult = rollActivityQuality(rng, activity.type, scout, scout.careerPath);
       const ipResult = calculateAccumulation(ipSource, qualityResult.tier, scout);
       totalInsightPoints += ipResult.totalEarned;
     }

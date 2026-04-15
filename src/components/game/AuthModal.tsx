@@ -41,10 +41,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      onClose();
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;

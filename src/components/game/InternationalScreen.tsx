@@ -9,6 +9,7 @@ import { Globe, MapPin, Wallet, Plane } from "lucide-react";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
 import type { CountryReputation, TravelBooking } from "@/engine/core/types";
 import { getTravelCost, getTravelSlots, getTravelDuration, getScoutHomeCountry, getContinentId } from "@/engine/world/travel";
+import { getAvailableAssignments } from "@/engine/world/international";
 import { WorldMap, COUNTRY_COORDS, lonLatToSvg, getTierColors } from "@/components/game/WorldMap";
 import { CountryPopup } from "@/components/game/CountryPopup";
 
@@ -134,12 +135,161 @@ function BookingBanner({ booking, homeName }: { booking: TravelBooking; homeName
   );
 }
 
+function assignmentTypeLabel(type: "youthTournament" | "seniorFriendly" | "scoutingMission"): string {
+  switch (type) {
+    case "youthTournament":
+      return "Youth Tournament";
+    case "seniorFriendly":
+      return "Senior Friendly";
+    case "scoutingMission":
+      return "Scouting Mission";
+  }
+}
+
+function AssignmentPanel({
+  currentWeek,
+  currentSeason,
+  assignments,
+  activeAssignment,
+  canAcceptAssignments,
+  scoutBalance,
+  homeCountry,
+  onOpenAssignment,
+  onAcceptAssignment,
+}: {
+  currentWeek: number;
+  currentSeason: number;
+  assignments: Array<{
+    id: string;
+    country: string;
+    region: string;
+    description: string;
+    duration: number;
+    reputationReward: number;
+    type: "youthTournament" | "seniorFriendly" | "scoutingMission";
+  }>;
+  activeAssignment: {
+    id: string;
+    country: string;
+    region: string;
+    description: string;
+    duration: number;
+    reputationReward: number;
+    type: "youthTournament" | "seniorFriendly" | "scoutingMission";
+  } | null;
+  canAcceptAssignments: boolean;
+  scoutBalance: number;
+  homeCountry: string;
+  onOpenAssignment: (country: string) => void;
+  onAcceptAssignment: (assignmentId: string) => void;
+}) {
+  return (
+    <div className="absolute left-3 top-16 z-20 w-[320px] rounded-xl border border-zinc-700/50 bg-zinc-950/85 p-4 backdrop-blur-md">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Assignments</p>
+          <h2 className="mt-1 text-sm font-semibold text-white">
+            {assignments.length > 0 ? `${assignments.length} available this week` : "No live assignments"}
+          </h2>
+        </div>
+        <div className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2 py-1 text-[10px] text-zinc-400">
+          W{currentWeek} · S{currentSeason}
+        </div>
+      </div>
+
+      {activeAssignment && (
+        <div className="mb-3 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+          <p className="text-[11px] uppercase tracking-[0.18em] text-blue-300">Active Trip</p>
+          <p className="mt-1 text-sm font-medium text-white">
+            {getCountryMeta(activeAssignment.country).name} · {assignmentTypeLabel(activeAssignment.type)}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-300">{activeAssignment.description}</p>
+        </div>
+      )}
+
+      {assignments.length === 0 ? (
+        <p className="text-xs leading-relaxed text-zinc-500">
+          {canAcceptAssignments
+            ? "No international assignments are live right now. New opportunities refresh periodically as your network grows."
+            : "Assignments unlock at career tier 3 and pause while you are actively abroad."}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {assignments.map((assignment) => (
+            (() => {
+              const travelCost = getTravelCost(homeCountry, assignment.country);
+              const canAfford = scoutBalance >= travelCost;
+              const canAccept = canAcceptAssignments && canAfford;
+
+              return (
+            <div
+              key={assignment.id}
+              className="rounded-lg border border-zinc-800 bg-zinc-900/70 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-white">{getCountryMeta(assignment.country).name}</p>
+                  <p className="text-[11px] text-zinc-500">{assignment.region} · {assignmentTypeLabel(assignment.type)}</p>
+                </div>
+                <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
+                  +{assignment.reputationReward} rep
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed text-zinc-400">{assignment.description}</p>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] text-zinc-500">
+                    {assignment.duration === 1 ? "1 week" : `${assignment.duration} weeks`} on site
+                  </p>
+                  <p className="text-[10px] text-zinc-600">Travel £{travelCost.toLocaleString()}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onOpenAssignment(assignment.country)}
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                  >
+                    Open on Map
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAcceptAssignment(assignment.id)}
+                    disabled={!canAccept}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                      canAccept
+                        ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/15"
+                        : "cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-600"
+                    }`}
+                  >
+                    {canAcceptAssignments
+                      ? canAfford
+                        ? "Accept"
+                        : "Funds Low"
+                      : "Unavailable"}
+                  </button>
+                </div>
+              </div>
+            </div>
+              );
+            })()
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main screen
 // ---------------------------------------------------------------------------
 
 export function InternationalScreen() {
-  const { gameState, bookInternationalTravel } = useGameStore();
+  const {
+    gameState,
+    bookInternationalTravel,
+    pendingInternationalCountry,
+    setPendingInternationalCountry,
+  } = useGameStore();
   const { playSFX } = useAudio();
   const { startSequence, checkAutoAdvance } = useTutorialStore();
 
@@ -157,6 +307,23 @@ export function InternationalScreen() {
 
   // ── Handlers (must be before early return) ────────────────────────────────
 
+  const openCountryPopup = useCallback((countryKey: string, svgX: number, svgY: number) => {
+    const svg = svgRef.current;
+    const container = containerRef.current;
+    if (!svg || !container) return;
+
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const screenX = svgX * ctm.a + ctm.e - containerRect.left;
+    const screenY = svgY * ctm.d + ctm.f - containerRect.top;
+
+    setSelectedCountry(countryKey);
+    setPopupPos({ x: screenX, y: screenY });
+    setJustBooked(false);
+  }, []);
+
   const handleCountrySelect = useCallback(
     (countryKey: string, svgX: number, svgY: number) => {
       // If clicking the same country, toggle off
@@ -167,30 +334,35 @@ export function InternationalScreen() {
         return;
       }
 
-      // Convert SVG coords to screen coords relative to container
-      const svg = svgRef.current;
-      const container = containerRef.current;
-      if (!svg || !container) return;
-
-      const ctm = svg.getScreenCTM();
-      if (!ctm) return;
-
-      const containerRect = container.getBoundingClientRect();
-      const screenX = svgX * ctm.a + ctm.e - containerRect.left;
-      const screenY = svgY * ctm.d + ctm.f - containerRect.top;
-
-      setSelectedCountry(countryKey);
-      setPopupPos({ x: screenX, y: screenY });
-      setJustBooked(false);
+      openCountryPopup(countryKey, svgX, svgY);
       checkAutoAdvance("countryClicked");
     },
-    [selectedCountry, checkAutoAdvance],
+    [selectedCountry, openCountryPopup, checkAutoAdvance],
   );
 
   const handleBookTravel = useCallback(() => {
-    if (!selectedCountry) return;
+    if (!gameState || !selectedCountry) return;
+    if (gameState.scout.travelBooking) return;
+    const homeCountry = getScoutHomeCountry(gameState.scout);
+    const travelCost = getTravelCost(homeCountry, selectedCountry);
+    if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
+
+    const selectedAssignment = getAvailableAssignments(
+      gameState.scout,
+      gameState.internationalAssignments,
+      gameState.currentWeek,
+    ).find((assignment) => assignment.country === selectedCountry);
+
     playSFX("travel");
-    bookInternationalTravel(selectedCountry);
+    bookInternationalTravel(
+      selectedCountry,
+      selectedAssignment
+        ? {
+            duration: selectedAssignment.duration,
+            assignmentId: selectedAssignment.id,
+          }
+        : undefined,
+    );
     setJustBooked(true);
     // Auto-dismiss after 1.5s
     clearTimeout(bookTimerRef.current);
@@ -199,7 +371,32 @@ export function InternationalScreen() {
       setPopupPos(null);
       setJustBooked(false);
     }, 1500);
-  }, [selectedCountry, playSFX, bookInternationalTravel]);
+  }, [gameState, selectedCountry, playSFX, bookInternationalTravel]);
+
+  const handleAcceptAssignment = useCallback((assignmentId: string) => {
+    if (!gameState) return;
+    const assignment = gameState.internationalAssignments.find(
+      (item) => item.id === assignmentId,
+    );
+    if (!assignment || gameState.scout.travelBooking) return;
+
+    const homeCountry = getScoutHomeCountry(gameState.scout);
+    const travelCost = getTravelCost(homeCountry, assignment.country);
+    if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
+
+    playSFX("travel");
+    bookInternationalTravel(assignment.country, {
+      duration: assignment.duration,
+      assignmentId: assignment.id,
+    });
+    setJustBooked(true);
+    clearTimeout(bookTimerRef.current);
+    bookTimerRef.current = setTimeout(() => {
+      setSelectedCountry(null);
+      setPopupPos(null);
+      setJustBooked(false);
+    }, 1500);
+  }, [gameState, playSFX, bookInternationalTravel]);
 
   const handleClose = useCallback(() => {
     setSelectedCountry(null);
@@ -216,6 +413,20 @@ export function InternationalScreen() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [selectedCountry, handleClose]);
+
+  useEffect(() => {
+    if (!pendingInternationalCountry) return;
+
+    const coords = COUNTRY_COORDS[pendingInternationalCountry];
+    if (!coords) {
+      setPendingInternationalCountry(null);
+      return;
+    }
+
+    const projected = lonLatToSvg(coords.lon, coords.lat);
+    openCountryPopup(pendingInternationalCountry, projected.x, projected.y);
+    setPendingInternationalCountry(null);
+  }, [openCountryPopup, pendingInternationalCountry, setPendingInternationalCountry]);
 
   // Recalculate popup position on resize
   useEffect(() => {
@@ -261,6 +472,19 @@ export function InternationalScreen() {
 
   const { scout, countries, currentWeek } = gameState;
   const booking: TravelBooking | undefined = scout.travelBooking;
+  const activeAssignment = gameState.activeInternationalAssignment;
+  const availableAssignments = getAvailableAssignments(
+    scout,
+    gameState.internationalAssignments,
+    currentWeek,
+  );
+  const assignmentCountries = Array.from(
+    new Set([
+      ...availableAssignments.map((assignment) => assignment.country),
+      ...(activeAssignment ? [activeAssignment.country] : []),
+    ]),
+  );
+  const canAcceptAssignments = scout.careerTier >= 3 && !booking;
 
   // Derive "currently here" country from an active abroad booking
   const currentCountry: string | null =
@@ -302,6 +526,9 @@ export function InternationalScreen() {
   const selectedTravelDuration = selectedCountry
     ? getTravelDuration(homeCountry, selectedCountry)
     : 0;
+  const selectedAssignment = selectedCountry
+    ? availableAssignments.find((assignment) => assignment.country === selectedCountry) ?? null
+    : null;
 
   // Container rect for popup clamping
   const containerEl = containerRef.current;
@@ -327,7 +554,7 @@ export function InternationalScreen() {
           countries={countries}
           familiarityLevels={familiarityLevels}
           currentLocation={currentCountry ?? homeCountry}
-          activeAssignments={[]}
+          activeAssignments={assignmentCountries}
           travelDestination={booking && !booking.isAbroad ? booking.destinationCountry : undefined}
           onCountryClick={handleCountrySelect}
           svgRef={svgRef}
@@ -341,6 +568,22 @@ export function InternationalScreen() {
         <BudgetHUD balance={scoutBalance} />
         <LegendHUD />
         {booking && <BookingBanner booking={booking} homeName={homeMeta.name} />}
+        <AssignmentPanel
+          currentWeek={currentWeek}
+          currentSeason={gameState.currentSeason}
+          assignments={availableAssignments}
+          activeAssignment={activeAssignment}
+          canAcceptAssignments={canAcceptAssignments}
+          scoutBalance={scoutBalance}
+          homeCountry={homeCountry}
+          onOpenAssignment={(country) => {
+            const coords = COUNTRY_COORDS[country];
+            if (!coords) return;
+            const projected = lonLatToSvg(coords.lon, coords.lat);
+            openCountryPopup(country, projected.x, projected.y);
+          }}
+          onAcceptAssignment={handleAcceptAssignment}
+        />
 
         {/* ── Country Popup ────────────────────────────────────── */}
         {selectedCountry && popupPos && selectedMeta && (
@@ -363,6 +606,12 @@ export function InternationalScreen() {
             position={popupPos}
             containerRect={cRect}
             justBooked={justBooked}
+            bookingActionLabel={selectedAssignment ? "Accept Assignment" : "Book Travel"}
+            bookingDetail={
+              selectedAssignment
+                ? `Complete this assignment for +${selectedAssignment.reputationReward} reputation.`
+                : undefined
+            }
             onBookTravel={handleBookTravel}
             onClose={handleClose}
           />

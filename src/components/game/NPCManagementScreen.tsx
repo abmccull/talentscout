@@ -15,8 +15,14 @@ import {
   Eye,
   CheckCircle,
   X,
+  Send,
 } from "lucide-react";
-import type { NPCScout, NPCScoutReport, Territory } from "@/engine/core/types";
+import type {
+  NPCDelegation,
+  NPCScout,
+  NPCScoutReport,
+  Territory,
+} from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
@@ -69,11 +75,20 @@ function fatigueColor(fatigue: number): string {
 interface NPCScoutCardProps {
   scout: NPCScout;
   territory: Territory | undefined;
+  activeDelegation?: NPCDelegation;
+  activeDelegationPlayerName?: string;
   isSelected: boolean;
   onClick: () => void;
 }
 
-function NPCScoutCard({ scout, territory, isSelected, onClick }: NPCScoutCardProps) {
+function NPCScoutCard({
+  scout,
+  territory,
+  activeDelegation,
+  activeDelegationPlayerName,
+  isSelected,
+  onClick,
+}: NPCScoutCardProps) {
   return (
     <button
       onClick={onClick}
@@ -121,6 +136,20 @@ function NPCScoutCard({ scout, territory, isSelected, onClick }: NPCScoutCardPro
           indicatorClassName={fatigueColor(scout.fatigue)}
         />
       </div>
+
+      {activeDelegation && (
+        <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-[11px] text-amber-100">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-amber-200">Focused delegation active</span>
+            <span className="text-amber-300/80">
+              {activeDelegation.weeksRemaining} wk left
+            </span>
+          </div>
+          <p className="mt-1 truncate text-amber-100/90">
+            {activeDelegationPlayerName ?? "Assigned target"}
+          </p>
+        </div>
+      )}
     </button>
   );
 }
@@ -134,12 +163,16 @@ interface NPCScoutDetailProps {
   territory: Territory | undefined;
   allTerritories: Territory[];
   reports: NPCScoutReport[];
+  activeDelegation?: NPCDelegation;
+  activeDelegatedPlayerName?: string;
+  activePlayerDelegations: Record<string, NPCDelegation>;
   onAssign: (territoryId: string) => void;
   onMarkReviewed: (reportId: string) => void;
   onClose: () => void;
   getPlayerName: (playerId: string) => string;
   watchlist: string[];
   onDelegate: (npcScoutId: string, playerId: string) => void;
+  onToggleWatchlist: (playerId: string) => void;
 }
 
 function NPCScoutDetail({
@@ -147,12 +180,16 @@ function NPCScoutDetail({
   territory,
   allTerritories,
   reports,
+  activeDelegation,
+  activeDelegatedPlayerName,
+  activePlayerDelegations,
   onAssign,
   onMarkReviewed,
   onClose,
   getPlayerName,
   watchlist,
   onDelegate,
+  onToggleWatchlist,
 }: NPCScoutDetailProps) {
   const [selectedTerritoryId, setSelectedTerritoryId] = useState<string>(
     scout.territoryId ?? ""
@@ -170,6 +207,23 @@ function NPCScoutDetail({
     if (selectedTerritoryId) {
       onAssign(selectedTerritoryId);
     }
+  };
+
+  const getDelegationBlockReason = (playerId: string): string | null => {
+    if (activeDelegation && activeDelegation.playerId !== playerId) {
+      return `Busy: ${activeDelegatedPlayerName ?? "active assignment"}`;
+    }
+
+    const playerDelegation = activePlayerDelegations[playerId];
+    if (playerDelegation && playerDelegation.npcScoutId !== scout.id) {
+      return "Already assigned";
+    }
+
+    if (playerDelegation && playerDelegation.npcScoutId === scout.id) {
+      return "Assigned";
+    }
+
+    return null;
   };
 
   return (
@@ -226,6 +280,23 @@ function NPCScoutDetail({
           />
         </div>
 
+        {activeDelegation && (
+          <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-amber-200">
+                Active Delegation
+              </p>
+              <Badge variant="warning" className="text-[10px]">
+                {activeDelegation.weeksRemaining} wk left
+              </Badge>
+            </div>
+            <p className="text-sm text-white">{activeDelegatedPlayerName ?? "Assigned target"}</p>
+            <p className="mt-1 text-[11px] text-zinc-400">
+              Focused report due around S{activeDelegation.completionSeason} W{activeDelegation.completionWeek}.
+            </p>
+          </div>
+        )}
+
         {/* Territory assignment */}
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
@@ -270,37 +341,46 @@ function NPCScoutDetail({
         </div>
 
         {/* Delegate Player Scouting */}
-        {watchlist.length > 0 && (
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
               Delegate Player Scouting
             </p>
-            <div className="space-y-1.5">
-              {watchlist.map((playerId) => (
-                <div
-                  key={playerId}
-                  className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-2.5 py-1.5 text-xs"
-                >
-                  <span className="text-zinc-300 truncate mr-2">{getPlayerName(playerId)}</span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-5 px-2 text-[10px] shrink-0"
-                    onClick={() => onDelegate(scout.id, playerId)}
-                  >
-                    <Eye size={10} className="mr-1" aria-hidden="true" />
-                    Assign
-                  </Button>
-                </div>
-              ))}
-            </div>
-            {watchlist.length === 0 && (
-              <p className="text-[10px] text-zinc-600">
-                Add players to your watchlist to delegate scouting tasks.
-              </p>
-            )}
+            <Badge variant="outline" className="text-[10px]">
+              {watchlist.length} watchlisted
+            </Badge>
           </div>
-        )}
+          {watchlist.length > 0 ? (
+            <div className="space-y-1.5">
+              {watchlist.map((playerId) => {
+                const delegationBlockReason = getDelegationBlockReason(playerId);
+
+                return (
+                  <div
+                    key={playerId}
+                    className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-2.5 py-1.5 text-xs"
+                  >
+                    <span className="text-zinc-300 truncate mr-2">{getPlayerName(playerId)}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-5 px-2 text-[10px] shrink-0"
+                      onClick={() => onDelegate(scout.id, playerId)}
+                      disabled={delegationBlockReason !== null}
+                    >
+                      <Eye size={10} className="mr-1" aria-hidden="true" />
+                      {delegationBlockReason ?? "Assign"}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-[10px] text-zinc-600">
+              Add players from scout reports to your watchlist, then assign them here for follow-up coverage.
+            </p>
+          )}
+        </div>
 
         {/* Recent reports for this scout */}
         {scoutReports.length > 0 && (
@@ -315,6 +395,11 @@ function NPCScoutDetail({
                   report={report}
                   playerName={getPlayerName(report.playerId)}
                   onMarkReviewed={onMarkReviewed}
+                  isWatchlisted={watchlist.includes(report.playerId)}
+                  onToggleWatchlist={onToggleWatchlist}
+                  onDelegate={(playerId) => onDelegate(scout.id, playerId)}
+                  delegateLabel={getDelegationBlockReason(report.playerId) ?? "Delegate"}
+                  delegateDisabled={getDelegationBlockReason(report.playerId) !== null}
                 />
               ))}
             </div>
@@ -333,9 +418,23 @@ interface ReportCardProps {
   report: NPCScoutReport;
   playerName: string;
   onMarkReviewed: (reportId: string) => void;
+  isWatchlisted?: boolean;
+  onToggleWatchlist?: (playerId: string) => void;
+  onDelegate?: (playerId: string) => void;
+  delegateDisabled?: boolean;
+  delegateLabel?: string;
 }
 
-function ReportCard({ report, playerName, onMarkReviewed }: ReportCardProps) {
+function ReportCard({
+  report,
+  playerName,
+  onMarkReviewed,
+  isWatchlisted = false,
+  onToggleWatchlist,
+  onDelegate,
+  delegateDisabled = false,
+  delegateLabel = "Delegate",
+}: ReportCardProps) {
   const recConfig = RECOMMENDATION_CONFIG[report.recommendation];
 
   return (
@@ -379,16 +478,45 @@ function ReportCard({ report, playerName, onMarkReviewed }: ReportCardProps) {
             S{report.season} W{report.week}
           </span>
         </div>
-        {!report.reviewed && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => onMarkReviewed(report.id)}
-          >
-            Mark Reviewed
-          </Button>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onToggleWatchlist && (
+            <Button
+              size="sm"
+              variant="outline"
+              className={`h-6 px-2 text-[10px] ${isWatchlisted ? "border-amber-500/40 text-amber-300" : ""}`}
+              onClick={() => onToggleWatchlist(report.playerId)}
+            >
+              <Star
+                size={10}
+                className={isWatchlisted ? "mr-1 fill-amber-400 text-amber-400" : "mr-1"}
+                aria-hidden="true"
+              />
+              {isWatchlisted ? "Watchlisted" : "Watchlist"}
+            </Button>
+          )}
+          {onDelegate && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[10px]"
+              onClick={() => onDelegate(report.playerId)}
+              disabled={delegateDisabled}
+            >
+              <Send size={10} className="mr-1" aria-hidden="true" />
+              {delegateLabel}
+            </Button>
+          )}
+          {!report.reviewed && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[10px]"
+              onClick={() => onMarkReviewed(report.id)}
+            >
+              Mark Reviewed
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -419,6 +547,32 @@ export function NPCManagementScreen() {
         (a, b) => b.week - a.week || b.season - a.season
       ),
     [gameState?.npcReports]
+  );
+
+  const activeDelegations = useMemo(
+    () =>
+      Object.values(gameState?.npcDelegations ?? {})
+        .filter((delegation) => !delegation.completed)
+        .sort((a, b) => a.weeksRemaining - b.weeksRemaining),
+    [gameState?.npcDelegations]
+  );
+
+  const activeDelegationsByScout = useMemo(
+    () =>
+      activeDelegations.reduce<Record<string, NPCDelegation>>((acc, delegation) => {
+        acc[delegation.npcScoutId] = delegation;
+        return acc;
+      }, {}),
+    [activeDelegations]
+  );
+
+  const activeDelegationsByPlayer = useMemo(
+    () =>
+      activeDelegations.reduce<Record<string, NPCDelegation>>((acc, delegation) => {
+        acc[delegation.playerId] = delegation;
+        return acc;
+      }, {}),
+    [activeDelegations]
   );
 
   const selectedScout = useMemo(
@@ -463,7 +617,7 @@ export function NPCManagementScreen() {
                   unreviewedCount > 0
                     ? ` · ${unreviewedCount} unreviewed report${unreviewedCount !== 1 ? "s" : ""}`
                     : ""
-                }`
+                }${activeDelegations.length > 0 ? ` · ${activeDelegations.length} active delegation${activeDelegations.length !== 1 ? "s" : ""}` : ""}`
               : "Head of Scouting tier required"}
           </p>
         </div>
@@ -505,6 +659,12 @@ export function NPCManagementScreen() {
                       key={npcScout.id}
                       scout={npcScout}
                       territory={getTerritoryForScout(npcScout)}
+                      activeDelegation={activeDelegationsByScout[npcScout.id]}
+                      activeDelegationPlayerName={
+                        activeDelegationsByScout[npcScout.id]
+                          ? getPlayerName(activeDelegationsByScout[npcScout.id].playerId)
+                          : undefined
+                      }
                       isSelected={selectedScoutId === npcScout.id}
                       onClick={() =>
                         setSelectedScoutId(
@@ -524,6 +684,13 @@ export function NPCManagementScreen() {
                     territory={selectedTerritory}
                     allTerritories={allTerritories}
                     reports={allNPCReports}
+                    activeDelegation={activeDelegationsByScout[selectedScout.id]}
+                    activeDelegatedPlayerName={
+                      activeDelegationsByScout[selectedScout.id]
+                        ? getPlayerName(activeDelegationsByScout[selectedScout.id].playerId)
+                        : undefined
+                    }
+                    activePlayerDelegations={activeDelegationsByPlayer}
                     onAssign={(territoryId) =>
                       assignNPCScoutTerritory(selectedScout.id, territoryId)
                     }
@@ -532,6 +699,7 @@ export function NPCManagementScreen() {
                     getPlayerName={getPlayerName}
                     watchlist={gameState.watchlist ?? []}
                     onDelegate={delegateScouting}
+                    onToggleWatchlist={toggleWatchlist}
                   />
                 </div>
               )}
@@ -567,6 +735,29 @@ export function NPCManagementScreen() {
                           report={report}
                           playerName={getPlayerName(report.playerId)}
                           onMarkReviewed={reviewNPCReport}
+                          isWatchlisted={(gameState.watchlist ?? []).includes(report.playerId)}
+                          onToggleWatchlist={toggleWatchlist}
+                          onDelegate={
+                            selectedScout
+                              ? (playerId) => delegateScouting(selectedScout.id, playerId)
+                              : undefined
+                          }
+                          delegateLabel={
+                            selectedScout
+                              ? activeDelegationsByScout[selectedScout.id] &&
+                                activeDelegationsByScout[selectedScout.id].playerId !== report.playerId
+                                ? "Scout Busy"
+                                : activeDelegationsByPlayer[report.playerId]
+                                  ? "Assigned"
+                                  : "Delegate"
+                              : "Delegate"
+                          }
+                          delegateDisabled={
+                            !selectedScout ||
+                            (activeDelegationsByScout[selectedScout.id] !== undefined &&
+                              activeDelegationsByScout[selectedScout.id].playerId !== report.playerId) ||
+                            activeDelegationsByPlayer[report.playerId] !== undefined
+                          }
                         />
                       </div>
                     );

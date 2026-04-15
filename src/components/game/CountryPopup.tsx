@@ -33,6 +33,8 @@ export interface CountryPopupProps {
   containerRect: { width: number; height: number };
   /** Whether a booking was just confirmed (shows success state). */
   justBooked: boolean;
+  bookingActionLabel?: string;
+  bookingDetail?: string;
   /** Regional knowledge for this country (F13). */
   regionalKnowledge?: RegionalKnowledge;
   /** Hidden leagues discovered in this country (F13). */
@@ -99,6 +101,8 @@ export function CountryPopup({
   position,
   containerRect,
   justBooked,
+  bookingActionLabel,
+  bookingDetail,
   regionalKnowledge,
   discoveredHiddenLeagues,
   onBookTravel,
@@ -359,6 +363,12 @@ export function CountryPopup({
               </Tooltip>
             </div>
 
+            {bookingDetail && (
+              <p className="mb-3 text-[11px] leading-relaxed text-zinc-400">
+                {bookingDetail}
+              </p>
+            )}
+
             <button
               onClick={canBook ? onBookTravel : undefined}
               disabled={!canBook}
@@ -375,7 +385,7 @@ export function CountryPopup({
                   ? "Insufficient Funds"
                   : travelCost === 0
                     ? "Same Location"
-                    : "Book Travel"}
+                    : bookingActionLabel ?? "Book Travel"}
             </button>
           </div>
         )}

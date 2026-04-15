@@ -1,18 +1,31 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useGameStore } from "@/stores/gameStore";
+import { useGameStore, type SaveSlotSummary } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
-import { AuthModal } from "./AuthModal";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Trash2, LogOut } from "lucide-react";
-import type { SaveRecord } from "@/lib/db";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
+import { AuthModal } from "./AuthModal";
+import { supabase } from "@/lib/supabase";
+import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
+import {
+  BETA_CLOUD_SAVES_ENABLED,
+  BETA_CLOUD_SAVES_MESSAGE,
+  BETA_GLOBAL_LEADERBOARD_MESSAGE,
+} from "@/config/beta";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
+
+function getSaveSourceLabel(source: SaveSlotSummary["source"]): string {
+  if (source === "supabase") return "Cloud";
+  if (source === "steam") return "Steam";
+  return "Local";
+}
 
 export function MainMenu() {
   const {
@@ -22,18 +35,28 @@ export function MainMenu() {
     loadFromSlot,
     deleteSlot,
     isLoadingSave,
+    selectedScenarioId,
+    setSelectedScenario,
   } = useGameStore();
 
-  const { isAuthenticated, displayName, signOut } = useAuthStore();
+  const {
+    isLoading: isAuthLoading,
+    isAuthenticated,
+    displayName,
+    signOut,
+    cloudSaveEnabled,
+  } = useAuthStore();
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSplash, setShowSplash] = useState(!splashShownThisSession);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [deleteConfirmSlot, setDeleteConfirmSlot] = useState<number | null>(null);
+  const [deletingSlot, setDeletingSlot] = useState<number | null>(null);
   const splashTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    refreshSaveSlots();
-  }, [refreshSaveSlots]);
+    void refreshSaveSlots();
+  }, [refreshSaveSlots, isAuthenticated, cloudSaveEnabled]);
 
   useEffect(() => {
     if (!showSplash) return;
@@ -53,12 +76,19 @@ export function MainMenu() {
   };
 
   const handleLoad = async (slot: number) => {
+    setDeleteConfirmSlot(null);
     await loadFromSlot(slot);
     setShowLoadPicker(false);
   };
 
   const handleDelete = async (slot: number) => {
-    await deleteSlot(slot);
+    setDeletingSlot(slot);
+    try {
+      await deleteSlot(slot);
+      setDeleteConfirmSlot((current) => (current === slot ? null : current));
+    } finally {
+      setDeletingSlot(null);
+    }
   };
 
   const formatDate = (timestamp: number) => {
@@ -72,6 +102,10 @@ export function MainMenu() {
   };
 
   const hasSaves = saveSlots.length > 0;
+  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
+  const pendingScenario = selectedScenarioId
+    ? getScenarioById(selectedScenarioId)
+    : undefined;
 
   if (showSplash) {
     return (
@@ -123,7 +157,12 @@ export function MainMenu() {
           <Button
             size="lg"
             className="w-full text-base"
-            onClick={() => setScreen("newGame")}
+            onClick={() => {
+              if (selectedScenarioId) {
+                setSelectedScenario(null);
+              }
+              setScreen("newGame");
+            }}
           >
             New Game
           </Button>
@@ -154,29 +193,69 @@ export function MainMenu() {
             Scenarios
           </Button>
 
+          {pendingScenario && (
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
+              <p className="text-xs font-medium text-amber-200">
+                Pending scenario: {pendingScenario.name}
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                Use Scenarios to continue it. New Game clears this selection and
+                starts a standard career.
+              </p>
+            </div>
+          )}
+
           {/* Auth status indicator */}
           <div className="mt-2 flex flex-col items-center gap-1.5">
-            {isAuthenticated ? (
+            {!cloudAuthAvailable ? (
+              <p className="max-w-xs text-center text-xs text-zinc-500">
+                Cloud saves are unavailable in this build.
+              </p>
+            ) : isAuthLoading ? (
+              <p className="max-w-xs text-center text-xs text-zinc-500">
+                Checking cloud account…
+              </p>
+            ) : isAuthenticated ? (
               <>
-                <p className="text-xs text-zinc-500">
-                  Signed in as{" "}
-                  <span className="text-emerald-400">{displayName}</span>
+                <p className="text-xs text-zinc-400">
+                  Signed in as {displayName ?? "Scout"}
                 </p>
-                <button
-                  onClick={() => void signOut()}
-                  className="flex items-center gap-1 text-xs text-zinc-600 transition hover:text-zinc-400"
-                >
-                  <LogOut size={11} aria-hidden="true" />
-                  Sign Out
-                </button>
+                <p className="max-w-xs text-center text-xs text-zinc-500">
+                  {cloudSaveEnabled
+                    ? BETA_CLOUD_SAVES_MESSAGE
+                    : "Signed in. Turn on cloud saves in Settings to sync this device."}
+                </p>
+                {isAuthenticated && (
+                  <button
+                    onClick={() => void signOut()}
+                    className="flex items-center gap-1 text-xs text-zinc-600 transition hover:text-zinc-400"
+                  >
+                    <LogOut size={11} aria-hidden="true" />
+                    Sign Out {displayName ? `(${displayName})` : ""}
+                  </button>
+                )}
+                <p className="max-w-xs text-center text-[11px] text-zinc-600">
+                  {BETA_GLOBAL_LEADERBOARD_MESSAGE}
+                </p>
               </>
             ) : (
-              <button
-                onClick={() => setShowAuthModal(true)}
-                className="text-xs text-zinc-600 underline-offset-2 transition hover:text-emerald-400 hover:underline"
-              >
-                Sign In
-              </button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setShowAuthModal(true)}
+                >
+                  Sign In
+                </Button>
+                <p className="max-w-xs text-center text-xs text-zinc-500">
+                  Sign in to connect a cloud account. Turn on Cloud Save Sync in
+                  Settings when you want this device to sync.
+                </p>
+                <p className="max-w-xs text-center text-[11px] text-zinc-600">
+                  {BETA_GLOBAL_LEADERBOARD_MESSAGE}
+                </p>
+              </>
             )}
           </div>
         </div>
@@ -187,24 +266,43 @@ export function MainMenu() {
           </h2>
 
           {autosave && (
-            <SaveSlotCard
-              save={autosave}
-              label="Autosave"
-              onLoad={() => void handleLoad(autosave.slot)}
-              onDelete={() => void handleDelete(autosave.slot)}
-              formatDate={formatDate}
-            />
+            <div className="space-y-1.5">
+              <SaveSlotCard
+                save={autosave}
+                label="Autosave"
+                onLoad={() => void handleLoad(autosave.slot)}
+                onDelete={() => setDeleteConfirmSlot(autosave.slot)}
+                formatDate={formatDate}
+              />
+              {deleteConfirmSlot === autosave.slot && (
+                <InlineDeleteConfirm
+                  label="Autosave"
+                  isLoading={deletingSlot === autosave.slot}
+                  onCancel={() => setDeleteConfirmSlot(null)}
+                  onConfirm={() => void handleDelete(autosave.slot)}
+                />
+              )}
+            </div>
           )}
 
           {manualSaves.map((save) => (
-            <SaveSlotCard
-              key={save.slot}
-              save={save}
-              label={save.name}
-              onLoad={() => void handleLoad(save.slot)}
-              onDelete={() => void handleDelete(save.slot)}
-              formatDate={formatDate}
-            />
+            <div key={save.slot} className="space-y-1.5">
+              <SaveSlotCard
+                save={save}
+                label={save.name}
+                onLoad={() => void handleLoad(save.slot)}
+                onDelete={() => setDeleteConfirmSlot(save.slot)}
+                formatDate={formatDate}
+              />
+              {deleteConfirmSlot === save.slot && (
+                <InlineDeleteConfirm
+                  label={save.name}
+                  isLoading={deletingSlot === save.slot}
+                  onCancel={() => setDeleteConfirmSlot(null)}
+                  onConfirm={() => void handleDelete(save.slot)}
+                />
+              )}
+            </div>
           ))}
 
           {saveSlots.length === 0 && (
@@ -216,7 +314,10 @@ export function MainMenu() {
           <Button
             variant="outline"
             className="w-full"
-            onClick={() => setShowLoadPicker(false)}
+            onClick={() => {
+              setDeleteConfirmSlot(null);
+              setShowLoadPicker(false);
+            }}
           >
             Back
           </Button>
@@ -227,7 +328,6 @@ export function MainMenu() {
         v{APP_VERSION} — The scout&apos;s eye sees what others miss
       </p>
 
-      {/* Auth modal */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
@@ -238,6 +338,48 @@ export function MainMenu() {
 
 // ─── SaveSlotCard ─────────────────────────────────────────────────────────────
 
+function InlineDeleteConfirm({
+  label,
+  isLoading,
+  onConfirm,
+  onCancel,
+}: {
+  label: string;
+  isLoading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+      <p className="flex-1 text-xs text-amber-200">
+        Delete {label} permanently?
+      </p>
+      <Button
+        size="sm"
+        variant="destructive"
+        onClick={onConfirm}
+        disabled={isLoading}
+        className="h-7 px-2 text-xs"
+      >
+        {isLoading ? (
+          <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+        ) : (
+          "Delete"
+        )}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onCancel}
+        disabled={isLoading}
+        className="h-7 px-2 text-xs"
+      >
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
 function SaveSlotCard({
   save,
   label,
@@ -245,7 +387,7 @@ function SaveSlotCard({
   onDelete,
   formatDate,
 }: {
-  save: Omit<SaveRecord, "state">;
+  save: SaveSlotSummary;
   label: string;
   onLoad: () => void;
   onDelete: () => void;
@@ -255,7 +397,12 @@ function SaveSlotCard({
     <Card className="cursor-pointer transition hover:border-emerald-500/50">
       <CardContent className="flex items-center justify-between p-4">
         <button onClick={onLoad} className="flex-1 text-left">
-          <p className="text-sm font-medium text-white">{label}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-medium text-white">{label}</p>
+            <Badge variant="secondary" className="text-[10px] uppercase">
+              {getSaveSourceLabel(save.source)}
+            </Badge>
+          </div>
           <p className="text-xs text-zinc-400">
             {save.scoutName} &middot; {save.specialization} &middot; S
             {save.season} W{save.week}

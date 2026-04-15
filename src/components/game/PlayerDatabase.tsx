@@ -6,7 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, ChevronUp, ChevronDown, Users, FileText, Star } from "lucide-react";
+import { Search, ChevronUp, ChevronDown, Users, FileText, Star, Lock } from "lucide-react";
 import type { Player, Position } from "@/engine/core/types";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
@@ -82,7 +82,31 @@ export function PlayerDatabase() {
     [gameState]
   );
 
-  const sourcePlayers = scoutedOnly ? scoutedPlayers : allPlayers;
+  const isGlobalQueryReady = useMemo(
+    () =>
+      search.trim().length >= 2 ||
+      Boolean(positionFilter) ||
+      Boolean(minAge) ||
+      Boolean(maxAge) ||
+      Boolean(nationalityFilter) ||
+      Boolean(leagueFilter) ||
+      Boolean(minValue) ||
+      Boolean(maxValue) ||
+      watchlistOnly,
+    [
+      search,
+      positionFilter,
+      minAge,
+      maxAge,
+      nationalityFilter,
+      leagueFilter,
+      minValue,
+      maxValue,
+      watchlistOnly,
+    ],
+  );
+
+  const sourcePlayers = scoutedOnly || !isGlobalQueryReady ? scoutedPlayers : allPlayers;
 
   const specialization = gameState?.scout.primarySpecialization;
   const specFilteredPlayers = useMemo(() => {
@@ -253,7 +277,13 @@ export function PlayerDatabase() {
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Player Database</h1>
-            <p className="text-sm text-zinc-400">{filtered.length} players shown</p>
+            <p className="text-sm text-zinc-400">
+              {scoutedOnly
+                ? `${filtered.length} scouted player${filtered.length !== 1 ? "s" : ""} shown`
+                : isGlobalQueryReady
+                  ? `${filtered.length} player${filtered.length !== 1 ? "s" : ""} matched`
+                  : "Global search locked until you add a search term or filter"}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -276,7 +306,7 @@ export function PlayerDatabase() {
               size="sm"
               onClick={() => setScoutedOnly(false)}
             >
-              All Players
+              Global Search
             </Button>
             {gameState.freeAgentPool?.agents.some((a) => a.status === "available") && (
               <Button
@@ -293,6 +323,15 @@ export function PlayerDatabase() {
 
         {/* Filters */}
         <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4" data-tutorial-id="player-db-search">
+          {!scoutedOnly && !isGlobalQueryReady && (
+            <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+              <Lock size={12} className="mt-0.5 shrink-0 text-amber-400" aria-hidden="true" />
+              <span>
+                Wider database access is intentionally gated. Add a search term or at least one
+                filter to query beyond your own scouting notes.
+              </span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-3">
             {/* Search */}
             <div className="relative flex-1 min-w-48">
@@ -410,7 +449,9 @@ export function PlayerDatabase() {
               <p className="text-sm text-zinc-500">
                 {scoutedOnly
                   ? "No scouted players yet. Attend matches and observe players."
-                  : "No players match your filters."}
+                  : isGlobalQueryReady
+                    ? "No players match your filters."
+                    : "Add a search term or filter to unlock the wider database."}
               </p>
             </div>
           ) : (

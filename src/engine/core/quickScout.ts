@@ -21,8 +21,10 @@ import type {
   DelegationResult,
   NPCDelegation,
   NPCScout,
+  NPCScoutReport,
   Contact,
   ScoutSkill,
+  Player,
 } from "./types";
 import {
   ACTIVITY_FATIGUE_COSTS,
@@ -324,6 +326,8 @@ export function batchAdvanceWeeks(
     const prevInboxCount = currentState.inbox.length;
     const prevObsCount = Object.keys(currentState.observations).length;
     const prevDiscoveryCount = currentState.discoveryRecords.length;
+    const processedWeek = currentState.currentWeek;
+    const processedSeason = currentState.currentSeason;
 
     // Auto-schedule the current week
     const scheduledWeek = autoScheduleWeek(currentState, priorities);
@@ -341,6 +345,8 @@ export function batchAdvanceWeeks(
     // Run the game loop tick
     const tickResult = processWeeklyTick(currentState, rng);
     currentState = advanceWeek(currentState, tickResult);
+    const delegationResult = processNPCDelegations(currentState, rng);
+    currentState = delegationResult.state;
 
     // Reset schedule for next week
     currentState = {
@@ -369,13 +375,18 @@ export function batchAdvanceWeeks(
         keyEvents.push(`${totalReports} NPC scout report(s) received`);
       }
     }
+    if (delegationResult.completedReports.length > 0) {
+      keyEvents.push(
+        `${delegationResult.completedReports.length} delegated report(s) delivered`,
+      );
+    }
     if (newDiscoveries > 0) {
       keyEvents.push(`${newDiscoveries} new player(s) discovered`);
     }
 
     const weekSummary: BatchWeekSummary = {
-      week: currentState.currentWeek - 1, // The week that was just processed
-      season: currentState.currentSeason,
+      week: processedWeek,
+      season: processedSeason,
       fatigueChange: weekResult.fatigueChange,
       matchesAttended: weekResult.matchesAttended.length,
       reportsWritten: weekResult.reportsWritten.length,
@@ -494,8 +505,54 @@ export function delegateScoutingTask(
     };
   }
 
+  const activeDelegations = Object.values(state.npcDelegations ?? {}).filter(
+    (delegation) => !delegation.completed,
+  );
+  const existingScoutDelegation = activeDelegations.find(
+    (delegation) => delegation.npcScoutId === npcScoutId,
+  );
+  if (existingScoutDelegation) {
+    const existingTarget = state.players[existingScoutDelegation.playerId];
+    const existingTargetName = existingTarget
+      ? `${existingTarget.firstName} ${existingTarget.lastName}`
+      : "another player";
+    return {
+      state,
+      result: {
+        npcScout,
+        estimatedWeeks: 0,
+        accepted: false,
+        rejectionReason: `${npcScout.firstName} ${npcScout.lastName} is already covering ${existingTargetName}.`,
+      },
+    };
+  }
+
+  const existingPlayerDelegation = activeDelegations.find(
+    (delegation) => delegation.playerId === playerId,
+  );
+  if (existingPlayerDelegation) {
+    const assignedScout = state.npcScouts[existingPlayerDelegation.npcScoutId];
+    const assignedScoutName = assignedScout
+      ? `${assignedScout.firstName} ${assignedScout.lastName}`
+      : "another scout";
+    return {
+      state,
+      result: {
+        npcScout,
+        estimatedWeeks: 0,
+        accepted: false,
+        rejectionReason: `${player.firstName} ${player.lastName} is already assigned to ${assignedScoutName}.`,
+      },
+    };
+  }
+
   // Calculate estimated weeks: quality 5 = 2 weeks, quality 1 = 3 weeks
   const estimatedWeeks = npcScout.quality >= 4 ? 2 : 3;
+  const completionTiming = estimateDelegationCompletion(
+    state.currentWeek,
+    state.currentSeason,
+    estimatedWeeks,
+  );
 
   // Create the delegation record
   const delegationId = `deleg_${npcScoutId}_${playerId}_w${state.currentWeek}`;
@@ -504,7 +561,11 @@ export function delegateScoutingTask(
     npcScoutId,
     playerId,
     startWeek: state.currentWeek,
-    completionWeek: state.currentWeek + estimatedWeeks,
+    startSeason: state.currentSeason,
+    estimatedWeeks,
+    weeksRemaining: estimatedWeeks,
+    completionWeek: completionTiming.week,
+    completionSeason: completionTiming.season,
     completed: false,
   };
 
@@ -532,9 +593,11 @@ export function delegateScoutingTask(
       ...state.npcScouts,
       [npcScoutId]: updatedNpc,
     },
+    npcDelegations: {
+      ...state.npcDelegations,
+      [delegationId]: delegation,
+    },
     inbox: [...state.inbox, newMessage],
-    // Store active delegations in a spot on GameState
-    // We use npcReports as the destination once complete; for now, tag via inbox
   };
 
   return {
@@ -544,6 +607,183 @@ export function delegateScoutingTask(
       estimatedWeeks,
       accepted: true,
     },
+  };
+}
+
+function estimateDelegationCompletion(
+  startWeek: number,
+  startSeason: number,
+  estimatedWeeks: number,
+): { week: number; season: number } {
+  const WEEKS_PER_SEASON_ESTIMATE = 38;
+  const projectedWeek = startWeek + estimatedWeeks;
+  if (projectedWeek <= WEEKS_PER_SEASON_ESTIMATE) {
+    return { week: projectedWeek, season: startSeason };
+  }
+
+  return {
+    week: projectedWeek - WEEKS_PER_SEASON_ESTIMATE,
+    season: startSeason + 1,
+  };
+}
+
+function clampDelegationReportQuality(value: number): number {
+  return Math.max(1, Math.min(100, value));
+}
+
+function specializationBonus(npcScout: NPCScout, player: Player): number {
+  switch (npcScout.specialization) {
+    case "youth":
+      return player.age < 21 ? 10 : 0;
+    case "firstTeam":
+      return player.currentAbility >= 130 ? 10 : 0;
+    case "regional":
+      return 6;
+    case "data":
+      return player.currentAbility >= 100 ? 8 : 2;
+    default:
+      return 0;
+  }
+}
+
+function deriveDelegationRecommendation(
+  quality: number,
+  player: Player,
+): NPCScoutReport["recommendation"] {
+  const signal = quality * 0.7 + (player.currentAbility / 200) * 100 * 0.3;
+  if (signal >= 75) return "pursue";
+  if (signal >= 45) return "shortlist";
+  return "monitor";
+}
+
+function createDelegationReport(
+  rng: RNG,
+  state: GameState,
+  delegation: NPCDelegation,
+  npcScout: NPCScout,
+  player: Player,
+): NPCScoutReport {
+  const baseQuality = npcScout.quality * 18 + 8 + specializationBonus(npcScout, player);
+  const fatiguePenalty = npcScout.fatigue > 70 ? 12 : 0;
+  const focusedBonus = 8;
+  const noisyQuality = Math.round(
+    rng.gaussian(baseQuality + focusedBonus - fatiguePenalty, 6),
+  );
+  const quality = clampDelegationReportQuality(noisyQuality);
+  const recommendation = deriveDelegationRecommendation(quality, player);
+  const reportId = `npc_deleg_${delegation.id}_${state.currentSeason}_${state.currentWeek}`;
+  const summary =
+    `${npcScout.firstName} ${npcScout.lastName} completed a focused follow-up on ` +
+    `${player.firstName} ${player.lastName}. ` +
+    `The report graded ${quality}/100 and recommends you ` +
+    `${recommendation === "pursue" ? "move quickly" : recommendation === "shortlist" ? "keep the player under close watch" : "continue monitoring"} ` +
+    `after a delegated assignment that lasted ${delegation.estimatedWeeks} week(s).`;
+
+  return {
+    id: reportId,
+    npcScoutId: npcScout.id,
+    playerId: player.id,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    quality,
+    summary,
+    recommendation,
+    reviewed: false,
+  };
+}
+
+export function processNPCDelegations(
+  state: GameState,
+  rng: RNG,
+): { state: GameState; completedReports: NPCScoutReport[] } {
+  const delegations = state.npcDelegations ?? {};
+  const activeDelegations = Object.values(delegations).filter(
+    (delegation) => !delegation.completed,
+  );
+
+  if (activeDelegations.length === 0) {
+    return { state, completedReports: [] };
+  }
+
+  const updatedDelegations = { ...delegations };
+  const updatedNpcReports = { ...state.npcReports };
+  const updatedNpcScouts = { ...state.npcScouts };
+  const updatedInbox = [...state.inbox];
+  const completedReports: NPCScoutReport[] = [];
+
+  for (const delegation of activeDelegations) {
+    const decrementedWeeks = Math.max(0, (delegation.weeksRemaining ?? delegation.estimatedWeeks) - 1);
+    if (decrementedWeeks > 0) {
+      updatedDelegations[delegation.id] = {
+        ...delegation,
+        weeksRemaining: decrementedWeeks,
+      };
+      continue;
+    }
+
+    const npcScout = updatedNpcScouts[delegation.npcScoutId];
+    const player = state.players[delegation.playerId];
+
+    if (!npcScout || !player) {
+      updatedDelegations[delegation.id] = {
+        ...delegation,
+        weeksRemaining: 0,
+        completed: true,
+        completedWeek: state.currentWeek,
+        completedSeason: state.currentSeason,
+      };
+      updatedInbox.push({
+        id: `delegation-missing-${delegation.id}`,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "event",
+        title: "Delegated Scouting Closed",
+        body: "A delegated assignment ended without a report because the target or scout was no longer available.",
+        read: false,
+        actionRequired: false,
+      });
+      continue;
+    }
+
+    const report = createDelegationReport(rng, state, delegation, npcScout, player);
+    updatedNpcReports[report.id] = report;
+    updatedNpcScouts[npcScout.id] = {
+      ...npcScout,
+      reportsSubmitted: npcScout.reportsSubmitted + 1,
+    };
+    updatedDelegations[delegation.id] = {
+      ...delegation,
+      weeksRemaining: 0,
+      completed: true,
+      completedWeek: state.currentWeek,
+      completedSeason: state.currentSeason,
+      resultReportId: report.id,
+    };
+    updatedInbox.push({
+      id: `delegation-complete-${delegation.id}`,
+      week: state.currentWeek,
+      season: state.currentSeason,
+      type: "feedback",
+      title: "Delegated Report Delivered",
+      body:
+        `${npcScout.firstName} ${npcScout.lastName} has returned a focused report on ` +
+        `${player.firstName} ${player.lastName}. Review it from NPC Scout Management.`,
+      read: false,
+      actionRequired: false,
+      relatedId: report.id,
+    });
+    completedReports.push(report);
+  }
+
+  return {
+    state: {
+      ...state,
+      npcDelegations: updatedDelegations,
+      npcReports: updatedNpcReports,
+      npcScouts: updatedNpcScouts,
+      inbox: updatedInbox,
+    },
+    completedReports,
   };
 }
 

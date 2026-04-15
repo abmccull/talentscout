@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
+import type { GameScreen } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
 import { AudioEngine } from "@/lib/audio/audioEngine";
 import { GameLayout } from "./GameLayout";
@@ -28,7 +29,7 @@ import {
   Filter,
   DollarSign,
 } from "lucide-react";
-import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain, ChainConsequence, GossipAction, ActionableGossipItem } from "@/engine/core/types";
+import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain, ChainConsequence, GossipAction, ActionableGossipItem, SeasonEvent } from "@/engine/core/types";
 import { formatConsequence } from "@/engine/events";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
@@ -51,7 +52,20 @@ const MESSAGE_TYPE_CONFIG: Record<
   warning: { label: "Warning", icon: AlertTriangle, color: "text-red-400" },
   gossip: { label: "Gossip", icon: MessageCircle, color: "text-cyan-400" },
   marketplaceBid: { label: "Bid Received", icon: DollarSign, color: "text-emerald-400" },
+  financial: { label: "Financial", icon: DollarSign, color: "text-amber-400" },
+  performance: { label: "Performance", icon: Target, color: "text-sky-400" },
+  health: { label: "Health", icon: AlertTriangle, color: "text-rose-400" },
 };
+
+const DEFAULT_MESSAGE_CONFIG = {
+  label: "Update",
+  icon: Mail,
+  color: "text-zinc-400",
+} satisfies { label: string; icon: React.ElementType; color: string };
+
+function getMessageConfig(messageType: string) {
+  return MESSAGE_TYPE_CONFIG[messageType as InboxMessageType] ?? DEFAULT_MESSAGE_CONFIG;
+}
 
 // ─── Narrative event type config ─────────────────────────────────────────────
 
@@ -409,37 +423,46 @@ function GossipActionButtons({ gossipItem, onAction }: GossipActionButtonsProps)
 
 interface MessageItemProps {
   message: InboxMessage;
+  seasonEvent?: SeasonEvent;
   isExpanded: boolean;
   currentWeek: number;
   currentSeason: number;
   onClick: () => void;
   onViewPlayer?: (playerId: string) => void;
   onWriteReport?: (playerId: string) => void;
-  onViewCareer?: () => void;
+  onOpenScreen?: (screen: GameScreen) => void;
+  onOpenTransfer?: (negotiationId: string) => void;
+  onOpenAssignment?: (assignmentId: string) => void;
   onAcceptBid?: (bidId: string) => void;
   onDeclineBid?: (bidId: string) => void;
   onViewReports?: () => void;
+  onResolveSeasonEvent?: (eventId: string, choiceIndex: number) => void;
   gossipItem?: ActionableGossipItem;
   onGossipAction?: (gossipId: string, action: GossipAction) => void;
 }
 
 function MessageItem({
   message,
+  seasonEvent,
   isExpanded,
   currentWeek,
   currentSeason,
   onClick,
   onViewPlayer,
   onWriteReport,
-  onViewCareer,
+  onOpenScreen,
+  onOpenTransfer,
+  onOpenAssignment,
   onAcceptBid,
   onDeclineBid,
   onViewReports,
+  onResolveSeasonEvent,
   gossipItem,
   onGossipAction,
 }: MessageItemProps) {
-  const config = MESSAGE_TYPE_CONFIG[message.type];
+  const config = getMessageConfig(message.type);
   const Icon = config.icon;
+  const requiresAction = message.actionRequired && !seasonEvent?.resolved;
 
   return (
     <button
@@ -491,7 +514,7 @@ function MessageItem({
             <Badge variant="outline" className="text-[10px]">
               {config.label}
             </Badge>
-            {message.actionRequired && (
+            {requiresAction && (
               <Badge variant="warning" className="text-[10px]">
                 Action Required
               </Badge>
@@ -529,7 +552,7 @@ function MessageItem({
                     size="sm"
                     variant="outline"
                     className="text-xs h-7"
-                    onClick={(e) => { e.stopPropagation(); onViewCareer?.(); }}
+                    onClick={(e) => { e.stopPropagation(); onOpenScreen?.("career"); }}
                   >
                     View in Career
                   </Button>
@@ -541,7 +564,7 @@ function MessageItem({
                     size="sm"
                     variant="outline"
                     className="text-xs h-7"
-                    onClick={(e) => { e.stopPropagation(); onViewCareer?.(); }}
+                    onClick={(e) => { e.stopPropagation(); onOpenScreen?.("network"); }}
                   >
                     View Network
                   </Button>
@@ -549,13 +572,51 @@ function MessageItem({
               )}
               {message.relatedEntityType === "tool" && (
                 <div className="mt-3">
+                  {(() => {
+                    const targetScreen: GameScreen =
+                      message.relatedId === "performance"
+                        ? "performance"
+                        : message.relatedId === "agency"
+                          ? "agency"
+                          : "career";
+                    return (
                   <Button
                     size="sm"
                     variant="outline"
                     className="text-xs h-7"
-                    onClick={(e) => { e.stopPropagation(); onViewCareer?.(); }}
+                    onClick={(e) => { e.stopPropagation(); onOpenScreen?.(targetScreen); }}
                   >
-                    View Tools
+                    {message.relatedId === "performance"
+                      ? "Open Performance"
+                      : message.relatedId === "agency"
+                        ? "Open Agency"
+                        : "Open Career"}
+                  </Button>
+                    );
+                  })()}
+                </div>
+              )}
+              {message.relatedEntityType === "transfer" && message.relatedId && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onOpenTransfer?.(message.relatedId!); }}
+                  >
+                    Open Negotiation
+                  </Button>
+                </div>
+              )}
+              {message.relatedEntityType === "assignment" && message.relatedId && (
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="text-xs h-7"
+                    onClick={(e) => { e.stopPropagation(); onOpenAssignment?.(message.relatedId!); }}
+                  >
+                    View Assignment
                   </Button>
                 </div>
               )}
@@ -584,6 +645,29 @@ function MessageItem({
                   >
                     View All Bids
                   </Button>
+                </div>
+              )}
+              {message.relatedEntityType === "seasonEvent" && seasonEvent && (
+                <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                  {seasonEvent.resolved ? (
+                    <p className="text-xs text-zinc-500">
+                      Decision made: {seasonEvent.choices?.[seasonEvent.choiceSelected ?? -1]?.label ?? "Resolved"}
+                    </p>
+                  ) : seasonEvent.choices && onResolveSeasonEvent ? (
+                    <div className="flex flex-wrap gap-2">
+                      {seasonEvent.choices.map((choice, index) => (
+                        <Button
+                          key={`${seasonEvent.id}-${choice.label}`}
+                          size="sm"
+                          variant={index === 0 ? "secondary" : "outline"}
+                          className="text-xs h-7"
+                          onClick={() => onResolveSeasonEvent(seasonEvent.id, index)}
+                        >
+                          {choice.label}
+                        </Button>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               )}
               {/* A3: Gossip action buttons — only shown for gossip messages when expanded */}
@@ -621,11 +705,13 @@ export function InboxScreen() {
     markAllRead,
     acknowledgeNarrativeEvent,
     resolveNarrativeEventChoice,
+    resolveSeasonEvent,
     handleGossipAction,
     acceptMarketplaceBid,
     declineMarketplaceBid,
     selectPlayer,
     setScreen,
+    setPendingInternationalCountry,
     startReport,
   } = useGameStore();
   const { playSFX } = useAudio();
@@ -929,11 +1015,16 @@ export function InboxScreen() {
                 message.type === "gossip" && message.relatedId
                   ? gossipById.get(message.relatedId)
                   : undefined;
+              const relatedSeasonEvent =
+                message.relatedEntityType === "seasonEvent" && message.relatedId
+                  ? gameState.seasonEvents.find((event) => event.id === message.relatedId)
+                  : undefined;
 
               return (
                 <div key={message.id} role="listitem">
                   <MessageItem
                     message={message}
+                    seasonEvent={relatedSeasonEvent}
                     isExpanded={expandedId === message.id}
                     currentWeek={currentWeek}
                     currentSeason={currentSeason}
@@ -945,14 +1036,29 @@ export function InboxScreen() {
                     onWriteReport={(playerId) => {
                       startReport(playerId);
                     }}
-                    onViewCareer={() => {
-                      if (message.relatedEntityType === "contact") setScreen("network");
-                      else if (message.relatedEntityType === "tool") setScreen("career");
-                      else setScreen("career");
+                    onOpenScreen={(screen) => {
+                      setScreen(screen);
+                    }}
+                    onOpenTransfer={(negotiationId) => {
+                      useGameStore.setState({
+                        activeNegotiationId: negotiationId,
+                        currentScreen: "negotiation",
+                      });
+                    }}
+                    onOpenAssignment={(assignmentId) => {
+                      const assignment = gameState.internationalAssignments.find(
+                        (item) => item.id === assignmentId,
+                      );
+                      if (!assignment) return;
+                      setPendingInternationalCountry(assignment.country);
+                      setScreen("internationalView");
                     }}
                     onAcceptBid={(bidId) => { acceptMarketplaceBid(bidId); }}
                     onDeclineBid={(bidId) => { declineMarketplaceBid(bidId); }}
                     onViewReports={() => { setScreen("reportHistory"); }}
+                    onResolveSeasonEvent={(eventId, choiceIndex) => {
+                      resolveSeasonEvent(eventId, choiceIndex);
+                    }}
                     gossipItem={relatedGossip}
                     onGossipAction={handleGossipAction}
                   />

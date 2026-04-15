@@ -12,35 +12,20 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { Scout, GameState, Player, UnsignedYouth, SeasonEvent } from "@/engine/core/types";
+import type {
+  Scout,
+  GameState,
+  Player,
+  UnsignedYouth,
+  SeasonEvent,
+  InternationalAssignment,
+} from "@/engine/core/types";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getAvailableCountries } from "@/data/index";
 
 // =============================================================================
 // LOCAL INTERFACES
 // =============================================================================
-
-/**
- * An international scouting assignment offered to the scout.
- * Only available to tier 3+ scouts.
- */
-export interface InternationalAssignment {
-  id: string;
-  /** Destination country for this assignment. */
-  country: string;
-  /** Geographic region label, e.g. "South America", "Western Europe". */
-  region: string;
-  /** Human-readable description of the assignment. */
-  description: string;
-  /** Week this assignment first becomes available. */
-  weekAvailable: number;
-  /** How many weeks the assignment lasts (travel duration). */
-  duration: number;
-  /** Reputation points awarded on successful completion. */
-  reputationReward: number;
-  /** Category of the international activity. */
-  type: "youthTournament" | "seniorFriendly" | "scoutingMission";
-}
 
 /**
  * A youth tournament gathering clubs from multiple countries.
@@ -548,19 +533,14 @@ export function getAvailableAssignments(
     return [];
   }
 
-  // Traveling gate: scout cannot accept new assignments while already abroad
+  // Booking gate: scout cannot accept new assignments while a trip is booked.
   if (scout.travelBooking) {
-    const { departureWeek, returnWeek } = scout.travelBooking;
-    const isCurrentlyAbroad =
-      currentWeek >= departureWeek && currentWeek < returnWeek;
-    if (isCurrentlyAbroad) {
-      return [];
-    }
+    return [];
   }
 
-  // Filter to assignments available this week
+  // Filter to assignments available this week or carried over from last week.
   return assignments.filter(
-    (a) => a.weekAvailable === currentWeek,
+    (a) => a.weekAvailable >= currentWeek - 1 && a.weekAvailable <= currentWeek,
   );
 }
 

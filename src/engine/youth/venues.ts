@@ -106,19 +106,21 @@ export interface ScoutQualityData {
  * - Max (~1.0): almost always sees the best available.
  */
 function computeQualityWeight(data: ScoutQualityData): number {
-  // Base: intuition normalized from 1–20 to 0–1
-  let weight = (data.intuition - 1) / 19;
+  // Early-career scouts should still see a mixed pool. Keep the bias toward
+  // top-end prospects modest until intuition, knowledge, and specialization
+  // are genuinely strong.
+  let weight = 0.08 + ((data.intuition - 1) / 19) * 0.28;
 
   // Regional knowledge bonus
-  if (data.regionalKnowledge >= 80) weight += 0.30;
-  else if (data.regionalKnowledge >= 50) weight += 0.15;
+  if (data.regionalKnowledge >= 80) weight += 0.12;
+  else if (data.regionalKnowledge >= 50) weight += 0.06;
 
-  // Youth specialization bonus: up to +0.2 at level 50
+  // Youth specialization bonus: up to +0.14 at level 50
   if (data.isYouthSpecialist) {
-    weight += (data.specializationLevel / 50) * 0.2;
+    weight += (data.specializationLevel / 50) * 0.14;
   }
 
-  return Math.min(1, Math.max(0, weight));
+  return Math.min(0.65, Math.max(0.05, weight));
 }
 
 /**
@@ -197,6 +199,13 @@ export function getYouthVenuePool(
   const scoutCountry = abroad
     ? scout.travelBooking!.destinationCountry.toLowerCase()
     : getScoutHomeCountry(scout);
+  const tournamentCountries = new Set(
+    (tournament?.participantCountries ?? [])
+      .map((country) => country.toLowerCase()),
+  );
+  const allowedCountries = tournamentCountries.size > 0
+    ? tournamentCountries
+    : new Set([scoutCountry]);
   let filtered: UnsignedYouth[];
 
   switch (venueType) {
@@ -212,8 +221,8 @@ export function getYouthVenuePool(
       break;
 
     case "grassrootsTournament":
-      // Same country, any age
-      filtered = activeYouth.filter((y) => y.country === scoutCountry);
+      // Domestic grassroots by default; tournament context can override host/participant country.
+      filtered = activeYouth.filter((y) => allowedCountries.has(y.country));
       break;
 
     case "streetFootball":
@@ -236,9 +245,12 @@ export function getYouthVenuePool(
       break;
 
     case "youthFestival":
-      // Any region, age 14-17
+      // Domestic by default; explicit tournaments can widen the participant country set.
       filtered = activeYouth.filter(
-        (y) => y.player.age >= 14 && y.player.age <= 17,
+        (y) =>
+          allowedCountries.has(y.country) &&
+          y.player.age >= 14 &&
+          y.player.age <= 17,
       );
       break;
   }

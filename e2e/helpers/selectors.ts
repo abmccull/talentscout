@@ -52,37 +52,49 @@ export const NAV_SCREENS = {
 
 // ─── Visibility Tiers ────────────────────────────────────────────────────────
 
-/** Always visible regardless of tier/week. */
+/**
+ * Always visible at week 1, tier 1 (in ALWAYS_VISIBLE set + inbox returns true).
+ * Note: playerDatabase visible for non-youth, youthScouting for youth.
+ */
 export const ALWAYS_VISIBLE_SCREENS = [
   "dashboard",
   "calendar",
-  "fixtureBrowser",
-  "finances",
   "achievements",
   "handbook",
   "settings",
-  "agency",
-  "leaderboard",
+  "inbox",
 ] as const;
 
-/** Visible after week 3. */
-export const WEEK3_SCREENS = [
+/** Visible after week 2 (fixtureBrowser, career, performance). */
+export const WEEK2_SCREENS = [
+  "fixtureBrowser",
   "career",
   "performance",
-  "equipment",
-  "training",
-  "inbox",
+] as const;
+
+/** Visible after week 3 (finances, reportHistory). */
+export const WEEK3_SCREENS = [
+  "finances",
   "reportHistory",
 ] as const;
 
-/** Visible at tier 2+. */
+/** Visible at tier 2+ OR week >= 6 (equipment, training). */
+export const TIER2_EQUIPMENT_SCREENS = ["equipment", "training"] as const;
+
+/** Visible at tier 2+ (network needs tier 2 OR week >= 4, rivals needs tier 2). */
 export const TIER2_SCREENS = ["network", "rivals"] as const;
 
 /** Visible at tier 3+. */
 export const TIER3_SCREENS = ["discoveries", "analytics", "alumniDashboard"] as const;
 
+/** Visible at tier 3+ OR week >= 12. */
+export const TIER3_AGENCY = ["agency"] as const;
+
 /** Visible at tier 4+. */
 export const TIER4_SCREENS = ["npcManagement"] as const;
+
+/** Visible after season 1 (effectiveWeek > 52). */
+export const SEASON2_SCREENS = ["leaderboard"] as const;
 
 // ─── All GameScreens (from gameStore.ts type) ────────────────────────────────
 
@@ -129,6 +141,36 @@ export const KEY_TO_SCREEN: Record<string, string> = {
 // ─── Specializations ─────────────────────────────────────────────────────────
 
 export const SPECIALIZATIONS = ["youth", "firstTeam", "regional", "data"] as const;
+
+// ─── Calendar Selectors ─────────────────────────────────────────────────────
+
+export const CALENDAR_SELECTORS = {
+  calendarGrid: '[data-tutorial-id="calendar-grid"]',
+  daySlot: '[data-tutorial-id="day-slot"]',
+  activityCard: '[data-tutorial-id="activity-card"]',
+  advanceWeekButton: 'button:has-text("Advance"), button:has-text("End Week"), button:has-text("Next Week"), button:has-text("Advance Week")',
+  autoScheduleButton: 'button:has-text("Auto"), button:has-text("Quick Scout")',
+} as const;
+
+// ─── Report Selectors ───────────────────────────────────────────────────────
+
+export const REPORT_SELECTORS = {
+  reportList: '[data-tutorial-id="report-list"]',
+  reportCard: '[data-tutorial-id="report-card"]',
+  listForSaleButton: 'button:has-text("List"), button:has-text("Sell")',
+  priceInput: 'input[type="number"]',
+  convictionSelect: '[data-tutorial-id="conviction-level"]',
+  submitButton: 'button:has-text("Submit")',
+} as const;
+
+// ─── Network Selectors ──────────────────────────────────────────────────────
+
+export const NETWORK_SELECTORS = {
+  contactList: '[data-tutorial-id="contact-list"]',
+  contactCard: '[data-tutorial-id="contact-card"]',
+  intelSection: '[data-tutorial-id="intel-section"]',
+  relationshipBadge: '[data-tutorial-id="relationship-badge"]',
+} as const;
 
 // ─── Common UI Selectors ─────────────────────────────────────────────────────
 

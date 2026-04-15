@@ -142,15 +142,15 @@ export const GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   {
     id: "wroteReport",
     target: "report-conviction",
-    title: "Write a report",
+    title: "Finish the report write-up",
     mentorText:
-      "Time to write your report. " +
-      "Choose your [[conviction-level]] carefully — higher conviction means higher stakes for your [[reputation]].",
+      "Finish the report properly before you send it. " +
+      "Set your [[conviction-level]] and make sure the write-up reflects what you actually saw — stronger conviction means higher stakes for your [[reputation]].",
     mentorTextFreelance:
-      "Here's where your opinion matters. Pick a [[conviction-level]]. " +
+      "This is where the write-up earns its keep. Set your [[conviction-level]] and make sure your notes back it up. " +
       "If you're confident, stake your reputation. If you're unsure, play it safe.",
     position: "right",
-    interactive: false,
+    interactive: true,
     screen: "reportWriter",
   },
   {

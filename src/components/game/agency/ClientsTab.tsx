@@ -49,6 +49,9 @@ interface ClientsTabProps {
 
 export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
   const pitchToClient = useGameStore((s) => s.pitchToClient);
+  const pendingRetainerOffers = useGameStore(
+    (s) => s.gameState?.finances?.pendingRetainerOffers ?? [],
+  );
 
   const [pitchClubId, setPitchClubId] = useState<string>("");
   const [pitchType, setPitchType] = useState<PitchType>("coldCall");
@@ -60,10 +63,15 @@ export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
 
   function handlePitch() {
     if (!pitchClubId) return;
-    pitchToClient(pitchClubId, pitchType);
     const club = clubs[pitchClubId];
+    const pendingBefore = pendingRetainerOffers.length;
+    pitchToClient(pitchClubId, pitchType);
+    const pendingAfter =
+      useGameStore.getState().gameState?.finances?.pendingRetainerOffers?.length ?? pendingBefore;
     setLastPitchResult(
-      `Pitch sent to ${club?.name ?? pitchClubId}. Check your inbox for retainer offers.`,
+      pendingAfter > pendingBefore
+        ? `${club?.name ?? pitchClubId} made a retainer offer. Review it from your agency finances.`
+        : `Pitch logged with ${club?.name ?? pitchClubId}. Successful responses show up as pending retainer offers, not inbox messages.`,
     );
     setPitchClubId("");
   }
@@ -159,6 +167,11 @@ export function ClientsTab({ clientRelationships, clubs }: ClientsTabProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          {pendingRetainerOffers.length > 0 && (
+            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2 text-xs text-cyan-200">
+              {pendingRetainerOffers.length} pending retainer offer{pendingRetainerOffers.length !== 1 ? "s" : ""} waiting in your agency finances.
+            </div>
+          )}
           {lastPitchResult && (
             <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2 text-xs text-emerald-400">
               {lastPitchResult}

@@ -46,6 +46,10 @@ export function starsToAbility(stars: number): number {
   return Math.round(raw);
 }
 
+function snapHalfStar(value: number): number {
+  return Math.round(value * 2) / 2;
+}
+
 // ---------------------------------------------------------------------------
 // Noise multipliers per observation context for ability reads
 // ---------------------------------------------------------------------------
@@ -190,19 +194,56 @@ function perceivePA(
     firstObsPenalty;
 
   const rawPerceived = rng.gaussian(player.potentialAbility, stddev);
-  const clampedPA = Math.max(1, Math.min(200, Math.round(rawPerceived)));
+  // Early youth reads should be conservative. Scouts rarely jump straight to
+  // a 5-star ceiling after one glance, so cap first reads relative to current
+  // level and scout skill before converting to stars.
+  const projectionCap =
+    player.age <= 18
+      ? Math.min(
+          200,
+          player.currentAbility +
+            25 +
+            skill * 4 +
+            Math.max(0, count - 1) * 14 +
+            Math.round(contextDiversity * 10),
+        )
+      : 200;
+  const conservativePA = player.age <= 18
+    ? Math.min(rawPerceived, projectionCap)
+    : rawPerceived;
+  const clampedPA = Math.max(1, Math.min(200, Math.round(conservativePA)));
   const midpoint = abilityToStars(clampedPA);
 
-  // Range width in stars
-  const rangeWidth = Math.max(
-    0.5,
-    ((20 - skill) / 3) * ageFactor / (1 + count * 0.2),
+  // Range width in stars. Keep early youth projections uncertain, but not so
+  // wide that average prospects all look like elite 5-star bets.
+  const baseHalfRange = 0.45 + ((20 - skill) / 20) * 0.65;
+  const youthPenalty = player.age <= 17 ? 0.35 : player.age <= 21 ? 0.15 : 0;
+  const firstSightingPenalty = count === 1 ? 0.35 : count === 2 ? 0.2 : 0;
+  const contextAdjustment =
+    context === "academyVisit" || context === "youthTournament"
+      ? -0.1
+      : context === "followUpSession"
+        ? -0.15
+        : context === "schoolMatch" || context === "grassrootsTournament"
+          ? 0.1
+          : 0;
+  const halfRange = snapHalfStar(
+    Math.max(
+      0.5,
+      Math.min(
+        1.5,
+        baseHalfRange +
+          youthPenalty +
+          firstSightingPenalty +
+          contextAdjustment -
+          contextDiversity * 0.2,
+      ),
+    ),
   );
-  const halfRange = Math.round(rangeWidth * 2) / 4; // snap to 0.25 increments
   const rawLow = midpoint - halfRange;
   const rawHigh = midpoint + halfRange;
-  const low = Math.max(0.5, Math.round(rawLow * 2) / 2);
-  const high = Math.min(5.0, Math.round(rawHigh * 2) / 2);
+  const low = Math.max(0.5, snapHalfStar(rawLow));
+  const high = Math.min(5.0, snapHalfStar(rawHigh));
 
   // Confidence
   const rawConfidence =

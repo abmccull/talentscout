@@ -24,6 +24,10 @@
 
 import { supabase } from "./supabase";
 import type { LeaderboardEntry } from "@/engine/core/types";
+import {
+  BETA_GLOBAL_LEADERBOARD_ENABLED,
+  BETA_GLOBAL_LEADERBOARD_MESSAGE,
+} from "@/config/beta";
 
 // ---------------------------------------------------------------------------
 // Row shape returned by Supabase
@@ -59,6 +63,10 @@ export async function submitCloudLeaderboardEntry(
   userId: string,
   entry: LeaderboardEntry,
 ): Promise<void> {
+  void userId;
+  if (!BETA_GLOBAL_LEADERBOARD_ENABLED) {
+    throw new Error(BETA_GLOBAL_LEADERBOARD_MESSAGE);
+  }
   if (!supabase) return;
 
   const { data: { session } } = await supabase.auth.getSession();
@@ -92,6 +100,7 @@ export async function submitCloudLeaderboardEntry(
 export async function getCloudLeaderboard(
   limit: number = 20,
 ): Promise<LeaderboardEntry[]> {
+  if (!BETA_GLOBAL_LEADERBOARD_ENABLED) return [];
   if (!supabase) return [];
   const { data, error } = await supabase
     .from("leaderboard_entries")

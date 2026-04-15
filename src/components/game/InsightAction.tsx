@@ -5,7 +5,8 @@ import { Sparkles, AlertTriangle, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { InsightAction, InsightActionId } from "@/engine/insight/types";
-import type { Specialization } from "@/engine/core/types";
+import type { CareerPath, Specialization } from "@/engine/core/types";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // TYPES
@@ -17,6 +18,8 @@ interface InsightActionPanelProps {
   cooldownRemaining: number;
   onSelectAction: (actionId: InsightActionId) => void;
   onCancel: () => void;
+  /** Career path used to resolve "your club" text for independent scouts. */
+  careerPath?: CareerPath;
 }
 
 // =============================================================================
@@ -60,9 +63,10 @@ interface ActionCardProps {
   canAfford: boolean;
   isOnCooldown: boolean;
   onSelect: () => void;
+  careerPath?: CareerPath;
 }
 
-function ActionCard({ action, canAfford, isOnCooldown, onSelect }: ActionCardProps) {
+function ActionCard({ action, canAfford, isOnCooldown, onSelect, careerPath }: ActionCardProps) {
   const isDisabled = !canAfford || isOnCooldown;
   const disabledReason = isOnCooldown
     ? "Insight is on cooldown"
@@ -108,7 +112,7 @@ function ActionCard({ action, canAfford, isOnCooldown, onSelect }: ActionCardPro
           </div>
 
           <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-            {action.description}
+            {resolveCareerPathText(action.description, careerPath)}
           </p>
 
           {/* Risk description */}
@@ -118,7 +122,7 @@ function ActionCard({ action, canAfford, isOnCooldown, onSelect }: ActionCardPro
               className="mt-0.5 shrink-0"
               aria-hidden="true"
             />
-            {action.riskDescription}
+            {resolveCareerPathText(action.riskDescription, careerPath)}
           </p>
         </div>
 
@@ -162,6 +166,7 @@ interface ActionGroupProps {
   canAfford: (cost: number) => boolean;
   isOnCooldown: boolean;
   onSelect: (id: InsightActionId) => void;
+  careerPath?: CareerPath;
 }
 
 function ActionGroup({
@@ -170,6 +175,7 @@ function ActionGroup({
   canAfford,
   isOnCooldown,
   onSelect,
+  careerPath,
 }: ActionGroupProps) {
   if (actions.length === 0) return null;
 
@@ -189,6 +195,7 @@ function ActionGroup({
             canAfford={canAfford(action.cost)}
             isOnCooldown={isOnCooldown}
             onSelect={() => onSelect(action.id)}
+            careerPath={careerPath}
           />
         ))}
       </div>
@@ -206,6 +213,7 @@ export function InsightActionPanel({
   cooldownRemaining,
   onSelectAction,
   onCancel,
+  careerPath,
 }: InsightActionPanelProps) {
   const isOnCooldown = cooldownRemaining > 0;
   const canAfford = (cost: number) => currentPoints >= cost;
@@ -303,6 +311,7 @@ export function InsightActionPanel({
                 canAfford={canAfford}
                 isOnCooldown={isOnCooldown}
                 onSelect={onSelectAction}
+                careerPath={careerPath}
               />
             )}
 
@@ -314,6 +323,7 @@ export function InsightActionPanel({
                 canAfford={canAfford}
                 isOnCooldown={isOnCooldown}
                 onSelect={onSelectAction}
+                careerPath={careerPath}
               />
             ))}
           </div>

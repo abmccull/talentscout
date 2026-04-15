@@ -19,9 +19,11 @@ import type { GameState } from "@/engine/core/types";
  */
 export interface CloudSaveSlot {
   slot: number;
+  name: string;
   scoutName: string;
   season: number;
   week: number;
+  specialization: string;
   reputation: number;
   savedAt: number; // Unix ms timestamp
 }
@@ -60,7 +62,7 @@ export interface CloudSaveProvider {
    * Implementations should update an internal "savedAt" timestamp as part of
    * the write so subsequent conflict checks reflect the latest upload time.
    */
-  uploadSave(slot: number, state: GameState): Promise<void>;
+  uploadSave(slot: number, state: GameState, name?: string): Promise<void>;
 
   /**
    * Retrieve a previously uploaded save from the given slot.

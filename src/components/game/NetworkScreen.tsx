@@ -501,17 +501,43 @@ export function NetworkScreen() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [scheduledId, setScheduledId] = useState<string | null>(null);
 
-  // Pre-compute intel for all contacts using stable per-contact RNG seeds.
-  // Memoised so it only re-runs when gameState changes.
   const contactIntelMap = useMemo<Map<string, IntelEntry[]>>(() => {
     const map = new Map<string, IntelEntry[]>();
     if (!gameState) return map;
+    const persistedIntel = gameState.contactIntel;
+    const usePersistedIntel = persistedIntel !== undefined && persistedIntel !== null;
 
     for (const contact of Object.values(gameState.contacts)) {
-      if (contact.relationship < 35 || contact.knownPlayerIds.length === 0) {
+      if (contact.knownPlayerIds.length === 0) {
         map.set(contact.id, []);
         continue;
       }
+
+      if (usePersistedIntel) {
+        const entries: IntelEntry[] = [];
+        const seenIntel = new Set<string>();
+        for (const playerId of contact.knownPlayerIds) {
+          const player = getPlayer(playerId);
+          if (!player) continue;
+          for (const intel of persistedIntel[playerId] ?? []) {
+            const intelKey = `${intel.playerId}:${intel.attribute}`;
+            if (seenIntel.has(intelKey)) continue;
+            seenIntel.add(intelKey);
+            entries.push({
+              playerName: `${player.firstName} ${player.lastName}`,
+              intel,
+            });
+          }
+        }
+        map.set(contact.id, entries);
+        continue;
+      }
+
+      if (contact.relationship < 35) {
+        map.set(contact.id, []);
+        continue;
+      }
+
       const rng = new RNG(`intel-${contact.id}`);
       const entries: IntelEntry[] = [];
       for (const playerId of contact.knownPlayerIds) {
@@ -716,7 +742,7 @@ export function NetworkScreen() {
                           {(contactIntelMap.get(contact.id)?.length ?? 0) > 0 && (
                             <span className="flex items-center gap-1 text-xs text-cyan-400">
                               <Eye size={11} aria-hidden="true" />
-                              Intel
+                              {(contactIntelMap.get(contact.id)?.length ?? 0)} intel
                             </span>
                           )}
                           {gossipCount > 0 && (

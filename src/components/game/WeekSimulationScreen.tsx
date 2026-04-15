@@ -10,6 +10,8 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { motion, AnimatePresence } from "framer-motion";
 import type { DayResult, GameState, ScoutSkill } from "@/engine/core/types";
 import { INTERACTIVE_ACTIVITIES } from "@/engine/observation/types";
+import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -185,43 +187,25 @@ function buildInteractivePlayerPool(
 
   const targetId = dayResult.activity.targetId;
   if (targetId && dayResult.activity.type !== "attendMatch") {
-    const senior = gameState.players[targetId];
-    if (senior) {
+    const resolved = resolvePlayerEntity(gameState, targetId);
+    if (resolved) {
       addPlayer(
-        senior.id,
-        `${senior.firstName} ${senior.lastName}`,
-        senior.position,
+        resolved.player.id,
+        `${resolved.player.firstName} ${resolved.player.lastName}`,
+        resolved.player.position,
       );
-    } else {
-      const youth = gameState.unsignedYouth[targetId]?.player;
-      if (youth) {
-        addPlayer(
-          youth.id,
-          `${youth.firstName} ${youth.lastName}`,
-          youth.position,
-        );
-      }
     }
   }
 
   const focusedIds = dayResult.interaction?.focusedPlayerIds
     ?? (dayResult.interaction?.focusedPlayerId ? [dayResult.interaction.focusedPlayerId] : []);
   for (const focusedId of focusedIds) {
-    const senior = gameState.players[focusedId];
-    if (senior) {
+    const resolved = resolvePlayerEntity(gameState, focusedId);
+    if (resolved) {
       addPlayer(
-        senior.id,
-        `${senior.firstName} ${senior.lastName}`,
-        senior.position,
-      );
-      continue;
-    }
-    const youth = gameState.unsignedYouth[focusedId]?.player;
-    if (youth) {
-      addPlayer(
-        youth.id,
-        `${youth.firstName} ${youth.lastName}`,
-        youth.position,
+        resolved.player.id,
+        `${resolved.player.firstName} ${resolved.player.lastName}`,
+        resolved.player.position,
       );
     }
   }
@@ -253,21 +237,12 @@ function buildInteractivePlayerPool(
       .slice(0, 12)
       .map(([id]) => id);
     for (const playerId of fallbackIds) {
-      const senior = gameState.players[playerId];
-      if (senior) {
+      const resolved = resolvePlayerEntity(gameState, playerId);
+      if (resolved) {
         addPlayer(
-          senior.id,
-          `${senior.firstName} ${senior.lastName}`,
-          senior.position,
-        );
-        continue;
-      }
-      const youth = gameState.unsignedYouth[playerId]?.player;
-      if (youth) {
-        addPlayer(
-          youth.id,
-          `${youth.firstName} ${youth.lastName}`,
-          youth.position,
+          resolved.player.id,
+          `${resolved.player.firstName} ${resolved.player.lastName}`,
+          resolved.player.position,
         );
       }
     }
@@ -609,7 +584,7 @@ function DayCard({
                       key={option.id}
                       variant="outline"
                       size="sm"
-                      className="h-auto min-w-0 justify-start overflow-hidden px-3 py-2 text-left"
+                      className="h-auto min-w-0 justify-start px-3 py-2 text-left"
                       onClick={() => {
                         if (option.id === "focus") {
                           if (availableFocusCandidates.length > 0) {
@@ -755,7 +730,6 @@ export function WeekSimulationScreen() {
   const currentDayResult: DayResult | undefined = dayResults[currentDay];
   const isLastDay = currentDay >= dayResults.length - 1;
   const isComplete = currentDay >= 7;
-  const interactionPending = !!currentDayResult?.interaction && !currentDayResult.interaction.selectedOptionId;
   const interactivePlayerPool = useMemo(
     () => buildInteractivePlayerPool(currentDayResult, gameState),
     [currentDayResult, gameState],
@@ -764,8 +738,7 @@ export function WeekSimulationScreen() {
     && currentDayResult.activity.type !== "attendMatch"
     && INTERACTIVE_ACTIVITIES.has(currentDayResult.activity.type);
   const currentActivityInstanceKey = currentDayResult?.activity
-    ? (currentDayResult.activity.instanceId
-      ?? `${currentDayResult.activity.type}-d${currentDayResult.dayIndex}`)
+    ? getInteractiveActivityCompletionKey(currentDayResult.activity, currentDayResult.dayIndex)
     : undefined;
   const completedInteractiveSet = useMemo(
     () => new Set(gameState?.completedInteractiveSessions ?? []),
@@ -776,19 +749,23 @@ export function WeekSimulationScreen() {
   const canLaunchInteractiveSession = interactiveActivitySupported
     && interactivePlayerPool.length > 0
     && !interactiveSessionCompleted;
+  // If the interactive session is already completed, the decision is optional
+  const interactionPending = !!currentDayResult?.interaction
+    && !currentDayResult.interaction.selectedOptionId
+    && !interactiveSessionCompleted;
 
   const launchInteractiveSession = () => {
     if (!currentDayResult?.activity || !canLaunchInteractiveSession) return;
     const targetPlayerId = resolveSessionTargetId(currentDayResult, interactivePlayerPool);
-    const activityInstanceId =
-      currentDayResult.activity.instanceId
-      ?? `${currentDayResult.activity.type}-d${currentDayResult.dayIndex}`;
     startObservationSession(
       currentDayResult.activity.type,
       interactivePlayerPool,
       targetPlayerId,
       {
-        activityInstanceId,
+        activityInstanceId: getInteractiveActivityCompletionKey(
+          currentDayResult.activity,
+          currentDayResult.dayIndex,
+        ),
         returnScreen: "weekSimulation",
       },
     );

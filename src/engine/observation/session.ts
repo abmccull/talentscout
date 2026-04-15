@@ -37,9 +37,21 @@ import { ACTIVITY_MODE_MAP, VENUE_PHASE_RANGES } from "@/engine/observation/type
  */
 const TOKENS_PER_HALF: Record<ObservationMode, number> = {
   fullObservation: 3,
-  investigation: 2,
+  investigation: 0,
   analysis: 1,
   quickInteraction: 0,
+};
+
+/**
+ * Normalizes IP-per-phase across modes so that shorter sessions (fewer phases)
+ * don't unfairly inflate quality tiers. quickInteraction (2-3 phases) needs 2x
+ * raw IP/phase to match fullObservation (6-14 phases) at the same tier.
+ */
+const QUALITY_NORMALIZATION: Record<ObservationMode, number> = {
+  fullObservation: 1.0,
+  investigation: 0.8,
+  analysis: 0.9,
+  quickInteraction: 0.5,
 };
 
 /** Insight points awarded for specific scout actions during a session. */
@@ -215,6 +227,7 @@ export function createSession(
     players: buildSessionPlayers(config),
     startedAtWeek: config.week,
     startedAtSeason: config.season,
+    careerPath: config.careerPath,
   };
 }
 
@@ -621,9 +634,10 @@ export function getSessionResult(session: ObservationSession): SessionResult {
       : session.currentPhaseIndex + 1;
 
   // Derive a quality tier from insight points earned relative to session length.
-  // This is a simple heuristic — richer logic can replace it later.
-  const ipPerPhase =
+  // Normalized so shorter modes don't get inflated tiers from fewer phases.
+  const rawIpPerPhase =
     phasesCompleted > 0 ? session.insightPointsEarned / phasesCompleted : 0;
+  const ipPerPhase = rawIpPerPhase * (QUALITY_NORMALIZATION[session.mode] ?? 1.0);
   let qualityTier: string;
   if (ipPerPhase >= 12) {
     qualityTier = "exceptional";

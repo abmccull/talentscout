@@ -32,7 +32,7 @@
 import { getSteam } from "@/lib/steam/steamInterface";
 import { supabase } from "@/lib/supabase";
 import { SupabaseCloudSaveProvider } from "@/lib/supabaseCloudSave";
-import { saveGame, loadGame, listSaves, migrateSaveState } from "@/lib/db";
+import { saveGame, loadGame, listSaves, deleteSave, migrateSaveState, type SaveRecord } from "@/lib/db";
 import { captureException } from "@/lib/sentry";
 
 // ---------------------------------------------------------------------------
@@ -50,8 +50,15 @@ export type SaveSource = "local" | "steam" | "supabase";
  */
 export interface SaveEntry {
   slotName: string;
+  slot: number;
   source: SaveSource;
-  timestamp: number; // Unix ms
+  name: string;
+  scoutName: string;
+  season: number;
+  week: number;
+  specialization: string;
+  reputation: number;
+  savedAt: number; // Unix ms
 }
 
 /**
@@ -61,7 +68,12 @@ export interface SaveEntry {
 export interface LoadResult {
   data: string;
   source: SaveSource;
+  name: string;
   timestamp: number; // Unix ms
+}
+
+export interface SaveOptions {
+  waitForCloud?: boolean;
 }
 
 /**
@@ -93,7 +105,12 @@ export interface SaveProvider {
    * Steam Cloud and Supabase writes are fire-and-forget: they do not block
    * the caller and their failures are logged but not re-thrown.
    */
-  save(slotName: string, data: string): Promise<void>;
+  save(
+    slotName: string,
+    data: string,
+    displayName?: string,
+    options?: SaveOptions,
+  ): Promise<void>;
 
   /**
    * Load game data for the given slot.
@@ -103,12 +120,24 @@ export interface SaveProvider {
   load(slotName: string): Promise<LoadResult | null>;
 
   /**
+   * Load a specific backend copy for the slot instead of automatically
+   * choosing the newest source.
+   */
+  loadFromSource(slotName: string, source: SaveSource): Promise<LoadResult | null>;
+
+  /**
    * List all available saves across every configured backend.
    * Returns one entry per (slotName, source) pair; the list is not
    * deduplicated — a slot that exists in both IndexedDB and Steam will
-   * appear twice.  Sorted newest-first by timestamp.
+   * appear twice.  Sorted newest-first by savedAt.
    */
   listSaves(): Promise<SaveEntry[]>;
+
+  /**
+   * Delete the slot from all writable backends participating in this provider.
+   * Backends that do not support deletion are skipped.
+   */
+  delete(slotName: string): Promise<void>;
 
   /**
    * Compare the local and cloud copies of a save slot.
@@ -130,6 +159,13 @@ export interface SaveProviderOptions {
    * as a backend.  When null/undefined, Supabase is skipped entirely.
    */
   userId?: string | null;
+
+  /**
+   * Whether Steam Cloud should participate in reads/listing/conflict checks.
+   * Defaults to true. Some beta flows intentionally disable Steam reads so
+   * Supabase-backed cloud saves do not collide with stale mirrored copies.
+   */
+  includeSteam?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +246,28 @@ function buildPreview(raw: string): string {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed === "object" && parsed !== null) {
       const r = parsed as Record<string, unknown>;
-      const season = typeof r["season"] === "number" ? r["season"] : "?";
-      const week = typeof r["week"] === "number" ? r["week"] : "?";
+      const season =
+        typeof r["season"] === "number"
+          ? r["season"]
+          : typeof r["currentSeason"] === "number"
+            ? r["currentSeason"]
+            : "?";
+      const week =
+        typeof r["week"] === "number"
+          ? r["week"]
+          : typeof r["currentWeek"] === "number"
+            ? r["currentWeek"]
+            : "?";
+      const scout =
+        typeof r["scout"] === "object" && r["scout"] !== null
+          ? (r["scout"] as Record<string, unknown>)
+          : null;
       const rep =
-        typeof r["reputation"] === "number" ? r["reputation"] : "?";
+        typeof r["reputation"] === "number"
+          ? r["reputation"]
+          : typeof scout?.["reputation"] === "number"
+            ? scout["reputation"]
+            : "?";
       return `Season ${season} · Week ${week} · Rep ${rep}`;
     }
   } catch {
@@ -222,22 +276,55 @@ function buildPreview(raw: string): string {
   return "Save data";
 }
 
+function parseSteamSaveRecord(raw: string | null): SaveRecord | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      !("slot" in parsed) ||
+      !("name" in parsed) ||
+      !("savedAt" in parsed) ||
+      !("season" in parsed) ||
+      !("week" in parsed) ||
+      !("scoutName" in parsed) ||
+      !("specialization" in parsed) ||
+      !("reputation" in parsed) ||
+      !("state" in parsed)
+    ) {
+      return null;
+    }
+
+    return parsed as SaveRecord;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
 
 class SaveProviderImpl implements SaveProvider {
   private readonly userId: string | null;
+  private readonly includeSteam: boolean;
 
   constructor(options: SaveProviderOptions) {
     this.userId = options.userId ?? null;
+    this.includeSteam = options.includeSteam ?? true;
   }
 
   // -------------------------------------------------------------------------
   // save
   // -------------------------------------------------------------------------
 
-  async save(slotName: string, data: string): Promise<void> {
+  async save(
+    slotName: string,
+    data: string,
+    displayName?: string,
+    options?: SaveOptions,
+  ): Promise<void> {
     const slot = slotNameToNumber(slotName);
 
     // ---- Primary write: IndexedDB (must succeed before we return) ----------
@@ -254,7 +341,8 @@ class SaveProviderImpl implements SaveProvider {
       );
     }
 
-    const saveName = slotName === "autosave" ? "Autosave" : `Save ${slot}`;
+    const saveName =
+      displayName ?? (slotName === "autosave" ? "Autosave" : `Save ${slot}`);
     await saveGame(slot, saveName, state);
     // IndexedDB succeeded — from here on, secondary writes are fire-and-forget.
     // Note: db.saveGame() already mirrors the canonical SaveRecord envelope to
@@ -262,22 +350,28 @@ class SaveProviderImpl implements SaveProvider {
     // which may not include `savedAt` metadata expected by cloud reads.
 
     // ---- Secondary write: Supabase ----------------------------------------
+    let supabaseUpload: Promise<void> | null = null;
     if (supabase && this.userId) {
       markCloudSyncPending();
       const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
-      supabaseProvider
-        .uploadSave(slot, state)
+      supabaseUpload = supabaseProvider
+        .uploadSave(slot, state, saveName)
         .then(() => {
           markCloudSyncComplete();
         })
         .catch((err: unknown) => {
-          markCloudSyncFailed();
+          markCloudSyncFailed(err);
           console.warn(
             `SaveProvider: Supabase write failed for slot "${slotName}":`,
             err,
           );
           captureException(err);
+          if (options?.waitForCloud) throw err;
         });
+    }
+
+    if (options?.waitForCloud && supabaseUpload) {
+      await supabaseUpload;
     }
   }
 
@@ -307,6 +401,22 @@ class SaveProviderImpl implements SaveProvider {
     return best;
   }
 
+  async loadFromSource(
+    slotName: string,
+    source: SaveSource,
+  ): Promise<LoadResult | null> {
+    const slot = slotNameToNumber(slotName);
+
+    switch (source) {
+      case "local":
+        return this._loadFromLocal(slot);
+      case "steam":
+        return this._loadFromSteam(slot);
+      case "supabase":
+        return this._loadFromSupabase(slot);
+    }
+  }
+
   private async _loadFromLocal(slot: number): Promise<LoadResult | null> {
     try {
       const saves = await listSaves();
@@ -319,6 +429,7 @@ class SaveProviderImpl implements SaveProvider {
       return {
         data: JSON.stringify(state),
         source: "local",
+        name: meta.name,
         timestamp: meta.savedAt,
       };
     } catch (err) {
@@ -329,16 +440,21 @@ class SaveProviderImpl implements SaveProvider {
   }
 
   private async _loadFromSteam(slot: number): Promise<LoadResult | null> {
+    if (!this.includeSteam) return null;
     const steam = getSteam();
     if (!steam.isAvailable()) return null;
 
     try {
       const raw = await steam.getCloudSave(slot);
-      if (!raw) return null;
-      const timestamp = parseSteamTimestamp(raw);
-      if (timestamp === null) return null;
+      const record = parseSteamSaveRecord(raw);
+      if (!record) return null;
 
-      return { data: raw, source: "steam", timestamp };
+      return {
+        data: JSON.stringify(record.state),
+        source: "steam",
+        name: record.name,
+        timestamp: record.savedAt,
+      };
     } catch (err) {
       console.warn("SaveProvider: Steam Cloud load error:", err);
       captureException(err);
@@ -363,6 +479,7 @@ class SaveProviderImpl implements SaveProvider {
       return {
         data: JSON.stringify(state),
         source: "supabase",
+        name: meta.name,
         timestamp: meta.savedAt,
       };
     } catch (err) {
@@ -393,7 +510,7 @@ class SaveProviderImpl implements SaveProvider {
     }
 
     // Sort newest-first.
-    entries.sort((a, b) => b.timestamp - a.timestamp);
+    entries.sort((a, b) => b.savedAt - a.savedAt);
     return entries;
   }
 
@@ -401,12 +518,20 @@ class SaveProviderImpl implements SaveProvider {
     const records = await listSaves();
     return records.map((r) => ({
       slotName: slotNumberToName(r.slot),
+      slot: r.slot,
       source: "local" as const,
-      timestamp: r.savedAt,
+      name: r.name,
+      scoutName: r.scoutName,
+      season: r.season,
+      week: r.week,
+      specialization: r.specialization,
+      reputation: r.reputation,
+      savedAt: r.savedAt,
     }));
   }
 
   private async _listFromSteam(): Promise<SaveEntry[]> {
+    if (!this.includeSteam) return [];
     const steam = getSteam();
     if (!steam.isAvailable()) return [];
 
@@ -416,9 +541,20 @@ class SaveProviderImpl implements SaveProvider {
     const settled = await Promise.allSettled(
       KNOWN_SLOTS.map(async (slot) => {
         const raw = await steam.getCloudSave(slot);
-        const timestamp = parseSteamTimestamp(raw);
-        if (timestamp === null) return null;
-        return { slotName: slotNumberToName(slot), source: "steam" as const, timestamp };
+        const record = parseSteamSaveRecord(raw);
+        if (!record) return null;
+        return {
+          slotName: slotNumberToName(slot),
+          slot: record.slot,
+          source: "steam" as const,
+          name: record.name,
+          scoutName: record.scoutName,
+          season: record.season,
+          week: record.week,
+          specialization: record.specialization,
+          reputation: record.reputation,
+          savedAt: record.savedAt,
+        };
       }),
     );
 
@@ -437,8 +573,15 @@ class SaveProviderImpl implements SaveProvider {
     const metas = await supabaseProvider.listCloudSaves();
     return metas.map((m) => ({
       slotName: slotNumberToName(m.slot),
+      slot: m.slot,
       source: "supabase" as const,
-      timestamp: m.savedAt,
+      name: m.name,
+      scoutName: m.scoutName,
+      season: m.season,
+      week: m.week,
+      specialization: m.specialization,
+      reputation: m.reputation,
+      savedAt: m.savedAt,
     }));
   }
 
@@ -475,7 +618,7 @@ class SaveProviderImpl implements SaveProvider {
 
     // Check Steam Cloud first (preferred when available).
     const steam = getSteam();
-    if (steam.isAvailable()) {
+    if (this.includeSteam && steam.isAvailable()) {
       try {
         const raw = await steam.getCloudSave(slot);
         const steamTimestamp = parseSteamTimestamp(raw);
@@ -536,6 +679,24 @@ class SaveProviderImpl implements SaveProvider {
 
     return null;
   }
+
+  // -------------------------------------------------------------------------
+  // delete
+  // -------------------------------------------------------------------------
+
+  async delete(slotName: string): Promise<void> {
+    const slot = slotNameToNumber(slotName);
+    const tasks: Promise<void>[] = [];
+
+    tasks.push(deleteSave(slot));
+
+    if (supabase && this.userId) {
+      const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
+      tasks.push(supabaseProvider.deleteCloudSave(slot));
+    }
+
+    await Promise.all(tasks);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -545,24 +706,30 @@ class SaveProviderImpl implements SaveProvider {
 interface CloudSyncStatus {
   lastSync: Date | null;
   pending: boolean;
+  lastError: string | null;
 }
 
-let _cloudSyncStatus: CloudSyncStatus = { lastSync: null, pending: false };
+let _cloudSyncStatus: CloudSyncStatus = {
+  lastSync: null,
+  pending: false,
+  lastError: null,
+};
 
 export function getLastCloudSyncStatus(): CloudSyncStatus {
   return { ..._cloudSyncStatus };
 }
 
 function markCloudSyncPending(): void {
-  _cloudSyncStatus = { ..._cloudSyncStatus, pending: true };
+  _cloudSyncStatus = { ..._cloudSyncStatus, pending: true, lastError: null };
 }
 
 function markCloudSyncComplete(): void {
-  _cloudSyncStatus = { lastSync: new Date(), pending: false };
+  _cloudSyncStatus = { lastSync: new Date(), pending: false, lastError: null };
 }
 
-function markCloudSyncFailed(): void {
-  _cloudSyncStatus = { ..._cloudSyncStatus, pending: false };
+function markCloudSyncFailed(error?: unknown): void {
+  const message = error instanceof Error ? error.message : error ? String(error) : "Cloud sync failed";
+  _cloudSyncStatus = { ..._cloudSyncStatus, pending: false, lastError: message };
 }
 
 // ---------------------------------------------------------------------------

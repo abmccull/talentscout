@@ -12,6 +12,7 @@ import type {
   SeasonEventType,
   SeasonEventEffect,
   SeasonEventChoice,
+  Specialization,
 } from "./types";
 
 // =============================================================================
@@ -30,6 +31,7 @@ interface EventDefinition {
   description: string;
   effects?: SeasonEventEffect[];
   choices?: SeasonEventChoice[];
+  relevantSpecializations?: Specialization[];
 }
 
 /**
@@ -43,6 +45,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 1,
     endWeek: 2,
     description: "Pre-season preparations and friendly tournaments",
+    relevantSpecializations: ["firstTeam", "regional", "data"],
     effects: [
       { type: "scoutingCostModifier", value: -0.4, targetScope: "global" },
       { type: "attributeRevealBonus", value: 0.25, targetScope: "global" },
@@ -75,6 +78,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     startWeek: 1,
     endWeek: 8,
     description: "Summer transfer window is open — panic pricing in final weeks",
+    relevantSpecializations: ["firstTeam", "regional", "data"],
     effects: [
       { type: "transferPriceModifier", value: 0.0, targetScope: "global" },
     ],
@@ -261,6 +265,7 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
     endWeek: 23,
     description:
       "January transfer window — mid-season transfers, loan recalls, desperation deals",
+    relevantSpecializations: ["firstTeam", "regional", "data"],
     effects: [
       { type: "transferPriceModifier", value: -0.15, targetScope: "global" },
     ],
@@ -488,6 +493,9 @@ export function generateSeasonEvents(season: number): SeasonEvent[] {
           description: c.description,
           effects: [...c.effects],
         }))
+      : undefined,
+    relevantSpecializations: def.relevantSpecializations
+      ? [...def.relevantSpecializations]
       : undefined,
     resolved: false,
   }));

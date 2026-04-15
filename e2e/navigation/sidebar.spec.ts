@@ -2,10 +2,14 @@ import { test, expect } from "../fixtures";
 import {
   navItem,
   ALWAYS_VISIBLE_SCREENS,
+  WEEK2_SCREENS,
   WEEK3_SCREENS,
   TIER2_SCREENS,
+  TIER2_EQUIPMENT_SCREENS,
   TIER3_SCREENS,
+  TIER3_AGENCY,
   TIER4_SCREENS,
+  SEASON2_SCREENS,
 } from "../helpers/selectors";
 
 test.describe("Sidebar Navigation", () => {
@@ -25,22 +29,29 @@ test.describe("Sidebar Navigation", () => {
       }
     });
 
-    test("week-3 items are hidden at week 1", async ({ gamePage }) => {
+    test("week-2+ items are hidden at week 1", async ({ gamePage }) => {
+      for (const screen of WEEK2_SCREENS) {
+        const el = gamePage.page.locator(navItem(screen));
+        await expect(el).not.toBeVisible();
+      }
+    });
+
+    test("week-3+ items are hidden at week 1", async ({ gamePage }) => {
       for (const screen of WEEK3_SCREENS) {
         const el = gamePage.page.locator(navItem(screen));
         await expect(el).not.toBeVisible();
       }
     });
 
-    test("tier-2+ items are hidden at tier 1", async ({ gamePage }) => {
-      for (const screen of TIER2_SCREENS) {
+    test("tier-2+ items are hidden at tier 1 week 1", async ({ gamePage }) => {
+      for (const screen of [...TIER2_SCREENS, ...TIER2_EQUIPMENT_SCREENS]) {
         const el = gamePage.page.locator(navItem(screen));
         await expect(el).not.toBeVisible();
       }
     });
 
     test("tier-3+ items are hidden at tier 1", async ({ gamePage }) => {
-      for (const screen of TIER3_SCREENS) {
+      for (const screen of [...TIER3_SCREENS, ...TIER3_AGENCY]) {
         const el = gamePage.page.locator(navItem(screen));
         await expect(el).not.toBeVisible();
       }
@@ -62,7 +73,7 @@ test.describe("Sidebar Navigation", () => {
     });
   });
 
-  test.describe("Week 3+ visibility", () => {
+  test.describe("Week 5 visibility (tier 1)", () => {
     test.beforeEach(async ({ gamePage }) => {
       await gamePage.goto();
       await gamePage.injectState({
@@ -71,15 +82,22 @@ test.describe("Sidebar Navigation", () => {
       });
     });
 
-    test("week-3 items become visible after week 3", async ({ gamePage }) => {
+    test("week-2 items become visible", async ({ gamePage }) => {
+      for (const screen of WEEK2_SCREENS) {
+        const el = gamePage.page.locator(navItem(screen));
+        await expect(el).toBeVisible();
+      }
+    });
+
+    test("week-3 items become visible", async ({ gamePage }) => {
       for (const screen of WEEK3_SCREENS) {
         const el = gamePage.page.locator(navItem(screen));
         await expect(el).toBeVisible();
       }
     });
 
-    test("clicking week-3 items navigates correctly", async ({ gamePage }) => {
-      for (const screen of WEEK3_SCREENS) {
+    test("clicking week-unlocked items navigates correctly", async ({ gamePage }) => {
+      for (const screen of [...WEEK2_SCREENS, ...WEEK3_SCREENS]) {
         await gamePage.navigateTo(screen);
         const current = await gamePage.getCurrentScreen();
         expect(current).toBe(screen);
@@ -99,19 +117,33 @@ test.describe("Sidebar Navigation", () => {
         await expect(el).toBeVisible();
       }
     });
+
+    test("equipment/training appear at tier 2", async ({ gamePage }) => {
+      for (const screen of TIER2_EQUIPMENT_SCREENS) {
+        const el = gamePage.page.locator(navItem(screen));
+        await expect(el).toBeVisible();
+      }
+    });
   });
 
   test.describe("Tier 3 visibility", () => {
     test.beforeEach(async ({ gamePage }) => {
       await gamePage.goto();
       await gamePage.injectState({
-        currentWeek: 10,
-        scout: { careerTier: 3, primarySpecialization: "youth" },
+        currentWeek: 15,
+        scout: { careerTier: 3, primarySpecialization: "youth", reputation: 60 },
       });
     });
 
     test("tier-3 items appear at tier 3", async ({ gamePage }) => {
       for (const screen of TIER3_SCREENS) {
+        const el = gamePage.page.locator(navItem(screen));
+        await expect(el).toBeVisible();
+      }
+    });
+
+    test("agency appears at tier 3", async ({ gamePage }) => {
+      for (const screen of TIER3_AGENCY) {
         const el = gamePage.page.locator(navItem(screen));
         await expect(el).toBeVisible();
       }
@@ -131,12 +163,15 @@ test.describe("Sidebar Navigation", () => {
       }
     });
 
-    test("all nav items are clickable and navigate without errors", async ({ gamePage }) => {
+    test("all tier-gated nav items are clickable and navigate without errors", async ({ gamePage }) => {
       const allVisible = [
         ...ALWAYS_VISIBLE_SCREENS,
+        ...WEEK2_SCREENS,
         ...WEEK3_SCREENS,
         ...TIER2_SCREENS,
+        ...TIER2_EQUIPMENT_SCREENS,
         ...TIER3_SCREENS,
+        ...TIER3_AGENCY,
         ...TIER4_SCREENS,
       ];
 

@@ -18,6 +18,7 @@ import type {
   SessionPlayer,
   LensType,
 } from "@/engine/observation/types";
+import { MODE_FLAGGED_NOUN } from "@/engine/observation/types";
 
 // =============================================================================
 // RESULT TYPES
@@ -67,6 +68,32 @@ export interface ReflectionResult {
   /** A single narrative paragraph summarising the full session. */
   sessionSummary: string;
 }
+
+const ACTIVITY_LABELS: Partial<Record<ObservationSession["activityType"], string>> = {
+  attendMatch: "Attend Match",
+  watchVideo: "Watch Video",
+  networkMeeting: "Network Meeting",
+  trainingVisit: "Training Visit",
+  academyVisit: "Academy Visit",
+  youthTournament: "Youth Tournament",
+  schoolMatch: "School Match",
+  grassrootsTournament: "Grassroots Tournament",
+  streetFootball: "Street Football",
+  academyTrialDay: "Academy Trial Day",
+  youthFestival: "Youth Festival",
+  followUpSession: "Follow-Up Session",
+  parentCoachMeeting: "Parent/Coach Meeting",
+  reserveMatch: "Reserve Match",
+  scoutingMission: "Scouting Mission",
+  oppositionAnalysis: "Opposition Analysis",
+  agentShowcase: "Agent Showcase",
+  trialMatch: "Trial Match",
+  databaseQuery: "Database Query",
+  deepVideoAnalysis: "Deep Video Analysis",
+  statsBriefing: "Stats Briefing",
+  dataConference: "Data Conference",
+  analyticsTeamMeeting: "Analytics Team Meeting",
+};
 
 // =============================================================================
 // GUT FEELING NARRATIVE TEMPLATES
@@ -144,6 +171,51 @@ const GENERIC_PROMPTS = [
   "First impressions age. Come back to your notes in a week and see if they still hold.",
   "Consider which moments you'd be comfortable defending in a scout meeting. Start with those.",
   "You formed {hypothesisCount} hypothesis today. Each one is a reason to return.",
+];
+
+// ---- Investigation mode (meetings, conversations) ----
+
+const INVESTIGATION_PLAYER_PROMPTS = [
+  "You noticed {playerName}'s body language shift during the conversation. Worth following up on.",
+  "Something about the way {playerName} was described suggested hidden potential. Investigate further.",
+  "{playerName}'s name came up more than once — the people around them clearly have strong opinions.",
+  "The hesitation when discussing {playerName}'s weaknesses was telling. Dig deeper next time.",
+];
+
+const INVESTIGATION_ATMOSPHERE_PROMPTS = [
+  "The tone of the meeting was tense. Consider whether that coloured the information you received.",
+  "They were guarded today — the conversation yielded less than you hoped. A different approach may open doors.",
+  "The meeting felt one-sided. Next time, lead with something of value to balance the exchange.",
+  "Your counterpart was unusually forthcoming. Consider whether they had an agenda of their own.",
+];
+
+const INVESTIGATION_FOCUS_PROMPTS = [
+  "You asked a lot of questions but didn't leave much space for the other party. Consider a listening approach next time.",
+  "You spent most of the conversation on {playerName}. Don't forget to gather context about the wider situation.",
+  "Prioritise what's actionable — not everything from this conversation will age well.",
+  "You gathered {flagCount} key pieces of intel. Cross-reference them before committing to your file.",
+];
+
+// ---- Analysis mode (data, video) ----
+
+const ANALYSIS_PLAYER_PROMPTS = [
+  "{playerName}'s numbers stood out from the dataset. Worth a deeper statistical dive.",
+  "The data on {playerName} was inconsistent across metrics. That gap deserves investigation.",
+  "{playerName}'s trend line is moving in the right direction — but check the sample size.",
+  "The anomaly you flagged around {playerName} might be noise. Cross-reference with video before writing it up.",
+];
+
+const ANALYSIS_ATMOSPHERE_PROMPTS = [
+  "Data quality was patchy today — consider whether the source was reliable enough to base conclusions on.",
+  "Some of the metrics you reviewed had small sample sizes. Treat early signals with appropriate caution.",
+  "The dataset skewed towards a particular context. Factor that bias into your interpretation.",
+];
+
+const ANALYSIS_FOCUS_PROMPTS = [
+  "You focused heavily on statistical outliers. Don't forget to review the baseline numbers too.",
+  "You flagged {flagCount} data points. Prioritise the ones with the strongest signal-to-noise ratio.",
+  "Your analysis was broad today. Next session, consider narrowing the scope for deeper confidence.",
+  "Consider which data points you'd present to the manager. Lead with those in the report.",
 ];
 
 // =============================================================================
@@ -239,6 +311,135 @@ function interpolate(
   return template.replace(/\{(\w+)\}/g, (_, key: string) =>
     key in vars ? String(vars[key]) : `{${key}}`,
   );
+}
+
+function humanizeIdentifier(value: string): string {
+  return value
+    .replace(/([A-Z])/g, " $1")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function formatObservationActivityLabel(
+  activityType: ObservationSession["activityType"],
+): string {
+  return ACTIVITY_LABELS[activityType] ?? humanizeIdentifier(activityType);
+}
+
+function formatLensPhrase(lens?: LensType): string {
+  if (!lens || lens === "general") return "";
+  const article = /^[aeiou]/i.test(lens) ? "an" : "a";
+  return ` through ${article} ${lens} lens`;
+}
+
+function describeSessionOpening(
+  session: ObservationSession,
+  completedPhases: number,
+  totalPhases: number,
+): string {
+  const activityLabel = formatObservationActivityLabel(session.activityType).toLowerCase();
+  const completedAllPhases = completedPhases >= totalPhases;
+
+  if (session.mode === "investigation") {
+    return completedAllPhases
+      ? `You saw the ${activityLabel} through from start to finish.`
+      : `You got through ${completedPhases} of ${totalPhases} stages of the ${activityLabel}.`;
+  }
+
+  if (session.mode === "analysis") {
+    return completedAllPhases
+      ? `You worked through the ${activityLabel} from start to finish.`
+      : `You got through ${completedPhases} of ${totalPhases} stages of the ${activityLabel}.`;
+  }
+
+  return completedAllPhases
+    ? `You saw the ${activityLabel} all the way through.`
+    : `You got through ${completedPhases} of ${totalPhases} phases of the ${activityLabel}.`;
+}
+
+function describeAtmosphere(session: ObservationSession): string {
+  if (session.mode !== "fullObservation" || !session.venueAtmosphere) {
+    return "";
+  }
+
+  const chaos = session.venueAtmosphere.chaosLevel;
+  if (chaos <= 0.2) {
+    return "Conditions stayed calm enough for a clean read.";
+  }
+  if (chaos <= 0.45) {
+    return "Conditions were steady, though there was still a little background noise to work through.";
+  }
+  if (chaos <= 0.7) {
+    return "The atmosphere added enough noise to blur some of the finer details.";
+  }
+  return "The atmosphere was chaotic, which made instincts easier to spot than precise detail.";
+}
+
+function describePlayerFocus(session: ObservationSession): string {
+  if (session.mode === "investigation") {
+    const primary = session.players[0];
+    const speaker = session.players[1];
+    if (primary && speaker) {
+      return `Most of the conversation revolved around ${primary.name}, with ${speaker.name} shaping the read.`;
+    }
+    if (primary) {
+      return `Most of the conversation centered on ${primary.name}.`;
+    }
+    return "You spent the meeting gathering context rather than locking onto one clear subject.";
+  }
+
+  const focusedPlayers = session.players.filter((p) => p.focusedPhases.length > 0);
+  if (focusedPlayers.length === 0) {
+    return "You kept your focus broad rather than locking onto one player for long.";
+  }
+
+  if (focusedPlayers.length === 1) {
+    const player = focusedPlayers[0];
+    return `Most of your attention stayed on ${player.name}${formatLensPhrase(player.currentLens)}.`;
+  }
+
+  if (focusedPlayers.length === 2) {
+    const [primary, secondary] = focusedPlayers;
+    return `Most of your attention stayed on ${primary.name}${formatLensPhrase(primary.currentLens)}, with ${secondary.name}${formatLensPhrase(secondary.currentLens)} as a secondary focus.`;
+  }
+
+  const [primary, secondary, tertiary] = focusedPlayers;
+  return `Your focus moved between ${primary.name}${formatLensPhrase(primary.currentLens)}, ${secondary.name}${formatLensPhrase(secondary.currentLens)}, and ${tertiary.name}${formatLensPhrase(tertiary.currentLens)}, though ${primary.name} drew the longest look.`;
+}
+
+function describeSessionTakeaway(session: ObservationSession): string {
+  const flaggedCount = session.flaggedMoments.length;
+  const noun = MODE_FLAGGED_NOUN[session.mode];
+  const hypCount = session.hypotheses.length;
+  const parts: string[] = [];
+
+  if (flaggedCount === 0) {
+    parts.push(
+      session.mode === "investigation"
+        ? "The meeting gave you a little texture, but nothing concrete enough to bank as fresh intel."
+        : session.mode === "analysis"
+          ? "There were a few loose signals in the material, but nothing strong enough to flag."
+          : "Nothing quite sharpened into a flagged moment."
+    );
+  } else if (flaggedCount === 1) {
+    parts.push(`One ${noun.singular} stood out enough to mark down for follow-up.`);
+  } else {
+    parts.push(`${flaggedCount} ${noun.plural} stood out enough to flag for follow-up.`);
+  }
+
+  if (hypCount === 0) {
+    parts.push(
+      flaggedCount === 0
+        ? "It also stopped short of giving you a new hypothesis to chase."
+        : "It still wasn't enough to justify a new hypothesis."
+    );
+  } else if (hypCount === 1) {
+    parts.push("By the end, you had one new hypothesis worth tracking.");
+  } else {
+    parts.push(`By the end, you had ${hypCount} new hypotheses worth tracking.`);
+  }
+
+  return parts.join(" ");
 }
 
 // =============================================================================
@@ -493,25 +694,43 @@ export function generateReflectionPrompts(
   const prompts: string[] = [];
   const flaggedCount = session.flaggedMoments.length;
   const hypothesisCount = session.hypotheses.length;
-  const primaryPlayer = mostFocusedPlayer(session.players);
+  const primaryPlayer = mostFocusedPlayer(session.players)
+    ?? (session.players[0]?.focusedPhases.length === 0 ? session.players[0] : undefined);
+
+  // Select template banks based on session mode
+  const playerPrompts =
+    session.mode === "investigation" ? INVESTIGATION_PLAYER_PROMPTS
+    : session.mode === "analysis" ? ANALYSIS_PLAYER_PROMPTS
+    : PLAYER_FOCUSED_PROMPTS;
+
+  const atmospherePrompts =
+    session.mode === "investigation" ? INVESTIGATION_ATMOSPHERE_PROMPTS
+    : session.mode === "analysis" ? ANALYSIS_ATMOSPHERE_PROMPTS
+    : ATMOSPHERE_PROMPTS;
+
+  const focusPrompts =
+    session.mode === "investigation" ? INVESTIGATION_FOCUS_PROMPTS
+    : session.mode === "analysis" ? ANALYSIS_FOCUS_PROMPTS
+    : FOCUS_DISTRIBUTION_PROMPTS;
 
   // Always include one player-focused prompt if there is a primary subject.
   if (primaryPlayer) {
-    const template = rng.pick(PLAYER_FOCUSED_PROMPTS);
+    const template = rng.pick(playerPrompts);
     prompts.push(interpolate(template, { playerName: primaryPlayer.name }));
   }
 
-  // Include an atmosphere prompt if the venue was chaotic.
+  // Atmosphere prompt: lower chaos threshold for investigation (meetings are always somewhat tense)
   const chaos = session.venueAtmosphere?.chaosLevel ?? 0;
-  if (chaos > 0.5) {
-    prompts.push(rng.pick(ATMOSPHERE_PROMPTS));
+  const atmosphereThreshold = session.mode === "investigation" ? 0.2 : 0.5;
+  if (chaos > atmosphereThreshold || session.mode === "investigation") {
+    prompts.push(rng.pick(atmospherePrompts));
   }
 
-  // Include a focus distribution prompt.
-  const focusTemplate = rng.pick(FOCUS_DISTRIBUTION_PROMPTS);
+  // Include a focus/distribution prompt.
+  const focusTemplate = rng.pick(focusPrompts);
   prompts.push(
     interpolate(focusTemplate, {
-      playerName: primaryPlayer?.name ?? "your primary player",
+      playerName: primaryPlayer?.name ?? "your primary subject",
       flagCount: flaggedCount,
     }),
   );
@@ -537,56 +756,14 @@ export function generateReflectionPrompts(
 export function generateSessionSummary(session: ObservationSession): string {
   const totalPhases = session.phases.length;
   const completedPhases = session.currentPhaseIndex + 1;
-
-  const venueLabel = session.venueAtmosphere?.venueType ?? session.activityType;
-  const atmosphereDesc = session.venueAtmosphere?.description
-    ? ` ${session.venueAtmosphere.description}`
-    : "";
-
-  const focusedPlayers = session.players.filter(
-    (p) => p.focusedPhases.length > 0,
-  );
-
-  let playerFragment = "";
-  if (focusedPlayers.length === 0) {
-    playerFragment = "without concentrating your focus on any single player";
-  } else if (focusedPlayers.length === 1) {
-    const p = focusedPlayers[0];
-    const lensLabel = p.currentLens ? ` (${p.currentLens} lens)` : "";
-    playerFragment = `focusing primarily on ${p.name}${lensLabel}`;
-  } else {
-    const playerLabels = focusedPlayers.map((p) => {
-      const lensLabel = p.currentLens ? ` (${p.currentLens} lens)` : "";
-      return `${p.name}${lensLabel}`;
-    });
-    const last = playerLabels.pop()!;
-    playerFragment = `focusing primarily on ${playerLabels.join(", ")} and ${last}`;
-  }
-
-  const flaggedCount = session.flaggedMoments.length;
-  const momentFragment =
-    flaggedCount === 0
-      ? "no moments worth flagging"
-      : `${flaggedCount} ${flaggedCount === 1 ? "moment" : "moments"} worth flagging`;
-
-  const hypCount = session.hypotheses.length;
-  const hypFragment =
-    hypCount === 0
-      ? "no new hypotheses"
-      : `${hypCount} new ${hypCount === 1 ? "hypothesis" : "hypotheses"}`;
-
-  const chaosDesc =
-    session.venueAtmosphere && session.venueAtmosphere.chaosLevel > 0.6
-      ? " The chaotic atmosphere revealed raw instincts, but made precise readings difficult."
-      : session.venueAtmosphere && session.venueAtmosphere.chaosLevel < 0.3
-        ? " Calm conditions allowed for clean, reliable observations throughout."
-        : "";
-
-  return (
-    `After ${completedPhases} of ${totalPhases} phases observing a ${venueLabel},${atmosphereDesc} ` +
-    `you spent the session ${playerFragment}. ` +
-    `You identified ${momentFragment} and formed ${hypFragment}.${chaosDesc}`
-  );
+  return [
+    describeSessionOpening(session, completedPhases, totalPhases),
+    describeAtmosphere(session),
+    describePlayerFocus(session),
+    describeSessionTakeaway(session),
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 /**

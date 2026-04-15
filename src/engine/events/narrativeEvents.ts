@@ -21,6 +21,7 @@ import type {
   Specialization,
   ChainConsequence,
 } from "@/engine/core/types";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 import type { RNG } from "@/engine/rng";
 import {
   EVENT_TEMPLATES,
@@ -54,6 +55,7 @@ const EVENT_COOLDOWN_WEEKS = 2;
  * primary specialization.  Higher values make specialization more deterministic.
  */
 const SPECIALIZATION_WEIGHT_MULTIPLIER = 2;
+const DEFAULT_SEASON_LENGTH_WEEKS = 38;
 
 // =============================================================================
 // Specialization weight map
@@ -131,13 +133,25 @@ function generateMessageId(rng: RNG): string {
   return `msg_${id}`;
 }
 
+function getSeasonLengthFromState(state: GameState): number {
+  let maxWeek = DEFAULT_SEASON_LENGTH_WEEKS;
+  for (const fixture of Object.values(state.fixtures)) {
+    if (fixture.week > maxWeek) maxWeek = fixture.week;
+  }
+  return maxWeek;
+}
+
+function toAbsoluteWeek(state: GameState, season: number, week: number): number {
+  return season * getSeasonLengthFromState(state) + week;
+}
+
 /**
  * Return the week number of the most recently fired narrative event,
  * or -Infinity if no events have occurred yet.
  */
 function mostRecentEventWeek(state: GameState): number {
   if (state.narrativeEvents.length === 0) return -Infinity;
-  return Math.max(...state.narrativeEvents.map((e) => e.week));
+  return Math.max(...state.narrativeEvents.map((e) => toAbsoluteWeek(state, e.season, e.week)));
 }
 
 /**
@@ -240,7 +254,8 @@ export function generateWeeklyEvent(
 
   // Step 2 — cooldown check
   const lastWeek = mostRecentEventWeek(state);
-  if (state.currentWeek - lastWeek < EVENT_COOLDOWN_WEEKS) {
+  const currentAbsoluteWeek = toAbsoluteWeek(state, state.currentSeason, state.currentWeek);
+  if (currentAbsoluteWeek - lastWeek < EVENT_COOLDOWN_WEEKS) {
     return { event: null };
   }
 
@@ -278,10 +293,18 @@ export function generateWeeklyEvent(
     week: state.currentWeek,
     season: state.currentSeason,
     title: template.titleTemplate,
-    description: template.descriptionTemplate(ctx),
+    description: resolveCareerPathText(
+      template.descriptionTemplate(ctx),
+      state.scout.careerPath,
+    ),
     relatedIds,
     acknowledged: false,
-    choices: template.choices ? [...template.choices] : undefined,
+    choices: template.choices
+      ? template.choices.map((c) => ({
+          ...c,
+          label: resolveCareerPathText(c.label, state.scout.careerPath),
+        }))
+      : undefined,
     selectedChoice: undefined,
   };
 
@@ -716,10 +739,13 @@ export function resolveEventChoice(
             rng,
             state,
             event,
-            "You put the player's development ahead of your club's interests " +
-            "and recommended the environment where they'll genuinely thrive. " +
-            "The family was grateful. Your reputation as someone who truly " +
-            "cares about the players themselves has quietly grown.",
+            resolveCareerPathText(
+              "You put the player's development ahead of your club's interests " +
+              "and recommended the environment where they'll genuinely thrive. " +
+              "The family was grateful. Your reputation as someone who truly " +
+              "cares about the players themselves has quietly grown.",
+              state.scout.careerPath,
+            ),
           ),
         );
       } else {

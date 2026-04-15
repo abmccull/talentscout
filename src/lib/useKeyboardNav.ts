@@ -33,6 +33,48 @@ const KEY_TO_SCREEN: Record<string, GameScreen> = {
   "8": "settings",
 };
 
+const NON_GAME_SCREENS = new Set<GameScreen>([
+  "mainMenu",
+  "newGame",
+  "scenarioSelect",
+  "hallOfFame",
+  "demoEnd",
+]);
+
+const ESCAPE_TO_DASHBOARD_SCREENS = new Set<GameScreen>([
+  "calendar",
+  "playerDatabase",
+  "reportHistory",
+  "career",
+  "inbox",
+  "network",
+  "settings",
+  "playerProfile",
+  "reportWriter",
+  "npcManagement",
+  "internationalView",
+  "discoveries",
+  "leaderboard",
+  "analytics",
+  "fixtureBrowser",
+  "youthScouting",
+  "alumniDashboard",
+  "finances",
+  "handbook",
+  "equipment",
+  "agency",
+  "training",
+  "rivals",
+  "performance",
+  "achievements",
+  "reportComparison",
+  "freeAgents",
+  "seasonAwards",
+  "negotiation",
+  "weekSimulation",
+  "matchSummary",
+]);
+
 // ---------------------------------------------------------------------------
 // Helper — returns true when the focused element is an editable control
 // ---------------------------------------------------------------------------
@@ -43,6 +85,20 @@ function isTypingTarget(el: Element | null): boolean {
   if (tag === "input" || tag === "textarea" || tag === "select") return true;
   if ((el as HTMLElement).isContentEditable) return true;
   return false;
+}
+
+function hasOpenModal(): boolean {
+  return document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+}
+
+function isVisibleShortcutTarget(screen: GameScreen): boolean {
+  const target = document.querySelector<HTMLElement>(
+    `[data-tutorial-id="nav-${screen}"]`,
+  );
+  if (!target) return false;
+  if (target.hasAttribute("disabled")) return false;
+  if (target.getAttribute("aria-disabled") === "true") return false;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,10 +128,15 @@ export function useKeyboardNav(): void {
       // Never fire shortcuts while the user is typing
       if (isTypingTarget(document.activeElement)) return;
 
+      // Active modal dialogs own the keyboard until they close.
+      if (hasOpenModal()) return;
+
       // Ctrl+S / Cmd+S — navigate to settings (save management)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        const noGameScreens: GameScreen[] = ["mainMenu", "newGame"];
-        if (!noGameScreens.includes(currentScreen)) {
+        if (
+          !NON_GAME_SCREENS.has(currentScreen) &&
+          isVisibleShortcutTarget("settings")
+        ) {
           e.preventDefault();
           setScreen("settings");
         }
@@ -90,40 +151,7 @@ export function useKeyboardNav(): void {
       // ── Escape ────────────────────────────────────────────────────────────
       // Return to dashboard from any in-game screen
       if (key === "Escape") {
-        const inGameScreens: GameScreen[] = [
-          "calendar",
-          "playerDatabase",
-          "reportHistory",
-          "career",
-          "inbox",
-          "network",
-          "settings",
-          "playerProfile",
-          "reportWriter",
-          "npcManagement",
-          "internationalView",
-          "discoveries",
-          "leaderboard",
-          "analytics",
-          "fixtureBrowser",
-          "youthScouting",
-          "alumniDashboard",
-          "finances",
-          "handbook",
-          "equipment",
-          "agency",
-          "training",
-          "rivals",
-          "performance",
-          "achievements",
-          "reportComparison",
-          "freeAgents",
-          "seasonAwards",
-          "negotiation",
-          "weekSimulation",
-          "matchSummary",
-        ];
-        if (inGameScreens.includes(currentScreen)) {
+        if (ESCAPE_TO_DASHBOARD_SCREENS.has(currentScreen)) {
           e.preventDefault();
           setScreen("dashboard");
         }
@@ -132,11 +160,13 @@ export function useKeyboardNav(): void {
 
       // ── Number keys 1–8: jump to screen ───────────────────────────────────
       if (KEY_TO_SCREEN[key]) {
-        // Only activate when already in-game (not on main menu / new game)
-        const noGameScreens: GameScreen[] = ["mainMenu", "newGame"];
-        if (!noGameScreens.includes(currentScreen)) {
+        const targetScreen = KEY_TO_SCREEN[key];
+        if (
+          !NON_GAME_SCREENS.has(currentScreen) &&
+          isVisibleShortcutTarget(targetScreen)
+        ) {
           e.preventDefault();
-          setScreen(KEY_TO_SCREEN[key]);
+          setScreen(targetScreen);
         }
         return;
       }
@@ -155,8 +185,10 @@ export function useKeyboardNav(): void {
 
       // ── ? — open settings ──────────────────────────────────────────────────
       if (key === "?") {
-        const noGameScreens: GameScreen[] = ["mainMenu", "newGame"];
-        if (!noGameScreens.includes(currentScreen)) {
+        if (
+          !NON_GAME_SCREENS.has(currentScreen) &&
+          isVisibleShortcutTarget("settings")
+        ) {
           e.preventDefault();
           setScreen("settings");
         }
@@ -165,8 +197,7 @@ export function useKeyboardNav(): void {
 
       // ── F1 — open feedback modal ────────────────────────────────────────
       if (key === "F1") {
-        const noGameScreens: GameScreen[] = ["mainMenu", "newGame"];
-        if (!noGameScreens.includes(currentScreen) && _onFeedbackOpen) {
+        if (!NON_GAME_SCREENS.has(currentScreen) && _onFeedbackOpen) {
           e.preventDefault();
           _onFeedbackOpen();
         }

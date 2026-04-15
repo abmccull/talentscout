@@ -1,14 +1,15 @@
 import { test, expect } from "../fixtures";
 
 test.describe("Agency Screen", () => {
-  test("agency renders at tier 1", async ({ gamePage }) => {
+  test("agency renders at tier 3 (minimum required)", async ({ gamePage }) => {
     await gamePage.goto();
+    // Agency requires tier >= 3 OR week >= 12
     await gamePage.injectState({
-      currentWeek: 1,
-      scout: { careerTier: 1, primarySpecialization: "youth" },
+      currentWeek: 15,
+      scout: { careerTier: 3, primarySpecialization: "youth", reputation: 60 },
     });
 
-    await gamePage.navigateTo("agency");
+    await gamePage.setScreen("agency");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();

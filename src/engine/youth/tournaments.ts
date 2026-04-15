@@ -19,6 +19,7 @@ import type {
 } from "@/engine/core/types";
 import { STRUCTURED_YOUTH_TOURNAMENTS } from "@/engine/world/international";
 import { getScoutHomeCountry, getTravelCost } from "@/engine/world/travel";
+import { getContactCoverageCountry } from "@/engine/network/contacts";
 
 // =============================================================================
 // TOURNAMENT TEMPLATE
@@ -169,6 +170,17 @@ const COUNTRY_CONFEDERATION: Record<string, string> = {
   australia: "AFC", newzealand: "AFC",
 };
 
+function getParticipantCountriesForConfederation(confederation?: string): string[] {
+  const allCountries = Object.keys(COUNTRY_CONFEDERATION);
+  if (!confederation || confederation === "FIFA" || confederation === "Open") {
+    return allCountries;
+  }
+
+  return allCountries.filter(
+    (country) => COUNTRY_CONFEDERATION[country] === confederation,
+  );
+}
+
 /**
  * International templates built from STRUCTURED_YOUTH_TOURNAMENTS + continental.
  * These use the existing data as the source of truth for FIFA/UEFA/Toulon,
@@ -308,6 +320,7 @@ export function generateSeasonTournaments(
       id,
       name: tmpl.name,
       country: tmpl.country,
+      participantCountries: [tmpl.country],
       category: "named",
       prestige: tmpl.prestige,
       startWeek: tmpl.startWeek,
@@ -345,6 +358,7 @@ export function generateSeasonTournaments(
       id,
       name: tmpl.name,
       country: hostCountry,
+      participantCountries: getParticipantCountriesForConfederation(tmpl.confederation),
       category: "international",
       prestige: "international",
       startWeek: tmpl.startWeek,
@@ -447,6 +461,7 @@ export function generateGrassrootsTournament(
     id,
     name,
     country,
+    participantCountries: [country],
     subRegionId,
     category: "grassroots",
     prestige: rng.next() < 0.3 ? "regional" : "local",
@@ -480,6 +495,8 @@ export function processContactTournamentTip(
   season: number,
 ): TournamentEvent | null {
   if (!TIP_CONTACT_TYPES.has(contact.type)) return null;
+  const contactCountry = getContactCoverageCountry(contact);
+  if (!contactCountry) return null;
 
   const chance = Math.min(0.50, 0.15 + contact.relationship * 0.003);
   if (rng.next() >= chance) return null;
@@ -488,7 +505,7 @@ export function processContactTournamentTip(
   const undiscovered = Object.values(tournaments).filter(
     t => !t.discovered && !t.attended &&
     t.startWeek >= currentWeek && t.startWeek <= currentWeek + 6 &&
-    (contact.country ? t.country.toLowerCase() === contact.country.toLowerCase() : true),
+    t.country.toLowerCase() === contactCountry,
   );
 
   if (undiscovered.length > 0 && rng.next() < 0.6) {
@@ -503,7 +520,6 @@ export function processContactTournamentTip(
   }
 
   // 40%: generate a new grassroots event
-  const contactCountry = contact.country?.toLowerCase() ?? "england";
   const matchingRegions = Object.values(subRegions).filter(
     sr => sr.country.toLowerCase() === contactCountry,
   );
@@ -569,6 +585,7 @@ export function createAgencyShowcase(
     id,
     name: "Agency Youth Showcase",
     country: scoutCountry,
+    participantCountries: [scoutCountry],
     category: "agencyShowcase",
     prestige: "national",
     startWeek,

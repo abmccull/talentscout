@@ -23,6 +23,7 @@ import type {
   InboxMessage,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -307,6 +308,85 @@ const REGIONS = [
   "Australia", "New Zealand",
 ];
 
+const COUNTRY_DISPLAY_NAMES: Record<string, string> = {
+  england: "England",
+  spain: "Spain",
+  germany: "Germany",
+  france: "France",
+  italy: "Italy",
+  portugal: "Portugal",
+  netherlands: "Netherlands",
+  brazil: "Brazil",
+  argentina: "Argentina",
+  belgium: "Belgium",
+  usa: "USA",
+  mexico: "Mexico",
+  canada: "Canada",
+  nigeria: "Nigeria",
+  ghana: "Ghana",
+  ivorycoast: "Ivory Coast",
+  egypt: "Egypt",
+  southafrica: "South Africa",
+  senegal: "Senegal",
+  cameroon: "Cameroon",
+  japan: "Japan",
+  southkorea: "South Korea",
+  saudiarabia: "Saudi Arabia",
+  china: "China",
+  australia: "Australia",
+  newzealand: "New Zealand",
+};
+
+const COUNTRY_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(COUNTRY_DISPLAY_NAMES).flatMap(([key, label]) => [
+    [key, key],
+    [label.toLowerCase(), key],
+    [label.toLowerCase().replace(/[\s-]+/g, ""), key],
+  ]),
+);
+
+function normalizeCountryKey(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+
+  const lower = trimmed.toLowerCase();
+  return COUNTRY_ALIASES[lower] ?? COUNTRY_ALIASES[lower.replace(/[\s-]+/g, "")];
+}
+
+function resolveContactLocation(value?: string): { country?: string; region?: string } {
+  const country = normalizeCountryKey(value);
+  if (country) {
+    return {
+      country,
+      region: COUNTRY_DISPLAY_NAMES[country] ?? value?.trim(),
+    };
+  }
+
+  const region = value?.trim();
+  return region ? { region } : {};
+}
+
+export function getCountryDisplayName(country?: string): string {
+  if (!country) return "Unknown";
+
+  const key = normalizeCountryKey(country);
+  if (key) return COUNTRY_DISPLAY_NAMES[key] ?? country;
+
+  const humanized = country.replace(/([A-Z])/g, " $1").trim();
+  return humanized.charAt(0).toUpperCase() + humanized.slice(1);
+}
+
+export function getContactCoverageCountry(
+  contact: Pick<Contact, "country" | "region">,
+  fallbackCountry?: string,
+): string | undefined {
+  return (
+    normalizeCountryKey(contact.country)
+    ?? normalizeCountryKey(contact.region)
+    ?? normalizeCountryKey(fallbackCountry)
+  );
+}
+
 const ORGANIZATIONS: Record<ContactType, string[]> = {
   agent: [
     "Independent", "Base Soccer", "Stellar Group", "CAA Sport", "Unique Sports Group",
@@ -368,7 +448,8 @@ function generateContact(
   const id = `contact_${type}_${rng.nextInt(100000, 999999)}`;
   const name = generateContactName(type, rng);
   const organization = rng.pick(ORGANIZATIONS[type]);
-  const region = country ?? rng.pick(REGIONS);
+  const location = resolveContactLocation(country);
+  const region = location.region ?? rng.pick(REGIONS);
 
   // Reliability: 0–100 (scouts and club staff tend to be more reliable than journalists)
   const reliabilityBase: Record<ContactType, [number, number]> = {
@@ -396,7 +477,7 @@ function generateContact(
     reliability,
     knownPlayerIds: [],
     region,
-    country,
+    country: location.country,
     // F3: Contact Network Depth defaults
     trustLevel: relationship,
     loyalty: rng.nextInt(30, 70),
@@ -430,39 +511,40 @@ export function generateStartingContacts(
 
   const spec = scout.primarySpecialization;
   const tier = scout.careerTier;
+  const homeCountry = getScoutHomeCountry(scout);
 
   const startingRelationship = 30; // Neutral-positive starting point
 
   switch (spec) {
     case "youth":
       // 1 club-staff member (from an academy) + 1 agent + 1 academy coach
-      contacts.push(generateContact(rng, "clubStaff",    startingRelationship));
-      contacts.push(generateContact(rng, "agent",        startingRelationship));
-      contacts.push(generateContact(rng, "academyCoach", startingRelationship));
+      contacts.push(generateContact(rng, "clubStaff",    startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "agent",        startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "academyCoach", startingRelationship, homeCountry));
       // Youth specialists also get 2 home-country grassroots contacts
-      contacts.push(generateContact(rng, "grassrootsOrganizer", startingRelationship));
-      contacts.push(generateContact(rng, "schoolCoach",         startingRelationship));
+      contacts.push(generateContact(rng, "grassrootsOrganizer", startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "schoolCoach",         startingRelationship, homeCountry));
       break;
 
     case "firstTeam":
       // 1 agent + 1 journalist + 1 sporting director
-      contacts.push(generateContact(rng, "agent",            startingRelationship));
-      contacts.push(generateContact(rng, "journalist",       startingRelationship));
-      contacts.push(generateContact(rng, "sportingDirector", startingRelationship));
+      contacts.push(generateContact(rng, "agent",            startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "journalist",       startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "sportingDirector", startingRelationship, homeCountry));
       break;
 
     case "regional":
       // 2 regional scouts + 1 agent
-      contacts.push(generateContact(rng, "scout", startingRelationship + 5));
-      contacts.push(generateContact(rng, "scout", startingRelationship));
-      contacts.push(generateContact(rng, "agent", startingRelationship));
+      contacts.push(generateContact(rng, "scout", startingRelationship + 5, homeCountry));
+      contacts.push(generateContact(rng, "scout", startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "agent", startingRelationship, homeCountry));
       break;
 
     case "data":
       // Data scouts have journalist contacts who share statistical stories
-      contacts.push(generateContact(rng, "journalist", startingRelationship));
-      contacts.push(generateContact(rng, "journalist", startingRelationship));
-      contacts.push(generateContact(rng, "agent", startingRelationship));
+      contacts.push(generateContact(rng, "journalist", startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "journalist", startingRelationship, homeCountry));
+      contacts.push(generateContact(rng, "agent", startingRelationship, homeCountry));
       break;
   }
 
@@ -471,7 +553,7 @@ export function generateStartingContacts(
   if (tier >= 3 && (spec === "regional" || spec === "data")) {
     if (rng.chance(0.5)) {
       const bonusType = rng.chance(0.5) ? "academyCoach" : "sportingDirector";
-      contacts.push(generateContact(rng, bonusType, startingRelationship));
+      contacts.push(generateContact(rng, bonusType, startingRelationship, homeCountry));
     }
   }
 
@@ -488,6 +570,8 @@ export function generateStartingContacts(
  * - RNG (non-deterministic encounters add texture to gameplay)
  *
  * Returns a ContactMeetingResult describing what happened.
+ * A scheduled background meeting should always move the relationship forward
+ * at least a little, even for weak networkers.
  */
 export function meetContact(
   rng: RNG,
@@ -498,9 +582,9 @@ export function meetContact(
   const networkingAttr = scout.attributes.networking;
   const networkingBonus = Math.round((networkingAttr - 10) * 0.5); // -2.5 to +5
 
-  // Base relationship change: positive but modest (0–8 per meeting)
+  // Base relationship change: positive but modest (at least +1 per meeting)
   const baseChange = rng.nextInt(2, 8);
-  const relationshipChange = clamp(baseChange + networkingBonus, -3, 15);
+  const relationshipChange = clamp(baseChange + networkingBonus, 1, 15);
 
   // Intel: only if relationship is high enough (≥ 40)
   const intel: HiddenIntel[] = [];
@@ -533,7 +617,7 @@ export function meetContact(
   }
 
   // F3: Trust delta from this meeting (similar to relationship change but for trust)
-  const trustDelta = clamp(Math.round(baseChange * 0.7 + networkingBonus * 0.5), 0, 10);
+  const trustDelta = clamp(Math.round(baseChange * 0.7 + networkingBonus * 0.5), 1, 10);
 
   // F3: Record the interaction for history
   const interaction: ContactInteraction = {
@@ -670,6 +754,7 @@ export function generateContactForType(
 ): Contact {
   const id = `contact_${type}_${rng.nextInt(100000, 999999)}`;
   const name = generateContactName(type, rng);
+  const location = resolveContactLocation(region);
 
   const reliabilityBase: Record<ContactType, [number, number]> = {
     agent:                [40, 75],
@@ -695,7 +780,8 @@ export function generateContactForType(
     relationship: 20, // Cold-start: lower than the organic scout-facing default
     reliability,
     knownPlayerIds: [],
-    region: region ?? rng.pick(REGIONS),
+    region: location.region ?? region ?? rng.pick(REGIONS),
+    country: location.country,
     // F3: Contact Network Depth defaults
     trustLevel: 20,
     loyalty: rng.nextInt(30, 70),
@@ -733,7 +819,7 @@ export function processContactIntroduction(
   const introType = rng.pick(youthContactTypes);
 
   // The introduced contact is from the same country/region as the existing contact
-  const country = contact.country ?? contact.region;
+  const country = getContactCoverageCountry(contact) ?? contact.region;
 
   return generateContact(rng, introType, 20, country); // warm start at 20 relationship
 }

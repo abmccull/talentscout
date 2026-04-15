@@ -38,9 +38,11 @@ import type {
 
 interface SaveSlotMetaRow {
   slot: number;
+  name: string;
   scout_name: string;
   season: number;
   week: number;
+  specialization: string;
   reputation: number | string; // numeric comes back as string in some drivers
   saved_at: number | string;   // bigint comes back as string
 }
@@ -58,10 +60,29 @@ interface SaveSlotTimestampRow {
 // ---------------------------------------------------------------------------
 
 export class SupabaseCloudSaveProvider implements CloudSaveProvider {
-  private readonly userId: string;
+  private readonly expectedUserId: string | null;
 
-  constructor(userId: string) {
-    this.userId = userId;
+  constructor(userId?: string | null) {
+    this.expectedUserId = userId ?? null;
+  }
+
+  private async requireAuthenticatedUserId(): Promise<string> {
+    if (!supabase) throw new Error("Cloud features are not configured");
+
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      throw new Error("Cloud save failed: not authenticated");
+    }
+
+    if (this.expectedUserId && user.id !== this.expectedUserId) {
+      throw new Error("Cloud save session changed. Please retry.");
+    }
+
+    return user.id;
   }
 
   /**
@@ -81,13 +102,14 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * duplicate.  `saved_at` is set to Date.now() on every write so conflict
    * detection downstream always reflects the most recent upload time.
    */
-  async uploadSave(slot: number, state: GameState): Promise<void> {
+  async uploadSave(slot: number, state: GameState, name?: string): Promise<void> {
     if (!supabase) throw new Error("Cloud features are not configured");
+    const userId = await this.requireAuthenticatedUserId();
     const { error } = await supabase.from("save_slots").upsert(
       {
-        user_id: this.userId,
+        user_id: userId,
         slot,
-        name: slot === 0 ? "Autosave" : `Save ${slot}`,
+        name: name ?? (slot === 0 ? "Autosave" : `Save ${slot}`),
         scout_name: `${state.scout.firstName} ${state.scout.lastName}`,
         season: state.currentSeason,
         week: state.currentWeek,
@@ -108,10 +130,11 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    */
   async downloadSave(slot: number): Promise<GameState | null> {
     if (!supabase) return null;
+    const userId = await this.requireAuthenticatedUserId();
     const { data, error } = await supabase
       .from("save_slots")
       .select("state")
-      .eq("user_id", this.userId)
+      .eq("user_id", userId)
       .eq("slot", slot)
       .maybeSingle<SaveSlotStateRow>();
 
@@ -127,19 +150,22 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    */
   async listCloudSaves(): Promise<CloudSaveSlot[]> {
     if (!supabase) return [];
+    const userId = await this.requireAuthenticatedUserId();
     const { data, error } = await supabase
       .from("save_slots")
-      .select("slot, scout_name, season, week, reputation, saved_at")
-      .eq("user_id", this.userId)
+      .select("slot, name, scout_name, season, week, specialization, reputation, saved_at")
+      .eq("user_id", userId)
       .order("saved_at", { ascending: false });
 
     if (error) throw new Error(`List saves failed: ${error.message}`);
 
     return (data ?? []).map((row: SaveSlotMetaRow) => ({
       slot: row.slot,
+      name: row.name,
       scoutName: row.scout_name,
       season: row.season,
       week: row.week,
+      specialization: row.specialization,
       reputation: Number(row.reputation),
       savedAt: Number(row.saved_at),
     }));
@@ -152,10 +178,11 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    */
   async deleteCloudSave(slot: number): Promise<void> {
     if (!supabase) return;
+    const userId = await this.requireAuthenticatedUserId();
     const { error } = await supabase
       .from("save_slots")
       .delete()
-      .eq("user_id", this.userId)
+      .eq("user_id", userId)
       .eq("slot", slot);
 
     if (error) throw new Error(`Delete save failed: ${error.message}`);
@@ -167,25 +194,27 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * version, meaning another device has written to this slot more recently.
    *
    * Returns `{ hasConflict: false }` when the slot has no cloud save yet or
-   * the local version is at least as recent as the cloud version.
+   * the timestamps are close enough to be treated as the same save.
    */
   async checkConflict(
     slot: number,
     localTimestamp: number,
   ): Promise<ConflictResult> {
     if (!supabase) return { hasConflict: false };
+    const userId = await this.requireAuthenticatedUserId();
     const { data, error } = await supabase
       .from("save_slots")
       .select("saved_at")
-      .eq("user_id", this.userId)
+      .eq("user_id", userId)
       .eq("slot", slot)
       .maybeSingle<SaveSlotTimestampRow>();
 
     if (error || !data) return { hasConflict: false };
 
     const cloudTimestamp = Number(data.saved_at);
+    const timestampDelta = Math.abs(cloudTimestamp - localTimestamp);
 
-    if (cloudTimestamp > localTimestamp) {
+    if (timestampDelta > 60_000) {
       return { hasConflict: true, cloudTimestamp, localTimestamp };
     }
 

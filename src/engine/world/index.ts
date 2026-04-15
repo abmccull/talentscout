@@ -51,11 +51,11 @@ export {
 } from './international';
 
 export type {
-  InternationalAssignment,
   YouthTournament,
   YouthTournamentResult,
   InternationalWeekResult,
 } from './international';
+export type { InternationalAssignment } from '@/engine/core/types';
 
 export {
   processRelegationPromotion,

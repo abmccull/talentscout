@@ -121,6 +121,10 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function normaliseSeasonWeek(week: number, seasonLength = 38): number {
+  return ((week - 1) % seasonLength + seasonLength) % seasonLength + 1;
+}
+
 /**
  * Derive the scout's home country from their country reputations.
  *
@@ -342,11 +346,13 @@ export function bookTravel(
   duration: number,
 ): Scout {
   const homeCountry = getScoutHomeCountry(scout);
+  const normalisedDepartureWeek = normaliseSeasonWeek(departureWeek);
+  const normalisedReturnWeek = normaliseSeasonWeek(departureWeek + duration);
 
   const booking: TravelBooking = {
     destinationCountry,
-    departureWeek,
-    returnWeek: departureWeek + duration,
+    departureWeek: normalisedDepartureWeek,
+    returnWeek: normalisedReturnWeek,
     cost: getTravelCost(homeCountry, destinationCountry),
     isAbroad: false,
   };
@@ -370,7 +376,11 @@ export function bookTravel(
 export function isScoutAbroad(scout: Scout, currentWeek: number): boolean {
   if (!scout.travelBooking) return false;
   const { departureWeek, returnWeek } = scout.travelBooking;
-  return currentWeek >= departureWeek && currentWeek < returnWeek;
+  if (departureWeek === returnWeek) return false;
+  if (departureWeek < returnWeek) {
+    return currentWeek >= departureWeek && currentWeek < returnWeek;
+  }
+  return currentWeek >= departureWeek || currentWeek < returnWeek;
 }
 
 /**

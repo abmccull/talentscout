@@ -388,7 +388,7 @@ export function NegotiationScreen() {
                   </Badge>
                 </div>
                 <p className="text-[11px] text-zinc-500 italic">
-                  {getPersonalityDescription(negotiation.clubPersonality)}
+                  {getPersonalityDescription(negotiation.clubPersonality, gameState?.scout.careerPath)}
                 </p>
               </CardContent>
             </Card>

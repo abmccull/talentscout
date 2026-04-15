@@ -9,20 +9,121 @@ import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStore";
 import type { LensType, ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import type { InsightActionId, InsightState, InsightActionResult } from "@/engine/insight/types";
-import type { ActivityType } from "@/engine/core/types";
-import type { AttributeDomain } from "@/engine/core/types";
+import type {
+  ActivityType,
+  AttributeDomain,
+  GutFeeling,
+  ReflectionJournalEntry,
+  ReflectionHypothesisRecord,
+} from "@/engine/core/types";
 import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, addHypothesis, completeSession, getSessionResult } from "@/engine/observation/session";
 import { populateFullObservationPhases } from "@/engine/observation/fullObservation";
 import { populateAnalysisPhases } from "@/engine/observation/analysis";
 import { populateInvestigationPhases } from "@/engine/observation/investigation";
 import { populateQuickInteractionPhases } from "@/engine/observation/quickInteraction";
-import { generateReflection } from "@/engine/observation/reflection";
+import { generateReflection, type ReflectionResult } from "@/engine/observation/reflection";
 import { createInsightState, accumulateInsight, calculateCapacity, canUseInsight, spendInsight } from "@/engine/insight/insight";
 import { executeInsightAction } from "@/engine/insight/actions";
 import { createRNG } from "@/engine/rng";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import { ALL_PERKS } from "@/engine/specializations/perks";
 import { calculateSystemFit } from "@/engine/firstTeam";
+
+function serializeReflectionHypotheses(
+  session: ObservationSession,
+): ReflectionHypothesisRecord[] {
+  return session.hypotheses.map((hypothesis) => ({
+    id: hypothesis.id,
+    playerId: hypothesis.playerId,
+    text: hypothesis.text,
+    domain: hypothesis.domain,
+    state: hypothesis.state,
+    createdAtWeek: hypothesis.createdAtWeek,
+  }));
+}
+
+function persistGutFeeling(
+  session: ObservationSession,
+  reflectionResult: ReflectionResult | null,
+  existingGutFeelings: GutFeeling[],
+): { gutFeelings: GutFeeling[]; gutFeelingId?: string } {
+  const candidate = reflectionResult?.gutFeelingCandidate;
+  if (!candidate) {
+    return { gutFeelings: existingGutFeelings };
+  }
+
+  const existing = existingGutFeelings.find((gutFeeling) =>
+    gutFeeling.playerId === candidate.playerId &&
+    gutFeeling.narrative === candidate.narrative &&
+    gutFeeling.triggerDomain === candidate.domain &&
+    gutFeeling.week === session.startedAtWeek &&
+    gutFeeling.season === session.startedAtSeason,
+  );
+
+  if (existing) {
+    return {
+      gutFeelings: existingGutFeelings,
+      gutFeelingId: existing.id,
+    };
+  }
+
+  const persistedGutFeeling: GutFeeling = {
+    id: crypto.randomUUID(),
+    playerId: candidate.playerId,
+    narrative: candidate.narrative,
+    triggerDomain: candidate.domain,
+    reliability: candidate.reliability,
+    week: session.startedAtWeek,
+    season: session.startedAtSeason,
+  };
+
+  return {
+    gutFeelings: [...existingGutFeelings, persistedGutFeeling],
+    gutFeelingId: persistedGutFeeling.id,
+  };
+}
+
+function buildReflectionJournalEntry(
+  session: ObservationSession,
+  reflectionResult: ReflectionResult | null,
+  gutFeelingId: string | undefined,
+): ReflectionJournalEntry | null {
+  const notes = session.reflectionNotes
+    .map((note) => note.trim())
+    .filter((note) => note.length > 0);
+  const hypotheses = serializeReflectionHypotheses(session);
+  const summary = reflectionResult?.sessionSummary?.trim();
+  const gutFeelingPlayerId = reflectionResult?.gutFeelingCandidate?.playerId;
+  const playerIds = Array.from(new Set([
+    ...session.focusTokens.allocations.map((allocation) => allocation.playerId),
+    ...session.flaggedMoments.map((flaggedMoment) => flaggedMoment.moment.playerId),
+    ...hypotheses.map((hypothesis) => hypothesis.playerId),
+    ...(gutFeelingPlayerId ? [gutFeelingPlayerId] : []),
+  ]));
+
+  if (
+    notes.length === 0 &&
+    hypotheses.length === 0 &&
+    !gutFeelingId &&
+    !summary
+  ) {
+    return null;
+  }
+
+  return {
+    id: session.id,
+    sessionId: session.id,
+    activityType: session.activityType,
+    week: session.startedAtWeek,
+    season: session.startedAtSeason,
+    playerIds,
+    notes,
+    hypotheses,
+    gutFeelingId,
+    summary: summary || undefined,
+    createdAt: Date.now(),
+  };
+}
 
 export function createObservationActions(get: GetState, set: SetState) {
   return {
@@ -71,6 +172,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         seed: `${gameState.seed}-session-${seedKey}`,
         week: gameState.currentWeek,
         season: gameState.currentSeason,
+        careerPath: gameState.scout.careerPath as "club" | "independent" | undefined,
       };
 
       let session = createSession(config, rng);
@@ -175,7 +277,7 @@ export function createObservationActions(get: GetState, set: SetState) {
     },
 
     endObservationSession: () => {
-      const { activeSession, gameState, sessionReturnScreen } = get();
+      const { activeSession, gameState, sessionReturnScreen, lastReflectionResult } = get();
       if (!activeSession || !gameState) return;
 
       const completed = completeSession(activeSession);
@@ -195,6 +297,21 @@ export function createObservationActions(get: GetState, set: SetState) {
       const fallbackReturnScreen: GameScreen =
         get().weekSimulation ? "weekSimulation" : "dashboard";
       const nextScreen = sessionReturnScreen ?? fallbackReturnScreen;
+      const {
+        gutFeelings: persistedGutFeelings,
+        gutFeelingId,
+      } = persistGutFeeling(completed, lastReflectionResult as ReflectionResult | null, gameState.gutFeelings);
+      const reflectionJournalEntry = buildReflectionJournalEntry(
+        completed,
+        lastReflectionResult as ReflectionResult | null,
+        gutFeelingId,
+      );
+      const reflectionJournal = reflectionJournalEntry
+        ? {
+            ...gameState.reflectionJournal,
+            [reflectionJournalEntry.id]: reflectionJournalEntry,
+          }
+        : gameState.reflectionJournal;
 
       set({
         activeSession: null,
@@ -208,6 +325,8 @@ export function createObservationActions(get: GetState, set: SetState) {
             insightState: updatedInsight,
           },
           completedInteractiveSessions: [...completedSessions],
+          gutFeelings: persistedGutFeelings,
+          reflectionJournal,
         },
       });
     },
@@ -297,6 +416,69 @@ export function createObservationActions(get: GetState, set: SetState) {
 
     dismissInsightResult: () => {
       set({ lastInsightResult: null });
+    },
+
+    selectDialogueOption: (nodeId: string, optionId: string) => {
+      const { activeSession } = get();
+      if (!activeSession || activeSession.state !== "active") return;
+
+      const phase = activeSession.phases[activeSession.currentPhaseIndex];
+      if (!phase?.dialogueNodes) return;
+
+      const node = phase.dialogueNodes.find((n) => n.id === nodeId);
+      if (!node) return;
+      const option = node.options.find((o) => o.id === optionId);
+      if (!option) return;
+
+      // Apply insight bonus from the dialogue consequence
+      const insightBonus = option.outcome.insightBonus ?? 0;
+
+      set({
+        activeSession: {
+          ...activeSession,
+          insightPointsEarned: activeSession.insightPointsEarned + insightBonus,
+        },
+      });
+    },
+
+    selectDataPoint: (pointId: string) => {
+      const { activeSession } = get();
+      if (!activeSession || activeSession.state !== "active") return;
+
+      const phase = activeSession.phases[activeSession.currentPhaseIndex];
+      if (!phase?.dataPoints) return;
+
+      const point = phase.dataPoints.find((p) => p.id === pointId);
+      if (!point) return;
+
+      // Selecting a highlighted data point earns bonus insight
+      const insightBonus = point.isHighlighted ? 3 : 1;
+
+      set({
+        activeSession: {
+          ...activeSession,
+          insightPointsEarned: activeSession.insightPointsEarned + insightBonus,
+        },
+      });
+    },
+
+    selectStrategicChoice: (choiceId: string) => {
+      const { activeSession } = get();
+      if (!activeSession || activeSession.state !== "active") return;
+
+      const phase = activeSession.phases[activeSession.currentPhaseIndex];
+      if (!phase?.choices) return;
+
+      const choice = phase.choices.find((c) => c.id === choiceId);
+      if (!choice) return;
+
+      // Strategic choices always earn a flat insight bonus
+      set({
+        activeSession: {
+          ...activeSession,
+          insightPointsEarned: activeSession.insightPointsEarned + 5,
+        },
+      });
     },
   };
 }

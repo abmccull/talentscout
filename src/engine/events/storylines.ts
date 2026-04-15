@@ -20,6 +20,7 @@
  */
 
 import type { GameState, NarrativeEvent, NarrativeEventType, StorylineState } from "../core/types";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // RE-EXPORT StorylineState as Storyline for external consumers
@@ -747,7 +748,7 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
         relatedIds: ctx.playerId ? [ctx.playerId as string] : [],
         acknowledged: false,
         choices: [
-          { label: "Recommend to your club", effect: "intlRecommendOwn" },
+          { label: resolveCareerPathText("Recommend to your club", state.scout.careerPath), effect: "intlRecommendOwn" },
           { label: "Recommend to a bigger club", effect: "intlRecommendBig" },
           { label: "Hold off for now", effect: "intlHoldOff" },
         ],

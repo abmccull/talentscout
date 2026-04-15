@@ -10,6 +10,10 @@ import type { InboxMessage, Contact, HiddenIntel } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { getHiddenAttributeIntel } from "@/engine/network/contacts";
 import { updateRichPresence } from "@/lib/steam/richPresence";
+import {
+  getResolvedContactIntel,
+  resolvePlayerEntity,
+} from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
 
 export function createNavigationActions(get: GetState, set: SetState) {
@@ -49,11 +53,26 @@ export function createNavigationActions(get: GetState, set: SetState) {
     dismissBatchSummary: () => set({ batchSummary: null }),
 
     setSelectedScenario: (id: string | null) => set({ selectedScenarioId: id }),
-    dismissScenarioOutcome: () => set({ scenarioOutcome: null }),
+    dismissScenarioOutcome: () => set({
+      scenarioOutcome: null,
+      scenarioOutcomeScenarioId: null,
+      scenarioProgress: null,
+    }),
     dismissCelebration: () => set({ pendingCelebration: null }),
+    dismissSeasonAwards: () => {
+      const { gameState } = get();
+      if (!gameState?.seasonAwardsData) return;
+      set({
+        gameState: {
+          ...gameState,
+          seasonAwardsData: undefined,
+        },
+      });
+    },
 
     setPendingFixtureClubFilter: (filter: string | null) => set({ pendingFixtureClubFilter: filter }),
     setPendingCalendarActivity: (pending: { type: string; targetId: string; label: string } | null) => set({ pendingCalendarActivity: pending }),
+    setPendingInternationalCountry: (country: string | null) => set({ pendingInternationalCountry: country }),
 
     addToComparison: (reportId: string) => {
       const current = get().comparisonReportIds;
@@ -73,10 +92,11 @@ export function createNavigationActions(get: GetState, set: SetState) {
     tapNetworkForPlayer: (playerId: string) => {
       const state = get();
       if (!state.gameState) return null;
-      const player = state.gameState.players[playerId]
-        ?? state.gameState.unsignedYouth[playerId]?.player
-        ?? null;
-      if (!player) return null;
+      const resolvedPlayer = resolvePlayerEntity(state.gameState, playerId);
+      if (!resolvedPlayer) return null;
+
+      const player = resolvedPlayer.player;
+      const canonicalPlayerId = resolvedPlayer.playerId;
 
       const contacts = Object.values(state.gameState.contacts);
       if (contacts.length === 0) return null;
@@ -86,7 +106,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
       );
 
       let updatedIntel = { ...(state.gameState.contactIntel ?? {}) };
-      const existingIntel = updatedIntel[playerId] ?? [];
+      const existingIntel = getResolvedContactIntel(state.gameState, canonicalPlayerId);
       let found = false;
       let usedContactId: string | null = null;
       let usedContactName: string | undefined;
@@ -95,14 +115,14 @@ export function createNavigationActions(get: GetState, set: SetState) {
       const messages: InboxMessage[] = [];
 
       for (const contact of contacts) {
-        const intel = getHiddenAttributeIntel(rng, contact, playerId, player);
+        const intel = getHiddenAttributeIntel(rng, contact, canonicalPlayerId, player);
         if (intel) {
           // Avoid duplicate intel for the same attribute
           const alreadyHas = existingIntel.some((e) => e.attribute === intel.attribute);
           if (!alreadyHas) {
             updatedIntel = {
               ...updatedIntel,
-              [playerId]: [...(updatedIntel[playerId] ?? []), intel],
+              [canonicalPlayerId]: [...(updatedIntel[canonicalPlayerId] ?? []), intel],
             };
             found = true;
             usedContactId = contact.id;
@@ -110,7 +130,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
             resultTitle = `Network Intel: ${player.firstName} ${player.lastName}`;
             resultBody = `Your contact ${contact.name} shared intel on ${player.firstName} ${player.lastName}: "${intel.hint}"`;
             messages.push({
-              id: `tapnet-${playerId}-${contact.id}-w${state.gameState.currentWeek}`,
+              id: `tapnet-${canonicalPlayerId}-${contact.id}-w${state.gameState.currentWeek}`,
               week: state.gameState.currentWeek,
               season: state.gameState.currentSeason,
               type: "feedback" as const,
@@ -118,7 +138,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
               body: resultBody,
               read: true, // Mark read — user sees it inline
               actionRequired: false,
-              relatedId: playerId,
+              relatedId: canonicalPlayerId,
               relatedEntityType: "player" as const,
             });
             break; // One intel per tap
@@ -130,7 +150,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
         resultTitle = `Network Intel: ${player.firstName} ${player.lastName}`;
         resultBody = `You reached out to your contacts about ${player.firstName} ${player.lastName}, but nobody had new information to share right now. Try again after building stronger relationships.`;
         messages.push({
-          id: `tapnet-noresult-${playerId}-w${state.gameState.currentWeek}`,
+          id: `tapnet-noresult-${canonicalPlayerId}-w${state.gameState.currentWeek}`,
           week: state.gameState.currentWeek,
           season: state.gameState.currentSeason,
           type: "feedback" as const,
@@ -172,11 +192,12 @@ export function createNavigationActions(get: GetState, set: SetState) {
     toggleWatchlist: (playerId: string) => {
       const { gameState } = get();
       if (!gameState) return;
-      const idx = gameState.watchlist.indexOf(playerId);
+      const canonicalPlayerId = resolvePlayerEntity(gameState, playerId)?.playerId ?? playerId;
+      const idx = gameState.watchlist.indexOf(canonicalPlayerId);
       const next =
         idx >= 0
-          ? gameState.watchlist.filter((id) => id !== playerId)
-          : [...gameState.watchlist, playerId];
+          ? gameState.watchlist.filter((id) => id !== canonicalPlayerId)
+          : [...gameState.watchlist, canonicalPlayerId];
       set({ gameState: { ...gameState, watchlist: next } });
     },
   };

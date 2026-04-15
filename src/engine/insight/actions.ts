@@ -7,7 +7,8 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { Player, Scout, Contact, Specialization } from "@/engine/core/types";
+import type { CareerPath, Player, Scout, Contact, Specialization } from "@/engine/core/types";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 import {
   HIDDEN_ATTRIBUTES,
   TECHNICAL_ATTRIBUTES,
@@ -432,6 +433,7 @@ function selectNarrative(
   actionId: InsightActionId,
   spec: Specialization,
   rng: RNG,
+  careerPath?: CareerPath,
 ): string {
   const actionNarratives = INSIGHT_NARRATIVES[actionId];
   const specLines = actionNarratives[spec];
@@ -440,7 +442,7 @@ function selectNarrative(
   // Blend the specialization flavor prefix into the selected line naturally.
   // If the line already starts with a strong opener, append the flavor as a
   // suffix clause rather than a prefix to avoid awkward repetition.
-  return `${flavor} — ${line}`;
+  return resolveCareerPathText(`${flavor} — ${line}`, careerPath);
 }
 
 // =============================================================================
@@ -672,7 +674,7 @@ function clarityOfVision(
   fizzled: boolean,
 ): InsightActionResult {
   const { session, targetPlayerId, players, scout } = context;
-  const narrative = selectNarrative("clarityOfVision", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("clarityOfVision", scout.primarySpecialization, rng, scout.careerPath);
 
   if (!targetPlayerId) {
     return {
@@ -738,7 +740,7 @@ function hiddenNature(
   fizzled: boolean,
 ): InsightActionResult {
   const { targetPlayerId, players, scout } = context;
-  const narrative = selectNarrative("hiddenNature", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("hiddenNature", scout.primarySpecialization, rng, scout.careerPath);
 
   if (!targetPlayerId) {
     return {
@@ -785,7 +787,7 @@ function theVerdict(
   fizzled: boolean,
 ): InsightActionResult {
   const { scout } = context;
-  const narrative = selectNarrative("theVerdict", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("theVerdict", scout.primarySpecialization, rng, scout.careerPath);
   const bonus = fizzled ? 18 : 30;
 
   const outcomeNote = fizzled
@@ -806,7 +808,7 @@ function secondLook(
   fizzled: boolean,
 ): InsightActionResult {
   const { session, players, scout } = context;
-  const narrative = selectNarrative("secondLook", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("secondLook", scout.primarySpecialization, rng, scout.careerPath);
 
   const unfocusedByQuality = getUnfocusedPlayersByQuality(session);
   if (unfocusedByQuality.length === 0) {
@@ -879,7 +881,7 @@ function diamondInTheRough(
   fizzled: boolean,
 ): InsightActionResult {
   const { session, players, scout } = context;
-  const narrative = selectNarrative("diamondInTheRough", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("diamondInTheRough", scout.primarySpecialization, rng, scout.careerPath);
 
   // Scan every player visible in the session
   const sessionPlayerIds = session.players.map((sp) => sp.playerId);
@@ -961,7 +963,7 @@ function generationalWhisper(
   fizzled: boolean,
 ): InsightActionResult {
   const { session, players, scout } = context;
-  const narrative = selectNarrative("generationalWhisper", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("generationalWhisper", scout.primarySpecialization, rng, scout.careerPath);
 
   // Identify the highest-PA player in the session
   const sessionPlayerIds = session.players.map((sp) => sp.playerId);
@@ -1007,7 +1009,7 @@ function perfectFit(
   fizzled: boolean,
 ): InsightActionResult {
   const { targetPlayerId, players, scout } = context;
-  const narrative = selectNarrative("perfectFit", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("perfectFit", scout.primarySpecialization, rng, scout.careerPath);
 
   if (!targetPlayerId) {
     return {
@@ -1056,7 +1058,7 @@ function pressureTest(
   fizzled: boolean,
 ): InsightActionResult {
   const { targetPlayerId, players, scout } = context;
-  const narrative = selectNarrative("pressureTest", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("pressureTest", scout.primarySpecialization, rng, scout.careerPath);
 
   if (!targetPlayerId) {
     return {
@@ -1123,7 +1125,7 @@ function networkPulse(
   fizzled: boolean,
 ): InsightActionResult {
   const { contacts, session, scout } = context;
-  const narrative = selectNarrative("networkPulse", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("networkPulse", scout.primarySpecialization, rng, scout.careerPath);
 
   if (!contacts || Object.keys(contacts).length === 0) {
     return {
@@ -1203,7 +1205,7 @@ function territoryMastery(
   fizzled: boolean,
 ): InsightActionResult {
   const { scout, subRegionId } = context;
-  const narrative = selectNarrative("territoryMastery", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("territoryMastery", scout.primarySpecialization, rng, scout.careerPath);
 
   const bonus = fizzled ? 0.06 : 0.10;
   const regionLabel = subRegionId ?? "current sub-region";
@@ -1226,7 +1228,7 @@ function algorithmicEpiphany(
   fizzled: boolean,
 ): InsightActionResult {
   const { scout } = context;
-  const narrative = selectNarrative("algorithmicEpiphany", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("algorithmicEpiphany", scout.primarySpecialization, rng, scout.careerPath);
 
   const bonus = fizzled ? 0.6 : 1.0;
 
@@ -1248,7 +1250,7 @@ function marketBlindSpot(
   fizzled: boolean,
 ): InsightActionResult {
   const { leaguePlayers, scout } = context;
-  const narrative = selectNarrative("marketBlindSpot", scout.primarySpecialization, rng);
+  const narrative = selectNarrative("marketBlindSpot", scout.primarySpecialization, rng, scout.careerPath);
 
   if (!leaguePlayers || leaguePlayers.length === 0) {
     return {

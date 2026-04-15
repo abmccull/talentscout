@@ -36,6 +36,7 @@ import {
   withdrawListing,
   acceptBid,
   declineBid,
+  acceptExclusiveUpgrade,
   acceptRetainer,
   cancelRetainer,
   upgradeOffice,
@@ -190,6 +191,30 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const updated = declineBid(gameState.finances, listing.id, bidId);
       const updatedInbox = gameState.inbox.map((m) =>
         m.relatedId === bidId ? { ...m, read: true, actionRequired: false } : m,
+      );
+      set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+    },
+
+    acceptExclusiveUpgradeBid: (bidId: string) => {
+      const { gameState } = get();
+      if (!gameState || !gameState.finances) return;
+      const listing = gameState.finances.reportListings.find((l) =>
+        l.bids.some((b) => b.id === bidId),
+      );
+      if (!listing) return;
+      const updated = acceptExclusiveUpgrade(
+        gameState.finances, listing.id, bidId,
+        gameState.currentWeek, gameState.currentSeason,
+      );
+      // Mark related inbox messages as read for all declined bids + this accepted bid
+      const declinedBidIds = listing.bids
+        .filter((b) => b.status === "pending" && b.id !== bidId)
+        .map((b) => b.id);
+      const affectedIds = new Set([bidId, ...declinedBidIds]);
+      const updatedInbox = gameState.inbox.map((m) =>
+        m.relatedId && affectedIds.has(m.relatedId)
+          ? { ...m, read: true, actionRequired: false }
+          : m,
       );
       set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
     },

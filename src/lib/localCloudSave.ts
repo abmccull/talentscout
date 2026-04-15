@@ -27,9 +27,9 @@ export class LocalCloudSaveProvider implements CloudSaveProvider {
    * The save name defaults to "Manual Save" for numbered slots, matching the
    * convention used elsewhere in the codebase.  Slot 0 is the autosave slot.
    */
-  async uploadSave(slot: number, state: GameState): Promise<void> {
-    const name = slot === 0 ? "Autosave" : "Manual Save";
-    await saveGame(slot, name, state);
+  async uploadSave(slot: number, state: GameState, name?: string): Promise<void> {
+    const saveName = name ?? (slot === 0 ? "Autosave" : "Manual Save");
+    await saveGame(slot, saveName, state);
   }
 
   /**
@@ -48,9 +48,11 @@ export class LocalCloudSaveProvider implements CloudSaveProvider {
     const records = await listSaves();
     return records.map((record) => ({
       slot: record.slot,
+      name: record.name,
       scoutName: record.scoutName,
       season: record.season,
       week: record.week,
+      specialization: record.specialization,
       reputation: record.reputation,
       savedAt: record.savedAt,
     }));

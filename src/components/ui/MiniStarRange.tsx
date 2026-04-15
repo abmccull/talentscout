@@ -19,7 +19,11 @@ interface MiniStarRangeProps {
 
 export function MiniStarRange({ perceived, mode }: MiniStarRangeProps) {
   if (!perceived) {
-    return <span className="text-zinc-600">?</span>;
+    return (
+      <span className="inline-flex h-3 w-[60px] items-center text-[10px] text-zinc-600">
+        ?
+      </span>
+    );
   }
 
   const low = mode === "ca" ? perceived.caLow : perceived.paLow;
@@ -41,7 +45,7 @@ function FMStars({ low, high }: FMStarsProps) {
   const hi = Math.max(lo, Math.min(5, high));
 
   return (
-    <span className="inline-flex items-center gap-px text-[10px]">
+    <span className="inline-grid w-[60px] grid-cols-5 gap-px text-[10px] leading-none">
       {Array.from({ length: 5 }, (_, i) => {
         const pos = i + 1;
         // Determine what this star position represents
@@ -49,7 +53,11 @@ function FMStars({ low, high }: FMStarsProps) {
         const whiteFill = getFill(hi, pos);
 
         if (goldFill === "full") {
-          return <span key={i} className="text-amber-400">★</span>;
+          return (
+            <span key={i} className="inline-flex h-[10px] w-[10px] items-center justify-center text-amber-400">
+              ★
+            </span>
+          );
         }
         if (goldFill === "half") {
           // Half gold + check if the other half is white
@@ -60,13 +68,21 @@ function FMStars({ low, high }: FMStarsProps) {
         }
         // No gold — check white
         if (whiteFill === "full") {
-          return <span key={i} className="text-zinc-400">★</span>;
+          return (
+            <span key={i} className="inline-flex h-[10px] w-[10px] items-center justify-center text-zinc-400">
+              ★
+            </span>
+          );
         }
         if (whiteFill === "half") {
           return <HalfStar key={i} leftClass="text-zinc-400" rightClass="text-zinc-700" />;
         }
         // Empty
-        return <span key={i} className="text-zinc-700">★</span>;
+        return (
+          <span key={i} className="inline-flex h-[10px] w-[10px] items-center justify-center text-zinc-700">
+            ★
+          </span>
+        );
       })}
     </span>
   );
@@ -82,11 +98,13 @@ function getFill(rating: number, starPos: number): "full" | "half" | "empty" {
 /** Render a star split into two halves with different colors. */
 function HalfStar({ leftClass, rightClass }: { leftClass: string; rightClass: string }) {
   return (
-    <span className="relative inline-block w-[10px] h-[10px]">
+    <span className="relative inline-block h-[10px] w-[10px]">
       {/* Right half (background) */}
-      <span className={`absolute inset-0 ${rightClass}`}>★</span>
+      <span className={`absolute inset-0 inline-flex items-center justify-center ${rightClass}`}>★</span>
       {/* Left half (foreground, clipped) */}
-      <span className={`absolute inset-0 overflow-hidden w-[5px] ${leftClass}`}>★</span>
+      <span className={`absolute inset-0 w-[5px] overflow-hidden ${leftClass}`}>
+        <span className="inline-flex h-[10px] w-[10px] items-center justify-center">★</span>
+      </span>
     </span>
   );
 }

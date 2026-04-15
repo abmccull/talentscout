@@ -23,8 +23,10 @@ import type {
   RivalBid,
   ClubNegotiationPersonality,
   InboxMessage,
+  CareerPath,
 } from "@/engine/core/types";
 import { evaluateTransferWillingness } from "@/engine/players/personalityEffects";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // CONSTANTS
@@ -788,17 +790,24 @@ export function getRecommendedOffer(negotiation: TransferNegotiation): number {
  */
 export function getPersonalityDescription(
   personality: ClubNegotiationPersonality,
+  careerPath?: CareerPath,
 ): string {
+  let text: string;
   switch (personality) {
     case "hardball":
-      return "This club drives a hard bargain. Expect high demands and limited patience.";
+      text = "This club drives a hard bargain. Expect high demands and limited patience.";
+      break;
     case "reasonable":
-      return "This club is open to fair negotiation. A reasonable offer should lead to productive talks.";
+      text = "This club is open to fair negotiation. A reasonable offer should lead to productive talks.";
+      break;
     case "desperate":
-      return "This club appears eager to sell. You may be able to negotiate a favorable deal.";
+      text = "This club appears eager to sell. You may be able to negotiate a favorable deal.";
+      break;
     case "prestige":
-      return "This is a prestigious club. They expect top offers but may be swayed by your club's reputation.";
+      text = "This is a prestigious club. They expect top offers but may be swayed by your club's reputation.";
+      break;
   }
+  return resolveCareerPathText(text, careerPath);
 }
 
 function formatCurrency(amount: number): string {

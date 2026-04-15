@@ -24,13 +24,14 @@ import {
   List,
 } from "lucide-react";
 import type { UnsignedYouth, SubRegion, Observation, TournamentEvent } from "@/engine/core/types";
-import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { getPerceivedAbility, type PerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { MiniStarRange } from "@/components/ui/MiniStarRange";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Tab = "unsigned" | "subRegions" | "venues" | "tournaments";
-type SortOption = "buzz" | "age" | "country" | "visibility" | "pipeline";
+type SortOption = "buzz" | "age" | "country" | "visibility" | "pipeline" | "ca" | "pa";
 type PipelineStage = "discovered" | "observed" | "reported" | "placed";
 type ViewMode = "card" | "list";
 
@@ -147,9 +148,19 @@ function buzzColor(buzz: number): string {
   return "bg-zinc-600";
 }
 
+function getPerceivedSortValue(
+  perceived: PerceivedAbility | null | undefined,
+  mode: "ca" | "pa",
+): number {
+  if (!perceived) return -1;
+  if (mode === "ca") return (perceived.caLow + perceived.caHigh) / 2;
+  return (perceived.paLow + perceived.paHigh) / 2;
+}
+
 function sortYouth(
   list: UnsignedYouth[],
   sort: SortOption,
+  perceivedMap: Map<string, PerceivedAbility | null>,
   scoutId?: string,
   reportedIds?: Set<string>,
 ): UnsignedYouth[] {
@@ -163,6 +174,18 @@ function sortYouth(
       return copy.sort((a, b) => a.country.localeCompare(b.country));
     case "visibility":
       return copy.sort((a, b) => b.visibility - a.visibility);
+    case "ca":
+      return copy.sort(
+        (a, b) =>
+          getPerceivedSortValue(perceivedMap.get(b.player.id), "ca") -
+          getPerceivedSortValue(perceivedMap.get(a.player.id), "ca"),
+      );
+    case "pa":
+      return copy.sort(
+        (a, b) =>
+          getPerceivedSortValue(perceivedMap.get(b.player.id), "pa") -
+          getPerceivedSortValue(perceivedMap.get(a.player.id), "pa"),
+      );
     case "pipeline": {
       const stageOrder = (y: UnsignedYouth): number => {
         if (y.placed) return 3;
@@ -181,6 +204,8 @@ const SORT_LABELS: Record<SortOption, string> = {
   country: "By Country",
   visibility: "By Visibility",
   pipeline: "By Pipeline",
+  ca: "By CA",
+  pa: "By PA",
 };
 
 function getPipelineStage(
@@ -217,6 +242,7 @@ const PIPELINE_LABELS: Record<PipelineStage, string> = {
 
 interface YouthCardProps {
   youth: UnsignedYouth;
+  perceived: PerceivedAbility | null;
   scoutId: string;
   reportedIds: Set<string>;
   /** Number of observation sessions this scout has logged for this player. */
@@ -224,7 +250,14 @@ interface YouthCardProps {
   onClick: () => void;
 }
 
-function YouthCard({ youth, scoutId, reportedIds, observationCount, onClick }: YouthCardProps) {
+function YouthCard({
+  youth,
+  perceived,
+  scoutId,
+  reportedIds,
+  observationCount,
+  onClick,
+}: YouthCardProps) {
   const isObserved = youth.discoveredBy.includes(scoutId);
   const stage = getPipelineStage(youth, scoutId, reportedIds, observationCount);
   const scoutCount = youth.discoveredBy.length;
@@ -264,6 +297,27 @@ function YouthCard({ youth, scoutId, reportedIds, observationCount, onClick }: Y
         <div className="shrink-0 text-right">
           <p className="text-xs text-zinc-500">Scouts</p>
           <p className="text-sm font-bold text-white">{scoutCount}</p>
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[10px]">
+            <span className="text-zinc-500">CA</span>
+            <span className="text-zinc-600">
+              {perceived ? `${getPerceivedSortValue(perceived, "ca").toFixed(1)}★` : "Unknown"}
+            </span>
+          </div>
+          <MiniStarRange perceived={perceived} mode="ca" />
+        </div>
+        <div>
+          <div className="mb-1 flex items-center justify-between text-[10px]">
+            <span className="text-zinc-500">PA</span>
+            <span className="text-zinc-600">
+              {perceived ? `${getPerceivedSortValue(perceived, "pa").toFixed(1)}★` : "Unknown"}
+            </span>
+          </div>
+          <MiniStarRange perceived={perceived} mode="pa" />
         </div>
       </div>
 
@@ -441,14 +495,14 @@ function UnsignedYouthTab({
 
   // Build perceived ability map for all filtered youth
   const perceivedMap = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof getPerceivedAbility>>();
+    const map = new Map<string, PerceivedAbility | null>();
     for (const y of filtered) {
       map.set(y.player.id, getPerceivedAbility(observations, y.player.id));
     }
     return map;
   }, [filtered, observations]);
 
-  const sorted = sortYouth(filtered, sort, scoutId, reportedIds);
+  const sorted = sortYouth(filtered, sort, perceivedMap, scoutId, reportedIds);
 
   // For list view, use table sort; for card view, use button sort
   const displayList = viewMode === "list"
@@ -463,13 +517,13 @@ function UnsignedYouthTab({
           case "ca": {
             const aP = perceivedMap.get(a.player.id);
             const bP = perceivedMap.get(b.player.id);
-            cmp = ((aP ? (aP.caLow + aP.caHigh) / 2 : 0)) - ((bP ? (bP.caLow + bP.caHigh) / 2 : 0));
+            cmp = getPerceivedSortValue(aP, "ca") - getPerceivedSortValue(bP, "ca");
             break;
           }
           case "pa": {
             const aP = perceivedMap.get(a.player.id);
             const bP = perceivedMap.get(b.player.id);
-            cmp = ((aP ? (aP.paLow + aP.paHigh) / 2 : 0)) - ((bP ? (bP.paLow + bP.paHigh) / 2 : 0));
+            cmp = getPerceivedSortValue(aP, "pa") - getPerceivedSortValue(bP, "pa");
             break;
           }
           case "buzz": cmp = a.buzzLevel - b.buzzLevel; break;
@@ -668,7 +722,10 @@ function UnsignedYouthTab({
                     ["visibility", "Vis"],
                     ["pipeline", "Stage"],
                   ] as [YouthSortKey, string][]).map(([key, label]) => (
-                    <th key={key} className="px-4 py-3 font-medium">
+                    <th
+                      key={key}
+                      className={`px-4 py-3 font-medium ${key === "ca" || key === "pa" ? "w-[104px]" : ""}`}
+                    >
                       <button
                         onClick={() => handleTableSort(key)}
                         className="flex items-center gap-1 hover:text-white transition cursor-pointer"
@@ -718,10 +775,10 @@ function UnsignedYouthTab({
                       <td className="px-4 py-3 text-zinc-400">{y.player.age}</td>
                       <td className="px-4 py-3 text-zinc-400">{y.player.nationality}</td>
                       <td className="px-4 py-3 text-zinc-400">{formatValue(y.player.marketValue)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <MiniStarRange perceived={perceivedMap.get(y.player.id) ?? null} mode="ca" />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <MiniStarRange perceived={perceivedMap.get(y.player.id) ?? null} mode="pa" />
                       </td>
                       <td className="px-4 py-3">
@@ -761,6 +818,7 @@ function UnsignedYouthTab({
             <YouthCard
               key={y.id}
               youth={y}
+              perceived={perceivedMap.get(y.player.id) ?? null}
               scoutId={scoutId}
               reportedIds={reportedIds}
               observationCount={observationCountByPlayer.get(y.player.id) ?? 0}
@@ -989,7 +1047,7 @@ export function YouthScoutingScreen() {
   const observedPlayerIds = new Set(
     Object.values(gameState.observations).map((o) => o.playerId),
   );
-  const scoutHomeCountry = scout.nationality?.toLowerCase() ?? "";
+  const scoutHomeCountry = getScoutHomeCountry(scout);
 
   // Visibility filter: only show youth the scout has knowledge of
   const youthList = allYouthList.filter((y) => {

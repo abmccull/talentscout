@@ -15,7 +15,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { ObservationSession, Hypothesis, SessionFlaggedMoment } from "@/engine/observation/types";
-import type { ReflectionResult } from "@/engine/observation/reflection";
+import { MODE_FLAGGED_LABEL } from "@/engine/observation/types";
+import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/observation/reflection";
 
 // =============================================================================
 // PROP TYPES
@@ -233,7 +234,7 @@ export function ReflectionScreen({
           <h1 className="text-xl font-bold text-white">Post-Observation Reflection</h1>
           <p className="text-sm text-zinc-400">
             W{session.startedAtWeek} &middot; S{session.startedAtSeason} &middot;{" "}
-            <span className="capitalize">{session.activityType}</span>
+            <span>{formatObservationActivityLabel(session.activityType)}</span>
           </p>
         </div>
       </header>
@@ -406,7 +407,7 @@ export function ReflectionScreen({
             id="flagged-moments-heading"
             className="text-xs font-semibold uppercase tracking-widest text-zinc-500"
           >
-            Moments You Flagged
+            {MODE_FLAGGED_LABEL[session.mode]}
           </h2>
           {session.flaggedMoments.length > 0 && (
             <span className="ml-auto text-xs font-semibold text-zinc-400">
@@ -490,6 +491,9 @@ export function ReflectionScreen({
           Complete Reflection
           <ChevronRight size={16} className="ml-2" aria-hidden="true" />
         </Button>
+        <p className="mt-2 text-center text-[11px] text-zinc-500">
+          Saved notes, accepted hypotheses, and gut-feeling output carry forward after completion and can be reviewed later in Report History.
+        </p>
       </div>
     </div>
   );

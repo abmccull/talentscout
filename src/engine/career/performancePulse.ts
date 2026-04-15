@@ -156,6 +156,8 @@ export function applyPulseConsequences(
     body: `${gradeMessages[pulse.grade]}\n\nReports: ${pulse.reportsSubmitted} | Quality: ${pulse.reportQualityAvg}% | Accuracy: ${pulse.accuracyRate}% | Trend: ${pulse.trend}${repChange !== 0 ? `\nReputation ${repChange > 0 ? "+" : ""}${repChange}` : ""}`,
     read: false,
     actionRequired: pulse.grade === "D" || pulse.grade === "F",
+    relatedId: "performance",
+    relatedEntityType: "tool" as const,
   });
 
   // Check for two F grades in the same season (termination warning)
@@ -173,6 +175,8 @@ export function applyPulseConsequences(
       body: "You have received two F grades this season. Your club is seriously considering terminating your contract. Dramatic improvement is needed immediately.",
       read: false,
       actionRequired: true,
+      relatedId: "performance",
+      relatedEntityType: "tool" as const,
     });
   }
 

@@ -404,7 +404,7 @@ interface InvestigationContentProps {
   relationshipScore?: number;
 }
 
-function InvestigationContent({ nodes, onDialogueChoice, relationshipScore = 0 }: InvestigationContentProps) {
+export function InvestigationContent({ nodes, onDialogueChoice, relationshipScore = 0 }: InvestigationContentProps) {
   const [selectedChoices, setSelectedChoices] = useState<Record<string, string>>({});
 
   const handleSelect = (nodeId: string, optionId: string) => {
@@ -508,7 +508,7 @@ interface AnalysisContentProps {
   onDataPointSelect?: (pointId: string) => void;
 }
 
-function AnalysisContent({ dataPoints, onDataPointSelect }: AnalysisContentProps) {
+export function AnalysisContent({ dataPoints, onDataPointSelect }: AnalysisContentProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const handleSelect = (id: string) => {
@@ -578,7 +578,7 @@ interface QuickInteractionContentProps {
   onStrategicChoice?: (choiceId: string) => void;
 }
 
-function QuickInteractionContent({ choices, onStrategicChoice }: QuickInteractionContentProps) {
+export function QuickInteractionContent({ choices, onStrategicChoice }: QuickInteractionContentProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const handleSelect = (id: string) => {

@@ -3,14 +3,12 @@ import { test, expect } from "../fixtures";
 test.describe("Equipment Screen", () => {
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
-    await gamePage.injectState({
-      currentWeek: 5,
-      scout: { careerTier: 1, primarySpecialization: "youth" },
-    });
+    // Equipment requires tier >= 2 OR week >= 6
+    await gamePage.injectMidGameState("youth");
   });
 
   test("equipment screen renders", async ({ gamePage }) => {
-    await gamePage.navigateTo("equipment");
+    await gamePage.setScreen("equipment");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();
@@ -23,7 +21,7 @@ test.describe("Equipment Screen", () => {
   });
 
   test("equipment screen shows items", async ({ gamePage }) => {
-    await gamePage.navigateTo("equipment");
+    await gamePage.setScreen("equipment");
     await gamePage.page.waitForTimeout(500);
 
     // Equipment screen should show items to purchase or already owned

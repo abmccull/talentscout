@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X } from "lucide-react";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X, Globe } from "lucide-react";
 import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill, DisciplinaryRecord } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
@@ -20,6 +20,12 @@ import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { ACTIVITY_SLOT_COSTS } from "@/engine/core/calendar";
 import { canAddActivity } from "@/engine/core/calendar";
 import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip";
+import { getCountryDisplayName } from "@/engine/network/contacts";
+import { getScoutHomeCountry } from "@/engine/world/travel";
+import {
+  getResolvedContactIntel,
+  resolvePlayerEntity,
+} from "@/lib/playerResolution";
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -975,6 +981,7 @@ export function PlayerProfile() {
     toggleWatchlist,
     setPendingFixtureClubFilter,
     setPendingCalendarActivity,
+    setPendingInternationalCountry,
     tapNetworkForPlayer,
     initiateTransferNegotiation,
     recommendPlayerForLoan,
@@ -986,15 +993,17 @@ export function PlayerProfile() {
 
   if (!gameState || !selectedPlayerId) return null;
 
-  const player = gameState.players[selectedPlayerId]
-    ?? gameState.unsignedYouth[selectedPlayerId]?.player
-    ?? null;
-  if (!player) return null;
+  const resolvedPlayer = resolvePlayerEntity(gameState, selectedPlayerId);
+  if (!resolvedPlayer) return null;
+
+  const player = resolvedPlayer.player;
+  const canonicalPlayerId = resolvedPlayer.playerId;
+  const unsignedYouthRecord = resolvedPlayer.unsignedYouth;
 
   const club = getClub(player.clubId);
   const league = club ? getLeague(club.leagueId) : undefined;
-  const observations = getPlayerObservations(selectedPlayerId);
-  const reports = getPlayerReports(selectedPlayerId);
+  const observations = getPlayerObservations(canonicalPlayerId);
+  const reports = getPlayerReports(canonicalPlayerId);
 
   // Own-club check: signed players at scout's club show exact values
   const isOwnClubPlayer = !!(player.clubId && player.clubId === gameState.scout.currentClubId);
@@ -1025,7 +1034,7 @@ export function PlayerProfile() {
 
   // Aggregate ability readings using shared helper
   const allObs = Object.values(gameState.observations);
-  const perceived = getPerceivedAbility(allObs, selectedPlayerId);
+  const perceived = getPerceivedAbility(allObs, canonicalPlayerId);
 
   // Map perceived to the shape used by the UI below
   const aggregatedAbility = perceived
@@ -1040,23 +1049,24 @@ export function PlayerProfile() {
       }
     : null;
 
-  const contactIntel: HiddenIntel[] = gameState.contactIntel[selectedPlayerId] ?? [];
-
-  // Unsigned youth detection
-  const unsignedYouthRecord = gameState.unsignedYouth[selectedPlayerId] ?? null;
+  const contactIntel: HiddenIntel[] = getResolvedContactIntel(gameState, canonicalPlayerId);
+  const scoutHomeCountry = getScoutHomeCountry(gameState.scout);
+  const foreignYouthCountry = unsignedYouthRecord && unsignedYouthRecord.country !== scoutHomeCountry
+    ? unsignedYouthRecord.country
+    : null;
 
   // Specialization-specific data
   const specialization = gameState.scout.primarySpecialization;
   const clubId = gameState.scout.currentClubId ?? "";
-  const fitCacheKey = `${selectedPlayerId}:${clubId}`;
+  const fitCacheKey = `${canonicalPlayerId}:${clubId}`;
   const systemFit = specialization === "firstTeam"
     ? (gameState.systemFitCache[fitCacheKey] ?? undefined)
     : undefined;
   const statisticalProfile = specialization === "data"
-    ? (gameState.statisticalProfiles[selectedPlayerId] ?? undefined)
+    ? (gameState.statisticalProfiles[canonicalPlayerId] ?? undefined)
     : undefined;
   const playerAnomalies = specialization === "data"
-    ? gameState.anomalyFlags.filter((f) => f.playerId === selectedPlayerId)
+    ? gameState.anomalyFlags.filter((f) => f.playerId === canonicalPlayerId)
     : [];
 
   const convictionVariant = (c: string) => {
@@ -1093,14 +1103,14 @@ export function PlayerProfile() {
                   {player.firstName} {player.lastName}
                 </h1>
                 <button
-                  onClick={() => toggleWatchlist(selectedPlayerId)}
+                  onClick={() => toggleWatchlist(canonicalPlayerId)}
                   className="p-1 rounded hover:bg-zinc-800 transition"
-                  aria-label={gameState.watchlist.includes(selectedPlayerId) ? "Remove from watchlist" : "Add to watchlist"}
+                  aria-label={gameState.watchlist.includes(canonicalPlayerId) ? "Remove from watchlist" : "Add to watchlist"}
                 >
                   <Star
                     size={18}
                     className={
-                      gameState.watchlist.includes(selectedPlayerId)
+                      gameState.watchlist.includes(canonicalPlayerId)
                         ? "text-amber-400 fill-amber-400"
                         : "text-zinc-600"
                     }
@@ -1161,9 +1171,9 @@ export function PlayerProfile() {
                 )}
               </div>
             </div>
-          </div>
+        </div>
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => startReport(selectedPlayerId)} disabled={observations.length === 0}>
+            <Button onClick={() => startReport(canonicalPlayerId)} disabled={observations.length === 0}>
               <FileText size={14} className="mr-2" />
               Write Report
             </Button>
@@ -1183,7 +1193,7 @@ export function PlayerProfile() {
             <Button
               variant="outline"
               onClick={() => {
-                const result = tapNetworkForPlayer(selectedPlayerId);
+                const result = tapNetworkForPlayer(canonicalPlayerId);
                 if (result) setNetworkIntel(result);
               }}
               disabled={Object.keys(gameState.contacts).length === 0}
@@ -1197,11 +1207,11 @@ export function PlayerProfile() {
              player.clubId !== gameState.scout.currentClubId &&
              !unsignedYouthRecord &&
              !(gameState.activeNegotiations ?? []).some(
-               (n) => n.playerId === selectedPlayerId && n.phase !== "completed" && n.phase !== "collapsed"
+               (n) => n.playerId === canonicalPlayerId && n.phase !== "completed" && n.phase !== "collapsed"
              ) && (
               <Button
                 variant="outline"
-                onClick={() => initiateTransferNegotiation(selectedPlayerId)}
+                onClick={() => initiateTransferNegotiation(canonicalPlayerId)}
               >
                 <Handshake size={14} className="mr-2" />
                 Negotiate Transfer
@@ -1227,6 +1237,18 @@ export function PlayerProfile() {
                 </Button>
               ) : null;
             })()}
+            {foreignYouthCountry && !unsignedYouthRecord?.placed && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPendingInternationalCountry(foreignYouthCountry);
+                  setScreen("internationalView");
+                }}
+              >
+                <Globe size={14} className="mr-2" />
+                Scout in {getCountryDisplayName(foreignYouthCountry)}
+              </Button>
+            )}
             {/* Youth-specific quick actions */}
             {unsignedYouthRecord && observations.length > 0 && (
               <>
@@ -1440,6 +1462,11 @@ export function PlayerProfile() {
                     </p>
                   </div>
                 </div>
+
+                <p className="mt-4 text-xs text-zinc-400">
+                  Based in <span className="font-medium text-white">{getCountryDisplayName(unsignedYouthRecord.country)}</span>
+                  {foreignYouthCountry ? " — you will need to travel there to scout in person." : "."}
+                </p>
 
                 {!unsignedYouthRecord.placed && (
                   <Button

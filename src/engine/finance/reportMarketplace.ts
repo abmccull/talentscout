@@ -12,6 +12,7 @@ import type {
   ScoutReport,
   Scout,
   Club,
+  ClientRelationship,
   ConvictionLevel,
   MarketTemperature,
   MarketplaceBid,
@@ -19,6 +20,10 @@ import type {
   Player,
   Position,
 } from "../core/types";
+import {
+  ensureClientRelationship,
+  recordClientDelivery,
+} from "./clientRelationships";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -36,7 +41,7 @@ const BASE_PRICES: Record<ConvictionLevel, [number, number]> = {
 const MAX_LISTING_AGE_WEEKS = 8;
 
 /** Base probability per club per listing of generating a bid */
-const BASE_BID_PROBABILITY = 0.15;
+const BASE_BID_PROBABILITY = 0.20;
 
 /** Priority multipliers for bid amounts */
 const PRIORITY_MULTIPLIERS: Record<string, number> = {
@@ -59,6 +64,28 @@ const ADJACENT_POSITIONS: Record<Position, Position[]> = {
   RW: ["RB", "CAM"],
   ST: ["CAM"],
 };
+
+// ---------------------------------------------------------------------------
+// Accuracy helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute a scout's accuracy score from their recent prediction history.
+ * Same formula as performancePulse.ts: 100 - |predictedCA - actualCA| * 2,
+ * averaged over the last 20 entries. Returns 50 (neutral) when no data.
+ */
+function computeAccuracyScore(
+  accuracyHistory: { predictedCA: number; actualCA: number }[] | undefined,
+): number {
+  if (!accuracyHistory || accuracyHistory.length === 0) return 50;
+  const recent = accuracyHistory.slice(-20);
+  return (
+    recent.reduce((sum, a) => {
+      const diff = Math.abs(a.predictedCA - a.actualCA);
+      return sum + Math.max(0, 100 - diff * 2);
+    }, 0) / recent.length
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Pricing
@@ -87,7 +114,7 @@ export function calculateReportPrice(
   const clubTierMult = targetClub ? 0.5 + (targetClub.reputation / 100) : 1.0;
 
   // Exclusivity premium
-  const exclusivityMult = isExclusive ? 1.5 : 1.0;
+  const exclusivityMult = isExclusive ? 2.0 : 1.0;
 
   // Market temperature urgency
   const urgencyMult: Record<MarketTemperature, number> = {
@@ -103,6 +130,51 @@ export function calculateReportPrice(
 
   const price = Math.round(base * qualityMult * clubTierMult * exclusivityMult * marketMult * repMult);
   return Math.max(50, price);
+}
+
+/**
+ * Estimate a price range for a report before submission.
+ * Uses pre-submission data (conviction, quality preview score, scout reputation,
+ * market temperature) to give the player pricing guidance while writing.
+ */
+export function estimateReportPriceRange(
+  conviction: ConvictionLevel,
+  qualityPreviewScore: number,
+  scoutReputation: number,
+  marketTemperature: MarketTemperature,
+): {
+  nonExclusive: number;
+  exclusive: number;
+  low: number;
+  high: number;
+  marketTemperature: MarketTemperature;
+} {
+  const [baseLow, baseHigh] = BASE_PRICES[conviction];
+  const base = (baseLow + baseHigh) / 2;
+
+  // Quality multiplier (0.5x to 1.5x based on quality 0-100)
+  const qualityMult = 0.5 + (qualityPreviewScore / 100);
+
+  // Market temperature urgency
+  const urgencyMult: Record<MarketTemperature, number> = {
+    cold: 0.7,
+    normal: 1.0,
+    hot: 1.3,
+    deadline: 1.8,
+  };
+  const marketMult = urgencyMult[marketTemperature];
+
+  // Reputation multiplier (0.8x to 1.4x)
+  const repMult = 0.8 + (scoutReputation / 100) * 0.6;
+
+  const nonExclusive = Math.max(50, Math.round(base * qualityMult * marketMult * repMult));
+  const exclusive = Math.max(50, Math.round(nonExclusive * 2.0));
+
+  // Range: ±20% to show variance from actual bids
+  const low = Math.max(50, Math.round(nonExclusive * 0.8));
+  const high = Math.round(exclusive * 1.2);
+
+  return { nonExclusive, exclusive, low, high, marketTemperature };
 }
 
 // ---------------------------------------------------------------------------
@@ -301,11 +373,16 @@ function generateBidsForListing(
   scout: Scout,
   week: number,
   season: number,
+  clientRelationships: ClientRelationship[],
 ): { bids: MarketplaceBid[]; inboxMessages: InboxMessage[] } {
   const newBids: MarketplaceBid[] = [];
   const messages: InboxMessage[] = [];
 
   const player = players[report.playerId];
+
+  // Accuracy premium — same for all clubs on this listing (0.90x to 1.15x)
+  const accuracyScore = computeAccuracyScore(scout.accuracyHistory);
+  const accuracyMult = 0.85 + (accuracyScore / 100) * 0.35;
 
   // Determine candidate clubs
   const candidateClubs = listing.targetClubId
@@ -355,8 +432,14 @@ function generateBidsForListing(
     const competitionMult = 1.0 + listing.bids.filter((b) => b.status === "pending").length * 0.1;
     const noise = 1.0 + rng.gaussian(0, 0.08);
 
+    // Repeat buyer premium — clubs with purchase history pay more (1.00x to 1.20x)
+    const relationship = clientRelationships.find((cr) => cr.clubId === club.id);
+    const reportsDelivered = relationship?.totalReportsDelivered ?? 0;
+    const repeatBuyerMult = 1.0 + Math.min(10, reportsDelivered) * 0.03;
+
     let amount = Math.round(
-      listing.price * needMult * budgetMult * priorityMult * competitionMult * noise,
+      listing.price * needMult * budgetMult * priorityMult * competitionMult
+      * repeatBuyerMult * accuracyMult * noise,
     );
     amount = Math.max(
       Math.round(listing.price * 0.6),
@@ -364,6 +447,20 @@ function generateBidsForListing(
     );
 
     const bidExpiry = week + rng.nextInt(2, 3);
+
+    // Derive human-readable bid reason
+    const positionCount = player
+      ? Object.values(players).filter(
+          (p) => club.playerIds.includes(p.id) && p.position === player.position,
+        ).length
+      : 3;
+    const positionNeed = positionCount <= 1 ? "critical" : positionCount === 2 ? "high" : "moderate";
+    const reasons: string[] = [];
+    reasons.push(`${positionNeed} need at ${player?.position ?? "?"}`);
+    if (repeatBuyerMult > 1.0) reasons.push(`repeat buyer (${reportsDelivered} prior)`);
+    if (accuracyMult > 1.05) reasons.push(`accuracy premium`);
+    if (competitionMult > 1.0) reasons.push(`${listing.bids.filter((b) => b.status === "pending").length} competing bids`);
+    const bidReason = reasons.join(" · ");
 
     const bid: MarketplaceBid = {
       id: `bid_${listing.id}_${club.id}_${week}`,
@@ -376,6 +473,7 @@ function generateBidsForListing(
       expirySeason: season,
       status: "pending",
       needMatchScore,
+      bidReason,
     };
 
     newBids.push(bid);
@@ -388,12 +486,70 @@ function generateBidsForListing(
       season,
       type: "marketplaceBid",
       title: `Bid from ${club.name}`,
-      body: `${club.name} has placed a bid of $${amount.toLocaleString()} on your report. They appear ${interestLevel}. The bid expires in ${bidExpiry - week} week${bidExpiry - week > 1 ? "s" : ""}.`,
+      body: `${club.name} has placed a bid of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidExpiry - week} week${bidExpiry - week > 1 ? "s" : ""}.`,
       read: false,
       actionRequired: true,
       relatedId: bid.id,
       relatedEntityType: "bid",
     });
+  }
+
+  // --- Exclusive upgrade bids ---
+  // For non-exclusive listings with visible competition, high-need clubs
+  // may offer a premium to convert the listing to exclusive.
+  if (!listing.isExclusive) {
+    const acceptedBids = listing.bids.filter((b) => b.status === "accepted").length;
+    const pendingBids = listing.bids.filter((b) => b.status === "pending").length + newBids.length;
+    const hasCompetition = acceptedBids >= 1 || pendingBids >= 2;
+
+    if (hasCompetition) {
+      for (const club of candidateClubs) {
+        // Skip if club already has a pending bid (including upgrade bids)
+        const hasPending = [...listing.bids, ...newBids].some(
+          (b) => b.clubId === club.id && b.status === "pending",
+        );
+        if (hasPending) continue;
+
+        const needMatchScore = calculateNeedMatchScore(report, player, club, players);
+        if (needMatchScore < 70) continue;
+
+        // 8% base chance
+        if (!rng.chance(0.08)) continue;
+
+        // Upgrade price: 2-3x the listing price
+        const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
+        const upgradeAmount = Math.round(listing.price * upgradeMult);
+        const bidExpiry = week + rng.nextInt(2, 3);
+
+        const upgradeBid: MarketplaceBid = {
+          id: `bid_upgrade_${listing.id}_${club.id}_${week}`,
+          listingId: listing.id,
+          clubId: club.id,
+          amount: upgradeAmount,
+          placedWeek: week,
+          placedSeason: season,
+          expiryWeek: bidExpiry,
+          expirySeason: season,
+          status: "pending",
+          needMatchScore,
+          isExclusiveUpgrade: true,
+        };
+
+        newBids.push(upgradeBid);
+        messages.push({
+          id: `inbox_bid_${upgradeBid.id}`,
+          week,
+          season,
+          type: "marketplaceBid",
+          title: `Exclusive Upgrade Offer from ${club.name}`,
+          body: `${club.name} is offering £${upgradeAmount.toLocaleString()} to convert your listing to exclusive — they don't want competitors getting the same intel. Accepting will decline all other pending bids.`,
+          read: false,
+          actionRequired: true,
+          relatedId: upgradeBid.id,
+          relatedEntityType: "bid",
+        });
+      }
+    }
   }
 
   return { bids: newBids, inboxMessages: messages };
@@ -429,6 +585,7 @@ export function processMarketplaceBids(
     // Generate new bids
     const { bids: newBids, inboxMessages } = generateBidsForListing(
       rng, listing, report, clubs, players, scout, week, season,
+      updatedFinances.clientRelationships,
     );
 
     if (newBids.length > 0) {
@@ -458,7 +615,7 @@ export function processMarketplaceBids(
               season,
               type: "marketplaceBid",
               title: `Bid Expired`,
-              body: `The bid of $${b.amount.toLocaleString()} from ${clubs[b.clubId]?.name ?? "a club"} has expired.`,
+              body: `The bid of £${b.amount.toLocaleString()} from ${clubs[b.clubId]?.name ?? "a club"} has expired.`,
               read: false,
               actionRequired: false,
               relatedId: b.id,
@@ -498,6 +655,10 @@ export function acceptBid(
 
   // Complete the sale with the bid amount
   let updated = completeSale(finances, listingId, bid.clubId, bid.amount, week, season);
+
+  // Wire to client relationship system
+  updated = ensureClientRelationship(updated, bid.clubId, week, season);
+  updated = recordClientDelivery(updated, bid.clubId, bid.amount, week, season);
 
   // Update bid statuses
   updated = {
@@ -545,6 +706,53 @@ export function declineBid(
         : l,
     ),
   };
+}
+
+/**
+ * Accept an exclusive upgrade bid. Records the sale revenue, converts
+ * the listing to exclusive, marks it as sold, and declines all other
+ * pending bids. Only pending bids are declined — previous non-exclusive
+ * sales already happened.
+ */
+export function acceptExclusiveUpgrade(
+  finances: FinancialRecord,
+  listingId: string,
+  bidId: string,
+  week: number,
+  season: number,
+): FinancialRecord {
+  const listing = finances.reportListings.find((l) => l.id === listingId);
+  if (!listing) return finances;
+
+  const bid = listing.bids.find((b) => b.id === bidId);
+  if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return finances;
+
+  // Record the sale revenue
+  let updated = completeSale(finances, listingId, bid.clubId, bid.amount, week, season);
+
+  // Wire to client relationship system
+  updated = ensureClientRelationship(updated, bid.clubId, week, season);
+  updated = recordClientDelivery(updated, bid.clubId, bid.amount, week, season);
+
+  // Convert to exclusive, mark sold, accept this bid, decline all other pending bids
+  updated = {
+    ...updated,
+    reportListings: updated.reportListings.map((l) => {
+      if (l.id !== listingId) return l;
+      return {
+        ...l,
+        isExclusive: true,
+        status: "sold" as const,
+        bids: l.bids.map((b) => {
+          if (b.id === bidId) return { ...b, status: "accepted" as const };
+          if (b.status === "pending") return { ...b, status: "declined" as const };
+          return b;
+        }),
+      };
+    }),
+  };
+
+  return updated;
 }
 
 // ---------------------------------------------------------------------------

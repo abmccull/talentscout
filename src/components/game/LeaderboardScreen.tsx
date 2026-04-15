@@ -2,23 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
-import { useAuthStore } from "@/stores/authStore";
 import { GameLayout } from "./GameLayout";
-import { AuthModal } from "./AuthModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Award, Trophy, Loader2, Globe, HardDrive } from "lucide-react";
 import { getLeaderboard } from "@/lib/leaderboard";
-import {
-  getCloudLeaderboard,
-  submitCloudLeaderboardEntry,
-} from "@/lib/supabaseLeaderboard";
 import type { LeaderboardEntry } from "@/engine/core/types";
+import { BETA_GLOBAL_LEADERBOARD_MESSAGE } from "@/config/beta";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-type LeaderboardTab = "local" | "global";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,17 +160,12 @@ function LeaderboardTable({
 
 export function LeaderboardScreen() {
   const { gameState, submitToLeaderboard } = useGameStore();
-  const { isAuthenticated, userId } = useAuthStore();
 
-  const [activeTab, setActiveTab] = useState<LeaderboardTab>("local");
   const [localEntries, setLocalEntries] = useState<LeaderboardEntry[]>([]);
-  const [globalEntries, setGlobalEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoadingLocal, setIsLoadingLocal] = useState(true);
-  const [isLoadingGlobal, setIsLoadingGlobal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
 
   // Load local leaderboard on mount — must be before early return
   useEffect(() => {
@@ -197,27 +185,6 @@ export function LeaderboardScreen() {
       cancelled = true;
     };
   }, []);
-
-  // Load global leaderboard when the global tab is selected
-  useEffect(() => {
-    if (activeTab !== "global" || !isAuthenticated) return;
-
-    let cancelled = false;
-    setIsLoadingGlobal(true);
-    getCloudLeaderboard(20)
-      .then((data) => {
-        if (!cancelled) {
-          setGlobalEntries(data);
-          setIsLoadingGlobal(false);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setIsLoadingGlobal(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, isAuthenticated]);
 
   if (!gameState) return null;
 
@@ -239,16 +206,6 @@ export function LeaderboardScreen() {
       const updatedLocal = await getLeaderboard(20);
       setLocalEntries(updatedLocal);
       setSubmitSuccess(true);
-
-      // Also submit to cloud if authenticated
-      if (isAuthenticated && userId) {
-        await submitCloudLeaderboardEntry(userId, submittedEntry);
-        // Refresh global entries if on that tab
-        if (activeTab === "global") {
-          const updatedGlobal = await getCloudLeaderboard(20);
-          setGlobalEntries(updatedGlobal);
-        }
-      }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Failed to submit score");
     } finally {
@@ -266,7 +223,7 @@ export function LeaderboardScreen() {
           <div>
             <h1 className="text-2xl font-bold">Leaderboard</h1>
             <p className="text-sm text-zinc-400">
-              Top scouts ranked by season score
+              Top scouts ranked by season score on this device
             </p>
           </div>
 
@@ -305,41 +262,14 @@ export function LeaderboardScreen() {
           )}
         </div>
 
-
-        {/* ── Tab switcher ──────────────────────────────────────────────── */}
-        <div
-          className="mb-4 flex rounded-md border border-[#27272a] p-1"
-          role="tablist"
-          aria-label="Leaderboard view"
-        >
-          <button
-            role="tab"
-            aria-selected={activeTab === "local"}
-            aria-controls="leaderboard-panel"
-            onClick={() => setActiveTab("local")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded py-1.5 text-sm font-medium transition ${
-              activeTab === "local"
-                ? "bg-emerald-500/10 text-emerald-400"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            <HardDrive size={13} aria-hidden="true" />
-            Local
-          </button>
-          <button
-            role="tab"
-            aria-selected={activeTab === "global"}
-            aria-controls="leaderboard-panel"
-            onClick={() => setActiveTab("global")}
-            className={`flex flex-1 items-center justify-center gap-2 rounded py-1.5 text-sm font-medium transition ${
-              activeTab === "global"
-                ? "bg-emerald-500/10 text-emerald-400"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            <Globe size={13} aria-hidden="true" />
-            Global
-          </button>
+        <div className="mb-4 rounded-md border border-amber-500/20 bg-amber-500/10 px-4 py-3">
+          <p className="flex items-center gap-2 text-sm font-medium text-amber-300">
+            <Globe size={14} aria-hidden="true" />
+            Global leaderboard disabled for beta
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+            {BETA_GLOBAL_LEADERBOARD_MESSAGE}
+          </p>
         </div>
 
         {/* ── Leaderboard table ─────────────────────────────────────────── */}
@@ -347,54 +277,19 @@ export function LeaderboardScreen() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-sm">
               <Award size={14} aria-hidden="true" />
-              {activeTab === "local" ? "Top Scouts — Local" : "Top Scouts — Global"}
+              <HardDrive size={13} aria-hidden="true" />
+              Top Scouts — Local
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {activeTab === "local" ? (
-              <LeaderboardTable
-                entries={localEntries}
-                isLoading={isLoadingLocal}
-                currentScoutName={scoutName}
-              />
-            ) : isAuthenticated ? (
-              <LeaderboardTable
-                entries={globalEntries}
-                isLoading={isLoadingGlobal}
-                currentScoutName={scoutName}
-              />
-            ) : (
-              /* Not authenticated — prompt to sign in */
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <Globe
-                  size={40}
-                  className="mb-4 text-zinc-700"
-                  aria-hidden="true"
-                />
-                <p className="text-sm text-zinc-400">
-                  Sign in to see the global leaderboard
-                </p>
-                <p className="mt-1 text-xs text-zinc-600">
-                  Compete with scouts from around the world.
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => setShowAuthModal(true)}
-                >
-                  Sign In
-                </Button>
-              </div>
-            )}
+            <LeaderboardTable
+              entries={localEntries}
+              isLoading={isLoadingLocal}
+              currentScoutName={scoutName}
+            />
           </CardContent>
         </Card>
       </div>
-
-      {/* Auth modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-      />
     </GameLayout>
   );
 }

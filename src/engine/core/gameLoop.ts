@@ -73,6 +73,7 @@ import { processBoardWeekly } from "../firstTeam/boardAI";
 import { processWeeklyGossip } from "../network/gossip";
 import { processWeeklyReferrals } from "../network/referrals";
 import { processWeeklyContactDecay, processExclusiveWindows } from "../network/contacts";
+import { getContactCoverageCountry, getCountryDisplayName } from "../network/contacts";
 import type { CardEvent, DisciplinaryRecord, TransferNegotiation, BoardReaction, BoardProfile, TacticalMatchup } from "./types";
 import { calculateTacticalMatchup } from "../match/tactics";
 import {
@@ -93,6 +94,7 @@ import {
   processLoanRecalls,
 } from "../world/loans";
 import { getActiveEquipmentBonuses } from "../finance/equipmentBonuses";
+import { getScoutHomeCountry } from "../world/travel";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -1511,50 +1513,93 @@ function maybeGenerateYouthTip(
   const undiscovered = activeYouth.filter(
     (y) => !y.discoveredBy.includes(state.scout.id),
   );
-  const pool = undiscovered.length > 0 ? undiscovered : activeYouth;
-
-  const youth = rng.pick(pool);
-  const player = youth.player;
+  const basePool = undiscovered.length > 0 ? undiscovered : activeYouth;
+  const homeCountry = getScoutHomeCountry(state.scout);
 
   // Pick a contact source (or use a generic one)
   const contactEntries = Object.values(state.contacts ?? {});
-  const youthContacts = contactEntries.filter(
-    (c) =>
+  const youthContacts = contactEntries
+    .filter(
+      (c) =>
       c.type === "academyCoach" ||
       c.type === "schoolCoach" ||
       c.type === "grassrootsOrganizer" ||
       c.type === "youthAgent" ||
       c.type === "academyDirector" ||
       c.type === "localScout",
-  );
-  const contact =
-    youthContacts.length > 0 ? rng.pick(youthContacts) : null;
+    )
+    .map((contact) => ({
+      contact,
+      country: getContactCoverageCountry({ country: contact.country }, homeCountry) ?? homeCountry,
+    }));
+
+  const contactsWithLeads = youthContacts.filter(({ contact, country }) => {
+    const knownYouthCount = contact.knownPlayerIds.filter((id) => {
+      const youth = state.unsignedYouth[id];
+      return !!youth && !youth.placed && !youth.retired;
+    }).length;
+
+    return knownYouthCount > 0 || basePool.some((youth) => youth.country === country);
+  });
+
+  const selectedContact = contactsWithLeads.length > 0
+    ? rng.pick(contactsWithLeads)
+    : null;
+  const contact = selectedContact?.contact ?? null;
+  const contactCountry = selectedContact?.country ?? homeCountry;
   const sourceName = contact ? contact.name : "A local contact";
   const sourceRole = contact
     ? contact.type.replace(/([A-Z])/g, " $1").toLowerCase().trim()
     : "scout";
+  const knownYouthPool = contact
+    ? contact.knownPlayerIds
+      .map((id) => state.unsignedYouth[id])
+      .filter((y): y is UnsignedYouth => !!y && !y.placed && !y.retired)
+    : [];
+  const localizedKnownYouthPool = knownYouthPool.filter(
+    (candidate) => candidate.country === contactCountry,
+  );
+  const countryPool = basePool.filter((youth) => youth.country === contactCountry);
+  const localPool = basePool.filter((youth) => youth.country === homeCountry);
+  const pool = localizedKnownYouthPool.length > 0
+    ? localizedKnownYouthPool
+    : countryPool.length > 0
+      ? countryPool
+      : knownYouthPool.length > 0
+    ? knownYouthPool
+      : localPool.length > 0
+        ? localPool
+        : basePool;
+
+  const youth = rng.pick(pool);
+  const player = youth.player;
+  const isForeignLead = youth.country !== homeCountry;
+  const countryLabel = getCountryDisplayName(youth.country);
+  const travelHint = isForeignLead
+    ? `Open International and plan a trip to ${countryLabel} if you want to see ${player.firstName} in person.`
+    : "Consider scheduling a school match or grassroots tournament to spot this player.";
 
   // Tip templates — varied flavour
   const tips = [
     {
-      title: `Tip: Promising youngster in ${youth.country}`,
-      body: `${sourceName} (${sourceRole}) mentioned a ${player.age}-year-old ${player.position} named ${player.firstName} ${player.lastName} who's been turning heads at local matches. "${player.firstName} has something special — you should take a look." Consider scheduling a school match or grassroots tournament to spot this player.`,
+      title: `Tip: Promising youngster in ${countryLabel}`,
+      body: `${sourceName} (${sourceRole}) mentioned a ${player.age}-year-old ${player.position} named ${player.firstName} ${player.lastName} who's been turning heads at local matches. "${player.firstName} has something special — you should take a look." ${travelHint}`,
     },
     {
       title: `Tip: Academy buzz about ${player.firstName} ${player.lastName}`,
-      body: `${sourceName} (${sourceRole}) says there's growing buzz around ${player.firstName} ${player.lastName}, a ${player.age}-year-old ${player.position} from ${youth.country}. "Clubs are starting to notice — if you want first look, go soon." A youth tournament or academy visit might give you a chance to observe.`,
+      body: `${sourceName} (${sourceRole}) says there's growing buzz around ${player.firstName} ${player.lastName}, a ${player.age}-year-old ${player.position} based in ${countryLabel}. "Clubs are starting to notice — if you want first look, go soon." ${travelHint}`,
     },
     {
-      title: `Tip: Hidden gem spotted in ${youth.country}`,
-      body: `${sourceName} (${sourceRole}) passed along a lead: "${player.firstName} ${player.lastName} is the real deal — raw but incredibly talented for ${player.age}." The youngster plays ${player.position} and has been under the radar so far. Worth scheduling an observation visit.`,
+      title: `Tip: Hidden gem spotted in ${countryLabel}`,
+      body: `${sourceName} (${sourceRole}) passed along a lead: "${player.firstName} ${player.lastName} is the real deal — raw but incredibly talented for ${player.age}." The youngster plays ${player.position} and has been under the radar so far. ${travelHint}`,
     },
     {
       title: `Tip: Tournament standout — ${player.firstName} ${player.lastName}`,
-      body: `${sourceName} (${sourceRole}) flagged a standout from a recent youth event: ${player.firstName} ${player.lastName} (${player.position}, ${player.age}). "Dominated the tournament — every touch was quality." Check the grassroots circuit or upcoming youth tournaments to see for yourself.`,
+      body: `${sourceName} (${sourceRole}) flagged a standout from a recent youth event in ${countryLabel}: ${player.firstName} ${player.lastName} (${player.position}, ${player.age}). "Dominated the tournament — every touch was quality." ${travelHint}`,
     },
     {
       title: `Tip: School talent worth watching`,
-      body: `${sourceName} (${sourceRole}) reached out about ${player.firstName} ${player.lastName}, a ${player.age}-year-old ${player.position} from ${youth.country}. "This kid is outgrowing school football fast — won't stay hidden much longer." A school match visit could be your chance.`,
+      body: `${sourceName} (${sourceRole}) reached out about ${player.firstName} ${player.lastName}, a ${player.age}-year-old ${player.position} based in ${countryLabel}. "This kid is outgrowing school football fast — won't stay hidden much longer." ${travelHint}`,
     },
   ];
 
@@ -1782,8 +1827,22 @@ function processNPCScouts(
   if (state.scout.careerTier < 4) return [];
 
   const results: NPCScoutWeekResult[] = [];
+  const delegatedScoutIds = new Set(
+    Object.values(state.npcDelegations ?? {})
+      .filter((delegation) => !delegation.completed)
+      .map((delegation) => delegation.npcScoutId),
+  );
 
   for (const npcScout of Object.values(state.npcScouts)) {
+    if (delegatedScoutIds.has(npcScout.id)) {
+      results.push({
+        npcScoutId: npcScout.id,
+        updatedNPCScout: npcScout,
+        reportsGenerated: [],
+      });
+      continue;
+    }
+
     if (npcScout.territoryId) {
       // Scout is assigned to a territory — generate reports for this week
       const territory = state.territories[npcScout.territoryId];

@@ -5,8 +5,9 @@
  * Pure module, no side effects. Uses the seeded RNG for deterministic results.
  */
 
-import type { ActivityType, ScoutSkill, Scout } from "@/engine/core/types";
+import type { ActivityType, ScoutSkill, Scout, CareerPath } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // TYPES
@@ -82,6 +83,10 @@ const PRIMARY_SKILL_MAP: Partial<Record<ActivityType, ScoutSkill>> = {
   contractNegotiation: "psychologicalRead",
   // Free agent activities
   freeAgentOutreach: "playerJudgment",
+  // Youth showcase
+  agencyShowcase: "technicalEye",
+  // Territory management
+  assignTerritory: "playerJudgment",
   // Data-exclusive
   databaseQuery: "dataLiteracy",
   deepVideoAnalysis: "dataLiteracy",
@@ -930,6 +935,28 @@ const NARRATIVES: Partial<
       "Outstanding planning. Your strategic territory coverage gives the club access to talent pipelines nobody else is monitoring.",
     ],
   },
+  agencyShowcase: {
+    poor: [
+      "A chaotic showcase. Disorganized scheduling and too many players meant you could barely track anyone properly.",
+      "Disappointing turnout. The quality of players fell well short of what the agents had promised.",
+    ],
+    average: [
+      "A decent showcase. You saw a reasonable spread of talent but nothing that made you sit up.",
+      "Middling event. A few interesting players but the overall standard was uninspiring.",
+    ],
+    good: [
+      "A well-organized showcase. Several players showed genuine promise and you left with clear targets.",
+      "Good event. The agents delivered on their promises and you identified two or three worth tracking.",
+    ],
+    excellent: [
+      "An excellent showcase! One player stood out immediately — the kind of talent that justifies organizing the event.",
+      "Impressive depth at this showcase. You have a genuine shortlist of players who could step up quickly.",
+    ],
+    exceptional: [
+      "A star discovery! One player's combination of technique and maturity was breathtaking — a career-defining find.",
+      "A transformative event. The depth of talent on display was extraordinary and your shortlist is overflowing.",
+    ],
+  },
   internationalTravel: {
     poor: [
       "A gruelling trip. Delays, cancellations, and jet lag meant you arrived too exhausted to scout effectively.",
@@ -968,6 +995,7 @@ export function rollActivityQuality(
   rng: RNG,
   activityType: ActivityType,
   scout: Scout,
+  careerPath?: CareerPath,
 ): ActivityQualityResult {
   const primarySkill = PRIMARY_SKILL_MAP[activityType];
   // Default skill level of 10 (mid-range) for unmapped activities
@@ -1002,9 +1030,10 @@ export function rollActivityQuality(
 
   // Pick a narrative
   const templates = NARRATIVES[activityType]?.[tier];
-  const narrative = templates
+  const rawNarrative = templates
     ? rng.pick(templates)
     : `Your ${activityType} session was ${tier}.`;
+  const narrative = resolveCareerPathText(rawNarrative, careerPath);
 
   return {
     activityType,
@@ -1057,5 +1086,8 @@ export const MULTI_DAY_CONTINUATIONS: Partial<Record<ActivityType, string[]>> = 
   ],
   dataConference: [
     "Day two of the conference. The breakout sessions offer more hands-on insights.",
+  ],
+  agencyShowcase: [
+    "Day two of the showcase. You've narrowed your focus to the standout performers from yesterday.",
   ],
 };

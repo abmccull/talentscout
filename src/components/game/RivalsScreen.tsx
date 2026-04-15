@@ -89,7 +89,7 @@ interface RivalCardProps {
   getPlayerName: (playerId: string) => string;
   gameState: GameState;
   scout: Scout;
-  onNavigateToPlayer: () => void;
+  onNavigateToPlayer: (playerId: string) => void;
   recentActivities: RivalActivity[];
 }
 
@@ -155,7 +155,7 @@ function RivalCard({
               </p>
             </div>
             <button
-              onClick={onNavigateToPlayer}
+              onClick={() => rival.currentTarget && onNavigateToPlayer(rival.currentTarget)}
               className="text-xs text-zinc-300 hover:text-emerald-400 transition cursor-pointer mb-1"
             >
               {currentTargetName}
@@ -200,7 +200,7 @@ function RivalCard({
               {sharedTargetIds.slice(0, 5).map((pid) => (
                 <button
                   key={pid}
-                  onClick={onNavigateToPlayer}
+                  onClick={() => onNavigateToPlayer(pid)}
                   className="flex items-center gap-1.5 text-xs text-zinc-400 hover:text-emerald-400 transition cursor-pointer"
                 >
                   <User size={10} aria-hidden="true" />
@@ -247,7 +247,7 @@ function state_hasProgress(prog: number | undefined): boolean {
 }
 
 export function RivalsScreen() {
-  const { gameState, setScreen } = useGameStore();
+  const { gameState, selectPlayer, setScreen } = useGameStore();
 
   if (!gameState) return null;
 
@@ -259,6 +259,11 @@ export function RivalsScreen() {
   const getPlayerName = (playerId: string) => {
     const p = players[playerId];
     return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
+  };
+  const navigateToPlayer = (playerId: string) => {
+    if (!players[playerId] && !gameState.unsignedYouth[playerId]?.player) return;
+    selectPlayer(playerId);
+    setScreen("playerProfile");
   };
 
   /** Get recent activities for a specific rival (last 5). */
@@ -363,7 +368,7 @@ export function RivalsScreen() {
               getPlayerName={getPlayerName}
               gameState={gameState}
               scout={scout}
-              onNavigateToPlayer={() => setScreen("playerProfile")}
+              onNavigateToPlayer={navigateToPlayer}
               recentActivities={getRecentActivities(nemesis.id)}
             />
           )}
@@ -375,7 +380,7 @@ export function RivalsScreen() {
               getPlayerName={getPlayerName}
               gameState={gameState}
               scout={scout}
-              onNavigateToPlayer={() => setScreen("playerProfile")}
+              onNavigateToPlayer={navigateToPlayer}
               recentActivities={getRecentActivities(rival.id)}
             />
           ))}

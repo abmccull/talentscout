@@ -6,7 +6,6 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import type { AppSettings } from "@/stores/settingsStore";
 import { GameLayout } from "./GameLayout";
-import { AuthModal } from "./AuthModal";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,15 +17,13 @@ import {
   ArrowLeft,
   Check,
   User,
-  Cloud,
   LogOut,
-  LogIn,
+  AlertTriangle,
   Volume2,
   VolumeX,
   Monitor,
   Accessibility,
   Gamepad2,
-  Bell,
   MessageSquarePlus,
 } from "lucide-react";
 import { MAX_MANUAL_SLOTS } from "@/lib/db";
@@ -38,10 +35,17 @@ import {
   resetModData,
   getModdedKeys,
 } from "@/lib/modLoader";
+import { supabase } from "@/lib/supabase";
+import { getLastCloudSyncStatus } from "@/lib/saveProvider";
 import { getCountryData, getAvailableCountries } from "@/data/index";
 import { SaveLoadModal } from "./SaveLoadModal";
 import { FeedbackModal } from "./FeedbackModal";
-import { getLastCloudSyncStatus } from "@/lib/saveProvider";
+import { AuthModal } from "./AuthModal";
+import {
+  BETA_CLOUD_SAVES_ENABLED,
+  BETA_CLOUD_SAVES_MESSAGE,
+  BETA_GLOBAL_LEADERBOARD_MESSAGE,
+} from "@/config/beta";
 
 // ---------------------------------------------------------------------------
 // Small reusable primitives used only within SettingsScreen
@@ -114,6 +118,56 @@ function RadioGroup<T extends string>({
   );
 }
 
+function InlineDeleteConfirm({
+  label,
+  isLoading,
+  onConfirm,
+  onCancel,
+}: {
+  label: string;
+  isLoading: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+      role="alert"
+    >
+      <AlertTriangle
+        size={14}
+        className="shrink-0 text-amber-400"
+        aria-hidden="true"
+      />
+      <p className="flex-1 text-xs text-amber-200">
+        Delete {label} permanently?
+      </p>
+      <Button
+        size="sm"
+        variant="destructive"
+        onClick={onConfirm}
+        disabled={isLoading}
+        className="h-7 px-2 text-xs"
+      >
+        {isLoading ? (
+          <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+        ) : (
+          "Delete"
+        )}
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onCancel}
+        disabled={isLoading}
+        className="h-7 px-2 text-xs"
+      >
+        Cancel
+      </Button>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 
 export function SettingsScreen() {
@@ -129,21 +183,27 @@ export function SettingsScreen() {
   } = useGameStore();
 
   const {
+    isLoading: isAuthLoading,
     isAuthenticated,
     displayName,
     cloudSaveEnabled,
-    signOut,
     toggleCloudSave,
+    signOut,
   } = useAuthStore();
 
   const { setSetting, ...settings } = useSettingsStore();
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [moddedKeys, setModdedKeys] = useState<string[]>([]);
   const [modStatus, setModStatus] = useState<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [deleteConfirmSlot, setDeleteConfirmSlot] = useState<number | null>(null);
+  const [deletingSlot, setDeletingSlot] = useState<number | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState(() =>
+    getLastCloudSyncStatus(),
+  );
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const modTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -155,23 +215,42 @@ export function SettingsScreen() {
   const { volumes, setVolume, toggleMute } = useAudio();
 
   useEffect(() => {
-    refreshSaveSlots();
+    void refreshSaveSlots();
     void getModdedKeys().then(setModdedKeys);
-  }, [refreshSaveSlots]);
+  }, [refreshSaveSlots, isAuthenticated, cloudSaveEnabled]);
+
+  useEffect(() => {
+    const syncStatus = () => setCloudSyncStatus(getLastCloudSyncStatus());
+    syncStatus();
+    const intervalId = window.setInterval(syncStatus, 1000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   if (!gameState) return null;
 
   const manualSaves = saveSlots.filter((s) => s.slot > 0);
   const usedSlots = new Set(manualSaves.map((s) => s.slot));
+  const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
 
   // ── Save handlers ─────────────────────────────────────────────────────────
 
   const handleSave = async (slot: number) => {
+    setDeleteConfirmSlot(null);
     const name = `Save ${slot}`;
     await saveToSlot(slot, name);
     setSaveStatus(`Saved to slot ${slot}`);
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
+  };
+
+  const handleDelete = async (slot: number) => {
+    setDeletingSlot(slot);
+    try {
+      await deleteSlot(slot);
+      setDeleteConfirmSlot((current) => (current === slot ? null : current));
+    } finally {
+      setDeletingSlot(null);
+    }
   };
 
   const handleQuickSave = async () => {
@@ -200,6 +279,12 @@ export function SettingsScreen() {
     });
   };
 
+  const formatSource = (source: typeof saveSlots[number]["source"]) => {
+    if (source === "supabase") return "Cloud";
+    if (source === "steam") return "Steam";
+    return "Local";
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
@@ -226,15 +311,37 @@ export function SettingsScreen() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isAuthenticated ? (
+            {!cloudAuthAvailable ? (
+              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+                <p className="text-sm font-medium text-white">
+                  Cloud saves unavailable
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  This build does not have Supabase configured, so saves stay on
+                  this device only.
+                </p>
+              </div>
+            ) : isAuthLoading ? (
+              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+                <p className="text-sm font-medium text-white">
+                  Checking account…
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  Verifying whether this browser already has a cloud session.
+                </p>
+              </div>
+            ) : isAuthenticated ? (
               <>
-                {/* Signed-in state */}
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-white">
                       {displayName}
                     </p>
-                    <p className="text-xs text-zinc-500">Signed in</p>
+                    <p className="text-xs text-zinc-500">
+                      {cloudSaveEnabled
+                        ? "Signed in with cloud saves enabled"
+                        : "Signed in on this device"}
+                    </p>
                   </div>
                   <Button
                     variant="outline"
@@ -250,75 +357,75 @@ export function SettingsScreen() {
                   </Button>
                 </div>
 
-                {/* Cloud saves toggle */}
                 <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <Cloud
-                      size={14}
-                      className="text-emerald-500"
-                      aria-hidden="true"
-                    />
-                    <div>
-                      <p className="text-sm font-medium">Cloud Saves</p>
-                      <p className="text-xs text-zinc-500">
-                        Sync save slots to the cloud
-                      </p>
-                    </div>
+                  <div>
+                    <p className="text-sm font-medium">Cloud Save Sync</p>
+                    <p className="text-xs text-zinc-500">
+                      {cloudSaveEnabled
+                        ? BETA_CLOUD_SAVES_MESSAGE
+                        : "Saves stay local until you turn sync on for this device."}
+                    </p>
                   </div>
-                  <button
-                    role="switch"
-                    aria-checked={cloudSaveEnabled}
-                    aria-label="Toggle cloud saves"
-                    onClick={() => toggleCloudSave(!cloudSaveEnabled)}
-                    className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                      cloudSaveEnabled ? "bg-emerald-500" : "bg-zinc-700"
-                    }`}
-                  >
-                    <span
-                      className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                        cloudSaveEnabled ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
-                  </button>
+                  <PillToggle
+                    checked={cloudSaveEnabled}
+                    onChange={(enabled) => {
+                      toggleCloudSave(enabled);
+                      setCloudSyncStatus(getLastCloudSyncStatus());
+                      void refreshSaveSlots();
+                    }}
+                    label="Toggle cloud saves"
+                  />
                 </div>
 
-                {/* Cloud sync status indicator */}
-                {cloudSaveEnabled && (() => {
-                  const syncStatus = getLastCloudSyncStatus();
-                  if (syncStatus.pending) {
-                    return (
-                      <p className="text-xs text-amber-400">
-                        Cloud sync: Pending...
-                      </p>
-                    );
-                  }
-                  if (syncStatus.lastSync) {
-                    const ago = Math.round(
-                      (Date.now() - syncStatus.lastSync.getTime()) / 60_000,
-                    );
-                    return (
-                      <p className="text-xs text-zinc-500">
-                        Cloud sync: Last synced{" "}
-                        {ago < 1 ? "just now" : `${ago} min ago`}
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
-
-              </>
-            ) : (
-              /* Signed-out state */
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-zinc-300">
-                    Sign in to enable cloud saves and global leaderboard
+                <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+                  <p className="text-sm font-medium text-white">
+                    {cloudSaveEnabled
+                      ? cloudSyncStatus.pending
+                        ? "Sync in progress"
+                        : cloudSyncStatus.lastError
+                          ? "Sync needs attention"
+                        : cloudSyncStatus.lastSync
+                          ? `Last synced ${cloudSyncStatus.lastSync.toLocaleString()}`
+                          : "Waiting for next save"
+                      : "Cloud sync paused"}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    {cloudSaveEnabled
+                      ? cloudSyncStatus.lastError
+                        ? `Local saves still work, but cloud sync failed: ${cloudSyncStatus.lastError}`
+                        : "Manual saves and weekly autosaves write locally first, then sync in the background."
+                      : "You can still save locally. Re-enable cloud sync any time to resume uploading."}
                   </p>
                 </div>
-                <Button size="sm" onClick={() => setShowAuthModal(true)}>
-                  <LogIn size={12} className="mr-1" aria-hidden="true" />
-                  Sign In
-                </Button>
+
+                <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-3">
+                  <p className="text-sm font-medium text-amber-300">
+                    Global leaderboard still disabled
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    {BETA_GLOBAL_LEADERBOARD_MESSAGE}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+                <p className="text-sm font-medium text-white">
+                  Sign in to connect cloud saves
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  Signing in connects your account. Turn on Cloud Save Sync
+                  afterward when you want this device to upload and download
+                  saves.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAuthModal(true)}
+                  >
+                    Sign In
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>
@@ -555,50 +662,36 @@ export function SettingsScreen() {
               Gameplay
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            {/* Auto-Advance Speed */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-zinc-300">Auto-Advance Speed</p>
-              <RadioGroup<AppSettings["autoAdvanceSpeed"]>
-                name="autoAdvanceSpeed"
-                value={settings.autoAdvanceSpeed}
-                onChange={(v) => setSetting("autoAdvanceSpeed", v)}
-                options={[
-                  { value: "slow", label: "Slow" },
-                  { value: "normal", label: "Normal" },
-                  { value: "fast", label: "Fast" },
-                ]}
-              />
-            </div>
-
-            {/* Confirm Before Advance */}
-            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
-              <div>
-                <p className="text-sm font-medium">Confirm Before Advancing</p>
-                <p className="text-xs text-zinc-500">
-                  Show a prompt before advancing the week
-                </p>
+          <CardContent className="space-y-4">
+            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle
+                  size={14}
+                  className="mt-0.5 shrink-0 text-amber-400"
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm font-medium text-amber-200">
+                    Week-flow preferences are not live in this beta
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    Auto-advance speed, confirm-before-advance, and inbox filtering
+                    levels are still fixed by the current game flow. These controls
+                    stay hidden until the calendar, simulation, and notification
+                    systems actually read them.
+                  </p>
+                </div>
               </div>
-              <PillToggle
-                checked={settings.confirmBeforeAdvance}
-                onChange={(v) => setSetting("confirmBeforeAdvance", v)}
-                label="Toggle confirm before advance"
-              />
             </div>
-
-            {/* Notification Level */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-zinc-300">Notification Level</p>
-              <RadioGroup<AppSettings["notificationLevel"]>
-                name="notificationLevel"
-                value={settings.notificationLevel}
-                onChange={(v) => setSetting("notificationLevel", v)}
-                options={[
-                  { value: "all", label: "All" },
-                  { value: "important", label: "Important Only" },
-                  { value: "critical", label: "Critical Only" },
-                ]}
-              />
+            <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+              <p className="text-sm font-medium text-white">
+                What is live right now
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                Display, accessibility, audio, save management, and cloud-sync
+                preferences apply immediately. Week advancement and inbox cadence
+                still use the default beta behavior.
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -762,66 +855,81 @@ export function SettingsScreen() {
               (slot) => {
                 const existing = manualSaves.find((s) => s.slot === slot);
                 return (
-                  <div
-                    key={slot}
-                    className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#141414] p-3"
-                  >
-                    <div className="flex-1">
-                      {existing ? (
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium">{existing.name}</p>
-                            <Badge variant="secondary" className="text-xs">
-                              S{existing.season} W{existing.week}
-                            </Badge>
+                  <div key={slot} className="space-y-1.5">
+                    <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#141414] p-3">
+                      <div className="flex-1">
+                        {existing ? (
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium">{existing.name}</p>
+                              <Badge variant="secondary" className="text-xs">
+                                S{existing.season} W{existing.week}
+                              </Badge>
+                              <Badge variant="outline" className="text-[10px] uppercase">
+                                {formatSource(existing.source)}
+                              </Badge>
+                            </div>
+                            <p className="text-xs text-zinc-500">
+                              {existing.scoutName} &middot; Rep{" "}
+                              {Math.round(existing.reputation)} &middot;{" "}
+                              {formatDate(existing.savedAt)}
+                            </p>
                           </div>
-                          <p className="text-xs text-zinc-500">
-                            {existing.scoutName} &middot; Rep{" "}
-                            {Math.round(existing.reputation)} &middot;{" "}
-                            {formatDate(existing.savedAt)}
+                        ) : (
+                          <p className="text-sm text-zinc-500">
+                            Slot {slot} — Empty
                           </p>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-zinc-500">
-                          Slot {slot} — Empty
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => void handleSave(slot)}
-                        disabled={isSaving}
-                      >
-                        <Save size={12} className="mr-1" aria-hidden="true" />
-                        Save
-                      </Button>
-                      {existing && (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => loadFromSlot(slot)}
-                          >
-                            <Download
-                              size={12}
-                              className="mr-1"
-                              aria-hidden="true"
-                            />
-                            Load
-                          </Button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleSave(slot)}
+                          disabled={isSaving}
+                        >
+                          <Save size={12} className="mr-1" aria-hidden="true" />
+                          Save
+                        </Button>
+                        {existing && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => {
+                                setDeleteConfirmSlot(null);
+                                void loadFromSlot(slot);
+                              }}
+                            >
+                              <Download
+                                size={12}
+                                className="mr-1"
+                                aria-hidden="true"
+                              />
+                              Load
+                            </Button>
 
-                          <button
-                            onClick={() => deleteSlot(slot)}
-                            className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
-                            aria-label={`Delete slot ${slot}`}
-                          >
-                            <Trash2 size={14} aria-hidden="true" />
-                          </button>
-                        </>
-                      )}
+                            <button
+                              onClick={() => setDeleteConfirmSlot(slot)}
+                              disabled={deletingSlot === slot}
+                              className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+                              aria-label={`Delete slot ${slot}`}
+                            >
+                              <Trash2 size={14} aria-hidden="true" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
+
+                    {existing && deleteConfirmSlot === slot && (
+                      <InlineDeleteConfirm
+                        label={existing.name}
+                        isLoading={deletingSlot === slot}
+                        onCancel={() => setDeleteConfirmSlot(null)}
+                        onConfirm={() => void handleDelete(slot)}
+                      />
+                    )}
                   </div>
                 );
               },
@@ -868,12 +976,6 @@ export function SettingsScreen() {
         </Card>
       </div>
 
-      {/* Auth modal */}
-      <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-      />
-
       {/* Save/Load modal */}
       {showSaveLoadModal && (
         <SaveLoadModal
@@ -881,6 +983,11 @@ export function SettingsScreen() {
           onClose={() => setShowSaveLoadModal(false)}
         />
       )}
+
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+      />
 
       {/* Feedback modal */}
       <FeedbackModal

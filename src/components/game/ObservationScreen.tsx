@@ -29,15 +29,18 @@ import type {
   PlayerMoment,
   LensType,
   SessionFlaggedMoment,
-  DataPoint,
-  DialogueNode,
-  StrategicChoice,
 } from "@/engine/observation/types";
+import { MODE_FLAGGED_SHORT_LABEL } from "@/engine/observation/types";
 import type { InsightActionId } from "@/engine/insight/types";
 import { getAvailableActions as getAvailableInsightActions } from "@/engine/insight/insight";
 import { getSessionResult, isHalfTimePhase } from "@/engine/observation/session";
 import type { ReflectionResult } from "@/engine/observation/reflection";
 import { ReflectionScreen } from "./ReflectionScreen";
+import {
+  InvestigationContent,
+  AnalysisContent,
+  QuickInteractionContent,
+} from "./ObservationPhase";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -211,109 +214,8 @@ const MomentCard = memo(function MomentCard({
   );
 });
 
-// -- DataPointCard -----------------------------------------------------------
-
-interface DataPointCardProps {
-  point: DataPoint;
-  playerName?: string;
-}
-
-const DataPointCard = memo(function DataPointCard({ point, playerName }: DataPointCardProps) {
-  return (
-    <Card
-      className={`border ${
-        point.isHighlighted
-          ? "border-blue-500/30 bg-blue-500/5"
-          : "border-[#27272a] bg-[#0f0f0f]"
-      }`}
-    >
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-0.5">
-              {playerName ?? "Team"} — {point.category}
-            </p>
-            <p className="text-xs text-zinc-300">{point.label}</p>
-            {point.relatedAttributes && point.relatedAttributes.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {point.relatedAttributes.map((attr) => (
-                  <span key={attr} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400">
-                    {attr}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <span className="shrink-0 text-sm font-bold text-zinc-200 tabular-nums">
-            {point.value}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-});
-
-// -- DialogueCard ------------------------------------------------------------
-
-interface DialogueCardProps {
-  node: DialogueNode;
-}
-
-const DialogueCard = memo(function DialogueCard({ node }: DialogueCardProps) {
-  return (
-    <Card className="border border-[#27272a] bg-[#0f0f0f]">
-      <CardContent className="p-3">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 mb-1">
-          {node.speaker}
-        </p>
-        <p className="text-xs text-zinc-300 leading-snug italic">&ldquo;{node.text}&rdquo;</p>
-        {node.options.length > 0 && (
-          <div className="mt-2 space-y-1 border-t border-[#27272a] pt-2">
-            {node.options.map((opt) => (
-              <div key={opt.id} className="flex items-start gap-2 text-xs">
-                <Badge
-                  variant={
-                    opt.riskLevel === "bold"
-                      ? "destructive"
-                      : opt.riskLevel === "moderate"
-                        ? "warning"
-                        : "secondary"
-                  }
-                  className="shrink-0 mt-0.5 text-[10px] py-0"
-                >
-                  {opt.riskLevel}
-                </Badge>
-                <span className="text-zinc-400">{opt.text}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-});
-
-// -- StrategicChoiceCard -----------------------------------------------------
-
-interface StrategicChoiceCardProps {
-  choice: StrategicChoice;
-}
-
-const StrategicChoiceCard = memo(function StrategicChoiceCard({ choice }: StrategicChoiceCardProps) {
-  return (
-    <Card className="border border-[#27272a] bg-[#0f0f0f] hover:border-zinc-600 transition-colors">
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2 mb-1">
-          <p className="text-sm font-medium text-zinc-200">{choice.text}</p>
-          <Badge variant="outline" className="shrink-0 text-[10px] py-0 capitalize">
-            {choice.outcomeType}
-          </Badge>
-        </div>
-        <p className="text-xs text-zinc-400 leading-snug">{choice.description}</p>
-      </CardContent>
-    </Card>
-  );
-});
+// (DialogueCard, DataPointCard, StrategicChoiceCard removed —
+//  interactive equivalents imported from ObservationPhase.tsx)
 
 // -- PhaseContent ------------------------------------------------------------
 
@@ -323,6 +225,9 @@ interface PhaseContentProps {
   flaggedMomentIds: Set<string>;
   hasPhaseFlag: boolean;
   onFlagMoment: (momentId: string, reaction: SessionFlaggedMoment["reaction"]) => void;
+  onDialogueChoice: (nodeId: string, optionId: string) => void;
+  onDataPointSelect: (pointId: string) => void;
+  onStrategicChoice: (choiceId: string) => void;
 }
 
 const PhaseContent = memo(function PhaseContent({
@@ -331,6 +236,9 @@ const PhaseContent = memo(function PhaseContent({
   flaggedMomentIds,
   hasPhaseFlag,
   onFlagMoment,
+  onDialogueChoice,
+  onDataPointSelect,
+  onStrategicChoice,
 }: PhaseContentProps) {
   const playerMap = new Map(session.players.map((p) => [p.playerId, p]));
 
@@ -360,54 +268,41 @@ const PhaseContent = memo(function PhaseContent({
     );
   }
 
-  // Investigation: dialogue nodes
+  // Investigation: interactive dialogue nodes
   if (session.mode === "investigation") {
+    if ((phase.dialogueNodes ?? []).length === 0) {
+      return <p className="text-xs text-zinc-600 py-6 text-center">No dialogue in this phase.</p>;
+    }
     return (
-      <div className="space-y-2">
-        {(phase.dialogueNodes ?? []).length === 0 ? (
-          <p className="text-xs text-zinc-600 py-6 text-center">No dialogue in this phase.</p>
-        ) : (
-          (phase.dialogueNodes ?? []).map((node) => (
-            <DialogueCard key={node.id} node={node} />
-          ))
-        )}
-      </div>
+      <InvestigationContent
+        nodes={phase.dialogueNodes!}
+        onDialogueChoice={onDialogueChoice}
+      />
     );
   }
 
-  // Analysis: data points
+  // Analysis: interactive data points
   if (session.mode === "analysis") {
+    if ((phase.dataPoints ?? []).length === 0) {
+      return <p className="text-xs text-zinc-600 py-6 text-center">No data points in this phase.</p>;
+    }
     return (
-      <div className="space-y-2">
-        {(phase.dataPoints ?? []).length === 0 ? (
-          <p className="text-xs text-zinc-600 py-6 text-center">No data points in this phase.</p>
-        ) : (
-          (phase.dataPoints ?? []).map((point) => {
-            const player = point.playerId ? playerMap.get(point.playerId) : undefined;
-            return (
-              <DataPointCard
-                key={point.id}
-                point={point}
-                playerName={player?.name}
-              />
-            );
-          })
-        )}
-      </div>
+      <AnalysisContent
+        dataPoints={phase.dataPoints!}
+        onDataPointSelect={onDataPointSelect}
+      />
     );
   }
 
-  // Quick Interaction: strategic choices
+  // Quick Interaction: interactive strategic choices
+  if ((phase.choices ?? []).length === 0) {
+    return <p className="text-xs text-zinc-600 py-6 text-center">No choices available.</p>;
+  }
   return (
-    <div className="space-y-2">
-      {(phase.choices ?? []).length === 0 ? (
-        <p className="text-xs text-zinc-600 py-6 text-center">No choices available.</p>
-      ) : (
-        (phase.choices ?? []).map((choice) => (
-          <StrategicChoiceCard key={choice.id} choice={choice} />
-        ))
-      )}
-    </div>
+    <QuickInteractionContent
+      choices={phase.choices!}
+      onStrategicChoice={onStrategicChoice}
+    />
   );
 });
 
@@ -579,6 +474,144 @@ const FocusPanel = memo(function FocusPanel({
   );
 });
 
+// -- InvestigationSidebar ---------------------------------------------------
+
+interface InvestigationSidebarProps {
+  session: ObservationSession;
+}
+
+const InvestigationSidebar = memo(function InvestigationSidebar({
+  session,
+}: InvestigationSidebarProps) {
+  const primaryPlayer = session.players[0];
+  const speaker = session.players[1];
+  const totalPhases = session.phases.length;
+  const completedPhases = session.currentPhaseIndex + 1;
+  const progressPct = Math.round((completedPhases / totalPhases) * 100);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Conversation context */}
+      <div>
+        <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+          <MessageSquare size={14} className="text-emerald-500" aria-hidden="true" />
+          Conversation
+        </h3>
+        {primaryPlayer && (
+          <div className="rounded-md border border-[#27272a] bg-[#141414] p-3 mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">
+              About
+            </p>
+            <p className="text-sm font-medium text-zinc-200">{primaryPlayer.name}</p>
+            <p className="text-xs text-zinc-500">{primaryPlayer.position}</p>
+          </div>
+        )}
+        {speaker && (
+          <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-1">
+              Speaking with
+            </p>
+            <p className="text-sm font-medium text-zinc-200">{speaker.name}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Dialogue progress */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+            Progress
+          </span>
+          <span className="text-xs text-zinc-400 tabular-nums">
+            {completedPhases}/{totalPhases}
+          </span>
+        </div>
+        <div
+          className="h-1.5 bg-[#27272a] rounded-full overflow-hidden"
+          role="progressbar"
+          aria-valuenow={completedPhases}
+          aria-valuemax={totalPhases}
+          aria-label="Dialogue progress"
+        >
+          <div
+            className="h-full rounded-full bg-emerald-500/70 transition-all duration-300"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Hypotheses formed */}
+      {session.hypotheses.length > 0 && (
+        <div>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">
+            Hypotheses Formed
+          </h4>
+          <div className="space-y-1.5">
+            {session.hypotheses.map((hyp) => (
+              <div
+                key={hyp.id}
+                className="rounded border border-[#27272a] bg-[#141414] px-3 py-2"
+              >
+                <p className="text-xs text-zinc-300 leading-snug">{hyp.text}</p>
+                <p className="text-[10px] text-zinc-600 mt-0.5 capitalize">{hyp.domain}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Insight earned */}
+      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+        <p className="text-lg font-bold text-amber-400 tabular-nums">
+          {session.insightPointsEarned}
+        </p>
+        <p className="text-[10px] text-zinc-500">Insight Earned</p>
+      </div>
+    </div>
+  );
+});
+
+// -- MinimalInfoSidebar ---------------------------------------------------
+
+interface MinimalInfoSidebarProps {
+  session: ObservationSession;
+}
+
+const MinimalInfoSidebar = memo(function MinimalInfoSidebar({
+  session,
+}: MinimalInfoSidebarProps) {
+  const primaryPlayer = session.players[0];
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold flex items-center gap-2 mb-2">
+          {session.mode === "analysis" ? (
+            <BarChart3 size={14} className="text-blue-400" aria-hidden="true" />
+          ) : (
+            <Shuffle size={14} className="text-purple-400" aria-hidden="true" />
+          )}
+          {session.mode === "analysis" ? "Data Analysis" : "Quick Decision"}
+        </h3>
+        {primaryPlayer && (
+          <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
+            <p className="text-sm font-medium text-zinc-200">{primaryPlayer.name}</p>
+            <p className="text-xs text-zinc-500">{primaryPlayer.position}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Insight earned */}
+      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+        <p className="text-lg font-bold text-amber-400 tabular-nums">
+          {session.insightPointsEarned}
+        </p>
+        <p className="text-[10px] text-zinc-500">Insight Earned</p>
+      </div>
+    </div>
+  );
+});
+
 // -- SetupView ---------------------------------------------------------------
 
 interface SetupViewProps {
@@ -716,7 +749,7 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
             <p className="text-xl font-bold text-amber-400 tabular-nums">
               {result.flaggedMoments.length}
             </p>
-            <p className="text-[10px] text-zinc-500 mt-0.5">Moments Flagged</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">{MODE_FLAGGED_SHORT_LABEL[result.mode]}</p>
           </div>
           <div className="rounded-lg border border-[#27272a] bg-[#0f0f0f] p-3 text-center">
             <p className="text-xl font-bold text-zinc-200 capitalize">
@@ -880,6 +913,27 @@ export function ObservationScreen() {
     [],
   );
 
+  const handleDialogueChoice = useCallback(
+    (nodeId: string, optionId: string) => {
+      useGameStore.getState().selectDialogueOption(nodeId, optionId);
+    },
+    [],
+  );
+
+  const handleDataPointSelect = useCallback(
+    (pointId: string) => {
+      useGameStore.getState().selectDataPoint(pointId);
+    },
+    [],
+  );
+
+  const handleStrategicChoice = useCallback(
+    (choiceId: string) => {
+      useGameStore.getState().selectStrategicChoice(choiceId);
+    },
+    [],
+  );
+
   const handleCompleteReflection = useCallback(() => {
     useGameStore.getState().endObservationSession();
   }, []);
@@ -959,7 +1013,7 @@ export function ObservationScreen() {
             {state === "active" && (
               <p className="mt-0.5 text-[11px] text-zinc-500 capitalize">
                 {activeSession.activityType.replace(/([A-Z])/g, " $1").trim()}
-                {activeSession.venueAtmosphere?.weather
+                {mode === "fullObservation" && activeSession.venueAtmosphere?.weather
                   ? ` · ${activeSession.venueAtmosphere.weather}`
                   : ""}
               </p>
@@ -993,8 +1047,8 @@ export function ObservationScreen() {
                   </p>
                 </div>
 
-                {/* Atmosphere event banner */}
-                {currentPhase.atmosphereEvent && (
+                {/* Atmosphere event banner — match modes only */}
+                {mode === "fullObservation" && currentPhase.atmosphereEvent && (
                   <div
                     className="shrink-0 border-b border-amber-500/30 bg-amber-500/5 px-4 py-2"
                     role="status"
@@ -1018,8 +1072,8 @@ export function ObservationScreen() {
                   </div>
                 )}
 
-                {/* Chaos indicator (subtle) */}
-                {activeSession.venueAtmosphere && (
+                {/* Chaos indicator — match modes only */}
+                {mode === "fullObservation" && activeSession.venueAtmosphere && (
                   <div className="shrink-0 px-4 py-1.5 flex items-center gap-2 border-b border-[#27272a]">
                     <span className="text-[10px] text-zinc-600">Observation clarity</span>
                     <div className="flex-1 h-1 bg-[#27272a] rounded-full overflow-hidden max-w-[80px]">
@@ -1042,30 +1096,31 @@ export function ObservationScreen() {
                     flaggedMomentIds={flaggedMomentIds}
                     hasPhaseFlag={hasPhaseFlag}
                     onFlagMoment={handleFlagMoment}
+                    onDialogueChoice={handleDialogueChoice}
+                    onDataPointSelect={handleDataPointSelect}
+                    onStrategicChoice={handleStrategicChoice}
                   />
                 </div>
               </div>
 
-              {/* ── Right sidebar: Focus panel (40%) ────────────────────── */}
+              {/* ── Right sidebar: mode-aware ──────────────────────────── */}
               <div className="w-72 shrink-0 border-l border-[#27272a] bg-[#0c0c0c] flex flex-col overflow-hidden">
 
-                {/* Focus panel (only for modes with tokens) */}
-                {activeSession.focusTokens.total > 0 ? (
+                {/* Sidebar content based on mode */}
+                {mode === "fullObservation" ? (
                   <FocusPanel
                     session={activeSession}
                     onAllocateFocus={handleAllocateFocus}
                     onRemoveFocus={handleRemoveFocus}
                   />
+                ) : mode === "investigation" ? (
+                  <InvestigationSidebar session={activeSession} />
                 ) : (
-                  <div className="flex-1 overflow-y-auto p-4">
-                    <p className="text-xs text-zinc-600 text-center py-8">
-                      No focus tokens in this session mode.
-                    </p>
-                  </div>
+                  <MinimalInfoSidebar session={activeSession} />
                 )}
 
-                {/* Insight action button */}
-                {activeSession.insightPointsEarned > 0 && (
+                {/* Insight action button — visible when scout has any IP available */}
+                {((gameState?.scout.insightState?.points ?? 0) > 0 || activeSession.insightPointsEarned > 0) && (
                   <div className="shrink-0 border-t border-[#27272a] px-4 py-2">
                     <button
                       onClick={() => setShowInsightOverlay(true)}
@@ -1075,7 +1130,7 @@ export function ObservationScreen() {
                       <Zap size={12} aria-hidden="true" />
                       Use Insight
                       <span className="ml-auto tabular-nums">
-                        {activeSession.insightPointsEarned} IP
+                        {(gameState?.scout.insightState?.points ?? 0) + activeSession.insightPointsEarned} IP
                       </span>
                     </button>
                   </div>

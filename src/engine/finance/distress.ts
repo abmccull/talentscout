@@ -183,7 +183,6 @@ function applyDistressTransition(
           msgId, week, season,
           "Financial Warning",
           "Your balance has been negative for over 2 weeks. Continued spending beyond your means will have serious consequences. Consider reducing expenses or taking on additional work.",
-          true,
         ),
       );
       break;
@@ -195,7 +194,6 @@ function applyDistressTransition(
           msgId, week, season,
           "Financial Distress — Forced Cutbacks",
           "Your finances are in serious trouble. Premium subscriptions have been cancelled and your travel budget has been reduced. Your reputation is starting to suffer.",
-          true,
         ),
       );
       break;
@@ -240,7 +238,6 @@ function applyDistressTransition(
           msgId, week, season,
           "Financial Crisis",
           "Your finances are critical. Staff have left and clients are pulling contracts. Immediate action required to prevent bankruptcy.",
-          true,
         ),
       );
       break;
@@ -268,7 +265,6 @@ function applyDistressTransition(
           msgId, week, season,
           "Bankruptcy",
           "You have been declared bankrupt. All equipment has been liquidated, contracts terminated, and your reputation has been severely damaged. You must rebuild from Tier 1. A 10-week recovery period is now in effect.",
-          true,
         ),
       );
       break;

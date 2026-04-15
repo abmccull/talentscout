@@ -10,9 +10,10 @@
  * - Data: Algorithmic, pattern-recognition. "The model converges. The noise clears..."
  */
 
-import type { Specialization } from "@/engine/core/types";
+import type { CareerPath, Specialization } from "@/engine/core/types";
 import type { InsightActionId } from "@/engine/insight/types";
 import type { RNG } from "@/engine/rng";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // NARRATIVE RECORD TYPE
@@ -485,12 +486,13 @@ export function getInsightNarrative(
   playerName: string,
   fizzled: boolean,
   rng: RNG,
+  careerPath?: CareerPath,
 ): string {
   const narratives = INSIGHT_NARRATIVES[actionId];
 
   if (fizzled) {
     const template = rng.pick(narratives.fizzled);
-    return formatNarrative(template, playerName);
+    return resolveCareerPathText(formatNarrative(template, playerName), careerPath);
   }
 
   const specializationKey = specialization as keyof Omit<
@@ -499,7 +501,7 @@ export function getInsightNarrative(
   >;
   const variants = narratives[specializationKey];
   const template = rng.pick(variants);
-  return formatNarrative(template, playerName);
+  return resolveCareerPathText(formatNarrative(template, playerName), careerPath);
 }
 
 /**
@@ -514,8 +516,9 @@ export function getFizzledNarrative(
   actionId: InsightActionId,
   playerName: string,
   rng: RNG,
+  careerPath?: CareerPath,
 ): string {
   const narratives = INSIGHT_NARRATIVES[actionId];
   const template = rng.pick(narratives.fizzled);
-  return formatNarrative(template, playerName);
+  return resolveCareerPathText(formatNarrative(template, playerName), careerPath);
 }

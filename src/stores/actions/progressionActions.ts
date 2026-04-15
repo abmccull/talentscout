@@ -441,12 +441,19 @@ export function createProgressionActions(get: GetState, set: SetState) {
 
     // ── Travel ────────────────────────────────────────────────────────────────
 
-    bookInternationalTravel: (country: string) => {
+    bookInternationalTravel: (
+      country: string,
+      options?: { duration?: number; assignmentId?: string },
+    ) => {
       const { gameState } = get();
       if (!gameState) return;
+      if (gameState.scout.travelBooking) return;
 
       const homeCountry = getScoutHome(gameState.scout);
-      const duration = getTravelDuration(homeCountry, country);
+      const duration = Math.max(
+        1,
+        options?.duration ?? getTravelDuration(homeCountry, country),
+      );
       const departureWeek = gameState.currentWeek + 1;
 
       const updatedScout = bookTravel(
@@ -455,12 +462,44 @@ export function createProgressionActions(get: GetState, set: SetState) {
         departureWeek,
         duration,
       );
+      const travelCost = updatedScout.travelBooking?.cost ?? 0;
+      if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
+
+      const acceptedAssignment = options?.assignmentId
+        ? gameState.internationalAssignments.find(
+            (assignment) => assignment.id === options.assignmentId,
+          ) ?? null
+        : null;
 
       set({
         gameState: {
           ...gameState,
           scout: updatedScout,
+          finances: gameState.finances
+            ? {
+                ...gameState.finances,
+                balance: gameState.finances.balance - travelCost,
+                transactions: [
+                  ...gameState.finances.transactions,
+                  {
+                    week: gameState.currentWeek,
+                    season: gameState.currentSeason,
+                    amount: -travelCost,
+                    description: acceptedAssignment
+                      ? `Accepted international assignment in ${country}`
+                      : `International travel to ${country}`,
+                  },
+                ],
+              }
+            : gameState.finances,
+          internationalAssignments: acceptedAssignment
+            ? gameState.internationalAssignments.filter(
+                (assignment) => assignment.id !== acceptedAssignment.id,
+              )
+            : gameState.internationalAssignments,
+          activeInternationalAssignment: acceptedAssignment,
         },
+        weekSimulation: null,
       });
     },
 

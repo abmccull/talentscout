@@ -86,7 +86,11 @@ import {
 } from "@/engine/core/transferWindow";
 import { initializeWorld } from "@/engine/world";
 import { createScout } from "@/engine/scout/creation";
-import { generateStartingContacts, generateContactForType } from "@/engine/network/contacts";
+import {
+  generateStartingContacts,
+  generateContactForType,
+  getContactCoverageCountry,
+} from "@/engine/network/contacts";
 import { createWeekSchedule, getAvailableActivities } from "@/engine/core/calendar";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
 import { generateManagerProfiles } from "@/engine/analytics";
@@ -105,14 +109,12 @@ import {
 } from "@/engine/rivals";
 import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
 import {
-  saveGame as dbSaveGame,
-  loadGame as dbLoadGame,
-  listSaves as dbListSaves,
-  deleteSave as dbDeleteSave,
+  migrateSaveState,
   type SaveRecord,
   AUTOSAVE_SLOT,
-  MAX_MANUAL_SLOTS,
 } from "@/lib/db";
+import type { SaveConflict, SaveSource } from "@/lib/saveProvider";
+import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import {
   applyScenarioSetup,
@@ -120,12 +122,17 @@ import {
 } from "@/engine/scenarios";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 import {
   generateLegacyProfile as generateLegacyProfileEngine,
   applyLegacyPerks as applyLegacyPerksEngine,
   readLegacyProfile,
   writeLegacyProfile,
 } from "@/engine/career/legacy";
+import {
+  getResolvedPlayerIds,
+  resolvePlayerEntity,
+} from "@/lib/playerResolution";
 
 export type GameScreen =
   | "mainMenu"
@@ -168,6 +175,85 @@ export type GameScreen =
   | "seasonAwards"
   | "freeAgents";
 
+export type SaveSlotSummary = Omit<SaveRecord, "state"> & {
+  source: SaveSource;
+};
+
+export interface SaveConflictState {
+  slot: number;
+  conflict: SaveConflict;
+}
+
+function slotNumberToSaveName(slot: number): string {
+  return slot === AUTOSAVE_SLOT ? "autosave" : `slot_${slot}`;
+}
+
+const YOUTH_CONTACT_TYPES = new Set([
+  "academyCoach",
+  "grassrootsOrganizer",
+  "schoolCoach",
+  "youthAgent",
+  "academyDirector",
+  "localScout",
+]);
+
+function pickRandomUniqueIds(rng: ReturnType<typeof createRNG>, pool: string[], count: number): string[] {
+  const available = [...pool];
+  const picked: string[] = [];
+
+  while (picked.length < count && available.length > 0) {
+    const idx = rng.nextInt(0, available.length - 1);
+    picked.push(available[idx]);
+    available.splice(idx, 1);
+  }
+
+  return picked;
+}
+
+function seedContactKnownPlayerIds(
+  rng: ReturnType<typeof createRNG>,
+  contact: Contact,
+  specialization: Specialization,
+  players: Record<string, Player>,
+  clubs: Record<string, Club>,
+  leagues: Record<string, League>,
+  unsignedYouth: Record<string, UnsignedYouth>,
+  fallbackCountry: string,
+): string[] {
+  const coverageCountry = getContactCoverageCountry(contact, fallbackCountry);
+  const count = rng.nextInt(4, 8);
+  const isYouthContact = YOUTH_CONTACT_TYPES.has(contact.type) && specialization === "youth";
+
+  if (isYouthContact) {
+    const youthPool = Object.values(unsignedYouth)
+      .filter((youth) => !youth.placed && !youth.retired)
+      .filter((youth) => !coverageCountry || youth.country === coverageCountry)
+      .map((youth) => youth.id);
+
+    return pickRandomUniqueIds(
+      rng,
+      youthPool.length > 0 ? youthPool : Object.keys(unsignedYouth),
+      count,
+    );
+  }
+
+  const allPlayerIds = Object.keys(players);
+  const seniorPool = coverageCountry
+    ? allPlayerIds.filter((id) => {
+        const player = players[id];
+        const club = player ? clubs[player.clubId] : undefined;
+        const league = club ? leagues[club.leagueId] : undefined;
+        return league?.country === coverageCountry;
+      })
+    : [];
+
+  return pickRandomUniqueIds(
+    rng,
+    seniorPool.length > 0 ? seniorPool : allPlayerIds,
+    count,
+  );
+}
+
 export interface GameStoreState {
   // Navigation
   currentScreen: GameScreen;
@@ -209,9 +295,11 @@ export interface GameStoreState {
   selectedPlayerId: string | null;
   selectedFixtureId: string | null;
   // Save/Load state
-  saveSlots: Omit<SaveRecord, "state">[];
+  saveSlots: SaveSlotSummary[];
   isSaving: boolean;
   isLoadingSave: boolean;
+  saveConflict: SaveConflictState | null;
+  isResolvingSaveConflict: boolean;
 
   // Autosave error state
   autosaveError: string | null;
@@ -221,11 +309,13 @@ export interface GameStoreState {
   setSelectedScenario: (id: string | null) => void;
   scenarioProgress: ScenarioProgress | null;
   scenarioOutcome: "victory" | "failure" | null;
+  scenarioOutcomeScenarioId: string | null;
   dismissScenarioOutcome: () => void;
 
   // Celebration transient state
   pendingCelebration: { tier: "minor" | "major" | "epic"; title: string; description: string } | null;
   dismissCelebration: () => void;
+  dismissSeasonAwards: () => void;
 
   // Actions
   startNewGame: (config: NewGameConfig) => Promise<void>;
@@ -237,6 +327,8 @@ export interface GameStoreState {
   loadFromSlot: (slot: number) => Promise<void>;
   deleteSlot: (slot: number) => Promise<void>;
   refreshSaveSlots: () => Promise<void>;
+  dismissSaveConflict: () => void;
+  resolveSaveConflict: (slot: number, preferredSource: SaveSource) => Promise<void>;
 
   // Calendar actions
   scheduleActivity: (activity: Activity, dayIndex: number) => void;
@@ -286,6 +378,9 @@ export interface GameStoreState {
   allocateSessionFocus: (playerId: string, lens: LensType) => void;
   removeSessionFocus: (playerId: string) => void;
   flagSessionMoment: (momentId: string, reaction: SessionFlaggedMoment['reaction']) => void;
+  selectDialogueOption: (nodeId: string, optionId: string) => void;
+  selectDataPoint: (pointId: string) => void;
+  selectStrategicChoice: (choiceId: string) => void;
   addSessionNote: (note: string) => void;
   addSessionHypothesis: (playerId: string, text: string, domain: string) => void;
   endObservationSession: () => void;
@@ -326,7 +421,10 @@ export interface GameStoreState {
   unlockSecondarySpecialization: (spec: Specialization) => void;
 
   // Travel
-  bookInternationalTravel: (country: string) => void;
+  bookInternationalTravel: (
+    country: string,
+    options?: { duration?: number; assignmentId?: string },
+  ) => void;
 
   // Phase 2 actions
   acknowledgeNarrativeEvent: (eventId: string) => void;
@@ -344,6 +442,7 @@ export interface GameStoreState {
   withdrawReportListing: (listingId: string) => void;
   acceptMarketplaceBid: (bidId: string) => void;
   declineMarketplaceBid: (bidId: string) => void;
+  acceptExclusiveUpgradeBid: (bidId: string) => void;
   acceptRetainerContract: (contract: RetainerContract) => void;
   cancelRetainerContract: (contractId: string) => void;
   enrollInCourse: (courseId: string) => void;
@@ -411,6 +510,14 @@ export interface GameStoreState {
   // Cross-screen calendar pre-fill (set from PlayerProfile → consumed by CalendarScreen)
   pendingCalendarActivity: { type: string; targetId: string; label: string } | null;
   setPendingCalendarActivity: (pending: { type: string; targetId: string; label: string } | null) => void;
+
+  // Cross-screen international pre-fill (set from PlayerProfile → consumed by InternationalScreen)
+  pendingInternationalCountry: string | null;
+  setPendingInternationalCountry: (country: string | null) => void;
+
+  // Post-submit listing prompt (transient — not persisted in save)
+  pendingListingReportId: string | null;
+  dismissPendingListing: () => void;
 
   // Tap network for hidden attribute intel on a player
   tapNetworkForPlayer: (playerId: string) => { title: string; body: string; contactName?: string } | null;
@@ -633,9 +740,12 @@ function migrateInjurySystem(state: GameState): void {
 function migrateSeasonEvents(state: GameState): void {
   if (!state.seasonEvents || state.seasonEvents.length === 0) return;
 
-  // Check if already migrated — presence of 'resolved' on first event indicates new format
-  const first = state.seasonEvents[0];
-  if (first.resolved !== undefined) return;
+  const needsTemplateFields = state.seasonEvents.some(
+    (event) =>
+      event.resolved === undefined ||
+      (event.choices && event.relevantSpecializations === undefined),
+  );
+  if (!needsTemplateFields) return;
 
   // Regenerate events from templates to pick up effects/choices
   const freshEvents = generateSeasonEvents(state.currentSeason);
@@ -646,15 +756,48 @@ function migrateSeasonEvents(state: GameState): void {
     if (template) {
       return {
         ...existing,
-        effects: template.effects,
-        choices: template.choices,
-        resolved: false,
+        effects: existing.effects ?? template.effects,
+        choices: existing.choices ?? template.choices,
+        relevantSpecializations: template.relevantSpecializations,
+        resolved: existing.resolved ?? false,
       };
     }
     // No matching template — add defaults
     return {
       ...existing,
       resolved: false,
+    };
+  });
+}
+
+function migrateInboxMessages(state: GameState): void {
+  if (!state.inbox || state.inbox.length === 0 || !state.seasonEvents) return;
+
+  const seasonEventsByName = new Map(
+    state.seasonEvents.map((event) => [event.name, event]),
+  );
+
+  state.inbox = state.inbox.map((message) => {
+    if (message.type !== "event") return message;
+
+    const titleBase = message.title.replace(/\s+— Decision Required$/, "");
+    const seasonEvent = seasonEventsByName.get(titleBase);
+    if (!seasonEvent) return message;
+
+    const actionable = !seasonEvent.resolved && (
+      !seasonEvent.relevantSpecializations ||
+      seasonEvent.relevantSpecializations.includes(state.scout.primarySpecialization)
+    );
+
+    return {
+      ...message,
+      title: actionable ? `${seasonEvent.name} — Decision Required` : seasonEvent.name,
+      body: actionable
+        ? `${seasonEvent.description}. You have a decision to make regarding your scouting strategy during this period.`
+        : `${seasonEvent.description}. This shapes the wider football landscape, but there is nothing you need to decide directly right now.`,
+      actionRequired: actionable,
+      relatedId: seasonEvent.id,
+      relatedEntityType: "seasonEvent",
     };
   });
 }
@@ -842,12 +985,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   saveSlots: [],
   isSaving: false,
   isLoadingSave: false,
+  saveConflict: null,
+  isResolvingSaveConflict: false,
   autosaveError: null,
 
   // Scenario transient state
   selectedScenarioId: null,
   scenarioProgress: null,
   scenarioOutcome: null,
+  scenarioOutcomeScenarioId: null,
 
   // Celebration transient state
   pendingCelebration: null,
@@ -860,6 +1006,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Cross-screen calendar pre-fill
   pendingCalendarActivity: null,
+  pendingInternationalCountry: null,
+
+  // Post-submit listing prompt (transient — not persisted)
+  pendingListingReportId: null,
+  dismissPendingListing: () => set({ pendingListingReportId: null }),
 
   // Report comparison (F11) — transient UI state
   comparisonReportIds: [],
@@ -901,80 +1052,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     }
 
-    // Populate knownPlayerIds for each contact using their region to prefer local players.
-    // This is done after world generation so all player/club/league data is available.
-    const regionToCountry: Record<string, string> = {
-      England: "england",
-      Spain: "spain",
-      Germany: "germany",
-      France: "france",
-      Italy: "italy",
-      Portugal: "portugal",
-      Netherlands: "netherlands",
-      Brazil: "brazil",
-      Argentina: "argentina",
-      Belgium: "belgium",
-      Scandinavia: "sweden", // best approximation for multi-country region
-      "Eastern Europe": "czech", // best approximation for multi-country region
-      // Secondary regions
-      USA: "usa",
-      Mexico: "mexico",
-      Canada: "canada",
-      Nigeria: "nigeria",
-      Ghana: "ghana",
-      "Ivory Coast": "ivorycoast",
-      Egypt: "egypt",
-      "South Africa": "southafrica",
-      Senegal: "senegal",
-      Cameroon: "cameroon",
-      Japan: "japan",
-      "South Korea": "southkorea",
-      "Saudi Arabia": "saudiarabia",
-      China: "china",
-      Australia: "australia",
-      "New Zealand": "newzealand",
-    };
-    const allPlayerIds = Object.keys(players);
-
-    // Youth-focused contact types should reference unsigned youth, not seniors
-    const YOUTH_CONTACT_TYPES = new Set([
-      "academyCoach", "grassrootsOrganizer", "schoolCoach",
-      "youthAgent", "academyDirector", "localScout",
-    ]);
+    // Populate knownPlayerIds after world generation so contacts are grounded
+    // in their actual coverage country instead of a random world region.
+    const scoutHomeCountry = getScoutHomeCountry(scout);
 
     for (const c of startingContacts) {
-      const countryCode = regionToCountry[c.region ?? ""];
-      const isYouthContact = YOUTH_CONTACT_TYPES.has(c.type)
-        && effectiveConfig.specialization === "youth";
-
-      let pool: string[];
-      if (isYouthContact) {
-        // Use unsigned youth IDs so tips/intel reference youth players
-        const youthIds = Object.values(initialUnsignedYouth)
-          .filter(y => !y.placed && !y.retired)
-          .filter(y => !countryCode || y.country.toLowerCase() === countryCode)
-          .map(y => y.id);
-        pool = youthIds.length > 0 ? youthIds : Object.keys(initialUnsignedYouth);
-      } else {
-        const candidateIds = countryCode
-          ? allPlayerIds.filter((id) => {
-              const p = players[id];
-              const club = p ? clubs[p.clubId] : undefined;
-              const league = club ? leagues[club.leagueId] : undefined;
-              return league?.country === countryCode;
-            })
-          : [];
-        pool = candidateIds.length > 0 ? candidateIds : allPlayerIds;
-      }
-      const count = 4 + Math.floor(rng.nextFloat(0, 1) * 5); // 4–8 players
-      const picked: string[] = [];
-      for (let i = 0; i < count && pool.length > 0; i++) {
-        const idx = rng.nextInt(0, pool.length - 1);
-        if (!picked.includes(pool[idx])) {
-          picked.push(pool[idx]);
-        }
-      }
-      contacts[c.id] = { ...c, knownPlayerIds: picked };
+      const knownPlayerIds = seedContactKnownPlayerIds(
+        rng,
+        c,
+        effectiveConfig.specialization,
+        players,
+        clubs,
+        leagues,
+        initialUnsignedYouth,
+        scoutHomeCountry,
+      );
+      contacts[c.id] = { ...c, knownPlayerIds };
     }
 
     // Generate season events and transfer windows for season 1
@@ -1005,6 +1098,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       inbox: [],
       npcScouts: {},
       npcReports: {},
+      npcDelegations: {},
       territories,
       countries: [...new Set([...selectedCountries, ...getSecondaryCountries(), "england", "spain", "germany", "france", "brazil", "argentina"])],
       narrativeEvents: [],
@@ -1016,6 +1110,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       managerProfiles: {},
       seasonEvents: initialSeasonEvents,
       transferWindow: initialTransferWindow,
+      completedScenarioIds: [],
       discoveryRecords: [],
       performanceHistory: [],
       transferRecords: [],
@@ -1025,6 +1120,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       unsignedYouth: initialUnsignedYouth,
       placementReports: {},
       gutFeelings: [],
+      reflectionJournal: {},
       alumniRecords: [],
       legacyScore: {
         youthFound: 0,
@@ -1041,6 +1137,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       subRegions: {},
       youthTournaments: {},
+      internationalAssignments: [],
+      activeInternationalAssignment: null,
       retiredPlayerIds: [],
       // First-Team Scouting System
       managerDirectives: [],
@@ -1220,6 +1318,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ...state,
       scout: { ...state.scout, skills: { ...state.scout.skills } },
       finances: state.finances ? { ...state.finances } : state.finances,
+      npcDelegations: { ...(state.npcDelegations ?? {}) },
     };
     // Migration: add new scout skills if loading an older save
     if (migrated.scout.skills.playerJudgment === undefined) {
@@ -1253,6 +1352,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     migrateMatchRatings(migrated);
     // Migration: Season event effects (F1)
     migrateSeasonEvents(migrated);
+    migrateInboxMessages(migrated);
     // Migration: Injury system (F7)
     migrateInjurySystem(migrated);
     // Migration: Personality profiles (F9)
@@ -1273,11 +1373,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     (migrated as any).activeNegotiations ??= [];
     // Migration: F8 Rival Scouts Enhancement
     migrateRivalScouts(migrated);
+    // Migration: NPC delegation persistence
+    if (!(migrated as GameState & { npcDelegations?: GameState["npcDelegations"] }).npcDelegations) {
+      (migrated as GameState & { npcDelegations: GameState["npcDelegations"] }).npcDelegations = {};
+    }
     // Migration: F2 Event Chains
     // eslint-disable-next-line
     (migrated as any).eventChains ??= [];
     // Migration: F3 Contact Network Depth
     migrateContactNetworkDepth(migrated);
+    // Migration: persisted international assignment queue
+    if (!(migrated as GameState & { internationalAssignments?: GameState["internationalAssignments"] }).internationalAssignments) {
+      (migrated as GameState & { internationalAssignments: GameState["internationalAssignments"] }).internationalAssignments = [];
+    }
+    if ((migrated as GameState & { activeInternationalAssignment?: GameState["activeInternationalAssignment"] }).activeInternationalAssignment === undefined) {
+      (migrated as GameState & { activeInternationalAssignment: GameState["activeInternationalAssignment"] }).activeInternationalAssignment = null;
+    }
     // Migration: F10 Dynamic Board Expectations
     // eslint-disable-next-line
     (migrated as any).boardReactions ??= [];
@@ -1309,7 +1420,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!(club as any).loanedOutPlayerIds) (club as any).loanedOutPlayerIds = [];
       if (!(club as any).loanedInPlayerIds) (club as any).loanedInPlayerIds = [];
     }
-    set({ gameState: migrated, isLoaded: true, currentScreen: "dashboard" });
+    set({
+      gameState: migrated,
+      isLoaded: true,
+      currentScreen: "dashboard",
+      scenarioProgress: null,
+      scenarioOutcome: null,
+      scenarioOutcomeScenarioId: null,
+      pendingCelebration: null,
+      activeSession: null,
+      weekSimulation: null,
+      lastWeekSummary: null,
+      batchSummary: null,
+      saveConflict: null,
+      isResolvingSaveConflict: false,
+    });
 
     // Resume guided session if it wasn't completed in a previous session
     const tutState = useTutorialStore.getState();
@@ -1326,22 +1451,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!gameState) return null;
     const saved = { ...gameState, lastSaved: Date.now() };
     set({ gameState: saved });
-    // Persist to IndexedDB (autosave slot 0) — fire and forget (Fix #4)
-    dbSaveGame(AUTOSAVE_SLOT, "autosave", saved).catch((err) => {
-      console.warn("saveGame: IndexedDB persist failed:", err);
-      captureException(err);
-    });
+    getActiveSaveProvider()
+      .save("autosave", JSON.stringify(saved), "Autosave")
+      .catch((err) => {
+        console.warn("saveGame: provider persist failed:", err);
+        captureException(err);
+      });
     return saved;
   },
 
-  // Persistence (IndexedDB)
+  // Persistence (save provider)
   saveToSlot: async (slot, name) => {
     const { gameState } = get();
     if (!gameState) return;
-    set({ isSaving: true });
+    set({ isSaving: true, saveConflict: null });
     try {
       const saved = { ...gameState, lastSaved: Date.now() };
-      await dbSaveGame(slot, name, saved);
+      await getActiveSaveProvider().save(
+        slotNumberToSaveName(slot),
+        JSON.stringify(saved),
+        name,
+      );
       set({ gameState: saved });
       await get().refreshSaveSlots();
     } finally {
@@ -1352,80 +1482,83 @@ export const useGameStore = create<GameStore>((set, get) => ({
   loadFromSlot: async (slot) => {
     set({ isLoadingSave: true });
     try {
-      const state = await dbLoadGame(slot);
-      if (state) {
-        // Migration: add new scout skills if loading an older save
-        if (state.scout.skills.playerJudgment === undefined) {
-          state.scout.skills.playerJudgment = 5;
-          state.scout.skills.potentialAssessment = 5;
-        }
-        // Migration: add careerPath to scout if missing
-        if (state.scout.careerPath === undefined) {
-          (state.scout as Scout & { careerPath?: string }).careerPath = "club";
-        }
-        // Migration: economics revamp
-        if (state.finances && state.finances.careerPath === undefined) {
-          state.finances = migrateFinancialRecord(state.finances, state.scout);
-        }
-        // Migration: employee skills system
-        if (state.finances && state.finances.employees.some((e) => !e.skills)) {
-          const rng = createRNG(`${state.seed}-skill-migrate`);
-          state.finances = migrateEmployeeSkillsInRecord(state.finances, rng);
-        }
-        // Migration: report listing bids
-        if (state.finances) {
-          state.finances = migrateReportListingBids(state.finances);
-        }
-        // Migration: storyline system
-        if (!Array.isArray(state.activeStorylines)) {
-          state.activeStorylines = [];
-        }
-        // Migration: Player roles, traits & tactical depth expansion
-        migratePlayerRolesAndTraits(state);
-        // Migration: Match rating system
-        migrateMatchRatings(state);
-        // Migration: Season event effects (F1)
-        migrateSeasonEvents(state);
-        // Migration: Injury system (F7)
-        migrateInjurySystem(state);
-        // Migration: Personality profiles (F9)
-        migratePersonalityProfiles(state);
-        // Migration: F14 Financial Strategy Layer
-        migrateFinancialStrategy(state);
-        // Migration: F13 Regional Scouting Depth
-        migrateRegionalKnowledge(state);
-        // Migration: discipline/card system
-        // eslint-disable-next-line
-        if ((state as any).disciplinaryRecords === undefined) {
-          (state as any).disciplinaryRecords = {};
-        }
-        // Migration: F12 Youth Pipeline Tracking
-        migrateAlumniPipeline(state);
-        // Migration: F4 Transfer Negotiation System
-        // eslint-disable-next-line
-        (state as any).activeNegotiations ??= [];
-        // Migration: F8 Rival Scouts Enhancement
-        migrateRivalScouts(state);
-        // Migration: F3 Contact Network Depth
-        migrateContactNetworkDepth(state);
-        // Migration: F10 Dynamic Board Expectations
-        // eslint-disable-next-line
-        (state as any).boardReactions ??= [];
-        set({ gameState: state, isLoaded: true, currentScreen: "dashboard" });
+      const provider = getActiveSaveProvider();
+      const slotName = slotNumberToSaveName(slot);
+      const conflict = await provider.checkConflict(slotName);
+      if (conflict) {
+        set({
+          saveConflict: {
+            slot,
+            conflict,
+          },
+        });
+        return;
       }
+
+      set({ saveConflict: null });
+      const loaded = await provider.load(slotName);
+      if (!loaded) return;
+
+      const state = migrateSaveState(JSON.parse(loaded.data) as unknown);
+      get().loadGame(state);
     } finally {
       set({ isLoadingSave: false });
     }
   },
 
   deleteSlot: async (slot) => {
-    await dbDeleteSave(slot);
+    await getActiveSaveProvider().delete(slotNumberToSaveName(slot));
     await get().refreshSaveSlots();
   },
 
   refreshSaveSlots: async () => {
-    const slots = await dbListSaves();
+    const provider = getActiveSaveProvider();
+    const entries = await provider.listSaves();
+    const seen = new Set<string>();
+    const slots: SaveSlotSummary[] = [];
+
+    for (const entry of entries) {
+      if (seen.has(entry.slotName)) continue;
+      seen.add(entry.slotName);
+      slots.push({
+        slot: entry.slot,
+        name: entry.name,
+        savedAt: entry.savedAt,
+        season: entry.season,
+        week: entry.week,
+        scoutName: entry.scoutName,
+        specialization: entry.specialization,
+        reputation: entry.reputation,
+        source: entry.source,
+      });
+    }
+
     set({ saveSlots: slots });
+  },
+
+  dismissSaveConflict: () => {
+    set({ saveConflict: null });
+  },
+
+  resolveSaveConflict: async (slot, preferredSource) => {
+    set({ isResolvingSaveConflict: true });
+    try {
+      const provider = getActiveSaveProvider();
+      const slotName = slotNumberToSaveName(slot);
+      const resolved = await provider.loadFromSource(slotName, preferredSource);
+      if (!resolved) return;
+
+      await provider.save(slotName, resolved.data, resolved.name, {
+        waitForCloud: true,
+      });
+
+      const state = migrateSaveState(JSON.parse(resolved.data) as unknown);
+      get().loadGame(state);
+      set({ saveConflict: null });
+      await get().refreshSaveSlots();
+    } finally {
+      set({ isResolvingSaveConflict: false });
+    }
   },
 
   // Weekly cycle actions (extracted to actions/weeklyActions.ts)
@@ -1463,7 +1596,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return pendingIds;
   },
 
-  getPlayer: (id) => get().gameState?.players[id],
+  getPlayer: (id) => {
+    const { gameState } = get();
+    return gameState ? resolvePlayerEntity(gameState, id)?.player : undefined;
+  },
   getClub: (id) => get().gameState?.clubs[id],
   getLeague: (id) => get().gameState?.leagues[id],
   getFixture: (id) => get().gameState?.fixtures[id],
@@ -1480,16 +1616,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
   getPlayerObservations: (playerId) => {
     const { gameState } = get();
     if (!gameState) return [];
+    const relatedIds = new Set(getResolvedPlayerIds(gameState, playerId));
     return Object.values(gameState.observations).filter(
-      (o) => o.playerId === playerId
+      (o) => relatedIds.has(o.playerId)
     );
   },
 
   getPlayerReports: (playerId) => {
     const { gameState } = get();
     if (!gameState) return [];
+    const relatedIds = new Set(getResolvedPlayerIds(gameState, playerId));
     return Object.values(gameState.reports).filter(
-      (r) => r.playerId === playerId
+      (r) => relatedIds.has(r.playerId)
     );
   },
 

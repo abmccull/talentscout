@@ -334,13 +334,32 @@ export function generateReportContent(
  * the scout during gameplay). This function is only called post-hoc by the
  * game engine for quality calculation.
  */
-export function calculateReportQuality(
+/** Detailed quality breakdown returned by calculateReportQualityDetailed(). */
+export interface ReportQualityDetailed {
+  score: number;
+  breakdown: {
+    accuracy: number;
+    coverage: number;
+    conviction: number;
+    tightness: number;
+    personalityBonus: number;
+    equipmentBonus: number;
+  };
+}
+
+/**
+ * Score a finalised report against the player's true values, returning both
+ * the overall score (0–100) and a per-component breakdown.
+ */
+export function calculateReportQualityDetailed(
   report: ScoutReport,
   player: Player,
   /** Additive bonus from equipment (0–1 scale, e.g. 0.05 = +5%). */
   reportQualityBonus?: number,
-): number {
-  if (report.attributeAssessments.length === 0) return 0;
+): ReportQualityDetailed {
+  if (report.attributeAssessments.length === 0) {
+    return { score: 0, breakdown: { accuracy: 0, coverage: 0, conviction: 0, tightness: 0, personalityBonus: 0, equipmentBonus: 0 } };
+  }
 
   const trueAttrs = player.attributes;
   let totalError = 0;
@@ -356,14 +375,14 @@ export function calculateReportQuality(
   const averageError = count > 0 ? totalError / count : 10;
 
   // Accuracy score: error 0 → 100, error 5 → 30, error 10+ → 0
-  const accuracyScore = Math.max(0, 100 - averageError * 14);
+  const accuracyRaw = Math.max(0, 100 - averageError * 14);
 
   // Coverage: % of position-relevant attributes assessed
   const relevantAttributes = getRelevantAttributes(player.position);
   const assessedRelevant = report.attributeAssessments.filter((a) =>
     relevantAttributes.includes(a.attribute),
   ).length;
-  const coverageScore =
+  const coverageRaw =
     (assessedRelevant / Math.max(1, relevantAttributes.length)) * 100;
 
   // Conviction appropriateness — use star-based CA when available
@@ -373,7 +392,7 @@ export function calculateReportQuality(
   const perceivedPa = report.perceivedPARange != null
     ? starsToAbility((report.perceivedPARange[0] + report.perceivedPARange[1]) / 2)
     : undefined;
-  const convictionScore = scoreConvictionAppropriateness(
+  const convictionRaw = scoreConvictionAppropriateness(
     perceivedCa,
     player.currentAbility,
     report.conviction,
@@ -382,23 +401,48 @@ export function calculateReportQuality(
   );
 
   // Range tightness (when ranges are correct, tight is better)
-  const tightnessScore = scoreRangeTightness(report.attributeAssessments, trueAttrs);
+  const tightnessRaw = scoreRangeTightness(report.attributeAssessments, trueAttrs);
 
-  const baseQuality =
-    accuracyScore  * 0.45 +
-    coverageScore  * 0.25 +
-    convictionScore * 0.20 +
-    tightnessScore * 0.10;
+  // Weighted components (these are the actual points contributed to the score)
+  const accuracy = accuracyRaw * 0.45;
+  const coverage = coverageRaw * 0.25;
+  const conviction = convictionRaw * 0.20;
+  const tightness = tightnessRaw * 0.10;
 
-  // Personality depth bonus: +5 quality points per revealed trait included in
-  // the report (the report was written while knowing these traits, so it
-  // demonstrates deeper insight beyond raw attribute numbers).
+  const baseQuality = accuracy + coverage + conviction + tightness;
+
+  // Personality depth bonus: +5 quality points per revealed trait
   const personalityBonus = (player.personalityRevealed?.length ?? 0) * 5;
 
-  // Apply equipment report quality bonus (additive, capped at 100)
-  const quality = baseQuality + personalityBonus + (reportQualityBonus ?? 0) * 100;
+  // Equipment report quality bonus (additive, capped at 100)
+  const equipmentBonus = (reportQualityBonus ?? 0) * 100;
 
-  return Math.round(Math.max(0, Math.min(100, quality)));
+  const quality = Math.round(Math.max(0, Math.min(100, baseQuality + personalityBonus + equipmentBonus)));
+
+  return {
+    score: quality,
+    breakdown: {
+      accuracy: Math.round(accuracy * 10) / 10,
+      coverage: Math.round(coverage * 10) / 10,
+      conviction: Math.round(conviction * 10) / 10,
+      tightness: Math.round(tightness * 10) / 10,
+      personalityBonus,
+      equipmentBonus: Math.round(equipmentBonus * 10) / 10,
+    },
+  };
+}
+
+/**
+ * Score a finalised report against the player's true values.
+ * Returns 0–100. Delegates to calculateReportQualityDetailed for backward compat.
+ */
+export function calculateReportQuality(
+  report: ScoutReport,
+  player: Player,
+  /** Additive bonus from equipment (0–1 scale, e.g. 0.05 = +5%). */
+  reportQualityBonus?: number,
+): number {
+  return calculateReportQualityDetailed(report, player, reportQualityBonus).score;
 }
 
 /**
@@ -704,6 +748,7 @@ function identifyWeaknesses(
   return weaknesses;
 }
 
+// TODO: surface in UI — currently generated but never displayed to the player
 function buildComparisonSuggestions(
   assessments: AttributeAssessment[],
   age: number,

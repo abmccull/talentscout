@@ -15,6 +15,7 @@ import type {
   DialogueConsequence,
 } from "@/engine/observation/types";
 import type { PlayerAttribute } from "@/engine/core/types";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // TEMPLATE TYPES
@@ -114,6 +115,32 @@ const NETWORK_ATTRIBUTES: readonly PlayerAttribute[] = [
   "bigGameTemperament",
 ];
 
+const AGENT_SHOWCASE_ATTRIBUTES: readonly PlayerAttribute[] = [
+  "professionalism",
+  "composure",
+  "consistency",
+  "bigGameTemperament",
+  "leadership",
+];
+
+const LOAN_MONITORING_ATTRIBUTES: readonly PlayerAttribute[] = [
+  "professionalism",
+  "workRate",
+  "consistency",
+  "composure",
+  "leadership",
+];
+
+const FREE_AGENT_ATTRIBUTES: readonly PlayerAttribute[] = [
+  "professionalism",
+  "composure",
+  "workRate",
+  "consistency",
+  "decisionMaking",
+  "bigGameTemperament",
+  "injuryProneness",
+];
+
 // =============================================================================
 // DIALOGUE TEMPLATES
 // =============================================================================
@@ -165,6 +192,25 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
           },
           {
             text: "Create genuinely high-pressure situations to expose real character",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The assistant coach gives you the pitch for an hour. {playerName} is already warming up — they know you're here. How do you set the tone?",
+        options: [
+          {
+            text: "Join the warm-up yourself — break the ice informally",
+            riskLevel: "safe",
+          },
+          {
+            text: "Set up a structured drill and observe from the sideline",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Tell them you're here for one reason — show me what you've got",
             riskLevel: "bold",
           },
         ],
@@ -360,6 +406,25 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
           },
           {
             text: "Ask whether they believe the player is being held back here",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "parent",
+        textTemplate:
+          "{speakerName} meets you at a café near the training ground. They brought photos of {playerName} at various tournaments — clearly proud. How do you steer the conversation?",
+        options: [
+          {
+            text: "Show genuine interest in the journey — let them tell the story",
+            riskLevel: "safe",
+          },
+          {
+            text: "Acknowledge the achievement, then pivot to specific questions about mentality",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Cut to it: \"What do you think is holding {playerName} back right now?\"",
             riskLevel: "bold",
           },
         ],
@@ -809,6 +874,680 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
       },
     ],
   ],
+
+  // ---------------------------------------------------------------------------
+  // agentShowcase — 3-5 phases
+  // ---------------------------------------------------------------------------
+  agentShowcase: [
+    // Phase 0 — agent pitch
+    [
+      {
+        speakerKey: "agent",
+        textTemplate:
+          "The agent leans forward confidently. \"Thanks for taking the meeting. I've got a player I think is exactly what you're looking for — {playerName}. Let me walk you through what makes them special.\"",
+        options: [
+          {
+            text: "Listen attentively and take notes on every claim",
+            riskLevel: "safe",
+          },
+          {
+            text: "Interrupt early with pointed questions about weaknesses",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Challenge the pitch immediately — \"I've heard that before. Prove it.\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "agent",
+        textTemplate:
+          "{speakerName} slides a highlights package across the table. \"I represent {playerName}. Before we get into numbers, let me tell you why three other clubs are already interested.\"",
+        options: [
+          {
+            text: "Express polite interest and ask for their full assessment",
+            riskLevel: "safe",
+          },
+          {
+            text: "Steer the conversation toward concrete stats and injury history",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Call the bluff — \"Name the clubs or I'm not buying it\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 1 — player discussion
+    [
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The agent has made their case. Now you need to dig beneath the surface. {playerName}'s profile looks promising on paper, but agents always spin. How do you verify the claims?",
+        options: [
+          {
+            text: "Ask about the player's daily routine and training habits",
+            riskLevel: "safe",
+          },
+          {
+            text: "Push for details on why the player is available — what's the real story?",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Demand to speak with the player directly, bypassing the agent's script",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "agent",
+        textTemplate:
+          "\"Look, I'll be honest with you,\" {speakerName} says, leaning back. \"{playerName} had a rough patch last season, but that's behind them. Every top player has a dip — it's about trajectory.\"",
+        options: [
+          {
+            text: "Acknowledge the honesty and ask what changed",
+            riskLevel: "safe",
+          },
+          {
+            text: "Press harder — what exactly caused the rough patch?",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"A rough patch or a pattern? I need medical and disciplinary records.\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 2 — terms and availability
+    [
+      {
+        speakerKey: "agent",
+        textTemplate:
+          "\"Let's talk availability,\" the agent says. \"There's a window here, but it won't stay open forever. {playerName} has options, and I owe it to my client to explore all of them.\"",
+        options: [
+          {
+            text: "Express genuine interest and ask what timeline they're working with",
+            riskLevel: "safe",
+          },
+          {
+            text: "Push back on the urgency — \"Good players are always available for the right club\"",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"Drop the pressure tactics. Either we're a fit or we're not.\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The conversation turns to practical matters. The agent wants to know your club's budget range and development pathway for {playerName}. How much do you reveal?",
+        options: [
+          {
+            text: "Share a general overview of the club's development programme",
+            riskLevel: "safe",
+          },
+          {
+            text: "Give specifics only if they match details about competing offers",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Keep your cards close — \"We'll make an offer if we like what we see\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 3 — close
+    [
+      {
+        speakerKey: "agent",
+        textTemplate:
+          "{speakerName} stands to wrap up. \"I think there's real potential here. What are your next steps? I need to give {playerName} an update.\"",
+        options: [
+          {
+            text: "Thank them for their time and commit to following up within the week",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask for one more piece of information before committing to anything",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"I'll be in touch if — and only if — what I've heard today checks out\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The meeting is winding down. You've gathered useful intelligence, but the agent is pushing for commitment. How do you leave things?",
+        options: [
+          {
+            text: "Express enthusiasm and schedule a follow-up meeting",
+            riskLevel: "safe",
+          },
+          {
+            text: "Stay neutral — you need to verify claims before showing your hand",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Set a hard deadline — \"You'll hear from me in 48 hours. No earlier.\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 4 — wrap-up assessment
+    [
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "Walking back to your car after the showcase meeting, you review your notes on {playerName}. The agent was polished, but how much of the pitch was substance? Time to form your initial assessment.",
+        options: [
+          {
+            text: "The agent seemed credible — log this as a genuine prospect",
+            riskLevel: "safe",
+          },
+          {
+            text: "Flag some inconsistencies to investigate further before committing",
+            riskLevel: "moderate",
+          },
+          {
+            text: "The pitch was too slick — trust your gut that something's off",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "You sit in your car making notes. {playerName}'s profile has potential, but the agent's eagerness to close quickly is raising questions. What's your read?",
+        options: [
+          {
+            text: "The urgency is normal — agents always push. Focus on the player's qualities",
+            riskLevel: "safe",
+          },
+          {
+            text: "Cross-reference the agent's claims with your own database before deciding",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Something doesn't add up — put this one on hold and dig deeper independently",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+  ],
+
+  // ---------------------------------------------------------------------------
+  // freeAgentOutreach — 4-6 phases
+  // ---------------------------------------------------------------------------
+  freeAgentOutreach: [
+    // Phase 0 — introduction
+    [
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "You've arranged to meet {playerName} directly — no agent, no intermediary. They're a free agent, and this is your chance to assess them face-to-face. How do you open?",
+        options: [
+          {
+            text: "Keep it casual — buy them a coffee and get them talking about themselves",
+            riskLevel: "safe",
+          },
+          {
+            text: "Be upfront about your club's interest and what you need to see from them",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Test their hunger immediately — \"Why should my club take a chance on you?\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "player",
+        textTemplate:
+          "{playerName} arrives early, dressed professionally. They shake your hand firmly. \"Thanks for meeting me. I know free agents don't always get this kind of attention.\"",
+        options: [
+          {
+            text: "Put them at ease — \"We're always looking for quality, regardless of contract status\"",
+            riskLevel: "safe",
+          },
+          {
+            text: "Acknowledge the situation honestly — ask why they're unattached",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"Let's skip the pleasantries. Walk me through what went wrong at your last club\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 1 — player assessment
+    [
+      {
+        speakerKey: "player",
+        textTemplate:
+          "\"I've been keeping fit on my own,\" {playerName} says. \"Training every day, watching film. I know people question free agents, but I'm sharper than I was six months ago.\"",
+        options: [
+          {
+            text: "Ask about their training regime and what they've been focusing on",
+            riskLevel: "safe",
+          },
+          {
+            text: "Challenge the claim — ask for specific examples of how they've improved",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"Prove it. We have facilities — show me tomorrow morning\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "Watching {playerName} talk about their abilities, you notice subtle cues. Their body language shifts when certain topics come up. How do you read the room?",
+        options: [
+          {
+            text: "Let them continue talking — people reveal the most when they feel comfortable",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask directly about the topic that made them uncomfortable",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Call it out — \"You tensed up there. What aren't you telling me?\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 2 — career discussion
+    [
+      {
+        speakerKey: "player",
+        textTemplate:
+          "{playerName} opens up about their career journey. \"I made some mistakes, I won't lie. But I've learned from them. I just need someone to believe in what I can still do.\"",
+        options: [
+          {
+            text: "Show empathy and ask what they learned from those experiences",
+            riskLevel: "safe",
+          },
+          {
+            text: "Probe deeper — what specific mistakes, and how have they changed?",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"Belief isn't enough. What guarantee can you give me this time is different?\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The conversation shifts to {playerName}'s last club. There are clearly unresolved feelings there. How do you navigate this sensitive territory?",
+        options: [
+          {
+            text: "Tread carefully — focus on the future rather than the past",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask neutral questions about what they'd do differently",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Push into the discomfort — the truth usually lives where people don't want to go",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 3 — terms discussion
+    [
+      {
+        speakerKey: "player",
+        textTemplate:
+          "\"Look, I'm not going to pretend I have a dozen offers,\" {playerName} says candidly. \"But I do have options. What I really want is the right situation — somewhere I can contribute and grow.\"",
+        options: [
+          {
+            text: "Appreciate the honesty and outline your club's culture and expectations",
+            riskLevel: "safe",
+          },
+          {
+            text: "Test their flexibility — what are they willing to compromise on?",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"What are your non-negotiables? Let's see if this is even worth pursuing.\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "{playerName} asks about your club's plan for them. They want to know if there's a genuine pathway or if they'd just be a depth signing. How transparent are you?",
+        options: [
+          {
+            text: "Paint an honest picture of the competition for places",
+            riskLevel: "safe",
+          },
+          {
+            text: "Be strategic — share enough to maintain their interest without overpromising",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"Earn your spot. Nobody gets guarantees — that's how we operate\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 4 — close
+    [
+      {
+        speakerKey: "player",
+        textTemplate:
+          "{playerName} stands up and extends their hand. \"I appreciate you taking the time. Whatever you decide, I respect the process.\" Their eyes search your face for a signal.",
+        options: [
+          {
+            text: "Give them a warm send-off and promise to be in touch soon",
+            riskLevel: "safe",
+          },
+          {
+            text: "Stay professional but give a measured hint of your impression",
+            riskLevel: "moderate",
+          },
+          {
+            text: "\"I'll know within 24 hours. If you don't hear from me, you have your answer.\"",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The meeting is over. {playerName} heads out, and you're left with your notes and your instincts. First impressions matter in this business.",
+        options: [
+          {
+            text: "Log detailed notes while the meeting is fresh — stay objective",
+            riskLevel: "safe",
+          },
+          {
+            text: "Compare what they said against what your sources have told you",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Trust your gut — you've seen enough players to know when something's real",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 5 — post-meeting follow-up
+    [
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "Back at your desk, you review the {playerName} file alongside your meeting notes. The free agent market is unpredictable — windows close fast. What's your recommendation?",
+        options: [
+          {
+            text: "Flag as a viable option and recommend further evaluation",
+            riskLevel: "safe",
+          },
+          {
+            text: "Recommend a trial period to verify their claims under real conditions",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Make a decisive call now — either push to sign or close the file",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "You draft your assessment of {playerName}. Free agents are always a calculated risk — low transfer cost but unknown variables. How do you frame your report?",
+        options: [
+          {
+            text: "Present a balanced view highlighting both potential and risk factors",
+            riskLevel: "safe",
+          },
+          {
+            text: "Lead with the specific gaps this player could fill in your squad",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Write a bold recommendation — commit to a clear position and defend it",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+  ],
+
+  // ---------------------------------------------------------------------------
+  // loanMonitoring — 3-5 phases
+  // ---------------------------------------------------------------------------
+  loanMonitoring: [
+    // Phase 0 — arrival at host club
+    [
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "You arrive at the host club's training facility to check on {playerName}. The loan manager meets you at the gate. How do you set the tone?",
+        options: [
+          {
+            text: "Keep it casual — ask about the player's settling-in before getting into specifics",
+            riskLevel: "safe",
+          },
+          {
+            text: "Request the latest training data and match reports upfront",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Ask directly whether the player is meeting expectations or falling short",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "The host club has set aside time for you to review {playerName}'s loan spell. {speakerName} walks you through the corridors toward the pitch. How do you open the conversation?",
+        options: [
+          {
+            text: "Compliment the facilities and ease into questions about the player",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask for a summary of playing time and role in the first team",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Challenge them on why the player's minutes have been inconsistent",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 1 — watching the player train or play
+    [
+      {
+        speakerKey: "contact",
+        textTemplate:
+          "{speakerName} gestures toward the training pitch where {playerName} is working through a session. What catches your eye first?",
+        options: [
+          {
+            text: "Watch body language and energy levels — are they engaged or going through the motions?",
+            riskLevel: "safe",
+          },
+          {
+            text: "Focus on the specific technical skills this loan was meant to develop",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Observe how the coaching staff interact with the player — are they invested or indifferent?",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "You settle into a quiet spot to watch {playerName} in action. The session is competitive and the pace is high. Where do you direct your attention?",
+        options: [
+          {
+            text: "Take a broad view — assess fitness, sharpness, and overall integration",
+            riskLevel: "safe",
+          },
+          {
+            text: "Zero in on decision-making under pressure — the area flagged before the loan",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Watch for leadership moments — does the player organize and demand from teammates?",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 2 — coaching staff meeting
+    [
+      {
+        speakerKey: "contact",
+        textTemplate:
+          "{speakerName} sits down with you in the office. 'So, what would you like to know about {playerName}?' they ask. How do you steer the conversation?",
+        options: [
+          {
+            text: "Ask about the player's attitude and professionalism day-to-day",
+            riskLevel: "safe",
+          },
+          {
+            text: "Request specifics on tactical role and how it's developed the player",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Ask bluntly whether they'd want to sign the player permanently",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "contact",
+        textTemplate:
+          "'Between us,' {speakerName} says, leaning back, '{playerName} has had an interesting time here.' They pause. What do you ask next?",
+        options: [
+          {
+            text: "Nod and let them continue — don't interrupt a candid moment",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask what 'interesting' means — good or bad?",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Push hard — what aren't you telling me?",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 3 — player conversation
+    [
+      {
+        speakerKey: "player",
+        textTemplate:
+          "You sit down with {playerName} after training. They seem open to talking but slightly guarded. How do you draw them out?",
+        options: [
+          {
+            text: "Ask about life off the pitch — settling in, city, teammates",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask what they feel they've improved most since arriving",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Be direct — do you feel this loan is making you better?",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "player",
+        textTemplate:
+          "{playerName} meets you in the canteen. They're relaxed and curious about why you're visiting. How do you frame the conversation?",
+        options: [
+          {
+            text: "Reassure them — this is routine, just checking in on how things are going",
+            riskLevel: "safe",
+          },
+          {
+            text: "Ask them to self-assess honestly — where are the gaps?",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Tell them the parent club has concerns and you need honest answers",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+    // Phase 4 — assessment wrap-up
+    [
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "You've seen enough. Time to compile your assessment of {playerName}'s loan spell. How do you frame your report?",
+        options: [
+          {
+            text: "Balanced summary — cover positives and areas for growth in equal measure",
+            riskLevel: "safe",
+          },
+          {
+            text: "Lead with the development metrics — hard data on what's changed",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Write a bold recommendation — extend, recall, or make permanent",
+            riskLevel: "bold",
+          },
+        ],
+      },
+      {
+        speakerKey: "scout",
+        textTemplate:
+          "Driving home, you turn over everything you've learned about {playerName}. The picture is complex but clear enough to act on. How do you present your findings?",
+        options: [
+          {
+            text: "Stick to the facts — let the data speak for itself",
+            riskLevel: "safe",
+          },
+          {
+            text: "Compare against the original loan objectives point by point",
+            riskLevel: "moderate",
+          },
+          {
+            text: "Make a definitive call — this loan has succeeded or failed",
+            riskLevel: "bold",
+          },
+        ],
+      },
+    ],
+  ],
 };
 
 // =============================================================================
@@ -899,6 +1638,12 @@ function getAttributePool(activityType: string): readonly PlayerAttribute[] {
       return CONTRACT_ATTRIBUTES;
     case "networkMeeting":
       return NETWORK_ATTRIBUTES;
+    case "agentShowcase":
+      return AGENT_SHOWCASE_ATTRIBUTES;
+    case "freeAgentOutreach":
+      return FREE_AGENT_ATTRIBUTES;
+    case "loanMonitoring":
+      return LOAN_MONITORING_ATTRIBUTES;
     default:
       return FOLLOW_UP_ATTRIBUTES;
   }
@@ -1085,6 +1830,12 @@ function deriveDefaultSpeaker(activityType: string): string {
       return "the agent";
     case "networkMeeting":
       return "the contact";
+    case "agentShowcase":
+      return "the agent";
+    case "freeAgentOutreach":
+      return "the player";
+    case "loanMonitoring":
+      return "the loan manager";
     default:
       return "your contact";
   }
@@ -1135,7 +1886,21 @@ export function populateInvestigationPhases(
       ),
     ];
 
-    return { ...phase, dialogueNodes };
+    // Apply career-path text substitution to all dialogue text
+    const resolvedNodes = dialogueNodes.map((node) => ({
+      ...node,
+      text: resolveCareerPathText(node.text, session.careerPath),
+      options: node.options.map((opt) => ({
+        ...opt,
+        text: resolveCareerPathText(opt.text, session.careerPath),
+        outcome: {
+          ...opt.outcome,
+          narrativeText: resolveCareerPathText(opt.outcome.narrativeText, session.careerPath),
+        },
+      })),
+    }));
+
+    return { ...phase, dialogueNodes: resolvedNodes };
   });
 
   // Suppress unused-variable warning for totalPhases — it is used implicitly

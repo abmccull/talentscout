@@ -434,7 +434,7 @@ function SeasonStatisticsSection({ stats }: { stats: SeasonStats }) {
 // =============================================================================
 
 export function SeasonAwardsScreen() {
-  const { gameState, setScreen } = useGameStore();
+  const { gameState, setScreen, dismissSeasonAwards } = useGameStore();
 
   if (!gameState || !gameState.seasonAwardsData) {
     return (
@@ -447,6 +447,7 @@ export function SeasonAwardsScreen() {
   const { seasonAwardsData } = gameState;
 
   const handleContinue = () => {
+    dismissSeasonAwards();
     setScreen("dashboard");
   };
 

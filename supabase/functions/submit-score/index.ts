@@ -1,5 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const GLOBAL_LEADERBOARD_ENABLED = false;
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Content-Type": "application/json",
+} as const;
+
 const SCORE_FORMULA = {
   reputation: 2,
   totalDiscoveries: 5,
@@ -28,26 +37,33 @@ function inRange(value: number, min: number, max: number): boolean {
   return value >= min && value <= max;
 }
 
+function jsonResponse(body: Record<string, unknown>, status: number): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: CORS_HEADERS,
+  });
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-    });
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
+  if (!GLOBAL_LEADERBOARD_ENABLED) {
+    return jsonResponse(
+      { error: "Global leaderboard is disabled during beta while score verification is hardened." },
+      403,
+    );
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
+    return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
   // Authenticate the user via the JWT in the Authorization header.
   const authHeader = req.headers.get("authorization");
   if (!authHeader) {
-    return new Response(JSON.stringify({ error: "Missing authorization header" }), { status: 401 });
+    return jsonResponse({ error: "Missing authorization header" }, 401);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -61,7 +77,7 @@ Deno.serve(async (req) => {
 
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    return jsonResponse({ error: "Unauthorized" }, 401);
   }
 
   // Parse and validate the payload.
@@ -69,27 +85,27 @@ Deno.serve(async (req) => {
   try {
     payload = await req.json();
   } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), { status: 400 });
+    return jsonResponse({ error: "Invalid JSON" }, 400);
   }
 
   const { id, scoutName, score, season, reputation, totalDiscoveries, predictionAccuracy, submittedAt } = payload;
 
   if (!id || !scoutName || typeof score !== "number" || typeof submittedAt !== "number") {
-    return new Response(JSON.stringify({ error: "Missing required fields" }), { status: 400 });
+    return jsonResponse({ error: "Missing required fields" }, 400);
   }
 
   // Plausibility checks.
   if (!inRange(reputation, PLAUSIBILITY_CAPS.reputation.min, PLAUSIBILITY_CAPS.reputation.max)) {
-    return new Response(JSON.stringify({ error: "reputation out of range" }), { status: 422 });
+    return jsonResponse({ error: "reputation out of range" }, 422);
   }
   if (!inRange(totalDiscoveries, PLAUSIBILITY_CAPS.totalDiscoveries.min, PLAUSIBILITY_CAPS.totalDiscoveries.max)) {
-    return new Response(JSON.stringify({ error: "totalDiscoveries out of range" }), { status: 422 });
+    return jsonResponse({ error: "totalDiscoveries out of range" }, 422);
   }
   if (!inRange(predictionAccuracy, PLAUSIBILITY_CAPS.predictionAccuracy.min, PLAUSIBILITY_CAPS.predictionAccuracy.max)) {
-    return new Response(JSON.stringify({ error: "predictionAccuracy out of range" }), { status: 422 });
+    return jsonResponse({ error: "predictionAccuracy out of range" }, 422);
   }
   if (!inRange(season, PLAUSIBILITY_CAPS.season.min, PLAUSIBILITY_CAPS.season.max)) {
-    return new Response(JSON.stringify({ error: "season out of range" }), { status: 422 });
+    return jsonResponse({ error: "season out of range" }, 422);
   }
 
   // Recalculate score and verify it matches.
@@ -100,10 +116,7 @@ Deno.serve(async (req) => {
 
   // Allow a tiny floating-point tolerance.
   if (Math.abs(score - expected) > 0.01) {
-    return new Response(
-      JSON.stringify({ error: "Score mismatch", expected, received: score }),
-      { status: 422 },
-    );
+    return jsonResponse({ error: "Score mismatch", expected, received: score }, 422);
   }
 
   // Insert using the service role client (bypasses RLS).
@@ -122,14 +135,8 @@ Deno.serve(async (req) => {
 
   if (insertError) {
     const status = insertError.code === "23505" ? 409 : 500; // duplicate PK = 409
-    return new Response(
-      JSON.stringify({ error: insertError.message }),
-      { status },
-    );
+    return jsonResponse({ error: insertError.message }, status);
   }
 
-  return new Response(JSON.stringify({ success: true }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return jsonResponse({ success: true }, 200);
 });

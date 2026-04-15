@@ -18,6 +18,7 @@ import type {
   NewGameConfig,
   Specialization,
 } from "../core/types";
+import { SCENARIOS } from "../scenarios";
 
 // =============================================================================
 // CONSTANTS
@@ -177,6 +178,12 @@ const SCENARIO_UNLOCK_CONDITIONS: ReadonlyArray<{
   },
 ];
 
+const LAUNCHABLE_ADVANCED_SCENARIO_IDS = new Set(
+  SCENARIOS
+    .filter((scenario) => scenario.category === "advanced")
+    .map((scenario) => scenario.id),
+);
+
 // =============================================================================
 // CORE FUNCTIONS
 // =============================================================================
@@ -202,12 +209,7 @@ export function generateCompletedCareer(state: GameState): CompletedCareer {
       ? legacyScore.totalSeasons
       : Math.max(1, state.currentSeason - 2024);
 
-  // Determine which scenarios were completed in this career
-  const completedScenarios: string[] = [];
-  if (state.activeScenarioId) {
-    // If there's an active scenario and we're in hall-of-fame, it was completed
-    completedScenarios.push(state.activeScenarioId);
-  }
+  const completedScenarios = [...(state.completedScenarioIds ?? [])];
 
   return {
     scoutName: `${scout.firstName} ${scout.lastName}`,
@@ -367,15 +369,25 @@ function isPerkConditionMet(
  * Returns the full list of unlocked scenario IDs.
  */
 export function checkScenarioUnlocks(profile: LegacyProfile): string[] {
-  const unlocked = new Set(profile.unlockedScenarios);
+  const unlocked = new Set(
+    (profile.unlockedScenarios ?? []).filter((scenarioId) =>
+      LAUNCHABLE_ADVANCED_SCENARIO_IDS.has(scenarioId),
+    ),
+  );
 
   for (const entry of SCENARIO_UNLOCK_CONDITIONS) {
+    if (!LAUNCHABLE_ADVANCED_SCENARIO_IDS.has(entry.scenarioId)) continue;
     if (entry.condition(profile)) {
       unlocked.add(entry.scenarioId);
     }
   }
 
-  return [...unlocked];
+  return SCENARIOS
+    .filter(
+      (scenario) =>
+        scenario.category === "advanced" && unlocked.has(scenario.id),
+    )
+    .map((scenario) => scenario.id);
 }
 
 /**
@@ -385,6 +397,7 @@ export function checkScenarioUnlocks(profile: LegacyProfile): string[] {
 export function getScenarioUnlockDescriptions(): Record<string, string> {
   const descriptions: Record<string, string> = {};
   for (const entry of SCENARIO_UNLOCK_CONDITIONS) {
+    if (!LAUNCHABLE_ADVANCED_SCENARIO_IDS.has(entry.scenarioId)) continue;
     descriptions[entry.scenarioId] = entry.description;
   }
   return descriptions;

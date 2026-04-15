@@ -19,6 +19,7 @@ async function globalSetup() {
     // Wait for the game store to be hydrated — this forces full JS compilation
     await page.waitForFunction(
       () => (window as any).__GAME_STORE__ !== undefined,
+      undefined,
       { timeout: 120_000 },
     );
   } catch (e) {

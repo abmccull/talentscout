@@ -153,6 +153,9 @@ export function migrateSaveState(raw: unknown): GameState {
   // Phase 1 defaults — NPC scouts, territories, countries
   if (!state.npcScouts) state.npcScouts = {};
   if (!state.npcReports) state.npcReports = {};
+  if (!(state as GameState & { npcDelegations?: GameState["npcDelegations"] }).npcDelegations) {
+    (state as GameState & { npcDelegations: GameState["npcDelegations"] }).npcDelegations = {};
+  }
   if (!state.territories) state.territories = {};
   if (!state.countries) state.countries = ["england"];
 
@@ -168,6 +171,7 @@ export function migrateSaveState(raw: unknown): GameState {
   // Phase 4 defaults — discovery records, performance history
   if (!state.discoveryRecords) state.discoveryRecords = [];
   if (!state.performanceHistory) state.performanceHistory = [];
+  if (!state.completedScenarioIds) state.completedScenarioIds = [];
 
   // Interactive match tracking — fixture IDs played via MatchScreen
   if (!state.playedFixtures) state.playedFixtures = [];
@@ -185,6 +189,7 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.unsignedYouth) state.unsignedYouth = {};
   if (!state.placementReports) state.placementReports = {};
   if (!state.gutFeelings) state.gutFeelings = [];
+  if (!state.reflectionJournal) state.reflectionJournal = {};
   if (!state.alumniRecords) state.alumniRecords = [];
   if (!state.legacyScore) state.legacyScore = { youthFound: 0, firstTeamBreakthroughs: 0, internationalCapsFromFinds: 0, totalScore: 0, clubsWorkedAt: 0, countriesScouted: 0, careerHighTier: 0, totalSeasons: 0, bestDiscoveryName: "", bestDiscoveryPA: 0, scenariosCompleted: 0 };
   // Backfill extended LegacyScore fields on saves that predate them
@@ -196,6 +201,7 @@ export function migrateSaveState(raw: unknown): GameState {
   if (state.legacyScore.bestDiscoveryPA === undefined) state.legacyScore.bestDiscoveryPA = 0;
   if (state.legacyScore.scenariosCompleted === undefined) state.legacyScore.scenariosCompleted = 0;
   if (!state.subRegions) state.subRegions = {};
+  if (!state.internationalAssignments) state.internationalAssignments = [];
   if (!state.retiredPlayerIds) state.retiredPlayerIds = [];
 
   // Scout field defaults — Phase 1 extensions on the Scout object

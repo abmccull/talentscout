@@ -1,0 +1,163 @@
+Original prompt: ok do a thorough code review for production readiness for the game for beta testers -- what to look for is full core game loops and engine logic, backend engines are tied to correct front end functionality, bugs or security issues, stubbed out functionality or missing depth etc...
+
+2026-03-09
+- Beta-hardening follow-up in progress.
+- Routed active save behavior toward `saveProvider` so local save UI can reflect real cloud-sync behavior when Supabase auth + cloud saves are enabled.
+- Added provider metadata propagation for save names/source labels across local and Supabase backends.
+- Restored sign-in/cloud-save UI while keeping the global leaderboard explicitly disabled for beta.
+- Verification:
+  - `npm run build` passed.
+  - `npm run test:e2e:smoke` passed (`4 passed`).
+  - `develop-web-game` Playwright client could launch once elevated permissions were granted, but the generic screenshot capture of `/play` was black and the auth-modal click run was blocked by the splash timing, so direct visual confirmation of the new main-menu/auth copy is still weaker than the DOM/smoke coverage.
+- Remaining beta risk:
+  - Cloud saves now use the real provider path, but there is still no conflict-resolution UI if local and cloud diverge intentionally; current beta behavior is "newest save wins."
+
+2026-03-10
+- Smoothed post-session reflection copy for observation, investigation, and analysis sessions in `src/engine/observation/reflection.ts`.
+- Added human-readable activity labels to the reflection header in `src/components/game/ReflectionScreen.tsx` so camelCase activity ids no longer leak into the UI.
+- Tightened passive `networkMeeting` outcomes so scheduled meetings always generate at least a small relationship/trust gain in `src/engine/network/contacts.ts`.
+- Updated passive meeting inbox copy in `src/stores/actions/weeklyActions.ts` to humanize contact roles and report the actual applied relationship delta after clamping, avoiding messages like `improved by 0 points`.
+- Re-anchored starter contacts and contact-seeded player pools to the scout's home country in `src/engine/network/contacts.ts` and `src/stores/gameStore.ts`, so week-1 youth tips and local network intel stop pulling random overseas prospects by default.
+- Tightened youth tip and tournament geography in `src/engine/core/gameLoop.ts`, `src/engine/youth/venues.ts`, and `src/engine/youth/tournaments.ts`; generic youth tournaments now stay local unless a named international tournament explicitly widens the participant country set.
+- Added foreign-prospect routing from `src/components/game/PlayerProfile.tsx` into `src/components/game/InternationalScreen.tsx`, including a direct `Scout in <Country>` action and auto-selected country popup for remote youth leads.
+- Reworked season-event inbox semantics in `src/engine/core/seasonEvents.ts`, `src/engine/core/seasonEventEffects.ts`, `src/components/game/InboxScreen.tsx`, and `src/stores/gameStore.ts` so transfer-window style prompts are no longer marked `Action Required` for youth scouts, existing saves migrate old inbox rows, and actionable season events expose real choice buttons.
+- Verification:
+  - `npm run build` passed.
+  - `npm run test:e2e:smoke` passed (`4 passed`).
+  - `develop-web-game` Playwright client ran successfully against `http://127.0.0.1:3000/play`; screenshot captured at `output/reflection-network-copy-check/shot-0.png`.
+  - Re-ran `npm run build` after the geography/inbox changes: passed.
+  - Re-ran `npm run test:e2e:smoke` after the geography/inbox changes: passed (`4 passed`).
+- Youth Hub follow-up:
+  - Added CA/PA sort options and inline CA/PA star rows to the unsigned-youth card view in `src/components/game/YouthScoutingScreen.tsx`.
+  - Fixed compact star alignment in `src/components/ui/MiniStarRange.tsx` by switching to fixed-width star cells so list-view CA/PA columns line up cleanly across rows.
+  - Corrected the Youth Hub home-country visibility check in `src/components/game/YouthScoutingScreen.tsx` to use `getScoutHomeCountry()` instead of display nationality.
+  - Made first-look youth PA reads materially more conservative in `src/engine/scout/starRating.ts`, so a single school match or tournament no longer makes average prospects look like universal 4.5–5.0 star ceilings.
+  - Reduced early scout quality bias in `src/engine/youth/venues.ts`, so week-1 venue pools stop over-selecting only the very top of the regional talent curve.
+  - Grounded youth narrative event targeting in `src/engine/events/eventTemplates.ts` to visible unsigned prospects only, which prevents named prodigy prompts from pointing at hidden/off-screen players.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+    - `develop-web-game` client captured a live `/play` render at `output/reflection-network-copy-check/shot-0.png`; this confirmed the app boot path, though it was only a landing-screen sanity check rather than a scripted Youth Hub capture.
+- Core state + shell hardening pass:
+  - Added shared player/youth identity resolution in `src/lib/playerResolution.ts` and standardized interactive-session completion keys in `src/lib/activityCompletion.ts`.
+  - Updated `src/stores/gameStore.ts`, `src/stores/actions/navigationActions.ts`, `src/stores/actions/reportActions.ts`, `src/stores/actions/weeklyActions.ts`, `src/components/game/PlayerProfile.tsx`, `src/components/game/ReportWriter.tsx`, `src/components/game/ReportHistory.tsx`, and `src/components/game/WeekSimulationScreen.tsx` so youth players can be resolved consistently by either unsigned-youth id or nested `player.id`.
+  - Fixed interactive-session completion tracking so the week simulator and week resolver now use the same key shape for scheduled observation sessions.
+  - Cleared stale `weekSimulation` state whenever the schedule or season-event decisions change in `src/stores/actions/weeklyActions.ts`, preventing the simulator from advancing an out-of-date weekly plan.
+  - Hardened inbox rendering in `src/components/game/InboxScreen.tsx` with explicit `financial`, `performance`, and `health` message configs plus a safe fallback so new backend message types do not crash the screen.
+  - Latched scenario completion/failure in `src/stores/actions/weeklyActions.ts`, persisted successful scenario IDs on `GameState.completedScenarioIds`, updated legacy counting in `src/engine/career/legacy.ts`, and switched `src/components/game/ScenarioOutcomeOverlay.tsx` to a dedicated resolved-scenario id so overlays stop re-firing after completion.
+  - Added a real awards dismissal path in `src/components/game/SeasonAwardsScreen.tsx` and `src/stores/actions/navigationActions.ts` so stale `seasonAwardsData` no longer blocks later season-awards routing.
+  - Worker patch integration:
+    - `src/components/game/MainMenu.tsx`, `src/components/game/SettingsScreen.tsx`, `src/components/game/AuthModal.tsx`, and `src/lib/useKeyboardNav.ts` now have destructive-action confirmations, clearer auth/cloud-save copy, safer Escape handling, and tighter shortcut gating.
+    - `src/components/game/RivalsScreen.tsx`, `src/components/game/NetworkScreen.tsx`, `src/components/game/PlayerDatabase.tsx`, `src/components/game/NPCManagementScreen.tsx`, and `src/components/game/agency/ClientsTab.tsx` now align better with backend state and avoid misleading/orphaned UI.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+    - `develop-web-game` browser check succeeded after elevating the render step; screenshot captured at `output/core-state-pass/shot-0.png`.
+  - Notes:
+    - A first `npm run build` attempt failed with `/_document` while `npm run test:e2e:smoke` was starting its own web server in parallel; rerunning the build in isolation passed, so that failure was an output-directory race rather than a code regression.
+    - `NPCManagementScreen` still lacks true persisted delegation state in the backend/store, so the new delegate affordances cannot yet show authoritative in-progress assignment status.
+- Reflection persistence pass:
+  - Added durable reflection journal types to `src/engine/core/types.ts` and a new `gameState.reflectionJournal` record keyed by session id.
+  - Backfilled `reflectionJournal` in save migration via `src/lib/db.ts` and initialized it in new careers in `src/stores/gameStore.ts`.
+  - Updated `src/stores/actions/observationActions.ts` so completing a reflection now persists saved notes, accepted/session hypotheses, the generated session summary, and any gut-feeling candidate into durable game state instead of dropping them when the reflection screen closes.
+  - Added a small persistence cue to `src/components/game/ReflectionScreen.tsx` so the UI is explicit that reflection outputs carry forward after completion.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+  - Residual gap:
+    - The data is now durable and available for later UI/report consumption, but this pass did not add a dedicated journal/history surface that reads `reflectionJournal`.
+- NPC delegation persistence pass:
+  - Added durable `npcDelegations` state to `GameState` in `src/engine/core/types.ts`, including estimated duration, remaining weeks, completion metadata, and the generated report id.
+  - Backfilled `npcDelegations` in `src/lib/db.ts` and initialized it for new careers plus load-time migration in `src/stores/gameStore.ts`.
+  - Reworked `delegateScoutingTask()` in `src/engine/core/quickScout.ts` so delegations are actually stored on `gameState`, duplicate/ambiguous assignments are rejected, and each delegation carries its own completion ETA.
+  - Added `processNPCDelegations()` in `src/engine/core/quickScout.ts` and wired it into both manual week advancement (`src/stores/actions/weeklyActions.ts`) and quick-scout batch advancement, so delegated assignments tick down each week and resolve into real `npcReports`.
+  - Updated `src/components/game/NPCManagementScreen.tsx` to surface active delegations, show per-scout assignment status, and disable delegate buttons when the selected scout is already busy or the player is already assigned elsewhere.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+  - Residual gap:
+    - Delegated scouts still continue their normal territory-scanning loop while a focused delegation is active; this pass made delegation state persistent and unambiguous, but it did not yet turn delegation into an exclusive weekly workload model.
+- Backend trust + inbox contract follow-up:
+  - Hardened Supabase cloud-save ownership in `src/lib/supabaseCloudSave.ts` so save operations derive `user_id` from the live authenticated session instead of trusting a client-selected id.
+  - Extended cloud-sync status in `src/lib/saveProvider.ts` and `src/components/game/SettingsScreen.tsx` to preserve the last sync error and surface it in the UI instead of silently failing behind a green-looking cloud toggle.
+  - Disabled cloud leaderboard access in code as well as UI via `src/lib/supabaseLeaderboard.ts`, and made the edge function in `supabase/functions/submit-score/index.ts` fail closed during beta with consistent JSON/CORS responses on every path.
+  - Finished the actionable-inbox contract in `src/components/game/InboxScreen.tsx` by wiring transfer updates back into `NegotiationScreen`, routing international assignments into `InternationalScreen`, and opening the correct tool screens for agency/performance-related items.
+  - Persisted `internationalAssignments` on `GameState` in `src/engine/core/types.ts`, `src/lib/db.ts`, `src/stores/gameStore.ts`, and `src/stores/actions/weeklyActions.ts`; inbox assignment links now target real stored assignment records instead of an orphaned weekly generator output.
+  - Downgraded fake urgency for non-clickable health/financial distress messages in `src/stores/actions/weeklyActions.ts` and `src/engine/finance/distress.ts`, while attaching real destinations to assistant morale and performance warnings in `src/engine/finance/assistantScouts.ts` and `src/engine/career/performancePulse.ts`.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+    - `develop-web-game` client rendered `/play` successfully with a fresh screenshot at `output/backend-inbox-pass/shot-0.png`.
+  - Residual gap:
+    - International assignments are now persisted and reachable from the inbox, but “accepting” an assignment is still effectively the same as opening the country and booking travel; there is not yet a richer accept/decline/payoff loop on the International screen.
+- International screen follow-up:
+  - Hooked `src/components/game/InternationalScreen.tsx` into persisted `gameState.internationalAssignments`, using `getAvailableAssignments()` to surface only the live week’s opportunities.
+  - Added a real assignment panel on the map screen with country, region, assignment type, duration, reputation reward, and an `Open on Map` action so the international system is no longer inbox-only.
+  - Wired `activeAssignments` through `src/components/game/WorldMap.tsx` from actual game state instead of an empty array, so countries with current assignments now pulse on the map.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+  - Notes:
+    - A first smoke rerun failed because a stale manual `next dev` process was still listening on `127.0.0.1:3000`, which prevented Playwright’s managed web server from binding the port. After killing that leftover process, the same smoke suite passed cleanly.
+- Scenario catalog + legacy alignment pass:
+  - Tightened `src/engine/career/legacy.ts` so scenario unlocks and unlock-description metadata are filtered against the real advanced-scenario catalog rather than blindly trusting hard-coded ids or stale legacy-profile state.
+  - Updated `src/components/game/ScenarioSelect.tsx` to read the legacy profile, keep starter scenarios always launchable, and render advanced scenarios as locked cards until their unlock condition is actually met.
+  - Reworked the scenario browser to show explicit unlock requirements on locked advanced scenarios instead of presenting an empty Advanced tab or implying nonexistent content.
+  - Verification:
+    - `npm run build` passed.
+  - Residual gap:
+    - This pass keeps unlock rewards aligned to launchable scenarios and prevents false-empty tabs, but it does not add a dedicated legacy-progression summary screen outside the scenario browser itself.
+- Tutorial/settings truthfulness pass:
+  - Moved the `wroteReport` milestone in `src/stores/actions/reportActions.ts` from report-screen entry to real report submission, so onboarding no longer claims a report was written when the player only opened the writer.
+  - Updated `src/components/game/tutorial/guidedSession.ts` so the milestone copy and interactivity reflect the new “submit to complete” behavior.
+  - Replaced the dead gameplay controls in `src/components/game/SettingsScreen.tsx` with honest beta messaging about which settings are currently live, instead of exposing toggles that the weekly loop never reads.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`) after the Playwright warmup fix below.
+  - Residual gap:
+    - The dormant gameplay fields still exist in persisted settings state for forward compatibility, but the UI no longer claims they affect live behavior.
+- Narrative timing + smoke harness stabilization:
+  - Made narrative-event cooldowns season-safe in `src/engine/events/narrativeEvents.ts` by comparing absolute season/week positions derived from the current fixture calendar instead of raw `currentWeek` values.
+  - Fixed acknowledged-event pruning in `src/stores/actions/weeklyActions.ts` to use the same absolute-week logic, so season rollovers no longer incorrectly retain or prune old narrative cards.
+  - Corrected the Playwright warmup timeout bug in `e2e/global-setup.ts`: `page.waitForFunction()` now receives its timeout in the proper options argument instead of silently falling back to the 30-second default.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+  - Notes:
+    - Before the warmup fix, smoke failures were intermittent and misleading because the dev server could still be compiling while tests started. After fixing the helper, the managed smoke run completed cleanly without the earlier warmup warning.
+- International travel + save conflict pass:
+  - Promoted international assignments to a shared core type in `src/engine/core/types.ts`, added `gameState.activeInternationalAssignment`, initialized/migrated it in `src/stores/gameStore.ts`, and removed the old anonymous inline assignment shape.
+  - Turned accepted international work into a real stateful loop:
+    - `src/stores/actions/progressionActions.ts` now books assignment travel against the assignment duration, removes the accepted assignment from the live queue, stores it as the active assignment, deducts travel cost from finances, records the expense transaction, and invalidates stale week-simulation state.
+    - `src/engine/world/travel.ts` now normalizes wrapped season weeks for travel bookings and treats cross-season travel windows correctly in `isScoutAbroad()`.
+    - `src/stores/actions/weeklyActions.ts` now runs `processInternationalTravelLifecycle()` after weekly advancement so bookings flip into `isAbroad`, clear on return, award country familiarity/reputation on successful assignment completion, and generate a completion inbox message.
+    - `src/engine/world/international.ts` now treats carried-over offers as genuinely available during their final valid week instead of leaving them in state but impossible to accept.
+  - Upgraded the International UI in `src/components/game/InternationalScreen.tsx` and `src/components/game/CountryPopup.tsx`:
+    - assignment cards now show active-trip state, travel cost, and a real `Accept` action in addition to `Open on Map`;
+    - the country popup switches from generic `Book Travel` copy to `Accept Assignment` when the selected country has a live assignment;
+    - the world map now highlights both live offers and the currently active assignment destination coherently through the same flow.
+  - Wired save-conflict resolution into the actual save/load path:
+    - `src/lib/saveProvider.ts` now supports source-specific loads, more useful conflict previews, and optional `waitForCloud` saves so resolution can converge on the chosen source intentionally instead of warning and falling back to newest-wins.
+    - `src/lib/supabaseCloudSave.ts` now treats materially diverged timestamps in either direction as a conflict rather than only flagging “cloud newer.”
+    - `src/stores/gameStore.ts` now stores transient conflict state, checks for conflicts before loading a slot, and resolves a chosen source back through the provider before hydrating the game.
+    - `src/components/game/SaveLoadModal.tsx` now shows inline local-vs-cloud conflict resolution with `Keep Local` / `Use Cloud` choices instead of only a generic load confirmation.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+    - `develop-web-game` render sanity check ran against `/play`; latest screenshot captured at `output/international-save-pass/shot-0.png`.
+  - Residual gap:
+    - The render sanity check only covered the boot/menu state, not a scripted deep navigation into the International or Save/Load screens, so the structural validation here still leans more on build + smoke than on a focused UI replay for those exact screens.
+- Reflection journal + delegation exclusivity pass:
+  - Added a real player-facing reflection-history surface to `src/components/game/ReportHistory.tsx`:
+    - new `Reflection Journal` section sorted newest-first from `gameState.reflectionJournal`;
+    - each entry now shows activity label, season/week, linked player chips, summary, note/hypothesis counts, optional gut-feeling indicator, and expandable details for notes/hypotheses/gut-feeling text;
+    - entries deep-link back into `playerProfile` via the same player resolution flow used elsewhere.
+  - Updated `src/components/game/ReflectionScreen.tsx` copy so the completion state explicitly tells the player the saved reflection can be revisited later from Report History.
+  - Made focused NPC delegations exclusive at the engine level in `src/engine/core/gameLoop.ts`:
+    - the weekly passive territory-scouting loop now skips any NPC scout with an active unfinished delegation;
+    - delegated scouts no longer generate passive territory reports in parallel with a focused assignment during manual or batch week advancement, because both flows share the same weekly tick.
+  - Verification:
+    - `npm run build` passed.
+    - `npm run test:e2e:smoke` passed (`4 passed`).
+  - Residual gap:
+    - Reflection history is now visible globally, but there still is not a dedicated player-profile reflection card or a direct report-to-reflection linkage model; the journal remains session-based rather than report-based.

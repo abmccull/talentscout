@@ -77,7 +77,13 @@ import {
   isDeadlineDayPressure,
 } from "@/engine/core/transferWindow";
 import { processWeeklyTick, advanceWeek as advanceWeekEngine } from "@/engine/core/gameLoop";
-import { autoScheduleWeek, batchAdvanceWeeks, delegateScoutingTask, buildDefaultPriorities } from "@/engine/core/quickScout";
+import {
+  autoScheduleWeek,
+  batchAdvanceWeeks,
+  delegateScoutingTask,
+  buildDefaultPriorities,
+  processNPCDelegations,
+} from "@/engine/core/quickScout";
 import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases";
 import { calculateAttendedMatchRatings, computeFormFromRatings } from "@/engine/match/ratings";
 import { generateCardEvents, processCardAccumulation } from "@/engine/match/discipline";
@@ -86,7 +92,11 @@ import { computeScoutingBreakthroughBonus } from "@/engine/scout/perception";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { trackPostTransfer } from "@/engine/reports/reporting";
 import { updateReputation, generateJobOffers, calculatePerformanceReview } from "@/engine/career/progression";
-import { meetContact, generateContactForType } from "@/engine/network/contacts";
+import {
+  meetContact,
+  generateContactForType,
+  getContactCoverageCountry,
+} from "@/engine/network/contacts";
 import {
   createWeekSchedule,
   addActivity,
@@ -128,8 +138,10 @@ import {
   bookTravel,
   getTravelDuration,
   getScoutHomeCountry as getScoutHome,
+  isScoutAbroad,
   processCrossCountryTransfers,
   processInternationalWeek,
+  updateCountryReputation,
   classifyStandingZone,
 } from "@/engine/world/index";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
@@ -225,12 +237,31 @@ import { getCountryDataSync, getSecondaryCountries, getAvailableCountries } from
 import { useTutorialStore, resolveOnboardingSequence } from "@/stores/tutorialStore";
 import { evaluateHints } from "@/components/game/tutorial/hintConditions";
 import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
+import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
+import {
+  resolvePlayerEntity,
+  resolveUnsignedYouth,
+} from "@/lib/playerResolution";
 import {
   applyScenarioOverrides,
   checkScenarioObjectives,
   isScenarioFailed,
 } from "@/engine/scenarios";
 import { ACTIVITY_MODE_MAP } from "@/engine/observation/types";
+
+const DEFAULT_NARRATIVE_SEASON_LENGTH_WEEKS = 38;
+
+function getNarrativeSeasonLength(state: GameState): number {
+  let maxWeek = DEFAULT_NARRATIVE_SEASON_LENGTH_WEEKS;
+  for (const fixture of Object.values(state.fixtures)) {
+    if (fixture.week > maxWeek) maxWeek = fixture.week;
+  }
+  return maxWeek;
+}
+
+function toAbsoluteNarrativeWeek(state: GameState, season: number, week: number): number {
+  return season * getNarrativeSeasonLength(state) + week;
+}
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import {
   generateDirectives,
@@ -258,10 +289,7 @@ import { createInsightState, accumulateInsight, calculateCapacity, tickCooldown 
 import { processManagerMeeting, recordDiscovery } from "@/engine/career/index";
 import { generateReportContent, finalizeReport, calculateReportQuality } from "@/engine/reports/reporting";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
-import {
-  autosave as dbAutosave,
-  AUTOSAVE_SLOT,
-} from "@/lib/db";
+import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { captureException } from "@/lib/sentry";
 
 // ── Module-level state ─────────────────────────────────────────────────────
@@ -270,6 +298,11 @@ let _autosavePending = false;
 
 // ── Local type alias ───────────────────────────────────────────────────────
 type SimulationChoiceId = ActivityChoiceId;
+type CelebrationPayload = {
+  tier: "minor" | "major" | "epic";
+  title: string;
+  description: string;
+};
 
 // ── Helper functions ───────────────────────────────────────────────────────
 
@@ -289,8 +322,89 @@ function buildDaySpanInfo(
   return info;
 }
 
-function buildDayInteraction(activity: Activity | null): DayResult["interaction"] | undefined {
-  return buildActivityInteractionState(activity);
+function processInternationalTravelLifecycle(state: GameState): GameState {
+  const booking = state.scout.travelBooking;
+  if (!booking) return state;
+
+  const currentlyAbroad = isScoutAbroad(state.scout, state.currentWeek);
+
+  if (!currentlyAbroad && !booking.isAbroad) {
+    return state;
+  }
+
+  if (currentlyAbroad) {
+    if (booking.isAbroad) return state;
+    return {
+      ...state,
+      scout: {
+        ...state.scout,
+        travelBooking: {
+          ...booking,
+          isAbroad: true,
+        },
+      },
+    };
+  }
+
+  let updatedScout: Scout = {
+    ...state.scout,
+    travelBooking: undefined,
+  };
+  let updatedState: GameState = {
+    ...state,
+    scout: updatedScout,
+  };
+
+  const assignment = state.activeInternationalAssignment;
+  if (!assignment) {
+    return updatedState;
+  }
+
+  const countryKey = assignment.country.toLowerCase();
+  const existingCountryRep = updatedScout.countryReputations[countryKey] ?? {
+    country: countryKey,
+    familiarity: 0,
+    reportsSubmitted: 0,
+    successfulFinds: 0,
+    contactCount: 0,
+  };
+  const countryEvent =
+    assignment.type === "youthTournament" ? "contact" : "report";
+
+  updatedScout = {
+    ...updatedScout,
+    reputation: Math.min(100, updatedScout.reputation + assignment.reputationReward),
+    countryReputations: {
+      ...updatedScout.countryReputations,
+      [countryKey]: updateCountryReputation(existingCountryRep, countryEvent),
+    },
+  };
+
+  const completionMessage: InboxMessage = {
+    id: `assignment-complete-${assignment.id}-w${state.currentWeek}-s${state.currentSeason}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "event",
+    title: `Assignment Complete: ${assignment.country}`,
+    body:
+      `You returned from ${assignment.country} after a ${assignment.type === "youthTournament" ? "youth-focused" : "dedicated"} scouting trip. ` +
+      `Your reputation rose by ${assignment.reputationReward} and your knowledge of the country improved.`,
+    read: false,
+    actionRequired: false,
+    relatedId: assignment.id,
+    relatedEntityType: "assignment",
+  };
+
+  return {
+    ...updatedState,
+    scout: updatedScout,
+    activeInternationalAssignment: null,
+    inbox: [completionMessage, ...updatedState.inbox],
+  };
+}
+
+function buildDayInteraction(activity: Activity | null, careerPath?: import("@/engine/core/types").CareerPath): DayResult["interaction"] | undefined {
+  return buildActivityInteractionState(activity, careerPath);
 }
 
 function isQualityRelevantActivity(activity: Activity | null): activity is Activity {
@@ -315,7 +429,209 @@ function rollDayActivityQuality(
   const qualityRng = createRNG(
     `${gameState.seed}-quality-${gameState.currentWeek}-${gameState.currentSeason}-${getQualityKey(activity, dayIndex)}`,
   );
-  return rollActivityQuality(qualityRng, activity.type, gameState.scout);
+  return rollActivityQuality(qualityRng, activity.type, gameState.scout, gameState.scout.careerPath);
+}
+
+function deriveScenarioState(
+  state: GameState,
+): {
+  scenarioProgressUpdate: ScenarioProgress | null;
+  scenarioOutcomeUpdate: "victory" | "failure" | null;
+} {
+  const scenarioId = state.activeScenarioId;
+  if (!scenarioId) {
+    return {
+      scenarioProgressUpdate: null,
+      scenarioOutcomeUpdate: null,
+    };
+  }
+
+  const progress = checkScenarioObjectives(state, scenarioId);
+  const failCheck = isScenarioFailed(state, scenarioId);
+
+  return {
+    scenarioProgressUpdate: progress,
+    scenarioOutcomeUpdate: progress.allRequiredComplete
+      ? "victory"
+      : failCheck.failed
+        ? "failure"
+        : null,
+  };
+}
+
+function derivePendingCelebration(
+  previousState: GameState,
+  nextState: GameState,
+  scenarioOutcomeUpdate: "victory" | "failure" | null,
+  newlyUnlocked: string[],
+): CelebrationPayload | null {
+  const prevDiscoveryIds = new Set(previousState.discoveryRecords.map((d) => d.playerId));
+  const newWonderkidDiscoveries = nextState.discoveryRecords.filter(
+    (d) => d.wasWonderkid && !prevDiscoveryIds.has(d.playerId),
+  );
+
+  if (newWonderkidDiscoveries.length > 0) {
+    const first = newWonderkidDiscoveries[0];
+    const wkPlayer = first ? nextState.players[first.playerId] : undefined;
+    const wkName = wkPlayer ? `${wkPlayer.firstName} ${wkPlayer.lastName}` : "a player";
+    return {
+      tier: "epic",
+      title: "Wonderkid Discovered!",
+      description: `You've uncovered a generational talent: ${wkName}. This could be the find of your career.`,
+    };
+  }
+
+  if (nextState.scout.careerTier > previousState.scout.careerTier) {
+    return {
+      tier: "major",
+      title: "Career Promotion!",
+      description: `You've been promoted to Tier ${nextState.scout.careerTier}. New opportunities await.`,
+    };
+  }
+
+  if (scenarioOutcomeUpdate === "victory") {
+    const scenarioId = nextState.activeScenarioId;
+    const victoryScenario = scenarioId ? getScenarioById(scenarioId) : undefined;
+    return {
+      tier: "major",
+      title: "Scenario Complete!",
+      description: victoryScenario
+        ? `You completed "${victoryScenario.name}". All objectives achieved.`
+        : "All scenario objectives achieved!",
+    };
+  }
+
+  if (newlyUnlocked.length > 0) {
+    return {
+      tier: "minor",
+      title: "New Tool Unlocked",
+      description: `You unlocked a new scouting tool: ${newlyUnlocked[0]}.`,
+    };
+  }
+
+  return null;
+}
+
+function latchScenarioOutcome(
+  state: GameState,
+  outcome: "victory" | "failure",
+): {
+  state: GameState;
+  resolvedScenarioId: string | null;
+} {
+  const resolvedScenarioId = state.activeScenarioId ?? null;
+  if (!resolvedScenarioId) {
+    return { state, resolvedScenarioId: null };
+  }
+
+  if (outcome !== "victory") {
+    return {
+      resolvedScenarioId,
+      state: {
+        ...state,
+        activeScenarioId: undefined,
+      },
+    };
+  }
+
+  const completedScenarioIds = state.completedScenarioIds.includes(resolvedScenarioId)
+    ? state.completedScenarioIds
+    : [...state.completedScenarioIds, resolvedScenarioId];
+
+  return {
+    resolvedScenarioId,
+    state: {
+      ...state,
+      activeScenarioId: undefined,
+      completedScenarioIds,
+      legacyScore: {
+        ...state.legacyScore,
+        scenariosCompleted: completedScenarioIds.length,
+      },
+    },
+  };
+}
+
+function queueAutosave(newState: GameState, set: SetState): void {
+  set({ autosaveError: null });
+  if (_autosavePending) return;
+
+  _autosavePending = true;
+  getActiveSaveProvider()
+    .save("autosave", JSON.stringify(newState), "Autosave")
+    .catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("Autosave failed:", err);
+      set({ autosaveError: message });
+    })
+    .finally(() => {
+      _autosavePending = false;
+    });
+}
+
+function humanizeIdentifier(value: string): string {
+  return value
+    .replace(/([A-Z])/g, " $1")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function pickRandomIds(rng: ReturnType<typeof createRNG>, pool: string[], count: number): string[] {
+  const available = [...pool];
+  const picked: string[] = [];
+
+  while (picked.length < count && available.length > 0) {
+    const idx = rng.nextInt(0, available.length - 1);
+    picked.push(available[idx]);
+    available.splice(idx, 1);
+  }
+
+  return picked;
+}
+
+function seedKnownPlayersForContact(
+  rng: ReturnType<typeof createRNG>,
+  contact: Contact,
+  state: GameState,
+): string[] {
+  const knownCount = rng.nextInt(3, 7);
+  const coverageCountry = getContactCoverageCountry(contact, getScoutHome(state.scout));
+  const isYouthContact = new Set<Contact["type"]>([
+    "academyCoach",
+    "grassrootsOrganizer",
+    "schoolCoach",
+    "youthAgent",
+    "academyDirector",
+    "localScout",
+  ]).has(contact.type) && state.scout.primarySpecialization === "youth";
+
+  if (isYouthContact) {
+    const youthPool = Object.values(state.unsignedYouth)
+      .filter((youth) => !youth.placed && !youth.retired)
+      .filter((youth) => !coverageCountry || youth.country === coverageCountry)
+      .map((youth) => youth.id);
+    return pickRandomIds(
+      rng,
+      youthPool.length > 0 ? youthPool : Object.keys(state.unsignedYouth),
+      knownCount,
+    );
+  }
+
+  const allPlayerIds = Object.keys(state.players);
+  const seniorPool = coverageCountry
+    ? allPlayerIds.filter((id) => {
+        const player = state.players[id];
+        const club = player ? state.clubs[player.clubId] : undefined;
+        const league = club ? state.leagues[club.leagueId] : undefined;
+        return league?.country === coverageCountry;
+      })
+    : [];
+
+  return pickRandomIds(
+    rng,
+    seniorPool.length > 0 ? seniorPool : allPlayerIds,
+    knownCount,
+  );
 }
 
 function tierFromMultiplier(multiplier: number): ActivityQualityTier {
@@ -400,7 +716,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       }
     }
     const schedule = addActivity(gameState.schedule, effectiveActivity, dayIndex);
-    set({ gameState: { ...gameState, schedule } });
+    set({
+      gameState: { ...gameState, schedule },
+      weekSimulation: null,
+    });
 
     // Tutorial auto-advance — generic and specialization-specific conditions.
     const tutorial = useTutorialStore.getState();
@@ -443,7 +762,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     const { gameState } = get();
     if (!gameState) return;
     const schedule = removeActivity(gameState.schedule, dayIndex);
-    set({ gameState: { ...gameState, schedule } });
+    set({
+      gameState: { ...gameState, schedule },
+      weekSimulation: null,
+    });
   },
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -463,7 +785,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     const { gameState } = get();
     if (!gameState) return;
     const newState = resolveSeasonEventChoice(gameState, eventId, choiceIndex);
-    set({ gameState: newState });
+    set({
+      gameState: newState,
+      weekSimulation: null,
+    });
   },
 
   advanceWeek: () => {
@@ -472,9 +797,11 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
     // Checkpoint autosave before processing — if the game crashes during week
     // simulation the player has a save from immediately before.
-    dbAutosave(gameState).catch((err) => {
-      console.warn("Pre-advance checkpoint autosave failed:", err);
-    });
+    getActiveSaveProvider()
+      .save("autosave", JSON.stringify(gameState), "Autosave")
+      .catch((err) => {
+        console.warn("Pre-advance checkpoint autosave failed:", err);
+      });
 
     const simState = get().weekSimulation;
 
@@ -632,7 +959,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       const mode = ACTIVITY_MODE_MAP[activity.type];
       if (!mode) continue;
 
-      const instanceKey = activity.instanceId ?? `${activity.type}-d${instance.dayIndex}`;
+      const instanceKey = getInteractiveActivityCompletionKey(activity, instance.dayIndex);
       if (completedInteractiveIds.has(instanceKey)) {
         switch (mode) {
           case "fullObservation":
@@ -853,7 +1180,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           + interactionRelBonus
           + lifestyleNetBonus;
         const adjustedChange = result.relationshipChange >= 0
-          ? Math.round(result.relationshipChange * (1 + relBonus))
+          ? Math.max(1, Math.round(result.relationshipChange * (1 + relBonus)))
           : result.relationshipChange;
 
         // Apply relationship change — clamp to 0–100
@@ -861,6 +1188,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           0,
           Math.min(100, contact.relationship + adjustedChange),
         );
+        const actualRelationshipChange = newRelationship - contact.relationship;
         // F3: Apply trust change and record interaction history
         const currentTrust = contact.trustLevel ?? contact.relationship;
         const newTrust = Math.max(0, Math.min(100, currentTrust + (result.trustDelta ?? 0)));
@@ -888,16 +1216,22 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           updatedIntel[boostedHint.playerId] = [...existing, boostedHint];
         }
 
+        const contactTypeLabel = humanizeIdentifier(contact.type);
         // Build meeting summary message
+        const relationshipLine =
+          actualRelationshipChange > 0
+            ? `Relationship improved by ${actualRelationshipChange} point${actualRelationshipChange === 1 ? "" : "s"} (now ${newRelationship}/100).`
+            : actualRelationshipChange < 0
+              ? `Relationship declined by ${Math.abs(actualRelationshipChange)} point${Math.abs(actualRelationshipChange) === 1 ? "" : "s"} (now ${newRelationship}/100).`
+              : `Relationship held steady at ${newRelationship}/100.`;
         const parts: string[] = [
-          `You met with ${contact.name} (${contact.type}).`,
-          `Relationship ${adjustedChange >= 0 ? "improved" : "declined"} by ${Math.abs(adjustedChange)} points (now ${newRelationship}/100).`,
+          `You met with ${contact.name} (${contactTypeLabel}).`,
+          relationshipLine,
         ];
 
         for (const intel of result.intel) {
-          const seniorPlayer = stateWithScheduleApplied.players[intel.playerId];
-          const youthEntry = stateWithScheduleApplied.unsignedYouth[intel.playerId];
-          const resolvedPlayer = seniorPlayer ?? youthEntry?.player;
+          const resolvedPlayer = resolvePlayerEntity(stateWithScheduleApplied, intel.playerId)?.player
+            ?? stateWithScheduleApplied.players[intel.playerId];
           const playerName = resolvedPlayer
             ? `${resolvedPlayer.firstName} ${resolvedPlayer.lastName}`
             : "a player";
@@ -906,9 +1240,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         }
 
         for (const tip of result.tips) {
-          const seniorPlayer = stateWithScheduleApplied.players[tip.playerId];
-          const youthEntry = stateWithScheduleApplied.unsignedYouth[tip.playerId];
-          const resolvedPlayer = seniorPlayer ?? youthEntry?.player;
+          const resolvedPlayer = resolvePlayerEntity(stateWithScheduleApplied, tip.playerId)?.player
+            ?? stateWithScheduleApplied.players[tip.playerId];
           const playerName = resolvedPlayer
             ? `${resolvedPlayer.firstName} ${resolvedPlayer.lastName}`
             : "a player";
@@ -919,13 +1252,13 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         // Youth scout: boost visibility/buzz for youth mentioned in tips
         if (stateWithScheduleApplied.scout.primarySpecialization === "youth") {
           for (const tip of result.tips) {
-            const youth = stateWithScheduleApplied.unsignedYouth[tip.playerId];
+            const youth = resolveUnsignedYouth(stateWithScheduleApplied, tip.playerId);
             if (!youth || youth.placed || youth.retired) continue;
             stateWithScheduleApplied = {
               ...stateWithScheduleApplied,
               unsignedYouth: {
                 ...stateWithScheduleApplied.unsignedYouth,
-                [tip.playerId]: {
+                [youth.id]: {
                   ...youth,
                   visibility: Math.min(100, youth.visibility + 5),
                   buzzLevel: Math.min(100, youth.buzzLevel + 5),
@@ -3702,7 +4035,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
       for (const placementActivity of scheduledPlacementActivities) {
         if (!placementActivity.targetId) continue;
-        const youth = stateWithScheduleApplied.unsignedYouth[placementActivity.targetId];
+        const youth = resolveUnsignedYouth(stateWithScheduleApplied, placementActivity.targetId);
         if (!youth || youth.placed || youth.retired) continue;
         const existingPending = Object.values(preparedPlacementReports).some(
           (r) => r.unsignedYouthId === youth.id && r.clubResponse === "pending",
@@ -3874,15 +4207,17 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         const type = contactRng.pick(contactTypes);
         const orgs = ["Base Soccer", "Elite Scouting", "Global Football Network", "Football Insights"];
         const org = contactRng.pick(orgs);
-        const newContact = generateContactForType(contactRng, type, org);
-        // Populate knownPlayerIds with random players
-        const allPIds = Object.keys(stateWithScheduleApplied.players);
-        const knownCount = contactRng.nextInt(3, 7);
-        const knownIds: string[] = [];
-        for (let i = 0; i < knownCount && allPIds.length > 0; i++) {
-          const idx = contactRng.nextInt(0, allPIds.length - 1);
-          if (!knownIds.includes(allPIds[idx])) knownIds.push(allPIds[idx]);
-        }
+        const newContact = generateContactForType(
+          contactRng,
+          type,
+          org,
+          getScoutHome(gameState.scout),
+        );
+        const knownIds = seedKnownPlayersForContact(
+          contactRng,
+          newContact,
+          stateWithScheduleApplied,
+        );
         const contactWithPlayers = { ...newContact, knownPlayerIds: knownIds };
         const contactMsg: InboxMessage = {
           id: `new-contact-${newContact.id}`,
@@ -3890,7 +4225,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           season: stateWithScheduleApplied.currentSeason,
           type: "event" as const,
           title: `New Contact: ${newContact.name}`,
-          body: `You've been introduced to ${newContact.name} (${type}) from ${org}${newContact.region ? `, covering ${newContact.region}` : ""}. They know ${knownCount} player${knownCount !== 1 ? "s" : ""} and appear in your contact network.`,
+          body: `You've been introduced to ${newContact.name} (${type}) from ${org}${newContact.region ? `, covering ${newContact.region}` : ""}. They know ${knownIds.length} player${knownIds.length !== 1 ? "s" : ""} and appear in your contact network.`,
           read: false,
           actionRequired: false,
           relatedId: newContact.id,
@@ -3987,10 +4322,18 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       internationalRng,
       stateWithScheduleApplied.scout,
       stateWithScheduleApplied,
+      stateWithScheduleApplied.internationalAssignments,
     );
 
     // Surface new international assignments as inbox messages so the player is notified
-    let stateWithInternational = stateWithScheduleApplied;
+    const retainedAssignments = stateWithScheduleApplied.internationalAssignments.filter(
+      (assignment) => !internationalResult.expiredAssignmentIds.includes(assignment.id),
+    );
+    const updatedAssignments = [...retainedAssignments, ...internationalResult.newAssignments];
+    let stateWithInternational = {
+      ...stateWithScheduleApplied,
+      internationalAssignments: updatedAssignments,
+    };
     if (internationalResult.newAssignments.length > 0) {
       const newMessages: InboxMessage[] = internationalResult.newAssignments.map((assignment) => ({
         id: `assignment-${assignment.id}`,
@@ -4002,9 +4345,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         read: false,
         actionRequired: true,
         relatedId: assignment.id,
+        relatedEntityType: "assignment" as const,
       }));
       stateWithInternational = {
-        ...stateWithScheduleApplied,
+        ...stateWithInternational,
         inbox: [...stateWithScheduleApplied.inbox, ...newMessages],
       };
     }
@@ -4257,6 +4601,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                 body: event.description,
                 read: false,
                 actionRequired: true,
+                relatedId: "agency",
+                relatedEntityType: "tool" as const,
               }, ...stateWithPhase2.inbox],
             };
           }
@@ -4710,6 +5056,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
     const tickResult = processWeeklyTick(stateWithPhase2, rng);
     let newState = advanceWeekEngine(stateWithPhase2, tickResult);
+    newState = processNPCDelegations(newState, rng).state;
+    newState = processInternationalTravelLifecycle(newState);
 
     // ── B10: Link transfers to scout reports for accountability tracking ────
     if (tickResult.transfers.length > 0) {
@@ -5133,7 +5481,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             title: msg.title,
             body: msg.body,
             read: false,
-            actionRequired: true,
+            actionRequired: false,
           });
           // Reputation penalty for failed contracts
           if (msg.title === "Contract Terminated") {
@@ -5189,7 +5537,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             title: "Burnout Illness",
             body: `The relentless pace has caught up with you. You've fallen ill and your ${burnout.affectedAttribute} has permanently decreased by 2. Take better care of yourself.`,
             read: false,
-            actionRequired: true,
+            actionRequired: false,
           });
         }
       }
@@ -5202,7 +5550,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           title: fatigueResult.status === "burnout_risk" ? "Burnout Warning — Forced Rest" : "Exhaustion — Forced Rest",
           body: "You are too exhausted to work effectively. You must rest next week. All scheduled activities have been cleared.",
           read: false,
-          actionRequired: true,
+          actionRequired: false,
         });
       }
 
@@ -5839,8 +6187,15 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
     // Issue 17: Prune old acknowledged narrative events (keep last 10 weeks)
     if (newState.narrativeEvents.length > 0) {
+      const currentNarrativeWeek = toAbsoluteNarrativeWeek(
+        newState,
+        newState.currentSeason,
+        newState.currentWeek,
+      );
       const prunedNarratives = newState.narrativeEvents.filter(
-        (e) => !e.acknowledged || newState.currentWeek - e.week < 10,
+        (e) =>
+          !e.acknowledged
+          || currentNarrativeWeek - toAbsoluteNarrativeWeek(newState, e.season, e.week) < 10,
       );
       newState = { ...newState, narrativeEvents: prunedNarratives };
     }
@@ -5873,70 +6228,20 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     };
 
     // ── Scenario objective checking ─────────────────────────────────────────
-    const scenarioId = newState.activeScenarioId;
-    let scenarioOutcomeUpdate: "victory" | "failure" | null = null;
-    let scenarioProgressUpdate: ScenarioProgress | null = null;
-    if (scenarioId) {
-      const progress = checkScenarioObjectives(newState, scenarioId);
-      const failCheck = isScenarioFailed(newState, scenarioId);
-      scenarioProgressUpdate = progress;
-      if (progress.allRequiredComplete) {
-        scenarioOutcomeUpdate = "victory";
-      } else if (failCheck.failed) {
-        scenarioOutcomeUpdate = "failure";
-      }
-    }
-
-    // ── Celebration detection (highest priority wins per week) ──────────────
-    type CelebrationPayload = { tier: "minor" | "major" | "epic"; title: string; description: string };
-    let pendingCelebration: CelebrationPayload | null = null;
-
-    // Epic: new wonderkid discovery this week
-    const prevDiscoveryIds = new Set(gameState.discoveryRecords.map((d) => d.playerId));
-    const newWonderkidDiscoveries = newState.discoveryRecords.filter(
-      (d) => d.wasWonderkid && !prevDiscoveryIds.has(d.playerId),
+    const { scenarioProgressUpdate, scenarioOutcomeUpdate } = deriveScenarioState(newState);
+    const pendingCelebration = derivePendingCelebration(
+      gameState,
+      newState,
+      scenarioOutcomeUpdate,
+      newlyUnlocked,
     );
-    if (newWonderkidDiscoveries.length > 0) {
-      const first = newWonderkidDiscoveries[0];
-      const wkPlayer = first ? newState.players[first.playerId] : undefined;
-      const wkName = wkPlayer ? `${wkPlayer.firstName} ${wkPlayer.lastName}` : "a player";
-      pendingCelebration = {
-        tier: "epic",
-        title: "Wonderkid Discovered!",
-        description: `You've uncovered a generational talent: ${wkName}. This could be the find of your career.`,
-      };
+    let resolvedScenarioId: string | null = null;
+    if (scenarioOutcomeUpdate !== null) {
+      const latched = latchScenarioOutcome(newState, scenarioOutcomeUpdate);
+      newState = latched.state;
+      resolvedScenarioId = latched.resolvedScenarioId;
     }
-
-    // Major: tier promotion (overrides minor, but not epic)
     const tierPromoted = newState.scout.careerTier > gameState.scout.careerTier;
-    if (!pendingCelebration && tierPromoted) {
-      pendingCelebration = {
-        tier: "major",
-        title: "Career Promotion!",
-        description: `You've been promoted to Tier ${newState.scout.careerTier}. New opportunities await.`,
-      };
-    }
-
-    // Major: scenario victory
-    if (!pendingCelebration && scenarioOutcomeUpdate === "victory") {
-      const victoryScenario = scenarioId ? getScenarioById(scenarioId) : undefined;
-      pendingCelebration = {
-        tier: "major",
-        title: "Scenario Complete!",
-        description: victoryScenario
-          ? `You completed "${victoryScenario.name}". All objectives achieved.`
-          : "All scenario objectives achieved!",
-      };
-    }
-
-    // Minor: new tool unlocked (perk-equivalent trigger)
-    if (!pendingCelebration && newlyUnlocked.length > 0) {
-      pendingCelebration = {
-        tier: "minor",
-        title: "New Tool Unlocked",
-        description: `You unlocked a new scouting tool: ${newlyUnlocked[0]}.`,
-      };
-    }
 
     // ── Guided session milestone ──────────────────────────────────────────────
     useTutorialStore.getState().completeMilestone("advancedWeek");
@@ -6062,7 +6367,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       gameState: newState,
       lastWeekSummary: weekSummary,
       ...(scenarioProgressUpdate !== null ? { scenarioProgress: scenarioProgressUpdate } : {}),
-      ...(scenarioOutcomeUpdate !== null ? { scenarioOutcome: scenarioOutcomeUpdate } : {}),
+      ...(scenarioOutcomeUpdate !== null
+        ? {
+            scenarioOutcome: scenarioOutcomeUpdate,
+            scenarioOutcomeScenarioId: resolvedScenarioId,
+          }
+        : {}),
       ...(pendingCelebration !== null ? { pendingCelebration } : {}),
       ...(tickResult.endOfSeasonTriggered && newState.seasonAwardsData
         ? { currentScreen: "seasonAwards" as GameScreen }
@@ -6130,24 +6440,54 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     }
 
     // Autosave after each week advance — guard against race condition (Fix #24)
-    set({ autosaveError: null });
-    if (!_autosavePending) {
-      _autosavePending = true;
-      dbAutosave(newState)
-        .catch((err) => {
-          const message = err instanceof Error ? err.message : String(err);
-          console.warn("Autosave failed:", err);
-          set({ autosaveError: message });
-        })
-        .finally(() => {
-          _autosavePending = false;
-        });
-    }
+    queueAutosave(newState, set);
   },
 
   // ── Quick Scout Mode (F17) ──────────────────────────────────────────────
-  autoSchedule: (priorities?: QuickScoutPriorities) => { const { gameState } = get(); if (!gameState) return; const p = priorities ?? buildDefaultPriorities(gameState); const ns = autoScheduleWeek(gameState, p); set({ gameState: { ...gameState, schedule: ns } }); },
-  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => { const { gameState } = get(); if (!gameState) return; const p = priorities ?? buildDefaultPriorities(gameState); const rng = createRNG(`${gameState.seed}-batch-${gameState.currentWeek}-${gameState.currentSeason}`); const { state: ns, result } = batchAdvanceWeeks(gameState, rng, weeks, p); set({ gameState: ns, batchSummary: result }); },
+  autoSchedule: (priorities?: QuickScoutPriorities) => { const { gameState } = get(); if (!gameState) return; const p = priorities ?? buildDefaultPriorities(gameState); const ns = autoScheduleWeek(gameState, p); set({ gameState: { ...gameState, schedule: ns }, weekSimulation: null }); },
+  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => {
+    const { gameState } = get();
+    if (!gameState) return;
+
+    const p = priorities ?? buildDefaultPriorities(gameState);
+    const rng = createRNG(`${gameState.seed}-batch-${gameState.currentWeek}-${gameState.currentSeason}`);
+    const { state: ns, result } = batchAdvanceWeeks(gameState, rng, weeks, p);
+    const { scenarioProgressUpdate, scenarioOutcomeUpdate } = deriveScenarioState(ns);
+    const newlyUnlocked = ns.unlockedTools.filter((tool) => !gameState.unlockedTools.includes(tool));
+    const pendingCelebration = derivePendingCelebration(
+      gameState,
+      ns,
+      scenarioOutcomeUpdate,
+      newlyUnlocked,
+    );
+    let resolvedScenarioId: string | null = null;
+    let finalState = ns;
+    if (scenarioOutcomeUpdate !== null) {
+      const latched = latchScenarioOutcome(ns, scenarioOutcomeUpdate);
+      finalState = latched.state;
+      resolvedScenarioId = latched.resolvedScenarioId;
+    }
+
+    useTutorialStore.getState().completeMilestone("advancedWeek");
+
+    set({
+      gameState: finalState,
+      batchSummary: result,
+      ...(scenarioProgressUpdate !== null ? { scenarioProgress: scenarioProgressUpdate } : {}),
+      ...(scenarioOutcomeUpdate !== null
+        ? {
+            scenarioOutcome: scenarioOutcomeUpdate,
+            scenarioOutcomeScenarioId: resolvedScenarioId,
+          }
+        : {}),
+      ...(pendingCelebration !== null ? { pendingCelebration } : {}),
+      ...(!gameState.seasonAwardsData && finalState.seasonAwardsData
+        ? { currentScreen: "seasonAwards" as GameScreen }
+        : {}),
+    });
+
+    queueAutosave(finalState, set);
+  },
   delegateScouting: (npcScoutId: string, playerId: string) => { const { gameState } = get(); if (!gameState) return; const { state: ns, result } = delegateScoutingTask(gameState, npcScoutId, playerId); if (!result.accepted) { set({ gameState: { ...gameState, inbox: [...gameState.inbox, { id: `deleg-rej-${npcScoutId}-${playerId}-${gameState.currentWeek}`, week: gameState.currentWeek, season: gameState.currentSeason, type: "event" as const, title: "Delegation Rejected", body: result.rejectionReason ?? "NPC scout could not accept.", read: false, actionRequired: false }] } }); return; } set({ gameState: ns }); },
 
   // ── Day-by-day simulation actions ──────────────────────────────────────────
@@ -6291,7 +6631,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         fatigueChange: fatigueCost,
         narrative,
         inboxMessages,
-        interaction: buildDayInteraction(activity),
+        interaction: buildDayInteraction(activity, gameState.scout.careerPath),
       });
     }
 

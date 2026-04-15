@@ -221,14 +221,14 @@ function FailureOverlay({ scenarioId, failReason, onTryAgain, onReturnToMenu }: 
  */
 export function ScenarioOutcomeOverlay() {
   const scenarioOutcome = useGameStore((s) => s.scenarioOutcome);
+  const scenarioOutcomeScenarioId = useGameStore((s) => s.scenarioOutcomeScenarioId);
   const dismissScenarioOutcome = useGameStore((s) => s.dismissScenarioOutcome);
   const setScreen = useGameStore((s) => s.setScreen);
   const scenarioProgress = useGameStore((s) => s.scenarioProgress);
-  const gameState = useGameStore((s) => s.gameState);
 
-  if (!scenarioOutcome || !gameState?.activeScenarioId) return null;
+  if (!scenarioOutcome || !scenarioOutcomeScenarioId) return null;
 
-  const scenarioId = gameState.activeScenarioId;
+  const scenarioId = scenarioOutcomeScenarioId;
 
   const handleReturnToMenu = () => {
     dismissScenarioOutcome();

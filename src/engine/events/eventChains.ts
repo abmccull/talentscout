@@ -20,6 +20,7 @@ import type {
   EventChain,
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
 // Constants
@@ -218,7 +219,7 @@ const dressingRoomConflict: ChainTemplate = {
           escalated ? 1 : 0,
           [
             { label: "Recommend signing the outcast", effect: "conflictSign" },
-            { label: "Warn your club to avoid", effect: "conflictAvoid" },
+            { label: resolveCareerPathText("Warn your club to avoid", state.scout.careerPath), effect: "conflictAvoid" },
             { label: "Monitor for another week", effect: "conflictWait" },
           ]);
       },
@@ -310,7 +311,7 @@ const transferSaga: ChainTemplate = {
           0,
           [
             { label: "Submit a detailed assessment", effect: "transferAssess" },
-            { label: "Flag concerns to your club", effect: "transferWarn" },
+            { label: resolveCareerPathText("Flag concerns to your club", state.scout.careerPath), effect: "transferWarn" },
           ]),
     },
     {

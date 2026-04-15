@@ -123,6 +123,18 @@ function getEffectiveEffects(event: SeasonEvent): SeasonEventEffect[] {
   return event.effects ?? [];
 }
 
+function isSeasonEventActionable(event: SeasonEvent, state: GameState): boolean {
+  if (!event.choices || event.choices.length === 0 || event.resolved) {
+    return false;
+  }
+
+  if (!event.relevantSpecializations || event.relevantSpecializations.length === 0) {
+    return true;
+  }
+
+  return event.relevantSpecializations.includes(state.scout.primarySpecialization);
+}
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
@@ -210,15 +222,20 @@ export function applySeasonEventEffects(
       // Only send a message on the first week the event is active
       if (state.currentWeek === event.startWeek) {
         const choiceId = `se_choice_${rng.nextInt(100000, 999999)}`;
+        const actionable = isSeasonEventActionable(event, state);
         messages.push({
           id: choiceId,
           type: "event",
-          title: `${event.name} — Decision Required`,
-          body: `${event.description}. You have a decision to make regarding your scouting strategy during this period.`,
+          title: actionable ? `${event.name} — Decision Required` : event.name,
+          body: actionable
+            ? `${event.description}. You have a decision to make regarding your scouting strategy during this period.`
+            : `${event.description}. This shapes the wider football landscape, but there is nothing you need to decide directly right now.`,
           week: state.currentWeek,
           season: state.currentSeason,
           read: false,
-          actionRequired: true,
+          actionRequired: actionable,
+          relatedId: event.id,
+          relatedEntityType: "seasonEvent",
         });
       }
     }

@@ -216,6 +216,121 @@ export class GamePage {
     return (await this.getGameStateValue("scout.primarySpecialization")) as string;
   }
 
+  // ── Observation Session Helpers ────────────────────────────────────────
+
+  /**
+   * Start an observation session via the store.
+   * Builds a player pool from the current game state automatically.
+   */
+  async startObservationSession(
+    activityType: string,
+    targetPlayerId?: string,
+  ): Promise<void> {
+    await this.page.evaluate(
+      ({ activityType, targetPlayerId }) => {
+        const store = (window as any).__GAME_STORE__;
+        const state = store.getState().gameState;
+        if (!state) throw new Error("No game state");
+
+        const players = Object.values(state.players) as any[];
+        if (players.length === 0) throw new Error("No players in game state");
+
+        const pool = players.slice(0, 5).map((p: any) => ({
+          playerId: p.id,
+          name: `${p.firstName} ${p.lastName}`,
+          position: p.position ?? "Forward",
+        }));
+
+        const target = targetPlayerId ?? pool[0].playerId;
+        store.getState().startObservationSession(activityType, pool, target);
+      },
+      { activityType, targetPlayerId },
+    );
+    await this.page.waitForTimeout(300);
+  }
+
+  /**
+   * Read a serialized summary of the active observation session.
+   */
+  async getActiveSession(): Promise<{
+    mode: string;
+    state: string;
+    currentPhaseIndex: number;
+    totalPhases: number;
+    focusTokens: { available: number; total: number };
+    flaggedMoments: number;
+    hypotheses: number;
+    reflectionNotes: number;
+    insightPointsEarned: number;
+    activityType: string;
+  } | null> {
+    return this.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const session = store?.getState()?.activeSession;
+      if (!session) return null;
+      return {
+        mode: session.mode,
+        state: session.state,
+        currentPhaseIndex: session.currentPhaseIndex,
+        totalPhases: session.phases?.length ?? 0,
+        focusTokens: {
+          available: session.focusTokens?.available ?? 0,
+          total: session.focusTokens?.total ?? 0,
+        },
+        flaggedMoments: session.flaggedMoments?.length ?? 0,
+        hypotheses: session.hypotheses?.length ?? 0,
+        reflectionNotes: session.reflectionNotes?.length ?? 0,
+        insightPointsEarned: session.insightPointsEarned ?? 0,
+        activityType: session.activityType,
+      };
+    });
+  }
+
+  /**
+   * Schedule an activity into a calendar day slot via the store.
+   */
+  async scheduleActivityByType(activityType: string, dayIndex: number): Promise<void> {
+    await this.page.evaluate(
+      ({ activityType, dayIndex }) => {
+        const store = (window as any).__GAME_STORE__;
+        store.getState().scheduleActivity(
+          { type: activityType, slots: 1, description: `E2E ${activityType}` },
+          dayIndex,
+        );
+      },
+      { activityType, dayIndex },
+    );
+    await this.page.waitForTimeout(100);
+  }
+
+  /**
+   * Submit a report via the store with default values.
+   * Auto-selects the first player, starts a report, and submits with "confident" conviction.
+   * Returns whether submission succeeded.
+   */
+  async submitReportViaStore(): Promise<boolean> {
+    return this.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      if (!state || Object.keys(state.players).length === 0) return false;
+
+      const playerId = Object.keys(state.players)[0];
+      store.getState().startReport(playerId);
+
+      try {
+        store.getState().submitReport(
+          "confident",
+          "E2E test report summary",
+          ["pace", "finishing"],
+          ["positioning"],
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+
   // ── Assertions ─────────────────────────────────────────────────────────
 
   /** Assert no console errors were recorded during the test. */

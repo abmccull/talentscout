@@ -10,7 +10,8 @@
  * The narrative events module consumes them to generate concrete events.
  */
 
-import type { GameState, NarrativeEventType } from "@/engine/core/types";
+import type { GameState, NarrativeEventType, UnsignedYouth } from "@/engine/core/types";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // =============================================================================
 // EventContext — fields extracted from GameState for template rendering
@@ -129,8 +130,25 @@ function recommendedReportPlayerName(state: GameState): string {
 }
 
 /** Returns the name of a youth player from unsignedYouth, or a fallback. */
+function getVisibleUnsignedYouth(state: GameState): UnsignedYouth[] {
+  const observedPlayerIds = new Set(
+    Object.values(state.observations).map((obs) => obs.playerId),
+  );
+  const homeCountry = getScoutHomeCountry(state.scout);
+
+  return Object.values(state.unsignedYouth)
+    .filter((y) => !y.placed && !y.retired)
+    .filter((y) => {
+      if (y.discoveredBy.includes(state.scout.id)) return true;
+      if (observedPlayerIds.has(y.player.id)) return true;
+      if ((state.contactIntel[y.player.id]?.length ?? 0) > 0) return true;
+      return y.country === homeCountry && y.visibility >= 30;
+    })
+    .sort((a, b) => (b.buzzLevel + b.visibility) - (a.buzzLevel + a.visibility));
+}
+
 function firstUnsignedYouthName(state: GameState): string {
-  const youth = Object.values(state.unsignedYouth)[0];
+  const youth = getVisibleUnsignedYouth(state)[0];
   if (!youth) return "a promising youngster";
   return `${youth.player.firstName} ${youth.player.lastName}`;
 }
@@ -671,7 +689,7 @@ const youthProdigyDilemmaTemplate: EventTemplate = {
       `something fundamental about what kind of scout you are.`
     );
   },
-  prerequisites: (state) => Object.keys(state.unsignedYouth).length > 0,
+  prerequisites: (state) => getVisibleUnsignedYouth(state).length > 0,
   choices: [
     { label: "Recommend your own club", effect: "prodigyOwnClub" },
     { label: "Recommend the best-fit club", effect: "prodigyBestFit" },
@@ -913,7 +931,7 @@ const youthAcademyScandal: EventTemplate = {
       `integrity in youth scouting is non-negotiable.`
     );
   },
-  prerequisites: (state) => Object.keys(state.unsignedYouth).length > 0,
+  prerequisites: (state) => getVisibleUnsignedYouth(state).length > 0,
   choices: undefined,
 };
 
@@ -1393,7 +1411,7 @@ export function extractRelatedIds(
 
     case "youthProdigyDilemma":
     case "youthAcademyScandal": {
-      const youth = Object.values(state.unsignedYouth)[0];
+      const youth = getVisibleUnsignedYouth(state)[0];
       return youth ? [youth.id] : [];
     }
 

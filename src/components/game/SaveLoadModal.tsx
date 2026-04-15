@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useGameStore } from "@/stores/gameStore";
+import { useGameStore, type SaveSlotSummary } from "@/stores/gameStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,6 @@ import {
   X,
 } from "lucide-react";
 import { AUTOSAVE_SLOT, MAX_MANUAL_SLOTS } from "@/lib/db";
-import type { SaveRecord } from "@/lib/db";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -33,7 +32,13 @@ type ConfirmAction =
   | { type: "load"; slot: number }
   | { type: "delete"; slot: number };
 
-type SlotMeta = Omit<SaveRecord, "state">;
+type SlotMeta = SaveSlotSummary;
+
+function getSaveSourceLabel(source: SlotMeta["source"]): string {
+  if (source === "supabase") return "Cloud";
+  if (source === "steam") return "Steam";
+  return "Local";
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,6 +64,9 @@ function SlotInfo({ slot }: { slot: SlotMeta }) {
         <p className="truncate text-sm font-medium text-white">{slot.name}</p>
         <Badge variant="secondary" className="shrink-0 text-xs">
           S{slot.season} W{slot.week}
+        </Badge>
+        <Badge variant="outline" className="shrink-0 text-[10px] uppercase">
+          {getSaveSourceLabel(slot.source)}
         </Badge>
       </div>
       <p className="truncate text-xs text-zinc-500">
@@ -121,6 +129,92 @@ function InlineConfirm({
   );
 }
 
+function ConflictResolution({
+  localPreview,
+  localTimestamp,
+  cloudPreview,
+  cloudTimestamp,
+  cloudSourceLabel,
+  onKeepLocal,
+  onUseCloud,
+  onCancel,
+  isLoading,
+}: {
+  localPreview: string;
+  localTimestamp: number;
+  cloudPreview: string;
+  cloudTimestamp: number;
+  cloudSourceLabel: string;
+  onKeepLocal: () => void;
+  onUseCloud: () => void;
+  onCancel: () => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+      <div className="flex items-start gap-2">
+        <AlertTriangle
+          size={14}
+          className="mt-0.5 shrink-0 text-amber-400"
+          aria-hidden="true"
+        />
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-amber-100">
+            Local and cloud saves diverged for this slot.
+          </p>
+          <p className="text-xs text-amber-200/90">
+            Pick which version should become the source of truth.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-2 md:grid-cols-2">
+        <div className="rounded border border-zinc-800 bg-[#0c0c0c] p-2.5">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">Local</p>
+          <p className="mt-1 text-xs text-zinc-200">{localPreview}</p>
+          <p className="mt-1 text-[11px] text-zinc-500">{formatDate(localTimestamp)}</p>
+        </div>
+        <div className="rounded border border-zinc-800 bg-[#0c0c0c] p-2.5">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{cloudSourceLabel}</p>
+          <p className="mt-1 text-xs text-zinc-200">{cloudPreview}</p>
+          <p className="mt-1 text-[11px] text-zinc-500">{formatDate(cloudTimestamp)}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={isLoading}
+          onClick={onKeepLocal}
+          className="h-8 text-xs"
+        >
+          {isLoading ? <Loader2 size={12} className="mr-1 animate-spin" /> : null}
+          Keep Local
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={isLoading}
+          onClick={onUseCloud}
+          className="h-8 text-xs"
+        >
+          {cloudSourceLabel === "Cloud" ? "Use Cloud" : `Use ${cloudSourceLabel}`}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={isLoading}
+          onClick={onCancel}
+          className="h-8 text-xs text-zinc-400 hover:text-white"
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // SaveLoadModal
 // ---------------------------------------------------------------------------
@@ -133,8 +227,12 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
     saveToSlot,
     loadFromSlot,
     deleteSlot,
+    saveConflict,
+    dismissSaveConflict,
+    resolveSaveConflict,
     isSaving,
     isLoadingSave,
+    isResolvingSaveConflict,
   } = useGameStore();
 
   const [activeTab, setActiveTab] = useState<Tab>("save");
@@ -150,8 +248,9 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       void refreshSaveSlots();
       setConfirm(null);
       setSuccessSlot(null);
+      dismissSaveConflict();
     }
-  }, [isOpen, refreshSaveSlots]);
+  }, [isOpen, refreshSaveSlots, dismissSaveConflict]);
 
   // Escape key closes the modal
   useEffect(() => {
@@ -160,12 +259,13 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
+        dismissSaveConflict();
         onClose();
       }
     }
     document.addEventListener("keydown", handleKey, true);
     return () => document.removeEventListener("keydown", handleKey, true);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, dismissSaveConflict]);
 
   const autosave = saveSlots.find((s) => s.slot === AUTOSAVE_SLOT);
 
@@ -218,7 +318,9 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
     if (!confirm || confirm.type !== "load") return;
     await loadFromSlot(confirm.slot);
     setConfirm(null);
-    onClose();
+    if (!useGameStore.getState().saveConflict) {
+      onClose();
+    }
   }, [confirm, loadFromSlot, onClose]);
 
   // ── Delete handler ────────────────────────────────────────────────────────
@@ -236,6 +338,21 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
     setConfirm(null);
   }, [confirm, deleteSlot]);
 
+  const handleResolveConflict = useCallback(
+    async (slot: number, preferredSource: SlotMeta["source"]) => {
+      await resolveSaveConflict(slot, preferredSource);
+      if (!useGameStore.getState().saveConflict) {
+        onClose();
+      }
+    },
+    [resolveSaveConflict, onClose],
+  );
+
+  const conflictForSlot = useCallback(
+    (slot: number) => (saveConflict?.slot === slot ? saveConflict.conflict : null),
+    [saveConflict],
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -245,7 +362,10 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       aria-modal="true"
       aria-label="Save and Load Game"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) {
+          dismissSaveConflict();
+          onClose();
+        }
       }}
     >
       <Card className="w-full max-w-lg border-[#27272a] bg-[#141414]">
@@ -254,7 +374,10 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
             Save / Load
           </CardTitle>
           <button
-            onClick={onClose}
+            onClick={() => {
+              dismissSaveConflict();
+              onClose();
+            }}
             className="rounded p-1.5 text-zinc-400 transition hover:bg-zinc-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             aria-label="Close save and load dialog"
           >
@@ -271,6 +394,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
               onClick={() => {
                 setActiveTab("save");
                 setConfirm(null);
+                dismissSaveConflict();
               }}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition ${
                 activeTab === "save"
@@ -287,6 +411,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
               onClick={() => {
                 setActiveTab("load");
                 setConfirm(null);
+                dismissSaveConflict();
               }}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-2 text-sm font-medium transition ${
                 activeTab === "load"
@@ -396,6 +521,10 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
             <div className="space-y-2" role="tabpanel" aria-label="Load game">
               {/* Autosave slot */}
               <div className="space-y-1.5">
+                {(() => {
+                  const autosaveConflict = conflictForSlot(AUTOSAVE_SLOT);
+                  return (
+                    <>
                 <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
                   {autosave ? (
                     <>
@@ -409,6 +538,12 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                             className="shrink-0 text-xs"
                           >
                             S{autosave.season} W{autosave.week}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-[10px] uppercase"
+                          >
+                            {getSaveSourceLabel(autosave.source)}
                           </Badge>
                         </div>
                         <p className="truncate text-xs text-zinc-500">
@@ -457,6 +592,24 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                     isLoading={isLoadingSave}
                   />
                 )}
+                {autosaveConflict && (
+                  <ConflictResolution
+                    localPreview={autosaveConflict.local.preview}
+                    localTimestamp={autosaveConflict.local.timestamp}
+                    cloudPreview={autosaveConflict.cloud.preview}
+                    cloudTimestamp={autosaveConflict.cloud.timestamp}
+                    cloudSourceLabel={getSaveSourceLabel(autosaveConflict.cloud.source)}
+                    isLoading={isResolvingSaveConflict}
+                    onKeepLocal={() => void handleResolveConflict(AUTOSAVE_SLOT, "local")}
+                    onUseCloud={() =>
+                      void handleResolveConflict(AUTOSAVE_SLOT, autosaveConflict.cloud.source)
+                    }
+                    onCancel={dismissSaveConflict}
+                  />
+                )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Manual slots */}
@@ -467,6 +620,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                     confirm?.type === "load" && confirm.slot === slot;
                   const isConfirmingDelete =
                     confirm?.type === "delete" && confirm.slot === slot;
+                  const slotConflict = conflictForSlot(slot);
 
                   return (
                     <div key={slot} className="space-y-1.5">
@@ -521,6 +675,22 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                           onConfirm={() => void confirmLoad()}
                           onCancel={() => setConfirm(null)}
                           isLoading={isLoadingSave}
+                        />
+                      )}
+
+                      {slotConflict && (
+                        <ConflictResolution
+                          localPreview={slotConflict.local.preview}
+                          localTimestamp={slotConflict.local.timestamp}
+                          cloudPreview={slotConflict.cloud.preview}
+                          cloudTimestamp={slotConflict.cloud.timestamp}
+                          cloudSourceLabel={getSaveSourceLabel(slotConflict.cloud.source)}
+                          isLoading={isResolvingSaveConflict}
+                          onKeepLocal={() => void handleResolveConflict(slot, "local")}
+                          onUseCloud={() =>
+                            void handleResolveConflict(slot, slotConflict.cloud.source)
+                          }
+                          onCancel={dismissSaveConflict}
                         />
                       )}
 

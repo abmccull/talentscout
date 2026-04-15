@@ -463,6 +463,8 @@ export interface ObservationSession {
   startedAtWeek: number;
   /** Season this session started. */
   startedAtSeason: number;
+  /** Scout's career path for dialogue text resolution. */
+  careerPath?: "club" | "independent";
 }
 
 // =============================================================================
@@ -492,6 +494,8 @@ export interface SessionConfig {
   week: number;
   /** Current season. */
   season: number;
+  /** Scout's career path — affects dialogue text (e.g. "your club" vs "the interested parties"). */
+  careerPath?: "club" | "independent";
 }
 
 /**
@@ -541,6 +545,8 @@ export const ACTIVITY_MODE_MAP: Record<string, ObservationMode> = {
   streetFootball: "fullObservation",
   academyTrialDay: "fullObservation",
   youthFestival: "fullObservation",
+  academyVisit: "fullObservation",
+  youthTournament: "fullObservation",
   attendMatch: "fullObservation",
   reserveMatch: "fullObservation",
   trainingVisit: "fullObservation",
@@ -552,6 +558,9 @@ export const ACTIVITY_MODE_MAP: Record<string, ObservationMode> = {
   parentCoachMeeting: "investigation",
   contractNegotiation: "investigation",
   networkMeeting: "investigation",
+  agentShowcase: "investigation",
+  freeAgentOutreach: "investigation",
+  loanMonitoring: "investigation",
 
   // --- Analysis ---
   databaseQuery: "analysis",
@@ -560,6 +569,7 @@ export const ACTIVITY_MODE_MAP: Record<string, ObservationMode> = {
   algorithmCalibration: "analysis",
   marketInefficiency: "analysis",
   oppositionAnalysis: "analysis",
+  loanRecommendation: "analysis",
 
   // --- Quick Interaction ---
   statsBriefing: "quickInteraction",
@@ -584,6 +594,10 @@ export const VENUE_PHASE_RANGES: Record<string, [number, number]> = {
   academyTrialDay: [8, 10],
   youthFestival: [10, 14],
 
+  // Youth / Full Observation (continued)
+  academyVisit: [8, 10],
+  youthTournament: [10, 14],
+
   // Investigation
   followUpSession: [4, 6],
   parentCoachMeeting: [3, 5],
@@ -598,6 +612,9 @@ export const VENUE_PHASE_RANGES: Record<string, [number, number]> = {
   // Investigation (first-team)
   contractNegotiation: [4, 8],
   networkMeeting: [3, 5],
+  agentShowcase: [3, 5],
+  freeAgentOutreach: [4, 6],
+  loanMonitoring: [3, 5],
 
   // Analysis
   databaseQuery: [3, 5],
@@ -606,6 +623,7 @@ export const VENUE_PHASE_RANGES: Record<string, [number, number]> = {
   algorithmCalibration: [3, 4],
   marketInefficiency: [4, 6],
   oppositionAnalysis: [4, 6],
+  loanRecommendation: [3, 4],
 
   // Quick Interaction
   statsBriefing: [2, 3],
@@ -625,3 +643,31 @@ export const VENUE_PHASE_RANGES: Record<string, [number, number]> = {
 export const INTERACTIVE_ACTIVITIES = new Set<ActivityType>(
   Object.keys(ACTIVITY_MODE_MAP) as ActivityType[],
 );
+
+// =============================================================================
+// MODE-AWARE LABELS
+// =============================================================================
+
+/** Full heading for the flagged-items section in reflection screens. */
+export const MODE_FLAGGED_LABEL: Record<ObservationMode, string> = {
+  fullObservation: "Moments You Flagged",
+  investigation: "Key Intelligence Gathered",
+  analysis: "Data Points Flagged",
+  quickInteraction: "Decisions Made",
+};
+
+/** Short label for compact UI (e.g. stat cards). */
+export const MODE_FLAGGED_SHORT_LABEL: Record<ObservationMode, string> = {
+  fullObservation: "Moments Flagged",
+  investigation: "Intel Gathered",
+  analysis: "Points Flagged",
+  quickInteraction: "Decisions Made",
+};
+
+/** Singular/plural noun for flagged items, used in narrative text. */
+export const MODE_FLAGGED_NOUN: Record<ObservationMode, { singular: string; plural: string }> = {
+  fullObservation: { singular: "moment", plural: "moments" },
+  investigation: { singular: "piece of intelligence", plural: "pieces of intelligence" },
+  analysis: { singular: "data anomaly", plural: "data anomalies" },
+  quickInteraction: { singular: "key decision", plural: "key decisions" },
+};

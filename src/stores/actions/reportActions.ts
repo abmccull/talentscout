@@ -9,7 +9,7 @@ import type { GetState, SetState } from "./types";
 import type { ConvictionLevel, InboxMessage } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
-import { generateReportContent, finalizeReport, calculateReportQuality } from "@/engine/reports/reporting";
+import { generateReportContent, finalizeReport, calculateReportQualityDetailed } from "@/engine/reports/reporting";
 import { updateReputation } from "@/engine/career/progression";
 import { recordDiscovery } from "@/engine/career/index";
 import {
@@ -28,6 +28,7 @@ import {
   createPrediction,
   generatePredictionSuggestions,
 } from "@/engine/data";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
 
 export function createReportActions(get: GetState, set: SetState) {
@@ -36,19 +37,20 @@ export function createReportActions(get: GetState, set: SetState) {
       set({ selectedPlayerId: playerId, currentScreen: "reportWriter" });
       // Use the more detailed firstReportWriting tutorial for first-timers
       useTutorialStore.getState().startSequence("firstReportWriting");
-      useTutorialStore.getState().completeMilestone("wroteReport");
     },
 
     submitReport: (conviction: ConvictionLevel, summary: string, strengths: string[], weaknesses: string[]) => {
       const { gameState, selectedPlayerId } = get();
       if (!gameState || !selectedPlayerId) return;
 
-      const player = gameState.players[selectedPlayerId]
-        ?? gameState.unsignedYouth[selectedPlayerId]?.player;
-      if (!player) return;
+      const resolvedPlayer = resolvePlayerEntity(gameState, selectedPlayerId);
+      if (!resolvedPlayer) return;
+
+      const player = resolvedPlayer.player;
+      const canonicalPlayerId = resolvedPlayer.playerId;
 
       const observations = Object.values(gameState.observations).filter(
-        (o) => o.playerId === selectedPlayerId
+        (o) => o.playerId === canonicalPlayerId
       );
       const draft = generateReportContent(player, observations, gameState.scout);
       const report = finalizeReport(
@@ -60,7 +62,7 @@ export function createReportActions(get: GetState, set: SetState) {
         gameState.scout,
         gameState.currentWeek,
         gameState.currentSeason,
-        selectedPlayerId
+        canonicalPlayerId
       );
 
       // F14: Include infrastructure + equipment report quality bonus
@@ -68,7 +70,9 @@ export function createReportActions(get: GetState, set: SetState) {
       const submitEquipBonuses = gameState.finances?.equipment
         ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
         : undefined;
-      const quality = calculateReportQuality(report, player, infraEffectsForReport.reportQualityBonus + (submitEquipBonuses?.reportQuality ?? 0));
+      const totalReportQualityBonus = infraEffectsForReport.reportQualityBonus + (submitEquipBonuses?.reportQuality ?? 0);
+      const qualityDetailed = calculateReportQualityDetailed(report, player, totalReportQualityBonus);
+      const quality = qualityDetailed.score;
 
       const repBefore = gameState.scout.reputation;
       const baseUpdatedScout = updateReputation(gameState.scout, {
@@ -87,11 +91,11 @@ export function createReportActions(get: GetState, set: SetState) {
         reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1,
       };
       const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
-      let scoredReport = { ...report, qualityScore: quality, reputationDelta };
+      let scoredReport = { ...report, qualityScore: quality, reputationDelta, qualityBreakdown: qualityDetailed.breakdown };
 
       // Record discovery if this player has not been tracked before
       const alreadyDiscovered = gameState.discoveryRecords.some(
-        (r) => r.playerId === selectedPlayerId,
+        (r) => r.playerId === canonicalPlayerId,
       );
       const newDiscoveryRecord = alreadyDiscovered
         ? null
@@ -115,14 +119,14 @@ export function createReportActions(get: GetState, set: SetState) {
         const responseRng = createRNG(
           `${gameState.seed}-response-${scoredReport.id}`,
         );
-        const responsePlayer = gameState.players[selectedPlayerId];
+        const responsePlayer = gameState.players[canonicalPlayerId];
         const responseClub = gameState.clubs[gameState.scout.currentClubId];
         const responseManager = gameState.managerProfiles[gameState.scout.currentClubId];
 
         if (responsePlayer && responseClub && responseManager) {
           // Calculate system fit for this player-club combination
           const fitRng = createRNG(
-            `${gameState.seed}-sysfit-${selectedPlayerId}-${gameState.scout.currentClubId}`,
+            `${gameState.seed}-sysfit-${canonicalPlayerId}-${gameState.scout.currentClubId}`,
           );
           const fitAccuracy = submitEquipBonuses?.systemFitAccuracy ?? 0;
           const systemFitResult = calculateSystemFit(
@@ -134,7 +138,7 @@ export function createReportActions(get: GetState, set: SetState) {
             fitAccuracy,
             fitRng,
           );
-          const fitCacheKey = `${selectedPlayerId}:${gameState.scout.currentClubId}`;
+          const fitCacheKey = `${canonicalPlayerId}:${gameState.scout.currentClubId}`;
           updatedSystemFitCache = { ...updatedSystemFitCache, [fitCacheKey]: systemFitResult };
           scoredReport = { ...scoredReport, systemFitScore: systemFitResult.overallFit };
 
@@ -206,7 +210,7 @@ export function createReportActions(get: GetState, set: SetState) {
             body: `${clubResponse.feedback}\n\nReputation change: ${clubResponse.reputationDelta >= 0 ? "+" : ""}${clubResponse.reputationDelta}`,
             read: false,
             actionRequired: false,
-            relatedId: selectedPlayerId,
+            relatedId: canonicalPlayerId,
             relatedEntityType: "player" as const,
           };
         }
@@ -229,7 +233,7 @@ export function createReportActions(get: GetState, set: SetState) {
           const top = suggestions[0];
           const prediction = createPrediction(
             `pred_${scoredReport.id}`,
-            selectedPlayerId,
+            canonicalPlayerId,
             gameState.scout.id,
             top.type,
             top.statement,
@@ -270,6 +274,9 @@ export function createReportActions(get: GetState, set: SetState) {
         }
       }
 
+      // For independent scouts, flag the newly submitted report for the listing prompt
+      const isIndependent = gameState.scout.careerPath === "independent";
+
       set({
         gameState: {
           ...gameState,
@@ -285,9 +292,11 @@ export function createReportActions(get: GetState, set: SetState) {
             : gameState.inbox,
         },
         currentScreen: "reportHistory",
+        ...(isIndependent ? { pendingListingReportId: scoredReport.id } : {}),
       });
       // Tutorial auto-advance: step expects "reportSubmitted"
       const tutorialAfterReport = useTutorialStore.getState();
+      tutorialAfterReport.completeMilestone("wroteReport");
       tutorialAfterReport.checkAutoAdvance("reportSubmitted");
       tutorialAfterReport.completeMilestone("submittedReport");
 

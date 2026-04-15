@@ -1,9 +1,11 @@
 import type {
   Activity,
   ActivityType,
+  CareerPath,
   DayInteractionOption,
   DayInteractionState,
 } from "@/engine/core/types";
+import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 export type ActivityChoiceId = "scan" | "focus" | "network";
 
@@ -77,6 +79,168 @@ const NEGOTIATION_OPTIONS: DayInteractionOption[] = [
   },
 ];
 
+const MEETING_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Build Rapport",
+    description: "Keep it friendly and establish trust for the long term.",
+  },
+  {
+    id: "focus",
+    label: "Probe Deep",
+    description: "Ask pointed questions to extract specific intel.",
+  },
+  {
+    id: "network",
+    label: "Mutual Exchange",
+    description: "Share information both ways to strengthen the relationship.",
+  },
+];
+
+const FOLLOW_UP_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Broad Assessment",
+    description: "Run a wide-ranging session covering multiple attributes.",
+  },
+  {
+    id: "focus",
+    label: "Targeted Testing",
+    description: "Zero in on specific qualities you need to verify.",
+  },
+  {
+    id: "network",
+    label: "Rapport Session",
+    description: "Prioritize the relationship and observe character under comfort.",
+  },
+];
+
+const REPORT_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Broad Summary",
+    description: "Cover all observed attributes at surface level for a wider picture.",
+  },
+  {
+    id: "focus",
+    label: "Deep Analysis",
+    description: "Focus the report on fewer attributes with higher confidence and detail.",
+  },
+  {
+    id: "network",
+    label: "Contextual Narrative",
+    description: "Weave in background intel, character notes, and off-pitch observations.",
+  },
+];
+
+const TERRITORY_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Spread Coverage",
+    description: "Assign scouts across a wider area to maximise discovery potential.",
+  },
+  {
+    id: "focus",
+    label: "Concentrate Resources",
+    description: "Focus scouts on a smaller region with known high-value prospects.",
+  },
+  {
+    id: "network",
+    label: "Leverage Contacts",
+    description: "Prioritise areas where your network can provide insider access.",
+  },
+];
+
+const SHOWCASE_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Evaluate Broadly",
+    description: "Assess the full picture — let the agent talk and judge the overall package.",
+  },
+  {
+    id: "focus",
+    label: "Scrutinize Claims",
+    description: "Challenge every assertion and dig for proof behind the pitch.",
+  },
+  {
+    id: "network",
+    label: "Build Agent Relationship",
+    description: "Prioritize the long-term relationship with the agent over this single deal.",
+  },
+];
+
+const SHOWCASE_SCOUTING_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Cast Wide Net",
+    description: "Watch as many players as possible across all pitches.",
+  },
+  {
+    id: "focus",
+    label: "Shortlist Watch",
+    description: "Focus on pre-identified targets to deepen your reads.",
+  },
+  {
+    id: "network",
+    label: "Work the Crowd",
+    description: "Spend time with agents and coaches between matches.",
+  },
+];
+
+const LOAN_MONITORING_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Full Review",
+    description: "Cover all aspects — fitness, form, integration, playing time.",
+  },
+  {
+    id: "focus",
+    label: "Development Check",
+    description: "Focus on the specific skills this loan was meant to develop.",
+  },
+  {
+    id: "network",
+    label: "Staff Dialogue",
+    description: "Prioritize conversations with the host club's coaches.",
+  },
+];
+
+const LOAN_RECOMMENDATION_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Survey Market",
+    description: "Scan broadly for destination clubs with the right profile.",
+  },
+  {
+    id: "focus",
+    label: "Targeted Match",
+    description: "Zero in on clubs that match the player's exact development needs.",
+  },
+  {
+    id: "network",
+    label: "Tap Contacts",
+    description: "Leverage your network to find clubs with guaranteed playing time.",
+  },
+];
+
+const OUTREACH_OPTIONS: DayInteractionOption[] = [
+  {
+    id: "scan",
+    label: "Wide Assessment",
+    description: "Cover a broad range of attributes and background factors.",
+  },
+  {
+    id: "focus",
+    label: "Targeted Evaluation",
+    description: "Zero in on the specific qualities your club needs most right now.",
+  },
+  {
+    id: "network",
+    label: "Build Trust",
+    description: "Prioritize the human connection — a player who trusts you reveals more.",
+  },
+];
+
 const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   attendMatch: {
     prompt: "How do you approach this match day?",
@@ -102,7 +266,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   writeReport: {
     prompt: "What reporting style are you using?",
-    options: SCOUTING_OPTIONS,
+    options: REPORT_OPTIONS,
     maxFocusPlayers: 2,
     defaultChoiceId: "focus",
     effects: {
@@ -113,7 +277,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   networkMeeting: {
     prompt: "How do you run this meeting?",
-    options: NEGOTIATION_OPTIONS,
+    options: MEETING_OPTIONS,
     defaultChoiceId: "network",
     effects: {
       scan: { relationshipModifier: 0 },
@@ -211,7 +375,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   followUpSession: {
     prompt: "How intensive is your follow-up session?",
-    options: SCOUTING_OPTIONS,
+    options: FOLLOW_UP_OPTIONS,
     maxFocusPlayers: 2,
     defaultChoiceId: "focus",
     effects: {
@@ -222,7 +386,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   parentCoachMeeting: {
     prompt: "How do you run the parent/coach discussion?",
-    options: NEGOTIATION_OPTIONS,
+    options: MEETING_OPTIONS,
     defaultChoiceId: "network",
     effects: {
       scan: { relationshipModifier: 0 },
@@ -254,7 +418,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   oppositionAnalysis: {
     prompt: "How do you run opposition analysis?",
-    options: SCOUTING_OPTIONS,
+    options: DATA_OPTIONS,
     maxFocusPlayers: 3,
     defaultChoiceId: "focus",
     effects: {
@@ -265,7 +429,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   agentShowcase: {
     prompt: "How do you approach this showcase?",
-    options: NEGOTIATION_OPTIONS,
+    options: SHOWCASE_OPTIONS,
     maxFocusPlayers: 3,
     defaultChoiceId: "network",
     effects: {
@@ -297,7 +461,7 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
   },
   freeAgentOutreach: {
     prompt: "How do you run this free agent outreach day?",
-    options: NEGOTIATION_OPTIONS,
+    options: OUTREACH_OPTIONS,
     maxFocusPlayers: 3,
     defaultChoiceId: "focus",
     effects: {
@@ -377,6 +541,48 @@ const PROFILES: Partial<Record<ActivityType, ActivityInteractionProfile>> = {
       network: { relationshipModifier: 2, anomalyModifier: 1 },
     },
   },
+  agencyShowcase: {
+    prompt: "How do you run your agency showcase day?",
+    options: SHOWCASE_SCOUTING_OPTIONS,
+    maxFocusPlayers: 3,
+    defaultChoiceId: "scan",
+    effects: {
+      scan: { discoveryModifier: 2 },
+      focus: { discoveryModifier: -1, reportQualityModifier: 1 },
+      network: { relationshipModifier: 2, discoveryModifier: 1 },
+    },
+  },
+  loanMonitoring: {
+    prompt: "How do you approach this loan check-in?",
+    options: LOAN_MONITORING_OPTIONS,
+    maxFocusPlayers: 2,
+    defaultChoiceId: "scan",
+    effects: {
+      scan: { discoveryModifier: 0, reportQualityModifier: 1 },
+      focus: { discoveryModifier: -1, reportQualityModifier: 2 },
+      network: { relationshipModifier: 2, reportQualityModifier: 1 },
+    },
+  },
+  loanRecommendation: {
+    prompt: "How do you approach this loan recommendation?",
+    options: LOAN_RECOMMENDATION_OPTIONS,
+    defaultChoiceId: "focus",
+    effects: {
+      scan: { profileModifier: 2, discoveryModifier: 1 },
+      focus: { profileModifier: 0, reportQualityModifier: 2 },
+      network: { relationshipModifier: 2, profileModifier: 1 },
+    },
+  },
+  assignTerritory: {
+    prompt: "How do you allocate your scouting territory?",
+    options: TERRITORY_OPTIONS,
+    defaultChoiceId: "scan",
+    effects: {
+      scan: { discoveryModifier: 2 },
+      focus: { discoveryModifier: -1, reportQualityModifier: 1 },
+      network: { relationshipModifier: 1, discoveryModifier: 1 },
+    },
+  },
 };
 
 const EMPTY_EFFECT: ActivityInteractionEffect = {};
@@ -399,13 +605,17 @@ export function getActivityInteractionEffect(
 
 export function buildActivityInteractionState(
   activity: Activity | null,
+  careerPath?: CareerPath,
 ): DayInteractionState | undefined {
   if (!activity) return undefined;
   const profile = PROFILES[activity.type];
   if (!profile) return undefined;
   return {
     prompt: profile.prompt,
-    options: profile.options,
+    options: profile.options.map((opt) => ({
+      ...opt,
+      description: resolveCareerPathText(opt.description, careerPath),
+    })),
     maxFocusPlayers: profile.maxFocusPlayers,
   };
 }

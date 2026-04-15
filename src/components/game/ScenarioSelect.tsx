@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { SCENARIOS, type ScenarioDef } from "@/engine/scenarios";
-import { ArrowLeft, Clock, Target, ChevronRight, CheckCircle2, Circle } from "lucide-react";
+import { getScenarioUnlockDescriptions, readLegacyProfile } from "@/engine/career";
+import { ArrowLeft, Clock, Target, ChevronRight, CheckCircle2, Circle, Lock } from "lucide-react";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
 // =============================================================================
@@ -74,17 +75,35 @@ function ObjectiveList({ scenario }: { scenario: ScenarioDef }) {
 
 function ScenarioCard({
   scenario,
+  isUnlocked,
+  unlockRequirement,
   onSelect,
 }: {
   scenario: ScenarioDef;
+  isUnlocked: boolean;
+  unlockRequirement?: string;
   onSelect: (s: ScenarioDef) => void;
 }) {
   return (
-    <div className="group flex flex-col rounded-xl border border-[#27272a] bg-[#141414] p-5 transition hover:border-emerald-500/50 hover:bg-[#161a16]">
+    <div
+      className={`group flex flex-col rounded-xl border p-5 transition ${
+        isUnlocked
+          ? "border-[#27272a] bg-[#141414] hover:border-emerald-500/50 hover:bg-[#161a16]"
+          : "border-[#2f2a1c] bg-[#14110a]"
+      }`}
+    >
       {/* Header */}
       <div className="mb-2 flex items-start justify-between gap-3">
         <h3 className="text-base font-semibold text-white">{scenario.name}</h3>
-        <DifficultyBadge difficulty={scenario.difficulty} />
+        <div className="flex items-center gap-2">
+          {!isUnlocked && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-300">
+              <Lock size={11} aria-hidden="true" />
+              Locked
+            </span>
+          )}
+          <DifficultyBadge difficulty={scenario.difficulty} />
+        </div>
       </div>
 
       {/* Meta */}
@@ -109,13 +128,22 @@ function ScenarioCard({
       <ObjectiveList scenario={scenario} />
 
       {/* CTA */}
-      <button
-        onClick={() => onSelect(scenario)}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 active:scale-[0.98]"
-      >
-        Start Scenario
-        <ChevronRight size={16} aria-hidden="true" />
-      </button>
+      {isUnlocked ? (
+        <button
+          onClick={() => onSelect(scenario)}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 active:scale-[0.98]"
+        >
+          Start Scenario
+          <ChevronRight size={16} aria-hidden="true" />
+        </button>
+      ) : (
+        <div className="mt-4 rounded-lg border border-amber-500/20 bg-black/20 px-4 py-3 text-sm text-amber-100/90">
+          <p className="font-medium text-amber-200">Unlock requirement</p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-100/70">
+            {unlockRequirement ?? "Complete more careers to unlock this challenge."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -131,11 +159,29 @@ export function ScenarioSelect() {
   const [selectedScenario, setLocalSelectedScenario] = useState<ScenarioDef | null>(
     null,
   );
+  const legacyProfile = useMemo(() => readLegacyProfile(), []);
+  const unlockedAdvancedIds = useMemo(
+    () => new Set(legacyProfile?.unlockedScenarios ?? []),
+    [legacyProfile],
+  );
+  const unlockDescriptions = useMemo(() => getScenarioUnlockDescriptions(), []);
+  const tabs = useMemo(
+    () =>
+      CATEGORY_TABS.filter(
+        (tab) =>
+          tab.id === "all" ||
+          SCENARIOS.some((scenario) => scenario.category === tab.id),
+      ),
+    [],
+  );
 
-  const filtered =
-    activeTab === "all"
-      ? SCENARIOS
-      : SCENARIOS.filter((s) => s.category === activeTab);
+  const filtered = useMemo(
+    () =>
+      activeTab === "all"
+        ? SCENARIOS
+        : SCENARIOS.filter((scenario) => scenario.category === activeTab),
+    [activeTab],
+  );
 
   const handleSelect = (scenario: ScenarioDef) => {
     setLocalSelectedScenario(scenario);
@@ -182,7 +228,7 @@ export function ScenarioSelect() {
 
         {/* Category tabs */}
         <div className="mb-6 flex justify-center gap-2">
-          {CATEGORY_TABS.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -203,6 +249,15 @@ export function ScenarioSelect() {
             <ScenarioCard
               key={scenario.id}
               scenario={scenario}
+              isUnlocked={
+                scenario.category === "starter" ||
+                unlockedAdvancedIds.has(scenario.id)
+              }
+              unlockRequirement={
+                scenario.category === "advanced"
+                  ? unlockDescriptions[scenario.id]
+                  : undefined
+              }
               onSelect={handleSelect}
             />
           ))}
@@ -210,7 +265,7 @@ export function ScenarioSelect() {
 
         {filtered.length === 0 && (
           <p className="py-12 text-center text-sm text-zinc-600">
-            No scenarios in this category yet.
+            No launchable scenarios are available in this category.
           </p>
         )}
       </div>

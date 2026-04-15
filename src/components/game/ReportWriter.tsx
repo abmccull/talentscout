@@ -6,7 +6,7 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target, DollarSign } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading, PlayerAttribute, SystemFitResult } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
@@ -16,6 +16,7 @@ import {
   STRENGTH_DESCRIPTORS,
   WEAKNESS_DESCRIPTORS,
 } from "@/engine/reports";
+import { estimateReportPriceRange, getActiveEquipmentBonuses } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
 import { starsToAbility } from "@/engine/scout/starRating";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
@@ -24,6 +25,7 @@ import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
@@ -136,24 +138,26 @@ export function ReportWriter() {
   const draftApplied = useRef(false);
 
   // Derive data before any early return
-  const player = gameState && selectedPlayerId
-    ? gameState.players[selectedPlayerId] ?? gameState.unsignedYouth[selectedPlayerId]?.player
-    : undefined;
+  const resolvedPlayer = gameState && selectedPlayerId
+    ? resolvePlayerEntity(gameState, selectedPlayerId)
+    : null;
+  const player = resolvedPlayer?.player;
+  const canonicalPlayerId = resolvedPlayer?.playerId ?? selectedPlayerId ?? undefined;
   const club = player ? getClub(player.clubId) : undefined;
   const observations = useMemo(
-    () => (selectedPlayerId ? getPlayerObservations(selectedPlayerId) : []),
+    () => (canonicalPlayerId ? getPlayerObservations(canonicalPlayerId) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [selectedPlayerId, gameState?.observations]
+    [canonicalPlayerId, gameState?.observations]
   );
 
   // System fit data for first-team scouts
   const systemFit: SystemFitResult | undefined = useMemo(() => {
-    if (!gameState || !selectedPlayerId) return undefined;
+    if (!gameState || !canonicalPlayerId) return undefined;
     if (gameState.scout.primarySpecialization !== "firstTeam") return undefined;
     const clubId = gameState.scout.currentClubId ?? "";
-    const key = `${selectedPlayerId}:${clubId}`;
+    const key = `${canonicalPlayerId}:${clubId}`;
     return gameState.systemFitCache[key] ?? undefined;
-  }, [gameState, selectedPlayerId]);
+  }, [canonicalPlayerId, gameState]);
 
   const merged = useMemo<Map<string, AttributeReading>>(() => {
     const map = new Map<string, AttributeReading>();
@@ -248,6 +252,25 @@ export function ReportWriter() {
     }
     return map;
   }, []);
+
+  // Equipment report quality bonus for display
+  const equipmentReportQualityBonus = useMemo(() => {
+    if (!gameState?.finances?.equipment) return 0;
+    const bonuses = getActiveEquipmentBonuses(gameState.finances.equipment.loadout);
+    return bonuses.reportQuality;
+  }, [gameState?.finances?.equipment]);
+
+  // Live pricing estimate for independent scouts
+  const isIndependent = gameState?.scout.careerPath === "independent";
+  const priceEstimate = useMemo(() => {
+    if (!isIndependent || !gameState?.finances) return null;
+    return estimateReportPriceRange(
+      conviction,
+      qualityPreview.score,
+      gameState.scout.reputation,
+      gameState.finances.marketTemperature,
+    );
+  }, [isIndependent, conviction, qualityPreview.score, gameState?.scout.reputation, gameState?.finances?.marketTemperature]);
 
   // Pre-populate form state from draft (one-shot) and auto-generate summary
   useEffect(() => {
@@ -455,6 +478,31 @@ export function ReportWriter() {
                     </div>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {draft && draft.comparisonSuggestions.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Comparison Angles</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {draft.comparisonSuggestions.map((suggestion) => (
+                    <li
+                      key={suggestion}
+                      className="flex items-start gap-2 text-sm leading-relaxed text-zinc-300"
+                    >
+                      <Lightbulb
+                        size={14}
+                        className="mt-0.5 shrink-0 text-amber-400"
+                        aria-hidden="true"
+                      />
+                      <span>{suggestion}</span>
+                    </li>
+                  ))}
+                </ul>
               </CardContent>
             </Card>
           )}
@@ -741,8 +789,75 @@ export function ReportWriter() {
                   </div>
                 )}
 
+                {equipmentReportQualityBonus > 0 && (
+                  <p className="mt-2 text-[10px] text-emerald-500">
+                    +{Math.round(equipmentReportQualityBonus * 100)}% from equipment
+                  </p>
+                )}
+
                 <p className="mt-2 text-[10px] text-zinc-600 italic">
                   Final score may vary slightly based on additional factors
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Pricing Guidance (independent scouts only) */}
+          {priceEstimate && (
+            <Card className="border-emerald-500/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <DollarSign size={14} className="text-emerald-400" aria-hidden="true" />
+                  Price Estimate
+                  <Badge
+                    variant="outline"
+                    className={`ml-auto text-[10px] ${
+                      priceEstimate.marketTemperature === "hot" || priceEstimate.marketTemperature === "deadline"
+                        ? "text-orange-400 border-orange-500/40"
+                        : priceEstimate.marketTemperature === "cold"
+                        ? "text-blue-400 border-blue-500/40"
+                        : "text-zinc-400 border-zinc-500/40"
+                    }`}
+                  >
+                    {priceEstimate.marketTemperature === "deadline" ? "Deadline day" : `${priceEstimate.marketTemperature} market`}
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border border-[#27272a] bg-[#141414] p-2.5 text-center">
+                    <p className="text-[10px] text-zinc-500 mb-1">Non-Exclusive</p>
+                    <p className="text-lg font-bold text-emerald-400">{formatValue(priceEstimate.nonExclusive)}</p>
+                  </div>
+                  <div className="rounded-md border border-amber-500/20 bg-amber-950/10 p-2.5 text-center">
+                    <p className="text-[10px] text-amber-400/70 mb-1">Exclusive</p>
+                    <p className="text-lg font-bold text-amber-400">{formatValue(priceEstimate.exclusive)}</p>
+                  </div>
+                </div>
+
+                {/* Range bar */}
+                <div>
+                  <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
+                    <span>{formatValue(priceEstimate.low)}</span>
+                    <span>{formatValue(priceEstimate.high)}</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-[#27272a]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-amber-500 transition-all duration-300"
+                      style={{
+                        width: `${Math.min(100, Math.round(((priceEstimate.nonExclusive - priceEstimate.low) / Math.max(1, priceEstimate.high - priceEstimate.low)) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {qualityPreview.score < 40 && (
+                  <p className="text-[10px] text-amber-400/80 italic">
+                    Improve report quality to increase sale value
+                  </p>
+                )}
+                <p className="text-[10px] text-zinc-600 italic">
+                  Higher conviction &amp; quality = higher sale price
                 </p>
               </CardContent>
             </Card>

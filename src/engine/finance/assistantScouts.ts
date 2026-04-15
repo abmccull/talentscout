@@ -318,6 +318,8 @@ export function processAssistantScoutWeek(
         body: `${assistant.name} is unhappy and may consider leaving. Current morale: ${newMorale}/100.`,
         read: false,
         actionRequired: true,
+        relatedId: "agency",
+        relatedEntityType: "tool" as const,
       });
     }
 
