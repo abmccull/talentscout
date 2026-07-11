@@ -10,7 +10,6 @@ import type {
   PlacementFeeRecord,
   Scout,
   ConvictionLevel,
-  Club,
 } from "../core/types";
 
 // ---------------------------------------------------------------------------
@@ -32,8 +31,6 @@ const CONVICTION_FEE_MULTIPLIER: Record<ConvictionLevel, number> = {
 const STALE_THRESHOLD_WEEKS = 26;
 
 /** Flat youth placement fee range by club reputation tier */
-const YOUTH_FEE_BASE = 1000;
-const YOUTH_FEE_PER_REP = 90; // £90 per reputation point
 
 // ---------------------------------------------------------------------------
 // Placement fee calculation
@@ -65,16 +62,6 @@ export function calculatePlacementFee(
  * Calculate placement fee for youth player placements.
  * Flat fee based on club reputation, not transfer fee.
  */
-export function calculateYouthPlacementFee(
-  club: Club,
-  _playerAge: number,
-  scout: Scout,
-): number {
-  const base = YOUTH_FEE_BASE + club.reputation * YOUTH_FEE_PER_REP;
-  const repMult = 0.5 + (scout.reputation / 100) * 0.5;
-  return Math.round(base * repMult);
-}
-
 // ---------------------------------------------------------------------------
 // Sell-on clauses
 // ---------------------------------------------------------------------------

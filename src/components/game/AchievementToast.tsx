@@ -5,44 +5,31 @@ import { useAchievementStore } from "@/stores/achievementStore";
 import { ACHIEVEMENTS } from "@/lib/achievements";
 import { useAudio } from "@/lib/audio/useAudio";
 
-// =============================================================================
-// CONSTANTS
-// =============================================================================
-
-const AUTO_DISMISS_MS = 5000;
-
-// =============================================================================
-// TYPES
-// =============================================================================
+const AUTO_DISMISS_MS = 3600;
 
 interface ToastContentProps {
   achievementId: string;
+  queuedCount: number;
   onDismiss: () => void;
 }
 
-// =============================================================================
-// SUB-COMPONENTS
-// =============================================================================
-
-/**
- * Individual toast card. Handles its own auto-dismiss timer and slide-in
- * animation. Rendered only when there is a pending toast to show.
- */
-function ToastCard({ achievementId, onDismiss }: ToastContentProps) {
+function ToastCard({
+  achievementId,
+  queuedCount,
+  onDismiss,
+}: ToastContentProps) {
   const [visible, setVisible] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { playSFX } = useAudio();
 
   const achievement = ACHIEVEMENTS.find((a) => a.id === achievementId);
 
-  // Trigger slide-in after mount and play achievement SFX.
   useEffect(() => {
     playSFX("achievement");
     const id = window.requestAnimationFrame(() => setVisible(true));
     return () => window.cancelAnimationFrame(id);
   }, [playSFX]);
 
-  // Auto-dismiss after AUTO_DISMISS_MS.
   useEffect(() => {
     timerRef.current = setTimeout(onDismiss, AUTO_DISMISS_MS);
     return () => {
@@ -56,33 +43,46 @@ function ToastCard({ achievementId, onDismiss }: ToastContentProps) {
     <div
       role="status"
       aria-live="polite"
+      aria-atomic="true"
       aria-label={`Achievement unlocked: ${achievement.name}`}
       style={{
-        transform: visible ? "translateX(0)" : "translateX(calc(100% + 24px))",
-        transition: "transform 400ms cubic-bezier(0.22, 1, 0.36, 1)",
+        transform: visible ? "translateY(0)" : "translateY(-12px)",
+        opacity: visible ? 1 : 0,
+        transition: "transform 220ms ease-out, opacity 220ms ease-out",
       }}
-      className="w-80 rounded-xl border border-zinc-700 bg-zinc-900 p-4 shadow-2xl"
+      className="pointer-events-none w-[min(22rem,calc(100vw-1rem))] rounded-2xl border border-zinc-700/80 bg-zinc-950/95 p-3 shadow-2xl backdrop-blur"
     >
-      {/* Header row */}
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2 flex items-start gap-2">
         <span
-          className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-base"
+          className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-base"
           aria-hidden="true"
         >
           {achievement.icon}
         </span>
-        <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-          Achievement Unlocked
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+              Achievement
+            </span>
+            {queuedCount > 0 && (
+              <span className="rounded-full border border-zinc-700 bg-zinc-900/80 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
+                +{queuedCount} more
+              </span>
+            )}
+          </div>
+          <p className="mt-1 truncate text-sm font-bold text-white">
+            {achievement.name}
+          </p>
+        </div>
         <button
           onClick={onDismiss}
           aria-label="Dismiss achievement notification"
-          className="ml-auto flex h-5 w-5 items-center justify-center rounded text-zinc-500 transition hover:text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+          className="pointer-events-auto -mr-2 -mt-2 flex h-10 w-10 items-center justify-center rounded-xl text-zinc-400 transition hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
         >
           <svg
             viewBox="0 0 16 16"
             fill="currentColor"
-            className="h-3 w-3"
+            className="h-3.5 w-3.5"
             aria-hidden="true"
           >
             <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
@@ -90,17 +90,12 @@ function ToastCard({ achievementId, onDismiss }: ToastContentProps) {
         </button>
       </div>
 
-      {/* Achievement name */}
-      <p className="text-sm font-bold text-white">{achievement.name}</p>
-
-      {/* Achievement description */}
-      <p className="mt-0.5 text-xs leading-relaxed text-zinc-400">
+      <p className="hidden text-xs leading-relaxed text-zinc-300 sm:block">
         {achievement.description}
       </p>
 
-      {/* Progress bar (drains over AUTO_DISMISS_MS) */}
       <div
-        className="mt-3 h-0.5 overflow-hidden rounded-full bg-zinc-700"
+        className="mt-3 hidden h-1 overflow-hidden rounded-full bg-zinc-800 sm:block"
         aria-hidden="true"
       >
         <div
@@ -114,29 +109,16 @@ function ToastCard({ achievementId, onDismiss }: ToastContentProps) {
   );
 }
 
-// =============================================================================
-// MAIN COMPONENT
-// =============================================================================
-
-/**
- * AchievementToast — fixed overlay that displays the first pending achievement
- * toast from the achievementStore. Slides in from the bottom-right corner and
- * auto-dismisses after 5 seconds.
- *
- * Renders null when there are no pending toasts.
- */
 export function AchievementToast() {
   const pendingToasts = useAchievementStore((s) => s.pendingToasts);
-  const dismissToast = useAchievementStore((s) => s.dismissToast);
+  const dismissAllToasts = useAchievementStore((s) => s.dismissAllToasts);
 
-  // Show the first pending toast only. Once dismissed, the next will appear.
   const currentId = pendingToasts[0] ?? null;
 
   if (!currentId) return null;
 
   return (
     <>
-      {/* Keyframe for the progress bar drain animation */}
       <style>{`
         @keyframes shrink {
           from { width: 100%; }
@@ -144,19 +126,17 @@ export function AchievementToast() {
         }
       `}</style>
 
-      {/* Fixed container — bottom-right, above most content (z-50) */}
       <div
-        className="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3"
+        className="pointer-events-none fixed left-1/2 top-16 z-50 flex -translate-x-1/2 flex-col items-center gap-3 px-2 sm:bottom-5 sm:left-auto sm:right-5 sm:top-auto sm:translate-x-0 sm:items-end"
         aria-live="polite"
         aria-atomic="true"
       >
-        <div className="pointer-events-auto">
-          <ToastCard
-            key={currentId}
-            achievementId={currentId}
-            onDismiss={() => dismissToast(currentId)}
-          />
-        </div>
+        <ToastCard
+          key={currentId}
+          achievementId={currentId}
+          queuedCount={Math.max(0, pendingToasts.length - 1)}
+          onDismiss={dismissAllToasts}
+        />
       </div>
     </>
   );

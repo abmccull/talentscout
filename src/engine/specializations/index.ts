@@ -23,6 +23,7 @@ export {
   calculateScoutingEfficiency,
   getGraduatedRegionalBonus,
   initializeRegionalKnowledge,
+  synchronizeRegionalFamiliarity,
   processRegionalKnowledgeGrowth,
   generateCulturalInsight,
   generateLocalContact,

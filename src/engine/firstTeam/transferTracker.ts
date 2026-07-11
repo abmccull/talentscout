@@ -405,27 +405,48 @@ export function linkReportsToTransfers(
     toClubId: string;
     fee: number;
   }>,
-  reports: Record<string, { playerId: string; scoutId: string; conviction: ConvictionLevel; clubResponse?: string; id: string }>,
+  reports: Record<string, {
+    playerId: string;
+    scoutId: string;
+    conviction: ConvictionLevel;
+    clubResponse?: string;
+    id: string;
+    submittedWeek: number;
+    submittedSeason: number;
+  }>,
   players: Record<string, Player>,
   scoutId: string,
   currentWeek: number,
   currentSeason: number,
-  existingRecordPlayerIds: Set<string>,
+  existingTransferKeys: Set<string>,
 ): TransferRecord[] {
   const newRecords: TransferRecord[] = [];
 
   for (const transfer of transfers) {
-    // Skip if we already have a record for this player
-    if (existingRecordPlayerIds.has(transfer.playerId)) continue;
+    // A player's later career move is a distinct accountability event. Only
+    // suppress the exact transfer occurrence, not every future move.
+    const transferKey = `${transfer.playerId}:${transfer.fromClubId}:${transfer.toClubId}:${currentSeason}:${currentWeek}`;
+    if (existingTransferKeys.has(transferKey)) continue;
 
-    // Find a matching scout report for this player
-    const matchingReport = Object.values(reports).find(
-      (r) =>
-        r.playerId === transfer.playerId &&
-        r.scoutId === scoutId &&
-        r.conviction !== "note" &&
-        (r.clubResponse === "signed" || r.clubResponse === "shortlisted" || r.clubResponse === undefined),
-    );
+    // Use the most recent eligible report that existed before the transfer.
+    // This prevents an old first report from winning forever after the scout
+    // has reassessed the player.
+    const matchingReport = Object.values(reports)
+      .filter(
+        (report) =>
+          report.playerId === transfer.playerId &&
+          report.scoutId === scoutId &&
+          report.conviction !== "note" &&
+          (report.submittedSeason < currentSeason ||
+            (report.submittedSeason === currentSeason && report.submittedWeek <= currentWeek)) &&
+          (report.clubResponse === "signed" ||
+            report.clubResponse === "shortlisted" ||
+            report.clubResponse === undefined),
+      )
+      .sort(
+        (a, b) =>
+          b.submittedSeason - a.submittedSeason || b.submittedWeek - a.submittedWeek,
+      )[0];
 
     if (!matchingReport) continue;
 

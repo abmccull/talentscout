@@ -6,8 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X, Globe } from "lucide-react";
-import type { AttributeReading, HiddenIntel, Observation, SystemFitResult, StatisticalProfile, AnomalyFlag, ScoutSkill, DisciplinaryRecord } from "@/engine/core/types";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X, Globe, ChevronRight } from "lucide-react";
+import type {
+  AttributeReading,
+  HiddenIntel,
+  Observation,
+  SystemFitResult,
+  StatisticalProfile,
+  AnomalyFlag,
+  ScoutSkill,
+  DisciplinaryRecord,
+  InboxMessage,
+  ReflectionFlaggedMomentRecord,
+  ReflectionHypothesisRecord,
+  ReflectionJournalEntry,
+} from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
@@ -21,9 +34,13 @@ import { ACTIVITY_SLOT_COSTS } from "@/engine/core/calendar";
 import { canAddActivity } from "@/engine/core/calendar";
 import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip";
 import { getCountryDisplayName } from "@/engine/network/contacts";
+import { formatObservationActivityLabel } from "@/engine/observation/reflection";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import { getTransferFlowProbability } from "@/engine/world/transfers";
+import { normalizeCountryKey } from "@/lib/country";
 import {
   getResolvedContactIntel,
+  getResolvedPlayerIds,
   resolvePlayerEntity,
 } from "@/lib/playerResolution";
 
@@ -103,6 +120,14 @@ function confidenceLabel(confidence: number): string {
   return "Low";
 }
 
+function compareSeasonWeekDesc(
+  left: { season: number; week: number },
+  right: { season: number; week: number },
+): number {
+  if (right.season !== left.season) return right.season - left.season;
+  return right.week - left.week;
+}
+
 function formatMarketValue(value: number): string {
   if (value >= 1_000_000) return `£${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `£${(value / 1_000).toFixed(0)}K`;
@@ -112,6 +137,93 @@ function formatMarketValue(value: number): string {
 function formatAttribute(attr: string): string {
   const spaced = attr.replace(/([A-Z])/g, " $1").trim();
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function formatSeasonWeekLabel(season: number, week: number): string {
+  return `Season ${season}, Week ${week}`;
+}
+
+function formatMomentType(momentType: ReflectionFlaggedMomentRecord["momentType"]): string {
+  return formatAttribute(momentType);
+}
+
+function isQualitativeIntelMessage(message: InboxMessage): boolean {
+  const title = message.title.toLowerCase();
+  const body = message.body.toLowerCase();
+  if (title.startsWith("network intel:")) return true;
+  if (title.startsWith("exclusive tip")) return true;
+  if (title.startsWith("gossip from")) return true;
+
+  return [
+    "coach",
+    "parent",
+    "family",
+    "contact",
+    "intel",
+    "tip",
+    "gossip",
+  ].some((token) => title.includes(token) || body.includes(token));
+}
+
+function getHypothesisStateDisplay(state: ReflectionHypothesisRecord["state"]): {
+  label: string;
+  className: string;
+} {
+  switch (state) {
+    case "confirmed":
+      return {
+        label: "Confirmed",
+        className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+      };
+    case "supported":
+      return {
+        label: "Supported",
+        className: "border-sky-500/40 bg-sky-500/10 text-sky-300",
+      };
+    case "contradicted":
+      return {
+        label: "Contradicted",
+        className: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+      };
+    case "debunked":
+      return {
+        label: "Debunked",
+        className: "border-red-500/40 bg-red-500/10 text-red-300",
+      };
+    default:
+      return {
+        label: "Open",
+        className: "border-zinc-600 bg-zinc-800/70 text-zinc-300",
+      };
+  }
+}
+
+function getFlaggedReactionDisplay(reaction: ReflectionFlaggedMomentRecord["reaction"]): {
+  label: string;
+  className: string;
+} {
+  switch (reaction) {
+    case "promising":
+      return {
+        label: "Promising",
+        className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      };
+    case "concerning":
+      return {
+        label: "Concern",
+        className: "border-red-500/30 bg-red-500/10 text-red-300",
+      };
+    case "interesting":
+      return {
+        label: "Interesting",
+        className: "border-sky-500/30 bg-sky-500/10 text-sky-300",
+      };
+    default:
+      return {
+        label: "Watch",
+        className: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      };
+  }
 }
 
 function ReliabilityDots({ reliability }: { reliability: number }) {
@@ -129,6 +241,12 @@ function ReliabilityDots({ reliability }: { reliability: number }) {
       ))}
     </div>
   );
+}
+
+interface PlayerEvidenceEntry
+  extends Omit<ReflectionJournalEntry, "flaggedMoments" | "hypotheses"> {
+  flaggedMoments: ReflectionFlaggedMomentRecord[];
+  hypotheses: ReflectionHypothesisRecord[];
 }
 
 // ─── System Fit Card (firstTeam scouts) ────────────────────────────────────
@@ -990,6 +1108,12 @@ export function PlayerProfile() {
   } = useGameStore();
 
   const [networkIntel, setNetworkIntel] = useState<{ title: string; body: string; contactName?: string } | null>(null);
+  const [loanDialogOpen, setLoanDialogOpen] = useState(false);
+  const [loanTargetClubId, setLoanTargetClubId] = useState("");
+  const [loanRationale, setLoanRationale] = useState<
+    "development" | "playing-time" | "experience" | "squad-depth"
+  >("development");
+  const [loanDuration, setLoanDuration] = useState(20);
 
   if (!gameState || !selectedPlayerId) return null;
 
@@ -997,8 +1121,12 @@ export function PlayerProfile() {
   if (!resolvedPlayer) return null;
 
   const player = resolvedPlayer.player;
+  const isRetired = resolvedPlayer.isRetired;
   const canonicalPlayerId = resolvedPlayer.playerId;
   const unsignedYouthRecord = resolvedPlayer.unsignedYouth;
+  const relatedPlayerIds = new Set(
+    getResolvedPlayerIds(gameState, selectedPlayerId),
+  );
 
   const club = getClub(player.clubId);
   const league = club ? getLeague(club.leagueId) : undefined;
@@ -1007,6 +1135,63 @@ export function PlayerProfile() {
 
   // Own-club check: signed players at scout's club show exact values
   const isOwnClubPlayer = !!(player.clubId && player.clubId === gameState.scout.currentClubId);
+  const transferWindowOpen = gameState.transferWindow
+    ? isTransferWindowOpen([gameState.transferWindow], gameState.currentWeek)
+    : false;
+  const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+  const ownerLeagueId = gameState.clubs[ownerClubId]?.leagueId;
+  const ownerCountry = normalizeCountryKey(
+    ownerLeagueId ? gameState.leagues[ownerLeagueId]?.country : undefined,
+  );
+  const loanRouteScore = (clubId: string) => {
+    const candidateLeagueId = gameState.clubs[clubId]?.leagueId;
+    const candidateCountry = normalizeCountryKey(
+      candidateLeagueId ? gameState.leagues[candidateLeagueId]?.country : undefined,
+    );
+    if (!ownerCountry || !candidateCountry) return 0.5;
+    return getTransferFlowProbability(ownerCountry, candidateCountry);
+  };
+  const isForeignLoanClub = (clubId: string) => {
+    const candidateLeagueId = gameState.clubs[clubId]?.leagueId;
+    const candidateCountry = normalizeCountryKey(
+      candidateLeagueId ? gameState.leagues[candidateLeagueId]?.country : undefined,
+    );
+    return !!ownerCountry && !!candidateCountry && ownerCountry !== candidateCountry;
+  };
+  const loanTargetClubs = Object.values(gameState.clubs)
+    .filter((candidate) => {
+      if (candidate.id === ownerClubId) return false;
+      const owner = gameState.clubs[ownerClubId];
+      if (!owner) return false;
+      const reputationGap = owner.reputation - candidate.reputation;
+      if (reputationGap < -10 || reputationGap > 45) return false;
+      if (isForeignLoanClub(candidate.id)) {
+        if (player.age < 18) return false;
+        if (loanRouteScore(candidate.id) < 0.05) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const positionCount = (clubId: string) => gameState.clubs[clubId].playerIds.reduce(
+        (count, playerId) => gameState.players[playerId]?.position === player.position ? count + 1 : count,
+        0,
+      );
+      return (
+        Number(isForeignLoanClub(a.id)) - Number(isForeignLoanClub(b.id)) ||
+        positionCount(a.id) - positionCount(b.id) ||
+        loanRouteScore(b.id) - loanRouteScore(a.id) ||
+        b.youthAcademyRating - a.youthAcademyRating
+      );
+    })
+    .slice(0, 20);
+  const pendingLoanRecommendation = (gameState.loanRecommendations ?? []).some(
+    (recommendation) =>
+      recommendation.playerId === player.id &&
+      (recommendation.status ?? "pending") === "pending",
+  );
+  const movementHistory = (gameState.playerMovementHistory ?? [])
+    .filter((event) => event.playerId === player.id)
+    .sort((a, b) => b.season - a.season || b.week - a.week);
 
   // Aggregate readings from all observations
   const allReadings: AttributeReading[] = observations.flatMap((o) => o.attributeReadings);
@@ -1050,6 +1235,48 @@ export function PlayerProfile() {
     : null;
 
   const contactIntel: HiddenIntel[] = getResolvedContactIntel(gameState, canonicalPlayerId);
+  const dossierEntries: PlayerEvidenceEntry[] = Object.values(
+    gameState.reflectionJournal ?? {},
+  )
+    .filter((entry) => {
+      const hasPlayerLink = entry.playerIds.some((id) => relatedPlayerIds.has(id));
+      const hasHypothesis = entry.hypotheses.some((hypothesis) =>
+        relatedPlayerIds.has(hypothesis.playerId),
+      );
+      const hasFlaggedMoment = (entry.flaggedMoments ?? []).some((moment) =>
+        relatedPlayerIds.has(moment.playerId),
+      );
+      return hasPlayerLink || hasHypothesis || hasFlaggedMoment;
+    })
+    .map((entry) => ({
+      ...entry,
+      hypotheses: entry.hypotheses.filter((hypothesis) =>
+        relatedPlayerIds.has(hypothesis.playerId),
+      ),
+      flaggedMoments: (entry.flaggedMoments ?? []).filter((moment) =>
+        relatedPlayerIds.has(moment.playerId),
+      ),
+    }))
+    .filter(
+      (entry) =>
+        entry.hypotheses.length > 0 ||
+        entry.flaggedMoments.length > 0 ||
+        entry.notes.length > 0 ||
+        !!entry.summary,
+    )
+    .sort((left, right) => {
+      const seasonWeekDelta = compareSeasonWeekDesc(left, right);
+      if (seasonWeekDelta !== 0) return seasonWeekDelta;
+      return right.createdAt - left.createdAt;
+    });
+  const dossierInboxIntel = gameState.inbox
+    .filter(
+      (message) =>
+        !!message.relatedId &&
+        relatedPlayerIds.has(message.relatedId) &&
+        isQualitativeIntelMessage(message),
+    )
+    .sort(compareSeasonWeekDesc);
   const scoutHomeCountry = getScoutHomeCountry(gameState.scout);
   const foreignYouthCountry = unsignedYouthRecord && unsignedYouthRecord.country !== scoutHomeCountry
     ? unsignedYouthRecord.country
@@ -1076,35 +1303,80 @@ export function PlayerProfile() {
     return "outline" as const;
   };
 
+  const watchlisted = gameState.watchlist.includes(canonicalPlayerId);
+  const latestReport = [...reports].sort((left, right) => {
+    if ((right.submittedSeason ?? 0) !== (left.submittedSeason ?? 0)) {
+      return (right.submittedSeason ?? 0) - (left.submittedSeason ?? 0);
+    }
+    return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0);
+  })[0];
+  const unansweredAttributes = Array.from(byDomain.values()).flatMap((domainAttrs) =>
+    domainAttrs
+      .filter(([, reading]) => !reading)
+      .map(([attr]) => formatAttribute(attr)),
+  );
+  const evidenceSignals =
+    observations.length + dossierEntries.length + dossierInboxIntel.length + contactIntel.length;
+  const nextDecision =
+    observations.length === 0
+      ? "Get a live view before you commit."
+      : reports.length === 0
+      ? "Turn the read into a report."
+      : unsignedYouthRecord && !unsignedYouthRecord.placed
+      ? "Decide if this prospect is ready for placement."
+      : foreignYouthCountry && !unsignedYouthRecord?.placed
+      ? `Travel to ${getCountryDisplayName(foreignYouthCountry)} before escalating.`
+      : "Choose the most useful follow-up.";
+  const nextDecisionReason =
+    observations.length === 0
+      ? "You still need first-hand evidence."
+      : reports.length === 0
+      ? `${observations.length} observation${observations.length === 1 ? "" : "s"} are ready to be formalized.`
+      : unsignedYouthRecord && !unsignedYouthRecord.placed
+      ? "Placement is the next professional call in this youth dossier."
+      : unansweredAttributes.length > 0
+      ? `${unansweredAttributes.length} attribute${unansweredAttributes.length === 1 ? "" : "s"} still need clarity.`
+      : "The dossier is broad enough to decide whether to press or pause.";
+  const identityLabel = unsignedYouthRecord
+    ? unsignedYouthRecord.placed
+      ? "Placed youth prospect"
+      : "Unsigned youth prospect"
+    : isRetired
+    ? "Archived player profile"
+    : "Active player dossier";
+
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Back button */}
         <button
-          onClick={() => setScreen("playerDatabase")}
-          className="mb-4 flex items-center gap-1 text-sm text-zinc-500 hover:text-white transition"
-          aria-label="Back to player database"
+          onClick={() => setScreen(specialization === "youth" ? "youthScouting" : "playerDatabase")}
+          className="mb-4 flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+          aria-label={specialization === "youth" ? "Back to prospects" : "Back to player database"}
         >
-          <ArrowLeft size={14} />
-          Back to Players
+          <ArrowLeft size={15} aria-hidden="true" />
+          {specialization === "youth" ? "Back to Prospects" : "Back to Players"}
         </button>
 
         {/* Header */}
-        <div className="mb-6 flex items-start justify-between">
-          <div className="flex items-start gap-4">
+        <div className="mb-5 flex flex-col gap-5 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 xl:flex-row xl:items-start xl:justify-between sm:p-6">
+          <div className="flex flex-col items-start gap-4 sm:flex-row">
             <PlayerAvatar
               playerId={player.id}
               nationality={player.nationality}
               size={96}
             />
             <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                {identityLabel}
+              </p>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">
+                <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
                   {player.firstName} {player.lastName}
                 </h1>
                 <button
                   onClick={() => toggleWatchlist(canonicalPlayerId)}
-                  className="p-1 rounded hover:bg-zinc-800 transition"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg transition hover:bg-zinc-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                   aria-label={gameState.watchlist.includes(canonicalPlayerId) ? "Remove from watchlist" : "Add to watchlist"}
                 >
                   <Star
@@ -1172,8 +1444,8 @@ export function PlayerProfile() {
               </div>
             </div>
         </div>
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => startReport(canonicalPlayerId)} disabled={observations.length === 0}>
+          <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap xl:max-w-xl xl:justify-end [&>button]:min-h-11 [&>button]:w-full sm:[&>button]:w-auto">
+            <Button onClick={() => startReport(canonicalPlayerId)} disabled={isRetired || observations.length === 0}>
               <FileText size={14} className="mr-2" />
               Write Report
             </Button>
@@ -1204,8 +1476,12 @@ export function PlayerProfile() {
             {/* Negotiate Transfer — first-team scouts with a club can negotiate */}
             {gameState.scout.primarySpecialization === "firstTeam" &&
              gameState.scout.currentClubId &&
+             Boolean(player.contractClubId ?? player.clubId) &&
              player.clubId !== gameState.scout.currentClubId &&
+             !player.onLoan &&
              !unsignedYouthRecord &&
+             !isRetired &&
+             transferWindowOpen &&
              !(gameState.activeNegotiations ?? []).some(
                (n) => n.playerId === canonicalPlayerId && n.phase !== "completed" && n.phase !== "collapsed"
              ) && (
@@ -1218,25 +1494,21 @@ export function PlayerProfile() {
               </Button>
             )}
             {/* Recommend for Loan — own-club players not on loan, age < 26 */}
-            {isOwnClubPlayer && !player.onLoan && player.age < 26 && (() => {
-              const scoutClub = gameState.scout.currentClubId ? gameState.clubs[gameState.scout.currentClubId] : null;
-              const sameLeagueClubs = scoutClub
-                ? Object.values(gameState.clubs).filter(
-                    (c) => c.leagueId === scoutClub.leagueId && c.id !== scoutClub.id
-                  )
-                : [];
-              const targetClub = sameLeagueClubs.sort((a, b) => a.reputation - b.reputation)[0];
-              return targetClub ? (
-                <Button
-                  variant="outline"
-                  onClick={() => recommendPlayerForLoan(player.id, targetClub.id, "development", 20)}
-                  title={`Recommend loan to ${targetClub.name}`}
-                >
-                  <Send size={14} className="mr-2" />
-                  Recommend for Loan
-                </Button>
-              ) : null;
-            })()}
+            {!isRetired && transferWindowOpen && isOwnClubPlayer && !player.onLoan &&
+              player.age < 26 && loanTargetClubs.length > 0 && (
+              <Button
+                variant="outline"
+                disabled={pendingLoanRecommendation}
+                onClick={() => {
+                  setLoanTargetClubId(loanTargetClubs[0].id);
+                  setLoanDialogOpen(true);
+                }}
+                title={pendingLoanRecommendation ? "A loan recommendation is awaiting a response" : "Choose a development loan destination"}
+              >
+                <Send size={14} className="mr-2" />
+                {pendingLoanRecommendation ? "Recommendation Pending" : "Recommend for Loan"}
+              </Button>
+            )}
             {foreignYouthCountry && !unsignedYouthRecord?.placed && (
               <Button
                 variant="outline"
@@ -1322,6 +1594,44 @@ export function PlayerProfile() {
           </div>
         </div>
 
+        <Card className="mb-5 overflow-hidden border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.1),transparent_42%),rgba(17,22,28,0.96)]">
+          <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Next scouting decision</p>
+              <h2 className="mt-2 text-xl font-bold text-white sm:text-2xl">{nextDecision}</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-300">{nextDecisionReason}</p>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
+                  {observations.length} live view{observations.length === 1 ? "" : "s"}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
+                  {evidenceSignals} evidence signal{evidenceSignals === 1 ? "" : "s"}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
+                  {reports.length} filed report{reports.length === 1 ? "" : "s"}
+                </span>
+              </div>
+            </div>
+            <Button
+              className="min-h-11 w-full lg:w-auto"
+              onClick={() => {
+                if (observations.length > 0 && reports.length === 0) {
+                  startReport(canonicalPlayerId);
+                  return;
+                }
+                setScreen("calendar");
+              }}
+            >
+              {observations.length === 0
+                ? "Plan first observation"
+                : reports.length === 0
+                  ? "Write the report"
+                  : "Plan next action"}
+              <ChevronRight size={16} className="ml-2" aria-hidden="true" />
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card>
@@ -1347,7 +1657,7 @@ export function PlayerProfile() {
               </p>
             </CardContent>
           </Card>
-          {player.clubId && player.contractExpiry > 0 && (
+          {!isRetired && player.clubId && player.contractExpiry > 0 && (
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-zinc-500">Contract Expires</p>
@@ -1356,7 +1666,7 @@ export function PlayerProfile() {
             </Card>
           )}
           {/* Loan Status */}
-          {player.onLoan && player.loanParentClubId && (
+          {!isRetired && player.onLoan && player.loanParentClubId && (
             <Card className="border-sky-500/20 bg-sky-500/5">
               <CardContent className="p-4">
                 <p className="text-xs text-sky-400">On Loan</p>
@@ -1393,13 +1703,21 @@ export function PlayerProfile() {
             </Card>
           )}
           {/* Free Agent Badge */}
-          {!player.clubId && player.contractExpiry === 0 && gameState.freeAgentPool?.agents.some(
+          {!isRetired && !player.clubId && player.contractExpiry === 0 && gameState.freeAgentPool?.agents.some(
             (a) => a.playerId === player.id && a.status === "available"
           ) && (
             <Card className="border-emerald-500/20 bg-emerald-500/5">
               <CardContent className="p-4">
                 <p className="text-xs text-emerald-400">Free Agent</p>
                 <p className="mt-1 text-sm text-zinc-300">Available to sign</p>
+              </CardContent>
+            </Card>
+          )}
+          {isRetired && (
+            <Card className="border-zinc-500/30 bg-zinc-500/5">
+              <CardContent className="p-4">
+                <p className="text-xs font-medium text-zinc-300">Retired</p>
+                <p className="mt-1 text-sm text-zinc-500">Career record preserved</p>
               </CardContent>
             </Card>
           )}
@@ -1473,7 +1791,14 @@ export function PlayerProfile() {
                     variant="outline"
                     size="sm"
                     className="mt-4 border-amber-500/40 text-amber-400 hover:border-amber-400 hover:text-amber-300"
-                    onClick={() => setScreen("calendar")}
+                    onClick={() => {
+                      setPendingCalendarActivity({
+                        type: "writePlacementReport",
+                        targetId: unsignedYouthRecord.player.id,
+                        label: `Placement: ${unsignedYouthRecord.player.firstName} ${unsignedYouthRecord.player.lastName}`,
+                      });
+                      setScreen("calendar");
+                    }}
                   >
                     <FileText size={12} className="mr-1.5" aria-hidden="true" />
                     Recommend to Club
@@ -1771,6 +2096,200 @@ export function PlayerProfile() {
               </div>
             )}
 
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
+                Evidence Dossier
+              </h2>
+              <Card>
+                <CardContent className="px-4 pb-4 pt-4">
+                  <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                    <section aria-label="Reflection journal evidence" className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <FileText size={13} className="text-sky-400" aria-hidden="true" />
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                            Journal
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-zinc-600">
+                          {dossierEntries.length} saved
+                        </span>
+                      </div>
+
+                      {dossierEntries.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-[#27272a] bg-[#111111] px-3 py-4">
+                          <p className="text-xs text-zinc-500">
+                            No durable reflection entries saved for this player yet.
+                          </p>
+                        </div>
+                      ) : (
+                        dossierEntries.slice(0, 3).map((entry) => (
+                          <article
+                            key={entry.id}
+                            className="rounded-md border border-[#27272a] bg-[#141414] p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-medium text-white">
+                                  {formatObservationActivityLabel(entry.activityType)}
+                                </p>
+                                <p className="mt-0.5 text-[10px] text-zinc-500">
+                                  {formatSeasonWeekLabel(entry.season, entry.week)}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap justify-end gap-1">
+                                {entry.flaggedMoments.length > 0 && (
+                                  <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-amber-300">
+                                    {entry.flaggedMoments.length} moment{entry.flaggedMoments.length === 1 ? "" : "s"}
+                                  </span>
+                                )}
+                                {entry.hypotheses.length > 0 && (
+                                  <span className="rounded-full border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-sky-300">
+                                    {entry.hypotheses.length} hypothes{entry.hypotheses.length === 1 ? "is" : "es"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {entry.summary && (
+                              <p className="mt-2 text-xs leading-relaxed text-zinc-300">
+                                {entry.summary}
+                              </p>
+                            )}
+
+                            {entry.flaggedMoments.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                  Flagged Moments
+                                </p>
+                                {entry.flaggedMoments.slice(0, 2).map((moment) => {
+                                  const reactionDisplay = getFlaggedReactionDisplay(moment.reaction);
+                                  return (
+                                    <div key={moment.id} className="rounded-md border border-[#202020] bg-[#101010] p-2.5">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <p className="text-[10px] text-zinc-500">
+                                          {moment.minute}&apos; · {formatMomentType(moment.momentType)}
+                                          {moment.pressureContext ? " · Under pressure" : ""}
+                                        </p>
+                                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${reactionDisplay.className}`}>
+                                          {reactionDisplay.label}
+                                        </span>
+                                      </div>
+                                      <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+                                        {moment.description}
+                                      </p>
+                                      {moment.note && (
+                                        <p className="mt-1 text-[11px] text-zinc-500">
+                                          Note: {moment.note}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {entry.hypotheses.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                  Hypotheses
+                                </p>
+                                {entry.hypotheses.slice(0, 2).map((hypothesis) => {
+                                  const hypothesisDisplay = getHypothesisStateDisplay(hypothesis.state);
+                                  const forEvidence = (hypothesis.evidence ?? []).filter((item) => item.direction === "for");
+                                  const againstEvidence = (hypothesis.evidence ?? []).filter((item) => item.direction === "against");
+                                  const evidence = hypothesis.evidence ?? [];
+                                  const latestEvidence = evidence[evidence.length - 1];
+
+                                  return (
+                                    <div key={hypothesis.id} className="rounded-md border border-[#202020] bg-[#101010] p-2.5">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <p className="text-xs leading-relaxed text-zinc-300">
+                                          {hypothesis.text}
+                                        </p>
+                                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide ${hypothesisDisplay.className}`}>
+                                          {hypothesisDisplay.label}
+                                        </span>
+                                      </div>
+                                      <p className="mt-1 text-[10px] text-zinc-500">
+                                        {formatAttribute(hypothesis.domain)} · {forEvidence.length} for · {againstEvidence.length} against
+                                      </p>
+                                      {latestEvidence && (
+                                        <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                                          Latest evidence: {latestEvidence.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {entry.notes.length > 0 && (
+                              <div className="mt-3 space-y-1.5">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                                  Notes
+                                </p>
+                                {entry.notes.slice(0, 2).map((note, noteIndex) => (
+                                  <p key={`${entry.id}-note-${noteIndex}`} className="text-[11px] leading-relaxed text-zinc-400">
+                                    {note}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
+                          </article>
+                        ))
+                      )}
+                    </section>
+
+                    <section aria-label="Linked inbox intelligence" className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <Users size={13} className="text-violet-400" aria-hidden="true" />
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                            Linked Intel
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-zinc-600">
+                          {dossierInboxIntel.length} linked
+                        </span>
+                      </div>
+
+                      {dossierInboxIntel.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-[#27272a] bg-[#111111] px-3 py-4">
+                          <p className="text-xs text-zinc-500">
+                            No player-linked inbox intel saved yet.
+                          </p>
+                        </div>
+                      ) : (
+                        dossierInboxIntel.slice(0, 4).map((message) => (
+                          <article
+                            key={message.id}
+                            className="rounded-md border border-[#27272a] bg-[#141414] p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-medium text-white">{message.title}</p>
+                                <p className="mt-0.5 text-[10px] text-zinc-500">
+                                  {formatSeasonWeekLabel(message.season, message.week)}
+                                </p>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] uppercase tracking-wide text-zinc-300">
+                                {formatAttribute(message.type)}
+                              </Badge>
+                            </div>
+                            <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+                              {message.body}
+                            </p>
+                          </article>
+                        ))
+                      )}
+                    </section>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
             {/* Contact Intel */}
             {contactIntel.length > 0 && (
               <div>
@@ -1829,6 +2348,51 @@ export function PlayerProfile() {
               gameState={gameState}
             />
 
+            {movementHistory.length > 0 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Career Journey</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {movementHistory.slice(0, 12).map((event) => {
+                    const labels: Record<string, string> = {
+                      youthSigning: "Signed from youth football",
+                      permanentTransfer: "Permanent transfer",
+                      loanStart: "Loan started",
+                      loanReturn: "Returned from loan",
+                      loanRecall: "Recalled from loan",
+                      loanBuyOption: "Loan made permanent",
+                      release: "Released",
+                      freeAgentSigning: "Signed as a free agent",
+                      contractRenewal: "Contract renewed",
+                      retirement: "Retired",
+                      footballExit: "Left professional football",
+                    };
+                    const fromName = event.fromClubId ? gameState.clubs[event.fromClubId]?.name : undefined;
+                    const toName = event.toClubId ? gameState.clubs[event.toClubId]?.name : undefined;
+                    const route = fromName && toName
+                      ? `${fromName} → ${toName}`
+                      : toName ?? fromName;
+                    return (
+                      <div key={event.id} className="rounded-md border border-[#27272a] bg-[#111] px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-medium text-zinc-200">{labels[event.type] ?? event.type}</p>
+                          <span className="text-[10px] text-zinc-500">S{event.season} W{event.week}</span>
+                        </div>
+                        {(route || event.fee !== undefined) && (
+                          <p className="mt-1 text-[11px] text-zinc-400">
+                            {route}{route && event.fee !== undefined ? " · " : ""}
+                            {event.fee !== undefined ? formatMarketValue(event.fee) : ""}
+                          </p>
+                        )}
+                        {event.reason && <p className="mt-1 text-[10px] text-zinc-500">{event.reason}</p>}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Reports */}
             <Card>
               <CardHeader className="pb-2">
@@ -1877,6 +2441,82 @@ export function PlayerProfile() {
           </div>
         </div>
       </div>
+      {loanDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setLoanDialogOpen(false)}>
+          <div
+            className="mx-4 w-full max-w-lg rounded-xl border border-[#27272a] bg-[#0c0c0c] p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-base font-semibold text-white">Build a loan development plan</h3>
+                <p className="mt-1 text-xs text-zinc-400">
+                  Choose the club, purpose, and duration. The target club will respond when the week advances.
+                </p>
+              </div>
+              <button onClick={() => setLoanDialogOpen(false)} className="text-zinc-500 hover:text-white" aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <label className="block text-xs text-zinc-400">
+                Destination club
+                <select
+                  value={loanTargetClubId}
+                  onChange={(event) => setLoanTargetClubId(event.target.value)}
+                  className="mt-1.5 w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white"
+                >
+                  {loanTargetClubs.map((candidate) => {
+                    const leagueName = gameState.leagues[candidate.leagueId]?.name ?? "Unknown league";
+                    return (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.name} · {leagueName} · Academy {candidate.youthAcademyRating}/20
+                      </option>
+                    );
+                  })}
+                </select>
+              </label>
+              <label className="block text-xs text-zinc-400">
+                Development objective
+                <select
+                  value={loanRationale}
+                  onChange={(event) => setLoanRationale(event.target.value as typeof loanRationale)}
+                  className="mt-1.5 w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white"
+                >
+                  <option value="development">Coaching and development</option>
+                  <option value="playing-time">Guaranteed playing time</option>
+                  <option value="experience">Senior football experience</option>
+                  <option value="squad-depth">Fill a clear squad need</option>
+                </select>
+              </label>
+              <label className="block text-xs text-zinc-400">
+                Duration
+                <select
+                  value={loanDuration}
+                  onChange={(event) => setLoanDuration(Number(event.target.value))}
+                  className="mt-1.5 w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white"
+                >
+                  <option value={12}>12 weeks · short-term test</option>
+                  <option value={20}>20 weeks · half season</option>
+                  <option value={38}>38 weeks · full season</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setLoanDialogOpen(false)}>Cancel</Button>
+              <Button
+                disabled={!loanTargetClubId}
+                onClick={() => {
+                  recommendPlayerForLoan(player.id, loanTargetClubId, loanRationale, loanDuration);
+                  setLoanDialogOpen(false);
+                }}
+              >
+                Submit Recommendation
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Network Intel Popup */}
       {networkIntel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setNetworkIntel(null)}>

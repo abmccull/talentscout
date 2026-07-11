@@ -362,6 +362,21 @@ function describeAtmosphere(session: ObservationSession): string {
     return "";
   }
 
+  const weather = session.venueAtmosphere.weather;
+  const eventIds = new Set(
+    session.phases
+      .map((phase) => phase.atmosphereEvent?.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  if (weather === "heavy_rain" || eventIds.has("waterlogged_pitch")) {
+    return "Heavy conditions disrupted the read; the surface and weather turned the session into more of a stress test than a calm baseline watch.";
+  }
+
+  if (weather === "light_rain" || eventIds.has("rain_starts")) {
+    return "The weather kept altering touches and footing, so every read needed a little more caution than usual.";
+  }
+
   const chaos = session.venueAtmosphere.chaosLevel;
   if (chaos <= 0.2) {
     return "Conditions stayed calm enough for a clean read.";

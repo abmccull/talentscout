@@ -1,10 +1,5 @@
 /**
- * GamePage — custom Playwright fixture for TalentScout E2E tests.
- *
- * Wraps common game operations into a clean API:
- * - Start new games with any configuration
- * - Navigate via sidebar or store injection
- * - Advance weeks, read game state, etc.
+ * GamePage custom fixture for TalentScout E2E tests.
  */
 
 import { test as base, expect, type Page } from "@playwright/test";
@@ -18,10 +13,11 @@ import {
   getCurrentScreen,
   setScreen,
   getGameStateValue,
+  getDefaultSkillAllocations,
   type GameStateOverrides,
 } from "./helpers/state-injection";
 
-// ─── GamePage Helper ─────────────────────────────────────────────────────────
+const youthEarlyAccess = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
 
 export class GamePage {
   readonly page: Page;
@@ -30,51 +26,94 @@ export class GamePage {
   constructor(page: Page) {
     this.page = page;
 
-    // Collect console errors throughout the test
     page.on("console", (msg) => {
-      if (msg.type() === "error") {
-        const text = msg.text();
-        // Filter out known non-actionable errors
-        if (text.includes("favicon.ico")) return;
-        if (text.includes("hydration")) return;
-        if (text.includes("cannot contain a nested")) return; // React DOM nesting warnings
-        if (text.includes("Warning:")) return; // React dev-mode warnings
-        if (text.includes("Failed to load resource")) return; // Transient dev server 500s
-        if (text.includes("Internal Server Error")) return;
-        if (text.includes("net::ERR_")) return; // Network errors during page transitions
-        if (text.includes("Unexpected end of JSON")) return; // Next.js HMR race condition
-        this.consoleErrors.push(text);
-      }
+      if (msg.type() !== "error") return;
+      const text = msg.text();
+      if (text.includes("favicon.ico")) return;
+      this.consoleErrors.push(text);
+    });
+
+    page.on("pageerror", (error) => {
+      this.consoleErrors.push(error.stack ?? error.message);
     });
   }
 
-  // ── Navigation ─────────────────────────────────────────────────────────
+  private async allocateWizardSkillPoints(
+    specialization: "youth" | "firstTeam" | "regional" | "data" = "youth",
+  ): Promise<void> {
+    const allocations = getDefaultSkillAllocations(specialization);
+    for (const [skill, amount] of Object.entries(allocations)) {
+      for (let i = 0; i < amount; i++) {
+        await this.page.getByRole("button", { name: `Increase ${skill}` }).click();
+      }
+    }
+  }
 
-  /** Navigate browser to /play and wait for the game store to be available. */
+  private async resolveWeekSimulationInteraction(): Promise<boolean> {
+    const choiceRegion = this.page.getByRole("region", { name: "Day interaction choice" });
+    if (!(await choiceRegion.isVisible({ timeout: 1_000 }).catch(() => false))) {
+      return true;
+    }
+
+    const selectedChoice = choiceRegion.getByText(/^Selected:/);
+    if (await selectedChoice.isVisible({ timeout: 250 }).catch(() => false)) {
+      return true;
+    }
+
+    const decisionButtons = choiceRegion.getByRole("button");
+    if (!(await decisionButtons.first().isVisible({ timeout: 2_000 }).catch(() => false))) {
+      return false;
+    }
+
+    const focusButton = choiceRegion.getByRole("button", { name: /^Focus Prospect\b/i });
+    if (await focusButton.isVisible({ timeout: 500 }).catch(() => false)) {
+      await focusButton.click();
+    } else {
+      await decisionButtons.first().click();
+    }
+
+    const confirmFocus = this.page.getByRole("button", { name: /^Confirm Focus$/ });
+    if (await confirmFocus.isVisible({ timeout: 500 }).catch(() => false)) {
+      await confirmFocus.click();
+    }
+
+    await selectedChoice.waitFor({ state: "visible", timeout: 5_000 });
+    return true;
+  }
+
+  private async dismissBlockingDialogs(): Promise<void> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const dialog = this.page.getByRole("dialog").last();
+      if (!(await dialog.isVisible({ timeout: 500 }).catch(() => false))) return;
+
+      const dismissButton = dialog.getByRole("button", {
+        name: /^(Incredible!|Continue)$/,
+      });
+      if (!(await dismissButton.isVisible({ timeout: 500 }).catch(() => false))) return;
+
+      await dismissButton.click();
+      await this.page.waitForTimeout(150);
+    }
+  }
+
   async goto(): Promise<void> {
     await navigateToGame(this.page);
-    // Dismiss tutorial overlays so they don't block E2E interactions
     await dismissTutorials(this.page);
   }
 
-  /** Click a sidebar nav item by screen name. */
   async navigateTo(screen: string): Promise<void> {
-    const selector = navItem(screen);
-    await this.page.click(selector);
-    await this.page.waitForTimeout(300); // Allow screen transition animation
+    await this.page.click(navItem(screen));
+    await this.page.waitForTimeout(300);
   }
 
-  /** Set screen directly via the store (faster than clicking). */
   async setScreen(screen: string): Promise<void> {
     await setScreen(this.page, screen);
   }
 
-  /** Get the current screen from the store. */
   async getCurrentScreen(): Promise<string> {
     return getCurrentScreen(this.page);
   }
 
-  /** Wait until the current screen matches the expected value. */
   async waitForScreen(screen: string, timeout = 10_000): Promise<void> {
     await this.page.waitForFunction(
       (expected) => {
@@ -86,31 +125,18 @@ export class GamePage {
     );
   }
 
-  // ── State Injection ────────────────────────────────────────────────────
-
-  /** Inject a custom game state. */
   async injectState(overrides: GameStateOverrides = {}): Promise<void> {
     await injectGameState(this.page, overrides);
   }
 
-  /** Inject a late-game state with all features unlocked. */
   async injectLateGameState(spec: string = "youth"): Promise<void> {
     await injectLateGameState(this.page, spec);
   }
 
-  /** Inject a mid-game state (tier 2, week 20). */
   async injectMidGameState(spec: string = "youth"): Promise<void> {
     await injectMidGameState(this.page, spec);
   }
 
-  // ── New Game Wizard ────────────────────────────────────────────────────
-
-  /**
-   * Automate the 6-step new game wizard.
-   *
-   * Wizard inputs use placeholders "Alex" / "Morgan".
-   * Navigation button is "Continue" (steps 1–5) and "Begin Career" (step 6).
-   */
   async startNewGame(config: {
     firstName?: string;
     lastName?: string;
@@ -118,61 +144,50 @@ export class GamePage {
   } = {}): Promise<void> {
     const { firstName = "Test", lastName = "Scout", specialization = "youth" } = config;
 
-    // Should be on mainMenu or newGame screen
-    const currentScreen = await this.getCurrentScreen();
-    if (currentScreen === "mainMenu") {
-      await this.page.click(SELECTORS.newGameButton);
+    if ((await this.getCurrentScreen()) === "mainMenu") {
+      await this.page.locator(SELECTORS.newGameButton).first().click();
       await this.page.waitForTimeout(500);
     }
 
-    // Step 1: Identity — clear default values and fill name
-    const firstNameInput = this.page.locator('input#scout-first-name, input[placeholder="Alex"]');
-    const lastNameInput = this.page.locator('input#scout-last-name, input[placeholder="Morgan"]');
-    await firstNameInput.fill(firstName);
-    await lastNameInput.fill(lastName);
+    await this.page
+      .locator('input#scout-first-name, input[placeholder="Alex"]')
+      .fill(firstName);
+    await this.page
+      .locator('input#scout-last-name, input[placeholder="Morgan"]')
+      .fill(lastName);
     await this.page.click('button:has-text("Continue")');
     await this.page.waitForTimeout(400);
 
-    // Step 2: Specialization — click the spec card
-    const specNames: Record<string, string> = {
-      youth: "Youth Scout",
-      firstTeam: "First Team Scout",
-      regional: "Regional Expert",
-      data: "Data Scout",
-    };
-    const specName = specNames[specialization] ?? "Youth Scout";
-    await this.page.click(`text="${specName}"`);
+    if (!youthEarlyAccess) {
+      const specNames: Record<string, string> = {
+        youth: "Youth Scout",
+        firstTeam: "First Team Scout",
+        regional: "Regional Expert",
+        data: "Data Scout",
+      };
+      await this.page
+        .getByRole("button", { name: new RegExp(specNames[specialization] ?? "Youth Scout") })
+        .click();
+      await this.page.click('button:has-text("Continue")');
+      await this.page.waitForTimeout(400);
+    }
+
+    await this.allocateWizardSkillPoints(specialization);
     await this.page.click('button:has-text("Continue")');
     await this.page.waitForTimeout(400);
 
-    // Step 3: Skills — accept defaults
+    if (!youthEarlyAccess) {
+      await this.page.click('button:has-text("Continue")');
+      await this.page.waitForTimeout(400);
+    }
+
     await this.page.click('button:has-text("Continue")');
     await this.page.waitForTimeout(400);
 
-    // Step 4: Position — accept defaults (freelance)
-    await this.page.click('button:has-text("Continue")');
-    await this.page.waitForTimeout(400);
-
-    // Step 5: World — accept defaults (England)
-    await this.page.click('button:has-text("Continue")');
-    await this.page.waitForTimeout(400);
-
-    // Step 6: Review — click begin
     await this.page.click('button:has-text("Begin Career")');
-
-    // Wait for game to load and land on dashboard
     await this.waitForScreen("dashboard", 30_000);
   }
 
-  // ── Game Actions ───────────────────────────────────────────────────────
-
-  /**
-   * Advance one week via batchAdvance(1).
-   *
-   * batchAdvance bypasses the day-by-day simulation UI entirely,
-   * processing the week instantly in the background. This is the
-   * correct approach for E2E tests that need fast week progression.
-   */
   async advanceWeek(): Promise<void> {
     await this.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
@@ -183,7 +198,6 @@ export class GamePage {
     await this.page.waitForTimeout(200);
   }
 
-  /** Advance N weeks in a single batch (much faster than N individual advances). */
   async advanceWeeks(n: number): Promise<void> {
     await this.page.evaluate((weeks) => {
       const store = (window as any).__GAME_STORE__;
@@ -194,40 +208,208 @@ export class GamePage {
     await this.page.waitForTimeout(300);
   }
 
-  // ── State Queries ──────────────────────────────────────────────────────
+  async advanceCanonicalWeek(options: { launchLiveSession?: boolean } = {}): Promise<void> {
+    const { launchLiveSession = false } = options;
+    await this.page.getByRole("button", { name: /^Advance Week$/ }).click();
 
-  /** Read a value from the game state. */
+    const emptyDayAdvance = this.page.getByRole("button", { name: /^Advance$/ });
+    if (await emptyDayAdvance.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await emptyDayAdvance.click();
+    }
+
+    await this.waitForScreen("weekSimulation", 10_000);
+
+    for (let step = 0; step < 20; step++) {
+      if (launchLiveSession) {
+        const interactionResolved = await this.resolveWeekSimulationInteraction();
+        if (!interactionResolved) {
+          await this.page.waitForTimeout(250);
+          continue;
+        }
+
+        const launchLiveSessionButton = this.page.getByRole("button", {
+          name: /^Launch Live Session$/,
+        });
+        if (
+          await launchLiveSessionButton.isVisible({ timeout: 1_000 }).catch(() => false)
+        ) {
+          // The handler immediately replaces the week-simulation tree with the
+          // observation screen. Dispatch directly so Playwright does not retry
+          // the already-successful click after the source button detaches.
+          await launchLiveSessionButton.evaluate((element) => {
+            (element as HTMLButtonElement).click();
+          });
+          await this.waitForScreen("observation", 10_000);
+          await this.completeObservationViaUI();
+          await this.waitForScreen("weekSimulation", 10_000);
+          continue;
+        }
+      }
+
+      const viewCalendar = this.page.getByRole("button", { name: /^View Calendar$/ });
+      if (await viewCalendar.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await viewCalendar.click();
+        break;
+      }
+
+      const completeWeek = this.page.getByRole("button", {
+        name: /^(Complete the week and process results|Complete Week)$/i,
+      });
+      if (await completeWeek.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        if (!(await completeWeek.isEnabled())) {
+          await this.page.waitForTimeout(250);
+          continue;
+        }
+        await completeWeek.click();
+        await this.page.waitForTimeout(200);
+        continue;
+      }
+
+      const nextDay = this.page.getByRole("button", { name: /^(Advance to next day|Next Day)$/i });
+      if (await nextDay.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        if (!(await nextDay.isEnabled())) {
+          await this.page.waitForTimeout(250);
+          continue;
+        }
+        await nextDay.click();
+        await this.page.waitForTimeout(200);
+        continue;
+      }
+
+      if (step < 19) {
+        await this.page.waitForTimeout(250);
+        continue;
+      }
+    }
+
+    await this.dismissBlockingDialogs();
+
+    const summaryContinue = this.page.getByRole("button", { name: /^Continue$/ });
+    if (await summaryContinue.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await summaryContinue.click();
+    }
+
+    const finalScreen = await this.getCurrentScreen();
+    if (finalScreen !== "calendar") {
+      throw new Error(`Canonical week ended on unexpected screen: ${finalScreen}`);
+    }
+  }
+
+  async scheduleActivityByLabel(
+    activityLabel: string,
+    dayLabel: "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun" = "Mon",
+  ): Promise<void> {
+    const activityCard = this.page.locator("article").filter({
+      has: this.page.getByRole("heading", { name: activityLabel, exact: true }),
+    }).first();
+    await activityCard.getByRole("button", { name: /Choose Day/ }).click();
+    await this.page
+      .getByRole("button", { name: `Place ${activityLabel} on ${dayLabel}` })
+      .click();
+  }
+
+  async openFirstYouthPlayerProfile(): Promise<void> {
+    await this.navigateTo("youthScouting");
+    await this.page.locator('button[aria-label^="View profile for "]').first().click();
+    await this.waitForScreen("playerProfile");
+  }
+
+  async submitCurrentReportViaUI(
+    conviction: "note" | "recommend" | "strongRecommend" | "tablePound" = "recommend",
+  ): Promise<void> {
+    const convictionLabels: Record<typeof conviction, string> = {
+      note: "Note",
+      recommend: "Recommend",
+      strongRecommend: "Strong Recommend",
+      tablePound: "Table Pound",
+    };
+
+    await this.page
+      .getByRole("radio", { name: new RegExp(`^${convictionLabels[conviction]}\\b`) })
+      .click();
+    await this.page.getByRole("button", { name: /^Submit Report$/ }).click();
+  }
+
+  async completeObservationViaUI(): Promise<void> {
+    const beginObservation = this.page.getByRole("button", { name: /^Begin Observation$/ });
+    await beginObservation.waitFor({ state: "visible", timeout: 10_000 });
+    await beginObservation.click();
+
+    const focusButton = this.page.locator('button[aria-label^="Add focus to "]').first();
+    if (await focusButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await focusButton.click();
+      await this.page.getByRole("button", { name: /^technical$/i }).click();
+    }
+
+    const flagMoment = this.page.getByRole("button", { name: /^Flag this moment$/ }).first();
+    if (await flagMoment.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await flagMoment.click();
+      await this.page.getByRole("button", { name: /^Promising$/ }).click();
+    }
+
+    let reachedReflection = false;
+    for (let step = 0; step < 30; step++) {
+      const reflection = this.page.getByRole("button", { name: /^Go to Reflection$/ });
+      if (await reflection.isVisible({ timeout: 500 }).catch(() => false)) {
+        await reflection.click();
+        reachedReflection = true;
+        break;
+      }
+
+      const nextPhase = this.page.getByRole("button", { name: /^Next Phase$/ });
+      if (await nextPhase.isVisible({ timeout: 500 }).catch(() => false)) {
+        await nextPhase.click();
+        await this.page.waitForTimeout(100);
+        continue;
+      }
+
+      await this.page.waitForTimeout(100);
+    }
+
+    if (!reachedReflection) {
+      throw new Error("Observation never reached reflection");
+    }
+
+    const completeReflection = this.page.getByRole("button", {
+      name: /^Complete (Reflection|Session)$/,
+    });
+    await completeReflection.waitFor({ state: "visible", timeout: 10_000 });
+    await completeReflection.click();
+
+    const continueButton = this.page.getByRole("button", { name: /^Continue$/ });
+    const completionRoute = await Promise.race([
+      this.waitForScreen("weekSimulation", 10_000).then(() => "weekSimulation" as const),
+      continueButton
+        .waitFor({ state: "visible", timeout: 10_000 })
+        .then(() => "continue" as const),
+    ]);
+    if (completionRoute === "continue") {
+      await continueButton.click();
+    }
+  }
+
   async getGameStateValue(path: string): Promise<unknown> {
     return getGameStateValue(this.page, path);
   }
 
-  /** Get the current scout tier. */
   async getScoutTier(): Promise<number> {
     return (await this.getGameStateValue("scout.careerTier")) as number;
   }
 
-  /** Get the current week number. */
   async getCurrentWeek(): Promise<number> {
     return (await this.getGameStateValue("currentWeek")) as number;
   }
 
-  /** Get the scout specialization. */
   async getSpecialization(): Promise<string> {
     return (await this.getGameStateValue("scout.primarySpecialization")) as string;
   }
 
-  // ── Observation Session Helpers ────────────────────────────────────────
-
-  /**
-   * Start an observation session via the store.
-   * Builds a player pool from the current game state automatically.
-   */
   async startObservationSession(
     activityType: string,
     targetPlayerId?: string,
   ): Promise<void> {
     await this.page.evaluate(
-      ({ activityType, targetPlayerId }) => {
+      ({ activityType: type, targetPlayerId: targetId }) => {
         const store = (window as any).__GAME_STORE__;
         const state = store.getState().gameState;
         if (!state) throw new Error("No game state");
@@ -235,23 +417,19 @@ export class GamePage {
         const players = Object.values(state.players) as any[];
         if (players.length === 0) throw new Error("No players in game state");
 
-        const pool = players.slice(0, 5).map((p: any) => ({
-          playerId: p.id,
-          name: `${p.firstName} ${p.lastName}`,
-          position: p.position ?? "Forward",
+        const pool = players.slice(0, 5).map((player: any) => ({
+          playerId: player.id,
+          name: `${player.firstName} ${player.lastName}`,
+          position: player.position ?? "Forward",
         }));
 
-        const target = targetPlayerId ?? pool[0].playerId;
-        store.getState().startObservationSession(activityType, pool, target);
+        store.getState().startObservationSession(type, pool, targetId ?? pool[0].playerId);
       },
       { activityType, targetPlayerId },
     );
     await this.page.waitForTimeout(300);
   }
 
-  /**
-   * Read a serialized summary of the active observation session.
-   */
   async getActiveSession(): Promise<{
     mode: string;
     state: string;
@@ -286,16 +464,13 @@ export class GamePage {
     });
   }
 
-  /**
-   * Schedule an activity into a calendar day slot via the store.
-   */
   async scheduleActivityByType(activityType: string, dayIndex: number): Promise<void> {
     await this.page.evaluate(
-      ({ activityType, dayIndex }) => {
+      ({ activityType: type, dayIndex: day }) => {
         const store = (window as any).__GAME_STORE__;
         store.getState().scheduleActivity(
-          { type: activityType, slots: 1, description: `E2E ${activityType}` },
-          dayIndex,
+          { type, slots: 1, description: `E2E ${type}` },
+          day,
         );
       },
       { activityType, dayIndex },
@@ -303,13 +478,10 @@ export class GamePage {
     await this.page.waitForTimeout(100);
   }
 
-  /**
-   * Submit a report via the store with default values.
-   * Auto-selects the first player, starts a report, and submits with "confident" conviction.
-   * Returns whether submission succeeded.
-   */
-  async submitReportViaStore(): Promise<boolean> {
-    return this.page.evaluate(() => {
+  async submitReportViaStore(
+    conviction: "note" | "recommend" | "strongRecommend" | "tablePound" = "recommend",
+  ): Promise<boolean> {
+    return this.page.evaluate((reportConviction) => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
       if (!state || Object.keys(state.players).length === 0) return false;
@@ -319,7 +491,7 @@ export class GamePage {
 
       try {
         store.getState().submitReport(
-          "confident",
+          reportConviction,
           "E2E test report summary",
           ["pace", "finishing"],
           ["positioning"],
@@ -328,33 +500,25 @@ export class GamePage {
       } catch {
         return false;
       }
-    });
+    }, conviction);
   }
 
-  // ── Assertions ─────────────────────────────────────────────────────────
-
-  /** Assert no console errors were recorded during the test. */
   expectNoConsoleErrors(): void {
     expect(this.consoleErrors, "Console errors detected").toEqual([]);
   }
 
-  /** Get the list of collected console errors. */
   getConsoleErrors(): string[] {
     return [...this.consoleErrors];
   }
 
-  /** Clear collected console errors (use between sub-tests). */
   clearConsoleErrors(): void {
     this.consoleErrors = [];
   }
 }
 
-// ─── Custom Test Fixture ─────────────────────────────────────────────────────
-
 export const test = base.extend<{ gamePage: GamePage }>({
   gamePage: async ({ page }, use) => {
-    const gamePage = new GamePage(page);
-    await use(gamePage);
+    await use(new GamePage(page));
   },
 });
 

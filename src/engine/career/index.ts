@@ -18,7 +18,6 @@ export {
 
 export {
   generateNPCScoutRoster,
-  generateTerritories,
   assignTerritory,
   processNPCScoutingWeek,
   evaluateNPCReport,

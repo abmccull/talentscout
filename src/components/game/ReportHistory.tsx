@@ -89,13 +89,13 @@ function ReportDetailModal({ report, playerName, transferRecord, onClose }: Repo
             </Badge>
             {report.perceivedCAStars != null && (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-500">CA:</span>
+                <span className="text-[10px] text-zinc-500">Current read:</span>
                 <StarRating rating={report.perceivedCAStars} size="sm" />
               </div>
             )}
             {report.perceivedPARange && (
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-zinc-500">PA:</span>
+                <span className="text-[10px] text-zinc-500">Upside read:</span>
                 <StarRatingRange
                   low={report.perceivedPARange[0]}
                   high={report.perceivedPARange[1]}
@@ -104,10 +104,30 @@ function ReportDetailModal({ report, playerName, transferRecord, onClose }: Repo
               </div>
             )}
             <span className={`text-sm font-semibold ${qualityColor(report.qualityScore)}`}>
-              Quality: {report.qualityScore}/100
+              Craft: {report.qualityScore}/100
             </span>
+            {report.postTransferRating !== undefined ? (
+              <span className={`text-sm font-semibold ${qualityColor(report.postTransferRating)}`}>
+                Validated accuracy: {report.postTransferRating}/100
+              </span>
+            ) : (
+              <span className="text-xs text-zinc-500">Accuracy pending career evidence</span>
+            )}
+            {report.craftBreakdown && (
+              <div className="w-full mt-2 space-y-1 text-[10px] text-zinc-500">
+                <div className="flex justify-between"><span>Observation depth</span><span>{report.craftBreakdown.observationDepth}/25</span></div>
+                <div className="flex justify-between"><span>Evidence confidence</span><span>{report.craftBreakdown.confidenceLevel}/20</span></div>
+                <div className="flex justify-between"><span>Conviction calibration</span><span>{report.craftBreakdown.convictionFit}/15</span></div>
+                <div className="flex justify-between"><span>Evidence-backed detail</span><span>{report.craftBreakdown.detail}/20</span></div>
+                <div className="flex justify-between"><span>Scout technique</span><span>{report.craftBreakdown.scoutSkill}/20</span></div>
+                {report.craftBreakdown.equipmentBonus > 0 && (
+                  <div className="flex justify-between"><span>Equipment bonus</span><span>+{Math.round(report.craftBreakdown.equipmentBonus)}</span></div>
+                )}
+              </div>
+            )}
             {report.qualityBreakdown && (
               <div className="w-full mt-2 space-y-1 text-[10px] text-zinc-500">
+                <div className="font-medium text-zinc-400">Legacy report score</div>
                 <div className="flex justify-between"><span>Accuracy</span><span>{Math.round(report.qualityBreakdown.accuracy)}/45</span></div>
                 <div className="flex justify-between"><span>Coverage</span><span>{Math.round(report.qualityBreakdown.coverage)}/25</span></div>
                 <div className="flex justify-between"><span>Conviction</span><span>{Math.round(report.qualityBreakdown.conviction)}/20</span></div>
@@ -372,7 +392,7 @@ function PostSubmitListingPrompt({ report, playerName, suggestedPrice, marketTem
           <div className="flex-1 min-w-0">
             <h3 className="text-sm font-bold text-white mb-1">List your report for sale?</h3>
             <p className="text-xs text-zinc-400 mb-3">
-              <span className="text-white font-medium">{playerName}</span> — {CONVICTION_LABELS[report.conviction]} · Quality {report.qualityScore}/100
+              <span className="text-white font-medium">{playerName}</span> — {CONVICTION_LABELS[report.conviction]} · Craft {report.qualityScore}/100
             </p>
             <div className="flex flex-wrap items-end gap-3 mb-3">
               <div>
@@ -538,14 +558,193 @@ export function ReportHistory() {
     setListingReport(null);
   }
 
+  const renderTransferOutcome = (report: ScoutReport) => {
+    const transferRecord = transferByReportId.get(report.id);
+    if (!transferRecord) return <span className="text-zinc-600 text-xs">—</span>;
+    if (!transferRecord.outcome) return <span className="text-zinc-500 text-xs">Pending</span>;
+
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border ${OUTCOME_COLORS[transferRecord.outcome]}`}>
+          {transferRecord.outcome.charAt(0).toUpperCase() + transferRecord.outcome.slice(1)}
+        </span>
+        {transferRecord.outcomeReason && (
+          <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] border ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}>
+            {OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}
+          </span>
+        )}
+      </div>
+    );
+  };
+
+  const renderListingBids = (listing: ReportListing) => (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-zinc-400">
+        Bids on this listing ({listing.bids.filter((b) => b.status === "pending").length} pending)
+      </p>
+      {listing.bids.map((bid: MarketplaceBid) => {
+        const club = gameState.clubs[bid.clubId];
+        const clubName = club?.name ?? "Unknown Club";
+        const isUpgrade = bid.isExclusiveUpgrade === true;
+        return (
+          <div
+            key={bid.id}
+            className={`flex flex-col gap-2 rounded border p-3 text-xs sm:flex-row sm:items-center sm:gap-3 ${
+              isUpgrade && bid.status === "pending"
+                ? "border-amber-500/40 bg-amber-950/20"
+                : "border-[#27272a] bg-[#141414]"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {isUpgrade && (
+                <Crown size={14} className="shrink-0 text-amber-400" aria-hidden="true" />
+              )}
+              <span className="font-medium text-zinc-300">
+                {clubName}
+                <span className="ml-1 text-[9px] text-zinc-500">({bid.needMatchScore}/110 match)</span>
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Tooltip content={bid.bidReason ?? "Market-driven bid"} side="top">
+                <span className={`cursor-help font-bold ${isUpgrade ? "text-amber-400" : "text-emerald-400"}`}>
+                  £{bid.amount.toLocaleString()}
+                </span>
+              </Tooltip>
+              {isUpgrade && bid.status === "pending" && (
+                <Badge className="border-amber-500/40 bg-amber-500/20 text-[9px] text-amber-400">
+                  EXCLUSIVE UPGRADE
+                </Badge>
+              )}
+              <Badge
+                variant={
+                  bid.status === "pending" ? "warning"
+                  : bid.status === "accepted" ? "success"
+                  : bid.status === "declined" ? "destructive"
+                  : "outline"
+                }
+                className="text-[10px]"
+              >
+                {bid.status}
+              </Badge>
+              {bid.status === "pending" && (
+                <span className="text-zinc-500">expires wk {bid.expiryWeek}</span>
+              )}
+            </div>
+            {bid.status === "pending" && (
+              <div className="flex flex-wrap items-center gap-1 sm:ml-auto">
+                {isUpgrade && (
+                  <span className="mr-1 flex items-center gap-0.5 text-[9px] text-amber-400/70">
+                    <AlertTriangle size={10} aria-hidden="true" />
+                    Declines other bids
+                  </span>
+                )}
+                <Button
+                  size="sm"
+                  className={`h-6 text-[10px] ${
+                    isUpgrade
+                      ? "bg-amber-600 hover:bg-amber-500"
+                      : "bg-emerald-700 hover:bg-emerald-600"
+                  }`}
+                  onClick={() =>
+                    isUpgrade
+                      ? acceptExclusiveUpgradeBid(bid.id)
+                      : acceptMarketplaceBid(bid.id)
+                  }
+                >
+                  {isUpgrade ? "Accept Exclusive" : "Accept"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-[10px] text-zinc-400 hover:text-red-400"
+                  onClick={() => declineMarketplaceBid(bid.id)}
+                >
+                  Decline
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderReportActions = (
+    report: ScoutReport,
+    playerName: string,
+    listing: ReportListing | undefined,
+  ) => (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setSelectedReport(report)}
+        aria-label={`View full report for ${playerName}`}
+      >
+        View
+      </Button>
+      {hasFinances && (
+        <>
+          {listing?.status === "active" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => withdrawReportListing(listing.id)}
+              className="text-zinc-400 hover:text-red-400"
+              aria-label={`Withdraw listing for ${playerName} report`}
+            >
+              Withdraw
+            </Button>
+          )}
+          {listing?.status === "sold" && (
+            <Badge variant="success" className="text-[10px]">
+              Sold
+            </Badge>
+          )}
+          {listing == null && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setListingReport(report)}
+              className="text-zinc-400 hover:text-emerald-400"
+              aria-label={`List report for ${playerName} for sale`}
+            >
+              <DollarSign size={13} aria-hidden="true" />
+              List
+            </Button>
+          )}
+          {listing?.status === "active" && (
+            <Badge variant="outline" className="border-emerald-800 text-[10px] text-emerald-400">
+              Listed
+            </Badge>
+          )}
+          {listing?.status === "active" && listing.bids.filter((b) => b.status === "pending").length > 0 && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setExpandedBidsListingId(
+                expandedBidsListingId === listing.id ? null : listing.id,
+              )}
+              className="h-6 gap-1 text-xs text-amber-400 hover:text-amber-300"
+              aria-expanded={expandedBidsListingId === listing.id}
+            >
+              <Gavel size={12} aria-hidden="true" />
+              {listing.bids.filter((b) => b.status === "pending").length} bid{listing.bids.filter((b) => b.status === "pending").length > 1 ? "s" : ""}
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <GameLayout>
       <div className="relative min-h-full p-6">
         <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
         <div className="relative z-10">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold">Report History</h1>
-          <p className="text-sm text-zinc-400">All submitted scouting reports</p>
+          <h1 className="text-2xl font-bold">Reports</h1>
+          <p className="text-sm text-zinc-400">Filed judgments, marketplace outcomes, and your reflection journal</p>
         </div>
 
         {/* Market temperature banner (independent scouts only) */}
@@ -572,37 +771,39 @@ export function ReportHistory() {
 
         {/* Post-submit listing prompt (independent scouts only) */}
         {isIndependent && pendingReport && pendingReportPlayer && (
-          <PostSubmitListingPrompt
-            report={pendingReport}
-            playerName={`${pendingReportPlayer.firstName} ${pendingReportPlayer.lastName}`}
-            suggestedPrice={pendingReportPrice}
-            marketTemperature={gameState.finances?.marketTemperature}
-            onList={(price, isExclusive) => {
-              listReportForSale(pendingReport.id, price, isExclusive);
-              dismissPendingListing();
-            }}
-            onDismiss={dismissPendingListing}
-          />
+          <div data-tutorial-id="report-marketplace-prompt" className="mb-4">
+            <PostSubmitListingPrompt
+              report={pendingReport}
+              playerName={`${pendingReportPlayer.firstName} ${pendingReportPlayer.lastName}`}
+              suggestedPrice={pendingReportPrice}
+              marketTemperature={gameState.finances?.marketTemperature}
+              onList={(price, isExclusive) => {
+                listReportForSale(pendingReport.id, price, isExclusive);
+                dismissPendingListing();
+              }}
+              onDismiss={dismissPendingListing}
+            />
+          </div>
         )}
 
         {/* Stats */}
         <div className={`mb-6 grid grid-cols-2 gap-4 ${isIndependent ? "sm:grid-cols-3 lg:grid-cols-6" : "sm:grid-cols-4"}`}>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-zinc-500">Total Reports</p>
+              <p className="text-xs text-zinc-400">Total Reports</p>
               <p className="text-2xl font-bold text-emerald-400">{totalReports}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="p-4">
-              <p className="text-xs text-zinc-500">Avg Quality</p>
+              <p className="text-xs text-zinc-400">Avg Craft</p>
               <p className={`text-2xl font-bold ${qualityColor(avgQuality)}`}>{avgQuality}</p>
             </CardContent>
           </Card>
           {(["tablePound", "strongRecommend"] as ConvictionLevel[]).map((c) => (
             <Card key={c}>
               <CardContent className="p-4">
-                <p className="text-xs text-zinc-500">{CONVICTION_LABELS[c]}</p>
+                <p className="text-xs text-zinc-400">{CONVICTION_LABELS[c]}</p>
                 <p className="text-2xl font-bold">{convictionCounts[c] ?? 0}</p>
               </CardContent>
             </Card>
@@ -611,13 +812,13 @@ export function ReportHistory() {
             <>
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-xs text-zinc-500">Active Listings</p>
+                  <p className="text-xs text-zinc-400">Active Listings</p>
                   <p className="text-2xl font-bold text-emerald-400">{activeListingsCount}</p>
                 </CardContent>
               </Card>
               <Card className={totalPendingBids > 0 ? "border-amber-500/30" : ""}>
                 <CardContent className="p-4">
-                  <p className="text-xs text-zinc-500">Pending Bids</p>
+                  <p className="text-xs text-zinc-400">Pending Bids</p>
                   <p className={`text-2xl font-bold ${totalPendingBids > 0 ? "text-amber-400" : "text-zinc-500"}`}>
                     {totalPendingBids}
                   </p>
@@ -629,13 +830,13 @@ export function ReportHistory() {
 
         {/* Comparison action bar */}
         {comparisonReportIds.length > 0 && (
-          <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3" data-tutorial-id="reporthistory-compare">
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3 sm:flex-row sm:items-center" data-tutorial-id="reporthistory-compare">
             <GitCompareArrows size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
             <span className="text-sm text-zinc-300">
               {comparisonReportIds.length} report{comparisonReportIds.length > 1 ? "s" : ""} selected for comparison
               {comparisonReportIds.length < 2 && " (select at least 2)"}
             </span>
-            <div className="ml-auto flex gap-2">
+            <div className="flex flex-wrap gap-2 sm:ml-auto">
               <Button
                 size="sm"
                 variant="ghost"
@@ -661,13 +862,121 @@ export function ReportHistory() {
             {sortedReports.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <FileText size={32} className="mb-3 text-zinc-700" aria-hidden="true" />
-                <p className="text-sm text-zinc-500">No reports filed yet.</p>
-                <p className="text-xs text-zinc-600 mt-1">
+                <p className="text-sm text-zinc-300">No reports filed yet.</p>
+                <p className="mt-1 text-xs text-zinc-400">
                   Observe players and write your first scouting report.
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+                <div className="space-y-3 p-3 md:hidden">
+                  {sortedReports.map((report) => {
+                    const player = resolvePlayerEntity(gameState, report.playerId)?.player;
+                    const playerName = player
+                      ? `${player.firstName} ${player.lastName}`
+                      : "Unknown";
+                    const listing = listingByReportId[report.id];
+                    const isInComparison = comparisonReportIds.includes(report.id);
+                    const comparisonFull = comparisonReportIds.length >= 3 && !isInComparison;
+                    const hasPendingBids = listing?.bids.some((b) => b.status === "pending") ?? false;
+                    return (
+                      <div
+                        key={`${report.id}-mobile`}
+                        className={`rounded-lg border p-4 ${
+                          isInComparison
+                            ? "border-emerald-700/60 bg-emerald-950/20"
+                            : hasPendingBids
+                              ? "border-amber-500/30 bg-amber-950/10"
+                              : "border-[#27272a] bg-[#101010]"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={isInComparison}
+                            disabled={comparisonFull}
+                            onChange={() => {
+                              if (isInComparison) {
+                                removeFromComparison(report.id);
+                              } else {
+                                addToComparison(report.id);
+                              }
+                            }}
+                            className="mt-1 h-4 w-4 rounded border-[#27272a] bg-[#141414] accent-emerald-500 disabled:opacity-30"
+                            aria-label={`${isInComparison ? "Remove from" : "Add to"} comparison for ${playerName}`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <button
+                                onClick={() => {
+                                  selectPlayer(report.playerId);
+                                  setScreen("playerProfile");
+                                }}
+                                className="text-left font-medium text-white transition hover:text-emerald-400"
+                                aria-label={`View profile for ${playerName}`}
+                              >
+                                {playerName}
+                              </button>
+                              <span className="text-xs text-zinc-500">
+                                W{report.submittedWeek} S{report.submittedSeason}
+                              </span>
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <Badge variant={CONVICTION_VARIANT[report.conviction]} className="text-[10px]">
+                                {CONVICTION_LABELS[report.conviction]}
+                              </Badge>
+                              <span className={`text-xs font-semibold ${qualityColor(report.qualityScore)}`}>
+                                {report.qualityScore}/100
+                              </span>
+                              {report.reputationDelta !== undefined ? (
+                                <span className={`text-xs font-semibold ${report.reputationDelta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  Rep {report.reputationDelta >= 0 ? "+" : ""}{report.reputationDelta}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+
+                        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                              Club Response
+                            </dt>
+                            <dd className="mt-1">
+                              {report.clubResponse ? (
+                                <Badge variant="secondary" className="text-[10px] capitalize">
+                                  {report.clubResponse}
+                                </Badge>
+                              ) : (
+                                <span className="text-zinc-600 text-xs">Pending</span>
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                              Transfer Outcome
+                            </dt>
+                            <dd className="mt-1">{renderTransferOutcome(report)}</dd>
+                          </div>
+                        </dl>
+
+                        <div className="mt-4">
+                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                            Actions
+                          </p>
+                          {renderReportActions(report, playerName, listing)}
+                        </div>
+
+                        {listing && expandedBidsListingId === listing.id && listing.bids.length > 0 && (
+                          <div className="mt-4 border-t border-[#27272a] pt-4">
+                            {renderListingBids(listing)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#27272a] text-left text-xs text-zinc-500">
@@ -676,7 +985,7 @@ export function ReportHistory() {
                       </th>
                       <th className="px-4 py-3 font-medium">Player</th>
                       <th className="px-4 py-3 font-medium">Conviction</th>
-                      <th className="px-4 py-3 font-medium">Quality</th>
+                      <th className="px-4 py-3 font-medium">Craft</th>
                       <th className="px-4 py-3 font-medium">Rep</th>
                       <th className="px-4 py-3 font-medium">Week</th>
                       <th className="px-4 py-3 font-medium">Club Response</th>
@@ -941,7 +1250,8 @@ export function ReportHistory() {
                     })}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
@@ -959,8 +1269,8 @@ export function ReportHistory() {
           <CardContent className="space-y-3">
             {journalEntries.length === 0 ? (
               <div className="rounded-lg border border-[#27272a] bg-[#0c0c0c] px-4 py-8 text-center">
-                <p className="text-sm text-zinc-500">No reflection entries yet.</p>
-                <p className="mt-1 text-xs text-zinc-600">
+                <p className="text-sm text-zinc-300">No reflection entries yet.</p>
+                <p className="mt-1 text-xs text-zinc-400">
                   Finish an interactive observation session to start building your journal.
                 </p>
               </div>

@@ -17,6 +17,7 @@ import {
   BETA_CLOUD_SAVES_MESSAGE,
   BETA_GLOBAL_LEADERBOARD_MESSAGE,
 } from "@/config/beta";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 // Session flag — splash only shown once per browser session.
 let splashShownThisSession = false;
@@ -65,11 +66,15 @@ export function MainMenu() {
     return () => clearTimeout(splashTimerRef.current);
   }, [showSplash]);
 
-  const autosave = saveSlots.find((s) => s.slot === 0);
-  const manualSaves = saveSlots.filter((s) => s.slot > 0);
+  const compatibleSaveSlots = IS_YOUTH_EARLY_ACCESS
+    ? saveSlots.filter((save) => save.specialization === "youth")
+    : saveSlots;
+  const autosave = compatibleSaveSlots.find((s) => s.slot === 0);
+  const manualSaves = compatibleSaveSlots.filter((s) => s.slot > 0);
+  const unsupportedSaveCount = saveSlots.length - compatibleSaveSlots.length;
 
   const handleContinue = async () => {
-    const mostRecent = [...saveSlots].sort((a, b) => b.savedAt - a.savedAt)[0];
+    const mostRecent = [...compatibleSaveSlots].sort((a, b) => b.savedAt - a.savedAt)[0];
     if (mostRecent) {
       await loadFromSlot(mostRecent.slot);
     }
@@ -101,7 +106,7 @@ export function MainMenu() {
     });
   };
 
-  const hasSaves = saveSlots.length > 0;
+  const hasSaves = compatibleSaveSlots.length > 0;
   const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
   const pendingScenario = selectedScenarioId
     ? getScenarioById(selectedScenarioId)
@@ -109,7 +114,7 @@ export function MainMenu() {
 
   if (showSplash) {
     return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+      <main className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
         <ScreenBackground src="/images/backgrounds/loading.png" opacity={0.6} />
         <div className="relative z-10 animate-[splashFadeIn_800ms_ease-out_both] text-center">
           <h1 className="mb-3 text-7xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
@@ -125,31 +130,49 @@ export function MainMenu() {
             to { opacity: 1; transform: translateY(0); }
           }
         `}</style>
-      </div>
+      </main>
     );
   }
 
   if (isLoadingSave) {
     return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+      <main
+        className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]"
+        aria-busy="true"
+      >
         <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.8} />
         <div className="relative z-10">
           <Loader2 className="h-8 w-8 animate-spin text-emerald-500" />
           <p className="mt-4 text-zinc-400">Loading save...</p>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a] px-4 py-10">
       <ScreenBackground src="/images/backgrounds/menu-bg-1.png" opacity={0.65} />
       {/* Title */}
-      <div className="relative z-10 mb-16 text-center">
+      <div className="relative z-10 mb-10 text-center md:mb-14">
+        {IS_YOUTH_EARLY_ACCESS && (
+          <Badge className="mb-4 border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
+            Youth Scout Early Access
+          </Badge>
+        )}
         <h1 className="mb-2 text-6xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
           Talent<span className="text-emerald-500">Scout</span>
         </h1>
-        <p className="text-lg text-zinc-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">Football Scout Career Simulator</p>
+        <p className="text-lg text-zinc-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
+          {IS_YOUTH_EARLY_ACCESS
+            ? "Discover young players. Build the evidence. Back your judgement."
+            : "Football Scout Career Simulator"}
+        </p>
+        {IS_YOUTH_EARLY_ACCESS && (
+          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
+            This Early Access build is focused on one complete scouting specialization: Youth Scout.
+            Other scouting specializations will return after this core loop is proven.
+          </p>
+        )}
       </div>
 
       {!showLoadPicker ? (
@@ -164,7 +187,7 @@ export function MainMenu() {
               setScreen("newGame");
             }}
           >
-            New Game
+            {IS_YOUTH_EARLY_ACCESS ? "Start Youth Career" : "New Game"}
           </Button>
           <Button
             variant="secondary"
@@ -184,16 +207,18 @@ export function MainMenu() {
           >
             Load Game
           </Button>
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full text-base"
-            onClick={() => setScreen("scenarioSelect")}
-          >
-            Scenarios
-          </Button>
+          {!IS_YOUTH_EARLY_ACCESS && (
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full text-base"
+              onClick={() => setScreen("scenarioSelect")}
+            >
+              Scenarios
+            </Button>
+          )}
 
-          {pendingScenario && (
+          {!IS_YOUTH_EARLY_ACCESS && pendingScenario && (
             <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-2.5">
               <p className="text-xs font-medium text-amber-200">
                 Pending scenario: {pendingScenario.name}
@@ -203,6 +228,14 @@ export function MainMenu() {
                 starts a standard career.
               </p>
             </div>
+          )}
+
+          {IS_YOUTH_EARLY_ACCESS && unsupportedSaveCount > 0 && (
+            <p className="rounded-md border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 text-center text-[11px] leading-relaxed text-zinc-400">
+              {unsupportedSaveCount} save{unsupportedSaveCount === 1 ? "" : "s"} from an
+              unsupported specialization {unsupportedSaveCount === 1 ? "is" : "are"} safely
+              preserved and hidden in this Youth Early Access build.
+            </p>
           )}
 
           {/* Auth status indicator */}
@@ -305,9 +338,15 @@ export function MainMenu() {
             </div>
           ))}
 
-          {saveSlots.length === 0 && (
+          {compatibleSaveSlots.length === 0 && (
             <p className="text-center text-sm text-zinc-500">
-              No saved games found.
+              No compatible Youth Scout saves found.
+            </p>
+          )}
+
+          {IS_YOUTH_EARLY_ACCESS && unsupportedSaveCount > 0 && (
+            <p className="text-center text-xs leading-relaxed text-zinc-500">
+              Other-specialization saves remain stored and will be available when full-game mode returns.
             </p>
           )}
 
@@ -332,7 +371,7 @@ export function MainMenu() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
       />
-    </div>
+    </main>
   );
 }
 

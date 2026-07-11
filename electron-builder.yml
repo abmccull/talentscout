@@ -8,6 +8,11 @@ directories:
 # Bundle the app into an asar archive for faster startup and tamper resistance.
 asar: true
 
+# Runtime files are either static JS or vendor-provided prebuilt Steam
+# binaries. Rebuilding the full development dependency graph pulls in
+# @parcel/watcher and incorrectly requires Visual Studio on release hosts.
+npmRebuild: false
+
 # Maximum compression for production distribution size.
 compression: maximum
 
@@ -18,13 +23,20 @@ afterSign: scripts/notarize.js
 files:
   - electron/**/*
   - out/**/*
-  - "!node_modules/**/*"
+  # Keep the Steam bridge available when the native SDK redistributable is
+  # provisioned. The app still starts cleanly when Steam is unavailable.
+  - node_modules/steamworks.js/**/*
+
+asarUnpack:
+  - node_modules/steamworks.js/dist/**/*
 
 # steam_appid.txt is required on every platform so Steamworks can locate the
 # app. Keep it in extraResources (bundled inside the app package).
 extraResources:
-  - from: steam_appid.txt
+  - from: .
     to: .
+    filter:
+      - steam_appid.txt
 
 # ---------------------------------------------------------------------------
 # Publish — generic provider wired for electron-updater auto-update support.
@@ -43,8 +55,10 @@ win:
   target: nsis
   # Platform-specific Steamworks redistributable (64-bit Windows DLL).
   extraFiles:
-    - from: steam_api64.dll
-      to: steam_api64.dll
+    - from: .
+      to: .
+      filter:
+        - steam_api64.dll
 
 nsis:
   oneClick: false
@@ -81,8 +95,10 @@ mac:
   artifactName: "TalentScout-${version}-${arch}.${ext}"
   # Platform-specific Steamworks redistributable (macOS dylib).
   extraFiles:
-    - from: libsteam_api.dylib
-      to: libsteam_api.dylib
+    - from: .
+      to: .
+      filter:
+        - libsteam_api.dylib
 
 dmg:
   # No additional dmg-specific overrides needed beyond mac-level settings.
@@ -101,5 +117,7 @@ linux:
   artifactName: "TalentScout-${version}-${arch}.${ext}"
   # Platform-specific Steamworks redistributable (Linux shared object).
   extraFiles:
-    - from: libsteam_api.so
-      to: libsteam_api.so
+    - from: .
+      to: .
+      filter:
+        - libsteam_api.so

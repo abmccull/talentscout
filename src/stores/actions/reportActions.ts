@@ -9,7 +9,7 @@ import type { GetState, SetState } from "./types";
 import type { ConvictionLevel, InboxMessage } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
-import { generateReportContent, finalizeReport, calculateReportQualityDetailed } from "@/engine/reports/reporting";
+import { calculateReportCraftQualityDetailed, generateReportContent, finalizeReport } from "@/engine/reports/reporting";
 import { updateReputation } from "@/engine/career/progression";
 import { recordDiscovery } from "@/engine/career/index";
 import {
@@ -71,7 +71,13 @@ export function createReportActions(get: GetState, set: SetState) {
         ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
         : undefined;
       const totalReportQualityBonus = infraEffectsForReport.reportQualityBonus + (submitEquipBonuses?.reportQuality ?? 0);
-      const qualityDetailed = calculateReportQualityDetailed(report, player, totalReportQualityBonus);
+      const qualityDetailed = calculateReportCraftQualityDetailed(
+        report,
+        observations,
+        gameState.scout,
+        player,
+        totalReportQualityBonus,
+      );
       const quality = qualityDetailed.score;
 
       const repBefore = gameState.scout.reputation;
@@ -91,7 +97,18 @@ export function createReportActions(get: GetState, set: SetState) {
         reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1,
       };
       const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
-      let scoredReport = { ...report, qualityScore: quality, reputationDelta, qualityBreakdown: qualityDetailed.breakdown };
+      let scoredReport = {
+        ...report,
+        qualityScore: quality,
+        reputationDelta,
+        craftBreakdown: qualityDetailed.breakdown,
+        validationSnapshot: Object.fromEntries(
+          report.attributeAssessments.map((assessment) => [
+            assessment.attribute,
+            player.attributes[assessment.attribute],
+          ]),
+        ),
+      };
 
       // Record discovery if this player has not been tracked before
       const alreadyDiscovered = gameState.discoveryRecords.some(
@@ -181,6 +198,12 @@ export function createReportActions(get: GetState, set: SetState) {
           }
 
           updatedClubResponses = [...gameState.clubResponses, clubResponse];
+          const reportResponse = clubResponse.response === "signed"
+            ? "signed"
+            : new Set(["interested", "trial", "loanSigned"]).has(clubResponse.response)
+              ? "shortlisted"
+              : "ignored";
+          scoredReport = { ...scoredReport, clubResponse: reportResponse };
 
           // Check for first-team aha moment: first positive response
           const POSITIVE_RESPONSES = new Set(["interested", "trial", "signed", "loanSigned"]);

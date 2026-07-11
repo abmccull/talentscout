@@ -314,6 +314,21 @@ const CONTEXT_VISIBLE_ATTRIBUTES: Record<ObservationContext, PlayerAttribute[]> 
 // Light Observation Pipeline (non-match contexts)
 // ---------------------------------------------------------------------------
 
+export interface LightObservationEvidenceOptions {
+  /** Attributes made visible by concrete moments in an interactive session. */
+  evidenceAttributes?: PlayerAttribute[];
+  /** Dominant direct-focus lens used by the scout. */
+  focusLens?: Observation["focusLens"];
+  /** Small confidence lift earned through sustained direct focus. */
+  confidenceBonus?: number;
+  /** Additional readings for attributes backed by repeated focused moments. */
+  evidencePasses?: number;
+  /** Player-tagged moments the scout deliberately preserved. */
+  flaggedMoments?: FlaggedMoment[];
+  sourceSessionId?: string;
+  activityInstanceId?: string;
+}
+
 /**
  * Generate an observation without match phases.
  * Used by calendar activities: academy visits, youth tournaments,
@@ -327,6 +342,7 @@ export function observePlayerLight(
   existingObservations: Observation[],
   /** Additional attributes to observe per session (from equipment bonuses). */
   extraAttributes?: number,
+  evidenceOptions?: LightObservationEvidenceOptions,
 ): Observation {
   // Count prior readings for this player
   const priorCounts = new Map<PlayerAttribute, number>();
@@ -355,6 +371,12 @@ export function observePlayerLight(
     baseVisible.delete(attr as PlayerAttribute);
   }
 
+  // Concrete live moments can expose attributes that are uncommon for the
+  // venue. Hidden attributes still require indirect, multi-session inference.
+  for (const attribute of evidenceOptions?.evidenceAttributes ?? []) {
+    if (!HIDDEN_SET.has(attribute)) baseVisible.add(attribute);
+  }
+
   const visibleArray = Array.from(baseVisible);
 
   // Select 4–7 attributes to observe (fewer than a full match), plus equipment bonus
@@ -377,7 +399,17 @@ export function observePlayerLight(
     const j = rng.nextInt(0, i);
     [shuffledSeen[i], shuffledSeen[j]] = [shuffledSeen[j], shuffledSeen[i]];
   }
-  const prioritized = [...shuffled, ...shuffledSeen];
+  const evidenceSet = new Set(evidenceOptions?.evidenceAttributes ?? []);
+  const lens = evidenceOptions?.focusLens;
+  const priorityScore = (attribute: PlayerAttribute): number => {
+    let score = 0;
+    if (evidenceSet.has(attribute)) score += 2;
+    if (lens && ATTRIBUTE_DOMAINS[attribute] === lens) score += 1;
+    return score;
+  };
+  const prioritized = [...shuffled, ...shuffledSeen].sort(
+    (a, b) => priorityScore(b) - priorityScore(a),
+  );
   for (let i = 0; i < attrCount && i < prioritized.length; i++) {
     selected.push(prioritized[i]);
   }
@@ -385,14 +417,40 @@ export function observePlayerLight(
   // Generate readings
   const sessionReadings = new Map<PlayerAttribute, { values: number[]; confidences: number[] }>();
   for (const attr of selected) {
-    addReading(rng, sessionReadings, attr, player.attributes[attr], scout, priorCounts.get(attr) ?? 0, contextDiversity, player.form, context, 1.0);
+    const focusedEvidence = evidenceSet.has(attr) || (
+      lens !== undefined && ATTRIBUTE_DOMAINS[attr] === lens
+    );
+    const passes = focusedEvidence
+      ? Math.max(1, Math.min(3, evidenceOptions?.evidencePasses ?? 1))
+      : 1;
+    for (let pass = 0; pass < passes; pass++) {
+      addReading(
+        rng,
+        sessionReadings,
+        attr,
+        player.attributes[attr],
+        scout,
+        (priorCounts.get(attr) ?? 0) + pass,
+        contextDiversity,
+        player.form,
+        context,
+        1.0,
+      );
+    }
   }
 
   // Convert to AttributeReading[]
   const attributeReadings: AttributeReading[] = [];
   for (const [attr, bucket] of sessionReadings) {
     const avgPerceived = Math.round(bucket.values.reduce((s, v) => s + v, 0) / bucket.values.length);
-    const avgConfidence = bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length;
+    const receivesFocusBonus = evidenceSet.has(attr) || (
+      lens !== undefined && ATTRIBUTE_DOMAINS[attr] === lens
+    );
+    const avgConfidence = Math.min(
+      1,
+      bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length
+        + (receivesFocusBonus ? Math.max(0, evidenceOptions?.confidenceBonus ?? 0) : 0),
+    );
     const totalCount = (priorCounts.get(attr) ?? 0) + bucket.values.length;
     const domain = ATTRIBUTE_DOMAINS[attr];
     const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
@@ -426,6 +484,16 @@ export function observePlayerLight(
   };
   const contextLabel = CONTEXT_LABELS[context] ?? "observation";
   const notes = [`Observed ${player.firstName} ${player.lastName} during ${contextLabel} — ${attributeReadings.length} attributes assessed.`];
+
+  if (evidenceOptions?.focusLens) {
+    notes.push(`Direct ${evidenceOptions.focusLens} focus deepened the session evidence.`);
+  }
+  const preservedMomentCount = evidenceOptions?.flaggedMoments?.length ?? 0;
+  if (preservedMomentCount > 0) {
+    notes.push(
+      `${preservedMomentCount} moment${preservedMomentCount === 1 ? "" : "s"} preserved in the scout dossier.`,
+    );
+  }
 
   const abilityReading = generateAbilityReading(
     rng,
@@ -468,13 +536,16 @@ export function observePlayerLight(
     id: `obs_${player.id.slice(0, 8)}_${suffix}`,
     playerId: player.id,
     scoutId: scout.id,
+    sourceSessionId: evidenceOptions?.sourceSessionId,
+    activityInstanceId: evidenceOptions?.activityInstanceId,
     matchId: undefined,
     week: 0, // Set by caller
     season: 0, // Set by caller
     context,
     attributeReadings,
     notes,
-    flaggedMoments: [],
+    flaggedMoments: evidenceOptions?.flaggedMoments ?? [],
+    focusLens: evidenceOptions?.focusLens,
     abilityReading,
     revealedPersonalityTrait,
     updatedPersonalityProfile,

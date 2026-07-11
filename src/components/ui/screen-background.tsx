@@ -31,7 +31,7 @@ export function ScreenBackground({
         loading="eager"
       />
       <div
-        className="absolute inset-0 bg-[#0a0a0a]"
+        className="absolute inset-0 bg-[#090b0e]"
         style={{ opacity }}
       />
     </div>

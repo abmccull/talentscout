@@ -16,11 +16,13 @@ import type {
   Scout,
   Observation,
   ObservationContext,
+  PersonalityTrait,
   YouthVenueType,
   TournamentEvent,
 } from "@/engine/core/types";
 import { observePlayerLight } from "@/engine/scout/perception";
-import { getScoutHomeCountry, isScoutAbroad } from "@/engine/world/travel";
+import { isScoutAbroad } from "@/engine/world/travel";
+import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
 // VENUE POOL CONFIGURATION
@@ -45,27 +47,27 @@ const VENUE_POOL_SIZES: Record<YouthVenueType, VenueConfig> = {
 // HIDDEN ATTRIBUTE INTEL POOLS
 // =============================================================================
 
-const HIDDEN_INTEL_POOLS: Record<string, readonly string[]> = {
-  injuryProneness: [
-    "Rarely gets hurt — tough as nails",
-    "Has a history of niggling injuries",
-    "The family has concerns about a recurring knee issue",
-  ],
-  consistency: [
-    "Performs at the same level every week, rain or shine",
-    "Can be brilliant one day and invisible the next",
-    "His teacher says the same — inconsistent effort",
-  ],
-  professionalism: [
-    "First to arrive at training, last to leave",
-    "The coach has had to have words about his attitude more than once",
-    "Very mature for his age — takes his development seriously",
-  ],
-  bigGameTemperament: [
-    "Thrives when the pressure is on — loves the big stage",
-    "Went very quiet in the cup final",
-    "Gets nervous before important matches but usually finds his feet",
-  ],
+const HIDDEN_INTEL_POOLS = {
+  injuryProneness: {
+    low: ["The coach cannot remember the player missing a session through injury."],
+    medium: ["There have been a few minor knocks, but no clear injury pattern yet."],
+    high: ["The family and coach both mention recurring physical problems."],
+  },
+  consistency: {
+    low: ["Performance levels swing noticeably from one week to the next."],
+    medium: ["The coach sees a normal mix of strong and quiet performances."],
+    high: ["The player delivers much the same standard in training and matches every week."],
+  },
+  professionalism: {
+    low: ["The coach has repeatedly challenged the player's preparation and punctuality."],
+    medium: ["Training habits are acceptable, though the player still needs reminders."],
+    high: ["The player arrives early, listens closely, and takes development seriously."],
+  },
+  bigGameTemperament: {
+    low: ["The player has tended to withdraw when matches become emotionally demanding."],
+    medium: ["Big occasions still bring nerves, but the player usually settles into the game."],
+    high: ["The coach trusts the player most when the pressure and stakes rise."],
+  },
 } as const;
 
 const CHARACTER_NOTE_POOL: readonly string[] = [
@@ -79,7 +81,61 @@ const CHARACTER_NOTE_POOL: readonly string[] = [
   "The family is considering moving abroad — could be now or never",
 ] as const;
 
+const PERSONALITY_CHARACTER_NOTES: Partial<Record<PersonalityTrait, string>> = {
+  ambitious: "The family describes a player who constantly asks what the next level requires.",
+  loyal: "The coach says the player forms strong bonds and does not chase every new offer.",
+  professional: "Training habits and preparation are unusually mature for this age.",
+  temperamental: "Emotions can run hot when sessions or decisions go against the player.",
+  determined: "Setbacks tend to produce extra work rather than excuses.",
+  easygoing: "The player is relaxed and well liked, though occasionally needs pushing.",
+  leader: "Teammates naturally look to the player for direction and reassurance.",
+  introvert: "The player is quiet away from the pitch and takes time to trust new people.",
+  flair: "The coach actively gives the player freedom to improvise and try difficult actions.",
+  controversialCharacter: "Staff have needed to manage friction around the player more than once.",
+  modelCitizen: "School, family, and coaching staff all describe an exceptionally grounded youngster.",
+  pressurePlayer: "The player appears to enjoy responsibility when a match becomes tense.",
+  bigGamePlayer: "The strongest performances have tended to arrive in the biggest fixtures.",
+  inconsistent: "Staff are still trying to understand the gap between the player's best and quietest days.",
+  injuryProne: "The development plan has repeatedly been interrupted by physical complaints.",
+  lateDeveloper: "The coach believes the player is physically and technically behind the eventual timeline.",
+};
+
 const HIDDEN_ATTRIBUTE_KEYS = Object.keys(HIDDEN_INTEL_POOLS) as Array<keyof typeof HIDDEN_INTEL_POOLS>;
+
+function canonicalizeCountry(value?: string): string | undefined {
+  return normalizeCountryKey(value);
+}
+
+function resolveScoutHomeCountry(scout: Scout): string {
+  for (const [key, reputation] of Object.entries(scout.countryReputations ?? {})) {
+    const countryId = canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
+    if (countryId && reputation.familiarity >= 50) {
+      return countryId;
+    }
+  }
+
+  const nationalityCountry = countryKeyFromNationality(scout.nationality);
+  if (nationalityCountry) {
+    return nationalityCountry;
+  }
+
+  for (const [key, reputation] of Object.entries(scout.countryReputations ?? {})) {
+    const countryId = canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
+    if (countryId) {
+      return countryId;
+    }
+  }
+
+  return "england";
+}
+
+function resolveEffectiveScoutCountry(scout: Scout, currentWeek?: number): string {
+  const abroadCountry = currentWeek != null && isScoutAbroad(scout, currentWeek)
+    ? canonicalizeCountry(scout.travelBooking?.destinationCountry)
+    : undefined;
+
+  return abroadCountry ?? resolveScoutHomeCountry(scout);
+}
 
 // =============================================================================
 // SCOUT QUALITY DATA FOR POOL WEIGHTING
@@ -195,13 +251,11 @@ export function getYouthVenuePool(
   // Use the scout's effective location: if abroad, use destination country;
   // otherwise use home country. This ensures scouting in Brazil finds
   // Brazilian youth, not English youth.
-  const abroad = currentWeek != null && isScoutAbroad(scout, currentWeek);
-  const scoutCountry = abroad
-    ? scout.travelBooking!.destinationCountry.toLowerCase()
-    : getScoutHomeCountry(scout);
+  const scoutCountry = resolveEffectiveScoutCountry(scout, currentWeek);
   const tournamentCountries = new Set(
     (tournament?.participantCountries ?? [])
-      .map((country) => country.toLowerCase()),
+      .map((country) => canonicalizeCountry(country))
+      .filter((country): country is string => !!country),
   );
   const allowedCountries = tournamentCountries.size > 0
     ? tournamentCountries
@@ -213,7 +267,7 @@ export function getYouthVenuePool(
       // Same country as scout's location, age 14-16, low visibility
       filtered = activeYouth.filter(
         (y) =>
-          y.country === scoutCountry &&
+          canonicalizeCountry(y.country) === scoutCountry &&
           y.player.age >= 14 &&
           y.player.age <= 16 &&
           y.visibility < 30,
@@ -222,14 +276,16 @@ export function getYouthVenuePool(
 
     case "grassrootsTournament":
       // Domestic grassroots by default; tournament context can override host/participant country.
-      filtered = activeYouth.filter((y) => allowedCountries.has(y.country));
+      filtered = activeYouth.filter((y) =>
+        allowedCountries.has(canonicalizeCountry(y.country) ?? ""),
+      );
       break;
 
     case "streetFootball":
       // Same country as scout's location, specific sub-region (if provided), age 14-17, lower visibility
       filtered = activeYouth.filter(
         (y) =>
-          y.country === scoutCountry &&
+          canonicalizeCountry(y.country) === scoutCountry &&
           y.player.age >= 14 &&
           y.player.age <= 17 &&
           y.visibility < 50,
@@ -241,14 +297,16 @@ export function getYouthVenuePool(
 
     case "academyTrialDay":
       // Same country as scout's location, youth with buzz
-      filtered = activeYouth.filter((y) => y.country === scoutCountry && y.buzzLevel > 30);
+      filtered = activeYouth.filter(
+        (y) => canonicalizeCountry(y.country) === scoutCountry && y.buzzLevel > 30,
+      );
       break;
 
     case "youthFestival":
       // Domestic by default; explicit tournaments can widen the participant country set.
       filtered = activeYouth.filter(
         (y) =>
-          allowedCountries.has(y.country) &&
+          allowedCountries.has(canonicalizeCountry(y.country) ?? "") &&
           y.player.age >= 14 &&
           y.player.age <= 17,
       );
@@ -361,23 +419,48 @@ export function processVenueObservation(
  */
 export function processParentCoachMeeting(
   rng: RNG,
-  _scout: Scout,
-  _youth: UnsignedYouth,
+  scout: Scout,
+  youth: UnsignedYouth,
 ): { hiddenIntel: string[]; characterNotes: string[] } {
   // Pick 1-2 hidden attributes to reveal
   const attributeCount = rng.nextInt(1, 2);
   const availableKeys = rng.shuffle(HIDDEN_ATTRIBUTE_KEYS);
   const selectedKeys = availableKeys.slice(0, attributeCount);
 
-  // For each selected attribute, pick a random description
+  const reliability = Math.max(
+    0,
+    Math.min(
+      1,
+      (scout.skills.psychologicalRead + scout.attributes.intuition) / 40,
+    ),
+  );
+  const bands = ["low", "medium", "high"] as const;
+
+  // Each statement is grounded in the hidden value, with an adjacent-band
+  // misread still possible for inexperienced scouts.
   const hiddenIntel: string[] = selectedKeys.map((key) => {
+    const value = youth.player.attributes[key];
+    let bandIndex = value <= 7 ? 0 : value >= 14 ? 2 : 1;
+    if (rng.chance(0.3 * (1 - reliability))) {
+      bandIndex = Math.max(0, Math.min(2, bandIndex + (rng.chance(0.5) ? 1 : -1)));
+    }
     const pool = HIDDEN_INTEL_POOLS[key];
-    return pool[rng.nextInt(0, pool.length - 1)];
+    const bandPool = pool[bands[bandIndex]];
+    return bandPool[rng.nextInt(0, bandPool.length - 1)];
   });
 
-  // Pick 1 character note
-  const characterNote =
-    CHARACTER_NOTE_POOL[rng.nextInt(0, CHARACTER_NOTE_POOL.length - 1)];
+  const groundedCharacterNotes = youth.player.personalityTraits
+    .map((trait) => PERSONALITY_CHARACTER_NOTES[trait])
+    .filter((note): note is string => !!note);
+  if (youth.buzzLevel >= 70) {
+    groundedCharacterNotes.push(
+      "The family is aware of interest from several clubs and wants a clear development plan.",
+    );
+  }
+  const characterPool = groundedCharacterNotes.length > 0
+    ? groundedCharacterNotes
+    : [...CHARACTER_NOTE_POOL];
+  const characterNote = characterPool[rng.nextInt(0, characterPool.length - 1)];
 
   return {
     hiddenIntel,

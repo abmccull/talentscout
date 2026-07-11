@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useGameStore, type SaveSlotSummary } from "@/stores/gameStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { AUTOSAVE_SLOT, MAX_MANUAL_SLOTS } from "@/lib/db";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -238,6 +239,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>("save");
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
   const [successSlot, setSuccessSlot] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => () => clearTimeout(successTimerRef.current), []);
@@ -248,6 +250,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       void refreshSaveSlots();
       setConfirm(null);
       setSuccessSlot(null);
+      setLoadError(null);
       dismissSaveConflict();
     }
   }, [isOpen, refreshSaveSlots, dismissSaveConflict]);
@@ -267,13 +270,28 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
     return () => document.removeEventListener("keydown", handleKey, true);
   }, [isOpen, onClose, dismissSaveConflict]);
 
-  const autosave = saveSlots.find((s) => s.slot === AUTOSAVE_SLOT);
+  const { compatibleSaveSlots, reservedSlots, unsupportedSaveCount } = useMemo(() => {
+    const compatible = IS_YOUTH_EARLY_ACCESS
+      ? saveSlots.filter((save) => save.specialization === "youth")
+      : saveSlots;
+    const compatibleSlotNumbers = new Set(compatible.map((save) => save.slot));
+    return {
+      compatibleSaveSlots: compatible,
+      reservedSlots: new Set(
+        saveSlots
+          .filter((save) => !compatibleSlotNumbers.has(save.slot))
+          .map((save) => save.slot),
+      ),
+      unsupportedSaveCount: saveSlots.length - compatible.length,
+    };
+  }, [saveSlots]);
+  const autosave = compatibleSaveSlots.find((s) => s.slot === AUTOSAVE_SLOT);
 
   const findSlot = useCallback(
     (slot: number): SlotMeta | undefined => {
-      return saveSlots.find((s) => s.slot === slot);
+      return compatibleSaveSlots.find((s) => s.slot === slot);
     },
-    [saveSlots],
+    [compatibleSaveSlots],
   );
 
   // ── Save handler ──────────────────────────────────────────────────────────
@@ -281,6 +299,12 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
   const handleSave = useCallback(
     async (slot: number) => {
       if (!gameState) return;
+      if (reservedSlots.has(slot)) {
+        setLoadError(
+          `Slot ${slot} is reserved by a preserved full-game save and cannot be overwritten in Youth Scout Early Access.`,
+        );
+        return;
+      }
       const existing = findSlot(slot);
       if (existing) {
         setConfirm({ type: "overwrite", slot });
@@ -292,7 +316,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
       clearTimeout(successTimerRef.current);
       successTimerRef.current = setTimeout(() => setSuccessSlot(null), 2000);
     },
-    [gameState, findSlot, saveToSlot],
+    [gameState, findSlot, reservedSlots, saveToSlot],
   );
 
   const confirmOverwrite = useCallback(async () => {
@@ -316,10 +340,15 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
 
   const confirmLoad = useCallback(async () => {
     if (!confirm || confirm.type !== "load") return;
-    await loadFromSlot(confirm.slot);
-    setConfirm(null);
-    if (!useGameStore.getState().saveConflict) {
-      onClose();
+    try {
+      setLoadError(null);
+      await loadFromSlot(confirm.slot);
+      setConfirm(null);
+      if (!useGameStore.getState().saveConflict) {
+        onClose();
+      }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Unable to load this save.");
     }
   }, [confirm, loadFromSlot, onClose]);
 
@@ -340,9 +369,14 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
 
   const handleResolveConflict = useCallback(
     async (slot: number, preferredSource: SlotMeta["source"]) => {
-      await resolveSaveConflict(slot, preferredSource);
-      if (!useGameStore.getState().saveConflict) {
-        onClose();
+      try {
+        setLoadError(null);
+        await resolveSaveConflict(slot, preferredSource);
+        if (!useGameStore.getState().saveConflict) {
+          onClose();
+        }
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "Unable to resolve this save.");
       }
     },
     [resolveSaveConflict, onClose],
@@ -424,12 +458,30 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
             </button>
           </div>
 
+          {loadError && (
+            <div
+              className="rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200"
+              role="alert"
+            >
+              {loadError}
+            </div>
+          )}
+
+          {IS_YOUTH_EARLY_ACCESS && unsupportedSaveCount > 0 && (
+            <div className="rounded-md border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-xs leading-relaxed text-zinc-400">
+              {unsupportedSaveCount} save{unsupportedSaveCount === 1 ? "" : "s"} from other
+              specializations {unsupportedSaveCount === 1 ? "is" : "are"} preserved and hidden in
+              Youth Scout Early Access.
+            </div>
+          )}
+
           {/* ── Save tab ─────────────────────────────────────────────────── */}
           {activeTab === "save" && (
             <div className="space-y-2" role="tabpanel" aria-label="Save game">
               {Array.from({ length: MAX_MANUAL_SLOTS }, (_, i) => i + 1).map(
                 (slot) => {
                   const existing = findSlot(slot);
+                  const isReserved = reservedSlots.has(slot);
                   const isConfirming =
                     confirm?.type === "overwrite" && confirm.slot === slot;
                   const showSuccess = successSlot === slot;
@@ -439,6 +491,13 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                       <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
                         {existing ? (
                           <SlotInfo slot={existing} />
+                        ) : isReserved ? (
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-zinc-400">
+                              Slot {slot} — Preserved full-game save
+                            </p>
+                            <p className="text-xs text-zinc-600">This slot cannot be overwritten in Youth Early Access.</p>
+                          </div>
                         ) : (
                           <p className="flex-1 text-sm text-zinc-500">
                             Slot {slot} — Empty
@@ -456,7 +515,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                             size="sm"
                             variant="outline"
                             onClick={() => void handleSave(slot)}
-                            disabled={isSaving || isConfirming}
+                            disabled={isSaving || isConfirming || isReserved}
                             className="h-8"
                           >
                             {isSaving && isConfirming ? (
@@ -557,6 +616,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                         variant="secondary"
                         onClick={() => handleLoad(AUTOSAVE_SLOT)}
                         disabled={isLoadingSave}
+                        aria-label="Load autosave"
                         className="ml-3 h-8"
                       >
                         {isLoadingSave &&
@@ -616,6 +676,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
               {Array.from({ length: MAX_MANUAL_SLOTS }, (_, i) => i + 1).map(
                 (slot) => {
                   const existing = findSlot(slot);
+                  const isReserved = reservedSlots.has(slot);
                   const isConfirmingLoad =
                     confirm?.type === "load" && confirm.slot === slot;
                   const isConfirmingDelete =
@@ -634,6 +695,7 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                                 variant="secondary"
                                 onClick={() => handleLoad(slot)}
                                 disabled={isLoadingSave}
+                                aria-label={`Load save slot ${slot}`}
                                 className="h-8"
                               >
                                 {isLoadingSave && isConfirmingLoad ? (
@@ -661,6 +723,13 @@ export function SaveLoadModal({ isOpen, onClose }: SaveLoadModalProps) {
                               </button>
                             </div>
                           </>
+                        ) : isReserved ? (
+                          <div>
+                            <p className="text-sm font-medium text-zinc-400">
+                              Slot {slot} — Preserved full-game save
+                            </p>
+                            <p className="text-xs text-zinc-600">Unavailable in Youth Scout Early Access.</p>
+                          </div>
                         ) : (
                           <p className="text-sm text-zinc-500">
                             Slot {slot} — Empty

@@ -335,7 +335,10 @@ const FocusPanel = memo(function FocusPanel({
   );
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div
+      className="flex-1 overflow-y-auto p-4 space-y-4"
+      data-tutorial-id="observation-focus-panel"
+    >
       {/* Token counter */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -684,7 +687,12 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
         </div>
       )}
 
-      <Button onClick={onBegin} size="lg" className="gap-2">
+      <Button
+        onClick={onBegin}
+        size="lg"
+        className="gap-2"
+        data-tutorial-id="observation-begin-session"
+      >
         <Play size={16} aria-hidden="true" />
         Begin Observation
       </Button>
@@ -713,7 +721,10 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
   // If we have a full reflection result, render the dedicated ReflectionScreen
   if (lastReflectionResult) {
     return (
-      <div className="flex-1 overflow-y-auto p-6">
+      <div
+        className="flex-1 overflow-y-auto p-6"
+        data-tutorial-id="observation-session-controls"
+      >
         <div className="mx-auto max-w-2xl">
           <ReflectionScreen
             session={session}
@@ -730,7 +741,10 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
   // Fallback: minimal reflection view when no reflection result is available
   const result = getSessionResult(session);
   return (
-    <div className="flex-1 overflow-y-auto p-6">
+    <div
+      className="flex-1 overflow-y-auto p-6"
+      data-tutorial-id="observation-session-controls"
+    >
       <div className="mx-auto max-w-2xl">
         <h2 className="text-lg font-semibold text-zinc-100 mb-1">Session Reflection</h2>
         <p className="text-sm text-zinc-400 mb-6">
@@ -1150,7 +1164,10 @@ export function ObservationScreen() {
                 )}
 
                 {/* Advance / End buttons — pinned to bottom */}
-                <div className="shrink-0 border-t border-[#27272a] p-4 space-y-2">
+                <div
+                  className="shrink-0 border-t border-[#27272a] p-4 space-y-2"
+                  data-tutorial-id="observation-session-controls"
+                >
                   {isLastPhase ? (
                     <Button className="w-full" onClick={handleAdvancePhase}>
                       <Flag size={14} className="mr-2" aria-hidden="true" />

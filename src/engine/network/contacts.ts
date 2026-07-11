@@ -24,6 +24,10 @@ import type {
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import {
+  getCountryDisplayName as getSharedCountryDisplayName,
+  normalizeCountryKey as normalizeSharedCountryKey,
+} from "@/lib/country";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -308,57 +312,39 @@ const REGIONS = [
   "Australia", "New Zealand",
 ];
 
-const COUNTRY_DISPLAY_NAMES: Record<string, string> = {
-  england: "England",
-  spain: "Spain",
-  germany: "Germany",
-  france: "France",
+const CONTACT_ONLY_COUNTRY_DISPLAY_NAMES: Record<string, string> = {
   italy: "Italy",
   portugal: "Portugal",
   netherlands: "Netherlands",
-  brazil: "Brazil",
-  argentina: "Argentina",
   belgium: "Belgium",
-  usa: "USA",
-  mexico: "Mexico",
-  canada: "Canada",
-  nigeria: "Nigeria",
-  ghana: "Ghana",
-  ivorycoast: "Ivory Coast",
-  egypt: "Egypt",
-  southafrica: "South Africa",
-  senegal: "Senegal",
-  cameroon: "Cameroon",
-  japan: "Japan",
-  southkorea: "South Korea",
-  saudiarabia: "Saudi Arabia",
-  china: "China",
-  australia: "Australia",
-  newzealand: "New Zealand",
 };
 
-const COUNTRY_ALIASES: Record<string, string> = Object.fromEntries(
-  Object.entries(COUNTRY_DISPLAY_NAMES).flatMap(([key, label]) => [
+const CONTACT_ONLY_COUNTRY_ALIASES: Record<string, string> = Object.fromEntries(
+  Object.entries(CONTACT_ONLY_COUNTRY_DISPLAY_NAMES).flatMap(([key, label]) => [
     [key, key],
     [label.toLowerCase(), key],
-    [label.toLowerCase().replace(/[\s-]+/g, ""), key],
+    [label.toLowerCase().replace(/[^a-z0-9]+/g, ""), key],
   ]),
 );
 
-function normalizeCountryKey(value?: string): string | undefined {
+function normalizeContactCountryKey(value?: string): string | undefined {
+  const shared = normalizeSharedCountryKey(value);
+  if (shared) return shared;
+
   const trimmed = value?.trim();
   if (!trimmed) return undefined;
 
   const lower = trimmed.toLowerCase();
-  return COUNTRY_ALIASES[lower] ?? COUNTRY_ALIASES[lower.replace(/[\s-]+/g, "")];
+  const compact = lower.replace(/[^a-z0-9]+/g, "");
+  return CONTACT_ONLY_COUNTRY_ALIASES[lower] ?? CONTACT_ONLY_COUNTRY_ALIASES[compact];
 }
 
 function resolveContactLocation(value?: string): { country?: string; region?: string } {
-  const country = normalizeCountryKey(value);
+  const country = normalizeContactCountryKey(value);
   if (country) {
     return {
       country,
-      region: COUNTRY_DISPLAY_NAMES[country] ?? value?.trim(),
+      region: getCountryDisplayName(country),
     };
   }
 
@@ -369,8 +355,11 @@ function resolveContactLocation(value?: string): { country?: string; region?: st
 export function getCountryDisplayName(country?: string): string {
   if (!country) return "Unknown";
 
-  const key = normalizeCountryKey(country);
-  if (key) return COUNTRY_DISPLAY_NAMES[key] ?? country;
+  const sharedKey = normalizeSharedCountryKey(country);
+  if (sharedKey) return getSharedCountryDisplayName(sharedKey);
+
+  const localKey = normalizeContactCountryKey(country);
+  if (localKey) return CONTACT_ONLY_COUNTRY_DISPLAY_NAMES[localKey] ?? country;
 
   const humanized = country.replace(/([A-Z])/g, " $1").trim();
   return humanized.charAt(0).toUpperCase() + humanized.slice(1);
@@ -381,9 +370,9 @@ export function getContactCoverageCountry(
   fallbackCountry?: string,
 ): string | undefined {
   return (
-    normalizeCountryKey(contact.country)
-    ?? normalizeCountryKey(contact.region)
-    ?? normalizeCountryKey(fallbackCountry)
+    normalizeContactCountryKey(contact.country)
+    ?? normalizeContactCountryKey(contact.region)
+    ?? normalizeContactCountryKey(fallbackCountry)
   );
 }
 
@@ -892,10 +881,11 @@ export function processExclusiveTip(
   if (!rng.chance(0.15)) return null;
 
   // Pick a youth from the contact's country/region
-  const contactLocation = (contact.country ?? contact.region ?? "").toLowerCase();
+  const contactCountry = getContactCoverageCountry(contact);
+  if (!contactCountry) return null;
   const countryYouth = Object.values(unsignedYouth).filter(
     (y) =>
-      y.country.toLowerCase() === contactLocation &&
+      normalizeContactCountryKey(y.country) === contactCountry &&
       !y.placed &&
       !y.retired,
   );

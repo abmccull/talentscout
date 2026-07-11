@@ -14,6 +14,7 @@ import type {
   FreeAgent,
   InboxMessage,
 } from "@/engine/core/types";
+import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
 // CONSTANTS
@@ -23,11 +24,6 @@ import type {
 const RENEWAL_CHANCE_HIGH = 0.70;    // CA > 70
 const RENEWAL_CHANCE_MID = 0.50;     // CA 50-70
 const RENEWAL_CHANCE_LOW = 0.30;     // CA < 50
-
-/** If age > this AND CA < 50, player may retire instead of entering pool. */
-const RETIREMENT_AGE_THRESHOLD = 34;
-const RETIREMENT_CA_THRESHOLD = 50;
-const RETIREMENT_CHANCE = 0.60;
 
 /** Club reputation tiers — top clubs renew more aggressively. */
 const HIGH_REP_RENEWAL_BOOST = 0.15;   // rep > 75
@@ -61,11 +57,14 @@ export interface ContractExpiryResult {
   releasedPlayers: FreeAgent[];
   /** Player IDs whose contracts were renewed (club extended them). */
   renewedPlayerIds: string[];
-  /** Player IDs who retired from the game. */
-  retiredPlayerIds: string[];
-  /** Updated players map with renewed contract expiry dates. */
-  updatedPlayers: Record<string, Player>;
-  /** Inbox messages about notable releases/retirements. */
+  /** Atomic renewal decisions for the player lifecycle resolver. */
+  renewals: Array<{
+    playerId: string;
+    clubId: string;
+    contractLength: number;
+    wage: number;
+  }>;
+  /** Inbox messages about notable releases. */
   messages: InboxMessage[];
 }
 
@@ -83,17 +82,17 @@ export function processContractExpiries(
 ): ContractExpiryResult {
   const releasedPlayers: FreeAgent[] = [];
   const renewedPlayerIds: string[] = [];
-  const retiredPlayerIds: string[] = [];
-  const updatedPlayers: Record<string, Player> = {};
+  const renewals: ContractExpiryResult["renewals"] = [];
   const messages: InboxMessage[] = [];
 
   for (const [playerId, player] of Object.entries(state.players)) {
-    // Skip players without a club (already unsigned/youth)
-    if (!player.clubId) continue;
+    const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    // Skip players without a contract owner (already unsigned/youth)
+    if (!ownerClubId) continue;
     // Skip players whose contract hasn't expired
     if (player.contractExpiry > state.currentSeason) continue;
 
-    const club = state.clubs[player.clubId];
+    const club = state.clubs[ownerClubId];
     if (!club) continue;
 
     // Determine renewal probability
@@ -109,48 +108,28 @@ export function processContractExpiries(
     if (rng.chance(renewalChance)) {
       // Club renews: extend contract by 1-3 seasons
       const extension = rng.nextInt(1, 3);
-      updatedPlayers[playerId] = {
-        ...player,
-        contractExpiry: state.currentSeason + extension,
-      };
+      renewals.push({
+        playerId,
+        clubId: ownerClubId,
+        contractLength: extension,
+        wage: Math.max(player.wage, Math.round(player.currentAbility * 60)),
+      });
       renewedPlayerIds.push(playerId);
       continue;
     }
 
-    // Not renewed — check for retirement
-    if (
-      player.age > RETIREMENT_AGE_THRESHOLD &&
-      player.currentAbility < RETIREMENT_CA_THRESHOLD &&
-      rng.chance(RETIREMENT_CHANCE)
-    ) {
-      retiredPlayerIds.push(playerId);
-
-      // Notable retirement message (CA > 60 or high-rep club)
-      if (player.currentAbility > 60 || club.reputation > 60) {
-        messages.push({
-          id: makeMessageId("fa_retire", rng),
-          week: state.currentWeek,
-          season: state.currentSeason,
-          type: "event",
-          title: `${player.firstName} ${player.lastName} Retires`,
-          body: `${player.firstName} ${player.lastName} (${player.age}) has retired from professional football after leaving ${club.name}.`,
-          read: false,
-          actionRequired: false,
-        });
-      }
-      continue;
-    }
-
     // Release to free agent pool
-    const freeAgent = createFreeAgentFromPlayer(player, club, state.currentSeason);
+    const countryKey =
+      normalizeCountryKey(state.leagues[club.leagueId]?.country)
+      ?? countryKeyFromNationality(player.nationality)
+      ?? "england";
+    const freeAgent = createFreeAgentFromPlayer(
+      player,
+      club,
+      state.currentSeason,
+      countryKey,
+    );
     releasedPlayers.push(freeAgent);
-
-    // Remove club association
-    updatedPlayers[playerId] = {
-      ...player,
-      clubId: "",
-      contractExpiry: 0,
-    };
 
     // Notable release message (CA > 65)
     if (player.currentAbility > 65) {
@@ -170,8 +149,7 @@ export function processContractExpiries(
   return {
     releasedPlayers,
     renewedPlayerIds,
-    retiredPlayerIds,
-    updatedPlayers,
+    renewals,
     messages,
   };
 }
@@ -203,6 +181,7 @@ function createFreeAgentFromPlayer(
   player: Player,
   club: Club,
   currentSeason: number,
+  countryKey: string,
 ): FreeAgent {
   // Wage expectation based on CA and age
   const baseWage = Math.round(player.currentAbility * 80);
@@ -215,7 +194,8 @@ function createFreeAgentFromPlayer(
 
   return {
     playerId: player.id,
-    country: player.nationality,
+    country: countryKey,
+    nationality: player.nationality,
     releasedFrom: club.id,
     releasedSeason: currentSeason,
     weeksInPool: 0,

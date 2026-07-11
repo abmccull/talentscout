@@ -12,6 +12,7 @@ import { getTravelCost, getTravelSlots, getTravelDuration, getScoutHomeCountry, 
 import { getAvailableAssignments } from "@/engine/world/international";
 import { WorldMap, COUNTRY_COORDS, lonLatToSvg, getTierColors } from "@/components/game/WorldMap";
 import { CountryPopup } from "@/components/game/CountryPopup";
+import { getActiveEquipmentBonuses } from "@/engine/finance";
 
 // ---------------------------------------------------------------------------
 // Country metadata resolver — works for both core and secondary countries
@@ -154,6 +155,7 @@ function AssignmentPanel({
   canAcceptAssignments,
   scoutBalance,
   homeCountry,
+  canFitTravel,
   onOpenAssignment,
   onAcceptAssignment,
 }: {
@@ -180,6 +182,7 @@ function AssignmentPanel({
   canAcceptAssignments: boolean;
   scoutBalance: number;
   homeCountry: string;
+  canFitTravel: (country: string) => boolean;
   onOpenAssignment: (country: string) => void;
   onAcceptAssignment: (assignmentId: string) => void;
 }) {
@@ -219,7 +222,8 @@ function AssignmentPanel({
             (() => {
               const travelCost = getTravelCost(homeCountry, assignment.country);
               const canAfford = scoutBalance >= travelCost;
-              const canAccept = canAcceptAssignments && canAfford;
+              const hasCalendarCapacity = canFitTravel(assignment.country);
+              const canAccept = canAcceptAssignments && canAfford && hasCalendarCapacity;
 
               return (
             <div
@@ -263,7 +267,9 @@ function AssignmentPanel({
                   >
                     {canAcceptAssignments
                       ? canAfford
-                        ? "Accept"
+                        ? hasCalendarCapacity
+                          ? "Accept"
+                          : "Clear Calendar"
                         : "Funds Low"
                       : "Unavailable"}
                   </button>
@@ -353,8 +359,7 @@ export function InternationalScreen() {
       gameState.currentWeek,
     ).find((assignment) => assignment.country === selectedCountry);
 
-    playSFX("travel");
-    bookInternationalTravel(
+    const booked = bookInternationalTravel(
       selectedCountry,
       selectedAssignment
         ? {
@@ -363,6 +368,8 @@ export function InternationalScreen() {
           }
         : undefined,
     );
+    if (!booked) return;
+    playSFX("travel");
     setJustBooked(true);
     // Auto-dismiss after 1.5s
     clearTimeout(bookTimerRef.current);
@@ -384,11 +391,12 @@ export function InternationalScreen() {
     const travelCost = getTravelCost(homeCountry, assignment.country);
     if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
 
-    playSFX("travel");
-    bookInternationalTravel(assignment.country, {
+    const booked = bookInternationalTravel(assignment.country, {
       duration: assignment.duration,
       assignmentId: assignment.id,
     });
+    if (!booked) return;
+    playSFX("travel");
     setJustBooked(true);
     clearTimeout(bookTimerRef.current);
     bookTimerRef.current = setTimeout(() => {
@@ -520,9 +528,30 @@ export function InternationalScreen() {
   const selectedTravelCost = selectedCountry
     ? getTravelCost(homeCountry, selectedCountry)
     : 0;
-  const selectedTravelSlots = selectedCountry
-    ? getTravelSlots(homeCountry, selectedCountry)
+  const travelSlotReduction = gameState.finances?.equipment
+    ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout).travelSlotReduction ?? 0
     : 0;
+  const effectiveTravelSlotsFor = (country: string) => Math.max(
+    1,
+    getTravelSlots(homeCountry, country) - travelSlotReduction,
+  );
+  const canFitTravel = (country: string) => {
+    const requiredSlots = effectiveTravelSlotsFor(country);
+    return !gameState.schedule.completed &&
+      gameState.schedule.activities.some((_, startIndex, activities) => {
+        if (startIndex + requiredSlots > activities.length) return false;
+        for (let offset = 0; offset < requiredSlots; offset++) {
+          if (activities[startIndex + offset] !== null) return false;
+        }
+        return true;
+      });
+  };
+  const selectedTravelSlots = selectedCountry
+    ? effectiveTravelSlotsFor(selectedCountry)
+    : 0;
+  const scheduleHasTravelCapacity = selectedCountry
+    ? canFitTravel(selectedCountry)
+    : false;
   const selectedTravelDuration = selectedCountry
     ? getTravelDuration(homeCountry, selectedCountry)
     : 0;
@@ -576,6 +605,7 @@ export function InternationalScreen() {
           canAcceptAssignments={canAcceptAssignments}
           scoutBalance={scoutBalance}
           homeCountry={homeCountry}
+          canFitTravel={canFitTravel}
           onOpenAssignment={(country) => {
             const coords = COUNTRY_COORDS[country];
             if (!coords) return;
@@ -601,6 +631,7 @@ export function InternationalScreen() {
             travelCost={selectedTravelCost}
             travelSlots={selectedTravelSlots}
             travelDuration={selectedTravelDuration}
+            scheduleHasCapacity={scheduleHasTravelCapacity}
             currentWeek={currentWeek}
             scoutBalance={scoutBalance}
             position={popupPos}
@@ -612,6 +643,7 @@ export function InternationalScreen() {
                 ? `Complete this assignment for +${selectedAssignment.reputationReward} reputation.`
                 : undefined
             }
+            regionalKnowledge={gameState.regionalKnowledge?.[selectedCountry]}
             onBookTravel={handleBookTravel}
             onClose={handleClose}
           />

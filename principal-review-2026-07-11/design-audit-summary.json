@@ -1,0 +1,396 @@
+{
+  "target": {
+    "name_or_url": "TalentScout packaged /play.html build",
+    "product_type": "Desktop-first football scouting career simulation with responsive web UI",
+    "primary_user_goal": "Plan scouting work, interpret uncertain evidence, recommend players, and build a career",
+    "primary_business_goal": "Make the Youth Scout Early Access fantasy legible, trustworthy, and compelling enough to sustain long careers",
+    "audience": "Football management-simulation players who want a scouting-centered career fantasy",
+    "assumptions": [
+      "Youth Scout and Freelance are the only normally playable Early Access specialization and starting path.",
+      "Visual captures use the packaged build for a stable, reproducible render; final source typecheck and production build passed.",
+      "Unavailable career paths are excluded from visual scoring."
+    ]
+  },
+  "capture": {
+    "routes": [
+      "/play.html main menu",
+      "/play.html identity onboarding state",
+      "/play.html fresh dashboard state",
+      "/play.html populated calendar state"
+    ],
+    "viewports": [
+      "1440x900 desktop",
+      "390x844 mobile"
+    ],
+    "screenshots": [
+      "capture-live/screenshots/desktop-main-menu-viewport.png",
+      "capture-live/screenshots/desktop-main-menu-full.png",
+      "capture-live/screenshots/mobile-main-menu-viewport.png",
+      "capture-live/screenshots/mobile-main-menu-full.png",
+      "capture-live/screenshots/desktop-identity-viewport.png",
+      "capture-live/screenshots/desktop-identity-full.png",
+      "capture-live/screenshots/mobile-identity-viewport.png",
+      "capture-live/screenshots/mobile-identity-full.png",
+      "capture-live/screenshots/desktop-dashboard-viewport.png",
+      "capture-live/screenshots/desktop-dashboard-full.png",
+      "capture-live/screenshots/mobile-dashboard-viewport.png",
+      "capture-live/screenshots/mobile-dashboard-full.png",
+      "capture-live/screenshots/desktop-calendar-viewport.png",
+      "capture-live/screenshots/desktop-calendar-full.png",
+      "capture-live/screenshots/mobile-calendar-viewport.png",
+      "capture-live/screenshots/mobile-calendar-full.png"
+    ],
+    "flows_walked": [
+      "Early Access onboarding",
+      "Weekly planning and day decisions",
+      "School Match live observation, insight, halftime, and reflection",
+      "Player dossier and persistent note review",
+      "Report writing, history, marketplace, and finance feedback",
+      "Network meeting and follow-up observation",
+      "Career and international travel inspection"
+    ],
+    "automated_checks": [
+      "axe-core on eight desktop/mobile states",
+      "DOM inventory of headings, accessible names, font sizes, colors, and control dimensions",
+      "66 of 66 desktop planner scheduling controls and 68 of 68 mobile controls measured below 44px",
+      "Serious desktop color-contrast violations on dashboard and calendar",
+      "Moderate landmark, H1, region, and heading-order violations"
+    ]
+  },
+  "scores": {
+    "visual_hierarchy": {
+      "score": 6.0,
+      "weight": 12,
+      "rationale": "The main menu and onboarding have clear focal points, but the dashboard timeline and planner grids compete with the next scouting decision.",
+      "evidence": [
+        "Large wordmark and single emerald primary CTA create a strong main-menu hierarchy.",
+        "Season timeline dominates the fresh dashboard before it creates an action.",
+        "Planner rows and tiny day buttons have nearly equal visual weight."
+      ]
+    },
+    "layout_spacing": {
+      "score": 5.5,
+      "weight": 10,
+      "rationale": "The atmospheric shell and centered onboarding are controlled, while the planner wastes desktop space and compresses mobile content.",
+      "evidence": [
+        "Main menu and identity card remain balanced at both captured viewports.",
+        "Mobile calendar clips activity labels and becomes a long repeated matrix.",
+        "Achievement toast competes with first-viewport mobile content."
+      ]
+    },
+    "typography": {
+      "score": 6.5,
+      "weight": 8,
+      "rationale": "The type family and weight system feel cohesive, but operational labels shrink to 9-12px and semantic heading order is inconsistent.",
+      "evidence": [
+        "Planner day buttons measured around 9px.",
+        "Identity onboarding lacks an H1 and planner content skips a heading level.",
+        "Raw internal perk IDs appear in player-facing career UI."
+      ]
+    },
+    "color_contrast": {
+      "score": 5.0,
+      "weight": 10,
+      "rationale": "The emerald-on-charcoal palette is distinctive, but repeated muted text fails desktop contrast.",
+      "evidence": [
+        "axe found serious color-contrast violations affecting six desktop dashboard nodes.",
+        "axe found serious color-contrast violations affecting six desktop calendar nodes.",
+        "Muted zinc 500/600 text is used for required operational metadata."
+      ]
+    },
+    "components_states": {
+      "score": 5.5,
+      "weight": 10,
+      "rationale": "Cards, borders, and buttons share a visual language, but eligibility, affordability, and activity-specific states are inconsistent.",
+      "evidence": [
+        "Insight actions costing 20-30 IP appeared enabled at 0 IP.",
+        "A Network Meeting exposed a Live Session affordance.",
+        "One selected focus target resolved and displayed as two."
+      ]
+    },
+    "interaction_feedback": {
+      "score": 4.5,
+      "weight": 8,
+      "rationale": "The interface has motion, toasts, and summaries, but silent rejection and mismatched outcome values make feedback unreliable.",
+      "evidence": [
+        "Unaffordable insight action closed without inline explanation.",
+        "Network feedback used generic scouting prose from a different activity.",
+        "Report craft and price differed across writer, history, and marketplace."
+      ]
+    },
+    "information_architecture_navigation": {
+      "score": 5.5,
+      "weight": 10,
+      "rationale": "Progressive sidebar disclosure helps onboarding, but related player intelligence and history are split across overlapping screens.",
+      "evidence": [
+        "Discoveries, Player Database, Youth Hub, and Alumni overlap as entity lists.",
+        "Observation Journal, Report History, finance, and outcomes do not form one case timeline.",
+        "Messages and metrics often lack source-entity deep links."
+      ]
+    },
+    "conversion_task_flow": {
+      "score": 5.0,
+      "weight": 11,
+      "rationale": "Career setup is coherent and observation-to-reflection works, but planning and reporting impose excess clicks and omit stakes/context.",
+      "evidence": [
+        "Planner requires targeting tiny individual day controls across repeated rows.",
+        "Report flow asks for conviction without an audience, brief, budget, or role need.",
+        "Targeted follow-up does not let the player select the target quality or hypothesis."
+      ]
+    },
+    "accessibility_inclusive_ux": {
+      "score": 4.5,
+      "weight": 8,
+      "rationale": "Accessible names and some keyboard scaffolding exist, but contrast, semantics, target size, and mobile clipping are material failures.",
+      "evidence": [
+        "Identity capture had moderate missing-main, missing-H1, and region violations.",
+        "Desktop dashboard and calendar had serious contrast violations.",
+        "All inventoried planner scheduling controls were below 44px; day buttons were about 17x16px."
+      ]
+    },
+    "imagery_iconography": {
+      "score": 8.0,
+      "weight": 5,
+      "rationale": "Pitch imagery, green glow, silhouettes, and restrained line icons establish a strong scouting atmosphere.",
+      "evidence": [
+        "Main-menu pitch image creates football context without competing with text.",
+        "Icon family is visually consistent and restrained.",
+        "Later dashboards rely more heavily on generic cards and lose some of the distinctive atmosphere."
+      ]
+    },
+    "brand_visual_system": {
+      "score": 7.5,
+      "weight": 7,
+      "rationale": "The charcoal and emerald signal-in-darkness motif gives TalentScout a recognizable identity distinct from a generic sports dashboard.",
+      "evidence": [
+        "Early Access and Youth Scout framing is visible at the primary CTA.",
+        "Color, imagery, and restrained tone support a serious professional fantasy.",
+        "Raw IDs and incorrect activity copy break brand professionalism during play."
+      ]
+    },
+    "emotional_trust_polish": {
+      "score": 5.5,
+      "weight": 4,
+      "rationale": "The first impression and observation flow feel polished, while false achievements, clipped controls, and inconsistent outcomes erode trust.",
+      "evidence": [
+        "Main menu feels unusually finished for an Early Access simulation.",
+        "Live observation and reflection create suspense and ownership.",
+        "Fresh-career achievement toasts and contradictory finance/report displays cheapen accomplishment and credibility."
+      ]
+    }
+  },
+  "cohesion": {
+    "score": 5.5,
+    "subscores": {
+      "visual_grammar_coherence": 7.0,
+      "intent_coherence": 5.0,
+      "interaction_coherence": 4.5,
+      "journey_coherence": 5.0,
+      "brand_emotion_coherence": 7.5
+    },
+    "conflicts": [
+      "Polished visual controls do not consistently map to validated costs, targets, or committed outcomes.",
+      "Dashboards emphasize status and timelines over active scouting decisions and evidence gaps.",
+      "The desktop planner grid is compressed rather than redesigned for mobile.",
+      "Observation, report, stakeholder response, transaction, and outcome histories are fragmented."
+    ],
+    "strengths": [
+      "Consistent charcoal, zinc, and emerald visual grammar.",
+      "Strong brand-emotion match for a serious football scouting fantasy.",
+      "Useful progressive navigation disclosure during early play."
+    ],
+    "caps_applied": [
+      "No formal score cap applied.",
+      "Overall score reduced by 0.2 for interaction and journey cohesion conflicts."
+    ]
+  },
+  "overall": {
+    "base_design_score": 5.6,
+    "overall_design_score": 5.4,
+    "core_diagnosis": "TalentScout has a memorable visual identity and strong first impression, but its working interface prioritizes dense status display and tiny repeated controls over the scout's next judgment, while cross-screen feedback inconsistencies undermine trust."
+  },
+  "findings": [
+    {
+      "dimension": "Accessibility and inclusive UX",
+      "severity": "Critical",
+      "summary": "Planner control targets are far below practical touch and motor-accessibility guidance.",
+      "evidence": [
+        "66 of 66 desktop and 68 of 68 mobile scheduling controls were below 44px.",
+        "Day buttons measured about 17x16px with 9px labels."
+      ],
+      "why_it_matters": "Weekly planning is the central loop; difficult targeting turns strategic thought into motor friction and makes mobile play unreliable."
+    },
+    {
+      "dimension": "Color and contrast",
+      "severity": "High",
+      "summary": "Required muted text fails contrast on desktop dashboard and calendar surfaces.",
+      "evidence": [
+        "axe serious color-contrast violations affected six nodes on each captured desktop game state."
+      ],
+      "why_it_matters": "Costs, dates, status, and explanatory metadata are necessary for informed decisions, not optional decoration."
+    },
+    {
+      "dimension": "Interaction and feedback",
+      "severity": "High",
+      "summary": "Control state and committed behavior disagree.",
+      "evidence": [
+        "0-IP insight actions appeared enabled and failed silently.",
+        "One selected prospect resolved as two targets.",
+        "Report values changed across three adjacent surfaces."
+      ],
+      "why_it_matters": "A simulation interface must teach causal rules; inconsistent feedback makes every later choice feel arbitrary."
+    },
+    {
+      "dimension": "Information architecture and navigation",
+      "severity": "High",
+      "summary": "The central scouting story is split across overlapping lists and disconnected histories.",
+      "evidence": [
+        "Discoveries, Database, Youth, Alumni, Journal, Reports, finance, and outcomes require separate navigation."
+      ],
+      "why_it_matters": "Attachment, comparison, hindsight, and professional accountability require one persistent player/case context."
+    },
+    {
+      "dimension": "Task flow",
+      "severity": "High",
+      "summary": "The report flow requests conviction without establishing the professional decision context.",
+      "evidence": [
+        "No audience, club need, intended role, budget, wage context, deadline, alternative, or next action was required."
+      ],
+      "why_it_matters": "Without a brief, the interface rewards generic player quality instead of scouting judgment and club fit."
+    },
+    {
+      "dimension": "Layout and spacing",
+      "severity": "High",
+      "summary": "The planner's desktop matrix is compressed onto mobile rather than transformed into an agenda flow.",
+      "evidence": [
+        "Mobile labels truncate, the page becomes very long, and achievement overlay consumes the first viewport."
+      ],
+      "why_it_matters": "Responsive usability requires changing the interaction model, not only shrinking the same grid."
+    },
+    {
+      "dimension": "Components and states",
+      "severity": "Medium",
+      "summary": "Shared-looking activity cards expose actions that do not belong to their activity type.",
+      "evidence": [
+        "Network Meeting exposed Live Session and returned Cast Wide Net copy."
+      ],
+      "why_it_matters": "Visual consistency is harmful when it implies behavioral consistency that does not exist."
+    },
+    {
+      "dimension": "Typography and semantics",
+      "severity": "Medium",
+      "summary": "Onboarding and planner heading semantics are incomplete.",
+      "evidence": [
+        "Identity state lacked an H1/main landmark and calendar skipped heading levels."
+      ],
+      "why_it_matters": "Semantic hierarchy supports screen-reader navigation and reinforces visible hierarchy for all users."
+    },
+    {
+      "dimension": "Emotional trust and polish",
+      "severity": "High",
+      "summary": "Achievements and outcome displays can celebrate or report events the current career did not earn or cannot audit.",
+      "evidence": [
+        "Fresh-career achievement toasts appeared during setup and obscured dashboard content.",
+        "Balance rose while the finance history reported no income."
+      ],
+      "why_it_matters": "Unreliable celebration cheapens pride and directly contradicts the product fantasy of earned professional reputation."
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": 1,
+      "title": "Make the dashboard a decision agenda",
+      "problem": "The dashboard emphasizes season timeline and totals over urgent scouting judgments.",
+      "expert_principle": "Visual emphasis should match the user's immediate goal and expose progressive complexity.",
+      "recommended_change": "Lead with deadlines, active cases, evidence gaps, obligations, competitive heat, and cash risk; move background world/status lower.",
+      "impact": "Very high",
+      "effort": "L",
+      "acceptance_criteria": [
+        "Every first-viewport card has a valid action or source link.",
+        "Urgent decisions visually outrank historical totals.",
+        "A player can identify the next three decisions in under ten seconds."
+      ]
+    },
+    {
+      "priority": 2,
+      "title": "Replace the planner micro-button matrix",
+      "problem": "Tiny repeated day controls create accessibility and high-click task friction.",
+      "expert_principle": "Fitts's Law, target clarity, and responsive task design.",
+      "recommended_change": "Use an opportunity board and calendar with large targets, schedule-best-slot, drag/drop plus keyboard alternative, and a mobile agenda/slot picker.",
+      "impact": "Very high",
+      "effort": "L",
+      "acceptance_criteria": [
+        "Primary touch targets are at least 44x44px or meet spacing equivalence.",
+        "No clipped activity label at 390px.",
+        "A representative week can be scheduled in under 90 seconds by mouse, touch, or keyboard."
+      ]
+    },
+    {
+      "priority": 3,
+      "title": "Create one Recommendation Case workspace",
+      "problem": "Evidence, report, stakeholder response, transaction, and outcome history are fragmented.",
+      "expert_principle": "Entity continuity, recognition over recall, and narrative coherence.",
+      "recommended_change": "Unify brief, evidence, hypotheses, report versions, decisions, relationships, and long-term outcomes on one linked case page.",
+      "impact": "Very high",
+      "effort": "L",
+      "acceptance_criteria": [
+        "Every report and outcome links to its case.",
+        "A player can reconstruct why the recommendation changed without opening another history screen.",
+        "Related player, club, contact, and finance entities deep-link bidirectionally."
+      ]
+    },
+    {
+      "priority": 4,
+      "title": "Bind every control to a validated command preview",
+      "problem": "Affordability, target counts, activity actions, and committed values disagree.",
+      "expert_principle": "Honest design, visibility of system status, and error prevention.",
+      "recommended_change": "Render exact cost, target, eligibility, and consequence category from the same validator/evaluation object that commits the action.",
+      "impact": "Very high",
+      "effort": "M",
+      "acceptance_criteria": [
+        "Invalid controls are disabled with a readable reason.",
+        "Rejected actions preserve context and input.",
+        "Preview target/value metadata matches committed state."
+      ]
+    },
+    {
+      "priority": 5,
+      "title": "Establish accessible semantic and contrast tokens",
+      "problem": "Contrast, landmarks, heading order, focus, and small text failures repeat across screens.",
+      "expert_principle": "WCAG-oriented inclusive UX and systematic design tokens.",
+      "recommended_change": "Define measured text/state tokens, semantic page shells, logical headings, visible focus, and an operational typography floor.",
+      "impact": "High",
+      "effort": "M",
+      "acceptance_criteria": [
+        "Zero serious or critical axe violations on critical routes.",
+        "Every route has one main landmark and H1.",
+        "Required text meets WCAG AA on its real surface and state is never color-only."
+      ]
+    },
+    {
+      "priority": 6,
+      "title": "Turn notifications into action and history",
+      "problem": "Toasts obscure mobile content and inbox volume substitutes for durable context.",
+      "expert_principle": "Attention management and contextual feedback.",
+      "recommended_change": "Queue non-blocking achievements, create a validated Action Inbox, and move background outcome detail into the relevant case timeline.",
+      "impact": "High",
+      "effort": "M",
+      "acceptance_criteria": [
+        "Toast never blocks the primary action or core status.",
+        "Every action-required item has a valid command and deadline.",
+        "Background updates group and remain discoverable in entity history."
+      ]
+    }
+  ],
+  "redesign_thesis": "Turn TalentScout from a collection of dark management dashboards into a scout's evidence-and-decisions workspace: one prioritized weekly agenda, one persistent Recommendation Case for each consequential judgment, large validated actions, and explicit cause-and-consequence feedback.",
+  "acceptance_criteria": [
+    "All critical routes have one main landmark, one H1, and logical heading order.",
+    "No serious or critical axe violations at desktop or mobile viewports.",
+    "No primary/touch scheduling control is an unspaced 17x16px target and no actionable label is 9px.",
+    "No clipped label or horizontal overflow at 390, 768, 1024, and 1440px.",
+    "Every ineligible action is disabled with a readable reason and preserves context on rejection.",
+    "Report preview, committed artifact, and marketplace base metadata derive from one evaluation object.",
+    "A player can navigate message to case to evidence/report to transaction/outcome and back without losing context.",
+    "Keyboard-only users can complete onboarding, schedule, observe, reflect, report, resolve inbox actions, and save/load."
+  ]
+}

@@ -8,6 +8,11 @@ import { useGameStore } from "@/stores/gameStore";
 import type { FreeAgent, FreeAgentNegotiation, Position } from "@/engine/core/types";
 import { getFamiliarityVisibility } from "@/engine/freeAgents/discovery";
 import {
+  countryKeyFromNationality,
+  getCountryDisplayName,
+  normalizeCountryKey,
+} from "@/lib/country";
+import {
   Users,
   Search,
   ChevronUp,
@@ -42,6 +47,51 @@ function getVisibilityBadge(
   }
 }
 
+function getFreeAgentCountryKey(agent: Pick<FreeAgent, "country" | "nationality">): string | undefined {
+  return (
+    normalizeCountryKey(agent.country)
+    ?? countryKeyFromNationality(agent.country)
+    ?? countryKeyFromNationality(agent.nationality)
+  );
+}
+
+function getFreeAgentFamiliarity(
+  scout: NonNullable<ReturnType<typeof useGameStore.getState>["gameState"]>["scout"],
+  agent: Pick<FreeAgent, "country" | "nationality">,
+): number {
+  const countryKey = getFreeAgentCountryKey(agent);
+  if (!countryKey) return 0;
+
+  const direct = scout.countryReputations?.[countryKey];
+  if (direct) return direct.familiarity ?? 0;
+
+  for (const [rawKey, reputation] of Object.entries(scout.countryReputations ?? {})) {
+    const normalizedKey =
+      normalizeCountryKey(rawKey)
+      ?? normalizeCountryKey(reputation.country)
+      ?? countryKeyFromNationality(reputation.country);
+    if (normalizedKey === countryKey) {
+      return reputation.familiarity ?? 0;
+    }
+  }
+
+  return 0;
+}
+
+function getFreeAgentGeographyLabel(
+  agent: Pick<FreeAgent, "country" | "nationality">,
+  playerNationality?: string,
+): string {
+  return (
+    agent.nationality
+    ?? playerNationality
+    ?? (() => {
+      const countryKey = getFreeAgentCountryKey(agent);
+      return countryKey ? getCountryDisplayName(countryKey) : "Unknown";
+    })()
+  );
+}
+
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -69,13 +119,15 @@ export function FreeAgentScreen() {
   const visibleAgents = useMemo(() => {
     if (!pool || !scout) return [];
     return pool.agents.filter((agent) => {
-      if (agent.status !== "available") return false;
+      if (agent.status !== "available" && agent.status !== "inNegotiation") return false;
+
+      // Never hide an active negotiation from the screen used to answer it.
+      if (agent.status === "inNegotiation") return true;
 
       // Check visibility: discovered or familiarity-based
       if (agent.discoveredByScout) return true;
 
-      const countryRep = scout.countryReputations?.[agent.country];
-      const familiarity = countryRep?.familiarity ?? 0;
+      const familiarity = getFreeAgentFamiliarity(scout, agent);
       return familiarity >= 20; // Basic visibility threshold
     });
   }, [pool, scout]);
@@ -373,10 +425,10 @@ function FreeAgentRow({
 }) {
   if (!player) return null;
 
-  const countryRep = scout.countryReputations?.[agent.country];
-  const familiarity = countryRep?.familiarity ?? 0;
+  const familiarity = getFreeAgentFamiliarity(scout, agent);
   const visBadge = getVisibilityBadge(familiarity);
   const formerClub = clubs[agent.releasedFrom];
+  const geographyLabel = getFreeAgentGeographyLabel(agent, player.nationality);
 
   const hasNPCInterest = agent.npcInterest.length > 0;
 
@@ -397,7 +449,7 @@ function FreeAgentRow({
           </p>
           <p className="text-xs text-zinc-500">
             {formerClub ? `ex-${formerClub.name}` : ""}
-            {agent.country ? ` · ${agent.country}` : ""}
+            {geographyLabel ? ` · ${geographyLabel}` : ""}
           </p>
         </div>
       </td>

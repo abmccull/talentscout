@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 const AVATAR_COUNT = 6;
 
 interface ScoutAvatarProps {
@@ -19,9 +21,12 @@ export function ScoutAvatar({ avatarId, size = 48, className = "" }: ScoutAvatar
   const safeId = ((((avatarId ?? 1) - 1) % AVATAR_COUNT) + AVATAR_COUNT) % AVATAR_COUNT + 1;
 
   return (
-    <img
+    <Image
       src={`/images/avatars/scout-${safeId}.png`}
       alt="Scout portrait"
+      width={size}
+      height={size}
+      unoptimized
       className={`rounded-full object-cover ${sizeClasses[size] ?? sizeClasses[48]} ${className}`}
       draggable={false}
     />

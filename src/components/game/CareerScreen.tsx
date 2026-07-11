@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Briefcase,
   TrendingUp,
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import type {
+  DiscoveryRecord,
   JobOffer,
   PerformanceReview,
   ScoutSkill,
@@ -43,6 +45,7 @@ import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/eng
 import { Tooltip } from "@/components/ui/tooltip";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
+import { COURSE_CATALOG } from "@/engine/career/courses";
 import { calculatePreferenceAlignment } from "@/engine/analytics/dataTension";
 import { calculateManagerSatisfaction } from "@/engine/career/management";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
@@ -85,6 +88,32 @@ const SPEC_LABELS: Record<string, string> = {
   data: "Data Scout",
 };
 
+type CareerWorkspaceTab = "overview" | "development" | "trackRecord" | "finances";
+
+interface CareerMetricTileProps {
+  label: string;
+  value: string;
+  helper?: string;
+  tone?: "default" | "emerald" | "amber" | "blue" | "red";
+}
+
+interface CareerTimelineEntry {
+  id: string;
+  season: number;
+  week: number;
+  label: string;
+  title: string;
+  description: string;
+  tone: "default" | "emerald" | "amber" | "blue" | "red";
+}
+
+const CAREER_TAB_ITEMS: Array<{ value: CareerWorkspaceTab; label: string }> = [
+  { value: "overview", label: "Overview" },
+  { value: "development", label: "Development" },
+  { value: "trackRecord", label: "Track Record" },
+  { value: "finances", label: "Finances" },
+];
+
 // ─── Formatters ──────────────────────────────────────────────────────────────
 
 function formatSalary(salary: number): string {
@@ -104,6 +133,92 @@ function formatBalance(n: number): string {
   if (abs >= 1_000_000) return `${sign}£${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 1_000) return `${sign}£${(abs / 1_000).toFixed(0)}K`;
   return `${sign}£${abs}`;
+}
+
+function formatWeekSeason(season: number, week: number): string {
+  return `S${season} W${week}`;
+}
+
+function formatExpenseLabel(label: string): string {
+  return label
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function formatMovementLabel(type: string): string {
+  switch (type) {
+    case "permanentTransfer":
+      return "Transfer";
+    case "loanStart":
+      return "Loan move";
+    case "loanReturn":
+      return "Loan return";
+    case "loanRecall":
+      return "Loan recall";
+    case "loanBuyOption":
+      return "Loan option";
+    case "release":
+      return "Released";
+    case "freeAgentSigning":
+      return "Free signing";
+    case "contractRenewal":
+      return "Renewed";
+    case "retirement":
+      return "Retired";
+    case "footballExit":
+      return "Exited football";
+    case "youthSigning":
+      return "Academy intake";
+    default:
+      return type.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+  }
+}
+
+function metricToneClass(tone: CareerMetricTileProps["tone"]): string {
+  switch (tone) {
+    case "emerald":
+      return "text-emerald-300";
+    case "amber":
+      return "text-amber-300";
+    case "blue":
+      return "text-blue-300";
+    case "red":
+      return "text-red-300";
+    default:
+      return "text-white";
+  }
+}
+
+function timelineToneClasses(tone: CareerTimelineEntry["tone"]): string {
+  switch (tone) {
+    case "emerald":
+      return "border-emerald-500/30 bg-emerald-500/8";
+    case "amber":
+      return "border-amber-500/30 bg-amber-500/8";
+    case "blue":
+      return "border-blue-500/30 bg-blue-500/8";
+    case "red":
+      return "border-red-500/30 bg-red-500/8";
+    default:
+      return "border-[#27272a] bg-black/20";
+  }
+}
+
+function CareerMetricTile({
+  label,
+  value,
+  helper,
+  tone = "default",
+}: CareerMetricTileProps) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-black/25 p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+        {label}
+      </p>
+      <p className={`mt-2 text-xl font-semibold ${metricToneClass(tone)}`}>{value}</p>
+      {helper && <p className="mt-1 text-xs text-zinc-400">{helper}</p>}
+    </div>
+  );
 }
 
 // ─── Outcome helpers ─────────────────────────────────────────────────────────
@@ -294,6 +409,415 @@ export function CareerScreen() {
   useEffect(() => () => clearTimeout(boardTimerRef.current), []);
 
   if (!gameState || !scout) return null;
+
+  const youthPlacementReports = Object.values(gameState.placementReports ?? {}).filter(
+    (report) => report.scoutId === scout.id,
+  );
+  const acceptedPlacements = youthPlacementReports.filter(
+    (report) => report.clubResponse === "accepted" || report.clubResponse === "trial",
+  ).length;
+  const pendingPlacements = youthPlacementReports.filter(
+    (report) => !report.clubResponse || report.clubResponse === "pending",
+  ).length;
+  const youthDiscoveryRecords: DiscoveryRecord[] = gameState.discoveryRecords ?? [];
+  const discoveredPlayerIds = new Set(youthDiscoveryRecords.map((record) => record.playerId));
+  const averageSkill = skillEntries.length > 0
+    ? skillEntries.reduce((sum, [, value]) => sum + value, 0) / skillEntries.length
+    : 0;
+  const developmentPriority = [...skillEntries].sort((a, b) => a[1] - b[1])[0];
+  const monthlyExpenses = finances
+    ? Object.values(finances.expenses).reduce((sum, amount) => sum + amount, 0)
+    : 0;
+  const careerTimeline: CareerTimelineEntry[] = [
+    ...youthDiscoveryRecords.map((record) => {
+      const player = gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
+      return {
+        id: `discovery-${record.playerId}`,
+        season: record.discoveredSeason,
+        week: record.discoveredWeek,
+        label: "Discovery",
+        title: player ? `${player.firstName} ${player.lastName}` : "Youth prospect",
+        description: record.wasWonderkid
+          ? "First identified as an exceptional youth prospect."
+          : "Added to your professional scouting record.",
+        tone: record.wasWonderkid ? "amber" as const : "emerald" as const,
+      };
+    }),
+    ...youthDiscoveryRecords
+      .filter((record) => record.placementSeason != null && record.placementWeek != null)
+      .map((record) => {
+        const player = gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
+        const club = record.placementClubId ? gameState.clubs[record.placementClubId] : undefined;
+        return {
+          id: `placement-${record.playerId}-${record.placementSeason}-${record.placementWeek}`,
+          season: record.placementSeason!,
+          week: record.placementWeek!,
+          label: "Placement",
+          title: player ? `${player.firstName} ${player.lastName}` : "Youth prospect",
+          description: `Placed with ${club?.name ?? "a professional academy"}${record.placementType ? ` via ${record.placementType === "academyIntake" ? "academy intake" : "youth contract"}` : ""}.`,
+          tone: "blue" as const,
+        };
+      }),
+    ...(gameState.playerMovementHistory ?? [])
+      .filter((movement) => discoveredPlayerIds.has(movement.playerId))
+      .map((movement) => {
+        const player = gameState.players[movement.playerId] ?? gameState.retiredPlayers?.[movement.playerId];
+        const fromClub = movement.fromClubId ? gameState.clubs[movement.fromClubId] : undefined;
+        const toClub = movement.toClubId ? gameState.clubs[movement.toClubId] : undefined;
+        const route = fromClub || toClub
+          ? `${fromClub?.shortName ?? "Free agent"} to ${toClub?.shortName ?? "out of football"}`
+          : movement.reason ?? "Career status updated";
+        return {
+          id: `movement-${movement.id}`,
+          season: movement.season,
+          week: movement.week,
+          label: formatMovementLabel(movement.type),
+          title: player ? `${player.firstName} ${player.lastName}` : "Tracked prospect",
+          description: `${route}${movement.fee ? ` for ${formatBalance(movement.fee)}` : ""}.`,
+          tone: movement.type === "retirement" || movement.type === "footballExit"
+            ? "default" as const
+            : movement.type === "release"
+              ? "red" as const
+              : "blue" as const,
+        };
+      }),
+  ].sort((a, b) => b.season - a.season || b.week - a.week).slice(0, 40);
+
+  if (scout.primarySpecialization === "youth") {
+    return (
+      <GameLayout>
+        <div className="relative min-h-screen p-4 sm:p-6 lg:p-8">
+          <ScreenBackground src="/images/backgrounds/career-journey.png" opacity={0.88} />
+          <div className="relative z-10 mx-auto max-w-[1480px]">
+            <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.13),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-2xl shadow-black/25 sm:p-6 lg:p-8">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <ScoutAvatar avatarId={scout.avatarId ?? 1} size={96} />
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Professional record</p>
+                    <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                      {scout.firstName} {scout.lastName}
+                    </h1>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-zinc-300">
+                      <span>{TIER_LABELS[scout.careerTier]}</span>
+                      <span aria-hidden="true" className="text-zinc-600">·</span>
+                      <span>{currentClub?.name ?? "Independent"}</span>
+                      <span aria-hidden="true" className="text-zinc-600">·</span>
+                      <span>Season {currentSeason}</span>
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200">
+                        Tier {scout.careerTier}
+                      </span>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
+                        {Math.round(scout.reputation)} reputation
+                      </span>
+                      <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-amber-200">
+                        Youth mastery {scout.specializationLevel}/20
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-full rounded-xl border border-white/10 bg-black/20 p-4 lg:max-w-sm">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Next development edge</p>
+                  <p className="mt-2 text-lg font-bold text-white">
+                    {developmentPriority ? SKILL_LABELS[developmentPriority[0]] : "Build experience"}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-zinc-400">
+                    {developmentPriority
+                      ? `Currently ${developmentPriority[1]}/20. Choose weekly work that trains this weakness instead of chasing XP in the abstract.`
+                      : "Complete scouting work to reveal your development priorities."}
+                  </p>
+                  <Button className="mt-4 min-h-11 w-full" onClick={() => setScreen("calendar")}>
+                    Plan development work
+                    <ArrowRight size={16} className="ml-2" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <Tabs defaultValue="overview">
+              <TabsList className="mb-5 grid h-auto min-h-12 w-full grid-cols-2 gap-1 overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/95 p-1 sm:grid-cols-4">
+                {CAREER_TAB_ITEMS.map((item) => (
+                  <TabsTrigger key={item.value} value={item.value} className="min-h-11 rounded-lg px-3 py-2.5">
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <CareerMetricTile label="Reputation" value={`${Math.round(scout.reputation)}/100`} helper="Trust earned through decisions" tone="emerald" />
+                  <CareerMetricTile label="Placements" value={`${acceptedPlacements}`} helper={`${pendingPlacements} awaiting response`} tone="blue" />
+                  <CareerMetricTile label="Discoveries" value={`${youthDiscoveryRecords.length}`} helper={`${scout.discoveryCredits.length} credited outcomes`} tone="amber" />
+                  <CareerMetricTile label="Skill Average" value={`${averageSkill.toFixed(1)}/20`} helper={`${scout.reportsSubmitted} reports submitted`} />
+                </div>
+
+                {showPathChoice && finances && (
+                  <Card className="border-amber-400/25 bg-amber-400/[0.06]">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base text-amber-200">Choose your career path</CardTitle>
+                      <p className="text-sm leading-6 text-zinc-300">This determines how you earn, who you answer to, and which long-term systems open up.</p>
+                    </CardHeader>
+                    <CardContent className="grid gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => useGameStore.getState().chooseCareerPath("club" as CareerPath)}
+                        className="min-h-24 rounded-xl border border-sky-400/25 bg-sky-400/[0.06] p-4 text-left transition hover:bg-sky-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                      >
+                        <span className="font-semibold text-sky-200">Club Scout</span>
+                        <span className="mt-1 block text-sm leading-5 text-zinc-400">Stable salary, internal influence, and an employer&apos;s priorities.</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => useGameStore.getState().chooseCareerPath("independent" as CareerPath)}
+                        className="min-h-24 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-4 text-left transition hover:bg-emerald-400/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                      >
+                        <span className="font-semibold text-emerald-200">Independent Scout</span>
+                        <span className="mt-1 block text-sm leading-5 text-zinc-400">Sell expertise, build retainers, and own the financial risk.</span>
+                      </button>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+                  <Card className="border-white/10 bg-[#11161c]/95">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Briefcase size={17} className="text-emerald-300" aria-hidden="true" />
+                        Career opportunities
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {jobOffers.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
+                          <p className="font-semibold text-white">No offers on the table</p>
+                          <p className="mt-1 text-sm text-zinc-400">Reputation, successful placements, and strong reviews create better roles over time.</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {jobOffers.map((offer) => (
+                            <JobOfferCard
+                              key={offer.id}
+                              offer={offer}
+                              clubName={getClub(offer.clubId)?.name ?? "Unknown club"}
+                              onAccept={() => acceptJob(offer.id)}
+                              onDecline={() => declineJob(offer.id)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-white/10 bg-[#11161c]/95">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Recent reviews</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {performanceReviews.length === 0 ? (
+                        <p className="text-sm leading-6 text-zinc-400">Your first formal review arrives after enough work has accumulated to judge.</p>
+                      ) : (
+                        [...performanceReviews].reverse().slice(0, 4).map((review) => (
+                          <div key={review.season} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`flex items-center gap-2 text-sm font-semibold ${outcomeColor(review.outcome)}`}>
+                                {outcomeIcon(review.outcome)} {review.outcome}
+                              </span>
+                              <span className="text-xs text-zinc-500">Season {review.season}</span>
+                            </div>
+                            <p className="mt-2 text-xs leading-5 text-zinc-400">
+                              {review.reportsSubmitted} reports · {Math.round(review.averageQuality)} average craft · {review.successfulRecommendations} successful recommendations
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="development" className="mt-0 space-y-5" data-tutorial-id="career-skills">
+                <div className="grid gap-5 xl:grid-cols-2">
+                  <Card className="border-white/10 bg-[#11161c]/95">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Scouting skills</CardTitle>
+                      <p className="text-sm text-zinc-400">Skills improve through relevant weekly work. The thin bar is XP toward the next level.</p>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      {skillEntries.map(([skill, value]) => {
+                        const xp = scout.skillXp?.[skill] ?? 0;
+                        const threshold = Math.max(1, value * 10);
+                        return (
+                          <div key={skill} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex items-center justify-between gap-2 text-sm">
+                              <span className="font-medium text-zinc-200">{SKILL_LABELS[skill]}</span>
+                              <span className="font-mono font-bold text-white">{value}/20</span>
+                            </div>
+                            <Progress value={value} max={20} indicatorClassName={value >= 15 ? "bg-emerald-400" : value >= 10 ? "bg-amber-400" : "bg-sky-400"} className="mt-3" />
+                            <div className="mt-2 flex items-center justify-between text-[11px] text-zinc-400">
+                              <span>{xp}/{threshold} XP</span>
+                              <span>{value >= 20 ? "Mastered" : `${Math.max(0, threshold - xp)} to level`}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-white/10 bg-[#11161c]/95">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Professional attributes</CardTitle>
+                      <p className="text-sm text-zinc-400">These shape relationships, stamina, memory, intuition, and how convincingly you act on a read.</p>
+                    </CardHeader>
+                    <CardContent className="grid gap-4 sm:grid-cols-2">
+                      {attrEntries.map(([attribute, value]) => (
+                        <div key={attribute} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <span className="font-medium text-zinc-200">{ATTRIBUTE_LABELS[attribute]}</span>
+                            <span className="font-mono font-bold text-white">{value}/20</span>
+                          </div>
+                          <Progress value={value} max={20} indicatorClassName="bg-violet-400" className="mt-3" />
+                          <p className="mt-2 text-[11px] text-zinc-400">{scout.attributeXp?.[attribute] ?? 0} XP banked</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-5 lg:grid-cols-3">
+                  <Card className="border-white/10 bg-[#11161c]/95 lg:col-span-2" data-tutorial-id="career-perk-tree">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Star size={17} className="text-amber-300" aria-hidden="true" />
+                        Youth specialization
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-4 flex items-center justify-between text-sm">
+                        <span className="text-zinc-300">Mastery level</span>
+                        <span className="font-semibold text-amber-200">{scout.specializationLevel}/20</span>
+                      </div>
+                      <Progress value={scout.specializationLevel} max={20} indicatorClassName="bg-amber-400" />
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {scout.unlockedPerks.length === 0 ? (
+                          <p className="text-sm text-zinc-400">Perks unlock as your specialization grows.</p>
+                        ) : scout.unlockedPerks.map((perk) => (
+                          <Badge key={perk} variant="outline" className="border-amber-400/20 bg-amber-400/10 text-amber-200">{perk}</Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <div className="space-y-3">
+                    <button onClick={() => setScreen("training")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-amber-400/25 hover:bg-amber-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                      <span><span className="block font-semibold text-white">Courses & qualifications</span><span className="mt-1 block text-xs text-zinc-400">{finances?.activeEnrollment ? "Training in progress" : `${finances?.completedCourses.length ?? 0} completed`}</span></span>
+                      <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
+                    </button>
+                    <button onClick={() => setScreen("equipment")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-emerald-400/25 hover:bg-emerald-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                      <span><span className="block font-semibold text-white">Equipment loadout</span><span className="mt-1 block text-xs text-zinc-400">Tools that change real activity outcomes</span></span>
+                      <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="trackRecord" className="mt-0 space-y-5">
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  <CareerMetricTile label="Reports Filed" value={`${youthPlacementReports.length}`} helper="Placement recommendations" />
+                  <CareerMetricTile label="Accepted" value={`${acceptedPlacements}`} helper="Trials and academy offers" tone="emerald" />
+                  <CareerMetricTile label="Tracked Players" value={`${discoveredPlayerIds.size}`} helper="Across full careers" tone="blue" />
+                  <CareerMetricTile label="Legacy" value={`${gameState.legacyScore.totalScore}`} helper="Outcome-weighted impact" tone="amber" />
+                </div>
+                <Card className="border-white/10 bg-[#11161c]/95">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Trophy size={17} className="text-amber-300" aria-hidden="true" />
+                      Career timeline
+                    </CardTitle>
+                    <p className="text-sm text-zinc-400">Your discoveries remain connected to signings, loans, transfers, releases, and retirement.</p>
+                  </CardHeader>
+                  <CardContent>
+                    {careerTimeline.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/15 p-8 text-center">
+                        <p className="font-semibold text-white">Your record starts with the first name you back</p>
+                        <p className="mt-1 text-sm text-zinc-400">Discover a prospect, build evidence, recommend a destination, then watch the career unfold.</p>
+                      </div>
+                    ) : (
+                      <ol className="space-y-3">
+                        {careerTimeline.map((entry) => (
+                          <li key={entry.id} className={`rounded-xl border p-4 ${timelineToneClasses(entry.tone)}`}>
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline" className="border-white/15 text-[10px] text-zinc-300">{entry.label}</Badge>
+                                  <h3 className="font-semibold text-white">{entry.title}</h3>
+                                </div>
+                                <p className="mt-2 text-sm leading-6 text-zinc-300">{entry.description}</p>
+                              </div>
+                              <span className="shrink-0 text-xs font-medium text-zinc-400">{formatWeekSeason(entry.season, entry.week)}</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="finances" className="mt-0 space-y-5">
+                {!finances ? (
+                  <Card><CardContent className="p-8 text-center text-sm text-zinc-400">Financial records are not available in this save.</CardContent></Card>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                      <CareerMetricTile label="Balance" value={formatBalance(finances.balance)} helper="Available cash" tone={finances.balance >= 0 ? "emerald" : "red"} />
+                      <CareerMetricTile label="Monthly Income" value={formatBalance(finances.monthlyIncome)} helper={scout.careerPath === "independent" ? "Reports and retainers" : "Salary and bonuses"} tone="emerald" />
+                      <CareerMetricTile label="Monthly Costs" value={formatBalance(monthlyExpenses)} helper="Lifestyle, travel, and tools" tone="red" />
+                      <CareerMetricTile label="Personal Savings" value={formatSavings(scout.savings)} helper={formatSalary(scout.salary)} />
+                    </div>
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      <Card className="border-white/10 bg-[#11161c]/95">
+                        <CardHeader className="pb-3"><CardTitle className="text-base">Monthly commitments</CardTitle></CardHeader>
+                        <CardContent className="space-y-2">
+                          {Object.entries(finances.expenses).map(([label, amount]) => (
+                            <div key={label} className="flex min-h-11 items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 text-sm">
+                              <span className="text-zinc-300">{formatExpenseLabel(label)}</span>
+                              <span className="font-semibold text-red-300">{formatBalance(amount)}</span>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                      <Card className="border-white/10 bg-[#11161c]/95">
+                        <CardHeader className="pb-3"><CardTitle className="text-base">Lifestyle</CardTitle><p className="text-sm text-zinc-400">Comfort changes monthly costs and recovery. Choose deliberately.</p></CardHeader>
+                        <CardContent className="space-y-2">
+                          {(Object.entries(LIFESTYLE_TIERS) as [string, (typeof LIFESTYLE_TIERS)[LifestyleLevel]][]).map(([levelString, tier]) => {
+                            const level = Number(levelString) as LifestyleLevel;
+                            const active = finances.lifestyle.level === level;
+                            return (
+                              <button
+                                key={level}
+                                type="button"
+                                onClick={() => useGameStore.getState().changeLifestyle(level)}
+                                aria-pressed={active}
+                                className={`flex min-h-14 w-full items-center justify-between rounded-xl border px-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${active ? "border-emerald-400/35 bg-emerald-400/10" : "border-white/10 bg-black/20 hover:border-white/20"}`}
+                              >
+                                <span><span className="block text-sm font-semibold text-white">{tier.name}</span><span className="mt-0.5 block text-xs text-zinc-400">Monthly comfort level</span></span>
+                                <span className={active ? "font-semibold text-emerald-200" : "text-zinc-300"}>{formatBalance(tier.config.monthlyCost)}/mo</span>
+                              </button>
+                            );
+                          })}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </>
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </GameLayout>
+    );
+  }
 
   return (
     <GameLayout>
@@ -552,7 +1076,7 @@ export function CareerScreen() {
                 <CardContent className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Trophy size={16} className="text-amber-400" aria-hidden="true" />
-                    <span className="text-sm font-medium">View Hall of Fame</span>
+                    <span className="text-sm font-medium">View Hall of Fame Snapshot</span>
                   </div>
                   <ChevronRight size={14} className="text-zinc-500" />
                 </CardContent>

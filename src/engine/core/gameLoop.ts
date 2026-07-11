@@ -43,6 +43,10 @@ import type {
   Contact,
   BoardSatisfactionDelta,
   LoanDeal,
+  FreeAgent,
+  FreeAgentNegotiation,
+  LoanRecommendation,
+  LoanOutcome,
 } from "./types";
 import { ALL_ATTRIBUTES } from "./types";
 import { getDifficultyModifiers } from "./difficulty";
@@ -62,7 +66,10 @@ import {
   generateSimulatedMatchRatings,
   computeFormFromRatings,
 } from "../match/ratings";
-import { processRegionalKnowledgeGrowth } from "../specializations/regionalKnowledge";
+import {
+  processRegionalKnowledgeGrowth,
+  synchronizeRegionalFamiliarity,
+} from "../specializations/regionalKnowledge";
 import {
   decrementSuspensions,
   clearSeasonCards,
@@ -85,6 +92,7 @@ import type { RelegationResult } from "../world/relegation";
 import { processContractExpiries } from "../freeAgents/expiry";
 import { tickFreeAgentPool } from "../freeAgents/pool";
 import { discoverFreeAgents } from "../freeAgents/discovery";
+import { processFreeAgentNegotiationDeadlines } from "../freeAgents/negotiation";
 import type { FreeAgentPool } from "./types";
 import { isTransferWindowOpen } from "./transferWindow";
 import {
@@ -92,9 +100,19 @@ import {
   processAILoanDeals,
   processLoanPerformance,
   processLoanRecalls,
+  evaluateLoanOutcome,
 } from "../world/loans";
 import { getActiveEquipmentBonuses } from "../finance/equipmentBonuses";
+import { calculateMarketValue } from "../players/generation";
 import { getScoutHomeCountry } from "../world/travel";
+import { getTransferFlowProbability } from "../world/transfers";
+import {
+  getLifecycleWorld,
+  resolvePlayerMovements,
+  type PlayerMovementIntent,
+} from "../world/playerLifecycle";
+import { processLoanOutcomeReputation } from "../firstTeam/loanIntegration";
+import { applyScoutSkillXp } from "../scout/progression";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -176,6 +194,8 @@ export interface TickResult {
   fixturesPlayed: SimulatedFixture[];
   standingsUpdated: boolean;
   playerDevelopment: PlayerDevelopmentResult[];
+  /** Slower weekly development for unsigned youth outside formal academies. */
+  unsignedYouthDevelopment: PlayerDevelopmentResult[];
   /** Rare breakthrough events for young in-form players. */
   breakthroughs: BreakthroughResult[];
   transfers: Transfer[];
@@ -203,7 +223,6 @@ export interface TickResult {
   /** Player retirements this tick. */
   playerRetirements?: {
     retiredPlayerIds: string[];
-    updatedClubs: Record<string, Club>;
   };
   /** Newly generated unsigned youth this tick. */
   newUnsignedYouth?: UnsignedYouth[];
@@ -240,6 +259,8 @@ export interface TickResult {
   alumniContactPromotions?: Array<{ alumniId: string; contact: Contact }>;
   /** Updated active negotiations after weekly processing (F4). */
   updatedNegotiations?: TransferNegotiation[];
+  /** Free-agent talks remaining after weekly deadline processing. */
+  updatedFreeAgentNegotiations?: FreeAgentNegotiation[];
   /** Updated contacts after F3 contact network depth processing. */
   updatedContacts?: Record<string, Contact>;
   /** Board AI reaction result (F10, tier 5 weekly). */
@@ -251,12 +272,26 @@ export interface TickResult {
   /** Updated free agent pool after weekly tick (pool decay, NPC signings, discovery). */
   updatedFreeAgentPool?: FreeAgentPool;
   /** Player IDs signed by NPC clubs from the free agent pool this week. */
-  freeAgentNPCSignings?: { playerId: string; clubId: string }[];
+  freeAgentNPCSignings?: Array<{
+    playerId: string;
+    clubId: string;
+    wage: number;
+    signingBonus: number;
+    contractLength: number;
+  }>;
+  /** Players retired/dropped from the free-agent pool this week. */
+  freeAgentRemovedPlayerIds?: string[];
+  /** Contracted players released into the pool during the weekly tick. */
+  midSeasonReleases?: FreeAgent[];
   /** Player IDs released due to contract expiry (season-end only). */
   contractExpiryResult?: {
-    renewedPlayerIds: string[];
-    retiredPlayerIds: string[];
-    updatedPlayers: Record<string, Player>;
+    renewals: Array<{
+      playerId: string;
+      clubId: string;
+      contractLength: number;
+      wage: number;
+    }>;
+    releasedPlayers: FreeAgent[];
   };
 
   // --- Player Loan System ---
@@ -267,6 +302,12 @@ export interface TickResult {
   loanReturns?: LoanDeal[];
   /** Loans recalled early by parent club this week. */
   loanRecalls?: LoanDeal[];
+  /** Authoritative weekly performance snapshot for existing active loans. */
+  updatedActiveLoans?: LoanDeal[];
+  /** Scout recommendations after target-club responses. */
+  updatedLoanRecommendations?: LoanRecommendation[];
+  /** Outcome-driven XP for the scout's loan-management skill. */
+  loanOutcomeXp?: number;
 }
 
 // =============================================================================
@@ -970,8 +1011,14 @@ function generateBreakthroughMessage(
 function processPlayerDevelopment(
   state: GameState,
   rng: RNG,
-): { development: PlayerDevelopmentResult[]; breakthroughs: BreakthroughResult[]; breakthroughMessages: InboxMessage[] } {
+): {
+  development: PlayerDevelopmentResult[];
+  unsignedYouthDevelopment: PlayerDevelopmentResult[];
+  breakthroughs: BreakthroughResult[];
+  breakthroughMessages: InboxMessage[];
+} {
   const development: PlayerDevelopmentResult[] = [];
+  const unsignedYouthDevelopment: PlayerDevelopmentResult[] = [];
   const breakthroughs: BreakthroughResult[] = [];
   const breakthroughMessages: InboxMessage[] = [];
   const devRateMod = getDifficultyModifiers(state.difficulty).developmentRate;
@@ -1004,7 +1051,26 @@ function processPlayerDevelopment(
     }
   }
 
-  return { development, breakthroughs, breakthroughMessages };
+  for (const youth of Object.values(state.unsignedYouth)) {
+    if (youth.placed || youth.retired) continue;
+    if (youth.player.injuryWeeksRemaining > 6) continue;
+    const result = computePlayerDevelopment(
+      youth.player,
+      undefined,
+      rng,
+      devRateMod * 0.75,
+    );
+    if (Object.keys(result.changes).length > 0 || result.abilityChange !== 0) {
+      unsignedYouthDevelopment.push(result);
+    }
+  }
+
+  return {
+    development,
+    unsignedYouthDevelopment,
+    breakthroughs,
+    breakthroughMessages,
+  };
 }
 
 // =============================================================================
@@ -1243,7 +1309,8 @@ function generateSimulatedCards(
  * unhappy, or explicitly listed.
  */
 function isTransferEligible(player: Player, currentSeason: number): boolean {
-  if (player.injured) return false;
+  if (player.injured || player.onLoan || player.age < 16) return false;
+  if (!(player.contractClubId ?? player.clubId)) return false;
   const contractingExpiringSoon = player.contractExpiry <= currentSeason + 1;
   const unhappy = player.morale <= 3;
   return contractingExpiringSoon || unhappy;
@@ -1257,21 +1324,50 @@ function isTransferEligible(player: Player, currentSeason: number): boolean {
 function findTransferDestination(
   player: Player,
   fromClub: Club,
-  clubs: Record<string, Club>,
+  state: GameState,
   rng: RNG,
 ): Club | null {
   // Target market value tier: reputation roughly proportional to player quality
   const targetReputation = Math.round((player.currentAbility / 200) * 100);
+  const fromCountry = state.leagues[fromClub.leagueId]?.country ?? "";
 
-  const candidates = Object.values(clubs).filter((club) => {
+  const candidates = Object.values(state.clubs).filter((club) => {
     if (club.id === fromClub.id) return false;
     if (club.budget < player.marketValue * 0.5) return false;
+    if (club.playerIds.length >= 30) return false;
     const repDiff = Math.abs(club.reputation - targetReputation);
     return repDiff <= 20; // Only clubs within 20 reputation points
   });
 
   if (candidates.length === 0) return null;
-  return rng.pick(candidates);
+
+  const weighted = candidates.map((club) => {
+    const country = state.leagues[club.leagueId]?.country ?? "";
+    const flowWeight = getTransferFlowProbability(fromCountry, country);
+    const reputationFit = Math.max(
+      0.2,
+      1 - Math.abs(club.reputation - targetReputation) / 25,
+    );
+    const samePositionCount = club.playerIds.reduce((count, playerId) => (
+      state.players[playerId]?.position === player.position ? count + 1 : count
+    ), 0);
+    const squadNeed = samePositionCount === 0 ? 2.2 : samePositionCount === 1 ? 1.5 : 0.75;
+    const philosophyFit =
+      club.scoutingPhilosophy === "globalRecruiter" && country !== fromCountry
+        ? 1.4
+        : club.scoutingPhilosophy === "academyFirst" && player.age <= 23
+          ? 1.3
+          : club.scoutingPhilosophy === "winNow" && player.currentAbility >= 120
+            ? 1.25
+            : 1;
+
+    return {
+      item: club,
+      weight: Math.max(0.001, flowWeight * reputationFit * squadNeed * philosophyFit),
+    };
+  });
+
+  return rng.pickWeighted(weighted);
 }
 
 /**
@@ -1288,13 +1384,14 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     if (!isTransferEligible(player, state.currentSeason)) continue;
     if (!rng.chance(AI_TRANSFER_PROBABILITY)) continue;
 
-    const fromClub = state.clubs[player.clubId];
+    const ownerClubId = player.contractClubId ?? player.clubId;
+    const fromClub = state.clubs[ownerClubId];
     if (!fromClub) continue;
 
     const destination = findTransferDestination(
       player,
       fromClub,
-      state.clubs,
+      state,
       rng,
     );
     if (!destination) continue;
@@ -1302,8 +1399,13 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     // Transfer fee: market value with ±20% variance, adjusted by standings position.
     // Bottom 5 clubs sell at -10%, top 3 clubs sell at +10%.
     const feeVariance = rng.nextFloat(0.8, 1.2);
-    const standingsModifier = getStandingsPriceModifier(player.clubId, state);
-    const fee = Math.round(player.marketValue * feeVariance * standingsModifier);
+    const standingsModifier = getStandingsPriceModifier(ownerClubId, state);
+    const contractYearsRemaining = Math.max(0, player.contractExpiry - state.currentSeason);
+    const contractModifier = contractYearsRemaining === 0 ? 0.35 : contractYearsRemaining === 1 ? 0.7 : 1;
+    const fee = Math.max(
+      0,
+      Math.round(player.marketValue * feeVariance * standingsModifier * contractModifier),
+    );
 
     // Destination must still have budget (accounting for other transfers this tick)
     const alreadySpent = spentBudget.get(destination.id) ?? 0;
@@ -1407,13 +1509,28 @@ function generateNewsMessages(
   const messages: InboxMessage[] = [];
 
   // Transfer news (only for notable players — high CA)
+  const trackedTransferPlayerIds = new Set([
+    ...Object.values(state.reports).map((report) => report.playerId),
+    ...Object.values(state.observations).map((observation) => observation.playerId),
+    ...(state.watchlist ?? []),
+  ]);
+
   for (const transfer of transfers) {
     const player = state.players[transfer.playerId];
-    if (!player || player.currentAbility < 130) continue;
-    if (!rng.chance(0.5)) continue; // Not all transfers make the news
+    if (!player) continue;
+    const tracked = trackedTransferPlayerIds.has(player.id);
+    if (!tracked && (player.currentAbility < 130 || !rng.chance(0.5))) continue;
 
     const fromClub = state.clubs[transfer.fromClubId];
     const toClub = state.clubs[transfer.toClubId];
+    const fromCountry = fromClub ? state.leagues[fromClub.leagueId]?.country : undefined;
+    const toCountry = toClub ? state.leagues[toClub.leagueId]?.country : undefined;
+    const fee = transfer.fee >= 1_000_000
+      ? `£${(transfer.fee / 1_000_000).toFixed(1)}M`
+      : `£${Math.round(transfer.fee / 1_000)}K`;
+    const route = fromCountry && toCountry && fromCountry !== toCountry
+      ? ` The move takes him from ${fromCountry} to ${toCountry}.`
+      : "";
 
     messages.push({
       id: makeMessageId("news", rng),
@@ -1421,7 +1538,7 @@ function generateNewsMessages(
       season: state.currentSeason,
       type: "news",
       title: `Transfer: ${player.firstName} ${player.lastName} moves clubs`,
-      body: `${player.firstName} ${player.lastName} has completed a transfer from ${fromClub?.name ?? "Unknown"} to ${toClub?.name ?? "Unknown"} for an undisclosed fee.`,
+      body: `${player.firstName} ${player.lastName} has completed a transfer from ${fromClub?.name ?? "Unknown"} to ${toClub?.name ?? "Unknown"} for ${fee}.${route}`,
       read: false,
       actionRequired: false,
       relatedId: player.id,
@@ -2025,24 +2142,46 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   );
 
   // 3. Player development (normal growth + rare breakthroughs)
-  const { development: playerDevelopment, breakthroughs, breakthroughMessages } =
-    processPlayerDevelopment(state, rng);
+  const {
+    development: playerDevelopment,
+    unsignedYouthDevelopment,
+    breakthroughs,
+    breakthroughMessages,
+  } = processPlayerDevelopment(state, rng);
 
-  // 4. AI transfers
-  const transfers = processAITransfers(state, rng);
-
-  // 4b. Player loan system
-  const loanReturnResult = processLoanReturns(state, state.currentWeek, state.currentSeason, rng);
-  const loanWindowOpen = state.transferWindow
+  // 4. AI transfers only occur inside an active registration window.
+  const transferWindowOpen = state.transferWindow
     ? isTransferWindowOpen([state.transferWindow], state.currentWeek)
     : false;
+  const transfers = transferWindowOpen ? processAITransfers(state, rng) : [];
+
+  // 4b. Player loan system
+  const updatedActiveLoans = processLoanPerformance(
+    state,
+    state.currentWeek,
+    state.currentSeason,
+    rng,
+  );
+  const loanState = { ...state, activeLoans: updatedActiveLoans };
+  const loanReturnResult = processLoanReturns(
+    loanState,
+    state.currentWeek,
+    state.currentSeason,
+    rng,
+  );
+  const loanWindowOpen = transferWindowOpen;
   const loanDealResult = loanWindowOpen
-    ? processAILoanDeals(state, state.currentWeek, state.currentSeason, rng)
-    : { deals: [], messages: [] };
+    ? processAILoanDeals(loanState, state.currentWeek, state.currentSeason, rng)
+    : {
+        deals: [],
+        messages: [],
+        updatedRecommendations: state.loanRecommendations ?? [],
+        reputationDelta: 0,
+        xpAward: 0,
+      };
   const loanRecallResult = loanWindowOpen
-    ? processLoanRecalls(state, state.currentWeek, state.currentSeason, rng)
+    ? processLoanRecalls(loanState, state.currentWeek, state.currentSeason, rng)
     : { deals: [], messages: [] };
-  const updatedActiveLoans = processLoanPerformance(state, state.currentWeek, rng);
 
   // 5. Injuries
   const injuries = processInjuries(state, rng);
@@ -2072,13 +2211,81 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // Append loan system messages
   newMessages.push(...loanReturnResult.messages, ...loanDealResult.messages, ...loanRecallResult.messages);
 
+  let updatedLoanRecommendations = loanDealResult.updatedRecommendations;
+  let loanOutcomeReputation = 0;
+  let loanOutcomeXp = loanDealResult.xpAward;
+  const closedLoanIds = new Set<string>();
+  const loanClosures: Array<{ deal: LoanDeal; outcome: LoanOutcome }> = [];
+  for (const deal of loanReturnResult.deals) {
+    let outcome = deal.outcome ?? evaluateLoanOutcome(deal);
+    if (
+      outcome === "buy-option-exercised" &&
+      (deal.buyOptionFee === undefined ||
+        (state.clubs[deal.loanClubId]?.budget ?? 0) < deal.buyOptionFee)
+    ) {
+      outcome = evaluateLoanOutcome({ ...deal, buyOptionFee: undefined });
+    }
+    loanClosures.push({ deal, outcome });
+    closedLoanIds.add(deal.id);
+  }
+  for (const deal of loanRecallResult.deals) {
+    if (!closedLoanIds.has(deal.id)) {
+      loanClosures.push({ deal, outcome: "recalled-early" });
+      closedLoanIds.add(deal.id);
+    }
+  }
+  for (const { deal, outcome } of loanClosures) {
+    const recommendation = updatedLoanRecommendations.find(
+      (item) => item.loanDealId === deal.id && !item.reputationApplied,
+    );
+    if (!recommendation || recommendation.scoutId !== state.scout.id) continue;
+    const reward = processLoanOutcomeReputation(
+      state.scout,
+      recommendation,
+      outcome,
+      deal,
+      state.players[deal.playerId],
+      state.currentWeek,
+      state.currentSeason,
+      rng,
+    );
+    loanOutcomeReputation += reward.reputationDelta;
+    loanOutcomeXp += reward.xpAward;
+    newMessages.push(reward.message);
+    if (reward.updatedRecommendation) {
+      updatedLoanRecommendations = updatedLoanRecommendations.map((item) =>
+        item.id === reward.updatedRecommendation?.id
+          ? reward.updatedRecommendation
+          : item,
+      ) as LoanRecommendation[];
+    }
+  }
+
   if (endOfSeasonTriggered) {
     newMessages.push(generateEndOfSeasonMessage(state, rng));
   }
 
   // 7. Reputation change (with itemised deltas for transparency UI — A4)
-  const { total: reputationChange, deltas: satisfactionDeltas } =
+  const { total: baseReputationChange, deltas: satisfactionDeltas } =
     computeReputationChangeDetailed(state);
+  if (loanDealResult.reputationDelta !== 0) {
+    satisfactionDeltas.push({
+      reason: "Loan recommendation accepted",
+      delta: loanDealResult.reputationDelta,
+      week: state.currentWeek,
+      season: state.currentSeason,
+    });
+  }
+  if (loanOutcomeReputation !== 0) {
+    satisfactionDeltas.push({
+      reason: "Loan outcome accountability",
+      delta: loanOutcomeReputation,
+      week: state.currentWeek,
+      season: state.currentSeason,
+    });
+  }
+  const reputationChange =
+    baseReputationChange + loanDealResult.reputationDelta + loanOutcomeReputation;
 
   // 8. NPC scout processing (tier 4+): assigned scouts generate reports,
   //    unassigned scouts recover fatigue via rest.
@@ -2118,18 +2325,43 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     newMessages.push(...boardAIResult.messages);
   }
 
-  // 11. Youth scouting: aging and retirement
-  const youthAgingResult = processYouthAging(
-    rng,
-    state.unsignedYouth,
-    state.clubs,
-    state.currentSeason,
-  );
+  // 11. Unsigned-youth decisions are annual, not repeated every week.
+  const youthAgingResult = endOfSeasonTriggered
+    ? processYouthAging(
+        rng,
+        state.unsignedYouth,
+        state.clubs,
+        state.currentSeason,
+      )
+    : undefined;
 
   // 12. Player retirement (season-end only)
   const playerRetirements = endOfSeasonTriggered
     ? processPlayerRetirement(rng, state.players, state.clubs, state.currentSeason)
     : undefined;
+  if (playerRetirements) {
+    const trackedPlayerIds = new Set([
+      ...Object.values(state.reports).map((report) => report.playerId),
+      ...state.alumniRecords.map((record) => record.playerId),
+    ]);
+    for (const playerId of playerRetirements.retiredPlayerIds) {
+      const player = state.players[playerId];
+      if (!player || (!trackedPlayerIds.has(playerId) && player.currentAbility < 110)) continue;
+      const club = state.clubs[player.contractClubId ?? player.clubId];
+      newMessages.push({
+        id: makeMessageId("retirement", rng),
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "news",
+        title: `Retirement: ${player.firstName} ${player.lastName}`,
+        body: `${player.firstName} ${player.lastName} has retired from professional football${club ? ` after finishing his career with ${club.name}` : ""}. His full career remains available in your alumni history.`,
+        read: false,
+        actionRequired: false,
+        relatedId: player.id,
+        relatedEntityType: "player",
+      });
+    }
+  }
 
   // 13. Alumni milestone tracking (F12: pass retiredPlayerIds for status derivation)
   const alumniResult = processAlumniWeek(
@@ -2258,47 +2490,65 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   }
 
   // 21. Free agent pool processing.
+  const freeAgentNegotiationResult = processFreeAgentNegotiationDeadlines(
+    state.freeAgentNegotiations ?? [],
+    state.freeAgentPool,
+    state.players,
+    state.currentWeek,
+    state.currentSeason,
+  );
+  newMessages.push(...freeAgentNegotiationResult.messages);
   let updatedFreeAgentPool: FreeAgentPool | undefined;
-  let freeAgentNPCSignings: { playerId: string; clubId: string }[] | undefined;
+  let freeAgentNPCSignings: TickResult["freeAgentNPCSignings"];
+  let freeAgentRemovedPlayerIds: string[] | undefined;
+  let midSeasonReleases: FreeAgent[] | undefined;
   let contractExpiryResult: {
-    renewedPlayerIds: string[];
-    retiredPlayerIds: string[];
-    updatedPlayers: Record<string, Player>;
+    renewals: Array<{
+      playerId: string;
+      clubId: string;
+      contractLength: number;
+      wage: number;
+    }>;
+    releasedPlayers: FreeAgent[];
   } | undefined;
 
   if (state.freeAgentPool) {
-    let workingPool = { ...state.freeAgentPool };
+    // Existing pool members resolve before new releases are introduced, so a
+    // player cannot be released and re-signed in the same weekly transaction.
+    const poolResult = tickFreeAgentPool(
+      { ...state, freeAgentPool: freeAgentNegotiationResult.updatedPool },
+      rng,
+      { allowMidSeasonReleases: !endOfSeasonTriggered },
+    );
+    updatedFreeAgentPool = poolResult.updatedPool;
+    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
+    freeAgentRemovedPlayerIds = poolResult.removedPlayerIds;
+    midSeasonReleases = poolResult.midSeasonReleases;
+    newMessages.push(...poolResult.messages);
 
-    // a) Season-end: process contract expiries → new releases into pool
     if (endOfSeasonTriggered) {
+      const retiringPlayerIds = new Set(playerRetirements?.retiredPlayerIds ?? []);
       const expiryResult = processContractExpiries(state, rng);
+      const renewals = expiryResult.renewals.filter(
+        (renewal) => !retiringPlayerIds.has(renewal.playerId),
+      );
+      const releasedPlayers = expiryResult.releasedPlayers.filter(
+        (released) => !retiringPlayerIds.has(released.playerId),
+      );
       newMessages.push(...expiryResult.messages);
-      contractExpiryResult = {
-        renewedPlayerIds: expiryResult.renewedPlayerIds,
-        retiredPlayerIds: expiryResult.retiredPlayerIds,
-        updatedPlayers: expiryResult.updatedPlayers,
-      };
+      contractExpiryResult = { renewals, releasedPlayers };
 
-      // Add released players to pool
-      for (const released of expiryResult.releasedPlayers) {
-        workingPool = {
-          ...workingPool,
-          agents: [...workingPool.agents, released],
-          totalReleasedThisSeason: workingPool.totalReleasedThisSeason + 1,
+      if (releasedPlayers.length > 0) {
+        updatedFreeAgentPool = {
+          ...updatedFreeAgentPool,
+          agents: [...updatedFreeAgentPool.agents, ...releasedPlayers],
+          totalReleasedThisSeason:
+            updatedFreeAgentPool.totalReleasedThisSeason + releasedPlayers.length,
         };
       }
     }
 
-    // b) Weekly tick: decay pool, NPC signings, mid-season releases
-    const poolResult = tickFreeAgentPool(
-      { ...state, freeAgentPool: workingPool },
-      rng,
-    );
-    updatedFreeAgentPool = poolResult.updatedPool;
-    freeAgentNPCSignings = poolResult.npcSignedPlayerIds;
-    newMessages.push(...poolResult.messages);
-
-    // c) Discovery: specialization-based discovery of free agents
+    // Discovery runs against the final pool for this tick.
     const discoveryResult = discoverFreeAgents(
       { ...state, freeAgentPool: updatedFreeAgentPool },
       rng,
@@ -2311,6 +2561,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     fixturesPlayed,
     standingsUpdated,
     playerDevelopment,
+    unsignedYouthDevelopment,
     breakthroughs,
     transfers,
     injuries,
@@ -2322,11 +2573,13 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     boardDirectiveResult,
     formMomentumUpdates,
     satisfactionDeltas,
-    youthAgingResult: {
-      autoSigned: youthAgingResult.autoSigned,
-      retired: youthAgingResult.retired,
-      updatedUnsignedYouth: youthAgingResult.updated,
-    },
+    youthAgingResult: youthAgingResult
+      ? {
+          autoSigned: youthAgingResult.autoSigned,
+          retired: youthAgingResult.retired,
+          updatedUnsignedYouth: youthAgingResult.updated,
+        }
+      : undefined,
     playerRetirements,
     // newUnsignedYouth and newAcademyIntake are generated asynchronously
     // in the store layer (they need CountryData which requires async loading)
@@ -2346,23 +2599,62 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     updatedNegotiations: negotiationResult.negotiations.length > 0
       ? negotiationResult.negotiations
       : undefined,
+    updatedFreeAgentNegotiations: freeAgentNegotiationResult.negotiations,
     updatedContacts: f3UpdatedContacts,
     boardReactions: boardAIResult?.reactions,
     updatedBoardProfile: boardAIResult?.updatedProfile,
     relegationResult,
     updatedFreeAgentPool,
     freeAgentNPCSignings,
+    freeAgentRemovedPlayerIds,
+    midSeasonReleases,
     contractExpiryResult,
     // Loan system
     loanDeals: loanDealResult.deals.length > 0 ? loanDealResult.deals : undefined,
     loanReturns: loanReturnResult.deals.length > 0 ? loanReturnResult.deals : undefined,
     loanRecalls: loanRecallResult.deals.length > 0 ? loanRecallResult.deals : undefined,
+    updatedActiveLoans,
+    updatedLoanRecommendations,
+    loanOutcomeXp,
   };
 }
 
 // =============================================================================
 // STATE ADVANCEMENT
 // =============================================================================
+
+function reconcileClubRosters(
+  clubs: Record<string, Club>,
+  players: Record<string, Player>,
+): Record<string, Club> {
+  return Object.fromEntries(
+    Object.entries(clubs).map(([clubId, club]) => {
+      const academyIds = [...new Set(club.academyPlayerIds ?? [])].filter(
+        (playerId) => players[playerId]?.clubId === clubId,
+      );
+      const graduatingIds = academyIds.filter(
+        (playerId) => (players[playerId]?.age ?? 0) >= 18,
+      );
+      const graduatingSet = new Set(graduatingIds);
+      const remainingAcademyIds = academyIds.filter(
+        (playerId) => !graduatingSet.has(playerId),
+      );
+      const academySet = new Set(remainingAcademyIds);
+      const seniorIds = [...new Set([...club.playerIds, ...graduatingIds])].filter(
+        (playerId) => players[playerId]?.clubId === clubId && !academySet.has(playerId),
+      );
+
+      return [
+        clubId,
+        {
+          ...club,
+          playerIds: seniorIds,
+          academyPlayerIds: remainingAcademyIds,
+        },
+      ];
+    }),
+  );
+}
 
 /**
  * Apply a TickResult to the current GameState, producing a new GameState.
@@ -2542,62 +2834,6 @@ export function advanceWeek(
   let updatedClubs = { ...state.clubs };
 
   // Deduplicate transfers — a player can only move once per week
-  const processedPlayerIds = new Set<string>();
-
-  for (const transfer of tickResult.transfers) {
-    if (processedPlayerIds.has(transfer.playerId)) continue;
-    // Skip transfers for players who were injured this same tick
-    if (newlyInjuredPlayerIds.has(transfer.playerId)) continue;
-    processedPlayerIds.add(transfer.playerId);
-
-    const player = updatedPlayers[transfer.playerId];
-    const fromClub = updatedClubs[transfer.fromClubId];
-    const toClub = updatedClubs[transfer.toClubId];
-
-    if (!player || !fromClub || !toClub) continue;
-
-    // Remove from source club and credit the transfer fee
-    updatedClubs[transfer.fromClubId] = {
-      ...fromClub,
-      playerIds: fromClub.playerIds.filter((id) => id !== transfer.playerId),
-      budget: fromClub.budget + transfer.fee,
-    };
-
-    // Add to destination club and deduct fee from budget
-    updatedClubs[transfer.toClubId] = {
-      ...toClub,
-      playerIds: [...toClub.playerIds, transfer.playerId],
-      budget: Math.max(0, toClub.budget - transfer.fee),
-    };
-
-    // Update player's club reference and contract
-    updatedPlayers[transfer.playerId] = {
-      ...player,
-      clubId: transfer.toClubId,
-      morale: clamp(player.morale + 2, 1, 10), // Transfer usually boosts morale
-    };
-  }
-
-  // ---- Free agent NPC signings: assign players to clubs ----
-  if (tickResult.freeAgentNPCSignings) {
-    for (const signing of tickResult.freeAgentNPCSignings) {
-      const player = updatedPlayers[signing.playerId];
-      const club = updatedClubs[signing.clubId];
-      if (!player || !club) continue;
-
-      updatedPlayers[signing.playerId] = {
-        ...player,
-        clubId: signing.clubId,
-        contractExpiry: state.currentSeason + 2,
-        wage: Math.round(player.currentAbility * 60),
-      };
-      updatedClubs[signing.clubId] = {
-        ...club,
-        playerIds: [...club.playerIds, signing.playerId],
-      };
-    }
-  }
-
   // ---- NPC scouts: apply updated states and accumulate new reports ----
   const updatedNPCScouts = { ...state.npcScouts };
   const updatedNPCReports = { ...state.npcReports };
@@ -2643,26 +2879,16 @@ export function advanceWeek(
     for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
       const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
       if (youth) {
-        const player = { ...youth.player, clubId };
+        // The lifecycle resolver owns the actual signing, contract, and roster.
+        const player = {
+          ...youth.player,
+          clubId: "",
+          contractClubId: undefined,
+          contractExpiry: 0,
+        };
         updatedPlayers[player.id] = player;
-        const club = updatedClubs[clubId];
-        if (club) {
-          updatedClubs[clubId] = {
-            ...club,
-            playerIds: [...club.playerIds, player.id],
-          };
-        }
+        void clubId;
       }
-    }
-  }
-
-  // ---- Player retirements: remove from clubs ----
-  if (tickResult.playerRetirements) {
-    for (const [clubId, club] of Object.entries(tickResult.playerRetirements.updatedClubs)) {
-      updatedClubs[clubId] = club;
-    }
-    for (const pid of tickResult.playerRetirements.retiredPlayerIds) {
-      delete updatedPlayers[pid];
     }
   }
 
@@ -2682,7 +2908,9 @@ export function advanceWeek(
       if (club) {
         updatedClubs[player.clubId] = {
           ...club,
-          playerIds: [...club.playerIds, player.id],
+          academyPlayerIds: [
+            ...new Set([...(club.academyPlayerIds ?? []), player.id]),
+          ],
         };
       }
     }
@@ -2698,21 +2926,232 @@ export function advanceWeek(
     }
   }
 
+  const youthIdByPlayerId = new Map(
+    Object.entries(youthPool).map(([youthId, youth]) => [youth.player.id, youthId]),
+  );
+  for (const development of tickResult.unsignedYouthDevelopment ?? []) {
+    const youthId = youthIdByPlayerId.get(development.playerId);
+    if (!youthId) continue;
+    const youth = youthPool[youthId];
+    if (!youth || youth.placed || youth.retired) continue;
+    const attributes = { ...youth.player.attributes };
+    for (const [attribute, delta] of Object.entries(development.changes) as Array<
+      [PlayerAttribute, number | undefined]
+    >) {
+      if (delta === undefined) continue;
+      attributes[attribute] = clamp(attributes[attribute] + delta, 1, 20);
+    }
+    youthPool[youthId] = {
+      ...youth,
+      player: {
+        ...youth.player,
+        attributes,
+        currentAbility: clamp(
+          youth.player.currentAbility + development.abilityChange,
+          1,
+          youth.player.potentialAbility,
+        ),
+      },
+    };
+  }
+
+  // ---- Authoritative player lifecycle resolution ----
+  const movementIntents: PlayerMovementIntent[] = [];
+
+  for (const playerId of tickResult.playerRetirements?.retiredPlayerIds ?? []) {
+    movementIntents.push({
+      type: "retirement",
+      playerId,
+      reason: "End-of-career retirement decision",
+    });
+  }
+
+  for (const playerId of tickResult.freeAgentRemovedPlayerIds ?? []) {
+    const player = updatedPlayers[playerId];
+    movementIntents.push({
+      type: player && player.age > 32 ? "retirement" : "footballExit",
+      playerId,
+      reason: player && player.age > 32
+        ? "Retired after leaving the free-agent market"
+        : "Left professional football after failing to find a club",
+    });
+  }
+
+  for (const deal of tickResult.loanReturns ?? []) {
+    const loanClub = updatedClubs[deal.loanClubId];
+    const evaluatedOutcome = deal.outcome ?? evaluateLoanOutcome(deal);
+    const exerciseBuyOption =
+      evaluatedOutcome === "buy-option-exercised" &&
+      deal.buyOptionFee !== undefined &&
+      (loanClub?.budget ?? 0) >= deal.buyOptionFee;
+    movementIntents.push({
+      type: "loanEnd",
+      playerId: deal.playerId,
+      dealId: deal.id,
+      resolution: exerciseBuyOption ? "buyOption" : "return",
+      outcome: exerciseBuyOption ? "buy-option-exercised" : evaluatedOutcome,
+      reason: exerciseBuyOption ? "Loan buy option exercised" : "Loan term completed",
+    });
+  }
+
+  for (const deal of tickResult.loanRecalls ?? []) {
+    movementIntents.push({
+      type: "loanEnd",
+      playerId: deal.playerId,
+      dealId: deal.id,
+      resolution: "recall",
+      outcome: "recalled-early",
+      reason: "Parent club recalled the player",
+    });
+  }
+
+  for (const transfer of tickResult.transfers) {
+    if (newlyInjuredPlayerIds.has(transfer.playerId)) continue;
+    movementIntents.push({
+      type: "permanentTransfer",
+      playerId: transfer.playerId,
+      fromClubId: transfer.fromClubId,
+      toClubId: transfer.toClubId,
+      fee: transfer.fee,
+      reason: "AI transfer market agreement",
+    });
+  }
+
+  for (const released of tickResult.contractExpiryResult?.releasedPlayers ?? []) {
+    movementIntents.push({
+      type: "release",
+      playerId: released.playerId,
+      fromClubId: released.releasedFrom,
+      reason: "Contract expired without renewal",
+    });
+  }
+
+  for (const released of tickResult.midSeasonReleases ?? []) {
+    movementIntents.push({
+      type: "release",
+      playerId: released.playerId,
+      fromClubId: released.releasedFrom,
+      reason: "Contract terminated by mutual consent",
+    });
+  }
+
+  for (const renewal of tickResult.contractExpiryResult?.renewals ?? []) {
+    movementIntents.push({
+      type: "contractRenewal",
+      playerId: renewal.playerId,
+      clubId: renewal.clubId,
+      contractLength: renewal.contractLength,
+      wage: renewal.wage,
+      reason: "Club contract renewal",
+    });
+  }
+
+  for (const signing of tickResult.freeAgentNPCSignings ?? []) {
+    movementIntents.push({
+      type: "freeAgentSigning",
+      playerId: signing.playerId,
+      toClubId: signing.clubId,
+      wage: signing.wage,
+      contractLength: signing.contractLength,
+      signingBonus: signing.signingBonus,
+      reason: "NPC free-agent agreement",
+    });
+  }
+
+  for (const { youthId, clubId } of tickResult.youthAgingResult?.autoSigned ?? []) {
+    const youth = tickResult.youthAgingResult?.updatedUnsignedYouth[youthId]
+      ?? state.unsignedYouth[youthId];
+    if (!youth) continue;
+    movementIntents.push({
+      type: "youthSigning",
+      playerId: youth.player.id,
+      toClubId: clubId,
+      contractLength: 3,
+      wage: Math.max(100, Math.round(youth.player.currentAbility * 50)),
+      reason: "NPC youth recruitment",
+    });
+  }
+
+  for (const deal of tickResult.loanDeals ?? []) {
+    movementIntents.push({
+      type: "loanStart",
+      playerId: deal.playerId,
+      deal,
+      reason: deal.scoutId ? "Scout-recommended development loan" : "AI development loan",
+    });
+  }
+
+  const lifecycleResolution = resolvePlayerMovements(
+    {
+      ...getLifecycleWorld(state),
+      players: updatedPlayers,
+      clubs: updatedClubs,
+      activeLoans: tickResult.updatedActiveLoans ?? state.activeLoans ?? [],
+      freeAgentPool: tickResult.updatedFreeAgentPool ?? state.freeAgentPool,
+    },
+    movementIntents,
+    state.currentWeek,
+    state.currentSeason,
+  );
+
+  updatedPlayers = lifecycleResolution.state.players;
+  updatedClubs = lifecycleResolution.state.clubs;
+  const updatedActiveLoans = lifecycleResolution.state.activeLoans;
+  const updatedLoanHistory = lifecycleResolution.state.loanHistory;
+  const updatedRetiredPlayers = lifecycleResolution.state.retiredPlayers;
+  let updatedRetiredPlayerIds = lifecycleResolution.state.retiredPlayerIds;
+  const updatedPlayerMovementHistory = lifecycleResolution.state.playerMovementHistory;
+  let lifecycleFreeAgentPool = lifecycleResolution.state.freeAgentPool;
+  const rejectedFreeAgentSigningIds = new Set(
+    lifecycleResolution.rejected
+      .filter(({ intent }) => intent.type === "freeAgentSigning")
+      .map(({ intent }) => intent.playerId),
+  );
+  if (rejectedFreeAgentSigningIds.size > 0) {
+    let restored = 0;
+    lifecycleFreeAgentPool = {
+      ...lifecycleFreeAgentPool,
+      agents: lifecycleFreeAgentPool.agents.map((agent) => {
+        if (!rejectedFreeAgentSigningIds.has(agent.playerId) || agent.status !== "signed") {
+          return agent;
+        }
+        restored += 1;
+        return { ...agent, status: "available" as const };
+      }),
+      totalSignedThisSeason: Math.max(
+        0,
+        lifecycleFreeAgentPool.totalSignedThisSeason - restored,
+      ),
+    };
+  }
+  const updatedLoanRecommendations = (
+    tickResult.updatedLoanRecommendations ?? state.loanRecommendations ?? []
+  ).map((recommendation) => {
+    if (recommendation.status !== "accepted" || !recommendation.loanDealId) {
+      return recommendation;
+    }
+    const dealApplied = updatedActiveLoans.some((deal) => deal.id === recommendation.loanDealId);
+    if (dealApplied) return recommendation;
+    return {
+      ...recommendation,
+      status: "rejected" as const,
+      loanDealId: undefined,
+      responseReason: "The agreement could not be registered because the player's status changed.",
+    };
+  });
+
   // ---- Gut feelings ----
   const updatedGutFeelings = [
     ...state.gutFeelings,
     ...(tickResult.gutFeelings ?? []),
   ];
 
-  // ---- Accumulated retired player IDs ----
-  let updatedRetiredPlayerIds = [
-    ...state.retiredPlayerIds,
-    ...(tickResult.playerRetirements?.retiredPlayerIds ?? []),
-    ...(tickResult.youthAgingResult?.retired ?? []),
-  ];
-
   // ---- Alumni records update (F12: contact promotions + season summaries) ----
-  let updatedAlumniRecords = tickResult.alumniRecords ?? state.alumniRecords;
+  let updatedAlumniRecords = (tickResult.alumniRecords ?? state.alumniRecords).map(
+    (record) => updatedRetiredPlayerIds.includes(record.playerId)
+      ? { ...record, currentStatus: "retired" as const }
+      : record,
+  );
 
   // F3 + F12: Apply F3 contact network updates first, then merge alumni promotions.
   let updatedContacts = tickResult.updatedContacts
@@ -2746,7 +3185,7 @@ export function advanceWeek(
   const rawRepChange = tickResult.reputationChange + boardReputationChange;
   const scaledRepChange = Math.round(rawRepChange * diffMods.reputationMultiplier);
   const seasonScout = tickResult.seasonEventState?.scout ?? state.scout;
-  const updatedScout = {
+  const reputationUpdatedScout = {
     ...seasonScout,
     reputation: clamp(
       seasonScout.reputation + scaledRepChange,
@@ -2754,6 +3193,14 @@ export function advanceWeek(
       100,
     ),
   };
+  const updatedScout = applyScoutSkillXp(
+    reputationUpdatedScout,
+    {
+      [seasonScout.primarySpecialization === "youth"
+        ? "potentialAssessment"
+        : "playerJudgment"]: tickResult.loanOutcomeXp ?? 0,
+    },
+  );
 
   // ---- A4: Satisfaction history: accumulate deltas with a rolling cap ----
   let allDeltas: BoardSatisfactionDelta[] = [...tickResult.satisfactionDeltas];
@@ -2800,6 +3247,11 @@ export function advanceWeek(
   const updatedRegionalKnowledge = tickResult.regionalKnowledgeResult
     ? tickResult.regionalKnowledgeResult.regionalKnowledge
     : (state.regionalKnowledge ?? {});
+  const synchronizedRegionalState = synchronizeRegionalFamiliarity(
+    updatedScout,
+    state.subRegions ?? {},
+    updatedRegionalKnowledge,
+  );
 
   // ---- Inbox ----
   const updatedInbox = [...state.inbox, ...tickResult.newMessages];
@@ -2837,6 +3289,24 @@ export function advanceWeek(
       updatedPlayers = { ...updatedPlayers, ...relegationChanges.players };
     }
 
+    // Reprice the market once per season from current ability, potential, age,
+    // form, position, and the owning club's new reputation.
+    for (const [id, player] of Object.entries(updatedPlayers)) {
+      const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+      const clubReputation = updatedClubs[ownerClubId]?.reputation ?? 30;
+      updatedPlayers[id] = {
+        ...player,
+        marketValue: calculateMarketValue(
+          player.currentAbility,
+          player.potentialAbility,
+          player.age,
+          player.position,
+          clubReputation,
+          player.form,
+        ),
+      };
+    }
+
     // Update season in all leagues
     const updatedLeagues = { ...state.leagues };
     for (const [id, league] of Object.entries(updatedLeagues)) {
@@ -2846,38 +3316,27 @@ export function advanceWeek(
     // Clear season cards at end of season
     updatedDisciplinaryRecords = clearSeasonCards(updatedDisciplinaryRecords, nextSeason);
 
-    // Apply contract expiry results: update renewed player contracts
-    if (tickResult.contractExpiryResult) {
-      for (const [id, renewedPlayer] of Object.entries(tickResult.contractExpiryResult.updatedPlayers)) {
-        updatedPlayers[id] = { ...updatedPlayers[id], ...renewedPlayer };
-      }
-      // Add retired players to retired list
-      updatedRetiredPlayerIds = [
-        ...updatedRetiredPlayerIds,
-        ...tickResult.contractExpiryResult.retiredPlayerIds,
-      ];
-    }
-
-    // Apply free agent pool updates (includes released players from expiry)
-    let updatedFreeAgentPool = tickResult.updatedFreeAgentPool ?? state.freeAgentPool;
-    if (updatedFreeAgentPool) {
+    // Reset free-agent market counters for the new season after lifecycle
+    // resolution has applied releases, signings, retirements, and exits.
+    if (lifecycleFreeAgentPool) {
       // Reset season counters for new season
-      updatedFreeAgentPool = {
-        ...updatedFreeAgentPool,
+      lifecycleFreeAgentPool = {
+        ...lifecycleFreeAgentPool,
         lastRefreshSeason: nextSeason,
         totalReleasedThisSeason: 0,
         totalSignedThisSeason: 0,
         totalRetiredThisSeason: 0,
       };
     }
+    const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);
 
     return {
       ...state,
       fixtures: updatedFixtures,
       players: updatedPlayers,
-      clubs: updatedClubs,
+      clubs: reconciledClubs,
       leagues: updatedLeagues,
-      scout: updatedScout,
+      scout: synchronizedRegionalState.scout,
       inbox: updatedInbox,
       contacts: updatedContacts,
       npcScouts: updatedNPCScouts,
@@ -2896,24 +3355,34 @@ export function advanceWeek(
       seasonEvents: generateSeasonEvents(nextSeason),
       gutFeelings: updatedGutFeelings,
       retiredPlayerIds: updatedRetiredPlayerIds,
+      retiredPlayers: updatedRetiredPlayers,
+      activeLoans: updatedActiveLoans,
+      loanHistory: updatedLoanHistory,
+      loanRecommendations: updatedLoanRecommendations,
+      playerMovementHistory: updatedPlayerMovementHistory,
       alumniRecords: updatedAlumniRecords,
       matchRatings: updatedMatchRatings,
       regionalKnowledge: updatedRegionalKnowledge,
+      subRegions: synchronizedRegionalState.subRegions,
       disciplinaryRecords: updatedDisciplinaryRecords,
       activeNegotiations: tickResult.updatedNegotiations ?? state.activeNegotiations ?? [],
+      freeAgentNegotiations:
+        tickResult.updatedFreeAgentNegotiations ?? state.freeAgentNegotiations ?? [],
       boardProfile: updatedBoardProfile,
       boardReactions: updatedBoardReactions,
       satisfactionHistory: updatedSatisfactionHistory,
-      freeAgentPool: updatedFreeAgentPool,
+      freeAgentPool: lifecycleFreeAgentPool,
     };
   }
+
+  const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);
 
   return {
     ...state,
     fixtures: updatedFixtures,
     players: updatedPlayers,
-    clubs: updatedClubs,
-    scout: updatedScout,
+    clubs: reconciledClubs,
+    scout: synchronizedRegionalState.scout,
     inbox: updatedInbox,
     contacts: updatedContacts,
     npcScouts: updatedNPCScouts,
@@ -2931,14 +3400,22 @@ export function advanceWeek(
     unsignedYouth: youthPool,
     gutFeelings: updatedGutFeelings,
     retiredPlayerIds: updatedRetiredPlayerIds,
+    retiredPlayers: updatedRetiredPlayers,
+    activeLoans: updatedActiveLoans,
+    loanHistory: updatedLoanHistory,
+    loanRecommendations: updatedLoanRecommendations,
+    playerMovementHistory: updatedPlayerMovementHistory,
     alumniRecords: updatedAlumniRecords,
     matchRatings: updatedMatchRatings,
     regionalKnowledge: updatedRegionalKnowledge,
+    subRegions: synchronizedRegionalState.subRegions,
     disciplinaryRecords: updatedDisciplinaryRecords,
     activeNegotiations: tickResult.updatedNegotiations ?? state.activeNegotiations ?? [],
+    freeAgentNegotiations:
+      tickResult.updatedFreeAgentNegotiations ?? state.freeAgentNegotiations ?? [],
     boardProfile: updatedBoardProfile,
     boardReactions: updatedBoardReactions,
     satisfactionHistory: updatedSatisfactionHistory,
-    freeAgentPool: tickResult.updatedFreeAgentPool ?? state.freeAgentPool,
+    freeAgentPool: lifecycleFreeAgentPool,
   };
 }

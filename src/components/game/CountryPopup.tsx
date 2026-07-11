@@ -25,6 +25,7 @@ export interface CountryPopupProps {
   travelCost: number;
   travelSlots: number;
   travelDuration: number;
+  scheduleHasCapacity: boolean;
   currentWeek: number;
   scoutBalance: number;
   /** Screen-relative position for the popup (px). */
@@ -96,6 +97,7 @@ export function CountryPopup({
   travelCost,
   travelSlots,
   travelDuration,
+  scheduleHasCapacity,
   currentWeek,
   scoutBalance,
   position,
@@ -141,7 +143,12 @@ export function CountryPopup({
   const canAfford = scoutBalance >= travelCost;
   const hasBooking = activeBooking !== undefined;
   const bookingIsForThisCountry = activeBooking?.destinationCountry === countryKey;
-  const canBook = !isCurrentLocation && !hasBooking && canAfford && travelCost > 0;
+  const canBook =
+    !isCurrentLocation &&
+    !hasBooking &&
+    canAfford &&
+    scheduleHasCapacity &&
+    travelCost > 0;
 
   const continentLabel = CONTINENT_LABELS[continent] ?? continent;
   const reports = reputation?.reportsSubmitted ?? 0;
@@ -383,6 +390,8 @@ export function CountryPopup({
                 ? "Booking Active"
                 : !canAfford
                   ? "Insufficient Funds"
+                  : !scheduleHasCapacity
+                    ? "Clear Calendar Space"
                   : travelCost === 0
                     ? "Same Location"
                     : bookingActionLabel ?? "Book Travel"}

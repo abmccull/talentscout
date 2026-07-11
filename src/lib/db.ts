@@ -8,12 +8,15 @@
 import Dexie, { type EntityTable } from "dexie";
 import type {
   GameState,
+  FreeAgent,
   LeaderboardEntry,
   ScoutSkill,
   ScoutAttribute,
 } from "@/engine/core/types";
 import type { CountryData } from "@/data/types";
 import { getSteam } from "@/lib/steam/steamInterface";
+import { getUnlockedPerks } from "@/engine/specializations/perks";
+import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -74,11 +77,46 @@ db.version(3).stores({
 export const AUTOSAVE_SLOT = 0;
 export const MAX_MANUAL_SLOTS = 5;
 
+function resolveFreeAgentCountryKey(
+  state: Pick<GameState, "players" | "clubs" | "leagues" | "countries">,
+  agent: Pick<FreeAgent, "playerId" | "releasedFrom" | "country" | "nationality">,
+): string | undefined {
+  const player = state.players?.[agent.playerId];
+  const formerClub = state.clubs?.[agent.releasedFrom];
+  const formerLeague = formerClub ? state.leagues?.[formerClub.leagueId] : undefined;
+
+  return (
+    normalizeCountryKey(formerLeague?.country)
+    ?? normalizeCountryKey(agent.country)
+    ?? countryKeyFromNationality(agent.country)
+    ?? countryKeyFromNationality(agent.nationality)
+    ?? countryKeyFromNationality(player?.nationality)
+    ?? normalizeCountryKey(player?.nationality)
+    ?? state.countries?.[0]
+  );
+}
+
+export function migrateFreeAgentGeography(state: GameState): void {
+  const agents = state.freeAgentPool?.agents;
+  if (!agents) return;
+
+  for (const agent of agents) {
+    const legacyCountry = agent.country;
+    const playerNationality = state.players?.[agent.playerId]?.nationality;
+    agent.nationality ??= playerNationality ?? legacyCountry;
+    agent.country =
+      resolveFreeAgentCountryKey(state, agent)
+      ?? agent.country;
+  }
+}
+
 export async function saveGame(
   slot: number,
   name: string,
   state: GameState,
 ): Promise<void> {
+  migrateFreeAgentGeography(state);
+
   const record: SaveRecord = {
     slot,
     name,
@@ -149,6 +187,7 @@ export function migrateSaveState(raw: unknown): GameState {
   }
 
   const state = raw as GameState;
+  migrateFreeAgentGeography(state);
 
   // Phase 1 defaults — NPC scouts, territories, countries
   if (!state.npcScouts) state.npcScouts = {};
@@ -203,6 +242,13 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.subRegions) state.subRegions = {};
   if (!state.internationalAssignments) state.internationalAssignments = [];
   if (!state.retiredPlayerIds) state.retiredPlayerIds = [];
+  if (!state.retiredPlayers) state.retiredPlayers = {};
+  if (!state.playerMovementHistory) state.playerMovementHistory = [];
+  for (const player of Object.values(state.players ?? {})) {
+    if (player.contractClubId === undefined) {
+      player.contractClubId = (player.loanParentClubId ?? player.clubId) || undefined;
+    }
+  }
 
   // Scout field defaults — Phase 1 extensions on the Scout object
   if (!state.scout.npcScoutIds) state.scout.npcScoutIds = [];
@@ -213,6 +259,14 @@ export function migrateSaveState(raw: unknown): GameState {
     state.scout.skillXp = {} as Partial<Record<ScoutSkill, number>>;
   if (!state.scout.attributeXp)
     state.scout.attributeXp = {} as Partial<Record<ScoutAttribute, number>>;
+  if (state.scout.specializationXp === undefined) state.scout.specializationXp = 0;
+  state.scout.unlockedPerks = Array.from(new Set([
+    ...(state.scout.unlockedPerks ?? []),
+    ...getUnlockedPerks(
+      state.scout.primarySpecialization,
+      state.scout.specializationLevel ?? 1,
+    ).map((perk) => perk.id),
+  ]));
 
   // New scout skills — playerJudgment and potentialAssessment
   if (state.scout.skills.playerJudgment === undefined) {

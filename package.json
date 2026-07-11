@@ -1,1 +1,63 @@
-{"name":"talentscout","version":"1.0.0","description":"Football scouting simulation game","author":{"name":"TalentScout Games","email":"dev@talentscout.game"},"private":true,"main":"electron/main.js","scripts":{"dev":"next dev","build":"next build","start":"next start","lint":"next lint","electron:dev":"concurrently \"next dev\" \"wait-on http://localhost:3000 && electron electron/main.js --dev\"","electron:build":"next build && electron-builder","electron:dist":"next build && electron-builder --publish never","test:e2e":"playwright test","test:e2e:ui":"playwright test --ui","test:e2e:smoke":"playwright test e2e/regression/smoke.spec.ts"},"dependencies":{"@sentry/nextjs":"^10.40.0","@supabase/supabase-js":"^2.97.0","class-variance-authority":"^0.7.1","clsx":"^2.1.1","dexie":"^4.3.0","framer-motion":"^12.34.3","howler":"^2.2.4","lucide-react":"^0.575.0","next":"^15.5.12","next-intl":"^4.8.3","react":"^19.0.0","react-dom":"^19.0.0","steamworks.js":"^0.4.0","tailwind-merge":"^3.5.0","zustand":"^5.0.11"},"devDependencies":{"@electron/notarize":"^3.1.1","@playwright/test":"^1.58.2","@tailwindcss/postcss":"^4","@types/howler":"^2.2.12","@types/node":"^22","@types/react":"^19","@types/react-dom":"^19","concurrently":"^9.2.1","electron":"^40.6.0","electron-builder":"^26.8.1","eslint":"^9","eslint-config-next":"^15.5.12","tailwindcss":"^4","typescript":"^5","wait-on":"^9.0.4"}}
+{
+  "name": "talentscout",
+  "version": "1.0.0",
+  "description": "Football scouting simulation game",
+  "author": {
+    "name": "TalentScout Games",
+    "email": "dev@talentscout.game"
+  },
+  "private": true,
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit --incremental false",
+    "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && electron electron/main.js --dev\"",
+    "electron:build": "next build && electron-builder",
+    "electron:dist": "next build && electron-builder --publish never",
+    "test:e2e": "playwright test",
+    "test:unit": "vitest run",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:smoke": "playwright test e2e/regression/smoke.spec.ts",
+    "test:e2e:youth-ea": "playwright test e2e/flows/new-game.spec.ts e2e/flows/save-load.spec.ts e2e/flows/report-writing.spec.ts e2e/flows/career-paths.spec.ts e2e/flows/report-marketplace.spec.ts e2e/flows/youth-early-access.spec.ts e2e/flows/international-youth.spec.ts e2e/regression/achievement-toast-clickthrough.spec.ts e2e/regression/report-validation-delay.spec.ts e2e/regression/long-career-invariants.spec.ts e2e/accessibility/youth-ea-accessibility.spec.ts --workers=1"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "^10.40.0",
+    "@supabase/supabase-js": "^2.97.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dexie": "^4.3.0",
+    "framer-motion": "^12.34.3",
+    "howler": "^2.2.4",
+    "lucide-react": "^0.575.0",
+    "next": "^15.5.12",
+    "next-intl": "^4.8.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "steamworks.js": "^0.4.0",
+    "styled-jsx": "^5.1.7",
+    "tailwind-merge": "^3.5.0",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@electron/notarize": "^3.1.1",
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/postcss": "^4",
+    "@types/howler": "^2.2.12",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
+    "electron": "^40.6.0",
+    "electron-builder": "^26.8.1",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.12",
+    "tailwindcss": "^4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10",
+    "wait-on": "^9.0.4"
+  }
+}

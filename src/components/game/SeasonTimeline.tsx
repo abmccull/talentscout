@@ -236,7 +236,7 @@ export function SeasonTimeline({
   return (
     <section aria-label="Season timeline" className="mb-6">
       <div className="rounded-lg border border-[#27272a] bg-[#141414] p-4">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
           Season Calendar — Week {currentWeek} of {TOTAL_WEEKS}
         </h2>
 
@@ -246,7 +246,9 @@ export function SeasonTimeline({
           <div
             className="relative h-4 w-full overflow-hidden rounded-full bg-zinc-800"
             role="img"
-            aria-label={`Season timeline showing week ${currentWeek} of ${TOTAL_WEEKS}`}
+            aria-label={`Season timeline showing week ${currentWeek} of ${TOTAL_WEEKS}. ${seasonEvents
+              .map((event) => `${event.name}, weeks ${event.startWeek} to ${event.endWeek}`)
+              .join("; ")}`}
           >
             {/* Event segments */}
             {seasonEvents.map((event) => {
@@ -258,7 +260,6 @@ export function SeasonTimeline({
                 <div
                   key={event.id}
                   title={`${event.name} (Weeks ${event.startWeek}--${event.endWeek})`}
-                  aria-label={`${event.name}, weeks ${event.startWeek} to ${event.endWeek}`}
                   className={`absolute top-0 h-full opacity-80 ${colorClass}`}
                   style={{
                     left: `${leftPercent}%`,
@@ -277,7 +278,7 @@ export function SeasonTimeline({
           </div>
 
           {/* Week number labels: start, mid, end */}
-          <div className="mt-1 flex justify-between text-[10px] text-zinc-600" aria-hidden="true">
+          <div className="mt-1 flex justify-between text-[10px] text-zinc-400" aria-hidden="true">
             <span>W1</span>
             <span>W10</span>
             <span>W20</span>
@@ -299,7 +300,7 @@ export function SeasonTimeline({
             return (
               <div
                 key={event.id}
-                className={`flex items-center gap-1.5 ${isActive ? "opacity-100" : isUpcoming ? "opacity-60" : "opacity-30"}`}
+                className="flex items-center gap-1.5"
               >
                 <span
                   aria-hidden="true"
@@ -308,12 +309,12 @@ export function SeasonTimeline({
                 <span className={`text-[11px] font-medium ${isActive ? textColorClass : "text-zinc-400"}`}>
                   {event.name}
                   {isActive && (
-                    <span className="ml-1 text-[10px] font-normal text-zinc-500">
+                    <span className="ml-1 text-[10px] font-normal text-zinc-400">
                       (active)
                     </span>
                   )}
                   {isUpcoming && (
-                    <span className="ml-1 text-[10px] font-normal text-zinc-600">
+                    <span className="ml-1 text-[10px] font-normal text-zinc-400">
                       wk {event.startWeek}
                     </span>
                   )}
@@ -327,7 +328,7 @@ export function SeasonTimeline({
                   </button>
                 )}
                 {isActive && event.resolved && event.choices && event.choiceSelected !== undefined && (
-                  <span className="ml-1 text-[10px] text-zinc-500">
+                  <span className="ml-1 text-[10px] text-zinc-400">
                     ({event.choices[event.choiceSelected]?.label})
                   </span>
                 )}
@@ -345,7 +346,7 @@ export function SeasonTimeline({
             e.effects.length > 0,
         ) && (
           <div className="mt-3 border-t border-zinc-800 pt-2">
-            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               Active Effects
             </div>
             <div className="flex flex-wrap gap-1.5">

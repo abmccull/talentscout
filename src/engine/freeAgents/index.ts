@@ -9,9 +9,6 @@ export { processContractExpiries } from "./expiry";
 export {
   createEmptyPool,
   tickFreeAgentPool,
-  addFreeAgent,
-  removeFreeAgent,
-  getVisibleFreeAgents,
 } from "./pool";
 export {
   discoverFreeAgents,
@@ -21,4 +18,5 @@ export {
   initiateFreeAgentNegotiation,
   advanceFreeAgentNegotiation,
   calculateFreeAgentAcceptance,
+  processFreeAgentNegotiationDeadlines,
 } from "./negotiation";

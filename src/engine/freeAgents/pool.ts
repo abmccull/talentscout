@@ -19,6 +19,7 @@ import type {
   Club,
   InboxMessage,
 } from "@/engine/core/types";
+import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
 // CONSTANTS
@@ -59,6 +60,20 @@ function makeMessageId(prefix: string, rng: RNG): string {
   return `${prefix}_${id}`;
 }
 
+function resolveFreeAgentCountryKey(
+  player: Player,
+  releasedFromClub: Club,
+  state: GameState,
+): string {
+  return (
+    normalizeCountryKey(state.leagues[releasedFromClub.leagueId]?.country)
+    ?? countryKeyFromNationality(player.nationality)
+    ?? normalizeCountryKey(player.nationality)
+    ?? state.countries[0]
+    ?? "england"
+  );
+}
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
@@ -74,28 +89,17 @@ export function createEmptyPool(season: number): FreeAgentPool {
   };
 }
 
-/** Add a free agent to the pool. */
-export function addFreeAgent(pool: FreeAgentPool, agent: FreeAgent): FreeAgentPool {
-  return {
-    ...pool,
-    agents: [...pool.agents, agent],
-    totalReleasedThisSeason: pool.totalReleasedThisSeason + 1,
-  };
-}
-
-/** Remove a free agent from the pool by playerId. */
-export function removeFreeAgent(pool: FreeAgentPool, playerId: string): FreeAgentPool {
-  return {
-    ...pool,
-    agents: pool.agents.filter((a) => a.playerId !== playerId),
-  };
-}
-
 export interface PoolTickResult {
   /** Updated pool after weekly processing. */
   updatedPool: FreeAgentPool;
   /** Player IDs of free agents signed by NPC clubs this week. */
-  npcSignedPlayerIds: { playerId: string; clubId: string }[];
+  npcSignedPlayerIds: Array<{
+    playerId: string;
+    clubId: string;
+    wage: number;
+    signingBonus: number;
+    contractLength: number;
+  }>;
   /** Player IDs of free agents who retired or dropped out. */
   removedPlayerIds: string[];
   /** Inbox messages about NPC signings of tracked free agents. */
@@ -117,9 +121,10 @@ export interface PoolTickResult {
 export function tickFreeAgentPool(
   state: GameState,
   rng: RNG,
+  options: { allowMidSeasonReleases?: boolean } = {},
 ): PoolTickResult {
   const pool = state.freeAgentPool;
-  const npcSignedPlayerIds: { playerId: string; clubId: string }[] = [];
+  const npcSignedPlayerIds: PoolTickResult["npcSignedPlayerIds"] = [];
   const removedPlayerIds: string[] = [];
   const messages: InboxMessage[] = [];
   const midSeasonReleases: FreeAgent[] = [];
@@ -169,10 +174,13 @@ export function tickFreeAgentPool(
     if (player) {
       const caBonus = player.currentAbility * NPC_OFFER_CA_MULTIPLIER;
       const urgencyBonus = updated.weeksInPool > NPC_URGENCY_WEEK ? 0.05 : 0;
-      const offerChance = (NPC_OFFER_BASE_CHANCE + caBonus + urgencyBonus) * overflowMultiplier;
+      const offerChance = Math.min(
+        0.95,
+        (NPC_OFFER_BASE_CHANCE + caBonus + urgencyBonus) * overflowMultiplier,
+      );
 
       if (rng.chance(offerChance) && updated.npcInterest.length < 3) {
-        const npcClub = findInterestedNPCClub(player, state.clubs, rng);
+        const npcClub = findInterestedNPCClub(player, updated, state.clubs, rng);
         if (npcClub) {
           updated.npcInterest = [
             ...updated.npcInterest,
@@ -184,7 +192,6 @@ export function tickFreeAgentPool(
 
     // 5. Process existing NPC interest — check for accepted offers
     const newInterest: FreeAgentNPCInterest[] = [];
-    let signed = false;
     for (const interest of updated.npcInterest) {
       if (interest.accepted) {
         newInterest.push(interest);
@@ -192,10 +199,14 @@ export function tickFreeAgentPool(
       }
       // Check if NPC offer gets accepted this week
       if (rng.chance(NPC_ACCEPTANCE_CHANCE * overflowMultiplier)) {
-        npcSignedPlayerIds.push({ playerId: agent.playerId, clubId: interest.clubId });
+        npcSignedPlayerIds.push({
+          playerId: agent.playerId,
+          clubId: interest.clubId,
+          wage: updated.wageExpectation,
+          signingBonus: updated.signingBonusExpectation,
+          contractLength: player && player.age >= 32 ? 1 : player && player.age >= 29 ? 2 : 3,
+        });
         updated.status = "signed";
-        signed = true;
-
         // If the scout had discovered this player, notify them
         if (agent.discoveredByScout) {
           const npcClub = state.clubs[interest.clubId];
@@ -219,44 +230,44 @@ export function tickFreeAgentPool(
     }
     updated.npcInterest = newInterest;
 
-    if (!signed) {
-      updatedAgents.push(updated);
-    } else {
-      updatedAgents.push(updated);
-    }
+    updatedAgents.push(updated);
   }
 
   // 6. Mid-season trickle — random releases from clubs
-  for (const player of Object.values(state.players)) {
-    if (!player.clubId) continue;
-    if (player.currentAbility > MID_SEASON_RELEASE_CA_CEILING) continue;
-    if (player.age < 25) continue; // Young players don't get terminated mid-season
-    if (!rng.chance(MID_SEASON_RELEASE_CHANCE)) continue;
+  if (options.allowMidSeasonReleases !== false) {
+    for (const player of Object.values(state.players)) {
+      const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+      if (!ownerClubId || player.onLoan || player.clubId !== ownerClubId) continue;
+      if (player.currentAbility > MID_SEASON_RELEASE_CA_CEILING) continue;
+      if (player.age < 25) continue; // Young players don't get terminated mid-season
+      if (!rng.chance(MID_SEASON_RELEASE_CHANCE)) continue;
 
-    const club = state.clubs[player.clubId];
-    if (!club) continue;
+      const club = state.clubs[ownerClubId];
+      if (!club) continue;
 
-    // Don't release if already in pool
-    if (updatedAgents.some((a) => a.playerId === player.id)) continue;
+      // Don't release if already in pool
+      if (updatedAgents.some((a) => a.playerId === player.id)) continue;
 
-    const maxWeeks = player.currentAbility >= 45 ? 16 : 20;
-    const baseWage = Math.round(player.currentAbility * 80);
-    const ageFactor = player.age > 30 ? 0.8 : 0.9;
+      const maxWeeks = player.currentAbility >= 45 ? 16 : 20;
+      const baseWage = Math.round(player.currentAbility * 80);
+      const ageFactor = player.age > 30 ? 0.8 : 0.9;
 
-    midSeasonReleases.push({
-      playerId: player.id,
-      country: player.nationality,
-      releasedFrom: club.id,
-      releasedSeason: state.currentSeason,
-      weeksInPool: 0,
-      maxWeeksInPool: maxWeeks,
-      wageExpectation: Math.round(baseWage * ageFactor),
-      signingBonusExpectation: Math.round(baseWage * ageFactor * 2),
-      discoverySource: null,
-      discoveredByScout: false,
-      npcInterest: [],
-      status: "available",
-    });
+      midSeasonReleases.push({
+        playerId: player.id,
+        country: resolveFreeAgentCountryKey(player, club, state),
+        nationality: player.nationality,
+        releasedFrom: club.id,
+        releasedSeason: state.currentSeason,
+        weeksInPool: 0,
+        maxWeeksInPool: maxWeeks,
+        wageExpectation: Math.round(baseWage * ageFactor),
+        signingBonusExpectation: Math.round(baseWage * ageFactor * 2),
+        discoverySource: null,
+        discoveredByScout: false,
+        npcInterest: [],
+        status: "available",
+      });
+    }
   }
 
   // Build updated pool
@@ -277,33 +288,6 @@ export function tickFreeAgentPool(
   };
 }
 
-/**
- * Get free agents visible to the scout based on regional familiarity.
- *
- * Visibility thresholds:
- *   0        → invisible
- *   1-19     → rumor only (no name/stats)
- *   20-39    → basic (name, age, position, former club)
- *   40-59    → standard (full profile with accuracy penalties)
- *   60-79    → good (reduced accuracy penalty)
- *   80-100   → expert (no accuracy penalty, proactive recommendations)
- */
-export function getVisibleFreeAgents(
-  pool: FreeAgentPool,
-  countryFamiliarity: Record<string, number>,
-): FreeAgent[] {
-  return pool.agents.filter((agent) => {
-    if (agent.status !== "available") return false;
-
-    // Discovered by scout — always visible regardless of familiarity
-    if (agent.discoveredByScout) return true;
-
-    // Check familiarity with agent's country
-    const familiarity = countryFamiliarity[agent.country] ?? 0;
-    return familiarity >= 20; // Basic visibility threshold
-  });
-}
-
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -314,17 +298,19 @@ export function getVisibleFreeAgents(
  */
 function findInterestedNPCClub(
   player: Player,
+  agent: FreeAgent,
   clubs: Record<string, Club>,
   rng: RNG,
 ): Club | null {
   const candidates = Object.values(clubs).filter((club) => {
     // Don't sign back to former club (if still exists)
-    if (club.id === player.clubId) return false;
-    // Must have budget for the wage
-    if (club.budget < player.currentAbility * 80 * 12) return false;
+    if (club.id === agent.releasedFrom) return false;
+    // Must have budget for the signing bonus and an initial wage reserve.
+    if (club.budget < agent.signingBonusExpectation + agent.wageExpectation * 12) return false;
     // Reputation match: within 30 points
-    const repDiff = Math.abs(club.reputation - player.currentAbility);
-    return repDiff <= 30;
+    const playerReputation = player.currentAbility / 2;
+    const repDiff = Math.abs(club.reputation - playerReputation);
+    return repDiff <= 25;
   });
 
   if (candidates.length === 0) return null;

@@ -45,7 +45,6 @@ export function createNavigationActions(get: GetState, set: SetState) {
         tut.recordScreenVisit(screen);
         if (screen === "dashboard") tut.completeMilestone("viewedDashboard");
         if (screen === "calendar") tut.completeMilestone("openedCalendar");
-        if (screen === "inbox") tut.completeMilestone("checkedInbox");
       }
     },
 

@@ -22,6 +22,7 @@ import type {
 } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS as ATTR_DOMAINS } from "@/engine/core/types";
 import { starsToAbility } from "@/engine/scout/starRating";
+import { calculateMarketValue } from "@/engine/players/generation";
 
 // ---------------------------------------------------------------------------
 // Report draft type
@@ -31,8 +32,12 @@ export interface ReportDraft {
   attributeAssessments: AttributeAssessment[];
   suggestedStrengths: string[];
   suggestedWeaknesses: string[];
+  /** Structured, evidence-linked alternatives for an editable report. */
+  suggestedStrengthClaims: ReportClaimSuggestion[];
+  suggestedWeaknessClaims: ReportClaimSuggestion[];
   comparisonSuggestions: string[];
   estimatedValue: number;
+  estimatedValueRange?: [number, number];
   perceivedCAStars?: number;
   perceivedPARange?: [number, number];
   /** System fit score for first-team scouts (0-100). */
@@ -77,7 +82,8 @@ export interface QualityPreviewResult {
 const POSITION_AVERAGES: Record<Position, Partial<Record<PlayerAttribute, number>>> = {
   GK: {
     composure: 12, positioning: 13, decisionMaking: 12, leadership: 11,
-    strength: 10, pace: 8, anticipation: 13, balance: 10, jumping: 9,
+    anticipation: 13, passing: 11, firstTouch: 10, vision: 10,
+    strength: 11, pace: 7, balance: 10, jumping: 11, teamwork: 10,
   },
   CB: {
     heading: 13, strength: 12, positioning: 13, decisionMaking: 12,
@@ -138,9 +144,16 @@ const POSITION_AVERAGES: Record<Position, Partial<Record<PlayerAttribute, number
 function getAgeBaselineScale(age: number): number {
   if (age >= 21) return 1.0;
   const scaleByAge: Record<number, number> = {
-    14: 0.28, 15: 0.34, 16: 0.40, 17: 0.48, 18: 0.57, 19: 0.68, 20: 0.82,
+    14: 0.45, 15: 0.52, 16: 0.60, 17: 0.68, 18: 0.76, 19: 0.84, 20: 0.92,
   };
-  return scaleByAge[age] ?? (age < 14 ? 0.25 : 1.0);
+  return scaleByAge[age] ?? (age < 14 ? 0.42 : 1.0);
+}
+
+export interface ReportClaimSuggestion {
+  descriptor: string;
+  attributes: PlayerAttribute[];
+  estimatedValue: number;
+  confidence: number;
 }
 
 /**
@@ -225,6 +238,21 @@ export const WEAKNESS_DESCRIPTORS: Partial<Record<PlayerAttribute, string>> = {
   teamwork:           "Individualistic — doesn't follow tactical instructions or support teammates consistently",
 };
 
+interface ClaimCandidate extends ReportClaimSuggestion {
+  severity: number;
+}
+
+interface AttributeClassification {
+  isStrength: boolean;
+  isWeakness: boolean;
+  severity: number;
+}
+
+interface MarketValueEstimate {
+  estimatedValue: number;
+  estimatedValueRange: [number, number];
+}
+
 // ---------------------------------------------------------------------------
 // Comparison templates
 // ---------------------------------------------------------------------------
@@ -266,6 +294,8 @@ export function generateReportContent(
       attributeAssessments: [],
       suggestedStrengths: [],
       suggestedWeaknesses: [],
+      suggestedStrengthClaims: [],
+      suggestedWeaknessClaims: [],
       comparisonSuggestions: [],
       estimatedValue: 0,
     };
@@ -278,16 +308,6 @@ export function generateReportContent(
   const attributeAssessments = allAssessments.filter(
     (a) => positionAverages[a.attribute] !== undefined,
   );
-
-  const suggestedStrengths = identifyStrengths(attributeAssessments, positionAverages);
-  const suggestedWeaknesses = identifyWeaknesses(attributeAssessments, positionAverages);
-
-  const comparisonSuggestions = buildComparisonSuggestions(
-    attributeAssessments,
-    player.age,
-  );
-
-  const estimatedValue = estimateMarketValue(attributeAssessments, player, scout);
 
   // Aggregate ability readings from the 3 most recent observations
   const recentWithAbility = observations
@@ -315,12 +335,33 @@ export function generateReportContent(
     ];
   }
 
+  const suggestedStrengthClaims = identifyStrengthClaims(player, attributeAssessments, positionAverages);
+  const suggestedWeaknessClaims = identifyWeaknessClaims(player, attributeAssessments, positionAverages);
+  const suggestedStrengths = suggestedStrengthClaims.map((claim) => claim.descriptor);
+  const suggestedWeaknesses = suggestedWeaknessClaims.map((claim) => claim.descriptor);
+
+  const comparisonSuggestions = buildComparisonSuggestions(
+    attributeAssessments,
+    player.age,
+  );
+
+  const { estimatedValue, estimatedValueRange } = estimateMarketValue(
+    attributeAssessments,
+    player,
+    scout,
+    perceivedCAStars,
+    perceivedPARange,
+  );
+
   return {
     attributeAssessments,
     suggestedStrengths,
     suggestedWeaknesses,
+    suggestedStrengthClaims,
+    suggestedWeaknessClaims,
     comparisonSuggestions,
     estimatedValue,
+    estimatedValueRange,
     perceivedCAStars,
     perceivedPARange,
   };
@@ -466,6 +507,8 @@ export function estimateReportQuality(params: {
   convictionLevel: ConvictionLevel;
   strengthCount: number;
   weaknessCount: number;
+  availableStrengthCount?: number;
+  availableWeaknessCount?: number;
   scoutSkills: Record<string, number>;
   assessedAttributeCount?: number;
   position?: Position;
@@ -479,6 +522,8 @@ export function estimateReportQuality(params: {
     convictionLevel,
     strengthCount,
     weaknessCount,
+    availableStrengthCount,
+    availableWeaknessCount,
     scoutSkills,
     assessedAttributeCount = 0,
     position,
@@ -509,8 +554,10 @@ export function estimateReportQuality(params: {
   }
 
   // --- Detail (strengths/weaknesses): 0-20 ---
-  const strengthScore = Math.min(1, strengthCount / 3);
-  const weaknessScore = Math.min(1, weaknessCount / 2);
+  const strengthTarget = Math.min(3, availableStrengthCount ?? 3);
+  const weaknessTarget = Math.min(2, availableWeaknessCount ?? 2);
+  const strengthScore = strengthTarget === 0 ? 1 : Math.min(1, strengthCount / strengthTarget);
+  const weaknessScore = weaknessTarget === 0 ? 1 : Math.min(1, weaknessCount / weaknessTarget);
   const detail = Math.round((strengthScore * 0.5 + weaknessScore * 0.5) * 20);
 
   // --- Scout skill: 0-20 ---
@@ -538,8 +585,14 @@ export function estimateReportQuality(params: {
     if (observationCount < 3) {
       hints.push("Add more observations to improve depth score");
     }
-    if (strengthCount < 3 || weaknessCount < 2) {
-      hints.push("Include at least 3 strengths and 2 weaknesses");
+    const needsStrengths = strengthCount < strengthTarget;
+    const needsWeaknesses = weaknessCount < weaknessTarget;
+    if (needsStrengths && needsWeaknesses) {
+      hints.push("Add the available evidence-backed strengths and concerns");
+    } else if (needsStrengths) {
+      hints.push("Add more evidence-backed strengths");
+    } else if (needsWeaknesses) {
+      hints.push("Add more evidence-backed concerns");
     }
     if (avgConfidence < 0.5) {
       hints.push("Observe more matches to increase attribute confidence");
@@ -560,6 +613,57 @@ export function estimateReportQuality(params: {
   }
 
   return { score, breakdown, hints };
+}
+
+export interface ReportCraftQualityDetailed {
+  score: number;
+  breakdown: QualityBreakdown & { equipmentBonus: number };
+}
+
+/**
+ * Score what the scout can control at submission time. This deliberately uses
+ * observations, public player context, and editorial choices only; true
+ * attributes and true CA/PA are reserved for delayed validation.
+ */
+export function calculateReportCraftQualityDetailed(
+  report: ScoutReport,
+  observations: Observation[],
+  scout: Scout,
+  playerContext: Pick<Player, "age" | "position">,
+  reportQualityBonus = 0,
+): ReportCraftQualityDetailed {
+  const readings = observations.flatMap((observation) => observation.attributeReadings);
+  const avgConfidence = readings.length > 0
+    ? readings.reduce((sum, reading) => sum + reading.confidence, 0) / readings.length
+    : 0;
+  const perceivedCA = report.perceivedCAStars !== undefined
+    ? starsToAbility(report.perceivedCAStars)
+    : estimatePerceivedCA(report.attributeAssessments);
+  const perceivedPA = report.perceivedPARange
+    ? starsToAbility((report.perceivedPARange[0] + report.perceivedPARange[1]) / 2)
+    : undefined;
+  const preview = estimateReportQuality({
+    observationCount: observations.length,
+    avgConfidence,
+    convictionLevel: report.conviction,
+    strengthCount: report.strengths.length,
+    weaknessCount: report.weaknesses.length,
+    scoutSkills: scout.skills,
+    assessedAttributeCount: report.attributeAssessments.length,
+    position: playerContext.position,
+    perceivedCA,
+    age: playerContext.age,
+    perceivedPA,
+  });
+  const equipmentBonus = Math.max(0, reportQualityBonus) * 100;
+
+  return {
+    score: Math.round(Math.max(0, Math.min(100, preview.score + equipmentBonus))),
+    breakdown: {
+      ...preview.breakdown,
+      equipmentBonus: Math.round(equipmentBonus * 10) / 10,
+    },
+  };
 }
 
 /**
@@ -592,9 +696,10 @@ export function finalizeReport(
     conviction,
     summary,
     estimatedValue: draft.estimatedValue,
+    estimatedValueRange: draft.estimatedValueRange,
 
-    // qualityScore starts at 0; updated by the engine once true values are
-    // compared. This is intentional — the scout does not know their own quality.
+    // Updated by the caller with an evidence-facing craftsmanship score.
+    // Retrospective truth-based accuracy lives in postTransferRating.
     qualityScore: 0,
 
     perceivedCAStars: draft.perceivedCAStars,
@@ -623,17 +728,22 @@ export function trackPostTransfer(
   let count = 0;
 
   for (const assessment of report.attributeAssessments) {
-    const current = trueAttrs[assessment.attribute];
-    const error = Math.abs(assessment.estimatedValue - current);
+    const valueAtSubmission =
+      report.validationSnapshot?.[assessment.attribute]
+      ?? trueAttrs[assessment.attribute];
+    const error = Math.abs(assessment.estimatedValue - valueAtSubmission);
     totalError += error;
     count++;
   }
 
   const avgError = count > 0 ? totalError / count : 10;
 
-  // Confidence in the retrospective score grows with settled data
-  const maturityFactor = Math.min(1, seasonsSinceSigning / 3);
-  const accuracy = Math.max(0, 100 - avgError * 12) * maturityFactor;
+  const rawAccuracy = Math.max(0, 100 - avgError * 12);
+  // The normal career validator waits two seasons. Keep direct early calls
+  // explicitly provisional, but do not permanently cap a report validated at
+  // the intended evidence threshold.
+  const evidenceMaturity = Math.min(1, Math.max(0, seasonsSinceSigning) / 2);
+  const accuracy = rawAccuracy * evidenceMaturity;
 
   return Math.round(accuracy);
 }
@@ -716,36 +826,64 @@ function estimateRangeHalf(perceivedValue: number, observationCount: number): nu
   return Math.round(half);
 }
 
-function identifyStrengths(
+function identifyStrengthClaims(
+  player: Player,
   assessments: AttributeAssessment[],
   positionAverages: Partial<Record<PlayerAttribute, number>>,
-): string[] {
-  const strengths: string[] = [];
+): ReportClaimSuggestion[] {
+  const strengths: ClaimCandidate[] = [];
   for (const assessment of assessments) {
-    const avg = positionAverages[assessment.attribute];
-    if (avg === undefined) continue; // attribute irrelevant to this position
-    if (assessment.estimatedValue >= avg + 3) {
-      const descriptor = STRENGTH_DESCRIPTORS[assessment.attribute];
-      if (descriptor) strengths.push(descriptor);
-    }
+    const adultAverage = POSITION_AVERAGES[player.position]?.[assessment.attribute];
+    const ageAverage = positionAverages[assessment.attribute];
+    if (adultAverage === undefined || ageAverage === undefined) continue;
+
+    const classification = classifyAttribute(
+      assessment.estimatedValue,
+      adultAverage,
+      ageAverage,
+      player.age,
+    );
+    if (!classification.isStrength) continue;
+
+    strengths.push({
+      descriptor: buildAttributeDescriptor(player, assessment.attribute, assessment.estimatedValue, "strength"),
+      attributes: [assessment.attribute],
+      estimatedValue: assessment.estimatedValue,
+      confidence: getAttributeAssessmentConfidence(assessment),
+      severity: classification.severity,
+    });
   }
-  return strengths;
+  return pickTopClaims(strengths, 4);
 }
 
-function identifyWeaknesses(
+function identifyWeaknessClaims(
+  player: Player,
   assessments: AttributeAssessment[],
   positionAverages: Partial<Record<PlayerAttribute, number>>,
-): string[] {
-  const weaknesses: string[] = [];
+): ReportClaimSuggestion[] {
+  const weaknesses: ClaimCandidate[] = [];
   for (const assessment of assessments) {
-    const avg = positionAverages[assessment.attribute];
-    if (avg === undefined) continue; // attribute irrelevant to this position
-    if (assessment.estimatedValue <= avg - 3) {
-      const descriptor = WEAKNESS_DESCRIPTORS[assessment.attribute];
-      if (descriptor) weaknesses.push(descriptor);
-    }
+    const adultAverage = POSITION_AVERAGES[player.position]?.[assessment.attribute];
+    const ageAverage = positionAverages[assessment.attribute];
+    if (adultAverage === undefined || ageAverage === undefined) continue;
+
+    const classification = classifyAttribute(
+      assessment.estimatedValue,
+      adultAverage,
+      ageAverage,
+      player.age,
+    );
+    if (!classification.isWeakness) continue;
+
+    weaknesses.push({
+      descriptor: buildAttributeDescriptor(player, assessment.attribute, assessment.estimatedValue, "weakness"),
+      attributes: [assessment.attribute],
+      estimatedValue: assessment.estimatedValue,
+      confidence: getAttributeAssessmentConfidence(assessment),
+      severity: classification.severity,
+    });
   }
-  return weaknesses;
+  return pickTopClaims(weaknesses, 3);
 }
 
 // TODO: surface in UI — currently generated but never displayed to the player
@@ -789,25 +927,94 @@ function estimateMarketValue(
   assessments: AttributeAssessment[],
   player: Player,
   scout: Scout,
-): number {
-  if (assessments.length === 0) return 0;
+  perceivedCAStars?: number,
+  perceivedPARange?: [number, number],
+): MarketValueEstimate {
+  if (assessments.length === 0) {
+    return { estimatedValue: 0, estimatedValueRange: [0, 0] };
+  }
 
-  const perceivedCa = estimatePerceivedCA(assessments);
-  // Exponential value curve: CA 100 ≈ £2M, CA 150 ≈ £20M, CA 180 ≈ £70M
-  const rawValue = Math.pow(perceivedCa / 100, 3.5) * 2_000_000;
+  const perceivedCa = perceivedCAStars != null
+    ? starsToAbility(perceivedCAStars)
+    : estimatePerceivedCA(assessments);
+  const perceivedPa = perceivedPARange != null
+    ? starsToAbility((perceivedPARange[0] + perceivedPARange[1]) / 2)
+    : perceivedCa;
 
-  // Age discount: players over 28 are worth less on the market
-  const ageFactor =
-    player.age <= 28
-      ? 1
-      : Math.max(0.3, 1 - (player.age - 28) * 0.08);
+  const profileValue = calculateMarketValue(
+    perceivedCa,
+    Math.max(perceivedCa, perceivedPa),
+    player.age,
+    player.position,
+    55,
+    player.form,
+  );
+  const knownValue = Math.max(5_000, player.marketValue);
+  const confidence = estimateAssessmentConfidence(assessments);
+  const dataLiteracy = clamp((scout.skills.dataLiteracy ?? 10) / 20, 0, 1);
+  const usesYouthGoalkeeperProxies = player.position === "GK" && player.age <= 20;
 
-  // Data literacy improves valuation precision (not the median, but reduces error)
-  const dataLiteracyFactor = 0.9 + (scout.skills.dataLiteracy / 20) * 0.2;
+  const knownWeightBase =
+    usesYouthGoalkeeperProxies ? 0.90
+    : player.age <= 16 ? 0.78
+    : player.age <= 18 ? 0.70
+    : player.age <= 20 ? 0.62
+    : player.age <= 24 ? 0.52
+    : 0.45;
+  const calculatedKnownWeight = clamp(
+    knownWeightBase + (1 - confidence) * 0.15 - dataLiteracy * 0.08,
+    0.3,
+    usesYouthGoalkeeperProxies ? 0.94 : 0.85,
+  );
+  const knownWeight = usesYouthGoalkeeperProxies
+    ? Math.max(0.85, calculatedKnownWeight)
+    : calculatedKnownWeight;
 
-  const estimate = rawValue * ageFactor * dataLiteracyFactor;
+  const potentialGap = Math.max(0, perceivedPa - perceivedCa);
+  const speculativePremium =
+    usesYouthGoalkeeperProxies
+      ? 1 + Math.min(0.15, potentialGap / 500)
+      : player.age <= 20
+      ? 1 + Math.min(0.45, potentialGap / 220)
+      : 1 + Math.min(0.18, potentialGap / 400);
 
-  return Math.round(estimate / 50_000) * 50_000;
+  const blendedMid =
+    knownValue * knownWeight +
+    profileValue * speculativePremium * (1 - knownWeight);
+
+  const ageVolatility =
+    player.age <= 16 ? 0.50
+    : player.age <= 18 ? 0.40
+    : player.age <= 20 ? 0.30
+    : player.age <= 24 ? 0.20
+    : 0.12;
+  const volatility = clamp(
+    ageVolatility + Math.min(0.35, potentialGap / 180) + (1 - confidence) * 0.35,
+    0.12,
+    0.8,
+  );
+
+  const lowerRaw = blendedMid * (1 - volatility * 0.45);
+  const upperRaw = blendedMid * (1 + volatility * 0.8);
+  const lower = roundMarketValue(
+    Math.max(5_000, Math.min(lowerRaw, knownValue * (player.age <= 20 ? 1.1 : 1.25))),
+  );
+  const proxyUpperCap = usesYouthGoalkeeperProxies
+    ? knownValue * (player.age <= 16 ? 4 : 6)
+    : Number.POSITIVE_INFINITY;
+  const upper = roundMarketValue(Math.max(lower, Math.min(upperRaw, proxyUpperCap)));
+  const estimateBias =
+    player.age <= 20
+      ? 0.38 + confidence * 0.18 + dataLiteracy * 0.08
+      : 0.45 + confidence * 0.20 + dataLiteracy * 0.05;
+  const estimatedValue = roundMarketValue(
+    lower + (upper - lower) * clamp(estimateBias, 0.3, 0.7),
+  );
+
+  return {
+    estimatedValue: clamp(estimatedValue, lower, upper),
+    estimatedValueRange: [lower, upper],
+  };
 }
 
 function estimatePerceivedCA(assessments: AttributeAssessment[]): number {
@@ -904,7 +1111,7 @@ function getRelevantAttributes(position: Position): PlayerAttribute[] {
   const base: PlayerAttribute[] = ["decisionMaking", "positioning", "composure", "workRate"];
 
   const positionSpecific: Record<Position, PlayerAttribute[]> = {
-    GK: ["positioning", "composure", "decisionMaking", "leadership"],
+    GK: ["positioning", "composure", "decisionMaking", "leadership", "anticipation", "passing", "vision", "jumping", "strength", "firstTouch"],
     CB: ["heading", "strength", "passing", "defensiveAwareness"],
     LB: ["crossing", "pace", "stamina", "defensiveAwareness", "pressing"],
     RB: ["crossing", "pace", "stamina", "defensiveAwareness", "pressing"],
@@ -921,4 +1128,119 @@ function getRelevantAttributes(position: Position): PlayerAttribute[] {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function classifyAttribute(
+  estimatedValue: number,
+  adultAverage: number,
+  ageAverage: number,
+  age: number,
+): AttributeClassification {
+  const expected = age <= 20 ? ageAverage : adultAverage;
+  const divisor = Math.max(1.5, adultAverage * 0.15);
+  const normalizedGap = (estimatedValue - expected) / divisor;
+  const strengthFloor =
+    age <= 16 ? 8
+    : age <= 18 ? 9
+    : age <= 20 ? 10
+    : 12;
+  const weaknessCeiling =
+    age <= 16 ? 6
+    : age <= 18 ? 7
+    : age <= 20 ? 8
+    : 9;
+
+  return {
+    isStrength: normalizedGap >= 1 && estimatedValue >= Math.min(strengthFloor, adultAverage),
+    isWeakness: normalizedGap <= -1 && estimatedValue <= Math.max(weaknessCeiling, adultAverage - 1),
+    severity: Math.abs(normalizedGap),
+  };
+}
+
+function buildAttributeDescriptor(
+  player: Player,
+  attribute: PlayerAttribute,
+  value: number,
+  kind: "strength" | "weakness",
+): string {
+  const label = humanizeAttribute(attribute);
+
+  if (kind === "strength") {
+    if (player.age >= 21 && value >= 15) {
+      return STRENGTH_DESCRIPTORS[attribute] ?? `${label} is a clear asset at senior level.`;
+    }
+    if (player.age <= 20) {
+      if (value >= 14) {
+        return `${label} already looks advanced for a ${player.age}-year-old in this role.`;
+      }
+      if (value >= 11) {
+        return `${label} is a clear positive for this age group and worth building around.`;
+      }
+      return `${label} is encouraging relative to peers, even if it is still developing.`;
+    }
+    if (value >= 13) {
+      return `${label} is a clear strength in the current profile.`;
+    }
+    return `${label} gives the player a useful edge in the role.`;
+  }
+
+  if (player.age >= 21 && value <= 5) {
+    return WEAKNESS_DESCRIPTORS[attribute] ?? `${label} is a serious concern at senior level.`;
+  }
+  if (player.age <= 20) {
+    if (value <= 4) {
+      return `${label} is well behind the age curve right now and needs patient development.`;
+    }
+    if (value <= 7) {
+      return `${label} still looks underdeveloped for this stage.`;
+    }
+    return `${label} is a current concern relative to the demands of the role.`;
+  }
+  if (value <= 7) {
+    return `${label} is a clear weakness against senior-level opposition.`;
+  }
+  return `${label} is the area opponents are most likely to target right now.`;
+}
+
+function pickTopClaims(candidates: ClaimCandidate[], maxCount: number): ReportClaimSuggestion[] {
+  const seen = new Set<string>();
+  return candidates
+    .sort((left, right) => right.severity - left.severity)
+    .filter((candidate) => {
+      if (seen.has(candidate.descriptor)) return false;
+      seen.add(candidate.descriptor);
+      return true;
+    })
+    .slice(0, maxCount)
+    .map(({ severity: _severity, ...claim }) => claim);
+}
+
+function humanizeAttribute(attribute: PlayerAttribute): string {
+  return attribute
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (char) => char.toUpperCase())
+    .replace("Off The Ball", "Off-the-ball")
+    .replace("Decision Making", "Decision-making");
+}
+
+function estimateAssessmentConfidence(assessments: AttributeAssessment[]): number {
+  if (assessments.length === 0) return 0.2;
+  const averageWidth =
+    assessments.reduce(
+      (sum, assessment) => sum + (assessment.confidenceRange[1] - assessment.confidenceRange[0]),
+      0,
+    ) / assessments.length;
+  return clamp(1 - averageWidth / 10, 0.2, 0.95);
+}
+
+function getAttributeAssessmentConfidence(assessment: AttributeAssessment): number {
+  const width = assessment.confidenceRange[1] - assessment.confidenceRange[0];
+  return clamp(1 - width / 10, 0.2, 0.95);
+}
+
+function roundMarketValue(value: number): number {
+  if (value <= 0) return 0;
+  if (value < 50_000) return Math.round(value / 1_000) * 1_000;
+  if (value < 1_000_000) return Math.round(value / 10_000) * 10_000;
+  return Math.round(value / 50_000) * 50_000;
 }

@@ -32,7 +32,6 @@ import {
   BookOpen,
   Monitor,
   Plane,
-  Sparkles,
   ClipboardList,
 } from "lucide-react";
 import { ClubCrest } from "@/components/game/ClubCrest";
@@ -49,6 +48,8 @@ import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import { LeagueStandingsWidget } from "./LeagueStandingsWidget";
 import { useTranslations } from "next-intl";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,6 +94,31 @@ function threatLabel(quality: number): string {
   return "Minimal";
 }
 
+function sortYouthByEvidence(
+  a: {
+    observationCount: number;
+    intelCount: number;
+    reported: boolean;
+    buzzLevel: number;
+    visibility: number;
+  },
+  b: {
+    observationCount: number;
+    intelCount: number;
+    reported: boolean;
+    buzzLevel: number;
+    visibility: number;
+  },
+): number {
+  return (
+    b.observationCount - a.observationCount ||
+    Number(b.reported) - Number(a.reported) ||
+    b.intelCount - a.intelCount ||
+    b.buzzLevel - a.buzzLevel ||
+    b.visibility - a.visibility
+  );
+}
+
 // ─── Specialization widget helpers ────────────────────────────────────────────
 
 function priorityBadgeClass(priority: string): string {
@@ -116,6 +142,8 @@ function moraleEmoji(morale: number): string {
   if (morale >= 25) return "😕";
   return "😞";
 }
+
+const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
 // ─── component ────────────────────────────────────────────────────────────────
 
@@ -146,7 +174,7 @@ export function Dashboard() {
             .sort((a, b) => b.submittedWeek - a.submittedWeek)
             .slice(0, 5)
         : [],
-    [gameState?.reports],
+    [gameState],
   );
   const observedPlayerCount = useMemo(
     () =>
@@ -155,14 +183,14 @@ export function Dashboard() {
             Object.values(gameState.observations).map((o) => o.playerId),
           ).size
         : 0,
-    [gameState?.observations],
+    [gameState],
   );
   const unreviewedNPCReports = useMemo(
     () =>
       gameState
         ? Object.values(gameState.npcReports).filter((r) => !r.reviewed)
         : [],
-    [gameState?.npcReports],
+    [gameState],
   );
 
   if (!gameState) return null;
@@ -191,6 +219,12 @@ export function Dashboard() {
 
   // Specialization-specific data
   const specialization = scout.primarySpecialization;
+  const relevantActiveLoans = (gameState.activeLoans ?? []).filter(
+    (deal) =>
+      deal.scoutId === scout.id ||
+      deal.parentClubId === scout.currentClubId ||
+      deal.loanClubId === scout.currentClubId,
+  );
 
   // Youth scout data
   const youthList = specialization === "youth" ? Object.values(gameState.unsignedYouth) : [];
@@ -205,6 +239,36 @@ export function Dashboard() {
       )
     : new Set<string>();
   const youthReportedCount = youthReportedIds.size;
+  const observations = Object.values(gameState.observations);
+  const observationCountByPlayer = new Map<string, number>();
+  for (const observation of observations) {
+    observationCountByPlayer.set(
+      observation.playerId,
+      (observationCountByPlayer.get(observation.playerId) ?? 0) + 1,
+    );
+  }
+  const observedYouthEvidence = specialization === "youth"
+    ? youthList
+        .filter((y) => y.discoveredBy.includes(scout.id))
+        .map((y) => {
+          const perceived = getPerceivedAbility(observations, y.player.id);
+          return {
+            youth: y,
+            observationCount: observationCountByPlayer.get(y.player.id) ?? 0,
+            intelCount: gameState.contactIntel[y.player.id]?.length ?? 0,
+            reported: youthReportedIds.has(y.id),
+            buzzLevel: y.buzzLevel,
+            visibility: y.visibility,
+            hasFirmRead:
+              perceived != null &&
+              perceived.observationCount >= 2 &&
+              (perceived.caConfidence >= 0.7 || perceived.paConfidence >= 0.7),
+          };
+        })
+    : [];
+  const multiViewCount = observedYouthEvidence.filter((entry) => entry.observationCount >= 2).length;
+  const firmReadCount = observedYouthEvidence.filter((entry) => entry.hasFirmRead).length;
+  const mostWatchedYouth = [...observedYouthEvidence].sort(sortYouthByEvidence)[0];
 
   // Phase 2: rival scouts — filtered to matching specialization
   const allRivals = Object.values(gameState.rivalScouts);
@@ -262,6 +326,468 @@ export function Dashboard() {
     endseason: "bg-red-500/15 text-red-400 border-red-500/30",
   };
 
+  const scheduleActivities = gameState.schedule.activities ?? [];
+  const scheduledSlots = scheduleActivities.filter((activity) => activity !== null).length;
+  const plannedActivities: Array<{
+    key: string;
+    dayIndex: number;
+    description: string;
+    slots: number;
+  }> = [];
+  const seenScheduleInstances = new Set<string>();
+  scheduleActivities.forEach((activity, dayIndex) => {
+    if (!activity) return;
+    const key = activity.instanceId ?? `${activity.type}-${activity.targetId ?? "none"}-${dayIndex}`;
+    if (seenScheduleInstances.has(key)) return;
+    seenScheduleInstances.add(key);
+    plannedActivities.push({
+      key,
+      dayIndex,
+      description: activity.description,
+      slots: activity.slots,
+    });
+  });
+
+  const decisionReadyYouth = observedYouthEvidence
+    .filter((entry) => entry.hasFirmRead && !entry.reported && !entry.youth.placed)
+    .sort(sortYouthByEvidence);
+  const evidenceQueue = observedYouthEvidence
+    .filter((entry) => !entry.reported && !entry.youth.placed)
+    .sort(sortYouthByEvidence);
+  const nextProspect = decisionReadyYouth[0] ?? evidenceQueue[0];
+  const placedYouthCount = youthList.filter((youth) => youth.placed).length;
+  const pendingPlacementCount = Object.values(gameState.placementReports ?? {}).filter(
+    (report) => report.scoutId === scout.id && (!report.clubResponse || report.clubResponse === "pending"),
+  ).length;
+  const nextTournament = Object.values(gameState.youthTournaments ?? {})
+    .filter(
+      (tournament) =>
+        tournament.discovered &&
+        !tournament.attended &&
+        tournament.season === currentSeason &&
+        tournament.endWeek >= currentWeek,
+    )
+    .sort((a, b) => a.startWeek - b.startWeek)[0];
+  const youthDeskAction = decisionReadyYouth.length > 0
+    ? {
+        eyebrow: "Decision ready",
+        title: `Make the call on ${decisionReadyYouth[0]!.youth.player.firstName} ${decisionReadyYouth[0]!.youth.player.lastName}`,
+        description: "You have enough repeat evidence for a defensible placement recommendation. Review the dossier before the trail cools.",
+        label: "Review decision",
+        kind: "prospect" as const,
+      }
+    : scheduledSlots === 0
+      ? {
+          eyebrow: "Week not planned",
+          title: "Build a week that can change a career",
+          description: "Choose where to look, what evidence to deepen, and when to recover. Empty days create no new information.",
+          label: "Open planner",
+          kind: "planner" as const,
+        }
+      : nextProspect
+        ? {
+            eyebrow: "Evidence gap",
+            title: `Get another look at ${nextProspect.youth.player.firstName} ${nextProspect.youth.player.lastName}`,
+            description: "One impression is a lead, not a judgment. Compare another context before committing your reputation.",
+            label: "Open dossier",
+            kind: "prospect" as const,
+          }
+        : {
+            eyebrow: "Ready to simulate",
+            title: "Your week has a purpose",
+            description: "Run the itinerary, collect what the week reveals, then turn those observations into a decision.",
+            label: "Advance week",
+            kind: "advance" as const,
+          };
+
+  function openYouthDeskAction(): void {
+    if (youthDeskAction.kind === "planner") {
+      setScreen("calendar");
+      return;
+    }
+    if (youthDeskAction.kind === "prospect" && nextProspect) {
+      selectPlayer(nextProspect.youth.player.id);
+      setScreen("playerProfile");
+      return;
+    }
+    requestWeekAdvance();
+  }
+
+  if (IS_YOUTH_EARLY_ACCESS && specialization === "youth") {
+    const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
+    const deskProspects = (evidenceQueue.length > 0 ? evidenceQueue : observedYouthEvidence).slice(0, 4);
+    const loopSteps = [
+      { label: "Find", detail: "Discover a lead", complete: youthDiscoveredCount > 0 },
+      { label: "Verify", detail: "Build repeat evidence", complete: multiViewCount > 0 },
+      { label: "Recommend", detail: "Back your judgment", complete: youthReportedCount > 0 },
+      { label: "Track", detail: "Follow the outcome", complete: placedYouthCount > 0 },
+    ];
+
+    return (
+      <GameLayout>
+        <section
+          className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"
+          data-tutorial-id="dashboard-overview"
+        >
+          <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.9} />
+          <div className="relative z-10 mx-auto max-w-[1480px]">
+            <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
+                <ScoutAvatar avatarId={scout.avatarId ?? 1} size={48} />
+                {club && <ClubCrest clubId={club.id} clubName={club.name} size={48} />}
+                <div className="min-w-0">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+                    Youth recruitment room
+                  </p>
+                  <h1 aria-label="Dashboard" className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                    Scouting Desk
+                  </h1>
+                  <p className="mt-1 text-sm text-zinc-300">
+                    {club?.name ?? "Independent assignment"} · Week {currentWeek}, Season {currentSeason}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${phaseClass[seasonPhase]}`}>
+                  {tCal(`seasonPhases.${seasonPhase}` as Parameters<typeof tCal>[0])}
+                </span>
+                <Button className="min-h-11" variant="outline" onClick={() => setScreen("calendar")}>
+                  <Calendar size={16} className="mr-2" aria-hidden="true" />
+                  Planner
+                </Button>
+                <Button className="min-h-11 border border-white/10 bg-white/5 text-white hover:bg-white/10" variant="secondary" onClick={() => requestWeekAdvance()}>
+                  Advance Week
+                </Button>
+              </div>
+            </header>
+
+            <Card className="relative mb-5 overflow-hidden border-emerald-400/25 bg-[#101820]/95 shadow-2xl shadow-black/30">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(52,211,153,0.14),transparent_36%)]" aria-hidden="true" />
+              <CardContent className="relative grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:p-8">
+                <div>
+                  <div className="mb-3 flex flex-wrap items-center gap-2">
+                    <Badge className="border-emerald-400/30 bg-emerald-400/10 text-emerald-200" variant="outline">
+                      {youthDeskAction.eyebrow}
+                    </Badge>
+                    {scheduledSlots > 0 && (
+                      <span className="text-xs text-zinc-300">{scheduledSlots}/7 days committed</span>
+                    )}
+                  </div>
+                  <h2 className="max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
+                    {youthDeskAction.title}
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-300 sm:text-base">
+                    {youthDeskAction.description}
+                  </p>
+                  <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+                    <Button className="min-h-11 px-5" onClick={openYouthDeskAction}>
+                      {youthDeskAction.label}
+                      <ArrowRight size={16} className="ml-2" aria-hidden="true" />
+                    </Button>
+                    {youthDeskAction.kind !== "planner" && (
+                      <Button className="min-h-11" variant="outline" onClick={() => setScreen("calendar")}>
+                        Review itinerary
+                      </Button>
+                    )}
+                  </div>
+                  <p className="mt-4 text-xs leading-5 text-zinc-400">
+                    Advancing resolves every scheduled activity. Unused days produce no evidence and cannot be recovered.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">The scout&apos;s loop</p>
+                      <p className="mt-1 text-sm text-zinc-200">Every name must earn the next step.</p>
+                    </div>
+                    <Target size={20} className="text-emerald-300" aria-hidden="true" />
+                  </div>
+                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+                    {loopSteps.map((step, index) => (
+                      <li
+                        key={step.label}
+                        className={`rounded-lg border p-3 ${
+                          step.complete
+                            ? "border-emerald-400/30 bg-emerald-400/10"
+                            : "border-white/10 bg-white/[0.025]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
+                          }`}>
+                            {step.complete ? "✓" : index + 1}
+                          </span>
+                          <span className="text-xs font-semibold text-white">{step.label}</span>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </CardContent>
+            </Card>
+
+            {gameState.seasonEvents.length > 0 && (
+              <div className="mb-5">
+                <SeasonTimeline
+                  seasonEvents={gameState.seasonEvents}
+                  currentWeek={currentWeek}
+                  onResolveEvent={(eventId, choiceIndex) => {
+                    useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
+                  }}
+                />
+              </div>
+            )}
+
+            <section aria-label="Youth pipeline snapshot" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                { label: "Known prospects", value: youthDiscoveredCount, detail: `${youthList.length} in your active world`, icon: Users, tone: "text-emerald-300" },
+                { label: "Repeat looks", value: multiViewCount, detail: `${firmReadCount} with a firm read`, icon: Eye, tone: "text-sky-300" },
+                { label: "Decisions ready", value: decisionReadyYouth.length, detail: `${pendingPlacementCount} awaiting club response`, icon: ClipboardList, tone: "text-amber-300" },
+                { label: "Placed", value: placedYouthCount, detail: `${gameState.legacyScore.totalScore} legacy points`, icon: Trophy, tone: "text-violet-300" },
+              ].map(({ label, value, detail, icon: Icon, tone }) => (
+                <Card key={label} className="border-white/10 bg-[#11161c]/90 shadow-lg shadow-black/10">
+                  <CardContent className="p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</p>
+                        <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{value}</p>
+                      </div>
+                      <Icon size={19} className={tone} aria-hidden="true" />
+                    </div>
+                    <p className="mt-2 text-xs text-zinc-400">{detail}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </section>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
+              <div className="space-y-5">
+                <Card className="border-white/10 bg-[#11161c]/95">
+                  <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base text-white">
+                        <CalendarPlus size={18} className="text-emerald-300" aria-hidden="true" />
+                        This week&apos;s itinerary
+                      </CardTitle>
+                      <p className="mt-1 text-sm text-zinc-400">Your plan is the strategy; simulation reveals the consequences.</p>
+                    </div>
+                    <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("calendar")}>
+                      Edit plan
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
+                    {plannedActivities.length === 0 ? (
+                      <button
+                        onClick={() => setScreen("calendar")}
+                        className="flex min-h-28 w-full flex-col items-center justify-center rounded-xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.04] p-5 text-center transition hover:bg-emerald-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                      >
+                        <CalendarPlus size={24} className="mb-2 text-emerald-300" aria-hidden="true" />
+                        <span className="font-semibold text-white">Your week is still blank</span>
+                        <span className="mt-1 text-sm text-zinc-400">Schedule a venue, follow-up, report, or recovery day.</span>
+                      </button>
+                    ) : (
+                      <ol className="space-y-2">
+                        {plannedActivities.slice(0, 6).map((item) => (
+                          <li key={item.key} className="flex min-h-14 items-center gap-3 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2.5">
+                            <span className="flex h-9 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-xs font-bold text-emerald-300">
+                              {DAY_NAMES[item.dayIndex]}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm font-medium text-white">{item.description}</p>
+                              <p className="mt-0.5 text-xs text-zinc-400">{item.slots} day{item.slots === 1 ? "" : "s"}</p>
+                            </div>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/10 bg-[#11161c]/95">
+                  <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                    <div>
+                      <CardTitle className="flex items-center gap-2 text-base text-white">
+                        <GraduationCap size={18} className="text-amber-300" aria-hidden="true" />
+                        Priority prospects
+                      </CardTitle>
+                      <p className="mt-1 text-sm text-zinc-400">Ranked by evidence need—not hidden potential.</p>
+                    </div>
+                    <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("youthScouting")}>
+                      Open pipeline
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
+                    {deskProspects.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
+                        <Compass size={24} className="mx-auto mb-2 text-zinc-400" aria-hidden="true" />
+                        <p className="font-semibold text-white">No names on your board yet</p>
+                        <p className="mt-1 text-sm text-zinc-400">Plan a youth event or local visit to create your first lead.</p>
+                      </div>
+                    ) : (
+                      <div className="divide-y divide-white/10">
+                        {deskProspects.map((entry) => {
+                          const status = entry.reported
+                            ? "Recommendation filed"
+                            : entry.hasFirmRead
+                              ? "Decision ready"
+                              : entry.observationCount >= 1
+                                ? "Needs another context"
+                                : "Unverified lead";
+                          return (
+                            <button
+                              key={entry.youth.id}
+                              onClick={() => {
+                                selectPlayer(entry.youth.player.id);
+                                setScreen("playerProfile");
+                              }}
+                              className="group flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                              aria-label={`Open dossier for ${entry.youth.player.firstName} ${entry.youth.player.lastName}`}
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/20 to-sky-400/10 font-bold text-emerald-200">
+                                {entry.youth.player.firstName[0]}{entry.youth.player.lastName[0]}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
+                                    {entry.youth.player.firstName} {entry.youth.player.lastName}
+                                  </p>
+                                  <Badge variant="outline" className="border-white/15 text-[10px] text-zinc-300">
+                                    {entry.youth.player.position}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 text-xs text-zinc-400">
+                                  Age {entry.youth.player.age} · {entry.observationCount} look{entry.observationCount === 1 ? "" : "s"} · Buzz {entry.youth.buzzLevel}
+                                </p>
+                              </div>
+                              <div className="hidden text-right sm:block">
+                                <p className={`text-xs font-semibold ${entry.hasFirmRead ? "text-amber-300" : "text-zinc-300"}`}>{status}</p>
+                                <p className="mt-1 text-[10px] text-zinc-500">{entry.intelCount} contact note{entry.intelCount === 1 ? "" : "s"}</p>
+                              </div>
+                              <ChevronRight size={17} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" aria-hidden="true" />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <aside className="space-y-5" aria-label="Scouting context">
+                <Card className="border-amber-400/20 bg-[#151711]/95">
+                  <CardHeader className="p-5 pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base text-white">
+                      <Star size={17} className="text-amber-300" aria-hidden="true" />
+                      Opportunity radar
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 pt-1">
+                    {nextTournament ? (
+                      <>
+                        <Badge className="mb-3 border-amber-400/25 bg-amber-400/10 text-amber-200" variant="outline">
+                          {nextTournament.prestige} · {nextTournament.country}
+                        </Badge>
+                        <h3 className="text-lg font-bold text-white">{nextTournament.name}</h3>
+                        <p className="mt-2 text-sm leading-6 text-zinc-300">
+                          {nextTournament.startWeek <= currentWeek
+                            ? "The event is live now. Attend before the window closes."
+                            : `Starts in week ${nextTournament.startWeek}. Reserve time before another scout gets the first look.`}
+                        </p>
+                        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+                          <div className="rounded-lg bg-black/20 p-3">
+                            <p className="text-zinc-400">Talent pool</p>
+                            <p className="mt-1 font-semibold text-white">{nextTournament.poolSizeMultiplier.toFixed(1)}× field</p>
+                          </div>
+                          <div className="rounded-lg bg-black/20 p-3">
+                            <p className="text-zinc-400">Observation</p>
+                            <p className="mt-1 font-semibold text-white">+{nextTournament.observationBonus} bonus</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm leading-6 text-zinc-300">No verified tournament is demanding attention yet. Contacts and local familiarity reveal better opportunities over time.</p>
+                      </>
+                    )}
+                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => setScreen("calendar")}>
+                      View planning opportunities
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/10 bg-[#11161c]/95">
+                  <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base text-white">
+                      <Mail size={17} className="text-sky-300" aria-hidden="true" />
+                      Inbox
+                    </CardTitle>
+                    {unreadMessages.length > 0 && <Badge variant="secondary">{unreadMessages.length} unread</Badge>}
+                  </CardHeader>
+                  <CardContent className="p-5 pt-1">
+                    {unreadMessages.length === 0 ? (
+                      <p className="text-sm text-zinc-400">You are caught up. New club responses and career events will appear here.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {unreadMessages.slice(0, 3).map((message) => (
+                          <button
+                            key={message.id}
+                            onClick={() => {
+                              markMessageRead(message.id);
+                              setScreen("inbox");
+                            }}
+                            className="min-h-14 w-full rounded-lg border border-white/10 bg-white/[0.025] p-3 text-left transition hover:border-sky-400/30 hover:bg-sky-400/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                          >
+                            <p className="line-clamp-1 text-sm font-semibold text-white">{message.title}</p>
+                            <p className="mt-1 line-clamp-1 text-xs text-zinc-400">{message.body}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <Button className="mt-3 min-h-11 w-full" variant="ghost" onClick={() => setScreen("inbox")}>
+                      Open inbox
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-white/10 bg-[#11161c]/95">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Scout condition</p>
+                        <p className="mt-1 text-sm font-semibold text-white">Tier {scout.careerTier} · {Math.round(scout.reputation)} reputation</p>
+                      </div>
+                      <TrendingUp size={19} className="text-emerald-300" aria-hidden="true" />
+                    </div>
+                    <div className="mt-4">
+                      <div className="mb-1.5 flex items-center justify-between text-xs">
+                        <span className="text-zinc-400">Fatigue</span>
+                        <span className={scout.fatigue >= 70 ? "font-semibold text-red-300" : scout.fatigue >= 40 ? "font-semibold text-amber-300" : "font-semibold text-emerald-300"}>
+                          {Math.round(scout.fatigue)}%
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
+                        <div
+                          className={`h-full rounded-full ${scout.fatigue >= 70 ? "bg-red-400" : scout.fatigue >= 40 ? "bg-amber-400" : "bg-emerald-400"}`}
+                          style={{ width: `${Math.min(100, Math.max(0, scout.fatigue))}%` }}
+                        />
+                      </div>
+                    </div>
+                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => setScreen("career")}>
+                      Open career development
+                    </Button>
+                  </CardContent>
+                </Card>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </GameLayout>
+    );
+  }
+
   return (
     <GameLayout>
       <div className="relative p-4 md:p-6" data-tutorial-id="dashboard-overview">
@@ -282,7 +808,7 @@ export function Dashboard() {
               <div>
                 <h1 className="text-xl md:text-2xl font-bold">Dashboard</h1>
                 {scout.currentClubId && gameState.clubs[scout.currentClubId] && (
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-zinc-400">
                     {gameState.clubs[scout.currentClubId]!.name}
                   </p>
                 )}
@@ -322,7 +848,7 @@ export function Dashboard() {
         )}
 
         {/* Transfer window alert */}
-        {transferWindowActive && (
+        {!IS_YOUTH_EARLY_ACCESS && transferWindowActive && (
           <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
             <AlertTriangle size={14} className="shrink-0" aria-hidden="true" />
             Transfer Window Active — Check Inbox for urgent assessments
@@ -330,7 +856,7 @@ export function Dashboard() {
         )}
 
         {/* Free agent alert */}
-        {gameState.freeAgentPool?.agents.some(
+        {!IS_YOUTH_EARLY_ACCESS && gameState.freeAgentPool?.agents.some(
           (a) => a.discoveredByScout && a.status === "available"
         ) && (
           <button
@@ -343,7 +869,7 @@ export function Dashboard() {
         )}
 
         {/* Scenario Progress — only shown when a scenario is active */}
-        <ConnectedScenarioProgressPanel />
+        {!IS_YOUTH_EARLY_ACCESS && <ConnectedScenarioProgressPanel />}
 
         {/* Quick Stats */}
         <div className="mb-4 md:mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -356,7 +882,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <Tooltip content="Your standing in the scouting world. Higher reputation unlocks better job offers and contact access." side="bottom">
-                    <p className="text-xs text-zinc-500">{t("reputation")}</p>
+                    <p className="text-xs text-zinc-400">{t("reputation")}</p>
                   </Tooltip>
                   <p className="text-2xl font-bold text-emerald-400">
                     {Math.round(scout.reputation)}
@@ -372,7 +898,7 @@ export function Dashboard() {
                       e.stopPropagation();
                       setShowSatisfactionHistory(!showSatisfactionHistory);
                     }}
-                    className="mt-2 flex w-full items-center gap-1 text-[10px] text-zinc-500 hover:text-zinc-300 transition"
+                    className="mt-2 flex w-full items-center gap-1 text-[10px] text-zinc-400 hover:text-zinc-300 transition"
                     aria-expanded={showSatisfactionHistory}
                     aria-label="Toggle reputation change history"
                   >
@@ -421,7 +947,7 @@ export function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-zinc-400">
                     {specialization === "youth" ? "Youth Discovered" : "Reports Filed"}
                   </p>
                   <p className="text-2xl font-bold">
@@ -430,7 +956,7 @@ export function Dashboard() {
                 </div>
                 {specialization === "youth"
                   ? <Users className="text-emerald-500" size={20} aria-hidden="true" />
-                  : <FileText className="text-zinc-500" size={20} aria-hidden="true" />
+                  : <FileText className="text-zinc-400" size={20} aria-hidden="true" />
                 }
               </div>
             </CardContent>
@@ -442,7 +968,7 @@ export function Dashboard() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">
+                  <p className="text-xs text-zinc-400">
                     {specialization === "youth" ? "Legacy Score" : "Players Scouted"}
                   </p>
                   <p className={`text-2xl font-bold ${specialization === "youth" ? "text-amber-400" : ""}`}>
@@ -451,7 +977,7 @@ export function Dashboard() {
                 </div>
                 {specialization === "youth"
                   ? <Star className="text-amber-500" size={20} aria-hidden="true" />
-                  : <Eye className="text-zinc-500" size={20} aria-hidden="true" />
+                  : <Eye className="text-zinc-400" size={20} aria-hidden="true" />
                 }
               </div>
             </CardContent>
@@ -465,7 +991,7 @@ export function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <Tooltip content="Physical and mental exhaustion. High fatigue reduces observation accuracy and increases injury risk." side="bottom">
-                    <p className="text-xs text-zinc-500">{t("fatigue")}</p>
+                    <p className="text-xs text-zinc-400">{t("fatigue")}</p>
                   </Tooltip>
                   <p className="text-2xl font-bold">
                     {Math.round(scout.fatigue)}%
@@ -521,7 +1047,7 @@ export function Dashboard() {
                 <div className="grid grid-cols-4 gap-4">
                   {/* Balance */}
                   <div>
-                    <p className="text-xs text-zinc-500 mb-1">Balance</p>
+                    <p className="text-xs text-zinc-400 mb-1">Balance</p>
                     <p
                       className={`text-lg font-bold ${
                         finances.balance >= 0 ? "text-emerald-400" : "text-red-400"
@@ -533,7 +1059,7 @@ export function Dashboard() {
 
                   {/* Monthly income */}
                   <div>
-                    <p className="text-xs text-zinc-500 mb-1">Monthly Income</p>
+                    <p className="text-xs text-zinc-400 mb-1">Monthly Income</p>
                     <p className="text-lg font-bold text-white">
                       {formatMoney(finances.monthlyIncome)}
                     </p>
@@ -543,7 +1069,7 @@ export function Dashboard() {
                   <div>
                     <button
                       onClick={() => setExpandedExpenses((prev) => !prev)}
-                      className="flex items-center gap-1 text-xs text-zinc-500 mb-1 hover:text-zinc-300 transition"
+                      className="flex items-center gap-1 text-xs text-zinc-400 mb-1 hover:text-zinc-300 transition"
                     >
                       Monthly Expenses
                       {expandedExpenses ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
@@ -560,7 +1086,7 @@ export function Dashboard() {
                               key={category}
                               className="flex items-center justify-between text-xs"
                             >
-                              <span className="text-zinc-500 capitalize">
+                              <span className="text-zinc-400 capitalize">
                                 {category.replace(/([A-Z])/g, " $1").trim()}
                               </span>
                               <span className="text-red-400">{formatMoney(amount)}</span>
@@ -572,7 +1098,7 @@ export function Dashboard() {
 
                   {/* Equipment loadout */}
                   <div>
-                    <p className="text-xs text-zinc-500 mb-1">Equipment</p>
+                    <p className="text-xs text-zinc-400 mb-1">Equipment</p>
                     <div className="flex items-center gap-1">
                       {ALL_EQUIPMENT_SLOTS.map((slot) => {
                         const itemId = finances.equipment?.loadout[slot];
@@ -590,7 +1116,7 @@ export function Dashboard() {
                               ? "text-amber-400"
                               : tier === 2
                                 ? "text-blue-400"
-                                : "text-zinc-600";
+                                : "text-zinc-500";
                         return (
                           <div
                             key={slot}
@@ -613,7 +1139,7 @@ export function Dashboard() {
                   if (totalSpec === 0 && scout.careerTier < 3) return null;
                   return (
                     <div className="mt-3 rounded-md border border-[#27272a] bg-[#0f0f0f] p-3">
-                      <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-2">
+                      <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-semibold mb-2">
                         Specialization Income
                       </p>
                       <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -627,7 +1153,7 @@ export function Dashboard() {
                         )}
                         {scout.careerTier >= 3 && (
                           <>
-                            <span className="text-zinc-600">|</span>
+                            <span className="text-zinc-500">|</span>
                             <span className="text-blue-400">
                               {getSpecTier3Label(scout.primarySpecialization)}
                             </span>
@@ -654,15 +1180,15 @@ export function Dashboard() {
         )}
 
         {/* Phase 1 alert widgets */}
-        {(unreviewedNPCReports.length > 0 || hasMultipleCountries) && (
+        {(hasMultipleCountries || (!IS_YOUTH_EARLY_ACCESS && unreviewedNPCReports.length > 0)) && (
           <div className="mb-6 flex flex-wrap gap-4">
             {/* NPC report queue */}
-            {unreviewedNPCReports.length > 0 && (
+            {!IS_YOUTH_EARLY_ACCESS && unreviewedNPCReports.length > 0 && (
               <Card className="flex-1 min-w-[220px]">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs text-zinc-500">NPC Reports</p>
+                      <p className="text-xs text-zinc-400">NPC Reports</p>
                       <p className="text-sm font-semibold text-amber-400">
                         {unreviewedNPCReports.length} pending review
                       </p>
@@ -685,7 +1211,7 @@ export function Dashboard() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs text-zinc-500">International</p>
+                      <p className="text-xs text-zinc-400">International</p>
                       {travelBooking?.isAbroad ? (
                         <p className="text-sm font-semibold text-blue-400">
                           In {travelBooking.destinationCountry} — returns wk{" "}
@@ -712,7 +1238,7 @@ export function Dashboard() {
         )}
 
         {/* Agency Business summary — independent path only */}
-        {careerPath === "independent" && gameState.finances && (
+        {!IS_YOUTH_EARLY_ACCESS && careerPath === "independent" && gameState.finances && (
           <div className="mb-6">
             <Card className="col-span-full">
               <CardContent className="pt-4">
@@ -735,7 +1261,7 @@ export function Dashboard() {
                     { label: "Pending Offers", value: `${(gameState.finances.pendingRetainerOffers?.length ?? 0) + (gameState.finances.pendingConsultingOffers?.length ?? 0)}`, color: "text-teal-400" },
                   ].map(({ label, value, color }) => (
                     <div key={label} className="rounded-md border border-zinc-800 bg-zinc-900/50 p-2.5">
-                      <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{label}</p>
+                      <p className="text-[10px] text-zinc-400 uppercase tracking-wider">{label}</p>
                       <p className={`text-sm font-semibold ${color}`}>{value}</p>
                     </div>
                   ))}
@@ -774,7 +1300,7 @@ export function Dashboard() {
                       className={`rounded-md border border-[#27272a] p-3 text-center cursor-pointer hover:border-zinc-600 transition w-full ${stage.bg}`}
                     >
                       <p className={`text-lg font-bold ${stage.color}`}>{stage.count}</p>
-                      <p className="text-[10px] text-zinc-500">{stage.label}</p>
+                      <p className="text-[10px] text-zinc-400">{stage.label}</p>
                     </button>
                   ))}
                 </div>
@@ -786,11 +1312,11 @@ export function Dashboard() {
                     .sort((a, b) => b.buzzLevel - a.buzzLevel)
                     .slice(0, 3);
                   if (observed.length === 0) return (
-                    <p className="text-sm text-zinc-500">No youth observed yet. Visit youth venues to discover talent.</p>
+                    <p className="text-sm text-zinc-400">No youth observed yet. Visit youth venues to discover talent.</p>
                   );
                   return (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Top Prospects</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Buzz Leaders</p>
                       {observed.map((y) => (
                         <button
                           key={y.id}
@@ -801,7 +1327,7 @@ export function Dashboard() {
                             <p className="text-sm font-medium text-white truncate">
                               {y.player.firstName} {y.player.lastName}
                             </p>
-                            <p className="text-[10px] text-zinc-500">{y.player.position} · {y.player.nationality}</p>
+                            <p className="text-[10px] text-zinc-400">{y.player.position} · {y.player.nationality}</p>
                           </div>
                           <div className="w-16">
                             <div className="mb-0.5 text-right text-[10px] text-zinc-400">{y.buzzLevel}%</div>
@@ -845,7 +1371,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 {thisWeekFixtures.length === 0 ? (
-                  <p className="text-sm text-zinc-500">No fixtures this week.</p>
+                  <p className="text-sm text-zinc-400">No fixtures this week.</p>
                 ) : (
                   <div className="space-y-2">
                     {thisWeekFixtures.slice(0, 6).map((fixture) => {
@@ -866,13 +1392,13 @@ export function Dashboard() {
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">
                                 {homeClub?.name || "?"}
-                                {homePos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(homePos)})</span>}
+                                {homePos > 0 && <span className="text-zinc-400 text-xs"> ({getOrdinal(homePos)})</span>}
                                 {" vs "}
                                 {awayClub?.name || "?"}
-                                {awayPos > 0 && <span className="text-zinc-500 text-xs"> ({getOrdinal(awayPos)})</span>}
+                                {awayPos > 0 && <span className="text-zinc-400 text-xs"> ({getOrdinal(awayPos)})</span>}
                               </span>
                               {weather && (
-                                <span className="text-[10px] text-zinc-500 capitalize">{weather.replace(/([A-Z])/g, " $1").trim()}</span>
+                                <span className="text-[10px] text-zinc-400 capitalize">{weather.replace(/([A-Z])/g, " $1").trim()}</span>
                               )}
                               <Badge variant="outline" className="text-[10px]">
                                 {league?.shortName}
@@ -910,7 +1436,7 @@ export function Dashboard() {
                   </div>
                 )}
                 {thisWeekFixtures.length > 6 && (
-                  <p className="mt-2 text-xs text-zinc-500">
+                  <p className="mt-2 text-xs text-zinc-400">
                     +{thisWeekFixtures.length - 6} more fixtures
                   </p>
                 )}
@@ -938,7 +1464,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 {unreadMessages.length === 0 ? (
-                  <p className="text-sm text-zinc-500">All caught up.</p>
+                  <p className="text-sm text-zinc-400">All caught up.</p>
                 ) : (
                   <div className="space-y-2">
                     {unreadMessages.slice(0, 4).map((msg) => (
@@ -951,7 +1477,7 @@ export function Dashboard() {
                         className="w-full cursor-pointer rounded-md border border-[var(--border)] p-2 text-left hover:border-zinc-600 transition"
                       >
                         <p className="text-sm font-medium">{msg.title}</p>
-                        <p className="text-xs text-zinc-500 line-clamp-1">
+                        <p className="text-xs text-zinc-400 line-clamp-1">
                           {msg.body}
                         </p>
                       </button>
@@ -976,7 +1502,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 {recentReports.length === 0 ? (
-                  <p className="text-sm text-zinc-500">{t("noReports")}</p>
+                  <p className="text-sm text-zinc-400">{t("noReports")}</p>
                 ) : (
                   <div className="space-y-2">
                     {recentReports.map((report) => {
@@ -1013,7 +1539,7 @@ export function Dashboard() {
                                     : "Note"}
                             </Badge>
                           </div>
-                          <p className="text-xs text-zinc-500">
+                          <p className="text-xs text-zinc-400">
                             Quality: {report.qualityScore}/100 — Week{" "}
                             {report.submittedWeek}
                           </p>
@@ -1065,7 +1591,7 @@ export function Dashboard() {
                     })}
                   </div>
                   {gameState.watchlist.length > 5 && (
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="mt-1 text-xs text-zinc-400">
                       +{gameState.watchlist.length - 5} more
                     </p>
                   )}
@@ -1093,11 +1619,11 @@ export function Dashboard() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <p className="text-zinc-500">Unsigned Youth</p>
+                      <p className="text-zinc-400">Unsigned Youth</p>
                       <p className="text-lg font-medium">{Object.keys(gameState.unsignedYouth).length}</p>
                     </div>
                     <div>
-                      <p className="text-zinc-500">Discovered</p>
+                      <p className="text-zinc-400">Discovered</p>
                       <p className="text-lg font-medium">
                         {Object.values(gameState.unsignedYouth).filter((y) =>
                           y.discoveredBy.includes(gameState.scout.id ?? ""),
@@ -1105,42 +1631,40 @@ export function Dashboard() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-zinc-500">Placed</p>
+                      <p className="text-zinc-400">Placed</p>
                       <p className="text-lg font-medium">
                         {Object.values(gameState.unsignedYouth).filter((y) => y.placed).length}
                       </p>
                     </div>
                     <div>
-                      <p className="text-zinc-500">Legacy Score</p>
+                      <p className="text-zinc-400">Legacy Score</p>
                       <p className="text-lg font-medium text-emerald-400">{gameState.legacyScore.totalScore}</p>
                     </div>
                   </div>
                   {specialization === "youth" && (() => {
-                    const observed = Object.values(gameState.unsignedYouth).filter(
-                      (y) => y.discoveredBy.includes(scout.id),
-                    );
-                    const wonderkids = observed.filter(
-                      (y) => y.player.wonderkidTier === "generational" || y.player.wonderkidTier === "worldClass",
-                    );
-                    const topProspect = observed
-                      .sort((a, b) => b.player.potentialAbility - a.player.potentialAbility)[0];
                     return (
                       <div className="mt-3 space-y-2 border-t border-[#27272a] pt-3">
-                        {wonderkids.length > 0 && (
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-amber-400 flex items-center gap-1">
-                              <Sparkles size={12} aria-hidden="true" />
-                              Wonderkids
-                            </span>
-                            <span className="font-medium text-amber-400">{wonderkids.length}</span>
-                          </div>
-                        )}
-                        {topProspect && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-zinc-400">Multi-view files</span>
+                          <span className="font-medium text-emerald-400">{multiViewCount}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-zinc-400">Firm reads</span>
+                          <span className="font-medium text-blue-400">{firmReadCount}</span>
+                        </div>
+                        {mostWatchedYouth && (
                           <div className="text-sm">
-                            <p className="text-zinc-500 text-xs">Top Prospect</p>
+                            <p className="text-zinc-400 text-xs">Most Watched File</p>
                             <p className="font-medium text-white">
-                              {topProspect.player.firstName} {topProspect.player.lastName}
-                              <span className="ml-1 text-xs text-zinc-500">{topProspect.player.position}</span>
+                              {mostWatchedYouth.youth.player.firstName} {mostWatchedYouth.youth.player.lastName}
+                              <span className="ml-1 text-xs text-zinc-400">{mostWatchedYouth.youth.player.position}</span>
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              {mostWatchedYouth.observationCount} look{mostWatchedYouth.observationCount === 1 ? "" : "s"}
+                              {" · "}
+                              {mostWatchedYouth.intelCount} intel note{mostWatchedYouth.intelCount === 1 ? "" : "s"}
+                              {" · Buzz "}
+                              {mostWatchedYouth.buzzLevel}
                             </p>
                           </div>
                         )}
@@ -1195,7 +1719,7 @@ export function Dashboard() {
                               {status}
                             </Badge>
                           </div>
-                          <p className="text-[10px] text-zinc-500">{club?.shortName ?? "Unknown Club"}</p>
+                          <p className="text-[10px] text-zinc-400">{club?.shortName ?? "Unknown Club"}</p>
                         </div>
                       );
                     })}
@@ -1358,15 +1882,15 @@ export function Dashboard() {
                           </Badge>
                           <span className="text-sm font-semibold text-white">{directive.position}</span>
                         </div>
-                        <span className="shrink-0 text-[10px] text-zinc-500">
+                        <span className="shrink-0 text-[10px] text-zinc-400">
                           {directive.submittedReportIds.length} report{directive.submittedReportIds.length !== 1 ? "s" : ""}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-zinc-400">
                         <span>Age {directive.ageRange[0]}–{directive.ageRange[1]}</span>
-                        <span className="text-zinc-600">·</span>
+                        <span className="text-zinc-500">·</span>
                         <span>{directive.minCAStars}★ min</span>
-                        <span className="text-zinc-600">·</span>
+                        <span className="text-zinc-500">·</span>
                         <span className="text-emerald-400">
                           {directive.budgetAllocation >= 1_000_000
                             ? `£${(directive.budgetAllocation / 1_000_000).toFixed(1)}M`
@@ -1420,19 +1944,19 @@ export function Dashboard() {
                                   ? "border-amber-500/50 text-amber-400"
                                   : record.outcome === "flop"
                                   ? "border-red-500/50 text-red-400"
-                                  : "border-zinc-600 text-zinc-500"
+                                  : "border-zinc-600 text-zinc-400"
                               }`}
                             >
                               {record.outcome}
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-xs text-zinc-400">
                           {fromClub?.shortName ?? "?"} → {toClub?.shortName ?? "?"}
                           {record.fee > 0 && <span className="ml-1">· £{record.fee.toLocaleString()}</span>}
                         </p>
                         {record.appearances != null && (
-                          <p className="mt-1 text-xs text-zinc-500">
+                          <p className="mt-1 text-xs text-zinc-400">
                             {record.appearances} appearances · S{record.transferSeason}
                           </p>
                         )}
@@ -1469,17 +1993,17 @@ export function Dashboard() {
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-md border border-[#27272a] p-2 text-center">
                     <p className="text-lg font-bold text-white">{allPredictions.length}</p>
-                    <p className="text-[10px] text-zinc-500">Total</p>
+                    <p className="text-[10px] text-zinc-400">Total</p>
                   </div>
                   <div className="rounded-md border border-[#27272a] p-2 text-center">
                     <p className="text-lg font-bold text-emerald-400">{correctPredictions.length}</p>
-                    <p className="text-[10px] text-zinc-500">Correct</p>
+                    <p className="text-[10px] text-zinc-400">Correct</p>
                   </div>
                   <div className="rounded-md border border-[#27272a] p-2 text-center">
                     <p className={`text-lg font-bold ${predictionAccuracy >= 70 ? "text-emerald-400" : predictionAccuracy >= 50 ? "text-amber-400" : "text-red-400"}`}>
                       {resolvedPredictions.length > 0 ? `${predictionAccuracy}%` : "—"}
                     </p>
-                    <p className="text-[10px] text-zinc-500">Accuracy</p>
+                    <p className="text-[10px] text-zinc-400">Accuracy</p>
                   </div>
                 </div>
                 {currentStreak > 0 && (
@@ -1491,7 +2015,7 @@ export function Dashboard() {
                 {/* Recent unresolved predictions */}
                 {unresolvedPredictions.length > 0 && (
                   <div className="space-y-1.5">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Pending</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Pending</p>
                     {unresolvedPredictions.map((pred) => {
                       const player = gameState.players[pred.playerId];
                       return (
@@ -1504,8 +2028,8 @@ export function Dashboard() {
                               {pred.type}
                             </Badge>
                           </div>
-                          <p className="mt-0.5 text-[10px] text-zinc-500 line-clamp-1">{pred.statement}</p>
-                          <p className="text-[9px] text-zinc-600">Resolves S{pred.resolveBySeason}</p>
+                          <p className="mt-0.5 text-[10px] text-zinc-400 line-clamp-1">{pred.statement}</p>
+                          <p className="text-[9px] text-zinc-500">Resolves S{pred.resolveBySeason}</p>
                         </div>
                       );
                     })}
@@ -1537,7 +2061,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {dataAnalysts.length === 0 ? (
-                  <p className="text-xs text-zinc-500">No analysts hired. Recruit analysts to generate passive reports.</p>
+                  <p className="text-xs text-zinc-400">No analysts hired. Recruit analysts to generate passive reports.</p>
                 ) : (
                   dataAnalysts.map((analyst) => {
                     const assignedLeague = analyst.assignedLeagueId
@@ -1556,8 +2080,8 @@ export function Dashboard() {
                           </span>
                         </div>
                         <div className="mb-1 flex items-center justify-between text-[10px]">
-                          <span className="text-zinc-500">Skill {analyst.skill}/20</span>
-                          <span className="text-zinc-500 capitalize">{analyst.focus}</span>
+                          <span className="text-zinc-400">Skill {analyst.skill}/20</span>
+                          <span className="text-zinc-400 capitalize">{analyst.focus}</span>
                         </div>
                         <div className="h-1 w-full overflow-hidden rounded-full bg-[#27272a]">
                           <div
@@ -1565,7 +2089,7 @@ export function Dashboard() {
                             style={{ width: `${(analyst.skill / 20) * 100}%` }}
                           />
                         </div>
-                        <p className="mt-1 text-[10px] text-zinc-500">
+                        <p className="mt-1 text-[10px] text-zinc-400">
                           {assignedLeague ? assignedLeague.name : "Unassigned"}
                         </p>
                       </div>
@@ -1601,27 +2125,31 @@ export function Dashboard() {
                   <Compass size={15} className="text-emerald-400" aria-hidden="true" />
                   Discoveries
                 </button>
-                <button
-                  onClick={() => setScreen("leaderboard")}
-                  className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
-                >
-                  <Trophy size={15} className="text-amber-400" aria-hidden="true" />
-                  Leaderboard
-                </button>
-                <button
-                  onClick={() => setScreen("analytics")}
-                  className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
-                >
-                  <BarChart3 size={15} className="text-blue-400" aria-hidden="true" />
-                  Analytics
-                </button>
+                {!IS_YOUTH_EARLY_ACCESS && (
+                  <>
+                    <button
+                      onClick={() => setScreen("leaderboard")}
+                      className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                    >
+                      <Trophy size={15} className="text-amber-400" aria-hidden="true" />
+                      Leaderboard
+                    </button>
+                    <button
+                      onClick={() => setScreen("analytics")}
+                      className="flex items-center gap-2 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                    >
+                      <BarChart3 size={15} className="text-blue-400" aria-hidden="true" />
+                      Analytics
+                    </button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>
         </div>
 
         {/* ── T8.6: Rival scouts section ───────────────────────────────────── */}
-        {hasRivals && (
+        {!IS_YOUTH_EARLY_ACCESS && hasRivals && (
           <div className="mt-6">
             <Card>
               <CardHeader className="pb-3">
@@ -1648,7 +2176,7 @@ export function Dashboard() {
                             <p className="truncate text-sm font-semibold text-white">
                               {rival.name}
                             </p>
-                            <p className="text-xs text-zinc-500">
+                            <p className="text-xs text-zinc-400">
                               {rivalClub?.shortName ?? "Unknown Club"}
                             </p>
                           </div>
@@ -1685,7 +2213,7 @@ export function Dashboard() {
                         </div>
 
                         {rivalLeague && (
-                          <p className="text-[10px] text-zinc-500">
+                          <p className="text-[10px] text-zinc-400">
                             Active in {rivalLeague.name}
                           </p>
                         )}
@@ -1698,12 +2226,14 @@ export function Dashboard() {
           </div>
         )}
         {/* League Standings with Relegation/Promotion Zones */}
-        <div className="mt-6">
-          <LeagueStandingsWidget />
-        </div>
+        {!IS_YOUTH_EARLY_ACCESS && (
+          <div className="mt-6">
+            <LeagueStandingsWidget />
+          </div>
+        )}
 
         {/* Active Loans */}
-        {(gameState.activeLoans ?? []).length > 0 && (
+        {relevantActiveLoans.length > 0 && (
           <div className="mt-6">
             <Card>
               <CardHeader className="pb-2">
@@ -1711,16 +2241,19 @@ export function Dashboard() {
                   <Eye size={14} className="text-sky-400" />
                   Active Loans
                   <Badge variant="outline" className="ml-auto text-[10px]">
-                    {gameState.activeLoans!.length}
+                    {relevantActiveLoans.length}
                   </Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {gameState.activeLoans!.slice(0, 8).map((deal) => {
+                {relevantActiveLoans.slice(0, 8).map((deal) => {
                   const loanPlayer = gameState.players[deal.playerId];
                   const parentClub = gameState.clubs[deal.parentClubId];
                   const loanClub = gameState.clubs[deal.loanClubId];
                   const perf = deal.performanceRecord;
+                  const monitoredThisWeek = (deal.monitoringWeeks ?? []).includes(
+                    `${gameState.currentSeason}:${gameState.currentWeek}`,
+                  );
                   if (!loanPlayer) return null;
                   return (
                     <div
@@ -1734,9 +2267,9 @@ export function Dashboard() {
                       <div className="min-w-0">
                         <p className="font-medium text-zinc-200 truncate">
                           {loanPlayer.firstName} {loanPlayer.lastName}
-                          <span className="ml-1 text-zinc-500">({loanPlayer.age})</span>
+                          <span className="ml-1 text-zinc-400">({loanPlayer.age})</span>
                         </p>
-                        <p className="text-[10px] text-zinc-500 truncate">
+                        <p className="text-[10px] text-zinc-400 truncate">
                           {parentClub?.name ?? "?"} → {loanClub?.name ?? "?"}
                           {" · "}Ends S{deal.endSeason} W{deal.endWeek}
                         </p>
@@ -1762,14 +2295,15 @@ export function Dashboard() {
                           deal.loanClubId === gameState.scout.currentClubId) && (
                           <button
                             className="rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-400 hover:border-sky-500/40 hover:text-sky-400 transition"
-                            title="Submit monitoring report"
+                            disabled={monitoredThisWeek}
+                            title={monitoredThisWeek ? "Monitoring report already filed this week" : "Submit monitoring report"}
                             onClick={(e) => {
                               e.stopPropagation();
                               submitLoanMonitoringReport(deal.id);
                             }}
                           >
                             <ClipboardList size={10} className="inline mr-0.5" />
-                            Monitor
+                            {monitoredThisWeek ? "Monitored" : "Monitor"}
                           </button>
                         )}
                       </div>

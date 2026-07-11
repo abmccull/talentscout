@@ -15,16 +15,13 @@ import type {
   Player,
   ScoutReport,
 } from "./types";
+import { deriveSeasonReviewMetrics } from "../career/seasonReviewContext";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-/** Minimum PA to classify as a wonderkid discovery (matches discoveryTracking). */
-const WONDERKID_PA_THRESHOLD = 150;
-
-/** Max age for wonderkid classification. */
-const WONDERKID_MAX_AGE = 21;
+const YOUTH_MAX_AGE = 21;
 
 // =============================================================================
 // HELPERS
@@ -40,27 +37,12 @@ function getSeasonReports(state: GameState, season: number): ScoutReport[] {
 }
 
 /**
- * Get unique countries scouted this season (from observations).
+ * Get unique countries scouted this season from actual season activity.
  */
 function getCountriesScouted(state: GameState, season: number): Set<string> {
-  const countries = new Set<string>();
-  const seasonObs = Object.values(state.observations).filter(
-    (o) => o.season === season,
+  return new Set(
+    deriveSeasonReviewMetrics(state, season).countriesScoutedThisSeason,
   );
-  for (const obs of seasonObs) {
-    const player = state.players[obs.playerId];
-    if (player) {
-      // Use the player's club's league's country
-      const club = state.clubs[player.clubId];
-      if (club) {
-        const league = state.leagues[club.leagueId];
-        if (league) {
-          countries.add(league.country);
-        }
-      }
-    }
-  }
-  return countries;
 }
 
 /**
@@ -97,8 +79,11 @@ function computeSeasonStats(
     (d) => d.discoveredSeason === season,
   );
   const playersDiscovered = seasonDiscoveries.length;
-  const wonderkidsDiscovered = seasonDiscoveries.filter(
-    (d) => d.wasWonderkid,
+  const highUpsideCalls = seasonReports.filter(
+    (report) =>
+      report.qualityScore >= 65 &&
+      report.perceivedPARange !== undefined &&
+      report.perceivedPARange[1] >= 4,
   ).length;
 
   // Transfer recommendations
@@ -156,7 +141,7 @@ function computeSeasonStats(
     avgReportQuality,
     matchesAttended,
     playersDiscovered,
-    wonderkidsDiscovered,
+    highUpsideCalls,
     transferRecommendations,
     recommendationsAccepted,
     recommendationsSigned,
@@ -183,17 +168,15 @@ function generateScoutAwards(
 ): SeasonAward[] {
   const awards: SeasonAward[] = [];
 
-  // "Golden Eye" — discovered 3+ wonderkids (PA >= threshold)
-  const seasonDiscoveries = state.discoveryRecords.filter(
-    (d) => d.discoveredSeason === season,
-  );
-  const wonderkidFinds = seasonDiscoveries.filter((d) => d.wasWonderkid);
-  if (wonderkidFinds.length >= 3) {
+  // "Golden Eye" rewards well-supported high-upside calls without revealing
+  // whether the engine considers those players true wonderkids.
+  const highUpsideCalls = stats.highUpsideCalls ?? 0;
+  if (highUpsideCalls >= 3) {
     awards.push({
       id: "golden-eye",
       name: "Golden Eye",
-      description: "Discovered 3 or more wonderkids in a single season",
-      criteria: `Found ${wonderkidFinds.length} wonderkids this season`,
+      description: "Filed 3 or more evidence-rich, high-upside reports in one season",
+      criteria: `${highUpsideCalls} high-upside calls this season`,
       tier: "gold",
     });
   }
@@ -203,8 +186,8 @@ function generateScoutAwards(
     awards.push({
       id: "mr-reliable",
       name: "Mr. Reliable",
-      description: "Maintained an average report quality of 70 or above",
-      criteria: `Average report quality: ${stats.avgReportQuality}`,
+      description: "Maintained an average report craft score of 70 or above",
+      criteria: `Average report craft: ${stats.avgReportQuality}`,
       tier: "gold",
     });
   }
@@ -255,7 +238,7 @@ function generateScoutAwards(
     if (r.clubResponse !== "signed") return false;
     const player = state.players[r.playerId];
     if (!player) return false;
-    return player.age <= WONDERKID_MAX_AGE;
+    return player.age <= YOUTH_MAX_AGE;
   });
   if (youthPlacements.length >= 3) {
     awards.push({
@@ -333,7 +316,7 @@ function generateLeagueAwards(
 
   // "Best Young Player" — highest-rated U21 player
   const youngPlayers = allPlayers
-    .filter((p) => p.age <= WONDERKID_MAX_AGE)
+    .filter((p) => p.age <= YOUTH_MAX_AGE)
     .sort((a, b) => b.currentAbility - a.currentAbility);
   if (youngPlayers.length > 0) {
     const bestYoung = youngPlayers[0];

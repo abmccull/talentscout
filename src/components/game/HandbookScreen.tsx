@@ -18,6 +18,7 @@ import {
   Lightbulb,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1254,6 +1255,17 @@ const CHAPTERS: HandbookChapter[] = [
 
 // ─── Exported chapter IDs ──────────────────────────────────────────────────────
 
+const YOUTH_VISIBLE_CHAPTER_IDS = new Set([
+  "getting-started",
+  "scouting-reports",
+  "youth",
+  "tips",
+]);
+
+const YOUTH_COMING_LATER_CHAPTERS = CHAPTERS.filter(
+  (chapter) => !YOUTH_VISIBLE_CHAPTER_IDS.has(chapter.id),
+);
+
 export const HANDBOOK_CHAPTERS = CHAPTERS.map((c) => c.id);
 
 /** Scroll to a chapter accordion and open it. Call after navigating to the handbook screen. */
@@ -1275,10 +1287,17 @@ export function HandbookScreen() {
   const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
 
   const normalised = search.toLowerCase().trim();
+  const visibleChapters = useMemo(
+    () =>
+      IS_YOUTH_EARLY_ACCESS
+        ? CHAPTERS.filter((chapter) => YOUTH_VISIBLE_CHAPTER_IDS.has(chapter.id))
+        : CHAPTERS,
+    [],
+  );
 
   const filteredChapters = useMemo(() => {
-    if (!normalised) return CHAPTERS;
-    return CHAPTERS.map((chapter) => {
+    if (!normalised) return visibleChapters;
+    return visibleChapters.map((chapter) => {
       const titleMatch = chapter.title.toLowerCase().includes(normalised);
       const filteredSections = chapter.sections.filter(
         (s) => titleMatch || s.title.toLowerCase().includes(normalised),
@@ -1288,7 +1307,7 @@ export function HandbookScreen() {
       }
       return null;
     }).filter(Boolean) as HandbookChapter[];
-  }, [normalised]);
+  }, [normalised, visibleChapters]);
 
   // When searching, open all matched chapters automatically
   const chaptersToShow = useMemo(() => {
@@ -1320,9 +1339,30 @@ export function HandbookScreen() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-zinc-100">Scout&apos;s Handbook</h1>
-            <p className="text-xs text-zinc-500">Reference guide to game mechanics</p>
+            <p className="text-xs text-zinc-500">
+              {IS_YOUTH_EARLY_ACCESS
+                ? "Youth Scout Early Access reference"
+                : "Reference guide to game mechanics"}
+            </p>
           </div>
         </div>
+
+        {IS_YOUTH_EARLY_ACCESS && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-200">
+              Build-aware handbook
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+              This handbook only foregrounds the Youth Scout loop in the current
+              build. Full-game chapters remain preserved internally and return
+              when those systems are playable.
+            </p>
+            <p className="mt-2 text-xs text-zinc-400">
+              Coming later:{" "}
+              {YOUTH_COMING_LATER_CHAPTERS.map((chapter) => chapter.title).join(", ")}
+            </p>
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative mb-6">

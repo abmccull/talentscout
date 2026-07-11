@@ -27,3 +27,5 @@ export {
 } from './perceivedAbility';
 
 export type { PerceivedAbility } from './perceivedAbility';
+
+export { applyScoutSkillXp } from './progression';

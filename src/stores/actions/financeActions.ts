@@ -24,6 +24,7 @@ import type {
   TransferRecord,
   EmployeeAssignment,
   TransferAddOn,
+  GameState,
 } from "@/engine/core/types";
 import type { EquipmentItemId } from "@/engine/finance";
 import { createRNG } from "@/engine/rng";
@@ -74,10 +75,44 @@ import {
   initiateFreeAgentNegotiation as initFANegotiation,
   advanceFreeAgentNegotiation,
   calculateFreeAgentAcceptance,
-  processFreeAgentSigning,
   generateNegotiationMessage,
 } from "@/engine/freeAgents/negotiation";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
+import {
+  getLifecycleWorld,
+  resolvePlayerMovements,
+  withLifecycleWorld,
+} from "@/engine/world/playerLifecycle";
+import { useTutorialStore } from "@/stores/tutorialStore";
+import { applyScoutSkillXp } from "@/engine/scout/progression";
+
+function completeFreeAgentSigning(
+  state: GameState,
+  playerId: string,
+  wage: number,
+  signingBonus: number,
+  contractLength: number,
+): GameState | null {
+  const toClubId = state.scout.currentClubId;
+  if (!toClubId) return null;
+  const resolution = resolvePlayerMovements(
+    getLifecycleWorld(state),
+    [{
+      type: "freeAgentSigning",
+      playerId,
+      toClubId,
+      wage,
+      signingBonus,
+      contractLength,
+      reason: "Scout-led free-agent agreement",
+    }],
+    state.currentWeek,
+    state.currentSeason,
+  );
+  return resolution.applied.length > 0
+    ? withLifecycleWorld(state, resolution.state)
+    : null;
+}
 
 export function createFinanceActions(get: GetState, set: SetState) {
   return {
@@ -153,6 +188,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         targetClubId, gameState.currentWeek, gameState.currentSeason,
       );
       set({ gameState: { ...gameState, finances: updated } });
+      useTutorialStore.getState().completeMilestone("checkedInbox");
     },
 
     withdrawReportListing: (listingId: string) => {
@@ -547,11 +583,28 @@ export function createFinanceActions(get: GetState, set: SetState) {
     initiateTransferNegotiation: (playerId: string) => {
       const { gameState } = get();
       if (!gameState || !gameState.scout.currentClubId) return;
+      const windowOpen = gameState.transferWindow
+        ? isTransferWindowOpen([gameState.transferWindow], gameState.currentWeek)
+        : false;
+      if (!windowOpen) {
+        const message: InboxMessage = {
+          id: `neg_window_closed_${playerId}_${gameState.currentSeason}_${gameState.currentWeek}`,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+          type: "transferUpdate",
+          title: "Transfer Window Closed",
+          body: "Permanent transfer negotiations can only be opened during the summer or winter registration window.",
+          read: false,
+          actionRequired: false,
+        };
+        set({ gameState: { ...gameState, inbox: [...gameState.inbox, message] } });
+        return;
+      }
       const rng = createRNG(`${gameState.seed}-neg-init-${playerId}-${gameState.currentWeek}`);
       const negotiation = negotiationEngine.initiateNegotiation(rng, gameState, playerId, gameState.scout.currentClubId);
       if (!negotiation) return;
       const player = gameState.players[playerId];
-      const fromClub = gameState.clubs[player?.clubId ?? ""];
+      const fromClub = gameState.clubs[negotiation.fromClubId];
       const playerName = player ? `${player.firstName} ${player.lastName}` : "Unknown";
       const fmtPrice = negotiation.initialAskingPrice >= 1_000_000
         ? `\u00A3${(negotiation.initialAskingPrice / 1_000_000).toFixed(1)}M`
@@ -576,6 +629,9 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (negIndex === -1) return;
       const neg = negotiations[negIndex];
       if (neg.phase === "completed" || neg.phase === "collapsed") return;
+      const buyingClub = gameState.clubs[neg.toClubId];
+      const signingBonus = neg.agentDemands?.signingBonus ?? 0;
+      if (!buyingClub || amount < 0 || amount + signingBonus > buyingClub.budget) return;
       const rng = createRNG(`${gameState.seed}-neg-offer-${negotiationId}-${neg.rounds.length}`);
       const updated = negotiationEngine.submitOffer(rng, neg, amount, addOns, gameState);
       const updatedNegotiations = [...negotiations];
@@ -606,6 +662,10 @@ export function createFinanceActions(get: GetState, set: SetState) {
     acceptNegotiation: (negotiationId: string) => {
       const { gameState } = get();
       if (!gameState) return;
+      const windowOpen = gameState.transferWindow
+        ? isTransferWindowOpen([gameState.transferWindow], gameState.currentWeek)
+        : false;
+      if (!windowOpen) return;
       const negotiations = gameState.activeNegotiations ?? [];
       const neg = negotiations.find((n) => n.id === negotiationId);
       if (!neg || neg.phase !== "completed") return;
@@ -626,24 +686,93 @@ export function createFinanceActions(get: GetState, set: SetState) {
         set({ gameState: { ...gameState, activeNegotiations: updatedNegs, inbox: [...gameState.inbox, message] }, activeNegotiationId: null, currentScreen: "dashboard" as GameScreen });
         return;
       }
-      const result = negotiationEngine.applyCompletedTransfer(neg, gameState);
-      const transferPlayer = gameState.players[neg.playerId];
+      const lastRound = neg.rounds[neg.rounds.length - 1];
+      const transferFee = lastRound?.offerAmount ?? neg.initialAskingPrice;
+      const signingBonus = neg.agentDemands?.signingBonus ?? 0;
+      const agreedWage = Math.max(
+        player.wage,
+        Math.round(player.wage * (1 + (neg.agentDemands?.wagePremium ?? 0.1))),
+      );
+      const resolution = resolvePlayerMovements(
+        getLifecycleWorld(gameState),
+        [{
+          type: "permanentTransfer",
+          playerId: player.id,
+          fromClubId: neg.fromClubId,
+          toClubId: neg.toClubId,
+          fee: transferFee,
+          signingBonus,
+          wage: agreedWage,
+          contractLength: player.age >= 32 ? 2 : 4,
+          reason: "Scout-led transfer negotiation completed",
+        }],
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      if (resolution.applied.length === 0) {
+        const failedNeg = { ...neg, phase: "collapsed" as const };
+        const failedMessage: InboxMessage = {
+          id: `neg_lifecycle_fail_${negotiationId}`,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+          type: "transferUpdate",
+          title: `Transfer Could Not Be Registered: ${player.firstName} ${player.lastName}`,
+          body: resolution.rejected[0]?.reason ?? "The transfer no longer meets registration requirements.",
+          read: false,
+          actionRequired: false,
+          relatedId: player.id,
+          relatedEntityType: "player",
+        };
+        set({
+          gameState: {
+            ...gameState,
+            activeNegotiations: negotiations.map((n) => n.id === negotiationId ? failedNeg : n),
+            inbox: [...gameState.inbox, failedMessage],
+          },
+          activeNegotiationId: null,
+          currentScreen: "dashboard" as GameScreen,
+        });
+        return;
+      }
+
+      const lifecycleState = withLifecycleWorld(gameState, resolution.state);
+      const matchingReport = Object.values(gameState.reports)
+        .filter((report) => report.playerId === neg.playerId && report.scoutId === gameState.scout.id)
+        .sort((a, b) => b.submittedSeason - a.submittedSeason || b.submittedWeek - a.submittedWeek)[0];
       const transferRecord: TransferRecord = {
-        id: `tr_${neg.id}`, playerId: neg.playerId, reportId: "",
+        id: `tr_${neg.id}`, playerId: neg.playerId, reportId: matchingReport?.id ?? "",
         scoutId: gameState.scout.id,
-        fromClubId: neg.fromClubId, toClubId: neg.toClubId, fee: result.transferFee,
+        fromClubId: neg.fromClubId, toClubId: neg.toClubId, fee: transferFee,
         transferSeason: gameState.currentSeason, transferWeek: gameState.currentWeek,
-        scoutConviction: "recommend",
-        caAtTransfer: transferPlayer?.currentAbility ?? 0,
+        scoutConviction: matchingReport?.conviction ?? "recommend",
+        caAtTransfer: player.currentAbility,
         seasonsSinceTransfer: 0,
         accountabilityApplied: false,
       };
       const updatedNegs = negotiations.map((n) => n.id === negotiationId ? { ...n, phase: "completed" as const } : n);
+      const feeLabel = transferFee >= 1_000_000
+        ? `£${(transferFee / 1_000_000).toFixed(1)}M`
+        : `£${Math.round(transferFee / 1_000)}K`;
+      const completionMessage: InboxMessage = {
+        id: `transfer_${neg.id}`,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+        type: "transferUpdate",
+        title: `Transfer Complete: ${player.firstName} ${player.lastName}`,
+        body: `${player.firstName} ${player.lastName} has joined ${toClub.name} from ${fromClub.name} for ${feeLabel}. A ${player.age >= 32 ? 2 : 4}-year contract was registered at £${agreedWage.toLocaleString()}/week${signingBonus > 0 ? ` with a £${signingBonus.toLocaleString()} signing bonus` : ""}.`,
+        read: false,
+        actionRequired: false,
+        relatedId: player.id,
+        relatedEntityType: "player",
+      };
       set({
         gameState: {
-          ...gameState, players: result.players, clubs: result.clubs,
+          ...lifecycleState,
           activeNegotiations: updatedNegs, transferRecords: [...gameState.transferRecords, transferRecord],
-          inbox: [...gameState.inbox, result.message],
+          reports: matchingReport
+            ? { ...gameState.reports, [matchingReport.id]: { ...matchingReport, clubResponse: "signed" } }
+            : gameState.reports,
+          inbox: [...gameState.inbox, completionMessage],
         },
         activeNegotiationId: null, currentScreen: "dashboard" as GameScreen,
       });
@@ -679,6 +808,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!player) return;
       const club = gameState.clubs[gameState.scout.currentClubId];
       if (!club) return;
+      if (wage < 100 || bonus < 0 || bonus > club.budget || contractLength < 1) return;
 
       // Check club acceptance first (conviction-based)
       const observations = Object.values(gameState.observations).filter((o) => o.playerId === playerId);
@@ -698,7 +828,16 @@ export function createFinanceActions(get: GetState, set: SetState) {
       }
 
       const rng = createRNG(`${gameState.seed}-fa-neg-${playerId}-${gameState.currentWeek}`);
-      const negotiation = initFANegotiation(agent, player, wage, bonus, contractLength, gameState.currentWeek, rng);
+      const negotiation = initFANegotiation(
+        agent,
+        player,
+        wage,
+        bonus,
+        contractLength,
+        gameState.currentWeek,
+        gameState.currentSeason,
+        rng,
+      );
       const message = generateNegotiationMessage(negotiation, player, club, rng, gameState.currentWeek, gameState.currentSeason);
 
       // Mark agent as in negotiation
@@ -708,17 +847,17 @@ export function createFinanceActions(get: GetState, set: SetState) {
 
       if (negotiation.status === "accepted") {
         // Immediate acceptance — process signing
-        const updatedPlayer = processFreeAgentSigning(player, gameState.scout.currentClubId, wage, contractLength, gameState.currentSeason);
-        const signedAgents = updatedAgents.map((a) =>
-          a.playerId === playerId ? { ...a, status: "signed" as const } : a,
+        const signingState = completeFreeAgentSigning(
+          gameState,
+          playerId,
+          wage,
+          bonus,
+          contractLength,
         );
-        const updatedClub = { ...club, playerIds: [...club.playerIds, playerId] };
+        if (!signingState) return;
         set({
           gameState: {
-            ...gameState,
-            players: { ...gameState.players, [playerId]: updatedPlayer },
-            clubs: { ...gameState.clubs, [club.id]: updatedClub },
-            freeAgentPool: { ...pool, agents: signedAgents, totalSignedThisSeason: pool.totalSignedThisSeason + 1 },
+            ...signingState,
             freeAgentNegotiations: gameState.freeAgentNegotiations.filter((n) => n.freeAgentId !== playerId),
             inbox: [...gameState.inbox, message],
           },
@@ -750,23 +889,24 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!player) return;
       const club = gameState.clubs[gameState.scout.currentClubId];
       if (!club) return;
+      if (wage < 100 || bonus < 0 || bonus > club.budget || contractLength < 1) return;
 
       const rng = createRNG(`${gameState.seed}-fa-offer-${playerId}-${negotiation.round}`);
       const updated = advanceFreeAgentNegotiation(negotiation, agent, player, wage, bonus, contractLength, rng);
       const message = generateNegotiationMessage(updated, player, club, rng, gameState.currentWeek, gameState.currentSeason);
 
       if (updated.status === "accepted") {
-        const updatedPlayer = processFreeAgentSigning(player, gameState.scout.currentClubId, wage, contractLength, gameState.currentSeason);
-        const signedAgents = pool.agents.map((a) =>
-          a.playerId === playerId ? { ...a, status: "signed" as const } : a,
+        const signingState = completeFreeAgentSigning(
+          gameState,
+          playerId,
+          wage,
+          bonus,
+          contractLength,
         );
-        const updatedClub = { ...club, playerIds: [...club.playerIds, playerId] };
+        if (!signingState) return;
         set({
           gameState: {
-            ...gameState,
-            players: { ...gameState.players, [playerId]: updatedPlayer },
-            clubs: { ...gameState.clubs, [club.id]: updatedClub },
-            freeAgentPool: { ...pool, agents: signedAgents, totalSignedThisSeason: pool.totalSignedThisSeason + 1 },
+            ...signingState,
             freeAgentNegotiations: gameState.freeAgentNegotiations.filter((n) => n.freeAgentId !== playerId),
             inbox: [...gameState.inbox, message],
           },
@@ -805,6 +945,15 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const player = gameState.players[playerId];
       const targetClub = gameState.clubs[targetClubId];
       if (!player || !targetClub) return;
+      const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+      if (!scout.currentClubId || ownerClubId !== scout.currentClubId || player.onLoan) return;
+      const windowOpen = gameState.transferWindow
+        ? isTransferWindowOpen([gameState.transferWindow], gameState.currentWeek)
+        : false;
+      if (!windowOpen || targetClubId === ownerClubId) return;
+      if ((gameState.loanRecommendations ?? []).some((item) =>
+        item.playerId === playerId && (item.status ?? "pending") === "pending"
+      )) return;
 
       const rng = createRNG(`${gameState.seed}-loanrec-${playerId}-${gameState.currentWeek}`);
       const wageContribution = 50; // default 50% wage contribution suggestion
@@ -826,16 +975,9 @@ export function createFinanceActions(get: GetState, set: SetState) {
         relatedEntityType: "player",
       };
 
-      // Apply +3 rep for recommendation submitted (XP flows through calendar activities)
-      const updatedScout = {
-        ...scout,
-        reputation: Math.min(100, scout.reputation + 3),
-      };
-
       set({
         gameState: {
           ...gameState,
-          scout: updatedScout,
           loanRecommendations: [...(gameState.loanRecommendations ?? []), recommendation],
           inbox: [...gameState.inbox, message],
         },
@@ -847,6 +989,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!gameState) return;
       const deal = (gameState.activeLoans ?? []).find((l) => l.id === loanDealId);
       if (!deal) return;
+      const monitoringKey = `${gameState.currentSeason}:${gameState.currentWeek}`;
+      if ((deal.monitoringWeeks ?? []).includes(monitoringKey)) return;
       const player = gameState.players[deal.playerId];
 
       const rng = createRNG(`${gameState.seed}-loanmon-${loanDealId}-${gameState.currentWeek}`);
@@ -854,15 +998,29 @@ export function createFinanceActions(get: GetState, set: SetState) {
         gameState.scout, deal, player, gameState.currentWeek, gameState.currentSeason, rng,
       );
 
-      const updatedScout = {
+      const reputationUpdatedScout = {
         ...gameState.scout,
         reputation: Math.min(100, gameState.scout.reputation + result.reputationDelta),
       };
+      const updatedScout = applyScoutSkillXp(
+        reputationUpdatedScout,
+        {
+          [gameState.scout.primarySpecialization === "youth"
+            ? "potentialAssessment"
+            : "playerJudgment"]: result.xpAward,
+        },
+      );
+      const updatedLoans = (gameState.activeLoans ?? []).map((activeDeal) =>
+        activeDeal.id === deal.id
+          ? { ...activeDeal, monitoringWeeks: [...(activeDeal.monitoringWeeks ?? []), monitoringKey] }
+          : activeDeal,
+      );
 
       set({
         gameState: {
           ...gameState,
           scout: updatedScout,
+          activeLoans: updatedLoans,
           inbox: [...gameState.inbox, result.message],
         },
       });
@@ -885,37 +1043,21 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const loanClub = gameState.clubs[deal.loanClubId];
       if (!parentClub || !loanClub) return;
 
-      // Move player back to parent club
-      const updatedPlayer = {
-        ...player,
-        clubId: deal.parentClubId,
-        onLoan: undefined,
-        loanParentClubId: undefined,
-        loanEndWeek: undefined,
-        loanEndSeason: undefined,
-      };
-
-      const updatedParentClub = {
-        ...parentClub,
-        playerIds: parentClub.playerIds.includes(player.id)
-          ? parentClub.playerIds
-          : [...parentClub.playerIds, player.id],
-        loanedOutPlayerIds: (parentClub.loanedOutPlayerIds ?? []).filter((id) => id !== player.id),
-      };
-
-      const updatedLoanClub = {
-        ...loanClub,
-        playerIds: loanClub.playerIds.filter((id) => id !== player.id),
-        loanedInPlayerIds: (loanClub.loanedInPlayerIds ?? []).filter((id) => id !== player.id),
-      };
-
-      const completedDeal: import("@/engine/core/types").LoanDeal = {
-        ...deal,
-        status: "recalled",
-      };
-
-      const updatedActiveLoans = [...gameState.activeLoans!];
-      updatedActiveLoans.splice(dealIndex, 1);
+      const resolution = resolvePlayerMovements(
+        getLifecycleWorld(gameState),
+        [{
+          type: "loanEnd",
+          playerId: player.id,
+          dealId: deal.id,
+          resolution: "recall",
+          outcome: "recalled-early",
+          reason: "Scout requested an in-window loan recall",
+        }],
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      if (resolution.applied.length === 0) return;
+      const lifecycleState = withLifecycleWorld(gameState, resolution.state);
 
       const message: InboxMessage = {
         id: `msg_recall_${deal.playerId}_${gameState.currentWeek}`,
@@ -932,15 +1074,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
 
       set({
         gameState: {
-          ...gameState,
-          players: { ...gameState.players, [player.id]: updatedPlayer },
-          clubs: {
-            ...gameState.clubs,
-            [parentClub.id]: updatedParentClub,
-            [loanClub.id]: updatedLoanClub,
-          },
-          activeLoans: updatedActiveLoans,
-          loanHistory: [...(gameState.loanHistory ?? []), completedDeal],
+          ...lifecycleState,
           inbox: [...gameState.inbox, message],
         },
       });

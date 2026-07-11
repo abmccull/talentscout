@@ -6,15 +6,13 @@ import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target, DollarSign } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target, DollarSign, X } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { ConvictionLevel, AttributeReading, PlayerAttribute, SystemFitResult } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import {
   generateReportContent,
   estimateReportQuality,
-  STRENGTH_DESCRIPTORS,
-  WEAKNESS_DESCRIPTORS,
 } from "@/engine/reports";
 import { estimateReportPriceRange, getActiveEquipmentBonuses } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
@@ -26,6 +24,7 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { useTutorialStore } from "@/stores/tutorialStore";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
@@ -55,10 +54,10 @@ function qualityScoreBorder(score: number): string {
 
 const BREAKDOWN_LABELS: Record<keyof QualityBreakdown, { label: string; max: number }> = {
   observationDepth: { label: "Observation depth", max: 25 },
-  confidenceLevel: { label: "Confidence level", max: 20 },
-  convictionFit: { label: "Conviction fit", max: 15 },
-  detail: { label: "Detail", max: 20 },
-  scoutSkill: { label: "Scout skill", max: 20 },
+  confidenceLevel: { label: "Evidence confidence", max: 20 },
+  convictionFit: { label: "Conviction calibration", max: 15 },
+  detail: { label: "Evidence-backed detail", max: 20 },
+  scoutSkill: { label: "Scout technique", max: 20 },
 };
 
 function formatValue(n: number): string {
@@ -70,6 +69,16 @@ function formatValue(n: number): string {
 function attrLabel(attr: string): string {
   return attr.replace(/([A-Z])/g, " $1").trim();
 }
+
+interface DescriptorOption {
+  attributes: PlayerAttribute[];
+  descriptor: string;
+  estimatedValue: number;
+  confidence: number;
+}
+
+const MAX_STRENGTHS = 3;
+const MAX_WEAKNESSES = 2;
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -212,6 +221,8 @@ export function ReportWriter() {
         convictionLevel: conviction,
         strengthCount: selectedStrengths.length,
         weaknessCount: selectedWeaknesses.length,
+        availableStrengthCount: draft?.suggestedStrengthClaims.length,
+        availableWeaknessCount: draft?.suggestedWeaknessClaims.length,
         scoutSkills: gameState?.scout.skills ?? {},
         assessedAttributeCount: merged.size,
         position: player?.position,
@@ -227,6 +238,8 @@ export function ReportWriter() {
       conviction,
       selectedStrengths.length,
       selectedWeaknesses.length,
+      draft?.suggestedStrengthClaims.length,
+      draft?.suggestedWeaknessClaims.length,
       gameState?.scout.skills,
       merged.size,
       player?.position,
@@ -236,22 +249,41 @@ export function ReportWriter() {
     ]
   );
 
-  // Build reverse-lookup maps: descriptor string → attribute name
-  const strengthToAttribute = useMemo(() => {
-    const map = new Map<string, PlayerAttribute>();
-    for (const [attr, desc] of Object.entries(STRENGTH_DESCRIPTORS)) {
-      if (desc) map.set(desc, attr as PlayerAttribute);
-    }
-    return map;
-  }, []);
+  const strengthOptions = useMemo<DescriptorOption[]>(
+    () => draft?.suggestedStrengthClaims ?? [],
+    [draft],
+  );
 
-  const weaknessToAttribute = useMemo(() => {
-    const map = new Map<string, PlayerAttribute>();
-    for (const [attr, desc] of Object.entries(WEAKNESS_DESCRIPTORS)) {
-      if (desc) map.set(desc, attr as PlayerAttribute);
-    }
-    return map;
-  }, []);
+  const weaknessOptions = useMemo<DescriptorOption[]>(
+    () => draft?.suggestedWeaknessClaims ?? [],
+    [draft],
+  );
+
+  const strengthClaimsByDescriptor = useMemo(
+    () => new Map(strengthOptions.map((option) => [option.descriptor, option])),
+    [strengthOptions],
+  );
+
+  const weaknessClaimsByDescriptor = useMemo(
+    () => new Map(weaknessOptions.map((option) => [option.descriptor, option])),
+    [weaknessOptions],
+  );
+
+  const selectedStrengthAttributes = useMemo(
+    () => new Set(
+      selectedStrengths
+        .flatMap((descriptor) => strengthClaimsByDescriptor.get(descriptor)?.attributes ?? []),
+    ),
+    [selectedStrengths, strengthClaimsByDescriptor],
+  );
+
+  const selectedWeaknessAttributes = useMemo(
+    () => new Set(
+      selectedWeaknesses
+        .flatMap((descriptor) => weaknessClaimsByDescriptor.get(descriptor)?.attributes ?? []),
+    ),
+    [selectedWeaknesses, weaknessClaimsByDescriptor],
+  );
 
   // Equipment report quality bonus for display
   const equipmentReportQualityBonus = useMemo(() => {
@@ -270,35 +302,45 @@ export function ReportWriter() {
       gameState.scout.reputation,
       gameState.finances.marketTemperature,
     );
-  }, [isIndependent, conviction, qualityPreview.score, gameState?.scout.reputation, gameState?.finances?.marketTemperature]);
+  }, [isIndependent, conviction, qualityPreview.score, gameState?.scout.reputation, gameState?.finances]);
 
   // Pre-populate form state from draft (one-shot) and auto-generate summary
   useEffect(() => {
     if (!draft || draftApplied.current) return;
     draftApplied.current = true;
-    if (draft.suggestedStrengths.length > 0) {
-      setSelectedStrengths(draft.suggestedStrengths);
+    const nextStrengths = draft.suggestedStrengthClaims
+      .slice(0, MAX_STRENGTHS)
+      .map((claim) => claim.descriptor);
+    const selectedStrengthAttrs = new Set(
+      nextStrengths
+        .flatMap((descriptor) => strengthClaimsByDescriptor.get(descriptor)?.attributes ?? []),
+    );
+    const nextWeaknesses = draft.suggestedWeaknessClaims
+      .filter((claim) => {
+        return !claim.attributes.some((attribute) => selectedStrengthAttrs.has(attribute));
+      })
+      .slice(0, MAX_WEAKNESSES)
+      .map((claim) => claim.descriptor);
+    if (nextStrengths.length > 0) {
+      setSelectedStrengths(nextStrengths);
     }
-    if (draft.suggestedWeaknesses.length > 0) {
-      setSelectedWeaknesses(draft.suggestedWeaknesses);
+    if (nextWeaknesses.length > 0) {
+      setSelectedWeaknesses(nextWeaknesses);
     }
     // Auto-generate summary
     const lines: string[] = [];
-    const roleStr = player?.naturalRole
-      ? ` ${player.naturalRole.replace(/([A-Z])/g, " $1").trim().toLowerCase()}`
-      : "";
     lines.push(
-      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player?.firstName} ${player?.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"}${roleStr} ${player?.position}.`
+      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player?.firstName} ${player?.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"} ${player?.position}.`
     );
-    if (draft.suggestedStrengths.length > 0) {
-      lines.push(`Key strengths include ${draft.suggestedStrengths.slice(0, 2).map(s => {
-        const attr = strengthToAttribute.get(s);
+    if (nextStrengths.length > 0) {
+      lines.push(`Key strengths include ${nextStrengths.slice(0, 2).map(s => {
+        const attr = strengthClaimsByDescriptor.get(s)?.attributes[0];
         return attr ? attrLabel(attr).toLowerCase() : s.toLowerCase().split(" — ")[0];
       }).join(" and ")}.`);
     }
-    if (draft.suggestedWeaknesses.length > 0) {
-      lines.push(`Areas of concern: ${draft.suggestedWeaknesses.slice(0, 2).map(w => {
-        const attr = weaknessToAttribute.get(w);
+    if (nextWeaknesses.length > 0) {
+      lines.push(`Areas of concern: ${nextWeaknesses.slice(0, 2).map(w => {
+        const attr = weaknessClaimsByDescriptor.get(w)?.attributes[0];
         return attr ? attrLabel(attr).toLowerCase() : w.toLowerCase().split(" — ")[0];
       }).join(" and ")}.`);
     }
@@ -326,7 +368,14 @@ export function ReportWriter() {
     }
     setSummary(lines.join(" "));
     playSFX("pen-scribble");
-  }, [draft, player, observations.length, strengthToAttribute, weaknessToAttribute, playSFX]);
+  }, [
+    draft,
+    player,
+    observations.length,
+    strengthClaimsByDescriptor,
+    weaknessClaimsByDescriptor,
+    playSFX,
+  ]);
 
   // Warn the user if they try to close/reload the tab while the form is dirty
   useEffect(() => {
@@ -358,6 +407,52 @@ export function ReportWriter() {
     );
   }
 
+  const toggleStrength = (option: DescriptorOption) => {
+    const isSelected = selectedStrengths.includes(option.descriptor);
+    const canAdd = isSelected || selectedStrengths.length < MAX_STRENGTHS;
+    if (!canAdd) return;
+
+    setIsDirty(true);
+    useTutorialStore.getState().completeMilestone("wroteReport");
+    setSelectedStrengths((current) =>
+      isSelected
+        ? current.filter((descriptor) => descriptor !== option.descriptor)
+        : [...current, option.descriptor]
+    );
+    if (!isSelected) {
+      setSelectedWeaknesses((current) =>
+        current.filter((descriptor) => {
+          const weakness = weaknessClaimsByDescriptor.get(descriptor);
+          return !weakness?.attributes.some((attribute) => option.attributes.includes(attribute));
+        }),
+      );
+    }
+    playSFX("page-turn");
+  };
+
+  const toggleWeakness = (option: DescriptorOption) => {
+    const isSelected = selectedWeaknesses.includes(option.descriptor);
+    const canAdd = isSelected || selectedWeaknesses.length < MAX_WEAKNESSES;
+    if (!canAdd) return;
+
+    setIsDirty(true);
+    useTutorialStore.getState().completeMilestone("wroteReport");
+    setSelectedWeaknesses((current) =>
+      isSelected
+        ? current.filter((descriptor) => descriptor !== option.descriptor)
+        : [...current, option.descriptor]
+    );
+    if (!isSelected) {
+      setSelectedStrengths((current) =>
+        current.filter((descriptor) => {
+          const strength = strengthClaimsByDescriptor.get(descriptor);
+          return !strength?.attributes.some((attribute) => option.attributes.includes(attribute));
+        }),
+      );
+    }
+    playSFX("page-turn");
+  };
+
   const handleBack = () => {
     if (isDirty && !window.confirm(t("unsavedWarning"))) {
       return;
@@ -377,26 +472,27 @@ export function ReportWriter() {
 
   return (
     <GameLayout>
-      <div className="relative min-h-full p-6">
+      <div className="relative min-h-full p-4 sm:p-6 lg:p-8">
         <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
-        <div className="relative z-10 max-w-4xl mx-auto">
+        <div className="relative z-10 mx-auto max-w-6xl">
         <button
           onClick={handleBack}
-          className="mb-4 flex items-center gap-1 text-sm text-zinc-500 hover:text-white transition"
+          className="mb-4 flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm font-medium text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
           aria-label="Back to player profile"
         >
-          <ArrowLeft size={14} />
+          <ArrowLeft size={15} aria-hidden="true" />
           {t("backToProfile")}
         </button>
 
-        <div className="mb-6 flex items-center gap-4">
+        <div className="mb-5 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#10151b]/95 p-5 shadow-xl shadow-black/20 sm:p-6">
           <PlayerAvatar
             playerId={player.id}
             nationality={player.nationality}
             size={64}
           />
           <div>
-            <h1 className="text-2xl font-bold">{t("title")}</h1>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Scouting judgment</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">{t("title")}</h1>
             <p className="text-sm text-zinc-400 mt-1">
               {player.firstName} {player.lastName} — {player.position}, Age {player.age}
               {club ? ` — ${club.name}` : ""}
@@ -414,6 +510,105 @@ export function ReportWriter() {
         )}
 
         <div className="space-y-6">
+          <Card data-tutorial-id="report-conviction" className={`border ${qualityScoreBorder(qualityPreview.score)} bg-[#10151b]/98 shadow-2xl shadow-black/25 lg:sticky lg:top-4 lg:z-20`}>
+            <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
+              <div>
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Your recommendation</p>
+                    <h2 className="mt-1 text-xl font-bold text-white">State the call before the supporting detail</h2>
+                  </div>
+                  <Badge variant="outline" className={`${qualityScoreBorder(qualityPreview.score)} ${qualityScoreColor(qualityPreview.score)}`}>
+                    Craft {qualityPreview.score}/100
+                  </Badge>
+                </div>
+                <label htmlFor="report-summary" className="text-sm font-semibold text-zinc-200">
+                  Final scouting judgment
+                </label>
+                <p id="report-summary-help" className="mt-1 text-xs leading-5 text-zinc-400">
+                  Evidence can suggest language, but this is your professional opinion. Edit it until it says exactly what you are prepared to defend.
+                </p>
+                <textarea
+                  id="report-summary"
+                  value={summary}
+                  onChange={(event) => {
+                    setIsDirty(true);
+                    setSummary(event.target.value);
+                  }}
+                  aria-describedby="report-summary-help"
+                  rows={5}
+                  placeholder="What should the receiving club do, and why?"
+                  className="mt-3 min-h-32 w-full resize-y rounded-xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/40"
+                />
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Conviction</p>
+                    <p className="mt-1 text-sm text-zinc-300">How much reputation belongs behind this call?</p>
+                  </div>
+                  <span className={`text-xs font-semibold ${canSubmit ? "text-emerald-300" : "text-amber-300"}`}>
+                    {canSubmit ? "Ready to file" : "Needs judgment"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Report conviction">
+                  {CONVICTION_KEYS.map((key) => (
+                    <button
+                      key={`decision-${key}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={conviction === key}
+                      onClick={() => {
+                        setIsDirty(true);
+                        setConviction(key);
+                        useTutorialStore.getState().completeMilestone("wroteReport");
+                        playSFX("page-turn");
+                      }}
+                      className={`min-h-12 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                        conviction === key
+                          ? key === "tablePound"
+                            ? "border-red-400/60 bg-red-400/10 text-red-200"
+                            : "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
+                          : "border-white/10 bg-white/[0.025] text-zinc-300 hover:border-white/20"
+                      }`}
+                    >
+                      {t(`convictions.${key}`)}
+                    </button>
+                  ))}
+                </div>
+                {isTablePound && (
+                  <p className="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 p-3 text-xs leading-5 text-red-200">
+                    This stakes meaningful reputation on the outcome. Use it only when the evidence deserves that risk.
+                  </p>
+                )}
+                <div className="mt-4 grid grid-cols-2 gap-2" data-tutorial-id="report-submit">
+                  <Button className="min-h-11" variant="outline" onClick={handleBack}>
+                    {tc("cancel")}
+                  </Button>
+                  <Button
+                    className={`min-h-11 ${isTablePound ? "bg-red-600 hover:bg-red-700" : ""}`}
+                    onClick={handleSubmit}
+                    disabled={!canSubmit}
+                  >
+                    <FileText size={14} className="mr-2" aria-hidden="true" />
+                    {t("submitReport")}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <details open className="group rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+              <div>
+                <span className="text-sm font-semibold text-white">Evidence and claim builder</span>
+                <span className="mt-1 block text-xs text-zinc-400">Review observations, ability ranges, form, attributes, strengths, weaknesses, and character.</span>
+              </div>
+              <span className="text-xs font-semibold text-emerald-300 group-open:hidden">Open evidence</span>
+              <span className="hidden text-xs font-semibold text-emerald-300 group-open:inline">Hide evidence</span>
+            </summary>
+            <div className="mt-5 space-y-6">
           {/* Observation summary */}
           <Card data-tutorial-id="report-observation-summary">
             <CardHeader className="pb-3">
@@ -475,9 +670,19 @@ export function ReportWriter() {
                       <p className="text-lg font-bold text-emerald-400">
                         {formatValue(draft.estimatedValue)}
                       </p>
+                      {draft.estimatedValueRange && (
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Plausible range {formatValue(draft.estimatedValueRange[0])}–{formatValue(draft.estimatedValueRange[1])}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
+                {player.position === "GK" && player.age <= 20 && (
+                  <p className="mt-4 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs leading-relaxed text-amber-200/80">
+                    Youth Early Access keeps goalkeeper conclusions conservative: this report only claims observed general attributes and does not infer unobserved shot-stopping, handling, or command.
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -516,7 +721,7 @@ export function ReportWriter() {
               <div className="flex items-center gap-3 mb-3">
                 <FormIndicator form={player.form} />
                 <span className="text-xs text-zinc-500">
-                  Form modifier: {player.form > 0 ? "+" : ""}{player.form}
+                  Recent performances are reflected in the valuation range.
                 </span>
               </div>
               <p className="text-xs text-zinc-500 leading-relaxed">
@@ -580,22 +785,40 @@ export function ReportWriter() {
                 {t("strengths")} ({selectedStrengths.length})
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200/80">
+                Select up to {MAX_STRENGTHS} strengths from observed attributes. Removing a suggestion is allowed; adding one requires supporting evidence below.
+              </div>
               {selectedStrengths.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedStrengths.map((s) => {
-                    const attr = strengthToAttribute.get(s);
+                    const claim = strengthClaimsByDescriptor.get(s);
                     return (
                       <div
                         key={s}
                         className="flex items-center gap-2 rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-2"
                       >
                         <span className="text-xs text-emerald-300">{s}</span>
-                        {attr && (
+                        {claim && (
                           <Badge variant="secondary" className="shrink-0 text-[10px] bg-emerald-500/20 text-emerald-400">
-                            {attrLabel(attr)}
+                            {claim.attributes.map(attrLabel).join(" + ")}
                           </Badge>
                         )}
+                        <button
+                          onClick={() => {
+                            const option = strengthOptions.find((candidate) => candidate.descriptor === s);
+                            if (option) {
+                              toggleStrength(option);
+                              return;
+                            }
+                            setIsDirty(true);
+                            setSelectedStrengths((current) => current.filter((descriptor) => descriptor !== s));
+                          }}
+                          className="rounded p-0.5 text-emerald-300/70 transition hover:bg-emerald-500/20 hover:text-white"
+                          aria-label={`Remove strength ${s}`}
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
                       </div>
                     );
                   })}
@@ -604,6 +827,56 @@ export function ReportWriter() {
                 <p className="text-xs text-zinc-600">
                   No standout strengths detected from observations.
                 </p>
+              )}
+              {strengthOptions.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Evidence-backed options
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {strengthOptions.map((option) => {
+                      const isSelected = selectedStrengths.includes(option.descriptor);
+                      const blockedByWeakness = option.attributes.some((attribute) =>
+                        selectedWeaknessAttributes.has(attribute)
+                      ) && !isSelected;
+                      const atLimit = selectedStrengths.length >= MAX_STRENGTHS && !isSelected;
+                      return (
+                        <button
+                          key={option.descriptor}
+                          onClick={() => toggleStrength(option)}
+                          disabled={blockedByWeakness || atLimit}
+                          className={`rounded-lg border px-3 py-3 text-left transition ${
+                            isSelected
+                              ? "border-emerald-500/60 bg-emerald-500/10"
+                              : "border-[#27272a] bg-[#141414] hover:border-emerald-500/30"
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-sm font-medium ${isSelected ? "text-emerald-300" : "text-white"}`}>
+                              {option.descriptor}
+                            </span>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {option.attributes.map(attrLabel).join(" + ")}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {option.estimatedValue}/20 observed • {Math.round(option.confidence * 100)}% certainty
+                          </p>
+                          {blockedByWeakness && (
+                            <p className="mt-1 text-[11px] text-amber-400">
+                              Remove the weakness tag for this attribute first.
+                            </p>
+                          )}
+                          {atLimit && !blockedByWeakness && (
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                              Strength limit reached.
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -615,22 +888,40 @@ export function ReportWriter() {
                 {t("weaknesses")} ({selectedWeaknesses.length})
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-200/80">
+                Select up to {MAX_WEAKNESSES} weaknesses from observed attributes. Unsupported concerns should stay out of the report.
+              </div>
               {selectedWeaknesses.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {selectedWeaknesses.map((w) => {
-                    const attr = weaknessToAttribute.get(w);
+                    const claim = weaknessClaimsByDescriptor.get(w);
                     return (
                       <div
                         key={w}
                         className="flex items-center gap-2 rounded-lg border border-red-500/50 bg-red-500/10 px-3 py-2"
                       >
                         <span className="text-xs text-red-300">{w}</span>
-                        {attr && (
+                        {claim && (
                           <Badge variant="secondary" className="shrink-0 text-[10px] bg-red-500/20 text-red-400">
-                            {attrLabel(attr)}
+                            {claim.attributes.map(attrLabel).join(" + ")}
                           </Badge>
                         )}
+                        <button
+                          onClick={() => {
+                            const option = weaknessOptions.find((candidate) => candidate.descriptor === w);
+                            if (option) {
+                              toggleWeakness(option);
+                              return;
+                            }
+                            setIsDirty(true);
+                            setSelectedWeaknesses((current) => current.filter((descriptor) => descriptor !== w));
+                          }}
+                          className="rounded p-0.5 text-red-300/70 transition hover:bg-red-500/20 hover:text-white"
+                          aria-label={`Remove weakness ${w}`}
+                        >
+                          <X size={12} aria-hidden="true" />
+                        </button>
                       </div>
                     );
                   })}
@@ -639,6 +930,56 @@ export function ReportWriter() {
                 <p className="text-xs text-zinc-600">
                   No notable weaknesses detected from observations.
                 </p>
+              )}
+              {weaknessOptions.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Evidence-backed options
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {weaknessOptions.map((option) => {
+                      const isSelected = selectedWeaknesses.includes(option.descriptor);
+                      const blockedByStrength = option.attributes.some((attribute) =>
+                        selectedStrengthAttributes.has(attribute)
+                      ) && !isSelected;
+                      const atLimit = selectedWeaknesses.length >= MAX_WEAKNESSES && !isSelected;
+                      return (
+                        <button
+                          key={option.descriptor}
+                          onClick={() => toggleWeakness(option)}
+                          disabled={blockedByStrength || atLimit}
+                          className={`rounded-lg border px-3 py-3 text-left transition ${
+                            isSelected
+                              ? "border-red-500/60 bg-red-500/10"
+                              : "border-[#27272a] bg-[#141414] hover:border-red-500/30"
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className={`text-sm font-medium ${isSelected ? "text-red-300" : "text-white"}`}>
+                              {option.descriptor}
+                            </span>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {option.attributes.map(attrLabel).join(" + ")}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {option.estimatedValue}/20 observed • {Math.round(option.confidence * 100)}% certainty
+                          </p>
+                          {blockedByStrength && (
+                            <p className="mt-1 text-[11px] text-amber-400">
+                              Remove the strength tag for this attribute first.
+                            </p>
+                          )}
+                          {atLimit && !blockedByStrength && (
+                            <p className="mt-1 text-[11px] text-zinc-500">
+                              Weakness limit reached.
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -702,8 +1043,11 @@ export function ReportWriter() {
             </Card>
           )}
 
+            </div>
+          </details>
+
           {/* Written summary */}
-          <Card>
+          <Card className="hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">{t("scoutSummary")}</CardTitle>
             </CardHeader>
@@ -722,11 +1066,11 @@ export function ReportWriter() {
 
           {/* Quality preview */}
           {observations.length > 0 && (
-            <Card className={`border ${qualityScoreBorder(qualityPreview.score)} sticky top-4 z-10`}>
+            <Card className="hidden">
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <TrendingUp size={14} className="text-zinc-400" aria-hidden="true" />
-                  Quality Preview
+                   Craft Preview
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -796,7 +1140,7 @@ export function ReportWriter() {
                 )}
 
                 <p className="mt-2 text-[10px] text-zinc-600 italic">
-                  Final score may vary slightly based on additional factors
+                  This grades report craft. Accuracy resolves later from the player&apos;s career.
                 </p>
               </CardContent>
             </Card>
@@ -853,11 +1197,11 @@ export function ReportWriter() {
 
                 {qualityPreview.score < 40 && (
                   <p className="text-[10px] text-amber-400/80 italic">
-                    Improve report quality to increase sale value
+                    Improve report craft to increase sale value
                   </p>
                 )}
                 <p className="text-[10px] text-zinc-600 italic">
-                  Higher conviction &amp; quality = higher sale price
+                  Calibrated conviction &amp; stronger craft = higher sale price
                 </p>
               </CardContent>
             </Card>
@@ -935,7 +1279,7 @@ export function ReportWriter() {
           )}
 
           {/* Conviction level */}
-          <Card data-tutorial-id="report-conviction">
+          <Card className="hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">
                 <Tooltip content={t("convictionTooltip")} side="top">
@@ -952,7 +1296,12 @@ export function ReportWriter() {
                 {CONVICTION_KEYS.map((key) => (
                   <button
                     key={key}
-                    onClick={() => { setIsDirty(true); setConviction(key); playSFX("page-turn"); }}
+                    onClick={() => {
+                      setIsDirty(true);
+                      setConviction(key);
+                      useTutorialStore.getState().completeMilestone("wroteReport");
+                      playSFX("page-turn");
+                    }}
                     role="radio"
                     aria-checked={conviction === key}
                     className={`rounded-lg border p-3 text-left transition ${
@@ -1006,7 +1355,7 @@ export function ReportWriter() {
           </Card>
 
           {/* Submit */}
-          <div className="flex items-center justify-end gap-3" data-tutorial-id="report-submit">
+          <div className="hidden">
             <Button variant="ghost" onClick={handleBack}>
               {tc("cancel")}
             </Button>

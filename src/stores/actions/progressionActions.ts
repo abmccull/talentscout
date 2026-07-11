@@ -15,6 +15,7 @@ import type {
   ActionableGossipItem,
   GossipAction,
   ChainConsequence,
+  Activity,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import {
@@ -23,13 +24,21 @@ import {
   unlockSecondarySpecialization,
   processManagerMeeting,
 } from "@/engine/career/index";
-import { calculateSigningBonus } from "@/engine/finance";
+import {
+  calculateMonthlyExpenses,
+  calculateSigningBonus,
+  calculateSpecMonthlyBonus,
+  calculateSpecUniqueIncome,
+  getActiveEquipmentBonuses,
+} from "@/engine/finance";
 import { processBoardMeeting } from "@/engine/firstTeam/boardAI";
 import {
   bookTravel,
   getTravelDuration,
+  getTravelSlots,
   getScoutHomeCountry as getScoutHome,
 } from "@/engine/world/index";
+import { addActivity, canAddActivity } from "@/engine/core/calendar";
 import {
   resolveEventChoice,
   acknowledgeEvent,
@@ -39,6 +48,68 @@ import {
   resolvePoachCounterBid,
   isNemesis,
 } from "@/engine/rivals";
+
+const DEFAULT_CLUB_PATH_OFFICE = {
+  tier: "home",
+  monthlyCost: 0,
+  qualityBonus: 0,
+  maxEmployees: 0,
+} as const;
+
+function syncClubEmploymentFinances(
+  finances: NonNullable<GameState["finances"]>,
+  scout: Scout,
+  countries: string[],
+): NonNullable<GameState["finances"]> {
+  const homeCountry = countries[0] ?? "england";
+  const pathSyncedFinances: NonNullable<GameState["finances"]> = {
+    ...finances,
+    careerPath: "club",
+    independentTier: undefined,
+    monthlyIncome: scout.salary * 4,
+    retainerContracts: finances.retainerContracts.map((contract) =>
+      contract.status === "active" || contract.status === "suspended"
+        ? { ...contract, status: "cancelled" as const }
+        : contract,
+    ),
+    consultingContracts: finances.consultingContracts.map((contract) =>
+      contract.status === "active"
+        ? { ...contract, status: "expired" as const }
+        : contract,
+    ),
+    reportListings: finances.reportListings.map((listing) => ({
+      ...listing,
+      status: listing.status === "active" ? "withdrawn" as const : listing.status,
+      bids: listing.bids.map((bid) =>
+        bid.status === "pending"
+          ? { ...bid, status: "withdrawn" as const }
+          : bid,
+      ),
+    })),
+    office: { ...DEFAULT_CLUB_PATH_OFFICE },
+    employees: [],
+    pendingRetainerOffers: [],
+    pendingConsultingOffers: [],
+    pendingEmployeeEvents: [],
+    satelliteOffices: [],
+    academyPartnerships:
+      scout.careerTier >= 3 && scout.primarySpecialization === "youth" ? 1 : 0,
+    regionalExpertiseRegion:
+      scout.careerTier >= 3 && scout.primarySpecialization === "regional"
+        ? homeCountry
+        : undefined,
+  };
+
+  const specBonusApplied = calculateSpecMonthlyBonus(scout);
+  const specUniqueIncome = calculateSpecUniqueIncome(scout, pathSyncedFinances);
+
+  return {
+    ...pathSyncedFinances,
+    expenses: calculateMonthlyExpenses(scout, pathSyncedFinances),
+    specBonusApplied,
+    specUniqueIncome,
+  };
+}
 
 /**
  * Apply ChainConsequence[] to a GameState, returning a new GameState.
@@ -144,6 +215,8 @@ export function createProgressionActions(get: GetState, set: SetState) {
 
       const updatedScout: Scout = {
         ...gameState.scout,
+        careerPath: "club",
+        independentTier: undefined,
         currentClubId: offer.clubId,
         careerTier: offer.tier,
         salary: offer.salary,
@@ -153,16 +226,14 @@ export function createProgressionActions(get: GetState, set: SetState) {
         successfulFinds: 0,
       };
 
-      // B9: Auto-initialize tier 3+ specialization income fields on promotion
+      // Synchronize finance state with club employment without wiping balance/history.
       let updatedFinances = gameState.finances;
-      if (offer.tier >= 3 && gameState.scout.careerTier < 3 && updatedFinances) {
-        const spec = updatedScout.primarySpecialization;
-        if (spec === "youth" && (updatedFinances.academyPartnerships ?? 0) === 0) {
-          updatedFinances = { ...updatedFinances, academyPartnerships: 1 };
-        } else if (spec === "regional" && !updatedFinances.regionalExpertiseRegion) {
-          const homeCountry = gameState.countries[0] ?? "england";
-          updatedFinances = { ...updatedFinances, regionalExpertiseRegion: homeCountry };
-        }
+      if (updatedFinances) {
+        updatedFinances = syncClubEmploymentFinances(
+          updatedFinances,
+          updatedScout,
+          gameState.countries,
+        );
       }
 
       // W3d: Signing bonus for tier 3+ club-path scouts
@@ -446,8 +517,8 @@ export function createProgressionActions(get: GetState, set: SetState) {
       options?: { duration?: number; assignmentId?: string },
     ) => {
       const { gameState } = get();
-      if (!gameState) return;
-      if (gameState.scout.travelBooking) return;
+      if (!gameState) return false;
+      if (gameState.scout.travelBooking) return false;
 
       const homeCountry = getScoutHome(gameState.scout);
       const duration = Math.max(
@@ -456,6 +527,29 @@ export function createProgressionActions(get: GetState, set: SetState) {
       );
       const departureWeek = gameState.currentWeek + 1;
 
+      const equipmentBonuses = gameState.finances?.equipment
+        ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+        : undefined;
+      const travelSlots = Math.max(
+        1,
+        getTravelSlots(homeCountry, country) - (equipmentBonuses?.travelSlotReduction ?? 0),
+      );
+      const travelActivity: Activity = {
+        type: "internationalTravel",
+        slots: travelSlots,
+        targetId: country,
+        description: `Travel to ${country}`,
+      };
+      const travelStartIndex = gameState.schedule.activities.findIndex((_, dayIndex) =>
+        canAddActivity(gameState.schedule, travelActivity, dayIndex),
+      );
+      if (travelStartIndex < 0) return false;
+      const updatedSchedule = addActivity(
+        gameState.schedule,
+        travelActivity,
+        travelStartIndex,
+      );
+
       const updatedScout = bookTravel(
         gameState.scout,
         country,
@@ -463,7 +557,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
         duration,
       );
       const travelCost = updatedScout.travelBooking?.cost ?? 0;
-      if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
+      if ((gameState.finances?.balance ?? Infinity) < travelCost) return false;
 
       const acceptedAssignment = options?.assignmentId
         ? gameState.internationalAssignments.find(
@@ -475,6 +569,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
         gameState: {
           ...gameState,
           scout: updatedScout,
+          schedule: updatedSchedule,
           finances: gameState.finances
             ? {
                 ...gameState.finances,
@@ -501,6 +596,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
         },
         weekSimulation: null,
       });
+      return true;
     },
 
     // ── Phase 2 Actions (Narrative Events) ────────────────────────────────────

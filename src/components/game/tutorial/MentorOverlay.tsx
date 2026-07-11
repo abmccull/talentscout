@@ -5,8 +5,6 @@ import { useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore } from "@/stores/gameStore";
 import { getSequenceById } from "./tutorialSteps";
 import type { TutorialStep } from "./tutorialSteps";
-import { getScreenGuide } from "./screenGuides";
-import type { ScreenGuideStep } from "./screenGuides";
 import { getGuidedMilestone } from "./guidedSession";
 import type { GuidedMilestoneDefinition } from "./guidedSession";
 import type { GuidedMilestoneId } from "@/stores/tutorialStore";
@@ -31,7 +29,6 @@ interface PopupPosition {
 type ActiveMode =
   | { kind: "tutorial"; step: TutorialStep; totalSteps: number; isAha: boolean }
   | { kind: "guided"; milestone: GuidedMilestoneDefinition }
-  | { kind: "screenGuide"; step: ScreenGuideStep; stepIndex: number; totalSteps: number }
   | { kind: "none" };
 
 // ---------------------------------------------------------------------------
@@ -54,6 +51,19 @@ function computePopupPosition(
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+
+  // On narrow screens the sidebar and primary actions live near the viewport
+  // edges. Keep the mentor card on the opposite edge so it never covers the
+  // hamburger or the highlighted control the player must press.
+  if (vw < 640) {
+    const targetIsInTopHalf = rect.top + rect.height / 2 < vh / 2;
+    return {
+      left: MARGIN,
+      top: targetIsInTopHalf
+        ? Math.max(MARGIN, vh - cardHeight - MARGIN)
+        : MARGIN,
+    };
+  }
 
   let top = 0;
   let left = 0;
@@ -110,10 +120,6 @@ export function MentorOverlay() {
   const currentGuidedTask = useTutorialStore((s) => s.currentGuidedTask);
   const mentorName = useTutorialStore((s) => s.mentorName);
   const mentorTitle = useTutorialStore((s) => s.mentorTitle);
-  const activeScreenGuide = useTutorialStore((s) => s.activeScreenGuide);
-  const screenGuideStep = useTutorialStore((s) => s.screenGuideStep);
-  const closeScreenGuide = useTutorialStore((s) => s.closeScreenGuide);
-  const advanceScreenGuide = useTutorialStore((s) => s.advanceScreenGuide);
 
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
   const [popupPos, setPopupPos] = useState<PopupPosition>({ top: 0, left: 0 });
@@ -144,34 +150,8 @@ export function MentorOverlay() {
         return { kind: "guided", milestone };
       }
     }
-    // 3. Screen guide
-    if (activeScreenGuide) {
-      const guide = getScreenGuide(activeScreenGuide);
-      if (guide) {
-        const step = guide.steps[screenGuideStep];
-        if (!step) {
-          // Step index out of bounds — close via effect, render nothing for now.
-          return { kind: "none" };
-        }
-        return {
-          kind: "screenGuide",
-          step,
-          stepIndex: screenGuideStep,
-          totalSteps: guide.steps.length,
-        };
-      }
-    }
     return { kind: "none" };
   })();
-
-  // Close screen guide when step index overflows.
-  useEffect(() => {
-    if (!activeScreenGuide) return;
-    const guide = getScreenGuide(activeScreenGuide);
-    if (guide && screenGuideStep >= guide.steps.length) {
-      closeScreenGuide();
-    }
-  }, [activeScreenGuide, screenGuideStep, closeScreenGuide]);
 
   // ---------------------------------------------------------------------------
   // Target selector resolution
@@ -183,8 +163,6 @@ export function MentorOverlay() {
         return activeMode.step.targetSelector;
       case "guided":
         return activeMode.milestone.target;
-      case "screenGuide":
-        return activeMode.step.target;
       default:
         return null;
     }
@@ -196,8 +174,6 @@ export function MentorOverlay() {
         return activeMode.step.position;
       case "guided":
         return activeMode.milestone.position;
-      case "screenGuide":
-        return activeMode.step.position;
       default:
         return "bottom";
     }
@@ -262,13 +238,12 @@ export function MentorOverlay() {
       if (e.key === "Escape") {
         e.preventDefault();
         if (activeMode.kind === "tutorial") skipTutorial();
-        else if (activeMode.kind === "screenGuide") closeScreenGuide();
       }
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeMode.kind, skipTutorial, closeScreenGuide]);
+  }, [activeMode.kind, skipTutorial]);
 
   // ---------------------------------------------------------------------------
   // Early exit
@@ -287,7 +262,6 @@ export function MentorOverlay() {
     switch (activeMode.kind) {
       case "tutorial":    return activeMode.step.title;
       case "guided":      return activeMode.milestone.title;
-      case "screenGuide": return activeMode.step.title;
       default:            return "";
     }
   })();
@@ -300,7 +274,6 @@ export function MentorOverlay() {
         ? activeMode.milestone.mentorTextFreelance
         : activeMode.milestone.mentorText;
     }
-    if (activeMode.kind === "screenGuide") return activeMode.step.description;
     return "";
   })();
 
@@ -313,22 +286,16 @@ export function MentorOverlay() {
   const totalDots =
     activeMode.kind === "tutorial"
       ? activeMode.totalSteps
-      : activeMode.kind === "screenGuide"
-        ? activeMode.totalSteps
         : 0;
 
   const currentDotIndex =
     activeMode.kind === "tutorial"
       ? currentStep
-      : activeMode.kind === "screenGuide"
-        ? activeMode.stepIndex
         : 0;
 
   const isLastStep =
     activeMode.kind === "tutorial"
       ? currentStep + 1 >= activeMode.totalSteps
-      : activeMode.kind === "screenGuide"
-        ? activeMode.stepIndex + 1 >= activeMode.totalSteps
         : false;
 
   const nextLabel =
@@ -338,16 +305,13 @@ export function MentorOverlay() {
 
   function handleNext() {
     if (activeMode.kind === "tutorial") nextStep();
-    else if (activeMode.kind === "screenGuide") advanceScreenGuide();
   }
 
   function handleSkip() {
     if (activeMode.kind === "tutorial") skipTutorial();
-    else if (activeMode.kind === "screenGuide") closeScreenGuide();
   }
 
-  const showSkipControls =
-    activeMode.kind === "tutorial" || activeMode.kind === "screenGuide";
+  const showSkipControls = activeMode.kind === "tutorial";
 
   // ---------------------------------------------------------------------------
   // Spotlight style — inset box-shadow, pointerEvents none so clicks pass through
@@ -406,7 +370,7 @@ export function MentorOverlay() {
           position: "fixed",
           top: popupPos.top,
           left: popupPos.left,
-          width: 360,
+          width: "min(360px, calc(100vw - 16px))",
           zIndex: 9999,
           transition: "top 150ms ease, left 150ms ease",
         }}
@@ -429,9 +393,7 @@ export function MentorOverlay() {
               ? "Task"
               : isAha
                 ? "Milestone"
-                : activeMode.kind === "screenGuide"
-                  ? "Guide"
-                  : "Tutorial"}
+                : "Tutorial"}
           </span>
         </div>
 

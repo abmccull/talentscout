@@ -23,6 +23,11 @@ import type {
   Specialization,
   InboxMessage,
 } from "@/engine/core/types";
+import {
+  countryKeyFromNationality,
+  getCountryDisplayName,
+  normalizeCountryKey,
+} from "@/lib/country";
 
 // =============================================================================
 // CONSTANTS
@@ -51,9 +56,6 @@ const MATCH_ATTENDANCE_DISCOVERY_BONUS = 0.10;
 
 /** Regional territory bonus for assigned territories. */
 const TERRITORY_DISCOVERY_BONUS = 0.20;
-
-/** Data scout familiarity penalty reduction (sees stats with less penalty). */
-const DATA_SCOUT_PENALTY_REDUCTION = 0.50;
 
 // =============================================================================
 // ID GENERATION
@@ -90,29 +92,6 @@ export function getFamiliarityVisibility(
  * Get the observation accuracy penalty for a given familiarity level.
  * Lower familiarity = higher penalty (wider confidence intervals).
  */
-export function getFamiliarityAccuracyPenalty(
-  familiarity: number,
-  specialization: Specialization,
-): number {
-  const baseLevel = getFamiliarityVisibility(familiarity);
-  let penalty: number;
-
-  switch (baseLevel) {
-    case "expert": penalty = 0; break;
-    case "good": penalty = 0.10; break;
-    case "standard": penalty = 0.25; break;
-    case "basic": penalty = 0.50; break;
-    default: penalty = 1.0; break;
-  }
-
-  // Data scouts have reduced penalty
-  if (specialization === "data") {
-    penalty *= (1 - DATA_SCOUT_PENALTY_REDUCTION);
-  }
-
-  return penalty;
-}
-
 export interface DiscoveryResult {
   /** Updated pool with discovered agents marked. */
   updatedPool: FreeAgentPool;
@@ -120,6 +99,33 @@ export interface DiscoveryResult {
   messages: InboxMessage[];
   /** Count of newly discovered free agents this tick. */
   newDiscoveries: number;
+}
+
+function getFreeAgentCountryKey(agent: Pick<FreeAgent, "country" | "nationality">): string | undefined {
+  return (
+    normalizeCountryKey(agent.country)
+    ?? countryKeyFromNationality(agent.country)
+    ?? countryKeyFromNationality(agent.nationality)
+  );
+}
+
+function getCountryFamiliarity(state: GameState, countryKey?: string): number {
+  if (!countryKey) return 0;
+
+  const direct = state.scout.countryReputations?.[countryKey];
+  if (direct) return direct.familiarity ?? 0;
+
+  for (const [rawKey, reputation] of Object.entries(state.scout.countryReputations ?? {})) {
+    const normalizedKey =
+      normalizeCountryKey(rawKey)
+      ?? normalizeCountryKey(reputation.country)
+      ?? countryKeyFromNationality(reputation.country);
+    if (normalizedKey === countryKey) {
+      return reputation.familiarity ?? 0;
+    }
+  }
+
+  return 0;
 }
 
 /**
@@ -146,13 +152,12 @@ export function discoverFreeAgents(
     const player = state.players[agent.playerId];
     if (!player) return agent;
 
-    // Get familiarity with agent's country
-    const countryRep = scout.countryReputations?.[agent.country];
-    const familiarity = countryRep?.familiarity ?? 0;
+    const countryKey = getFreeAgentCountryKey(agent);
+    const familiarity = getCountryFamiliarity(state, countryKey);
 
     // Check contact-based discovery (bypasses familiarity)
     const contactDiscovery = checkContactDiscovery(
-      agent,
+      countryKey,
       Object.values(state.contacts),
       rng,
     );
@@ -184,15 +189,15 @@ export function discoverFreeAgents(
     switch (spec) {
       case "firstTeam":
         // Agent/SD contacts boost
-        if (hasContactType(Object.values(state.contacts), "agent", agent.country) ||
-            hasContactType(Object.values(state.contacts), "sportingDirector", agent.country)) {
+        if (hasContactType(Object.values(state.contacts), "agent", countryKey) ||
+            hasContactType(Object.values(state.contacts), "sportingDirector", countryKey)) {
           discoveryChance += 0.08;
         }
         break;
 
       case "regional":
         // Territory bonus
-        if (isInAssignedTerritory(agent.country, state)) {
+        if (isInAssignedTerritory(countryKey, state)) {
           discoveryChance += TERRITORY_DISCOVERY_BONUS;
           source = "territoryScan";
         }
@@ -267,13 +272,18 @@ export function processContactFreeAgentTip(
  * Agents and journalists in the player's country can do this.
  */
 function checkContactDiscovery(
-  agent: FreeAgent,
+  countryKey: string | undefined,
   contacts: Contact[],
   rng: RNG,
 ): boolean {
+  if (!countryKey) return false;
+
   const relevantContacts = contacts.filter((c) => {
     // Contact must be in the same country as the free agent
-    if (c.country !== agent.country) return false;
+    const contactCountryKey =
+      normalizeCountryKey(c.country)
+      ?? countryKeyFromNationality(c.country);
+    if (contactCountryKey !== countryKey) return false;
     // Only agent and journalist contacts can reveal free agents
     if (c.type !== "agent" && c.type !== "journalist" && c.type !== "scout") return false;
     // Must have decent relationship
@@ -292,20 +302,35 @@ function checkContactDiscovery(
 function hasContactType(
   contacts: Contact[],
   type: string,
-  country: string,
+  countryKey: string | undefined,
 ): boolean {
+  if (!countryKey) return false;
+
   return contacts.some(
-    (c) => c.type === type && c.country === country && c.relationship >= 20,
+    (c) =>
+      c.type === type &&
+      (
+        normalizeCountryKey(c.country)
+        ?? countryKeyFromNationality(c.country)
+      ) === countryKey &&
+      c.relationship >= 20,
   );
 }
 
 function isInAssignedTerritory(
-  country: string,
+  countryKey: string | undefined,
   state: GameState,
 ): boolean {
+  if (!countryKey) return false;
+
   // Check if any territory covers this country
-  return Object.values(state.territories).some(
-    (t) => t.country === country,
+  return Object.values(state.territories ?? {}).some(
+    (t) =>
+      (
+        t.countryKey
+        ?? normalizeCountryKey(t.country)
+        ?? countryKeyFromNationality(t.country)
+      ) === countryKey,
   );
 }
 
@@ -318,9 +343,11 @@ function generateDiscoveryMessage(
 ): InboxMessage {
   const formerClub = state.clubs[agent.releasedFrom];
   const clubName = formerClub?.name ?? "an unknown club";
+  const countryKey = getFreeAgentCountryKey(agent);
+  const geographyLabel = agent.nationality ?? (countryKey ? getCountryDisplayName(countryKey) : "that market");
 
   const sourceDescriptions: Record<FreeAgentDiscoverySource, string> = {
-    familiarity: `Your knowledge of football in ${agent.country} has brought ${player.firstName} ${player.lastName} to your attention.`,
+    familiarity: `Your knowledge of football in ${countryKey ? getCountryDisplayName(countryKey) : geographyLabel} has brought ${player.firstName} ${player.lastName} to your attention.`,
     contactTip: `A contact has informed you that ${player.firstName} ${player.lastName} is available as a free agent.`,
     dataQuery: `Your database analysis has flagged ${player.firstName} ${player.lastName} as an available free agent.`,
     territoryScan: `Your territory network has identified ${player.firstName} ${player.lastName} as available.`,

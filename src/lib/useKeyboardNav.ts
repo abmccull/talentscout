@@ -1,36 +1,15 @@
-/**
- * useKeyboardNav — global keyboard shortcut hook.
- *
- * Registers document-level keydown listeners that fire only when the user
- * is not typing in an input, textarea, or contenteditable element.
- *
- * Shortcuts:
- *   Escape     — go back to dashboard (or close active overlay when one exists)
- *   1–8        — quick-navigate to the corresponding sidebar screen
- *   Space      — advance week on calendar screen; advance phase on match screen
- *   ?          — open settings screen (handbook placeholder)
- *
- * Call this hook exactly once, at the root page component level.
- */
-
 "use client";
 
 import { useEffect } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 
-// ---------------------------------------------------------------------------
-// Screen map  (number key → screen)
-// ---------------------------------------------------------------------------
-
-const KEY_TO_SCREEN: Record<string, GameScreen> = {
-  "1": "dashboard",
-  "2": "calendar",
-  "3": "playerDatabase",
-  "4": "reportHistory",
-  "5": "career",
-  "6": "inbox",
-  "7": "network",
-  "8": "settings",
+const KEY_TO_SCREEN: Record<string, GameScreen[]> = {
+  "1": ["dashboard"],
+  "2": ["calendar"],
+  "3": ["youthScouting", "playerDatabase"],
+  "4": ["reportHistory"],
+  "5": ["internationalView"],
+  "6": ["career"],
 };
 
 const NON_GAME_SCREENS = new Set<GameScreen>([
@@ -75,10 +54,6 @@ const ESCAPE_TO_DASHBOARD_SCREENS = new Set<GameScreen>([
   "matchSummary",
 ]);
 
-// ---------------------------------------------------------------------------
-// Helper — returns true when the focused element is an editable control
-// ---------------------------------------------------------------------------
-
 function isTypingTarget(el: Element | null): boolean {
   if (!el) return false;
   const tag = el.tagName.toLowerCase();
@@ -101,37 +76,28 @@ function isVisibleShortcutTarget(screen: GameScreen): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Hook
-// ---------------------------------------------------------------------------
+function getShortcutTarget(key: string): GameScreen | null {
+  const candidates = KEY_TO_SCREEN[key];
+  if (!candidates) return null;
+  return candidates.find((screen) => isVisibleShortcutTarget(screen)) ?? null;
+}
 
-// ---------------------------------------------------------------------------
-// Module-level callback ref for F1 feedback shortcut
-// ---------------------------------------------------------------------------
+let onFeedbackOpen: (() => void) | null = null;
 
-let _onFeedbackOpen: (() => void) | null = null;
-
-/** Register a callback that F1 will invoke to open the feedback modal. */
 export function setFeedbackOpenHandler(handler: (() => void) | null): void {
-  _onFeedbackOpen = handler;
+  onFeedbackOpen = handler;
 }
 
 export function useKeyboardNav(): void {
-  // Subscribe to only the slice we need to avoid unnecessary re-renders
   const setScreen = useGameStore((s) => s.setScreen);
   const currentScreen = useGameStore((s) => s.currentScreen);
-  const requestWeekAdvance = useGameStore((s) => s.requestWeekAdvance);
   const advancePhase = useGameStore((s) => s.advancePhase);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
-      // Never fire shortcuts while the user is typing
       if (isTypingTarget(document.activeElement)) return;
-
-      // Active modal dialogs own the keyboard until they close.
       if (hasOpenModal()) return;
 
-      // Ctrl+S / Cmd+S — navigate to settings (save management)
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
         if (
           !NON_GAME_SCREENS.has(currentScreen) &&
@@ -143,13 +109,10 @@ export function useKeyboardNav(): void {
         return;
       }
 
-      // Never fire when modifier keys are held (avoid browser/OS shortcuts)
       if (e.ctrlKey || e.metaKey || e.altKey) return;
 
       const key = e.key;
 
-      // ── Escape ────────────────────────────────────────────────────────────
-      // Return to dashboard from any in-game screen
       if (key === "Escape") {
         if (ESCAPE_TO_DASHBOARD_SCREENS.has(currentScreen)) {
           e.preventDefault();
@@ -158,24 +121,24 @@ export function useKeyboardNav(): void {
         return;
       }
 
-      // ── Number keys 1–8: jump to screen ───────────────────────────────────
-      if (KEY_TO_SCREEN[key]) {
-        const targetScreen = KEY_TO_SCREEN[key];
-        if (
-          !NON_GAME_SCREENS.has(currentScreen) &&
-          isVisibleShortcutTarget(targetScreen)
-        ) {
+      const targetScreen = getShortcutTarget(key);
+      if (targetScreen) {
+        if (!NON_GAME_SCREENS.has(currentScreen)) {
           e.preventDefault();
           setScreen(targetScreen);
         }
         return;
       }
 
-      // ── Space: advance week on calendar / advance phase on match ──────────
       if (key === " " || key === "Spacebar") {
         if (currentScreen === "calendar") {
-          e.preventDefault();
-          requestWeekAdvance();
+          const advanceButton = document.querySelector<HTMLButtonElement>(
+            '[data-tutorial-id="advance-week"]',
+          );
+          if (advanceButton && !advanceButton.disabled) {
+            e.preventDefault();
+            advanceButton.click();
+          }
         } else if (currentScreen === "match") {
           e.preventDefault();
           advancePhase();
@@ -183,7 +146,6 @@ export function useKeyboardNav(): void {
         return;
       }
 
-      // ── ? — open settings ──────────────────────────────────────────────────
       if (key === "?") {
         if (
           !NON_GAME_SCREENS.has(currentScreen) &&
@@ -195,13 +157,11 @@ export function useKeyboardNav(): void {
         return;
       }
 
-      // ── F1 — open feedback modal ────────────────────────────────────────
       if (key === "F1") {
-        if (!NON_GAME_SCREENS.has(currentScreen) && _onFeedbackOpen) {
+        if (!NON_GAME_SCREENS.has(currentScreen) && onFeedbackOpen) {
           e.preventDefault();
-          _onFeedbackOpen();
+          onFeedbackOpen();
         }
-        return;
       }
     }
 
@@ -209,5 +169,5 @@ export function useKeyboardNav(): void {
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [setScreen, currentScreen, requestWeekAdvance, advancePhase]);
+  }, [setScreen, currentScreen, advancePhase]);
 }

@@ -1,18 +1,24 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { useGameStore } from "@/stores/gameStore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Specialization, NewGameConfig, ScoutSkill, DifficultyLevel } from "@/engine/core/types";
 import { DIFFICULTY_DESCRIPTIONS } from "@/engine/core/difficulty";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
-import { IS_DEMO, DEMO_ALLOWED_SPECS } from "@/lib/demo";
+import {
+  IS_DEMO,
+  IS_YOUTH_EARLY_ACCESS,
+  YOUTH_EARLY_ACCESS_ALLOWED_SPECS,
+} from "@/lib/demo";
 import {
   BASE_SKILLS,
   SKILL_MINIMUMS,
   ALLOCATION_MAX,
   BONUS_POINTS,
+  validateSkillAllocations,
 } from "@/engine/scout/creation";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import {
@@ -331,11 +337,18 @@ const SECONDARY_REGIONS = (() => {
 // Wizard step definitions
 // ---------------------------------------------------------------------------
 
-const STEPS = [
+const FULL_GAME_STEPS = [
   { id: 1, label: "Identity" },
   { id: 2, label: "Specialization" },
   { id: 3, label: "Skills" },
   { id: 4, label: "Position" },
+  { id: 5, label: "World" },
+  { id: 6, label: "Review" },
+] as const;
+
+const YOUTH_EA_STEPS = [
+  { id: 1, label: "Identity" },
+  { id: 3, label: "Skills" },
   { id: 5, label: "World" },
   { id: 6, label: "Review" },
 ] as const;
@@ -380,7 +393,11 @@ export function NewGameScreen() {
   // Specialization
   const [specialization, setSpecializationRaw] = useState<Specialization>("youth");
   const setSpecialization = (spec: Specialization) => {
-    setSpecializationRaw(spec);
+    const nextSpecialization =
+      IS_YOUTH_EARLY_ACCESS && !YOUTH_EARLY_ACCESS_ALLOWED_SPECS.includes(spec)
+        ? "youth"
+        : spec;
+    setSpecializationRaw(nextSpecialization);
     setSkillAllocations({});
   };
 
@@ -391,6 +408,13 @@ export function NewGameScreen() {
   const [startingPosition, setStartingPosition] = useState<"freelance" | "club">("freelance");
   const [startingClubId, setStartingClubId] = useState<string>("");
 
+  useEffect(() => {
+    if (IS_YOUTH_EARLY_ACCESS) {
+      setStartingPosition("freelance");
+      setStartingClubId("");
+    }
+  }, []);
+
   // Football world
   const [selectedCountries, setSelectedCountries] = useState<string[]>(["england"]);
   const [startingCountry, setStartingCountry] = useState<string>("england");
@@ -398,6 +422,25 @@ export function NewGameScreen() {
   // World settings
   const [seed, setSeed] = useState(() => Math.random().toString(36).substring(2, 10));
   const [difficulty, setDifficulty] = useState<DifficultyLevel>("normal");
+
+  const availableSpecializations = IS_YOUTH_EARLY_ACCESS
+    ? SPECIALIZATIONS.filter((spec) => YOUTH_EARLY_ACCESS_ALLOWED_SPECS.includes(spec.id))
+    : SPECIALIZATIONS;
+  const comingSoonSpecializations = IS_YOUTH_EARLY_ACCESS
+    ? SPECIALIZATIONS.filter((spec) => !YOUTH_EARLY_ACCESS_ALLOWED_SPECS.includes(spec.id))
+    : [];
+  const effectiveSpecialization: Specialization = IS_YOUTH_EARLY_ACCESS
+    ? YOUTH_EARLY_ACCESS_ALLOWED_SPECS[0]
+    : specialization;
+  const effectiveStartingPosition: "freelance" | "club" = IS_YOUTH_EARLY_ACCESS
+    ? "freelance"
+    : startingPosition;
+  const steps = IS_YOUTH_EARLY_ACCESS ? YOUTH_EA_STEPS : FULL_GAME_STEPS;
+  const currentStepIndex = Math.max(
+    0,
+    steps.findIndex((candidate) => candidate.id === step),
+  );
+  const lastStepId = steps[steps.length - 1]?.id ?? 6;
 
   const totalClubs = COUNTRY_OPTIONS
     .filter((c) => selectedCountries.includes(c.key))
@@ -426,10 +469,49 @@ export function NewGameScreen() {
     });
   };
 
-  const canStart =
-    firstName.trim() !== "" &&
-    lastName.trim() !== "" &&
-    (startingPosition === "freelance" || startingClubId !== "");
+  const SKILL_DESCRIPTIONS: Record<ScoutSkill, string> = {
+    technicalEye: "Reading technical attributes",
+    physicalAssessment: "Evaluating physical traits",
+    psychologicalRead: "Assessing mental and hidden attributes",
+    tacticalUnderstanding: "Analysing tactical attributes",
+    dataLiteracy: "Interpreting statistics",
+    playerJudgment: "Gauging overall current ability",
+    potentialAssessment: "Projecting a player's ceiling",
+  };
+
+  const base = BASE_SKILLS[effectiveSpecialization];
+  const mins = SKILL_MINIMUMS[effectiveSpecialization];
+  const skills = Object.keys(base) as ScoutSkill[];
+  const totalUsed = skills.reduce((sum, skill) => sum + (skillAllocations[skill] ?? 0), 0);
+  const remaining = BONUS_POINTS - totalUsed;
+  const skillAllocationValidation = validateSkillAllocations(
+    effectiveSpecialization,
+    skillAllocations,
+  );
+  const skillAllocationMessage =
+    totalUsed < BONUS_POINTS
+      ? `Assign all ${BONUS_POINTS} bonus skill points to continue. ${remaining} point${remaining === 1 ? "" : "s"} remaining.`
+      : totalUsed > BONUS_POINTS
+        ? `Remove ${totalUsed - BONUS_POINTS} bonus skill point${totalUsed - BONUS_POINTS === 1 ? "" : "s"} so you are using exactly ${BONUS_POINTS}.`
+        : skillAllocationValidation.reason
+          ? `Fix your skill allocation before continuing. ${skillAllocationValidation.reason}.`
+          : `All ${BONUS_POINTS} bonus skill points assigned.`;
+
+  const startRequirements: string[] = [];
+  if (firstName.trim() === "") startRequirements.push("Enter a first name.");
+  if (lastName.trim() === "") startRequirements.push("Enter a last name.");
+  if (!skillAllocationValidation.valid) startRequirements.push(skillAllocationMessage);
+  if (IS_YOUTH_EARLY_ACCESS && startingClubId !== "") {
+    startRequirements.push("Club starts are disabled in Youth Early Access.");
+  }
+  if (effectiveStartingPosition === "club" && startingClubId === "") {
+    startRequirements.push("Choose a starting club or switch back to Freelance Scout.");
+  }
+
+  const canStart = startRequirements.length === 0;
+  const startRequirementMessage = canStart
+    ? "All requirements met. Ready to begin."
+    : `Before you can begin: ${startRequirements.join(" ")}`;
 
   const handleStart = () => {
     if (!canStart) return;
@@ -438,15 +520,15 @@ export function NewGameScreen() {
       scoutFirstName: firstName.trim(),
       scoutLastName: lastName.trim(),
       scoutAge: age,
-      specialization,
+      specialization: effectiveSpecialization,
       difficulty,
       worldSeed: seed,
       selectedCountries,
       nationality,
       avatarId,
-      ...(specialization === "regional" && { startingCountry }),
-      ...(startingPosition === "club" && startingClubId && { startingClubId }),
-      ...(Object.keys(skillAllocations).length > 0 && { skillAllocations }),
+      skillAllocations,
+      ...(effectiveSpecialization === "regional" && { startingCountry }),
+      ...(effectiveStartingPosition === "club" && startingClubId && { startingClubId }),
     };
 
     if (isNewGamePlusMode && selectedPerkIds.length > 0) {
@@ -468,8 +550,8 @@ export function NewGameScreen() {
     switch (s) {
       case 1: return firstName.trim() !== "" && lastName.trim() !== "";
       case 2: return true;
-      case 3: return true;
-      case 4: return startingPosition === "freelance" || startingClubId !== "";
+      case 3: return skillAllocationValidation.valid;
+      case 4: return effectiveStartingPosition === "freelance" || startingClubId !== "";
       case 5: return true;
       case 6: return canStart;
       default: return false;
@@ -479,42 +561,21 @@ export function NewGameScreen() {
   function goNext() {
     if (!canAdvance(step)) return;
     setDirection("forward");
-    setStep((s) => Math.min(s + 1, 6));
+    const nextStep = steps[currentStepIndex + 1];
+    if (nextStep) setStep(nextStep.id);
   }
 
   function goBack() {
     setDirection("back");
-    setStep((s) => Math.max(s - 1, 1));
+    const previousStep = steps[currentStepIndex - 1];
+    if (previousStep) setStep(previousStep.id);
   }
 
   function goToStep(target: number) {
-    if (target < 1 || target > 6) return;
+    if (!steps.some((candidate) => candidate.id === target)) return;
     setDirection(target > step ? "forward" : "back");
     setStep(target);
   }
-
-  // ---------------------------------------------------------------------------
-  // Skill helpers (used in steps 3 & 6)
-  // ---------------------------------------------------------------------------
-
-  const SKILL_DESCRIPTIONS: Record<ScoutSkill, string> = {
-    technicalEye: "Reading technical attributes",
-    physicalAssessment: "Evaluating physical traits",
-    psychologicalRead: "Assessing mental and hidden attributes",
-    tacticalUnderstanding: "Analysing tactical attributes",
-    dataLiteracy: "Interpreting statistics",
-    playerJudgment: "Gauging overall current ability",
-    potentialAssessment: "Projecting a player's ceiling",
-  };
-
-  const base = BASE_SKILLS[specialization];
-  const mins = SKILL_MINIMUMS[specialization];
-  const totalUsed = Object.values(skillAllocations).reduce(
-    (s, v) => s + (v ?? 0),
-    0,
-  );
-  const remaining = BONUS_POINTS - totalUsed;
-  const skills = Object.keys(base) as ScoutSkill[];
 
   function formatSkillName(skill: string): string {
     return skill.replace(/([A-Z])/g, " $1").trim().replace(/^\w/, (c) => c.toUpperCase());
@@ -524,11 +585,15 @@ export function NewGameScreen() {
   // Review helpers
   // ---------------------------------------------------------------------------
 
-  const specInfo = SPECIALIZATIONS.find((s) => s.id === specialization)!;
+  const specInfo = SPECIALIZATIONS.find((s) => s.id === effectiveSpecialization)!;
   const startingClubName =
     startingClubId
       ? Object.values(TOP_LEAGUE_CLUBS).flat().find((c) => c.id === startingClubId)?.name ?? startingClubId
       : null;
+  const roleSummary =
+    effectiveStartingPosition === "freelance"
+      ? "Freelance Youth Scout"
+      : "Club Scout";
 
   const worldCountryNames = selectedCountries
     .map((k) => COUNTRY_OPTIONS.find((c) => c.key === k)?.name ?? k)
@@ -558,10 +623,10 @@ export function NewGameScreen() {
       <div className="px-8 pt-6 pb-2">
         <div className="mx-auto max-w-3xl">
           <div className="flex items-center justify-between">
-            {STEPS.map((s, i) => {
-              const isCompleted = s.id < step;
-              const isCurrent = s.id === step;
-              const isFuture = s.id > step;
+            {steps.map((s, i) => {
+              const isCompleted = i < currentStepIndex;
+              const isCurrent = i === currentStepIndex;
+              const isFuture = i > currentStepIndex;
 
               return (
                 <div key={s.id} className="flex items-center flex-1 last:flex-none">
@@ -569,6 +634,9 @@ export function NewGameScreen() {
                   <button
                     onClick={() => isCompleted && goToStep(s.id)}
                     disabled={isFuture}
+                    aria-label={`${s.label}${
+                      isCompleted ? " — completed" : isCurrent ? " — current step" : " — upcoming"
+                    }`}
                     className={`
                       relative flex items-center justify-center rounded-full transition-all shrink-0
                       ${isCurrent ? "w-10 h-10 bg-emerald-500 text-white" : ""}
@@ -581,13 +649,13 @@ export function NewGameScreen() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <span className={`text-xs font-bold ${isCurrent ? "text-white" : ""}`}>{s.id}</span>
+                      <span className={`text-xs font-bold ${isCurrent ? "text-white" : ""}`}>{i + 1}</span>
                     )}
                   </button>
 
                   {/* Connecting line */}
-                  {i < STEPS.length - 1 && (
-                    <div className={`flex-1 h-0.5 mx-2 ${s.id < step ? "bg-emerald-500" : "bg-zinc-800"}`} />
+                  {i < steps.length - 1 && (
+                    <div className={`flex-1 h-0.5 mx-2 ${i < currentStepIndex ? "bg-emerald-500" : "bg-zinc-800"}`} />
                   )}
                 </div>
               );
@@ -595,9 +663,9 @@ export function NewGameScreen() {
           </div>
           {/* Step labels */}
           <div className="hidden sm:flex items-center justify-between mt-2">
-            {STEPS.map((s, i) => (
-              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${s.id === step ? "text-emerald-400 font-medium" : "text-zinc-600"}`}>
-                {i < STEPS.length - 1 ? (
+            {steps.map((s, i) => (
+              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-emerald-400 font-medium" : "text-zinc-600"}`}>
+                {i < steps.length - 1 ? (
                   <span className="inline-block" style={{ width: "calc(100% - 1rem)" }}>{s.label}</span>
                 ) : (
                   <span className="inline-block w-8 text-center">{s.label}</span>
@@ -818,7 +886,7 @@ export function NewGameScreen() {
                     </div>
                     <div className="col-span-2">
                       <label className="mb-2 block text-sm text-zinc-400">Your Portrait</label>
-                      <div className="grid grid-cols-6 gap-3">
+                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
                         {[1, 2, 3, 4, 5, 6].map((id) => (
                           <button
                             key={id}
@@ -830,9 +898,12 @@ export function NewGameScreen() {
                                 : "border-zinc-700 hover:border-zinc-500"
                             }`}
                           >
-                            <img
+                            <Image
                               src={`/images/avatars/scout-${id}.png`}
                               alt={`Portrait ${id}`}
+                              width={64}
+                              height={64}
+                              unoptimized
                               className="h-16 w-16 object-cover"
                               draggable={false}
                             />
@@ -853,124 +924,152 @@ export function NewGameScreen() {
                     Choose your scouting focus. This shapes your career path and which clubs want you.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-4">
-                  {IS_DEMO && (
-                    <div className="col-span-2 rounded-lg border border-amber-800/40 bg-amber-950/20 px-4 py-2.5 text-xs text-amber-300">
-                      Demo version — full game includes 4 specializations and 10 scenarios.
+                <CardContent className="space-y-4">
+                  {IS_YOUTH_EARLY_ACCESS && (
+                    <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-200">
+                      Youth Early Access is live. Start as a Youth Scout now. First Team Scout,
+                      Regional Expert, and Data Scout are coming in a later build.
                     </div>
                   )}
-                  {SPECIALIZATIONS.map((spec) => {
-                    const isSelected = specialization === spec.id;
-                    const isDemoLocked = IS_DEMO && !DEMO_ALLOWED_SPECS.includes(spec.id);
-                    return (
-                      <button
-                        key={spec.id}
-                        onClick={() => !isDemoLocked && setSpecialization(spec.id)}
-                        aria-pressed={isSelected}
-                        disabled={isDemoLocked}
-                        className={`cursor-pointer rounded-lg border p-4 text-left transition ${
-                          isDemoLocked
-                            ? "cursor-not-allowed border-zinc-800 opacity-40"
-                            : isSelected
+                  {IS_DEMO && (
+                    <div className="rounded-lg border border-amber-800/40 bg-amber-950/20 px-4 py-2.5 text-xs text-amber-300">
+                      Demo mode is active. Career length is capped at 2 seasons and only the Rescue Job scenario is available.
+                    </div>
+                  )}
+                  <div className={IS_YOUTH_EARLY_ACCESS ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4"}>
+                    {availableSpecializations.map((spec) => {
+                      const isSelected = effectiveSpecialization === spec.id;
+                      return (
+                        <button
+                          key={spec.id}
+                          onClick={() => setSpecialization(spec.id)}
+                          aria-pressed={isSelected}
+                          className={`cursor-pointer rounded-lg border p-4 text-left transition ${
+                            isSelected
                               ? "border-emerald-500 bg-emerald-500/10"
                               : "border-[var(--border)] hover:border-zinc-600"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <h3 className="font-semibold text-white">{spec.name}</h3>
-                          <span className="text-[10px] uppercase tracking-wider text-zinc-500">{spec.tagline}</span>
-                        </div>
-                        <p className="mb-3 text-sm text-zinc-400">{spec.desc}</p>
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <h3 className="font-semibold text-white">{spec.name}</h3>
+                            <span className="text-[10px] uppercase tracking-wider text-zinc-500">{spec.tagline}</span>
+                          </div>
+                          <p className="mb-3 text-sm text-zinc-400">{spec.desc}</p>
 
-                        {isSelected && (
-                          <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
-                            <div>
-                              <p className="text-xs font-semibold text-zinc-300 mb-1">How it plays</p>
-                              <p className="text-xs text-zinc-500 leading-relaxed">{spec.playstyle}</p>
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold text-zinc-300 mb-1.5">Exclusive features</p>
-                              <ul className="space-y-1">
-                                {spec.exclusiveFeatures.map((f) => (
-                                  <li key={f} className="flex items-start gap-1.5 text-xs text-zinc-400">
-                                    <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
-                                    {f}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                            {spec.exclusiveActivities.length > 0 && (
+                          {isSelected && (
+                            <div className="mt-3 space-y-3 border-t border-zinc-800 pt-3">
                               <div>
-                                <p className="text-xs font-semibold text-zinc-300 mb-1.5">
-                                  Exclusive activities
-                                  {spec.exclusiveActivities.length > 5 && (
-                                    <span className="ml-1.5 font-normal text-zinc-500">— some unlock with progression</span>
-                                  )}
-                                </p>
-                                <div className="flex flex-wrap gap-1">
-                                  {spec.exclusiveActivities.map((a) => (
-                                    <span key={a} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{a}</span>
-                                  ))}
-                                </div>
+                                <p className="text-xs font-semibold text-zinc-300 mb-1">How it plays</p>
+                                <p className="text-xs text-zinc-500 leading-relaxed">{spec.playstyle}</p>
                               </div>
-                            )}
-                            {spec.systemBonuses && (
                               <div>
-                                <p className="text-xs font-semibold text-zinc-300 mb-1.5">System bonuses</p>
+                                <p className="text-xs font-semibold text-zinc-300 mb-1.5">Exclusive features</p>
                                 <ul className="space-y-1">
-                                  {spec.systemBonuses.map((b) => (
-                                    <li key={b} className="flex items-start gap-1.5 text-xs text-zinc-400">
-                                      <span className="mt-1 w-1 h-1 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
-                                      {b}
+                                  {spec.exclusiveFeatures.map((f) => (
+                                    <li key={f} className="flex items-start gap-1.5 text-xs text-zinc-400">
+                                      <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" aria-hidden="true" />
+                                      {f}
                                     </li>
                                   ))}
                                 </ul>
                               </div>
-                            )}
-                            <div className="rounded bg-emerald-950/40 border border-emerald-900/30 px-2.5 py-1.5">
-                              <p className="text-[10px] text-emerald-400">
-                                <span className="font-semibold">Key strength:</span>{" "}
-                                <span className="text-emerald-300">{spec.keyStrength}</span>
-                              </p>
+                              {spec.exclusiveActivities.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-semibold text-zinc-300 mb-1.5">
+                                    Exclusive activities
+                                    {spec.exclusiveActivities.length > 5 && (
+                                      <span className="ml-1.5 font-normal text-zinc-500">— some unlock with progression</span>
+                                    )}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {spec.exclusiveActivities.map((a) => (
+                                      <span key={a} className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-300">{a}</span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {spec.systemBonuses && (
+                                <div>
+                                  <p className="text-xs font-semibold text-zinc-300 mb-1.5">System bonuses</p>
+                                  <ul className="space-y-1">
+                                    {spec.systemBonuses.map((b) => (
+                                      <li key={b} className="flex items-start gap-1.5 text-xs text-zinc-400">
+                                        <span className="mt-1 w-1 h-1 rounded-full bg-amber-500 shrink-0" aria-hidden="true" />
+                                        {b}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                              <div className="rounded bg-emerald-950/40 border border-emerald-900/30 px-2.5 py-1.5">
+                                <p className="text-[10px] text-emerald-400">
+                                  <span className="font-semibold">Key strength:</span>{" "}
+                                  <span className="text-emerald-300">{spec.keyStrength}</span>
+                                </p>
+                              </div>
+                              <div className="rounded-md border border-[var(--border)] bg-[var(--muted)] p-2">
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-1">
+                                  Income Focus
+                                </p>
+                                <p className="text-xs text-emerald-400">{SPEC_INCOME_INFO[spec.id].focus}</p>
+                                <p className="text-[10px] text-blue-400 mt-0.5">Tier 3: {SPEC_INCOME_INFO[spec.id].tier3}</p>
+                              </div>
                             </div>
-                            <div className="rounded-md border border-[var(--border)] bg-[var(--muted)] p-2">
-                              <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-1">
-                                Income Focus
-                              </p>
-                              <p className="text-xs text-emerald-400">{SPEC_INCOME_INFO[spec.id].focus}</p>
-                              <p className="text-[10px] text-blue-400 mt-0.5">Tier 3: {SPEC_INCOME_INFO[spec.id].tier3}</p>
-                            </div>
-                          </div>
-                        )}
+                          )}
 
-                        {!isSelected && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {spec.exclusiveActivities.length > 0 ? (
-                              <>
-                                {spec.exclusiveActivities.slice(0, 3).map((a) => (
-                                  <span key={a} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{a}</span>
-                                ))}
-                                {spec.exclusiveActivities.length > 3 && (
+                          {!isSelected && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {spec.exclusiveActivities.length > 0 ? (
+                                <>
+                                  {spec.exclusiveActivities.slice(0, 3).map((a) => (
+                                    <span key={a} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{a}</span>
+                                  ))}
+                                  {spec.exclusiveActivities.length > 3 && (
+                                    <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
+                                      +{spec.exclusiveActivities.length - 3} more
+                                    </span>
+                                  )}
+                                </>
+                              ) : spec.systemBonuses ? (
+                                <>
+                                  {spec.systemBonuses.slice(0, 2).map((b) => (
+                                    <span key={b} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{b}</span>
+                                  ))}
                                   <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
-                                    +{spec.exclusiveActivities.length - 3} more
+                                    +{spec.systemBonuses.length - 2} more
                                   </span>
-                                )}
-                              </>
-                            ) : spec.systemBonuses ? (
-                              <>
-                                {spec.systemBonuses.slice(0, 2).map((b) => (
-                                  <span key={b} className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">{b}</span>
-                                ))}
-                                <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-500">
-                                  +{spec.systemBonuses.length - 2} more
-                                </span>
-                              </>
-                            ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {IS_YOUTH_EARLY_ACCESS && comingSoonSpecializations.length > 0 && (
+                    <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold text-zinc-200">Coming Later</h3>
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                          Full game modes
+                        </span>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {comingSoonSpecializations.map((spec) => (
+                          <div
+                            key={spec.id}
+                            className="rounded-lg border border-zinc-800/80 bg-zinc-900/60 p-3"
+                          >
+                            <p className="font-semibold text-white">{spec.name}</p>
+                            <p className="mt-1 text-xs uppercase tracking-wider text-zinc-500">
+                              {spec.tagline}
+                            </p>
+                            <p className="mt-2 text-xs leading-relaxed text-zinc-400">{spec.desc}</p>
                           </div>
-                        )}
-                      </button>
-                    );
-                  })}
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -991,10 +1090,17 @@ export function NewGameScreen() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs text-zinc-500">Remaining Points</span>
-                      <span className={`text-sm font-bold ${remaining > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                      <span className={`text-sm font-bold ${remaining === 0 ? "text-emerald-400" : "text-amber-400"}`}>
                         {remaining} / {BONUS_POINTS}
                       </span>
                     </div>
+                    <p
+                      className={`text-xs ${skillAllocationValidation.valid ? "text-emerald-400" : "text-amber-400"}`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {skillAllocationMessage}
+                    </p>
 
                     {skills.map((skill) => {
                       const baseVal = base[skill];
@@ -1019,7 +1125,7 @@ export function NewGameScreen() {
                                   }))
                                 }
                                 disabled={!canDecrease}
-                                className={`w-6 h-6 rounded text-xs font-bold border transition ${
+                                className={`h-11 w-11 rounded text-sm font-bold border transition ${
                                   canDecrease
                                     ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800 cursor-pointer"
                                     : "border-zinc-800 text-zinc-700 cursor-not-allowed"
@@ -1037,7 +1143,7 @@ export function NewGameScreen() {
                                   }))
                                 }
                                 disabled={!canIncrease}
-                                className={`w-6 h-6 rounded text-xs font-bold border transition ${
+                                className={`h-11 w-11 rounded text-sm font-bold border transition ${
                                   canIncrease
                                     ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800 cursor-pointer"
                                     : "border-zinc-800 text-zinc-700 cursor-not-allowed"
@@ -1074,16 +1180,21 @@ export function NewGameScreen() {
                   <CardDescription>How do you want to begin your career?</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {IS_YOUTH_EARLY_ACCESS && (
+                    <div className="rounded-lg border border-emerald-800/40 bg-emerald-950/20 px-4 py-3 text-sm text-emerald-200">
+                      Youth Early Access starts as a Freelance Youth Scout only. Club-employed starts are coming later once that career branch is verified.
+                    </div>
+                  )}
+                  <div className={IS_YOUTH_EARLY_ACCESS ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 gap-3 sm:grid-cols-2"}>
                     {/* Freelance option */}
                     <button
                       onClick={() => {
                         setStartingPosition("freelance");
                         setStartingClubId("");
                       }}
-                      aria-pressed={startingPosition === "freelance"}
+                      aria-pressed={effectiveStartingPosition === "freelance"}
                       className={`cursor-pointer rounded-lg border p-4 text-left transition ${
-                        startingPosition === "freelance"
+                        effectiveStartingPosition === "freelance"
                           ? "border-emerald-500 bg-emerald-500/10"
                           : "border-[var(--border)] hover:border-zinc-600"
                       }`}
@@ -1091,13 +1202,13 @@ export function NewGameScreen() {
                       <div className="flex items-center gap-2 mb-2">
                         <span
                           className={`inline-flex w-4 h-4 rounded-full border-2 items-center justify-center flex-shrink-0 ${
-                            startingPosition === "freelance"
+                            effectiveStartingPosition === "freelance"
                               ? "border-emerald-500 bg-emerald-500"
                               : "border-zinc-500"
                           }`}
                           aria-hidden="true"
                         >
-                          {startingPosition === "freelance" && (
+                          {effectiveStartingPosition === "freelance" && (
                             <span className="w-1.5 h-1.5 rounded-full bg-white" />
                           )}
                         </span>
@@ -1113,8 +1224,27 @@ export function NewGameScreen() {
                         <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">Full freedom</span>
                       </div>
                     </button>
-
-                    {/* Club Scout option */}
+                    {IS_YOUTH_EARLY_ACCESS && (
+                      <div className="rounded-lg border border-dashed border-zinc-700 bg-zinc-950/40 p-4 text-left opacity-80">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <h3 className="font-semibold text-white">Club Scout</h3>
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+                            Coming later
+                          </span>
+                        </div>
+                        <p className="text-sm text-zinc-400">
+                          Club-employed starts are disabled in Youth Early Access while the first-report
+                          to marketplace flow stays on one verified career path.
+                        </p>
+                        {IS_YOUTH_EARLY_ACCESS && (
+                          <p className="mt-2 text-xs leading-relaxed text-emerald-200">
+                            This build begins on one verified path: Freelance Youth Scout.
+                            Identity, Skills, World, and Review are the only setup steps.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {!IS_YOUTH_EARLY_ACCESS && (
                     <button
                       onClick={() => setStartingPosition("club")}
                       aria-pressed={startingPosition === "club"}
@@ -1140,19 +1270,20 @@ export function NewGameScreen() {
                         <h3 className="font-semibold text-white">Club Scout</h3>
                       </div>
                       <p className="text-sm text-zinc-400">
-                        Start employed by a club. Receive a steady salary of £800/week but you must
+                        Start employed by a club. Receive a steady salary of GBP 800/week but you must
                         follow the club&apos;s scouting priorities and earn manager trust.
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">£800/week salary</span>
+                        <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">GBP 800/week salary</span>
                         <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">Club directives</span>
                         <span className="rounded-full bg-[var(--secondary)] px-2 py-0.5 text-xs text-zinc-300">Starter trust</span>
                       </div>
                     </button>
+                    )}
                   </div>
 
                   {/* Club selector */}
-                  {startingPosition === "club" && (
+                  {!IS_YOUTH_EARLY_ACCESS && effectiveStartingPosition === "club" && (
                     <div>
                       <label htmlFor="starting-club" className="mb-1.5 block text-sm text-zinc-400">
                         Choose your club
@@ -1187,7 +1318,7 @@ export function NewGameScreen() {
                   )}
 
                   {/* Starting Region — only for Regional specialization */}
-                  {specialization === "regional" && (
+                  {effectiveSpecialization === "regional" && (
                     <div className="border-t border-zinc-800 pt-4">
                       <p className="text-sm font-medium text-zinc-300 mb-2">Starting Region</p>
                       <p className="text-xs text-zinc-500 mb-3">Choose which country your Regional Expert begins their career in.</p>
@@ -1222,11 +1353,11 @@ export function NewGameScreen() {
                 <CardHeader>
                   <CardTitle>Build Your World</CardTitle>
                   <CardDescription>
-                    Select which countries to include. More countries = larger world.
+                    Choose which countries run full weekly simulation. Global talent pools stay active in every save.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {COUNTRY_OPTIONS.map((country) => {
                       const isSelected = selectedCountries.includes(country.key);
                       const isLocked = country.key === "england";
@@ -1334,30 +1465,38 @@ export function NewGameScreen() {
                         <button onClick={() => goToStep(1)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
                       </div>
                       <div className="flex items-center gap-3">
-                        <img
+                        <Image
                           src={`/images/avatars/scout-${avatarId}.png`}
                           alt="Scout portrait"
+                          width={48}
+                          height={48}
+                          unoptimized
                           className="h-12 w-12 rounded-full object-cover"
                         />
                         <div>
                           <p className="text-white font-medium">{firstName} {lastName}</p>
                           <p className="text-sm text-zinc-400">Age {age}, {nationality}</p>
+                          {IS_YOUTH_EARLY_ACCESS && (
+                            <p className="text-sm text-emerald-300">{roleSummary}</p>
+                          )}
                         </div>
                       </div>
                     </CardContent>
                   </Card>
 
                   {/* Specialization */}
-                  <Card>
-                    <CardContent className="pt-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-zinc-300">Specialization</h3>
-                        <button onClick={() => goToStep(2)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
-                      </div>
-                      <p className="text-white font-medium">{specInfo.name}</p>
-                      <p className="text-sm text-zinc-400">{specInfo.tagline}</p>
-                    </CardContent>
-                  </Card>
+                  {!IS_YOUTH_EARLY_ACCESS && (
+                    <Card>
+                      <CardContent className="pt-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-zinc-300">Specialization</h3>
+                          <button onClick={() => goToStep(2)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                        </div>
+                        <p className="text-white font-medium">{specInfo.name}</p>
+                        <p className="text-sm text-zinc-400">{specInfo.tagline}</p>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* Skills */}
                   <Card>
@@ -1384,25 +1523,27 @@ export function NewGameScreen() {
                   </Card>
 
                   {/* Position */}
-                  <Card>
-                    <CardContent className="pt-5">
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-zinc-300">Position</h3>
-                        <button onClick={() => goToStep(4)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
-                      </div>
-                      <p className="text-white font-medium">
-                        {startingPosition === "freelance" ? "Freelance Scout" : `Club Scout`}
-                      </p>
-                      {startingClubName && (
-                        <p className="text-sm text-zinc-400">{startingClubName}</p>
-                      )}
-                      {specialization === "regional" && (
-                        <p className="text-sm text-zinc-400">
-                          Region: {COUNTRY_OPTIONS.find((c) => c.key === startingCountry)?.name ?? startingCountry}
+                  {!IS_YOUTH_EARLY_ACCESS && (
+                    <Card>
+                      <CardContent className="pt-5">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-sm font-semibold text-zinc-300">Position</h3>
+                          <button onClick={() => goToStep(4)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                        </div>
+                        <p className="text-white font-medium">
+                          {effectiveStartingPosition === "freelance" ? "Freelance Scout" : "Club Scout"}
                         </p>
-                      )}
-                    </CardContent>
-                  </Card>
+                        {startingClubName && (
+                          <p className="text-sm text-zinc-400">{startingClubName}</p>
+                        )}
+                        {effectiveSpecialization === "regional" && (
+                          <p className="text-sm text-zinc-400">
+                            Region: {COUNTRY_OPTIONS.find((c) => c.key === startingCountry)?.name ?? startingCountry}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* World */}
                   <Card>
@@ -1420,7 +1561,7 @@ export function NewGameScreen() {
                   <Card>
                     <CardContent className="pt-5">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-zinc-300">Settings</h3>
+                        <h3 className="text-sm font-semibold text-zinc-300">Difficulty</h3>
                         <button onClick={() => goToStep(5)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
                       </div>
                       <p className="text-white font-medium capitalize">{difficulty} difficulty</p>
@@ -1462,7 +1603,7 @@ export function NewGameScreen() {
       {/* Bottom navigation */}
       <div className="border-t border-zinc-800 bg-[var(--background)] px-8 py-4">
         <div className="mx-auto max-w-4xl flex items-center justify-between">
-          {step > 1 ? (
+          {currentStepIndex > 0 ? (
             <Button variant="outline" onClick={goBack} className="cursor-pointer">
               Back
             </Button>
@@ -1470,24 +1611,37 @@ export function NewGameScreen() {
             <div />
           )}
 
-          {step < 6 ? (
-            <Button onClick={goNext} disabled={!canAdvance(step)} className="cursor-pointer">
-              Continue
-            </Button>
-          ) : (
-            <Button
-              size="lg"
-              onClick={handleStart}
-              disabled={!canStart}
-              className={`text-white cursor-pointer ${
-                isNewGamePlusMode
-                  ? "bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400"
-                  : "bg-emerald-600 hover:bg-emerald-700"
-              }`}
-            >
-              {isNewGamePlusMode ? "Begin New Game+" : "Begin Career"}
-            </Button>
-          )}
+          <div className="flex flex-col items-end gap-2">
+            {step !== lastStepId ? (
+              <Button onClick={goNext} disabled={!canAdvance(step)} className="cursor-pointer">
+                Continue
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                onClick={handleStart}
+                disabled={!canStart}
+                aria-describedby="start-requirements"
+                className={`text-white cursor-pointer ${
+                  isNewGamePlusMode
+                    ? "bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {isNewGamePlusMode ? "Begin New Game+" : "Begin Career"}
+              </Button>
+            )}
+            {step === lastStepId && (
+              <p
+                id="start-requirements"
+                role="status"
+                aria-live="polite"
+                className={`max-w-md text-right text-xs ${canStart ? "text-zinc-500" : "text-amber-400"}`}
+              >
+                {startRequirementMessage}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 

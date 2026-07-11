@@ -1,139 +1,321 @@
+import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
 
+async function createSubmittedYouthReport(gamePage: GamePage) {
+  await gamePage.goto();
+  await gamePage.injectState({
+    currentWeek: 1,
+    scout: {
+      firstName: "Career",
+      lastName: "Tester",
+      primarySpecialization: "youth",
+    },
+  });
+  await gamePage.navigateTo("calendar");
+  await gamePage.scheduleActivityByLabel("School Match", "Mon");
+  await gamePage.advanceCanonicalWeek({ launchLiveSession: true });
+  await gamePage.openFirstYouthPlayerProfile();
+  await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+  await gamePage.waitForScreen("reportWriter");
+  await gamePage.submitCurrentReportViaUI("recommend");
+  await gamePage.waitForScreen("reportHistory");
+}
+
 test.describe("Career Paths", () => {
-  test.beforeEach(async ({ gamePage }) => {
+  test("freelance youth careers render as independent on the career screen", async ({ gamePage }) => {
     await gamePage.goto();
-  });
-
-  test("club path initialization and verification", async ({ gamePage }) => {
     await gamePage.injectState({
-      currentWeek: 20,
+      currentWeek: 6,
       scout: {
-        careerTier: 2,
+        firstName: "Career",
+        lastName: "Tester",
         primarySpecialization: "youth",
-        careerPath: "club",
-        reputation: 40,
       },
     });
 
-    const careerPath = await gamePage.getGameStateValue("scout.careerPath");
-    expect(careerPath).toBe("club");
+    await gamePage.navigateTo("career");
 
-    // Club path should have club-related fields
-    const clubId = await gamePage.getGameStateValue("scout.currentClubId");
-    // May or may not have a club yet depending on state injection
-    expect(typeof clubId === "string" || clubId === undefined || clubId === null).toBe(true);
-  });
-
-  test("independent path initialization and verification", async ({ gamePage }) => {
-    await gamePage.injectState({
-      currentWeek: 20,
-      scout: {
-        careerTier: 2,
-        primarySpecialization: "youth",
-        careerPath: "independent",
-        reputation: 40,
-      },
-    });
-
-    const careerPath = await gamePage.getGameStateValue("scout.careerPath");
-    expect(careerPath).toBe("independent");
-  });
-
-  test("chooseCareerPath store action works", async ({ gamePage }) => {
-    // Start at tier 1 with enough reputation for path choice
-    await gamePage.injectState({
-      currentWeek: 15,
-      scout: {
-        careerTier: 2,
-        primarySpecialization: "youth",
-        reputation: 20,
-      },
-    });
-
-    // The path should be settable via state injection
-    await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      if (gs?.scout) {
-        gs.scout.careerPath = "independent";
-        store.getState().loadGame(gs);
-      }
-    });
-    await gamePage.page.waitForTimeout(100);
-
-    const path = await gamePage.getGameStateValue("scout.careerPath");
-    expect(path).toBe("independent");
-  });
-
-  test("path-specific content on agency screen: club path", async ({ gamePage }) => {
-    await gamePage.injectState({
-      currentWeek: 20,
-      scout: {
-        careerTier: 2,
-        primarySpecialization: "youth",
-        careerPath: "club",
-        reputation: 40,
-      },
-    });
-
-    await gamePage.setScreen("agency");
-    await gamePage.page.waitForTimeout(500);
-
-    const screen = await gamePage.getCurrentScreen();
-    expect(screen).toBe("agency");
-
-    const content = await gamePage.page.innerText("body");
-    expect(content.length).toBeGreaterThan(50);
+    expect(await gamePage.getGameStateValue("scout.currentClubId")).toBeFalsy();
+    expect(await gamePage.getGameStateValue("scout.salary")).toBe(0);
+    await expect(gamePage.page.getByText("Freelance Scout", { exact: true })).toBeVisible();
 
     gamePage.expectNoConsoleErrors();
   });
 
-  test("path-specific content on agency screen: independent path", async ({ gamePage }) => {
-    await gamePage.injectState({
-      currentWeek: 20,
-      scout: {
-        careerTier: 2,
-        primarySpecialization: "youth",
-        careerPath: "independent",
-        reputation: 40,
-      },
-    });
+  test("independent youth reports expose the marketplace prompt and stats", async ({ gamePage }) => {
+    await createSubmittedYouthReport(gamePage);
 
-    await gamePage.setScreen("agency");
-    await gamePage.page.waitForTimeout(500);
-
-    const screen = await gamePage.getCurrentScreen();
-    expect(screen).toBe("agency");
-
-    const content = await gamePage.page.innerText("body");
-    expect(content.length).toBeGreaterThan(50);
+    await expect(
+      gamePage.page.locator('[data-tutorial-id="report-marketplace-prompt"]'),
+    ).toBeVisible();
+    await expect(gamePage.page.getByText("Active Listings")).toBeVisible();
+    await expect(gamePage.page.getByText("Pending Bids")).toBeVisible();
 
     gamePage.expectNoConsoleErrors();
   });
 
-  test("career path flows through to observation session", async ({ gamePage }) => {
-    await gamePage.injectMidGameState("youth");
+  test("accepting a club job exits independent finances without wiping balance history", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 16,
+      currentSeason: 2,
+      scout: {
+        firstName: "Career",
+        lastName: "Tester",
+        primarySpecialization: "youth",
+      },
+    });
 
-    // Start an observation — session should carry scout's career path
-    await gamePage.startObservationSession("schoolMatch");
-
-    await gamePage.page.evaluate(() => {
+    const result = await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
-      if (store.getState().activeSession?.state === "setup") {
-        store.getState().beginSession();
+      const state = store?.getState()?.gameState;
+      if (!store || !state || !state.finances) {
+        throw new Error("Game state not ready");
       }
-    });
-    await gamePage.page.waitForTimeout(200);
 
-    const session = await gamePage.getActiveSession();
-    expect(session).not.toBeNull();
-    expect(session!.mode).toBe("fullObservation");
+      const clubId = Object.keys(state.clubs)[0];
+      if (!clubId) {
+        throw new Error("No clubs available");
+      }
 
-    // End session cleanly
-    await gamePage.page.evaluate(() => {
-      (window as any).__GAME_STORE__.getState().endObservationSession();
+      const offer = {
+        id: "offer_accept_club_path_fix",
+        clubId,
+        tier: 3,
+        role: "Senior Youth Scout",
+        salary: 2400,
+        contractLength: 2,
+        expiresWeek: 20,
+      };
+
+      const seededState = {
+        ...state,
+        scout: {
+          ...state.scout,
+          careerPath: "independent",
+          independentTier: 3,
+          currentClubId: null,
+          careerTier: 3,
+          salary: 0,
+          contractEndSeason: undefined,
+          clubTrust: 22,
+        },
+        finances: {
+          ...state.finances,
+          careerPath: "independent",
+          independentTier: 3,
+          balance: 12345,
+          monthlyIncome: 0,
+          transactions: [
+            ...state.finances.transactions,
+            {
+              week: 8,
+              season: 1,
+              amount: 777,
+              description: "Legacy cash reserve",
+            },
+          ],
+          retainerContracts: [
+            {
+              id: "retainer_live",
+              clubId,
+              tier: 2,
+              monthlyFee: 1800,
+              requiredReportsPerMonth: 3,
+              reportsDeliveredThisMonth: 1,
+              status: "active",
+            },
+          ],
+          consultingContracts: [
+            {
+              id: "consult_live",
+              clubId,
+              type: "youthAudit",
+              fee: 5000,
+              deadline: 20,
+              deadlineSeason: 2,
+              status: "active",
+            },
+          ],
+          reportListings: [
+            {
+              id: "listing_live",
+              reportId: "report_live",
+              price: 900,
+              isExclusive: false,
+              status: "active",
+              listedWeek: 15,
+              listedSeason: 2,
+              biddingEndsWeek: 18,
+              biddingEndsSeason: 2,
+              bids: [
+                {
+                  id: "bid_live",
+                  listingId: "listing_live",
+                  clubId,
+                  amount: 950,
+                  placedWeek: 15,
+                  placedSeason: 2,
+                  expiryWeek: 18,
+                  expirySeason: 2,
+                  status: "pending",
+                  needMatchScore: 78,
+                },
+              ],
+            },
+          ],
+          office: {
+            tier: "professional",
+            monthlyCost: 1500,
+            qualityBonus: 0.2,
+            maxEmployees: 6,
+          },
+          employees: [
+            {
+              id: "emp_live",
+              name: "Agency Scout",
+              role: "scout",
+              quality: 72,
+              salary: 1200,
+              morale: 60,
+              fatigue: 10,
+              hiredWeek: 4,
+              hiredSeason: 1,
+              reportsGenerated: [],
+              experience: 5,
+              weeklyLog: [],
+              regionFocusWeeks: 0,
+            },
+          ],
+          pendingRetainerOffers: [
+            {
+              id: "retainer_offer_live",
+              clubId,
+              tier: 1,
+              monthlyFee: 700,
+              requiredReportsPerMonth: 2,
+              reportsDeliveredThisMonth: 0,
+              status: "active",
+            },
+          ],
+          pendingConsultingOffers: [
+            {
+              id: "consult_offer_live",
+              clubId,
+              type: "dataPackage",
+              fee: 3000,
+              deadline: 24,
+              deadlineSeason: 2,
+              status: "active",
+            },
+          ],
+          pendingEmployeeEvents: [
+            {
+              id: "emp_evt_live",
+              type: "poaching",
+              employeeId: "emp_live",
+              description: "A rival agency is circling.",
+              options: [
+                {
+                  label: "Ignore",
+                  moraleChange: -5,
+                  effect: "ignore",
+                },
+              ],
+              deadline: 18,
+              deadlineSeason: 2,
+            },
+          ],
+          satelliteOffices: [
+            {
+              id: "sat_live",
+              region: "spain",
+              monthlyCost: 900,
+              qualityBonus: 0.1,
+              maxEmployees: 2,
+              employeeIds: ["emp_live"],
+              openedWeek: 10,
+              openedSeason: 1,
+            },
+          ],
+          academyPartnerships: 3,
+          regionalExpertiseRegion: "spain",
+          specBonusApplied: 999,
+          specUniqueIncome: 999,
+        },
+        jobOffers: [offer],
+      };
+
+      store.getState().loadGame(seededState);
+      store.getState().acceptJob(offer.id);
+
+      const updated = store.getState().gameState;
+      if (!updated || !updated.finances) {
+        throw new Error("Updated game state missing");
+      }
+
+      return {
+        scout: {
+          careerPath: updated.scout.careerPath,
+          independentTier: updated.scout.independentTier ?? null,
+          currentClubId: updated.scout.currentClubId ?? null,
+          careerTier: updated.scout.careerTier,
+          salary: updated.scout.salary,
+          contractEndSeason: updated.scout.contractEndSeason ?? null,
+        },
+        finances: {
+          careerPath: updated.finances.careerPath,
+          independentTier: updated.finances.independentTier ?? null,
+          balance: updated.finances.balance,
+          monthlyIncome: updated.finances.monthlyIncome,
+          academyPartnerships: updated.finances.academyPartnerships ?? null,
+          specUniqueIncome: updated.finances.specUniqueIncome ?? null,
+          officeTier: updated.finances.office.tier,
+          employeeCount: updated.finances.employees.length,
+          pendingRetainerOffers: updated.finances.pendingRetainerOffers.length,
+          pendingConsultingOffers: updated.finances.pendingConsultingOffers.length,
+          pendingEmployeeEvents: updated.finances.pendingEmployeeEvents.length,
+          satelliteOfficeCount: updated.finances.satelliteOffices.length,
+          retainerStatuses: updated.finances.retainerContracts.map((contract: { status: string }) => contract.status),
+          consultingStatuses: updated.finances.consultingContracts.map((contract: { status: string }) => contract.status),
+          listingStatuses: updated.finances.reportListings.map((listing: { status: string }) => listing.status),
+          bidStatuses: updated.finances.reportListings.flatMap(
+            (listing: { bids: Array<{ status: string }> }) =>
+              listing.bids.map((bid: { status: string }) => bid.status),
+          ),
+          preservedLegacyTransaction: updated.finances.transactions.some(
+            (transaction: { description: string }) =>
+              transaction.description === "Legacy cash reserve",
+          ),
+        },
+        remainingOffers: updated.jobOffers.length,
+      };
     });
+
+    expect(result.scout.careerPath).toBe("club");
+    expect(result.scout.independentTier).toBeNull();
+    expect(result.scout.currentClubId).toBeTruthy();
+    expect(result.scout.careerTier).toBe(3);
+    expect(result.scout.salary).toBe(2400);
+    expect(result.scout.contractEndSeason).toBe(4);
+    expect(result.finances.careerPath).toBe("club");
+    expect(result.finances.independentTier).toBeNull();
+    expect(result.finances.monthlyIncome).toBe(9600);
+    expect(result.finances.academyPartnerships).toBe(1);
+    expect(result.finances.specUniqueIncome).toBe(500);
+    expect(result.finances.officeTier).toBe("home");
+    expect(result.finances.employeeCount).toBe(0);
+    expect(result.finances.pendingRetainerOffers).toBe(0);
+    expect(result.finances.pendingConsultingOffers).toBe(0);
+    expect(result.finances.pendingEmployeeEvents).toBe(0);
+    expect(result.finances.satelliteOfficeCount).toBe(0);
+    expect(result.finances.retainerStatuses).toEqual(["cancelled"]);
+    expect(result.finances.consultingStatuses).toEqual(["expired"]);
+    expect(result.finances.listingStatuses).toEqual(["withdrawn"]);
+    expect(result.finances.bidStatuses).toEqual(["withdrawn"]);
+    expect(result.finances.preservedLegacyTransaction).toBe(true);
+    expect(result.finances.balance).toBeGreaterThan(12345);
+    expect(result.remainingOffers).toBe(0);
 
     gamePage.expectNoConsoleErrors();
   });

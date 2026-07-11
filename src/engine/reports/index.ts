@@ -2,6 +2,7 @@ export {
   generateReportContent,
   calculateReportQuality,
   calculateReportQualityDetailed,
+  calculateReportCraftQualityDetailed,
   estimateReportQuality,
   finalizeReport,
   trackPostTransfer,
@@ -9,4 +10,11 @@ export {
   WEAKNESS_DESCRIPTORS,
 } from "./reporting";
 
-export type { ReportDraft, QualityBreakdown, QualityPreviewResult, ReportQualityDetailed } from "./reporting";
+export type {
+  ReportDraft,
+  ReportClaimSuggestion,
+  QualityBreakdown,
+  QualityPreviewResult,
+  ReportQualityDetailed,
+  ReportCraftQualityDetailed,
+} from "./reporting";

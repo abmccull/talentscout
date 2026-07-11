@@ -1,0 +1,2800 @@
+{
+  "capturedAt": "2026-07-11T15:58:42.782Z",
+  "target": "TalentScout packaged build",
+  "records": [
+    {
+      "name": "desktop-main-menu",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h1",
+            "text": "TalentScout",
+            "fontSize": "60px",
+            "color": "rgb(255, 255, 255)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "Start Youth Career",
+            "width": 256,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          },
+          {
+            "tag": "button",
+            "name": "Continue",
+            "width": 256,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgb(30, 41, 59)",
+            "border": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "button",
+            "name": "Load Game",
+            "width": 256,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [],
+        "incomplete": 1,
+        "passes": 28
+      }
+    },
+    {
+      "name": "mobile-main-menu",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h1",
+            "text": "TalentScout",
+            "fontSize": "60px",
+            "color": "rgb(255, 255, 255)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "Start Youth Career",
+            "width": 256,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          },
+          {
+            "tag": "button",
+            "name": "Continue",
+            "width": 256,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgb(30, 41, 59)",
+            "border": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "button",
+            "name": "Load Game",
+            "width": 256,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [],
+        "incomplete": 1,
+        "passes": 28
+      }
+    },
+    {
+      "name": "mobile-identity",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h2",
+            "text": "Your scouting career starts here",
+            "fontSize": "16px",
+            "color": "oklch(0.845 0.143 164.978)"
+          },
+          {
+            "tag": "h3",
+            "text": "Your Identity",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "← Back to Menu",
+            "width": 103,
+            "height": 20,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Identity — current step",
+            "width": 40,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "oklch(0.696 0.17 162.48)",
+            "border": "rgb(255, 255, 255)"
+          },
+          {
+            "tag": "button",
+            "name": "Specialization — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Skills — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Position — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "World — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Review — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "input",
+            "name": "Alex",
+            "width": 130,
+            "height": 42,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "input",
+            "name": "Morgan",
+            "width": 130,
+            "height": 42,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "input",
+            "name": null,
+            "width": 130,
+            "height": 42,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "select",
+            "name": "EnglishSpanishGermanFrenchBrazilianArgentineItalianDutchPortugueseBelgianAmericanMexicanCanadianNigerianGhanaianIvorianEgyptianSouth AfricanSenegaleseCameroonianJapaneseSouth KoreanSaudiChineseAustralianNew Zealander",
+            "width": 130,
+            "height": 41,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 84,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.696 0.17 162.48)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 84,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 84,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 84,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 84,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 84,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Continue",
+            "width": 90,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [
+          {
+            "id": "landmark-one-main",
+            "impact": "moderate",
+            "help": "Document should have one main landmark",
+            "nodes": [
+              [
+                "html"
+              ]
+            ]
+          },
+          {
+            "id": "page-has-heading-one",
+            "impact": "moderate",
+            "help": "Page should contain a level-one heading",
+            "nodes": [
+              [
+                "html"
+              ]
+            ]
+          },
+          {
+            "id": "region",
+            "impact": "moderate",
+            "help": "All page content should be contained by landmarks",
+            "nodes": [
+              [
+                ".items-start > div:nth-child(2)"
+              ],
+              [
+                ".space-y-1\\.5"
+              ],
+              [
+                ".pt-0 > div:nth-child(1)"
+              ],
+              [
+                ".pt-0 > div:nth-child(2)"
+              ],
+              [
+                ".pt-0 > div:nth-child(3)"
+              ],
+              [
+                ".pt-0 > div:nth-child(4)"
+              ],
+              [
+                ".mb-2"
+              ]
+            ]
+          }
+        ],
+        "incomplete": 1,
+        "passes": 32
+      }
+    },
+    {
+      "name": "desktop-identity",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h2",
+            "text": "Your scouting career starts here",
+            "fontSize": "16px",
+            "color": "oklch(0.845 0.143 164.978)"
+          },
+          {
+            "tag": "h3",
+            "text": "Your Identity",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "← Back to Menu",
+            "width": 103,
+            "height": 20,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Identity — current step",
+            "width": 40,
+            "height": 40,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "oklch(0.696 0.17 162.48)",
+            "border": "rgb(255, 255, 255)"
+          },
+          {
+            "tag": "button",
+            "name": "Specialization — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Skills — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Position — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "World — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Review — upcoming",
+            "width": 32,
+            "height": 32,
+            "fontSize": "16px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "input",
+            "name": "Alex",
+            "width": 200,
+            "height": 42,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "input",
+            "name": "Morgan",
+            "width": 200,
+            "height": 42,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "input",
+            "name": null,
+            "width": 200,
+            "height": 42,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "select",
+            "name": "EnglishSpanishGermanFrenchBrazilianArgentineItalianDutchPortugueseBelgianAmericanMexicanCanadianNigerianGhanaianIvorianEgyptianSouth AfricanSenegaleseCameroonianJapaneseSouth KoreanSaudiChineseAustralianNew Zealander",
+            "width": 200,
+            "height": 41,
+            "fontSize": "16px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 30, 30)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 59,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.696 0.17 162.48)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 59,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 59,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 59,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 59,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": null,
+            "width": 59,
+            "height": 68,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.37 0.013 285.805)"
+          },
+          {
+            "tag": "button",
+            "name": "Continue",
+            "width": 90,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [
+          {
+            "id": "landmark-one-main",
+            "impact": "moderate",
+            "help": "Document should have one main landmark",
+            "nodes": [
+              [
+                "html"
+              ]
+            ]
+          },
+          {
+            "id": "page-has-heading-one",
+            "impact": "moderate",
+            "help": "Page should contain a level-one heading",
+            "nodes": [
+              [
+                "html"
+              ]
+            ]
+          },
+          {
+            "id": "region",
+            "impact": "moderate",
+            "help": "All page content should be contained by landmarks",
+            "nodes": [
+              [
+                ".hidden"
+              ],
+              [
+                ".items-start > div:nth-child(2)"
+              ],
+              [
+                ".space-y-1\\.5"
+              ],
+              [
+                ".pt-0 > div:nth-child(1)"
+              ],
+              [
+                ".pt-0 > div:nth-child(2)"
+              ],
+              [
+                ".pt-0 > div:nth-child(3)"
+              ],
+              [
+                ".pt-0 > div:nth-child(4)"
+              ],
+              [
+                ".mb-2"
+              ]
+            ]
+          }
+        ],
+        "incomplete": 1,
+        "passes": 31
+      }
+    },
+    {
+      "name": "desktop-dashboard",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h1",
+            "text": "TalentScout",
+            "fontSize": "18px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h1",
+            "text": "Dashboard",
+            "fontSize": "24px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h2",
+            "text": "Season Calendar — Week 1 of 38",
+            "fontSize": "12px",
+            "color": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "h3",
+            "text": "Finances",
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Youth Pipeline979 total",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Inbox2",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Recent Reports",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Youth Scouting",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Quick Links",
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "DashboardNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.765 0.177 163.223)",
+            "background": "oklab(0.696 -0.162114 0.0511765 / 0.1)",
+            "border": "oklch(0.765 0.177 163.223)"
+          },
+          {
+            "tag": "button",
+            "name": "CalendarNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Youth HubNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(255, 255, 255)",
+            "background": "rgb(30, 41, 59)",
+            "border": "rgb(255, 255, 255)"
+          },
+          {
+            "tag": "button",
+            "name": "InternationalNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InboxNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "HandbookNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "SettingsNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Ask Tommy for help",
+            "width": 99,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "oklab(0.37 0.00354074 -0.0125085 / 0.8)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Planner",
+            "width": 106,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Advance Week",
+            "width": 125,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          },
+          {
+            "tag": "button",
+            "name": "Choose",
+            "width": 48,
+            "height": 21,
+            "fontSize": "10px",
+            "color": "oklch(0.879 0.169 91.605)",
+            "background": "oklab(0.414 0.0779366 0.0804356 / 0.4)",
+            "border": "oklab(0.666 0.0940116 0.152325 / 0.5)"
+          },
+          {
+            "tag": "button",
+            "name": "Choose",
+            "width": 48,
+            "height": 21,
+            "fontSize": "10px",
+            "color": "oklch(0.879 0.169 91.605)",
+            "background": "oklab(0.414 0.0779366 0.0804356 / 0.4)",
+            "border": "oklab(0.666 0.0940116 0.152325 / 0.5)"
+          },
+          {
+            "tag": "button",
+            "name": "Monthly Expenses",
+            "width": 113,
+            "height": 16,
+            "fontSize": "12px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "View",
+            "width": 52,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "979New",
+            "width": 171,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklch(0.274 0.006 286.033)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "0Observed",
+            "width": 171,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklab(0.696 -0.162114 0.0511765 / 0.1)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "0Reported",
+            "width": 171,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklab(0.623 -0.0378409 -0.210628 / 0.1)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "0Placed",
+            "width": 171,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklab(0.769 0.0640531 0.176752 / 0.1)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "View Youth Hub",
+            "width": 721,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Welcome to TalentScoutWelcome, Visual Auditor. Your career as a Youth Scout begins now.\n\nYou are a freelance scout. You earn fees for every report you submit. Build your reputation to attract club offers and secure a full-time contract.\n\nYOUR ROLE\nAs a scout, your job is to find players worth signing and write convincing reports that persuade clubs to act. You observe players at matches, through video analysis, and via contacts on the ground.\n\nSCHEDULING ACTIVITIES\nOpen the Calendar screen each week to plan your time. You have 7 day-slots (Monday through Sunday). Schedule activities such as attending matches, writing reports, networking meetings, or rest. Once your week is planned, press Advance Week to simulate it.\n\nSCOUTING MATCHES\nFind an upcoming fixture in the Calendar or Fixture list and schedule an Attend Match activity. During the match you can focus on up to 3 players — choose a lens (Technical, Physical, Mental, or Tactical) to direct your observations. The more sessions you spend watching a player, the narrower your confidence ranges become on their report.\n\nWRITING REPORTS\nAfter observing a player at least once, open their Player Profile and navigate to the Report Writer. Choose your conviction level carefully: a Table Pound stakes your personal reputation and should only be used when you are certain about a player.\n\nBUILDING YOUR NETWORK\nSchedule networking meetings to develop contacts — agents, academy coaches, club staff, and journalists. High-quality contacts share tips about players you have not yet spotted yourself.\n\nREPUTATION AND CAREER PROGRESSION\nEvery report you submit affects your reputation. Accurate reports on players who go on to succeed will build your standing. As your reputation grows, clubs will offer you contracts with better salaries and wider territories. Your long-term goal is to rise from the starting tier all the way to Head of Scouting.\n\nGood luck, scout. The pitch is waiting.",
+            "width": 323,
+            "height": 54,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Welcome PackageWelcome to scouting! As part of your starter package, your first report sold will earn a 50% bonus payment, and your first placement fee will earn a 25% bonus. Make them count!",
+            "width": 323,
+            "height": 54,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "View All",
+            "width": 323,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "button",
+            "name": "View Youth Hub",
+            "width": 323,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Discoveries",
+            "width": 128,
+            "height": 42,
+            "fontSize": "14px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(20, 20, 20)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Dismiss achievement notification",
+            "width": 20,
+            "height": 20,
+            "fontSize": "16px",
+            "color": "oklch(0.552 0.016 285.938)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.552 0.016 285.938)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "help": "Elements must meet minimum color contrast ratio thresholds",
+            "nodes": [
+              [
+                ".mt-0\\.5.text-zinc-500.text-xs"
+              ],
+              [
+                "div:nth-child(1) > .pt-4.pb-1.text-zinc-600"
+              ],
+              [
+                "div:nth-child(2) > .pt-4.pb-1.text-zinc-600"
+              ],
+              [
+                ".mb-2.justify-between.items-center > .text-zinc-500.text-xs"
+              ],
+              [
+                ".capitalize"
+              ],
+              [
+                ".mt-2.justify-between.text-xs > .text-zinc-500"
+              ]
+            ]
+          }
+        ],
+        "incomplete": 1,
+        "passes": 33
+      }
+    },
+    {
+      "name": "mobile-dashboard",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h1",
+            "text": "TalentScout",
+            "fontSize": "18px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h1",
+            "text": "Dashboard",
+            "fontSize": "20px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h2",
+            "text": "Season Calendar — Week 1 of 38",
+            "fontSize": "12px",
+            "color": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "h3",
+            "text": "Finances",
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Youth Pipeline979 total",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Inbox2",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Recent Reports",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Youth Scouting",
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Quick Links",
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "Open navigation menu",
+            "width": 38,
+            "height": 38,
+            "fontSize": "16px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgb(12, 12, 12)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Close sidebar",
+            "width": 26,
+            "height": 26,
+            "fontSize": "16px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "DashboardNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.765 0.177 163.223)",
+            "background": "oklab(0.696 -0.162114 0.0511765 / 0.1)",
+            "border": "oklch(0.765 0.177 163.223)"
+          },
+          {
+            "tag": "button",
+            "name": "CalendarNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Youth HubNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InternationalNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InboxNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "HandbookNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "SettingsNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Ask Tommy for help",
+            "width": 30,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "oklab(0.37 0.00354074 -0.0125085 / 0.8)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Planner",
+            "width": 106,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Advance Week",
+            "width": 125,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          },
+          {
+            "tag": "button",
+            "name": "Choose",
+            "width": 48,
+            "height": 21,
+            "fontSize": "10px",
+            "color": "oklch(0.879 0.169 91.605)",
+            "background": "oklab(0.414 0.0779366 0.0804356 / 0.4)",
+            "border": "oklab(0.666 0.0940116 0.152325 / 0.5)"
+          },
+          {
+            "tag": "button",
+            "name": "Choose",
+            "width": 48,
+            "height": 21,
+            "fontSize": "10px",
+            "color": "oklch(0.879 0.169 91.605)",
+            "background": "oklab(0.414 0.0779366 0.0804356 / 0.4)",
+            "border": "oklab(0.666 0.0940116 0.152325 / 0.5)"
+          },
+          {
+            "tag": "button",
+            "name": "Monthly Expenses",
+            "width": 65,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "View",
+            "width": 52,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "979New",
+            "width": 36,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklch(0.274 0.006 286.033)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "0Observed",
+            "width": 36,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklab(0.696 -0.162114 0.0511765 / 0.1)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "0Reported",
+            "width": 36,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklab(0.623 -0.0378409 -0.210628 / 0.1)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "0Placed",
+            "width": 36,
+            "height": 69,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "oklab(0.769 0.0640531 0.176752 / 0.1)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "View Youth Hub",
+            "width": 181,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Welcome to TalentScoutWelcome, Visual Auditor. Your career as a Youth Scout begins now.\n\nYou are a freelance scout. You earn fees for every report you submit. Build your reputation to attract club offers and secure a full-time contract.\n\nYOUR ROLE\nAs a scout, your job is to find players worth signing and write convincing reports that persuade clubs to act. You observe players at matches, through video analysis, and via contacts on the ground.\n\nSCHEDULING ACTIVITIES\nOpen the Calendar screen each week to plan your time. You have 7 day-slots (Monday through Sunday). Schedule activities such as attending matches, writing reports, networking meetings, or rest. Once your week is planned, press Advance Week to simulate it.\n\nSCOUTING MATCHES\nFind an upcoming fixture in the Calendar or Fixture list and schedule an Attend Match activity. During the match you can focus on up to 3 players — choose a lens (Technical, Physical, Mental, or Tactical) to direct your observations. The more sessions you spend watching a player, the narrower your confidence ranges become on their report.\n\nWRITING REPORTS\nAfter observing a player at least once, open their Player Profile and navigate to the Report Writer. Choose your conviction level carefully: a Table Pound stakes your personal reputation and should only be used when you are certain about a player.\n\nBUILDING YOUR NETWORK\nSchedule networking meetings to develop contacts — agents, academy coaches, club staff, and journalists. High-quality contacts share tips about players you have not yet spotted yourself.\n\nREPUTATION AND CAREER PROGRESSION\nEvery report you submit affects your reputation. Accurate reports on players who go on to succeed will build your standing. As your reputation grows, clubs will offer you contracts with better salaries and wider territories. Your long-term goal is to rise from the starting tier all the way to Head of Scouting.\n\nGood luck, scout. The pitch is waiting.",
+            "width": 53,
+            "height": 94,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Welcome PackageWelcome to scouting! As part of your starter package, your first report sold will earn a 50% bonus payment, and your first placement fee will earn a 25% bonus. Make them count!",
+            "width": 53,
+            "height": 74,
+            "fontSize": "16px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "View All",
+            "width": 53,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "button",
+            "name": "View Youth Hub",
+            "width": 53,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "rgb(237, 237, 237)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Discoveries",
+            "width": 128,
+            "height": 42,
+            "fontSize": "14px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(20, 20, 20)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Dismiss achievement notification",
+            "width": 20,
+            "height": 20,
+            "fontSize": "16px",
+            "color": "oklch(0.552 0.016 285.938)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.552 0.016 285.938)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [],
+        "incomplete": 1,
+        "passes": 34
+      }
+    },
+    {
+      "name": "desktop-calendar",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h1",
+            "text": "TalentScout",
+            "fontSize": "18px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h1",
+            "text": "Weekly Planner",
+            "fontSize": "24px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Available Activities",
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "DashboardNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "CalendarNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.765 0.177 163.223)",
+            "background": "oklab(0.696 -0.162114 0.0511765 / 0.1)",
+            "border": "oklch(0.765 0.177 163.223)"
+          },
+          {
+            "tag": "button",
+            "name": "Youth HubNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InternationalNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InboxNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "HandbookNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "SettingsNew",
+            "width": 207,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Ask Tommy for help",
+            "width": 99,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "oklab(0.37 0.00354074 -0.0125085 / 0.8)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Advance Week",
+            "width": 125,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.442 0.017 285.786)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.442 0.017 285.786)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.442 0.017 285.786)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Mon",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Tue",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Wed",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Thu",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Fri",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Sat",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Sun",
+            "width": 34,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Dismiss achievement notification",
+            "width": 20,
+            "height": 20,
+            "fontSize": "16px",
+            "color": "oklch(0.552 0.016 285.938)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.552 0.016 285.938)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "help": "Elements must meet minimum color contrast ratio thresholds",
+            "nodes": [
+              [
+                ".mt-0\\.5.text-zinc-500"
+              ],
+              [
+                "div:nth-child(1) > .pt-4.pb-1.text-zinc-600"
+              ],
+              [
+                "div:nth-child(2) > .pt-4.pb-1.text-zinc-600"
+              ],
+              [
+                ".mb-2.justify-between.flex > .text-zinc-500.text-xs"
+              ],
+              [
+                ".capitalize"
+              ],
+              [
+                ".mt-2.justify-between.text-xs > .text-zinc-500"
+              ]
+            ]
+          },
+          {
+            "id": "heading-order",
+            "impact": "moderate",
+            "help": "Heading levels should only increase by one",
+            "nodes": [
+              [
+                "h3"
+              ]
+            ]
+          }
+        ],
+        "incomplete": 1,
+        "passes": 33
+      }
+    },
+    {
+      "name": "mobile-calendar",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "evidence": {
+        "title": "TalentScout — Football Scout Career Simulator",
+        "url": "http://127.0.0.1:3001/play.html",
+        "headings": [
+          {
+            "tag": "h1",
+            "text": "TalentScout",
+            "fontSize": "18px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h1",
+            "text": "Weekly Planner",
+            "fontSize": "24px",
+            "color": "rgb(237, 237, 237)"
+          },
+          {
+            "tag": "h3",
+            "text": "Available Activities",
+            "fontSize": "14px",
+            "color": "rgb(237, 237, 237)"
+          }
+        ],
+        "controls": [
+          {
+            "tag": "button",
+            "name": "Open navigation menu",
+            "width": 38,
+            "height": 38,
+            "fontSize": "16px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgb(12, 12, 12)",
+            "border": "rgb(39, 39, 42)"
+          },
+          {
+            "tag": "button",
+            "name": "Close sidebar",
+            "width": 26,
+            "height": 26,
+            "fontSize": "16px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "DashboardNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "CalendarNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.765 0.177 163.223)",
+            "background": "oklab(0.696 -0.162114 0.0511765 / 0.1)",
+            "border": "oklch(0.765 0.177 163.223)"
+          },
+          {
+            "tag": "button",
+            "name": "Youth HubNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InternationalNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "InboxNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "HandbookNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "SettingsNew",
+            "width": 239,
+            "height": 40,
+            "fontSize": "14px",
+            "color": "oklch(0.705 0.015 286.067)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.705 0.015 286.067)"
+          },
+          {
+            "tag": "button",
+            "name": "Ask Tommy for help",
+            "width": 30,
+            "height": 32,
+            "fontSize": "12px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "oklab(0.37 0.00354074 -0.0125085 / 0.8)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Advance Week",
+            "width": 125,
+            "height": 36,
+            "fontSize": "14px",
+            "color": "rgb(10, 10, 10)",
+            "background": "rgb(34, 197, 94)",
+            "border": "rgb(10, 10, 10)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Watch Video on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Training Visit on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.442 0.017 285.786)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Youth Tournament on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.442 0.017 285.786)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule School Match on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.442 0.017 285.786)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.442 0.017 285.786)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Street Football on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Network Meeting on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Study on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Mon",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Tue",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Wed",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Thu",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Fri",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Sat",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Schedule Rest on Sun",
+            "width": 17,
+            "height": 16,
+            "fontSize": "9px",
+            "color": "oklch(0.871 0.006 286.286)",
+            "background": "rgb(39, 39, 42)",
+            "border": "oklch(0.871 0.006 286.286)"
+          },
+          {
+            "tag": "button",
+            "name": "Dismiss achievement notification",
+            "width": 20,
+            "height": 20,
+            "fontSize": "16px",
+            "color": "oklch(0.552 0.016 285.938)",
+            "background": "rgba(0, 0, 0, 0)",
+            "border": "oklch(0.552 0.016 285.938)"
+          }
+        ]
+      },
+      "axe": {
+        "violations": [
+          {
+            "id": "heading-order",
+            "impact": "moderate",
+            "help": "Heading levels should only increase by one",
+            "nodes": [
+              [
+                "h3"
+              ]
+            ]
+          }
+        ],
+        "incomplete": 1,
+        "passes": 33
+      }
+    }
+  ]
+}

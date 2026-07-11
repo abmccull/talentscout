@@ -391,6 +391,12 @@ export interface Player {
   secondaryPositions: Position[];
   preferredFoot: Foot;
   clubId: string;
+  /**
+   * Club that owns the player's contract. This normally matches clubId, but
+   * remains the parent club while the player is registered elsewhere on loan.
+   * Empty/undefined means the player is unattached.
+   */
+  contractClubId?: string;
   /** Season year in which the player's contract expires. */
   contractExpiry: number;
   /** Weekly wage in game currency. */
@@ -581,6 +587,8 @@ export interface Club {
   scoutingPhilosophy: ScoutingPhilosophy;
   managerId: string;
   playerIds: string[];
+  /** Contracted youth developing outside the senior match-day squad. */
+  academyPlayerIds?: string[];
   /** Quality of the youth intake system, 1–20. */
   youthAcademyRating: number;
   /** The club's tactical playing style. */
@@ -731,6 +739,8 @@ export interface Scout {
   secondarySpecialization?: Specialization;
   /** Depth of mastery within the primary specialization, 1–20. */
   specializationLevel: number;
+  /** Progress toward the next specialization level. */
+  specializationXp: number;
   /**
    * IDs of unlocked specialization perks.
    * Examples: "youthEye", "dataDriven", "setpieceReader", "mentorNetwork"
@@ -852,6 +862,10 @@ export interface Observation {
   id: string;
   playerId: string;
   scoutId: string;
+  /** Interactive session that produced this evidence, when applicable. */
+  sourceSessionId?: string;
+  /** Scheduled activity instance that produced this evidence. */
+  activityInstanceId?: string;
   /** Set when context is liveMatch; references the Fixture id. */
   matchId?: string;
   week: number;
@@ -940,6 +954,8 @@ export interface ScoutReport {
   /** ID of a known player the scout compares the subject to. */
   comparisonPlayerId?: string;
   estimatedValue: number;
+  /** Optional bounded value range when the report carries material uncertainty. */
+  estimatedValueRange?: [number, number];
 
   /**
    * Composite quality score 0–100.
@@ -949,6 +965,8 @@ export interface ScoutReport {
 
   /** Reputation change when this report was submitted. */
   reputationDelta?: number;
+  /** Reputation change applied when the report was retrospectively validated. */
+  accuracyReputationDelta?: number;
 
   /** Club's subsequent decision on the scouted player. */
   clubResponse?: "ignored" | "shortlisted" | "signed";
@@ -976,6 +994,21 @@ export interface ScoutReport {
     personalityBonus: number;
     equipmentBonus: number;
   };
+  /** Evidence-facing craftsmanship breakdown used by newly submitted reports. */
+  craftBreakdown?: {
+    observationDepth: number;
+    confidenceLevel: number;
+    convictionFit: number;
+    detail: number;
+    scoutSkill: number;
+    equipmentBonus: number;
+  };
+  /**
+   * Engine-only truth snapshot for the attributes assessed when the report was
+   * submitted. It is never rendered; delayed validation uses it so natural
+   * player development is not mistaken for an inaccurate original report.
+   */
+  validationSnapshot?: Partial<Record<PlayerAttribute, number>>;
 }
 
 // =============================================================================
@@ -1006,6 +1039,16 @@ export interface PerformanceReview {
   tablePoundsSuccessful: number;
   reputationChange: number;
   outcome: "promoted" | "retained" | "warning" | "fired";
+  coverageSummary?: {
+    countriesScouted: number;
+    regionsScouted: number;
+    internationalCountriesScouted: number;
+  };
+  youthSummary?: {
+    unsignedYouthDiscovered: number;
+    successfulPlacements: number;
+    alumniMilestones: number;
+  };
 }
 
 // =============================================================================
@@ -1173,6 +1216,8 @@ export interface Activity {
   slots: number;
   /** ID of the target entity: match, player, contact, etc. */
   targetId?: string;
+  /** Explicit destination club for placement/loan activities. */
+  destinationClubId?: string;
   description: string;
   /** Available targets for player/contact-targeted activities (deduplicated cards). */
   targetPool?: TargetOption[];
@@ -1201,6 +1246,8 @@ export interface TournamentEvent {
   name: string;
   /** Country this tournament is in (domestic) or host country (international). */
   country: string;
+  /** Optional canonical country key for migration-safe geography lookups. */
+  countryKey?: string;
   /** Countries realistically represented in the participant pool. */
   participantCountries?: string[];
   subRegionId?: string;
@@ -1415,6 +1462,14 @@ export interface LoanDeal {
   /** Whether the parent club can recall the player early. */
   recallClause: boolean;
   status: LoanDealStatus;
+  /** Final evaluated outcome once the deal leaves activeLoans. */
+  outcome?: LoanOutcome;
+  /** Playing-time expectation agreed when the loan was created. */
+  agreedPlayingTime?: "key" | "regular" | "rotation" | "prospect";
+  /** Player CA when the loan began, used to measure real development. */
+  startCurrentAbility?: number;
+  /** Season/week keys when the scout filed a monitoring report. */
+  monitoringWeeks?: string[];
   /** Scout who recommended this loan, if any. */
   scoutId?: string;
   performanceRecord?: LoanPerformanceRecord;
@@ -1453,8 +1508,52 @@ export interface LoanRecommendation {
   /** Suggested duration in weeks. */
   suggestedDuration: number;
   suggestedWageContribution: number;
+  /** Recommendation lifecycle; legacy saves without this field are pending. */
+  status?: "pending" | "accepted" | "rejected" | "completed";
+  /** Loan created from this recommendation, when accepted. */
+  loanDealId?: string;
+  /** Week/season when the target club responded. */
+  responseWeek?: number;
+  responseSeason?: number;
+  responseReason?: string;
   outcome?: LoanOutcome;
   reputationApplied: boolean;
+}
+
+// =============================================================================
+// PLAYER LIFECYCLE / MOVEMENT LEDGER
+// =============================================================================
+
+export type PlayerMovementType =
+  | "youthSigning"
+  | "permanentTransfer"
+  | "loanStart"
+  | "loanReturn"
+  | "loanRecall"
+  | "loanBuyOption"
+  | "release"
+  | "freeAgentSigning"
+  | "contractRenewal"
+  | "retirement"
+  | "footballExit";
+
+/**
+ * Immutable career event written by the authoritative movement resolver.
+ * TransferRecord remains the scout-accountability view; this is the complete
+ * world history for every player.
+ */
+export interface PlayerMovementEvent {
+  id: string;
+  playerId: string;
+  type: PlayerMovementType;
+  week: number;
+  season: number;
+  fromClubId?: string;
+  toClubId?: string;
+  contractClubId?: string;
+  fee?: number;
+  loanDealId?: string;
+  reason?: string;
 }
 
 // =============================================================================
@@ -1581,6 +1680,10 @@ export interface GameState {
   activeInternationalAssignment: InternationalAssignment | null;
   /** IDs of players who have retired. */
   retiredPlayerIds: string[];
+  /** Full archived entities for retired/exited players, keyed by player ID. */
+  retiredPlayers: Record<string, Player>;
+  /** Append-only canonical history of all player lifecycle movements. */
+  playerMovementHistory: PlayerMovementEvent[];
 
   // --- First-Team Scouting System ---
 
@@ -1718,6 +1821,8 @@ export interface FreeAgent {
   playerId: string;
   /** Country key (e.g. "england", "brazil") — used for visibility gating. */
   country: string;
+  /** Nationality/demonym preserved separately for UI display and legacy fallback. */
+  nationality?: string;
   /** Club ID they were released from. */
   releasedFrom: string;
   /** Season in which the player was released. */
@@ -1775,6 +1880,10 @@ export interface FreeAgentNegotiation {
   counterBonus?: number;
   /** Game week by which the negotiation must conclude. */
   deadline: number;
+  /** Season in which the deadline falls. */
+  deadlineSeason?: number;
+  /** Season in which talks began. */
+  startSeason?: number;
 }
 
 // =============================================================================
@@ -1899,7 +2008,10 @@ export interface NPCScoutReport {
 export interface Territory {
   id: string;
   name: string;
+  /** Display label retained for existing world generation and UI copy. */
   country: string;
+  /** Optional canonical country key for migration-safe geography lookups. */
+  countryKey?: string;
   /** League IDs accessible from this territory. */
   leagueIds: string[];
   /** How many NPC scouts can be assigned here simultaneously. */
@@ -2868,6 +2980,8 @@ export interface GutFeeling {
   narrative: string;
   triggerDomain: AttributeDomain;
   reliability: number;     // 0-1
+  /** Noisy tier implied by the instinct; may differ from engine truth. */
+  perceivedTier?: WonderkidTier;
   wasAccurate?: boolean;
   week: number;
   season: number;
@@ -2880,6 +2994,32 @@ export interface ReflectionHypothesisRecord {
   domain: AttributeDomain;
   state: "open" | "supported" | "contradicted" | "confirmed" | "debunked";
   createdAtWeek: number;
+  /** Evidence accumulated across interactive sessions. Optional for old saves. */
+  evidence?: Array<{
+    week: number;
+    direction: "for" | "against";
+    description: string;
+    strength: "weak" | "moderate" | "strong";
+  }>;
+}
+
+/** Durable qualitative evidence captured by the scout during a live session. */
+export interface ReflectionFlaggedMomentRecord {
+  id: string;
+  playerId: string;
+  phaseIndex: number;
+  minute: number;
+  description: string;
+  reaction: "promising" | "concerning" | "interesting" | "needs_more_data";
+  momentType:
+    | "technicalAction"
+    | "physicalTest"
+    | "mentalResponse"
+    | "tacticalDecision"
+    | "characterReveal";
+  attributesHinted: PlayerAttribute[];
+  pressureContext: boolean;
+  note?: string;
 }
 
 export interface ReflectionJournalEntry {
@@ -2891,6 +3031,10 @@ export interface ReflectionJournalEntry {
   playerIds: string[];
   notes: string[];
   hypotheses: ReflectionHypothesisRecord[];
+  /** Qualitative session evidence. Numeric readings remain authoritative in observations. */
+  flaggedMoments?: ReflectionFlaggedMomentRecord[];
+  /** Canonical numeric observations generated by this session. */
+  observationIds?: string[];
   gutFeelingId?: string;
   summary?: string;
   createdAt: number;
@@ -2986,6 +3130,8 @@ export interface SubRegion {
   id: string;
   name: string;
   country: string;
+  /** Optional canonical country key for migration-safe geography lookups. */
+  countryKey?: string;
   familiarity: number;     // 0-100
 }
 
@@ -4051,6 +4197,8 @@ export interface TransferNegotiation {
   rivalBids: RivalBid[];
   /** Game week when this negotiation expires if not completed. */
   deadline: number;
+  /** Season containing the deadline week (supports negotiations near rollover). */
+  deadlineSeason?: number;
   /** The selling club's negotiation personality. */
   clubPersonality: ClubNegotiationPersonality;
   /** Whether a player agent is involved (adds wage/bonus demands). */
@@ -4407,7 +4555,10 @@ export interface SeasonStats {
   avgReportQuality: number;
   matchesAttended: number;
   playersDiscovered: number;
-  wonderkidsDiscovered: number;
+  /** Evidence-backed high-upside reports submitted this season. */
+  highUpsideCalls?: number;
+  /** Legacy field retained for old saves; no longer shown as live truth. */
+  wonderkidsDiscovered?: number;
   transferRecommendations: number;
   recommendationsAccepted: number;
   recommendationsSigned: number;

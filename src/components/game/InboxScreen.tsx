@@ -463,12 +463,19 @@ function MessageItem({
   const config = getMessageConfig(message.type);
   const Icon = config.icon;
   const requiresAction = message.actionRequired && !seasonEvent?.resolved;
+  const MessageContainer = isExpanded ? "div" : "button";
+  const collapsedMessageProps = isExpanded
+    ? {}
+    : {
+        type: "button" as const,
+        onClick,
+        "aria-expanded": false,
+        "aria-label": `${message.read ? "Read" : "Unread"} message: ${message.title}`,
+      };
 
   return (
-    <button
-      onClick={onClick}
-      aria-expanded={isExpanded}
-      aria-label={`${message.read ? "Read" : "Unread"} message: ${message.title}`}
+    <MessageContainer
+      {...collapsedMessageProps}
       className={`w-full rounded-lg border text-left transition ${
         !message.read
           ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50"
@@ -677,6 +684,22 @@ function MessageItem({
                   onAction={onGossipAction}
                 />
               )}
+              <div className="mt-3 border-t border-zinc-800 pt-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-zinc-500 hover:text-white"
+                  onClick={onClick}
+                  aria-label={`Collapse message: ${message.title}`}
+                >
+                  <ChevronDown
+                    size={12}
+                    className="mr-1 rotate-180"
+                    aria-hidden="true"
+                  />
+                  Collapse
+                </Button>
+              </div>
             </>
           ) : (
             <p className="text-xs text-zinc-500 line-clamp-2">{message.body}</p>
@@ -692,7 +715,7 @@ function MessageItem({
           )}
         </div>
       </div>
-    </button>
+    </MessageContainer>
   );
 }
 

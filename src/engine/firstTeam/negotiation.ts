@@ -39,6 +39,7 @@ const MAX_ROUNDS = 4;
 
 /** Deadline window: negotiations expire this many weeks after start. */
 const NEGOTIATION_DEADLINE_WEEKS = 4;
+const WEEKS_PER_SEASON = 38;
 
 /** Chance per round that a rival bid appears (5-15%). */
 const RIVAL_BID_CHANCE_MIN = 0.05;
@@ -189,12 +190,14 @@ export function initiateNegotiation(
   const player = state.players[playerId];
   if (!player) return null;
 
-  const fromClub = state.clubs[player.clubId];
+  const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+  if (!ownerClubId || player.onLoan) return null;
+  const fromClub = state.clubs[ownerClubId];
   const toClub = state.clubs[toClubId];
   if (!fromClub || !toClub) return null;
 
   // Cannot negotiate with own club
-  if (player.clubId === toClubId) return null;
+  if (ownerClubId === toClubId) return null;
 
   // Check if there's already an active negotiation for this player
   const existing = (state.activeNegotiations ?? []).find(
@@ -217,18 +220,21 @@ export function initiateNegotiation(
   const agentInvolved = rng.chance(AGENT_INVOLVEMENT_CHANCE);
   const agentDemands = agentInvolved ? processAgentDemands(rng, player) : undefined;
 
-  const deadline = state.currentWeek + NEGOTIATION_DEADLINE_WEEKS;
+  const rawDeadlineWeek = state.currentWeek + NEGOTIATION_DEADLINE_WEEKS;
+  const deadlineSeason = state.currentSeason + Math.floor((rawDeadlineWeek - 1) / WEEKS_PER_SEASON);
+  const deadline = ((rawDeadlineWeek - 1) % WEEKS_PER_SEASON) + 1;
 
   return {
     id: generateId("neg", rng),
     playerId,
-    fromClubId: player.clubId,
+    fromClubId: ownerClubId,
     toClubId,
     phase: "initial",
     rounds: [],
     maxRounds,
     rivalBids: [],
     deadline,
+    deadlineSeason,
     clubPersonality,
     agentInvolved,
     agentDemands,
@@ -594,7 +600,11 @@ export function processActiveNegotiations(
     }
 
     // Check deadline expiry
-    if (state.currentWeek >= neg.deadline) {
+    const deadlineSeason = neg.deadlineSeason ?? neg.season;
+    const deadlineReached =
+      state.currentSeason > deadlineSeason ||
+      (state.currentSeason === deadlineSeason && state.currentWeek >= neg.deadline);
+    if (deadlineReached) {
       const player = state.players[neg.playerId];
       const playerName = player
         ? `${player.firstName} ${player.lastName}`
@@ -644,74 +654,6 @@ export function processActiveNegotiations(
  * @param state        Current game state.
  * @returns            Updated state fragments: players, clubs, and inbox message.
  */
-export function applyCompletedTransfer(
-  negotiation: TransferNegotiation,
-  state: GameState,
-): {
-  players: Record<string, Player>;
-  clubs: Record<string, Club>;
-  message: InboxMessage;
-  transferFee: number;
-} {
-  const player = state.players[negotiation.playerId];
-  const fromClub = state.clubs[negotiation.fromClubId];
-  const toClub = state.clubs[negotiation.toClubId];
-
-  // Determine final fee from the last round
-  const lastRound = negotiation.rounds[negotiation.rounds.length - 1];
-  const transferFee = lastRound ? lastRound.offerAmount : negotiation.initialAskingPrice;
-
-  // Update player's club
-  const updatedPlayer: Player = {
-    ...player,
-    clubId: negotiation.toClubId,
-  };
-
-  // Update club rosters
-  const updatedFromClub: Club = fromClub
-    ? {
-        ...fromClub,
-        playerIds: fromClub.playerIds.filter((id) => id !== negotiation.playerId),
-        budget: fromClub.budget + transferFee,
-      }
-    : fromClub;
-
-  const updatedToClub: Club = toClub
-    ? {
-        ...toClub,
-        playerIds: [...toClub.playerIds, negotiation.playerId],
-        budget: toClub.budget - transferFee,
-      }
-    : toClub;
-
-  const playerName = `${player.firstName} ${player.lastName}`;
-  const message: InboxMessage = {
-    id: `transfer_${negotiation.id}`,
-    week: state.currentWeek,
-    season: state.currentSeason,
-    type: "transferUpdate",
-    title: `Transfer Complete: ${playerName}`,
-    body: `${playerName} has completed a transfer from ${fromClub?.name ?? "Unknown"} to ${toClub?.name ?? "Unknown"} for ${formatCurrency(transferFee)}.${
-      negotiation.agentInvolved && negotiation.agentDemands
-        ? ` Agent demands: ${Math.round(negotiation.agentDemands.wagePremium * 100)}% wage premium, ${formatCurrency(negotiation.agentDemands.signingBonus)} signing bonus.`
-        : ""
-    }`,
-    read: false,
-    actionRequired: false,
-    relatedId: negotiation.playerId,
-    relatedEntityType: "player",
-  };
-
-  const updatedPlayers = { ...state.players, [negotiation.playerId]: updatedPlayer };
-  const updatedClubs = {
-    ...state.clubs,
-    ...(updatedFromClub ? { [negotiation.fromClubId]: updatedFromClub } : {}),
-    ...(updatedToClub ? { [negotiation.toClubId]: updatedToClub } : {}),
-  };
-
-  return { players: updatedPlayers, clubs: updatedClubs, message, transferFee };
-}
-
 // =============================================================================
 // WALK AWAY
 // =============================================================================

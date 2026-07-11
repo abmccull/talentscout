@@ -20,10 +20,19 @@ export {
 
 export {
   getTransferFlowProbability,
-  findCrossCountryTransferDestination,
-  processCrossCountryTransfers,
 } from './transfers';
-export type { TransferResult } from './transfers';
+
+export {
+  getLifecycleWorld,
+  withLifecycleWorld,
+  resolvePlayerMovements,
+} from './playerLifecycle';
+export type {
+  LifecycleWorldState,
+  LifecycleResolution,
+  PlayerMovementIntent,
+  RejectedPlayerMovement,
+} from './playerLifecycle';
 
 export {
   initializeCountryReputations,
@@ -43,16 +52,12 @@ export {
 
 export {
   generateInternationalAssignment,
-  generateYouthTournaments,
-  scoutAtYouthTournament,
   getAvailableAssignments,
   processInternationalWeek,
   getAssignmentExpiryThreshold,
 } from './international';
 
 export type {
-  YouthTournament,
-  YouthTournamentResult,
   InternationalWeekResult,
 } from './international';
 export type { InternationalAssignment } from '@/engine/core/types';

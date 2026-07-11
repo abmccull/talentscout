@@ -6,6 +6,7 @@ export interface ResolvedPlayerEntity {
   playerId: string;
   sourceId: string;
   isUnsignedYouth: boolean;
+  isRetired: boolean;
 }
 
 export function findUnsignedYouthByPlayerId(
@@ -23,7 +24,9 @@ export function resolveUnsignedYouth(
 }
 
 export function resolvePlayerEntity(
-  state: Pick<GameState, "players" | "unsignedYouth">,
+  state: Pick<GameState, "players" | "unsignedYouth"> & {
+    retiredPlayers?: Record<string, Player>;
+  },
   entityId: string,
 ): ResolvedPlayerEntity | null {
   const seniorPlayer = state.players[entityId];
@@ -34,6 +37,19 @@ export function resolvePlayerEntity(
       playerId: seniorPlayer.id,
       sourceId: entityId,
       isUnsignedYouth: false,
+      isRetired: false,
+    };
+  }
+
+  const retiredPlayer = state.retiredPlayers?.[entityId];
+  if (retiredPlayer) {
+    return {
+      player: retiredPlayer,
+      unsignedYouth: null,
+      playerId: retiredPlayer.id,
+      sourceId: entityId,
+      isUnsignedYouth: false,
+      isRetired: true,
     };
   }
 
@@ -46,11 +62,14 @@ export function resolvePlayerEntity(
     playerId: youth.player.id,
     sourceId: entityId,
     isUnsignedYouth: true,
+    isRetired: false,
   };
 }
 
 export function getResolvedPlayerIds(
-  state: Pick<GameState, "players" | "unsignedYouth">,
+  state: Pick<GameState, "players" | "unsignedYouth"> & {
+    retiredPlayers?: Record<string, Player>;
+  },
   entityId: string,
 ): string[] {
   const resolved = resolvePlayerEntity(state, entityId);
@@ -66,7 +85,9 @@ export function getResolvedPlayerIds(
 }
 
 export function getResolvedContactIntel(
-  state: Pick<GameState, "players" | "unsignedYouth" | "contactIntel">,
+  state: Pick<GameState, "players" | "unsignedYouth" | "contactIntel"> & {
+    retiredPlayers?: Record<string, Player>;
+  },
   entityId: string,
 ): HiddenIntel[] {
   const deduped = new Map<string, HiddenIntel>();

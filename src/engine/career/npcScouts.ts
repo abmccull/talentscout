@@ -168,53 +168,6 @@ export function generateNPCScoutRoster(
 }
 
 // ---------------------------------------------------------------------------
-// 2. Generate Territories
-// ---------------------------------------------------------------------------
-
-/**
- * Create one territory per country, containing all league IDs for that country.
- *
- * Territories are named after their country. The `maxScouts` slot count scales
- * with the number of leagues in the territory (more leagues = more coverage
- * needed). At minimum each territory allows 1 scout.
- *
- * @param countries  List of country keys active in the game world (e.g. ["england", "germany"]).
- * @param leagues    Flat list of { id, countryKey } describing which country each league belongs to.
- */
-export function generateTerritories(
-  countries: string[],
-  leagues: { id: string; countryKey: string }[],
-): Territory[] {
-  return countries.map((countryKey) => {
-    const countryLeagueIds = leagues
-      .filter((l) => l.countryKey === countryKey)
-      .map((l) => l.id);
-
-    // Allow one NPC scout per two leagues, minimum of 1
-    const maxScouts = Math.max(1, Math.ceil(countryLeagueIds.length / 2));
-
-    const idSuffix = countryKey.replace(/\s+/g, "_").toLowerCase();
-
-    return {
-      id:               `territory_${idSuffix}`,
-      name:             formatCountryName(countryKey),
-      country:          countryKey,
-      leagueIds:        countryLeagueIds,
-      maxScouts,
-      assignedScoutIds: [],
-    };
-  });
-}
-
-/** Capitalise first letter of each word in a country key. */
-function formatCountryName(countryKey: string): string {
-  return countryKey
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-// ---------------------------------------------------------------------------
 // 3. Assign Territory
 // ---------------------------------------------------------------------------
 

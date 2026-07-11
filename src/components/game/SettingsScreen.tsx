@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -23,7 +23,6 @@ import {
   VolumeX,
   Monitor,
   Accessibility,
-  Gamepad2,
   MessageSquarePlus,
 } from "lucide-react";
 import { MAX_MANUAL_SLOTS } from "@/lib/db";
@@ -44,14 +43,9 @@ import { AuthModal } from "./AuthModal";
 import {
   BETA_CLOUD_SAVES_ENABLED,
   BETA_CLOUD_SAVES_MESSAGE,
-  BETA_GLOBAL_LEADERBOARD_MESSAGE,
 } from "@/config/beta";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
-// ---------------------------------------------------------------------------
-// Small reusable primitives used only within SettingsScreen
-// ---------------------------------------------------------------------------
-
-/** Emerald pill toggle — matches the Cloud Saves and Mute toggles above. */
 function PillToggle({
   checked,
   onChange,
@@ -67,12 +61,12 @@ function PillToggle({
       aria-checked={checked}
       aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+      className={`relative h-11 w-16 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
         checked ? "bg-emerald-500" : "bg-zinc-700"
       }`}
     >
       <span
-        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+        className={`absolute left-1.5 top-1.5 h-8 w-8 rounded-full bg-white shadow transition-transform ${
           checked ? "translate-x-5" : "translate-x-0"
         }`}
       />
@@ -80,7 +74,6 @@ function PillToggle({
   );
 }
 
-/** Three-option radio row (Small/Medium/Large, Slow/Normal/Fast, etc.). */
 function RadioGroup<T extends string>({
   name,
   options,
@@ -93,11 +86,11 @@ function RadioGroup<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="flex gap-2" role="radiogroup" aria-label={name}>
+    <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={name}>
       {options.map((opt) => (
         <label
           key={opt.value}
-          className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition ${
+          className={`flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-md border px-4 py-2 text-sm transition ${
             value === opt.value
               ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
               : "border-[#27272a] text-zinc-400 hover:border-zinc-600 hover:text-white"
@@ -118,66 +111,12 @@ function RadioGroup<T extends string>({
   );
 }
 
-function InlineDeleteConfirm({
-  label,
-  isLoading,
-  onConfirm,
-  onCancel,
-}: {
-  label: string;
-  isLoading: boolean;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div
-      className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2"
-      role="alert"
-    >
-      <AlertTriangle
-        size={14}
-        className="shrink-0 text-amber-400"
-        aria-hidden="true"
-      />
-      <p className="flex-1 text-xs text-amber-200">
-        Delete {label} permanently?
-      </p>
-      <Button
-        size="sm"
-        variant="destructive"
-        onClick={onConfirm}
-        disabled={isLoading}
-        className="h-7 px-2 text-xs"
-      >
-        {isLoading ? (
-          <Loader2 size={12} className="animate-spin" aria-hidden="true" />
-        ) : (
-          "Delete"
-        )}
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={onCancel}
-        disabled={isLoading}
-        className="h-7 px-2 text-xs"
-      >
-        Cancel
-      </Button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
 export function SettingsScreen() {
   const {
     gameState,
     saveSlots,
     refreshSaveSlots,
     saveToSlot,
-    loadFromSlot,
-    deleteSlot,
     isSaving,
     setScreen,
   } = useGameStore();
@@ -199,8 +138,6 @@ export function SettingsScreen() {
   const [moddedKeys, setModdedKeys] = useState<string[]>([]);
   const [modStatus, setModStatus] = useState<string | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [deleteConfirmSlot, setDeleteConfirmSlot] = useState<number | null>(null);
-  const [deletingSlot, setDeletingSlot] = useState<number | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState(() =>
     getLastCloudSyncStatus(),
   );
@@ -228,14 +165,30 @@ export function SettingsScreen() {
 
   if (!gameState) return null;
 
-  const manualSaves = saveSlots.filter((s) => s.slot > 0);
-  const usedSlots = new Set(manualSaves.map((s) => s.slot));
+  const allManualSaves = saveSlots.filter((save) => save.slot > 0);
+  const manualSaves = IS_YOUTH_EARLY_ACCESS
+    ? allManualSaves.filter((save) => save.specialization === "youth")
+    : allManualSaves;
+  const usedSlots = new Set(allManualSaves.map((save) => save.slot));
+  const reservedSlots = new Set(
+    allManualSaves
+      .filter(
+        (save) =>
+          !manualSaves.some((compatible) => compatible.slot === save.slot),
+      )
+      .map((save) => save.slot),
+  );
+  const unsupportedSaveCount = allManualSaves.length - manualSaves.length;
   const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
 
-  // ── Save handlers ─────────────────────────────────────────────────────────
-
   const handleSave = async (slot: number) => {
-    setDeleteConfirmSlot(null);
+    if (reservedSlots.has(slot)) {
+      setSaveStatus(
+        `Error: Slot ${slot} is reserved by a preserved full-game save.`,
+      );
+      return;
+    }
+
     const name = `Save ${slot}`;
     await saveToSlot(slot, name);
     setSaveStatus(`Saved to slot ${slot}`);
@@ -243,66 +196,46 @@ export function SettingsScreen() {
     saveTimerRef.current = setTimeout(() => setSaveStatus(null), 2000);
   };
 
-  const handleDelete = async (slot: number) => {
-    setDeletingSlot(slot);
-    try {
-      await deleteSlot(slot);
-      setDeleteConfirmSlot((current) => (current === slot ? null : current));
-    } finally {
-      setDeletingSlot(null);
-    }
-  };
-
   const handleQuickSave = async () => {
-    let slot = 1;
+    let slot: number | null = null;
     for (let i = 1; i <= MAX_MANUAL_SLOTS; i++) {
       if (!usedSlots.has(i)) {
         slot = i;
         break;
       }
     }
-    if (usedSlots.size >= MAX_MANUAL_SLOTS) {
-      const oldest = manualSaves.sort((a, b) => a.savedAt - b.savedAt)[0];
+    if (slot === null) {
+      const oldest = [...manualSaves].sort((a, b) => a.savedAt - b.savedAt)[0];
       if (oldest) slot = oldest.slot;
+    }
+    if (slot === null) {
+      setSaveStatus(
+        "Error: No Youth save slot is available. Other-specialization saves remain preserved.",
+      );
+      return;
     }
     await handleSave(slot);
   };
 
-  const formatDate = (timestamp: number) => {
-    const d = new Date(timestamp);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const formatSource = (source: typeof saveSlots[number]["source"]) => {
-    if (source === "supabase") return "Cloud";
-    if (source === "steam") return "Steam";
-    return "Local";
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
   return (
     <GameLayout>
-      <div className="mx-auto max-w-2xl space-y-6 p-6" data-tutorial-id="settings-preferences">
-        <div className="flex items-center justify-between">
+      <div
+        className="mx-auto max-w-3xl space-y-6 p-4 sm:p-6"
+        data-tutorial-id="settings-preferences"
+      >
+        <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold">Settings</h1>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setScreen("dashboard")}
+            className="min-h-11"
           >
             <ArrowLeft size={14} className="mr-1" aria-hidden="true" />
             Back
           </Button>
         </div>
 
-        {/* ── Account ─────────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -324,7 +257,7 @@ export function SettingsScreen() {
             ) : isAuthLoading ? (
               <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
                 <p className="text-sm font-medium text-white">
-                  Checking account…
+                  Checking account...
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                   Verifying whether this browser already has a cloud session.
@@ -332,7 +265,7 @@ export function SettingsScreen() {
               </div>
             ) : isAuthenticated ? (
               <>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-white">
                       {displayName}
@@ -347,17 +280,14 @@ export function SettingsScreen() {
                     variant="outline"
                     size="sm"
                     onClick={() => void signOut()}
+                    className="min-h-11"
                   >
-                    <LogOut
-                      size={12}
-                      className="mr-1"
-                      aria-hidden="true"
-                    />
+                    <LogOut size={12} className="mr-1" aria-hidden="true" />
                     Sign Out
                   </Button>
                 </div>
 
-                <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-3 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
                   <div>
                     <p className="text-sm font-medium">Cloud Save Sync</p>
                     <p className="text-xs text-zinc-500">
@@ -384,9 +314,9 @@ export function SettingsScreen() {
                         ? "Sync in progress"
                         : cloudSyncStatus.lastError
                           ? "Sync needs attention"
-                        : cloudSyncStatus.lastSync
-                          ? `Last synced ${cloudSyncStatus.lastSync.toLocaleString()}`
-                          : "Waiting for next save"
+                          : cloudSyncStatus.lastSync
+                            ? `Last synced ${cloudSyncStatus.lastSync.toLocaleString()}`
+                            : "Waiting for next save"
                       : "Cloud sync paused"}
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-400">
@@ -395,15 +325,6 @@ export function SettingsScreen() {
                         ? `Local saves still work, but cloud sync failed: ${cloudSyncStatus.lastError}`
                         : "Manual saves and weekly autosaves write locally first, then sync in the background."
                       : "You can still save locally. Re-enable cloud sync any time to resume uploading."}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-3">
-                  <p className="text-sm font-medium text-amber-300">
-                    Global leaderboard still disabled
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                    {BETA_GLOBAL_LEADERBOARD_MESSAGE}
                   </p>
                 </div>
               </>
@@ -422,6 +343,7 @@ export function SettingsScreen() {
                     variant="outline"
                     size="sm"
                     onClick={() => setShowAuthModal(true)}
+                    className="min-h-11"
                   >
                     Sign In
                   </Button>
@@ -431,7 +353,6 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        {/* ── Audio ───────────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -452,8 +373,7 @@ export function SettingsScreen() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Mute toggle */}
-            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
+            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
               <div className="flex items-center gap-2">
                 <VolumeX
                   size={14}
@@ -462,24 +382,13 @@ export function SettingsScreen() {
                 />
                 <p className="text-sm font-medium">Mute All Audio</p>
               </div>
-              <button
-                role="switch"
-                aria-checked={volumes.muted}
-                aria-label="Mute all audio"
-                onClick={toggleMute}
-                className={`relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                  volumes.muted ? "bg-emerald-500" : "bg-zinc-700"
-                }`}
-              >
-                <span
-                  className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    volumes.muted ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
+              <PillToggle
+                checked={volumes.muted}
+                onChange={() => toggleMute()}
+                label="Mute all audio"
+              />
             </div>
 
-            {/* Volume sliders */}
             {(
               [
                 { channel: "master" as const, label: "Master Volume" },
@@ -538,7 +447,6 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        {/* ── Display ─────────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -547,7 +455,6 @@ export function SettingsScreen() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Font Size */}
             <div className="space-y-2">
               <p className="text-sm font-medium text-zinc-300">Font Size</p>
               <RadioGroup<AppSettings["fontSize"]>
@@ -562,7 +469,6 @@ export function SettingsScreen() {
               />
             </div>
 
-            {/* Colorblind Mode */}
             <div className="space-y-2">
               <label
                 htmlFor="colorblind-mode"
@@ -579,28 +485,32 @@ export function SettingsScreen() {
                     e.target.value as AppSettings["colorblindMode"],
                   )
                 }
-                className="w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               >
                 <option value="none">None</option>
                 <option value="protanopia">Protanopia (red deficiency)</option>
-                <option value="deuteranopia">Deuteranopia (green deficiency)</option>
+                <option value="deuteranopia">
+                  Deuteranopia (green deficiency)
+                </option>
                 <option value="tritanopia">Tritanopia (blue deficiency)</option>
               </select>
             </div>
           </CardContent>
         </Card>
 
-        {/* ── Accessibility ────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Accessibility size={18} className="text-emerald-500" aria-hidden="true" />
+              <Accessibility
+                size={18}
+                className="text-emerald-500"
+                aria-hidden="true"
+              />
               Accessibility
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            {/* Reduced Motion */}
-            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2.5">
+            <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
               <div>
                 <p className="text-sm font-medium">Reduce Motion</p>
                 <p className="text-xs text-zinc-500">
@@ -614,25 +524,25 @@ export function SettingsScreen() {
               />
             </div>
 
-            {/* Keyboard shortcuts reference */}
             <div className="space-y-2">
               <p className="text-sm font-medium text-zinc-300">
                 Keyboard Shortcuts
               </p>
               <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
-                <ul className="space-y-1.5 text-xs text-zinc-400" aria-label="Keyboard shortcut reference">
+                <ul
+                  className="space-y-1.5 text-xs text-zinc-400"
+                  aria-label="Keyboard shortcut reference"
+                >
                   {(
                     [
-                      ["Esc", "Back to Dashboard"],
-                      ["1", "Dashboard"],
-                      ["2", "Calendar"],
-                      ["3", "Players"],
+                      ["Esc", "Back to Desk"],
+                      ["1", "Desk"],
+                      ["2", "Planner"],
+                      ["3", "Prospects"],
                       ["4", "Reports"],
-                      ["5", "Career"],
-                      ["6", "Inbox"],
-                      ["7", "Network"],
-                      ["8", "Settings"],
-                      ["Space", "Advance week (Calendar screen)"],
+                      ["5", "World"],
+                      ["6", "Career"],
+                      ["Space", "Advance week (Planner screen)"],
                       ["?", "Open Settings"],
                       ["Ctrl+S", "Open Settings (save management)"],
                       ["F1", "Send Feedback"],
@@ -654,49 +564,6 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        {/* ── Gameplay ─────────────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Gamepad2 size={18} className="text-emerald-500" aria-hidden="true" />
-              Gameplay
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-3 py-3">
-              <div className="flex items-start gap-2">
-                <AlertTriangle
-                  size={14}
-                  className="mt-0.5 shrink-0 text-amber-400"
-                  aria-hidden="true"
-                />
-                <div>
-                  <p className="text-sm font-medium text-amber-200">
-                    Week-flow preferences are not live in this beta
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                    Auto-advance speed, confirm-before-advance, and inbox filtering
-                    levels are still fixed by the current game flow. These controls
-                    stay hidden until the calendar, simulation, and notification
-                    systems actually read them.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
-              <p className="text-sm font-medium text-white">
-                What is live right now
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                Display, accessibility, audio, save management, and cloud-sync
-                preferences apply immediately. Week advancement and inbox cadence
-                still use the default beta behavior.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* ── Data Mods ──────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -706,7 +573,7 @@ export function SettingsScreen() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-zinc-500">
-              Export game data as JSON, edit club/league names and attributes,
+              Export game data as JSON, edit club or league names and attributes,
               then re-import to play with custom data. Changes apply to new
               games only.
             </p>
@@ -718,6 +585,7 @@ export function SettingsScreen() {
                 onClick={() => {
                   void exportGameData(getCountryData, getAvailableCountries());
                 }}
+                className="min-h-11"
               >
                 <Download size={12} className="mr-1" aria-hidden="true" />
                 Export Game Data
@@ -744,11 +612,15 @@ export function SettingsScreen() {
                         setModStatus(result.errors.join(", "));
                       }
                       clearTimeout(modTimerRef.current);
-                      modTimerRef.current = setTimeout(() => setModStatus(null), 4000);
+                      modTimerRef.current = setTimeout(
+                        () => setModStatus(null),
+                        4000,
+                      );
                     });
                   };
                   input.click();
                 }}
+                className="min-h-11"
               >
                 <Save size={12} className="mr-1" aria-hidden="true" />
                 Import Custom Data
@@ -763,9 +635,13 @@ export function SettingsScreen() {
                       setModdedKeys([]);
                       setModStatus("Reset to default data");
                       clearTimeout(modTimerRef.current);
-                      modTimerRef.current = setTimeout(() => setModStatus(null), 3000);
+                      modTimerRef.current = setTimeout(
+                        () => setModStatus(null),
+                        3000,
+                      );
                     });
                   }}
+                  className="min-h-11"
                 >
                   <Trash2 size={12} className="mr-1" aria-hidden="true" />
                   Reset to Default
@@ -773,13 +649,11 @@ export function SettingsScreen() {
               )}
             </div>
 
-            {modStatus && (
-              <p className="text-xs text-emerald-400">{modStatus}</p>
-            )}
+            {modStatus && <p className="text-xs text-emerald-400">{modStatus}</p>}
 
             {moddedKeys.length > 0 && (
               <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
-                <p className="text-xs font-medium text-zinc-300 mb-1">
+                <p className="mb-1 text-xs font-medium text-zinc-300">
                   Active Mods
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -794,17 +668,20 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        {/* ── Quick Save ──────────────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Save size={18} className="text-emerald-500" aria-hidden="true" />
-              Save Game
+              Saves
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Button onClick={() => void handleQuickSave()} disabled={isSaving}>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={() => void handleQuickSave()}
+                disabled={isSaving}
+                className="min-h-11"
+              >
                 {isSaving ? (
                   <Loader2
                     size={14}
@@ -819,129 +696,52 @@ export function SettingsScreen() {
               <Button
                 variant="outline"
                 onClick={() => setShowSaveLoadModal(true)}
+                className="min-h-11"
               >
                 <Download size={14} className="mr-2" aria-hidden="true" />
                 Manage Saves
               </Button>
-              {saveStatus && (
-                <span className="flex items-center gap-1 text-sm text-emerald-400">
-                  <Check size={14} aria-hidden="true" />
-                  {saveStatus}
-                </span>
-              )}
             </div>
 
-            <p className="text-xs text-zinc-500">
-              Game autosaves every time you advance a week. You have{" "}
-              {MAX_MANUAL_SLOTS} manual save slots.
+            {saveStatus && (
+              <div
+                className={`flex items-center gap-2 text-sm ${
+                  saveStatus.startsWith("Error:") ? "text-red-400" : "text-emerald-400"
+                }`}
+                role="status"
+              >
+                {saveStatus.startsWith("Error:") ? (
+                  <AlertTriangle size={14} aria-hidden="true" />
+                ) : (
+                  <Check size={14} aria-hidden="true" />
+                )}
+                <span>{saveStatus}</span>
+              </div>
+            )}
+
+            <p className="text-xs leading-relaxed text-zinc-500">
+              Game autosaves every time you advance a week. Use Manage Saves for
+              loading, deleting, and slot-by-slot save management across your{" "}
+              {MAX_MANUAL_SLOTS} manual slots.
             </p>
-          </CardContent>
-        </Card>
 
-        {/* ── Save Slots ──────────────────────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Download
-                size={18}
-                className="text-emerald-500"
-                aria-hidden="true"
-              />
-              Save Slots
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {Array.from({ length: MAX_MANUAL_SLOTS }, (_, i) => i + 1).map(
-              (slot) => {
-                const existing = manualSaves.find((s) => s.slot === slot);
-                return (
-                  <div key={slot} className="space-y-1.5">
-                    <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#141414] p-3">
-                      <div className="flex-1">
-                        {existing ? (
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium">{existing.name}</p>
-                              <Badge variant="secondary" className="text-xs">
-                                S{existing.season} W{existing.week}
-                              </Badge>
-                              <Badge variant="outline" className="text-[10px] uppercase">
-                                {formatSource(existing.source)}
-                              </Badge>
-                            </div>
-                            <p className="text-xs text-zinc-500">
-                              {existing.scoutName} &middot; Rep{" "}
-                              {Math.round(existing.reputation)} &middot;{" "}
-                              {formatDate(existing.savedAt)}
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-zinc-500">
-                            Slot {slot} — Empty
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleSave(slot)}
-                          disabled={isSaving}
-                        >
-                          <Save size={12} className="mr-1" aria-hidden="true" />
-                          Save
-                        </Button>
-                        {existing && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => {
-                                setDeleteConfirmSlot(null);
-                                void loadFromSlot(slot);
-                              }}
-                            >
-                              <Download
-                                size={12}
-                                className="mr-1"
-                                aria-hidden="true"
-                              />
-                              Load
-                            </Button>
-
-                            <button
-                              onClick={() => setDeleteConfirmSlot(slot)}
-                              disabled={deletingSlot === slot}
-                              className="rounded p-1.5 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-50"
-                              aria-label={`Delete slot ${slot}`}
-                            >
-                              <Trash2 size={14} aria-hidden="true" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {existing && deleteConfirmSlot === slot && (
-                      <InlineDeleteConfirm
-                        label={existing.name}
-                        isLoading={deletingSlot === slot}
-                        onCancel={() => setDeleteConfirmSlot(null)}
-                        onConfirm={() => void handleDelete(slot)}
-                      />
-                    )}
-                  </div>
-                );
-              },
+            {IS_YOUTH_EARLY_ACCESS && unsupportedSaveCount > 0 && (
+              <div className="rounded-md border border-zinc-700 bg-zinc-900/70 px-3 py-2 text-xs leading-relaxed text-zinc-400">
+                Other-specialization saves stay preserved in their slots and are
+                only viewable from Manage Saves in this Youth Scout build.
+              </div>
             )}
           </CardContent>
         </Card>
 
-        {/* ── Feedback & Support ───────────────────────────────────────────── */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <MessageSquarePlus size={18} className="text-emerald-500" aria-hidden="true" />
+              <MessageSquarePlus
+                size={18}
+                className="text-emerald-500"
+                aria-hidden="true"
+              />
               Feedback &amp; Support
             </CardTitle>
           </CardHeader>
@@ -952,6 +752,7 @@ export function SettingsScreen() {
             <Button
               variant="outline"
               onClick={() => setShowFeedbackModal(true)}
+              className="min-h-11"
             >
               <MessageSquarePlus size={14} className="mr-2" aria-hidden="true" />
               Send Feedback
@@ -959,12 +760,11 @@ export function SettingsScreen() {
           </CardContent>
         </Card>
 
-        {/* ── Quit to Menu ────────────────────────────────────────────────── */}
         <Card>
           <CardContent className="p-4">
             <Button
               variant="outline"
-              className="w-full"
+              className="min-h-11 w-full"
               onClick={() => setScreen("mainMenu")}
             >
               Quit to Main Menu
@@ -976,7 +776,6 @@ export function SettingsScreen() {
         </Card>
       </div>
 
-      {/* Save/Load modal */}
       {showSaveLoadModal && (
         <SaveLoadModal
           isOpen={showSaveLoadModal}
@@ -989,7 +788,6 @@ export function SettingsScreen() {
         onClose={() => setShowAuthModal(false)}
       />
 
-      {/* Feedback modal */}
       <FeedbackModal
         isOpen={showFeedbackModal}
         onClose={() => setShowFeedbackModal(false)}

@@ -29,6 +29,7 @@ import { RNG } from "@/engine/rng";
 
 export type ReputationEvent =
   | { type: "reportSubmitted"; quality: number }
+  | { type: "reportValidated"; accuracy: number }
   | {
       type: "successfulSigning";
       convictionLevel: ConvictionLevel;
@@ -162,6 +163,14 @@ function calculateReputationDelta(event: ReputationEvent): number {
       return 0.5 + normalised * 1.5;
     }
 
+    case "reportValidated": {
+      // Delayed truth is where accuracy affects a scout's standing. A 50/100
+      // validation is neutral; excellent calls build reputation while badly
+      // missed calls can cost it.
+      const accuracy = Math.max(0, Math.min(100, event.accuracy));
+      return ((accuracy - 50) / 50) * (accuracy >= 50 ? 3 : 2);
+    }
+
     case "successfulSigning": {
       const base = SIGNING_SUCCESS_DELTA[event.convictionLevel];
       // playerPerformance 0–100 scales the base by ±25 %
@@ -229,6 +238,8 @@ export interface TierReviewContext {
   // Tier 3 — international coverage
   /** Countries from which the scout submitted reports this season. */
   countriesScoutedThisSeason?: string[];
+  /** Youth/scouting sub-regions covered this season. */
+  regionsScoutedThisSeason?: string[];
   /** Home country of the scout (reports from other countries count as international). */
   homeCountry?: string;
 
@@ -255,7 +266,7 @@ export interface TierReviewContext {
   unsignedYouthDiscovered?: number;
   /** Number of successful youth placements this season. */
   successfulPlacements?: number;
-  /** Number of alumni milestones achieved this season (debut, international, wonderkid). */
+  /** Number of career-impact alumni milestones achieved this season. */
   alumniMilestonesThisSeason?: number;
 }
 
@@ -384,6 +395,32 @@ export function calculatePerformanceReview(
     tablePoundsSuccessful,
     reputationChange,
     outcome,
+    coverageSummary: tierContext !== undefined
+      ? {
+          countriesScouted: new Set(
+            tierContext.countriesScoutedThisSeason ?? [],
+          ).size,
+          regionsScouted: new Set(
+            tierContext.regionsScoutedThisSeason ?? [],
+          ).size,
+          internationalCountriesScouted: new Set(
+            (tierContext.countriesScoutedThisSeason ?? []).filter(
+              (country) =>
+                !tierContext.homeCountry || country !== tierContext.homeCountry,
+            ),
+          ).size,
+        }
+      : undefined,
+    youthSummary:
+      scout.primarySpecialization === "youth" && tierContext !== undefined
+        ? {
+            unsignedYouthDiscovered:
+              tierContext.unsignedYouthDiscovered ?? 0,
+            successfulPlacements: tierContext.successfulPlacements ?? 0,
+            alumniMilestones:
+              tierContext.alumniMilestonesThisSeason ?? 0,
+          }
+        : undefined,
   };
 }
 
@@ -404,11 +441,13 @@ export function calculatePerformanceReview(
  */
 function calculateTier3Bonus(ctx: TierReviewContext): number {
   const countries = ctx.countriesScoutedThisSeason ?? [];
+  const regions = ctx.regionsScoutedThisSeason ?? [];
   const home      = ctx.homeCountry ?? "";
 
-  if (countries.length === 0) return 0;
+  if (countries.length === 0 && regions.length === 0) return 0;
 
   const uniqueCountries     = new Set(countries);
+  const uniqueRegions       = new Set(regions);
   const internationalCount  = home
     ? [...uniqueCountries].filter((c) => c !== home).length
     : uniqueCountries.size;
@@ -423,6 +462,9 @@ function calculateTier3Bonus(ctx: TierReviewContext): number {
     if (home && uniqueCountries.has(home)) {
       penalty = 10; // Entirely domestic-only at full-time level is worse
     }
+
+    const regionalBreadthRelief = Math.max(0, uniqueRegions.size - 1) * 2;
+    penalty = Math.max(0, penalty - Math.min(penalty, regionalBreadthRelief));
   }
 
   return bonus - penalty;
@@ -542,7 +584,7 @@ function calculateTier5Bonus(ctx: TierReviewContext): number {
  * Scoring:
  *  - Unsigned youth discovered: +1 pt each, max +10 pts
  *  - Successful placements:     +5 pts each, max +10 pts
- *  - Alumni milestones:         +2.5 pts each, max +5 pts
+ *  - Career-impact alumni milestones: +2.5 pts each, max +5 pts
  */
 function calculateYouthSpecialistBonus(ctx: TierReviewContext): number {
   const discovered  = ctx.unsignedYouthDiscovered ?? 0;

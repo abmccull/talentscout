@@ -1,103 +1,159 @@
+import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
 
+async function prepareObservedYouthPlayer(gamePage: GamePage) {
+  await gamePage.goto();
+  await gamePage.injectState({
+    currentWeek: 1,
+    scout: {
+      firstName: "Report",
+      lastName: "Tester",
+      primarySpecialization: "youth",
+    },
+  });
+  await gamePage.navigateTo("calendar");
+  await gamePage.scheduleActivityByLabel("School Match", "Mon");
+  await gamePage.advanceCanonicalWeek({ launchLiveSession: true });
+
+  const sessionOutcome = await gamePage.page.evaluate(() => {
+    const store = (window as any).__GAME_STORE__;
+    const state = store.getState().gameState;
+    return {
+      observationCount: Object.keys(state?.observations ?? {}).length,
+      discoveryCount: (state?.discoveryRecords ?? []).length,
+    };
+  });
+
+  expect(
+    sessionOutcome.observationCount > 0 || sessionOutcome.discoveryCount > 0,
+  ).toBe(true);
+
+  await gamePage.openFirstYouthPlayerProfile();
+  await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
+  await gamePage.waitForScreen("reportWriter");
+}
+
 test.describe("Report Writing", () => {
-  test.beforeEach(async ({ gamePage }) => {
-    await gamePage.goto();
-    await gamePage.injectMidGameState("youth");
-  });
+  test("report writer exposes only valid conviction options", async ({ gamePage }) => {
+    await prepareObservedYouthPlayer(gamePage);
 
-  test("report writer screen renders", async ({ gamePage }) => {
-    // Select a player and navigate to report writer
-    const hasPlayer = await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const state = store.getState().gameState;
-      if (!state || Object.keys(state.players).length === 0) return false;
-
-      const playerId = Object.keys(state.players)[0];
-      store.getState().startReport(playerId);
-      return true;
-    });
-
-    if (hasPlayer) {
-      await gamePage.page.waitForTimeout(500);
-
-      const screen = await gamePage.getCurrentScreen();
-      expect(screen).toBe("reportWriter");
-
-      // Check that report writer content renders
-      const content = await gamePage.page.innerText("body");
-      expect(content.length).toBeGreaterThan(100);
-
-      gamePage.expectNoConsoleErrors();
-    }
-  });
-
-  test("report history screen renders", async ({ gamePage }) => {
-    await gamePage.setScreen("reportHistory");
-    await gamePage.page.waitForTimeout(500);
-
-    const screen = await gamePage.getCurrentScreen();
-    expect(screen).toBe("reportHistory");
-
-    const content = await gamePage.page.innerText("body");
-    expect(content.length).toBeGreaterThan(0);
+    await expect(gamePage.page.getByRole("radio", { name: /^Note\b/ })).toBeVisible();
+    await expect(gamePage.page.getByRole("radio", { name: /^Recommend\b/ })).toBeVisible();
+    await expect(gamePage.page.getByRole("radio", { name: /^Strong Recommend\b/ })).toBeVisible();
+    await expect(gamePage.page.getByRole("radio", { name: /^Table Pound\b/ })).toBeVisible();
+    await expect(gamePage.page.getByRole("button", { name: /^Submit Report$/ })).toBeEnabled();
 
     gamePage.expectNoConsoleErrors();
   });
 
-  test("report writer has conviction level controls", async ({ gamePage }) => {
-    const hasPlayer = await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const state = store.getState().gameState;
-      if (!state || Object.keys(state.players).length === 0) return false;
+  test("submitting a valid report writes it to report history", async ({ gamePage }) => {
+    await prepareObservedYouthPlayer(gamePage);
 
-      const playerId = Object.keys(state.players)[0];
-      store.getState().startReport(playerId);
-      return true;
+    await gamePage.submitCurrentReportViaUI("recommend");
+    await gamePage.waitForScreen("reportHistory");
+    await expect(
+      gamePage.page.getByRole("heading", { name: "Reports" }),
+    ).toBeVisible();
+
+    const latestReport = await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const reports = Object.values(store.getState().gameState?.reports ?? {}) as any[];
+      return reports.at(-1) ?? null;
     });
 
-    if (hasPlayer) {
-      await gamePage.page.waitForTimeout(500);
+    expect(latestReport).not.toBeNull();
+    expect(latestReport.conviction).toBe("recommend");
+    expect((latestReport.attributeAssessments ?? []).length).toBeGreaterThan(0);
+    expect(Array.isArray(latestReport.strengths)).toBe(true);
+    expect(Array.isArray(latestReport.weaknesses)).toBe(true);
+    await expect(gamePage.page.getByText("Recommend", { exact: true }).last()).toBeVisible();
 
-      // Look for conviction-related UI
-      const content = await gamePage.page.innerText("body");
-      // Report writer should contain player information and controls
-      expect(content.length).toBeGreaterThan(100);
-    }
+    gamePage.expectNoConsoleErrors();
   });
 
-  test("report submission flow works", async ({ gamePage }) => {
-    const reportCount = await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const state = store.getState().gameState;
-      return state?.reports ? Object.keys(state.reports).length : 0;
+  test("a low-evidence 14-year-old goalkeeper stays conservative and avoids invented keeper claims", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      scout: { primarySpecialization: "youth" },
     });
 
-    // Start a report, submit it via store
-    const submitted = await gamePage.page.evaluate(() => {
+    await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
-      if (!state || Object.keys(state.players).length === 0) return false;
-
       const playerId = Object.keys(state.players)[0];
-      store.getState().startReport(playerId);
+      const player = state.players[playerId];
+      const readings = [
+        ["positioning", 8],
+        ["composure", 6],
+        ["decisionMaking", 7],
+        ["leadership", 4],
+        ["anticipation", 8],
+        ["passing", 5],
+        ["vision", 4],
+        ["jumping", 6],
+        ["strength", 5],
+        ["firstTouch", 2],
+      ].map(([attribute, perceivedValue]) => ({
+        attribute,
+        perceivedValue,
+        confidence: 0.45,
+        observationCount: 1,
+        rangeLow: Math.max(1, Number(perceivedValue) - 3),
+        rangeHigh: Math.min(20, Number(perceivedValue) + 3),
+      }));
 
-      try {
-        store.getState().submitReport("confident", "Test report summary", ["pace", "finishing"], ["positioning"]);
-        return true;
-      } catch {
-        return false;
-      }
+      store.getState().loadGame({
+        ...state,
+        players: {
+          ...state.players,
+          [playerId]: {
+            ...player,
+            age: 14,
+            position: "GK",
+            marketValue: 5_000,
+          },
+        },
+        observations: {
+          ...state.observations,
+          gk_ea_observation: {
+            id: "gk_ea_observation",
+            playerId,
+            scoutId: state.scout.id,
+            week: 1,
+            season: 1,
+            context: "schoolMatch",
+            attributeReadings: readings,
+            notes: ["One cautious school-match watch."],
+            flaggedMoments: [],
+            abilityReading: {
+              perceivedCA: 1,
+              caConfidence: 0.4,
+              perceivedPALow: 1.5,
+              perceivedPAHigh: 2,
+              paConfidence: 0.35,
+            },
+          },
+        },
+      });
+      store.getState().startReport(playerId);
     });
 
-    if (submitted) {
-      const newReportCount = await gamePage.page.evaluate(() => {
-        const store = (window as any).__GAME_STORE__;
-        const state = store.getState().gameState;
-        return state?.reports ? Object.keys(state.reports).length : 0;
-      });
+    await gamePage.waitForScreen("reportWriter");
+    await expect(gamePage.page.getByText(/does not infer unobserved shot-stopping/i)).toBeVisible();
+    await gamePage.submitCurrentReportViaUI("note");
 
-      expect(newReportCount).toBeGreaterThan(reportCount);
-    }
+    const report = await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const reports = Object.values(store.getState().gameState?.reports ?? {}) as any[];
+      return reports.at(-1);
+    });
+
+    expect(report.estimatedValueRange[1]).toBeLessThanOrEqual(20_000);
+    expect([...report.strengths, ...report.weaknesses].join(" ")).not.toMatch(
+      /shot-stopp|handling|command of|sweeping/i,
+    );
+
+    gamePage.expectNoConsoleErrors();
   });
 });

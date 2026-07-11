@@ -1,0 +1,255 @@
+
+> talentscout@1.0.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+   ▲ Next.js 15.5.20
+   - Local:        http://127.0.0.1:3000
+   - Network:      http://127.0.0.1:3000
+
+ ✓ Starting...
+ ✓ Ready in 4.9s
+ ○ Compiling /play ...
+ ✓ Compiled /play in 9.7s (3866 modules)
+ GET /play 200 in 11289ms
+ ✓ Compiled in 1898ms (1679 modules)
+ ✓ Compiled in 528ms (1679 modules)
+ ✓ Compiled in 443ms (1679 modules)
+ ✓ Compiled in 597ms (1679 modules)
+ ○ Compiling /play ...
+ ✓ Compiled /play in 1146ms (2187 modules)
+ GET /play 200 in 4272ms
+ GET /play 200 in 130ms
+ GET /play 200 in 92ms
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: EPERM: operation not permitted, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\2.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\2.pack.gz'
+ GET /play 200 in 139ms
+ GET /play 200 in 96ms
+ GET /play 200 in 92ms
+ GET /play 200 in 111ms
+ GET /play 200 in 106ms
+ ✓ Compiled in 1223ms (1679 modules)
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /play 200 in 262ms
+ GET /play 200 in 134ms
+ GET /play 200 in 236ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 5s (3866 modules)
+ GET /play 200 in 4832ms
+ GET /play 200 in 54ms
+ ✓ Compiled in 747ms (3866 modules)
+ ✓ Compiled in 856ms (3866 modules)
+ ✓ Compiled in 757ms (3868 modules)
+ ✓ Compiled in 1130ms (3868 modules)
+ ✓ Compiled in 732ms (3868 modules)
+ ✓ Compiled in 875ms (3868 modules)
+ ✓ Compiled in 324ms (1680 modules)
+ ✓ Compiled in 253ms (1680 modules)
+ ✓ Compiled in 282ms (1680 modules)
+ ✓ Compiled in 390ms (1680 modules)
+ ✓ Compiled in 670ms (3868 modules)
+ ✓ Compiled in 1925ms (3868 modules)
+ ✓ Compiled in 1397ms (3868 modules)
+ ✓ Compiled in 1321ms (3868 modules)
+ GET /play 200 in 2075ms
+ GET /play 200 in 103ms
+ GET /play 200 in 72ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 870ms (3868 modules)
+ GET /play 200 in 1574ms
+ GET /play 200 in 1923ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 1989ms (3868 modules)
+ ⨯ TypeError: __webpack_require__.C is not a function
+    at <unknown> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\play\page.js:4080:21)
+    at Object.<anonymous> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\play\page.js:4085:3) {
+  page: '/play'
+}
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⨯ TypeError: __webpack_require__.C is not a function
+    at <unknown> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\play\page.js:4080:21)
+    at Object.<anonymous> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\play\page.js:4085:3) {
+  page: '/play'
+}
+ ○ Compiling /_error ...
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled /_error in 2.7s (4202 modules)
+ GET /play 500 in 5251ms
+ GET /play 500 in 3334ms
+ ✓ Compiled in 470ms (1833 modules)
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ GET /play 200 in 1315ms
+ GET /play 200 in 66ms
+ ✓ Compiled in 3.2s (4216 modules)
+ GET /play 200 in 307ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /play 200 in 901ms
+ ✓ Compiled in 934ms (1833 modules)
+ GET /play 200 in 1265ms
+ ✓ Compiled in 1296ms (1833 modules)
+ GET /play 200 in 81ms
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ✓ Compiled in 1641ms (4216 modules)
+ GET /play 200 in 397ms
+ GET /play 200 in 1348ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 3.3s (4216 modules)
+ GET /play 200 in 1356ms
+ GET /play 200 in 3363ms
+ GET /play 200 in 100ms
+ GET /play 200 in 99ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 8.2s (4216 modules)
+ GET /play 200 in 6774ms
+ GET /play 200 in 3223ms
+ GET /play 200 in 112ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 2.8s (4216 modules)
+ GET /play 200 in 842ms
+ GET /play 200 in 2405ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 924ms (4216 modules)
+ GET /play 200 in 1433ms
+ GET /play 200 in 2159ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 1325ms (4216 modules)
+ GET /play 200 in 1414ms
+ GET /play 200 in 1941ms
+ GET /play 200 in 93ms
+ GET /play 200 in 178ms
+ GET /play 200 in 136ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 1979ms (4216 modules)
+ GET /play 200 in 3180ms
+ GET /play 200 in 4024ms
+ GET /play 200 in 98ms
+ GET /play 200 in 166ms
+ GET /play 200 in 95ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 2.3s (4216 modules)
+ GET /play 200 in 2721ms
+ GET /play 200 in 3496ms
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 2.3s (4216 modules)
+ GET /play 200 in 1781ms
+ GET /play 200 in 2287ms
+ ✓ Compiled in 2s (4216 modules)
+ GET /play 200 in 853ms
+ GET /play 200 in 969ms
+ GET /play 200 in 67ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 1967ms (4216 modules)
+ GET /play 200 in 1449ms
+ GET /play 200 in 2008ms
+ ✓ Compiled in 1014ms (4216 modules)
+ GET /play 200 in 416ms
+ ✓ Compiled in 849ms (4216 modules)
+ GET /play 200 in 224ms
+ ✓ Compiled in 1536ms (4216 modules)
+ GET /play 200 in 238ms
+ GET /play 200 in 629ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 1647ms (4216 modules)
+ GET /play 200 in 2705ms
+ GET /play 200 in 3467ms
+ ✓ Compiled in 831ms (4216 modules)
+ GET /play 200 in 2052ms
+ ✓ Compiled in 1676ms (4216 modules)
+ GET /play 200 in 806ms
+ GET /play 200 in 948ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 2.2s (4216 modules)
+ GET /play 200 in 1680ms
+ GET /play 200 in 2770ms
+ ✓ Compiled in 1183ms (4216 modules)
+ GET /play 200 in 365ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /play 200 in 830ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ✓ Compiled in 1234ms (4216 modules)
+ GET /play 200 in 3058ms
+ GET /play 200 in 3789ms
+ GET /play 200 in 93ms
+ GET /play 200 in 90ms
+ GET /play 200 in 108ms
+ GET /play 200 in 157ms
+ GET /play 200 in 118ms
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack failed from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz: Error: incorrect header check
+ ✓ Compiled in 2.8s (4216 modules)
+ GET /play 200 in 2561ms
+ GET /play 200 in 3649ms
+ ✓ Compiled in 2.2s (4216 modules)
+ GET /play 200 in 447ms
+ ✓ Compiled in 1146ms (4216 modules)
+ GET /play 200 in 815ms
+ ✓ Compiled in 441ms (1833 modules)
+ GET /play 200 in 47ms
+ ✓ Compiled in 749ms (1833 modules)
+ GET /play 200 in 94ms
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz'
+ GET /play 200 in 4647ms
+ ✓ Compiled in 3.2s (4216 modules)
+ GET /play 200 in 386ms
+ GET /play 200 in 804ms
+ GET /play 200 in 189ms
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+ GET /play 200 in 204ms
+ GET /play 200 in 137ms
+ GET /play 200 in 120ms
+ ✓ Compiled in 921ms (1833 modules)
+ GET /play 200 in 64ms
+ GET /play 200 in 103ms
+ GET /play 200 in 67ms
+ GET /play 200 in 106ms
+ GET /play 200 in 97ms
+ GET /play 200 in 99ms
+ GET /play 200 in 96ms
+ GET /play 200 in 92ms
+ GET /play 200 in 129ms
+ GET /play 200 in 106ms
+ GET /play 200 in 74ms
+ GET /play 200 in 77ms
+ GET /play 200 in 86ms
+ GET /play 200 in 62ms
+ GET /play 200 in 85ms
+ GET /play 200 in 132ms
+ GET /play 200 in 121ms
+ GET /play 200 in 123ms
+ GET /play 200 in 84ms
+ GET /play 200 in 105ms
+ GET /play 200 in 78ms
+ GET /play 200 in 69ms
+ GET /play 200 in 84ms
+ GET /play 200 in 100ms
+ GET /play 200 in 114ms
+ GET /play 200 in 110ms
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ✓ Compiled in 2.6s (4216 modules)
+ ✓ Compiled in 834ms (4216 modules)
+ GET /play 200 in 2241ms
+ GET /play 200 in 98ms
+ GET /play 200 in 107ms
+ GET /play 200 in 79ms
+ GET /play 200 in 128ms
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ✓ Compiled in 2.1s (4216 modules)
+ ✓ Compiled in 455ms (1833 modules)
+ ✓ Compiled in 440ms (1833 modules)
+ ✓ Compiled in 482ms (1833 modules)
+ ✓ Compiled in 473ms (1833 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 1619ms (1833 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 2.3s (4216 modules)
+ ✓ Compiled in 1829ms (4216 modules)
+ ✓ Compiled in 884ms (4216 modules)
+ ✓ Compiled in 851ms (4216 modules)
+ ✓ Compiled in 433ms (1833 modules)
+ GET /play 200 in 2300ms
+ GET /play 200 in 102ms
+ GET /play 200 in 187ms

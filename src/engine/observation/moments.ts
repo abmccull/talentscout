@@ -14,7 +14,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { PlayerAttribute } from "@/engine/core/types";
+import type { Player, PlayerAttribute } from "@/engine/core/types";
 import type { PlayerMoment, SessionPlayer, VenueAtmosphere } from "./types";
 
 // =============================================================================
@@ -442,8 +442,10 @@ export function generateMoments(
   phaseIndex: number,
   totalPhases: number,
   atmosphere?: VenueAtmosphere,
+  playerProfiles?: Readonly<Record<string, Player>>,
 ): PlayerMoment[] {
-  const momentCount = rng.nextInt(3, 6);
+  const [minMoments, maxMoments] = getMomentCountRange(venueType);
+  const momentCount = rng.nextInt(minMoments, maxMoments);
   const moments: PlayerMoment[] = [];
 
   // Phase progression as a 0–1 scalar (used for pressure scaling).
@@ -456,20 +458,27 @@ export function generateMoments(
 
   for (let i = 0; i < momentCount; i++) {
     // --- Select an involved player ---
-    const player = selectMomentPlayer(rng, players);
+    const player = selectMomentPlayer(rng, players, phaseIndex, i, momentCount);
 
     // --- Select moment type weighted by venue ---
     const momentType = selectMomentType(rng, venueType);
 
     // --- Generate quality (1–10, gaussian-biased toward 5) ---
-    const rawQuality = rng.gaussian(5.5, 2.0);
-    const quality = Math.round(Math.min(10, Math.max(1, rawQuality)));
+    // Quality is resolved after the hinted attributes and pressure context are known.
 
     // --- Sample 1–3 attribute hints from the relevant pool ---
     const hintPool = getMomentAttributeHints(momentType);
     const hintCount = rng.nextInt(1, Math.min(3, hintPool.length));
     const shuffledPool = rng.shuffle(hintPool);
     const attributesHinted = shuffledPool.slice(0, hintCount) as PlayerAttribute[];
+
+    const pressureContext = rng.chance(pressureProbability);
+    const quality = calculateMomentQuality(
+      rng,
+      playerProfiles?.[player.playerId],
+      attributesHinted,
+      pressureContext,
+    );
 
     // --- Generate descriptions ---
     const { description, vagueDescription } = buildDescriptions(
@@ -480,8 +489,6 @@ export function generateMoments(
     );
 
     // --- Pressure context ---
-    const pressureContext = rng.chance(pressureProbability);
-
     // --- Standout flag ---
     const isStandout = quality >= 8;
 
@@ -515,26 +522,76 @@ export function generateMoments(
  * All players who pass the chance roll are collected; one is picked at random.
  * If none pass, a random player is chosen to guarantee the slot is filled.
  */
-function selectMomentPlayer(rng: RNG, players: SessionPlayer[]): SessionPlayer {
+function selectMomentPlayer(
+  rng: RNG,
+  players: SessionPlayer[],
+  phaseIndex: number,
+  momentIndex: number,
+  momentCount: number,
+): SessionPlayer {
   if (players.length === 0) {
     throw new RangeError("selectMomentPlayer: players array must not be empty");
   }
 
-  const candidates: SessionPlayer[] = [];
-
-  for (const player of players) {
-    const threshold = player.isFocused ? 0.5 : 0.2;
-    if (rng.chance(threshold)) {
-      candidates.push(player);
-    }
+  // Rotate early slots through the full pool so every prospect receives a
+  // fair chance to produce evidence. Focus changes perception, not events.
+  const coverageWindow = Math.max(1, Math.ceil(players.length / momentCount));
+  if (phaseIndex < coverageWindow) {
+    return players[(phaseIndex * momentCount + momentIndex) % players.length];
   }
 
-  // Always guarantee at least one player to avoid empty moments.
-  if (candidates.length === 0) {
-    return rng.pick(players);
+  return rng.pick(players);
+}
+
+function calculateMomentQuality(
+  rng: RNG,
+  player: Player | undefined,
+  attributesHinted: PlayerAttribute[],
+  pressureContext: boolean,
+): number {
+  if (!player || attributesHinted.length === 0) {
+    return Math.round(Math.min(10, Math.max(1, rng.gaussian(5.5, 2))));
   }
 
-  return rng.pick(candidates);
+  const relevantAverage = attributesHinted.reduce(
+    (sum, attribute) => sum + player.attributes[attribute],
+    0,
+  ) / attributesHinted.length;
+  let expectedQuality = 1 + ((relevantAverage - 1) / 19) * 9;
+
+  // Talent establishes the baseline; form and morale only nudge a single
+  // performance around it.
+  expectedQuality += player.form * 0.3;
+  expectedQuality += (player.morale - 5.5) * 0.12;
+
+  if (pressureContext) {
+    const pressureAverage = (
+      player.attributes.composure + player.attributes.bigGameTemperament
+    ) / 2;
+    const pressureQuality = 1 + ((pressureAverage - 1) / 19) * 9;
+    expectedQuality = expectedQuality * 0.72 + pressureQuality * 0.28;
+  }
+
+  return Math.round(
+    Math.min(10, Math.max(1, rng.gaussian(expectedQuality, 1.35))),
+  );
+}
+
+function getMomentCountRange(venueType: string): [number, number] {
+  switch (venueType) {
+    case "schoolMatch":
+    case "academyTrialDay":
+    case "academyVisit":
+      // Early Access tuning: youth baseline sessions should surface decisions,
+      // not long chains of low-value "next" clicks.
+      return [2, 4];
+    case "grassrootsTournament":
+    case "youthFestival":
+    case "youthTournament":
+      return [2, 4];
+    default:
+      return [3, 6];
+  }
 }
 
 /**

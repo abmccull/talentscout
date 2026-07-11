@@ -17,6 +17,8 @@ import type {
   CareerTier,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { getUnlockedPerks } from "@/engine/specializations/perks";
 
 // ---------------------------------------------------------------------------
 // Base skill profiles per specialization
@@ -156,17 +158,6 @@ const BASE_ATTRIBUTES: Record<Specialization, AttributeProfile> = {
 };
 
 // ---------------------------------------------------------------------------
-// Starting unlocked perks — one per specialization (level 1 perk)
-// ---------------------------------------------------------------------------
-
-const STARTING_PERKS: Record<Specialization, string[]> = {
-  youth:     ["youth_academy_access"],
-  firstTeam: ["firstteam_system_fit"],
-  regional:  ["regional_local_network"],
-  data:      ["data_statistical_baseline"],
-};
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -199,11 +190,15 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
 
   // Apply player allocations before Gaussian noise
   const alloc = config.skillAllocations ?? {};
+  const allocationValidation = validateSkillAllocations(specialization, alloc);
+  if (!allocationValidation.valid) {
+    throw new Error(`Invalid skill allocations: ${allocationValidation.reason}`);
+  }
+
   const skills: Record<ScoutSkill, number> = {} as Record<ScoutSkill, number>;
   for (const key of Object.keys(baseSkills) as ScoutSkill[]) {
     const allocated = baseSkills[key] + (alloc[key] ?? 0);
-    const capped = Math.min(ALLOCATION_MAX, allocated);
-    skills[key] = varyAttribute(capped, 0.8, rng);
+    skills[key] = varyAttribute(allocated, 0.8, rng);
   }
 
   // Personality attributes vary a little more (σ = 1.0)
@@ -221,8 +216,12 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
   // If the player chose to start employed at a club, begin as a tier-2 club
   // scout with a modest salary. Otherwise start freelance at tier 1.
   const startingClubId = config.startingClubId;
+  if (IS_YOUTH_EARLY_ACCESS && startingClubId) {
+    throw new Error("Invalid new game config: club starts are disabled in Youth Early Access");
+  }
   const careerTier: CareerTier = startingClubId ? 2 : 1;
   const salary = startingClubId ? 800 : 0;
+  const careerPath = startingClubId ? "club" : "independent";
 
   return {
     id,
@@ -237,10 +236,11 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
 
     primarySpecialization: specialization,
     specializationLevel: 1,
-    unlockedPerks: [...STARTING_PERKS[specialization]],
+    specializationXp: 0,
+    unlockedPerks: getUnlockedPerks(specialization, 1).map((perk) => perk.id),
 
     careerTier,
-    careerPath: "club",
+    careerPath,
     reputation: 10,
     clubTrust: startingClubId ? 20 : 0,
     specializationReputation: 5,
@@ -327,10 +327,20 @@ export function validateSkillAllocations(
 ): { valid: boolean; reason?: string } {
   const base = BASE_SKILLS[specialization];
   const mins = SKILL_MINIMUMS[specialization];
+  const skillKeys = Object.keys(base) as ScoutSkill[];
+
+  for (const key of Object.keys(allocations)) {
+    if (!skillKeys.includes(key as ScoutSkill)) {
+      return { valid: false, reason: `Unknown skill allocation: ${key}` };
+    }
+  }
 
   let totalUsed = 0;
-  for (const key of Object.keys(base) as ScoutSkill[]) {
+  for (const key of skillKeys) {
     const bonus = allocations[key] ?? 0;
+    if (!Number.isInteger(bonus)) {
+      return { valid: false, reason: `Bonus for ${key} must be a whole number` };
+    }
     if (bonus < 0) {
       return { valid: false, reason: `Negative bonus for ${key}` };
     }
@@ -344,8 +354,8 @@ export function validateSkillAllocations(
     totalUsed += bonus;
   }
 
-  if (totalUsed > BONUS_POINTS) {
-    return { valid: false, reason: `Used ${totalUsed} points, max is ${BONUS_POINTS}` };
+  if (totalUsed !== BONUS_POINTS) {
+    return { valid: false, reason: `Used ${totalUsed} points, required ${BONUS_POINTS}` };
   }
 
   return { valid: true };

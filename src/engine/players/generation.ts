@@ -80,13 +80,14 @@ type AttrWeights = Partial<Record<PlayerAttribute, number>>;
 
 const POSITION_WEIGHTS: Record<Position, AttrWeights> = {
   GK: {
-    composure: 1.4, positioning: 1.5, leadership: 1.1,
+    composure: 1.4, positioning: 1.5, decisionMaking: 1.25, leadership: 1.15,
+    anticipation: 1.4, passing: 1.1, firstTouch: 0.95, vision: 0.95,
     shooting: 0.2, dribbling: 0.2, crossing: 0.2, heading: 0.4,
-    pace: 0.5, agility: 0.8, strength: 0.7,
+    pace: 0.45, agility: 1.1, strength: 0.85,
     defensiveAwareness: 0.5, pressing: 0.3, offTheBall: 0.3,
     // New attributes
-    tackling: 0.2, finishing: 0.1, jumping: 0.6, balance: 0.7,
-    anticipation: 1.3, vision: 0.3, marking: 0.3, teamwork: 0.8,
+    tackling: 0.2, finishing: 0.1, jumping: 1.15, balance: 0.8,
+    marking: 0.3, teamwork: 0.9,
   },
   CB: {
     defensiveAwareness: 1.7, heading: 1.6, strength: 1.5,
@@ -256,7 +257,7 @@ export function getFormValueModifier(form: number): number {
   return FORM_VALUE_MODIFIERS[clamped] ?? 0;
 }
 
-function calculateMarketValue(
+export function calculateMarketValue(
   ca: number,
   pa: number,
   age: number,
@@ -444,6 +445,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
     secondaryPositions,
     preferredFoot,
     clubId,
+    contractClubId: clubId || undefined,
     contractExpiry: clubId ? currentSeason + rng.nextInt(1, 5) : 0,
     wage: calculateWage(currentAbility, clubReputation),
     marketValue: calculateMarketValue(currentAbility, potentialAbility, age, position, clubReputation),

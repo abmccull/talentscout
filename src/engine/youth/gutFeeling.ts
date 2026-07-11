@@ -269,17 +269,42 @@ export function rollGutFeeling(
   // --- Determine trigger domain ---
   const triggerDomain = getPlayerPrimaryDomain(youth);
 
-  // --- Pick narrative template ---
-  const wonderkidTier: WonderkidTier = youth.player.wonderkidTier;
-  const templates = GUT_FEELING_TEMPLATES[wonderkidTier][triggerDomain];
-  const narrative = rng.pick(templates);
-
   // --- Calculate reliability ---
   const youthSpecLevel = isYouthSpec ? scout.specializationLevel : 0;
   const reliability = Math.min(
     0.85,
     (scout.attributes.intuition + youthSpecLevel) / 40,
   );
+
+  // --- Pick a deliberately fallible narrative tier ---
+  const tierOrder: WonderkidTier[] = [
+    "journeyman",
+    "qualityPro",
+    "worldClass",
+    "generational",
+  ];
+  const actualTierIndex = tierOrder.indexOf(youth.player.wonderkidTier);
+  let perceivedTierIndex = actualTierIndex;
+  const correctTierChance = 0.3 + reliability * 0.7;
+  if (!rng.chance(correctTierChance)) {
+    const firstDirection = rng.chance(0.5) ? -1 : 1;
+    perceivedTierIndex = Math.max(
+      0,
+      Math.min(tierOrder.length - 1, actualTierIndex + firstDirection),
+    );
+    if (perceivedTierIndex === actualTierIndex) {
+      perceivedTierIndex = Math.max(
+        0,
+        Math.min(tierOrder.length - 1, actualTierIndex - firstDirection),
+      );
+    }
+  }
+  const perceivedTier = tierOrder[perceivedTierIndex];
+  const templates = GUT_FEELING_TEMPLATES[perceivedTier][triggerDomain];
+  const instinctCaveat = reliability >= 0.65
+    ? "It is still an instinct, and it needs repeat evidence."
+    : "It is only a flash of instinct; I could be reading too much into it.";
+  const narrative = `${rng.pick(templates)} ${instinctCaveat}`;
 
   // --- Build and return GutFeeling ---
   const gutFeeling: GutFeeling = {
@@ -288,6 +313,7 @@ export function rollGutFeeling(
     narrative,
     triggerDomain,
     reliability,
+    perceivedTier,
     // wasAccurate is set retroactively — omit here
     week: 0,   // caller is responsible for setting week/season from GameState
     season: 0, // caller is responsible for setting week/season from GameState
@@ -304,8 +330,8 @@ export function rollGutFeeling(
  * Return the gut feeling narrative, optionally appended with a rough PA
  * estimate when the scout holds the `paEstimate` perk.
  *
- * The estimate is expressed as a ±5 range around the player's true PA so the
- * display feels like a heuristic guess, not a data readout.
+ * The estimate is expressed as a broad, fallible star range. The hidden
+ * 1–200 PA value is never printed to the player.
  */
 export function formatGutFeelingWithPA(
   gutFeeling: GutFeeling,
@@ -318,10 +344,19 @@ export function formatGutFeelingWithPA(
     return gutFeeling.narrative;
   }
 
-  const pa = youth.player.potentialAbility;
-  const margin = Math.max(1, Math.floor(5 * (1 - (accuracyBonus ?? 0))));
-  const low = Math.max(1, pa - margin);
-  const high = Math.min(200, pa + margin);
+  const trueStars = youth.player.potentialAbility / 40;
+  const hash = [...gutFeeling.id].reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  );
+  const drift = gutFeeling.reliability >= 0.75 ? 0 : ((hash % 3) - 1) * 0.5;
+  const center = Math.max(0.5, Math.min(5, trueStars + drift));
+  const uncertainty = Math.max(
+    0.75,
+    1.5 - gutFeeling.reliability * 0.75 - Math.min(0.5, (accuracyBonus ?? 0) * 2),
+  );
+  const low = Math.max(0.5, Math.floor((center - uncertainty) * 2) / 2);
+  const high = Math.min(5, Math.ceil((center + uncertainty) * 2) / 2);
 
-  return `${gutFeeling.narrative} My best guess? Somewhere between ${low} and ${high} potential ability.`;
+  return `${gutFeeling.narrative} Rough upside signal: ${low.toFixed(1)}–${high.toFixed(1)} stars. Treat that as a hypothesis, not a measurement.`;
 }

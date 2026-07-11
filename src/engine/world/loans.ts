@@ -19,8 +19,11 @@ import type {
   LoanDeal,
   LoanPerformanceRecord,
   LoanOutcome,
+  LoanRecommendation,
   InboxMessage,
 } from "@/engine/core/types";
+import { normalizeCountryKey } from "@/lib/country";
+import { getTransferFlowProbability } from "@/engine/world/transfers";
 
 // =============================================================================
 // CONSTANTS
@@ -67,8 +70,9 @@ export function isLoanEligible(
   allPlayers: Record<string, Player>,
   currentSeason: number,
 ): boolean {
-  if (player.age >= 26) return false;
+  if (player.age < 16 || player.age >= 26) return false;
   if (player.onLoan) return false;
+  if ((player.contractClubId ?? player.clubId) !== club.id) return false;
   if (player.contractExpiry <= currentSeason + 1) return false;
 
   // Check if player is a key player (top 5 CA at the club)
@@ -91,8 +95,10 @@ export function findLoanDestination(
   clubs: Record<string, Club>,
   allPlayers: Record<string, Player>,
   rng: RNG,
+  leagues?: GameState["leagues"],
 ): Club | null {
-  const candidates: Club[] = [];
+  const candidates: Array<{ item: Club; weight: number }> = [];
+  const parentCountry = normalizeCountryKey(leagues?.[parentClub.leagueId]?.country);
 
   for (const club of Object.values(clubs)) {
     if (club.id === parentClub.id) continue;
@@ -102,6 +108,15 @@ export function findLoanDestination(
     // Check budget — club must be able to afford at least 30% wage contribution
     if (club.budget < player.wage * 0.3 * 20) continue; // ~20 weeks of partial wages
 
+    const destinationCountry = normalizeCountryKey(leagues?.[club.leagueId]?.country);
+    const isForeign = !!parentCountry && !!destinationCountry && parentCountry !== destinationCountry;
+    const transferFlow = parentCountry && destinationCountry
+      ? getTransferFlowProbability(parentCountry, destinationCountry)
+      : 0.5;
+    // Under-18 cross-border loans and unsupported international routes are not
+    // credible development moves in this early-access world model.
+    if (isForeign && (player.age < 18 || transferFlow < 0.05)) continue;
+
     // Prefer clubs that need the player's position
     const squadAtPosition = club.playerIds
       .map((id) => allPlayers[id])
@@ -109,12 +124,14 @@ export function findLoanDestination(
 
     // Fewer than 2 players in that position = strong need
     if (squadAtPosition.length < 3) {
-      candidates.push(club);
+      const geographyWeight = isForeign ? 0.5 + transferFlow * 2 : 4;
+      const needWeight = squadAtPosition.length === 0 ? 2 : squadAtPosition.length === 1 ? 1.5 : 1;
+      candidates.push({ item: club, weight: geographyWeight * needWeight });
     }
   }
 
   if (candidates.length === 0) return null;
-  return rng.pick(candidates);
+  return rng.pickWeighted(candidates);
 }
 
 /**
@@ -233,13 +250,19 @@ export function processLoanReturns(
   for (const deal of activeLoans) {
     if (deal.status !== "active") continue;
     if (deal.endWeek === week && deal.endSeason === season) {
-      const outcome = evaluateLoanOutcome(deal);
-      const completed: LoanDeal = { ...deal, status: "completed" };
-      returning.push(completed);
-
       const player = state.players[deal.playerId];
       const parentClub = state.clubs[deal.parentClubId];
       const loanClub = state.clubs[deal.loanClubId];
+      let outcome = evaluateLoanOutcome(deal);
+      if (
+        outcome === "buy-option-exercised" &&
+        (!deal.buyOptionFee || (loanClub?.budget ?? 0) < deal.buyOptionFee)
+      ) {
+        outcome = evaluateLoanOutcome({ ...deal, buyOptionFee: undefined });
+      }
+      const completed: LoanDeal = { ...deal, status: "completed", outcome };
+      returning.push(completed);
+
       const playerName = player
         ? `${player.firstName} ${player.lastName}`
         : "Unknown Player";
@@ -289,45 +312,227 @@ export function processAILoanDeals(
   week: number,
   season: number,
   rng: RNG,
-): { deals: LoanDeal[]; messages: InboxMessage[] } {
+): {
+  deals: LoanDeal[];
+  messages: InboxMessage[];
+  updatedRecommendations: LoanRecommendation[];
+  reputationDelta: number;
+  xpAward: number;
+} {
   const deals: LoanDeal[] = [];
   const messages: InboxMessage[] = [];
+  const reservedPlayerIds = new Set<string>();
+  let reputationDelta = 0;
+  let xpAward = 0;
 
-  for (const player of Object.values(state.players)) {
-    const club = state.clubs[player.clubId];
-    if (!club) continue;
+  const updatedRecommendations = (state.loanRecommendations ?? []).map((recommendation) => {
+    if ((recommendation.status ?? "pending") !== "pending") return recommendation;
 
-    if (!isLoanEligible(player, club, state.players, season)) continue;
-    if (!rng.chance(AI_LOAN_PROBABILITY)) continue;
+    const player = state.players[recommendation.playerId];
+    const ownerClubId = player
+      ? (player.contractClubId ?? player.loanParentClubId ?? player.clubId)
+      : "";
+    const parentClub = state.clubs[ownerClubId];
+    const targetClub = state.clubs[recommendation.targetClubId];
+    const rejectRecommendation = (reason: string): LoanRecommendation => {
+      const playerName = player ? `${player.firstName} ${player.lastName}` : "The player";
+      messages.push({
+        id: generateId("msg_loanrec_reject", rng),
+        week,
+        season,
+        type: "clubResponse",
+        title: `Loan Recommendation Declined: ${playerName}`,
+        body: `${targetClub?.name ?? "The target club"} declined the proposed loan. ${reason}`,
+        read: false,
+        actionRequired: false,
+        relatedId: recommendation.playerId,
+        relatedEntityType: "player",
+      });
+      return {
+        ...recommendation,
+        status: "rejected",
+        responseWeek: week,
+        responseSeason: season,
+        responseReason: reason,
+      };
+    };
 
-    // Already on loan lists? Skip.
-    if ((club.loanedOutPlayerIds ?? []).includes(player.id)) continue;
+    if (!player || !parentClub || !targetClub) {
+      return rejectRecommendation("The player or one of the clubs is no longer available.");
+    }
+    if (state.scout.currentClubId !== parentClub.id) {
+      return rejectRecommendation("Your current club does not own the player's contract.");
+    }
+    if (
+      reservedPlayerIds.has(player.id) ||
+      !isLoanEligible(player, parentClub, state.players, season) ||
+      targetClub.id === parentClub.id
+    ) {
+      return rejectRecommendation("The player is not currently eligible for this loan.");
+    }
 
-    const destination = findLoanDestination(player, club, state.clubs, state.players, rng);
-    if (!destination) continue;
+    const targetPositionCount = targetClub.playerIds.reduce((count, playerId) => (
+      state.players[playerId]?.position === player.position ? count + 1 : count
+    ), 0);
+    const reputationGap = parentClub.reputation - targetClub.reputation;
+    if (reputationGap < -10 || reputationGap > 45) {
+      return rejectRecommendation("The sporting level is not a credible development match.");
+    }
+    const parentCountry = normalizeCountryKey(state.leagues?.[parentClub.leagueId]?.country);
+    const targetCountry = normalizeCountryKey(state.leagues?.[targetClub.leagueId]?.country);
+    const isForeignLoan =
+      !!parentCountry && !!targetCountry && parentCountry !== targetCountry;
+    const routeProbability = parentCountry && targetCountry
+      ? getTransferFlowProbability(parentCountry, targetCountry)
+      : 0.5;
+    if (isForeignLoan && (player.age < 18 || routeProbability < 0.05)) {
+      return rejectRecommendation(
+        player.age < 18
+          ? "Cross-border loans are not available for under-18 players."
+          : "The proposed countries do not have a credible loan pathway.",
+      );
+    }
 
-    const terms = calculateLoanTerms(player, club, destination, week, season, rng);
+    let acceptanceChance = 0.3 + state.scout.reputation / 250;
+    if (targetPositionCount === 0) acceptanceChance += 0.2;
+    else if (targetPositionCount === 1) acceptanceChance += 0.12;
+    else if (targetPositionCount >= 3) acceptanceChance -= 0.15;
+    if (recommendation.rationale === "playing-time" && targetPositionCount <= 1) {
+      acceptanceChance += 0.08;
+    }
+    if (recommendation.rationale === "development" && targetClub.youthAcademyRating >= 12) {
+      acceptanceChance += 0.08;
+    }
+    acceptanceChance += isForeignLoan ? (routeProbability - 0.5) * 0.2 : 0.08;
+    acceptanceChance = Math.max(0.1, Math.min(0.9, acceptanceChance));
+    if (!rng.chance(acceptanceChance)) {
+      return rejectRecommendation("The club could not guarantee a suitable role or financial package.");
+    }
+
+    const duration = Math.max(
+      MIN_LOAN_DURATION,
+      Math.min(MAX_LOAN_DURATION, Math.round(recommendation.suggestedDuration)),
+    );
+    const rawEndWeek = week + duration;
+    const endSeason = season + Math.floor((rawEndWeek - 1) / 38);
+    const endWeek = ((rawEndWeek - 1) % 38) + 1;
+    const wageContribution = Math.max(
+      0,
+      Math.min(100, Math.round(recommendation.suggestedWageContribution)),
+    );
+    const loanFee = Math.max(
+      0,
+      Math.round(player.wage * duration * rng.nextFloat(0.05, 0.12)),
+    );
+    const wageCommitment = Math.round(player.wage * duration * wageContribution / 100);
+    if (targetClub.budget < loanFee + wageCommitment) {
+      return rejectRecommendation("The club cannot fund the fee and agreed wage contribution.");
+    }
+
     const deal: LoanDeal = {
       id: generateId("loan", rng),
-      ...terms,
+      playerId: player.id,
+      parentClubId: parentClub.id,
+      loanClubId: targetClub.id,
+      startWeek: week,
+      startSeason: season,
+      endWeek,
+      endSeason,
+      loanFee,
+      wageContribution,
+      buyOptionFee: rng.chance(0.15)
+        ? Math.round(player.marketValue * rng.nextFloat(1.1, 1.3))
+        : undefined,
+      recallClause: player.age < 21 ? rng.chance(0.65) : rng.chance(0.25),
+      agreedPlayingTime:
+        targetPositionCount === 0 ? "key" : targetPositionCount === 1 ? "regular" : "rotation",
+      startCurrentAbility: player.currentAbility,
+      scoutId: recommendation.scoutId,
       status: "active",
       performanceRecord: {
         appearances: 0,
         goals: 0,
         assists: 0,
-        avgRating: 6.0,
+        avgRating: 6,
         developmentDelta: 0,
         parentClubSatisfaction: 50,
         loanClubSatisfaction: 50,
       },
     };
-
     deals.push(deal);
+    reservedPlayerIds.add(player.id);
+    reputationDelta += 3;
+    xpAward += 15;
+    messages.push({
+      id: generateId("msg_loanrec_accept", rng),
+      week,
+      season,
+      type: "clubResponse",
+      title: `Loan Recommendation Accepted: ${player.firstName} ${player.lastName}`,
+      body: `${targetClub.name} accepted your recommendation. ${player.firstName} will join for ${duration} weeks as a ${deal.agreedPlayingTime} player, with ${wageContribution}% of wages covered. (+3 reputation, +15 scouting XP)`,
+      read: false,
+      actionRequired: false,
+      relatedId: player.id,
+      relatedEntityType: "player",
+    });
+    return {
+      ...recommendation,
+      status: "accepted" as const,
+      loanDealId: deal.id,
+      responseWeek: week,
+      responseSeason: season,
+      responseReason: "Target club accepted the proposed development plan.",
+    };
+  });
 
-    // Generate inbox message for scouted players only
-    const scoutedPlayerIds = new Set(
-      Object.values(state.reports).map((r) => r.playerId),
+  const scoutedPlayerIds = new Set(
+    Object.values(state.reports).map((report) => report.playerId),
+  );
+  for (const player of Object.values(state.players)) {
+    if (reservedPlayerIds.has(player.id)) continue;
+    const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    const club = state.clubs[ownerClubId];
+    if (!club || !isLoanEligible(player, club, state.players, season)) continue;
+    if (!rng.chance(AI_LOAN_PROBABILITY)) continue;
+    if ((club.loanedOutPlayerIds ?? []).includes(player.id)) continue;
+
+    const destination = findLoanDestination(
+      player,
+      club,
+      state.clubs,
+      state.players,
+      rng,
+      state.leagues,
     );
+    if (!destination) continue;
+    const terms = calculateLoanTerms(player, club, destination, week, season, rng);
+    const durationWeeks = Math.max(
+      1,
+      (terms.endSeason - terms.startSeason) * 38 + (terms.endWeek - terms.startWeek),
+    );
+    const totalCommitment = terms.loanFee + Math.round(
+      player.wage * durationWeeks * terms.wageContribution / 100,
+    );
+    if (destination.budget < totalCommitment) continue;
+    const deal: LoanDeal = {
+      id: generateId("loan", rng),
+      ...terms,
+      agreedPlayingTime: "rotation",
+      startCurrentAbility: player.currentAbility,
+      status: "active",
+      performanceRecord: {
+        appearances: 0,
+        goals: 0,
+        assists: 0,
+        avgRating: 6,
+        developmentDelta: 0,
+        parentClubSatisfaction: 50,
+        loanClubSatisfaction: 50,
+      },
+    };
+    deals.push(deal);
+    reservedPlayerIds.add(player.id);
+
     if (scoutedPlayerIds.has(player.id)) {
       const playerName = `${player.firstName} ${player.lastName}`;
       messages.push({
@@ -345,7 +550,7 @@ export function processAILoanDeals(
     }
   }
 
-  return { deals, messages };
+  return { deals, messages, updatedRecommendations, reputationDelta, xpAward };
 }
 
 /**
@@ -354,6 +559,7 @@ export function processAILoanDeals(
 export function processLoanPerformance(
   state: GameState,
   week: number,
+  season: number,
   rng: RNG,
 ): LoanDeal[] {
   const activeLoans = state.activeLoans ?? [];
@@ -391,8 +597,13 @@ export function processLoanPerformance(
         )
       : false;
 
-    // ~80% chance of appearing when there's a fixture (not injured, not suspended)
-    const appeared = hasFixture && !player.injured && rng.chance(0.8);
+    const playingTimeChance = {
+      key: 0.92,
+      regular: 0.78,
+      rotation: 0.55,
+      prospect: 0.35,
+    }[deal.agreedPlayingTime ?? "rotation"];
+    const appeared = hasFixture && !player.injured && rng.chance(playingTimeChance);
 
     const newAppearances = perf.appearances + (appeared ? 1 : 0);
     const newGoals = perf.goals + (appeared && rng.chance(0.08) ? 1 : 0);
@@ -409,14 +620,18 @@ export function processLoanPerformance(
       newAvgRating = perf.avgRating;
     }
 
-    // Development delta: CA at start vs now
-    // We approximate by tracking cumulative change
-    const weeklyDevChance = player.age < 21 ? 0.15 : 0.08;
-    const devChange = appeared && rng.chance(weeklyDevChance) ? rng.nextInt(0, 1) : 0;
-    const newDevDelta = perf.developmentDelta + devChange;
+    // Development is produced by the central player-development engine. Loans
+    // measure that real change instead of inventing a second CA progression.
+    const startCurrentAbility = deal.startCurrentAbility
+      ?? (player.currentAbility - perf.developmentDelta);
+    const newDevDelta = player.currentAbility - startCurrentAbility;
 
     // Satisfaction calculations
-    const appearanceRate = newAppearances / Math.max(1, week - deal.startWeek);
+    const elapsedWeeks = Math.max(
+      1,
+      (season - deal.startSeason) * 38 + (week - deal.startWeek) + 1,
+    );
+    const appearanceRate = newAppearances / elapsedWeeks;
     const parentSatisfaction = Math.min(100, Math.max(0,
       50 + (appearanceRate > 0.5 ? 20 : -10) + newDevDelta * 5,
     ));
@@ -426,6 +641,7 @@ export function processLoanPerformance(
 
     updatedLoans.push({
       ...deal,
+      startCurrentAbility,
       performanceRecord: {
         appearances: newAppearances,
         goals: newGoals,

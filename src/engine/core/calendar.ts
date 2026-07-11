@@ -18,6 +18,7 @@ import type {
   ActivityType,
   ScoutSkill,
   ScoutAttribute,
+  Specialization,
   SubRegion,
   Observation,
   UnsignedYouth,
@@ -29,11 +30,12 @@ import type {
   TargetOption,
   TournamentEvent,
 } from "@/engine/core/types";
-import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { RNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
 import { calculateAccumulation } from "@/engine/insight/insight";
 import { getTournamentActivities } from "@/engine/youth/tournaments";
+import { getUnlockedPerks } from "@/engine/specializations/perks";
+import { applyScoutSkillXp } from "@/engine/scout/progression";
 
 // ---------------------------------------------------------------------------
 // Result type
@@ -636,7 +638,7 @@ export function getAvailableActivities(
   observations?: Record<string, Observation>,
   unsignedYouth?: Record<string, UnsignedYouth>,
   players?: Record<string, Player>,
-  loanContext?: {
+  _loanContext?: {
     activeLoans?: LoanDeal[];
     loanRecommendations?: LoanRecommendation[];
     transferWindow?: TransferWindowState;
@@ -761,13 +763,6 @@ export function getAvailableActivities(
     type: "youthTournament",
     slots: ACTIVITY_SLOT_COSTS.youthTournament,
     description: "Attend a youth tournament — observe multiple young players",
-  });
-
-  // Travel
-  activities.push({
-    type: "travel",
-    slots: ACTIVITY_SLOT_COSTS.travel,
-    description: "Travel to another region or league",
   });
 
   // Study
@@ -1034,41 +1029,12 @@ export function getAvailableActivities(
     }
   }
 
-  // ── Loan activities (available to all specializations) ──────────────────────
-
-  if (loanContext) {
-    const activeLoans = loanContext.activeLoans ?? [];
-    const windowOpen = loanContext.transferWindow
-      ? isTransferWindowOpen([loanContext.transferWindow], week)
-      : false;
-
-    // Loan monitoring — available when scout has active loans at their club
-    // or loans they recommended
-    const monitorableLoans = activeLoans.filter(
-      (deal) =>
-        deal.status === "active" &&
-        (deal.scoutId === scout.id ||
-          deal.parentClubId === scout.currentClubId ||
-          deal.loanClubId === scout.currentClubId),
-    );
-    if (monitorableLoans.length > 0) {
-      activities.push({
-        type: "loanMonitoring",
-        slots: ACTIVITY_SLOT_COSTS.loanMonitoring,
-        description: `Monitor a loaned player's progress — check on ${monitorableLoans.length} active loan${monitorableLoans.length > 1 ? "s" : ""}`,
-      });
-    }
-
-    // Loan recommendation — available during transfer windows for scouts
-    // at tier 2+ with a club assignment
-    if (windowOpen && scout.currentClubId && scout.careerTier >= 2) {
-      activities.push({
-        type: "loanRecommendation",
-        slots: ACTIVITY_SLOT_COSTS.loanRecommendation,
-        description: "Recommend a player for loan — identify a target and suggest a loan destination",
-      });
-    }
-  }
+  // Loan recommendations and monitoring are contextual actions on the player
+  // profile and loan dashboard. The old generic calendar cards had no player,
+  // destination, or deal attached, so completing them could award progression
+  // without creating a recommendation or monitoring report. Their activity
+  // types remain readable for legacy saves and observation-session tests, but
+  // they are no longer offered as misleading schedule options.
 
   return activities;
 }
@@ -1508,6 +1474,76 @@ export function processCompletedWeek(
 // XP Application
 // ---------------------------------------------------------------------------
 
+const SPECIALIZATION_PRACTICE_SKILLS: Record<Specialization, ScoutSkill[]> = {
+  youth: [
+    "technicalEye",
+    "physicalAssessment",
+    "psychologicalRead",
+    "dataLiteracy",
+    "playerJudgment",
+    "potentialAssessment",
+  ],
+  firstTeam: [
+    "technicalEye",
+    "physicalAssessment",
+    "psychologicalRead",
+    "tacticalUnderstanding",
+    "playerJudgment",
+  ],
+  regional: [
+    "technicalEye",
+    "physicalAssessment",
+    "psychologicalRead",
+    "tacticalUnderstanding",
+    "potentialAssessment",
+  ],
+  data: [
+    "dataLiteracy",
+    "tacticalUnderstanding",
+    "technicalEye",
+    "playerJudgment",
+  ],
+};
+
+function applySpecializationPractice(
+  scout: Scout,
+  result: WeekProcessingResult,
+): Pick<Scout, "specializationLevel" | "specializationXp" | "unlockedPerks"> {
+  const relevantSkills = new Set(
+    SPECIALIZATION_PRACTICE_SKILLS[scout.primarySpecialization],
+  );
+  const gainedXp = Object.entries(result.skillXpGained).reduce(
+    (total, [skill, xp]) => total + (
+      relevantSkills.has(skill as ScoutSkill) ? (xp ?? 0) : 0
+    ),
+    0,
+  );
+  let specializationLevel = Math.max(1, scout.specializationLevel ?? 1);
+  let specializationXp = Math.max(0, scout.specializationXp ?? 0) + gainedXp;
+
+  while (
+    specializationLevel < 20
+    && specializationXp >= specializationLevel * 10
+  ) {
+    specializationXp -= specializationLevel * 10;
+    specializationLevel += 1;
+  }
+
+  const unlockedPerks = new Set(scout.unlockedPerks ?? []);
+  for (const perk of getUnlockedPerks(
+    scout.primarySpecialization,
+    specializationLevel,
+  )) {
+    unlockedPerks.add(perk.id);
+  }
+
+  return {
+    specializationLevel,
+    specializationXp: specializationLevel >= 20 ? 0 : specializationXp,
+    unlockedPerks: [...unlockedPerks],
+  };
+}
+
 /**
  * Apply XP gains from a completed week to the scout, producing an updated
  * scout with accumulated XP and any level-ups applied.
@@ -1520,27 +1556,11 @@ export function applyWeekResults(
   scout: Scout,
   result: WeekProcessingResult,
 ): Scout {
-  const updatedSkills = { ...scout.skills };
-  const updatedSkillXp = { ...scout.skillXp };
+  const skillProgressScout = applyScoutSkillXp(scout, result.skillXpGained);
+  const updatedSkills = { ...skillProgressScout.skills };
+  const updatedSkillXp = { ...skillProgressScout.skillXp };
   const updatedAttributes = { ...scout.attributes };
   const updatedAttributeXp = { ...scout.attributeXp };
-
-  // Apply skill XP
-  for (const [skill, xp] of Object.entries(result.skillXpGained) as [ScoutSkill, number][]) {
-    if (!xp) continue;
-    const current = updatedSkills[skill];
-    if (current >= 20) continue; // already maxed
-
-    const accumulated = (updatedSkillXp[skill] ?? 0) + xp;
-    const threshold = current * 10;
-
-    if (accumulated >= threshold) {
-      updatedSkills[skill] = Math.min(20, current + 1);
-      updatedSkillXp[skill] = accumulated - threshold;
-    } else {
-      updatedSkillXp[skill] = accumulated;
-    }
-  }
 
   // Apply attribute XP
   for (const [attr, xp] of Object.entries(result.attributeXpGained) as [ScoutAttribute, number][]) {
@@ -1561,6 +1581,7 @@ export function applyWeekResults(
 
   // Apply fatigue
   const newFatigue = clamp(scout.fatigue + result.fatigueChange, 0, MAX_FATIGUE);
+  const specializationProgress = applySpecializationPractice(scout, result);
 
   return {
     ...scout,
@@ -1569,6 +1590,7 @@ export function applyWeekResults(
     attributes: updatedAttributes,
     attributeXp: updatedAttributeXp,
     fatigue: newFatigue,
+    ...specializationProgress,
   };
 }
 

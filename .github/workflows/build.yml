@@ -17,7 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: "25"
+  NODE_VERSION: "22"
 
 permissions:
   contents: read
@@ -62,23 +62,19 @@ jobs:
 
       - run: npm ci
 
-      # The Steam SDK redistribution binaries are gitignored (proprietary).
-      # electron-builder.yml references steam_api64.dll from the project root via
-      # extraFiles. Create a placeholder so the build does not fail — the resulting
-      # installer will have non-functional Steam integration, but the artifact is
-      # otherwise valid for CI verification. Real binaries must be supplied via a
-      # separate secure channel (e.g., a private artifact store or manual depot upload).
-      - name: Prepare Steam SDK files
+      # Valve's redistributables are proprietary and arrive through the release
+      # channel, not source control. Manual builds may verify the non-Steam
+      # fallback; tagged release artifacts must contain the real files.
+      - name: Validate Steam SDK files
         shell: pwsh
         run: |
-          if (-not (Test-Path "steam_api64.dll")) {
-            Write-Host "::warning::steam_api64.dll not found — creating placeholder. Steam features will not function in this build."
-            New-Item -ItemType File -Path "steam_api64.dll" -Force | Out-Null
-          } else {
-            Write-Host "steam_api64.dll present."
+          $missing = @("steam_api64.dll", "steam_appid.txt") | Where-Object { -not (Test-Path $_) }
+          if ($missing.Count -gt 0 -and "${{ github.ref_type }}" -eq "tag") {
+            Write-Error "Tagged releases require real Steam files: $($missing -join ', ')."
+            exit 1
           }
-          if (-not (Test-Path "steam_appid.txt")) {
-            Set-Content -Path "steam_appid.txt" -Value "4455570"
+          if ($missing.Count -gt 0) {
+            Write-Host "::warning::Steam files absent; producing an explicit non-Steam verification build."
           }
 
       - name: Build Next.js (static export)
@@ -124,17 +120,18 @@ jobs:
 
       - run: npm ci
 
-      # libsteam_api.dylib is gitignored; create placeholder so electron-builder
-      # can copy the extraFiles entry without erroring.
-      - name: Prepare Steam SDK files
+      - name: Validate Steam SDK files
         run: |
-          if [ ! -f "libsteam_api.dylib" ]; then
-            echo "::warning::libsteam_api.dylib not found — creating placeholder. Steam features will not function in this build."
-            touch libsteam_api.dylib
-          else
-            echo "libsteam_api.dylib present."
+          missing=""
+          [ -f "libsteam_api.dylib" ] || missing="$missing libsteam_api.dylib"
+          [ -f "steam_appid.txt" ] || missing="$missing steam_appid.txt"
+          if [ -n "$missing" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "::error::Tagged releases require real Steam files:$missing"
+            exit 1
           fi
-          [ ! -f "steam_appid.txt" ] && echo "4455570" > steam_appid.txt
+          if [ -n "$missing" ]; then
+            echo "::warning::Steam files absent; producing an explicit non-Steam verification build."
+          fi
 
       - name: Build Next.js (static export)
         run: npm run build
@@ -184,17 +181,18 @@ jobs:
 
       - run: npm ci
 
-      # libsteam_api.so is gitignored; create placeholder so electron-builder
-      # can copy the extraFiles entry without erroring.
-      - name: Prepare Steam SDK files
+      - name: Validate Steam SDK files
         run: |
-          if [ ! -f "libsteam_api.so" ]; then
-            echo "::warning::libsteam_api.so not found — creating placeholder. Steam features will not function in this build."
-            touch libsteam_api.so
-          else
-            echo "libsteam_api.so present."
+          missing=""
+          [ -f "libsteam_api.so" ] || missing="$missing libsteam_api.so"
+          [ -f "steam_appid.txt" ] || missing="$missing steam_appid.txt"
+          if [ -n "$missing" ] && [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "::error::Tagged releases require real Steam files:$missing"
+            exit 1
           fi
-          [ ! -f "steam_appid.txt" ] && echo "4455570" > steam_appid.txt
+          if [ -n "$missing" ]; then
+            echo "::warning::Steam files absent; producing an explicit non-Steam verification build."
+          fi
 
       - name: Build Next.js (static export)
         run: npm run build

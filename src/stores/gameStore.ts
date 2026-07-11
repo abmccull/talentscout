@@ -79,6 +79,7 @@ import { generateBoardProfile } from "@/engine/firstTeam/boardAI";
 import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import { createRNG } from "@/engine/rng";
 import { generateSeasonEvents, getActiveSeasonEvents } from "@/engine/core/seasonEvents";
+import { createEmptyPool } from "@/engine/freeAgents/pool";
 import {
   initializeTransferWindows,
   isTransferWindowOpen,
@@ -92,9 +93,13 @@ import {
   getContactCoverageCountry,
 } from "@/engine/network/contacts";
 import { createWeekSchedule, getAvailableActivities } from "@/engine/core/calendar";
-import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
+import {
+  initializeRegionalKnowledge,
+  synchronizeRegionalFamiliarity,
+} from "@/engine/specializations/regionalKnowledge";
+import { getUnlockedPerks } from "@/engine/specializations/perks";
 import { generateManagerProfiles } from "@/engine/analytics";
-import { generateRegionalYouth } from "@/engine/youth/generation";
+import { generateRegionalYouth, generateSubRegions } from "@/engine/youth/generation";
 import {
   initializeFinances,
   migrateFinancialRecord,
@@ -110,6 +115,7 @@ import {
 import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
 import {
   migrateSaveState,
+  migrateFreeAgentGeography,
   type SaveRecord,
   AUTOSAVE_SLOT,
 } from "@/lib/db";
@@ -123,9 +129,11 @@ import {
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import { normalizeCountryKey } from "@/lib/country";
 import {
   generateLegacyProfile as generateLegacyProfileEngine,
   applyLegacyPerks as applyLegacyPerksEngine,
+  hasRepresentedCareerCompletionState,
   readLegacyProfile,
   writeLegacyProfile,
 } from "@/engine/career/legacy";
@@ -133,6 +141,7 @@ import {
   getResolvedPlayerIds,
   resolvePlayerEntity,
 } from "@/lib/playerResolution";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 export type GameScreen =
   | "mainMenu"
@@ -186,6 +195,17 @@ export interface SaveConflictState {
 
 function slotNumberToSaveName(slot: number): string {
   return slot === AUTOSAVE_SLOT ? "autosave" : `slot_${slot}`;
+}
+
+function assertEarlyAccessSaveCompatibility(state: GameState): void {
+  if (
+    IS_YOUTH_EARLY_ACCESS &&
+    state.scout.primarySpecialization !== "youth"
+  ) {
+    throw new Error(
+      "This save uses a specialization that is not available in Youth Scout Early Access. The save remains safely stored for a future full-game build.",
+    );
+  }
 }
 
 const YOUTH_CONTACT_TYPES = new Set([
@@ -424,7 +444,7 @@ export interface GameStoreState {
   bookInternationalTravel: (
     country: string,
     options?: { duration?: number; assignmentId?: string },
-  ) => void;
+  ) => boolean;
 
   // Phase 2 actions
   acknowledgeNarrativeEvent: (eventId: string) => void;
@@ -562,6 +582,7 @@ export interface GameStoreState {
 
 export interface WeekSummary {
   fatigueChange: number;
+  reputationChange: number;
   skillXpGained: Record<string, number>;
   attributeXpGained: Record<string, number>;
   matchesAttended: number;
@@ -890,9 +911,41 @@ function migrateRegionalKnowledge(state: GameState): void {
   const s = state as unknown as Record<string, unknown>;
   if (s.regionalKnowledge === undefined || s.regionalKnowledge === null) {
     const countries = state.countries ?? [];
-    const startingCountry = countries[0] ?? "england";
+    const startingCountry =
+      normalizeCountryKey(getScoutHomeCountry(state.scout))
+      ?? normalizeCountryKey(countries[0])
+      ?? "england";
     s.regionalKnowledge = initializeRegionalKnowledge(countries, startingCountry);
   }
+  if (!state.subRegions || Object.keys(state.subRegions).length === 0) {
+    const generatedSubRegions: GameState["subRegions"] = {};
+    for (const countryKey of state.countries ?? []) {
+      const countryData = getCountryDataSync(countryKey);
+      if (!countryData) continue;
+      for (const subRegion of generateSubRegions(countryData.name)) {
+        generatedSubRegions[subRegion.id] = subRegion;
+      }
+    }
+    state.subRegions = generatedSubRegions;
+  }
+  for (const subRegion of Object.values(state.subRegions ?? {})) {
+    subRegion.countryKey ??= normalizeCountryKey(subRegion.country);
+  }
+  for (const territory of Object.values(state.territories ?? {})) {
+    territory.countryKey ??=
+      normalizeCountryKey(territory.country)
+      ?? normalizeCountryKey(territory.id.replace(/^territory_/, ""));
+  }
+  for (const tournament of Object.values(state.youthTournaments ?? {})) {
+    tournament.countryKey ??= normalizeCountryKey(tournament.country);
+  }
+  const synchronized = synchronizeRegionalFamiliarity(
+    state.scout,
+    state.subRegions,
+    state.regionalKnowledge,
+  );
+  state.scout = synchronized.scout;
+  state.subRegions = synchronized.subRegions;
 }
 
 /**
@@ -1021,17 +1074,41 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Start new game
   startNewGame: async (config) => {
     // Apply scenario config overrides before world generation
-    const scenarioId = get().selectedScenarioId;
+    // Scenario selection is deliberately outside the Youth EA contract. Ignore
+    // any stale transient selection left by an older/full-build session.
+    const scenarioId = IS_YOUTH_EARLY_ACCESS ? null : get().selectedScenarioId;
     const scenario = scenarioId ? getScenarioById(scenarioId) : undefined;
     const effectiveConfig = scenario ? applyScenarioSetup(config, scenario) : config;
 
     const selectedCountries = effectiveConfig.selectedCountries ?? ["england"];
     const rng = createRNG(effectiveConfig.worldSeed);
-    const { leagues, clubs, players, fixtures, territories } = await initializeWorld(
+    const { leagues, clubs, players, fixtures, territories, subRegions } = await initializeWorld(
       rng,
       selectedCountries,
     );
-    const scout = createScout(effectiveConfig, rng);
+    let scout = createScout(effectiveConfig, rng);
+    const worldCountries = [
+      ...new Set([
+        ...selectedCountries,
+        ...getSecondaryCountries(),
+        "england",
+        "spain",
+        "germany",
+        "france",
+        "brazil",
+        "argentina",
+      ]),
+    ];
+    const initialRegionalKnowledge = initializeRegionalKnowledge(
+      worldCountries,
+      effectiveConfig.startingCountry ?? effectiveConfig.region ?? selectedCountries[0] ?? "england",
+    );
+    const synchronizedGeography = synchronizeRegionalFamiliarity(
+      scout,
+      subRegions,
+      initialRegionalKnowledge,
+    );
+    scout = synchronizedGeography.scout;
     const contacts: Record<string, Contact> = {};
     const startingContacts = generateStartingContacts(rng, scout);
 
@@ -1046,7 +1123,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
         if (!countryData) continue;
         // Call multiple times per country to overcome 30% chance gate
         for (let attempt = 0; attempt < 10; attempt++) {
-          const batch = generateRegionalYouth(youthRng, countryData, 1, attempt + 1, []);
+          const countrySubRegions = Object.values(synchronizedGeography.subRegions).filter(
+            (subRegion) =>
+              (subRegion.countryKey ?? normalizeCountryKey(subRegion.country)) === countryData.key,
+          );
+          const batch = generateRegionalYouth(
+            youthRng,
+            countryData,
+            1,
+            attempt + 1,
+            countrySubRegions,
+          );
           for (const y of batch) initialUnsignedYouth[y.id] = y;
         }
       }
@@ -1100,7 +1187,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       npcReports: {},
       npcDelegations: {},
       territories,
-      countries: [...new Set([...selectedCountries, ...getSecondaryCountries(), "england", "spain", "germany", "france", "brazil", "argentina"])],
+      countries: worldCountries,
       narrativeEvents: [],
       activeStorylines: [],
       eventChains: [],
@@ -1135,11 +1222,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         bestDiscoveryPA: 0,
         scenariosCompleted: 0,
       },
-      subRegions: {},
+      subRegions: synchronizedGeography.subRegions,
       youthTournaments: {},
       internationalAssignments: [],
       activeInternationalAssignment: null,
       retiredPlayerIds: [],
+      retiredPlayers: {},
+      playerMovementHistory: [],
       // First-Team Scouting System
       managerDirectives: [],
       clubResponses: [],
@@ -1165,10 +1254,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Discipline/Card System
       disciplinaryRecords: {},
       // Regional Scouting Depth (F13)
-      regionalKnowledge: initializeRegionalKnowledge(
-        [...new Set([...selectedCountries, ...getSecondaryCountries(), "england", "spain", "germany", "france", "brazil", "argentina"])],
-        effectiveConfig.startingCountry ?? effectiveConfig.region ?? selectedCountries[0] ?? "england",
-      ),
+      regionalKnowledge: initialRegionalKnowledge,
       // Dynamic Board Expectations (F10)
       boardReactions: [],
       // Gossip actions (A3)
@@ -1178,14 +1264,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
       // Interactive observation sessions
       completedInteractiveSessions: [],
       // Free Agent System
-      freeAgentPool: {
-        agents: [],
-        lastRefreshSeason: 1,
-        totalReleasedThisSeason: 0,
-        totalSignedThisSeason: 0,
-        totalRetiredThisSeason: 0,
-      },
+      freeAgentPool: createEmptyPool(1),
       freeAgentNegotiations: [],
+      activeLoans: [],
+      loanHistory: [],
+      loanRecommendations: [],
       createdAt: Date.now(),
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
@@ -1310,6 +1393,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Start guided first-week session (replaces old onboarding sequences)
     useTutorialStore.getState().startGuidedSession(!!effectiveConfig.startingClubId);
+    // The new career lands on the dashboard before the guided session starts,
+    // so record that arrival immediately instead of asking the player to
+    // navigate to the screen they are already viewing.
+    useTutorialStore.getState().completeMilestone("viewedDashboard");
   },
 
   loadGame: (state) => {
@@ -1320,6 +1407,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       finances: state.finances ? { ...state.finances } : state.finances,
       npcDelegations: { ...(state.npcDelegations ?? {}) },
     };
+    migrateFreeAgentGeography(migrated);
     // Migration: add new scout skills if loading an older save
     if (migrated.scout.skills.playerJudgment === undefined) {
       migrated.scout.skills.playerJudgment = 5;
@@ -1404,6 +1492,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
     if (!migrated.scout.accuracyHistory) migrated.scout.accuracyHistory = [];
     if (!migrated.scout.performancePulses) migrated.scout.performancePulses = [];
+    if (migrated.scout.specializationXp === undefined) migrated.scout.specializationXp = 0;
+    migrated.scout.unlockedPerks = Array.from(new Set([
+      ...(migrated.scout.unlockedPerks ?? []),
+      ...getUnlockedPerks(
+        migrated.scout.primarySpecialization,
+        migrated.scout.specializationLevel ?? 1,
+      ).map((perk) => perk.id),
+    ]));
     if (migrated.scout.avatarId === undefined) migrated.scout.avatarId = 1;
     // Migration: Youth Tournament System
     // eslint-disable-next-line
@@ -1415,10 +1511,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     (migrated as any).loanHistory ??= [];
     // eslint-disable-next-line
     (migrated as any).loanRecommendations ??= [];
+    (migrated as any).retiredPlayers ??= {};
+    (migrated as any).playerMovementHistory ??= [];
+    for (const player of Object.values(migrated.players ?? {})) {
+      if (player.contractClubId === undefined) {
+        player.contractClubId = (player.loanParentClubId ?? player.clubId) || undefined;
+      }
+    }
     // Ensure clubs have loan tracking arrays
     for (const club of Object.values(migrated.clubs ?? {})) {
       if (!(club as any).loanedOutPlayerIds) (club as any).loanedOutPlayerIds = [];
       if (!(club as any).loanedInPlayerIds) (club as any).loanedInPlayerIds = [];
+      if (!(club as any).academyPlayerIds) (club as any).academyPlayerIds = [];
     }
     set({
       gameState: migrated,
@@ -1500,6 +1604,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (!loaded) return;
 
       const state = migrateSaveState(JSON.parse(loaded.data) as unknown);
+      assertEarlyAccessSaveCompatibility(state);
       get().loadGame(state);
     } finally {
       set({ isLoadingSave: false });
@@ -1553,6 +1658,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       });
 
       const state = migrateSaveState(JSON.parse(resolved.data) as unknown);
+      assertEarlyAccessSaveCompatibility(state);
       get().loadGame(state);
       set({ saveConflict: null });
       await get().refreshSaveSlots();
@@ -1805,14 +1911,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const { gameState } = get();
     if (!gameState) return null;
 
+    if (!hasRepresentedCareerCompletionState(gameState)) {
+      return readLegacyProfile() ?? null;
+    }
+
     // Read existing profile from localStorage (may be undefined for first career)
     const existingProfile = readLegacyProfile();
 
     // Generate updated legacy profile
     const updatedProfile = generateLegacyProfileEngine(gameState, existingProfile);
 
-    // Persist to localStorage
-    writeLegacyProfile(updatedProfile);
+    // Persist only when this completion adds something new.
+    if (!existingProfile || updatedProfile !== existingProfile) {
+      writeLegacyProfile(updatedProfile);
+    }
 
     return updatedProfile;
   },

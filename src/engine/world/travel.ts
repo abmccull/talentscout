@@ -13,6 +13,7 @@
  */
 
 import type { Scout, TravelBooking, CountryReputation, Fixture, Territory } from "@/engine/core/types";
+import { normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
 // CONTINENT CLASSIFICATION
@@ -99,13 +100,13 @@ type ContinentId = "europe" | "southamerica" | "northamerica" | "africa" | "asia
  * Return the continent ID for a given country key.
  */
 export function getContinentId(country: string): ContinentId {
-  const lower = country.toLowerCase();
-  if (EUROPEAN_COUNTRIES.has(lower)) return "europe";
-  if (SOUTH_AMERICAN_COUNTRIES.has(lower)) return "southamerica";
-  if (NORTH_AMERICAN_COUNTRIES.has(lower)) return "northamerica";
-  if (AFRICAN_COUNTRIES.has(lower)) return "africa";
-  if (ASIAN_COUNTRIES.has(lower)) return "asia";
-  if (OCEANIAN_COUNTRIES.has(lower)) return "oceania";
+  const normalized = normalise(country);
+  if (EUROPEAN_COUNTRIES.has(normalized)) return "europe";
+  if (SOUTH_AMERICAN_COUNTRIES.has(normalized)) return "southamerica";
+  if (NORTH_AMERICAN_COUNTRIES.has(normalized)) return "northamerica";
+  if (AFRICAN_COUNTRIES.has(normalized)) return "africa";
+  if (ASIAN_COUNTRIES.has(normalized)) return "asia";
+  if (OCEANIAN_COUNTRIES.has(normalized)) return "oceania";
   return "unknown";
 }
 
@@ -114,7 +115,17 @@ export function getContinentId(country: string): ContinentId {
 // =============================================================================
 
 function normalise(country: string): string {
-  return country.toLowerCase();
+  return normalizeCountryKey(country) ?? country.trim().toLowerCase();
+}
+
+function getCountryReputationByIdentity(
+  reputations: Record<string, CountryReputation>,
+  country: string,
+): CountryReputation | undefined {
+  const normalizedCountry = normalise(country);
+  return Object.entries(reputations).find(
+    ([key]) => normalise(key) === normalizedCountry,
+  )?.[1];
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -146,7 +157,7 @@ export function getScoutHomeCountry(scout: Scout): string {
     }
   }
 
-  return bestKey;
+  return normalise(bestKey);
 }
 
 // =============================================================================
@@ -414,7 +425,7 @@ export function getAccessibleFixtures(
   const accessibleLeagueIds = new Set<string>();
 
   for (const territory of Object.values(territories)) {
-    if (normalise(territory.country) === locationCountry) {
+    if (normalise(territory.countryKey ?? territory.country) === locationCountry) {
       for (const leagueId of territory.leagueIds) {
         accessibleLeagueIds.add(leagueId);
       }
@@ -458,9 +469,7 @@ export function getAccessibleFixtures(
  * @returns       - Penalty factor in [0.0, 0.3]. Multiply against accuracy to reduce it.
  */
 export function getForeignScoutingPenalty(scout: Scout, country: string): number {
-  const rep: CountryReputation | undefined =
-    scout.countryReputations[normalise(country)] ??
-    scout.countryReputations[country];
+  const rep = getCountryReputationByIdentity(scout.countryReputations, country);
 
   const familiarity = rep ? rep.familiarity : 0;
   const adaptability = scout.attributes.adaptability;

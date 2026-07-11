@@ -32,6 +32,7 @@ const MAX_ROUNDS = 3;
 
 /** Deadline: negotiations expire this many weeks after start. */
 const NEGOTIATION_DEADLINE_WEEKS = 3;
+const WEEKS_PER_SEASON = 38;
 
 /** Wage tolerance: player accepts if offer is within this % of expectation. */
 const WAGE_ACCEPTANCE_TOLERANCE = 0.85;
@@ -102,8 +103,10 @@ export function initiateFreeAgentNegotiation(
   offeredBonus: number,
   offeredContractLength: number,
   currentWeek: number,
+  currentSeason: number,
   rng: RNG,
 ): FreeAgentNegotiation {
+  const rawDeadlineWeek = currentWeek + NEGOTIATION_DEADLINE_WEEKS;
   const negotiation: FreeAgentNegotiation = {
     freeAgentId: agent.playerId,
     offeredWage,
@@ -111,7 +114,9 @@ export function initiateFreeAgentNegotiation(
     offeredContractLength,
     round: 1,
     status: "pending",
-    deadline: currentWeek + NEGOTIATION_DEADLINE_WEEKS,
+    deadline: ((rawDeadlineWeek - 1) % WEEKS_PER_SEASON) + 1,
+    deadlineSeason: currentSeason + Math.floor((rawDeadlineWeek - 1) / WEEKS_PER_SEASON),
+    startSeason: currentSeason,
   };
 
   // Evaluate initial offer
@@ -195,24 +200,6 @@ export function calculateFreeAgentAcceptance(
 }
 
 /**
- * Process a successful free agent signing — update player and club data.
- */
-export function processFreeAgentSigning(
-  player: Player,
-  clubId: string,
-  wage: number,
-  contractLength: number,
-  currentSeason: number,
-): Player {
-  return {
-    ...player,
-    clubId,
-    wage,
-    contractExpiry: currentSeason + contractLength,
-  };
-}
-
-/**
  * Generate inbox messages for negotiation outcomes.
  */
 export function generateNegotiationMessage(
@@ -259,6 +246,72 @@ export function generateNegotiationMessage(
     body: `${player.firstName} ${player.lastName} has countered with a demand of ${negotiation.counterWage}/week and ${negotiation.counterBonus} signing bonus. You have until week ${negotiation.deadline} to respond.`,
     read: false,
     actionRequired: true,
+  };
+}
+
+/**
+ * Expire unanswered free-agent talks and return the player to the open market.
+ * This is the single weekly owner for negotiation deadlines.
+ */
+export function processFreeAgentNegotiationDeadlines(
+  negotiations: FreeAgentNegotiation[],
+  pool: FreeAgentPool,
+  players: Record<string, Player>,
+  currentWeek: number,
+  currentSeason: number,
+): {
+  negotiations: FreeAgentNegotiation[];
+  updatedPool: FreeAgentPool;
+  messages: InboxMessage[];
+} {
+  const expiredPlayerIds = new Set<string>();
+  const active: FreeAgentNegotiation[] = [];
+  const messages: InboxMessage[] = [];
+
+  for (const negotiation of negotiations) {
+    if (negotiation.status !== "pending" && negotiation.status !== "countered") {
+      continue;
+    }
+    const deadlineSeason =
+      negotiation.deadlineSeason ?? negotiation.startSeason ?? currentSeason;
+    const expired =
+      currentSeason > deadlineSeason ||
+      (currentSeason === deadlineSeason && currentWeek >= negotiation.deadline);
+    if (!expired) {
+      active.push(negotiation);
+      continue;
+    }
+
+    expiredPlayerIds.add(negotiation.freeAgentId);
+    const player = players[negotiation.freeAgentId];
+    const playerName = player
+      ? `${player.firstName} ${player.lastName}`
+      : "The free agent";
+    messages.push({
+      id: `fa_expired_${negotiation.freeAgentId}_${currentSeason}_${currentWeek}`,
+      week: currentWeek,
+      season: currentSeason,
+      type: "event",
+      title: `Free-Agent Talks Expired: ${playerName}`,
+      body: `${playerName}'s representatives have ended talks after the response deadline passed. The player is available to approach again.`,
+      read: false,
+      actionRequired: false,
+      relatedId: negotiation.freeAgentId,
+      relatedEntityType: "player",
+    });
+  }
+
+  return {
+    negotiations: active,
+    updatedPool: {
+      ...pool,
+      agents: pool.agents.map((agent) =>
+        expiredPlayerIds.has(agent.playerId) && agent.status === "inNegotiation"
+          ? { ...agent, status: "available" as const }
+          : agent,
+      ),
+    },
+    messages,
   };
 }
 

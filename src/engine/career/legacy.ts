@@ -184,9 +184,65 @@ const LAUNCHABLE_ADVANCED_SCENARIO_IDS = new Set(
     .map((scenario) => scenario.id),
 );
 
+/**
+ * Older scenario saves used calendar years for `currentSeason`.
+ * Normalize both formats to a Season 1-based ordinal for display and legacy rollups.
+ */
+const LEGACY_CALENDAR_YEAR_ONE = 2024;
+
 // =============================================================================
 // CORE FUNCTIONS
 // =============================================================================
+
+/**
+ * Convert the stored season marker into a 1-based season count.
+ * Keeps older year-based saves compatible without treating 2024 as season zero.
+ */
+export function getCareerSeasonOrdinal(currentSeason: number): number {
+  const normalizedSeason = Number.isFinite(currentSeason)
+    ? Math.trunc(currentSeason)
+    : 1;
+
+  if (normalizedSeason >= LEGACY_CALENDAR_YEAR_ONE) {
+    return Math.max(1, normalizedSeason - LEGACY_CALENDAR_YEAR_ONE + 1);
+  }
+
+  return Math.max(1, normalizedSeason);
+}
+
+/**
+ * Conservative terminal-state check for legacy completion.
+ * Today the only durable end-of-career marker in GameState is completing
+ * the retirement scenario.
+ */
+export function hasRepresentedCareerCompletionState(state: GameState): boolean {
+  return (state.completedScenarioIds ?? []).includes("the_last_season");
+}
+
+function areCompletedCareersEquivalent(
+  left: CompletedCareer,
+  right: CompletedCareer,
+): boolean {
+  if (
+    left.scoutName !== right.scoutName ||
+    left.finalTier !== right.finalTier ||
+    left.seasonsPlayed !== right.seasonsPlayed ||
+    left.totalDiscoveries !== right.totalDiscoveries ||
+    left.specialization !== right.specialization ||
+    left.legacyScoreTotal !== right.legacyScoreTotal ||
+    Math.abs(left.hitRate - right.hitRate) > 1e-9
+  ) {
+    return false;
+  }
+
+  const leftScenarios = [...left.completedScenarios].sort();
+  const rightScenarios = [...right.completedScenarios].sort();
+
+  return (
+    leftScenarios.length === rightScenarios.length &&
+    leftScenarios.every((scenarioId, index) => scenarioId === rightScenarios[index])
+  );
+}
 
 /**
  * Generate a CompletedCareer record from a finished career's GameState.
@@ -207,7 +263,7 @@ export function generateCompletedCareer(state: GameState): CompletedCareer {
   const seasonsPlayed =
     legacyScore.totalSeasons > 0
       ? legacyScore.totalSeasons
-      : Math.max(1, state.currentSeason - 2024);
+      : getCareerSeasonOrdinal(state.currentSeason);
 
   const completedScenarios = [...(state.completedScenarioIds ?? [])];
 
@@ -237,6 +293,14 @@ export function generateLegacyProfile(
   existingProfile?: LegacyProfile,
 ): LegacyProfile {
   const completedCareer = generateCompletedCareer(state);
+  const latestCompletedCareer = existingProfile?.completedCareers[0];
+
+  if (
+    latestCompletedCareer &&
+    areCompletedCareersEquivalent(completedCareer, latestCompletedCareer)
+  ) {
+    return existingProfile;
+  }
 
   const base: LegacyProfile = existingProfile
     ? { ...existingProfile }
@@ -489,21 +553,11 @@ export function applyLegacyPerks(
     }
   }
 
-  // Build skill allocations with bonuses
-  const newSkillAllocations = { ...config.skillAllocations };
-  for (const [skill, bonus] of Object.entries(skillBonuses)) {
-    const current = newSkillAllocations[skill as keyof typeof newSkillAllocations] ?? 0;
-    newSkillAllocations[skill as keyof typeof newSkillAllocations] = current + bonus;
-  }
-
   return {
-    config: {
-      ...config,
-      skillAllocations:
-        Object.keys(newSkillAllocations).length > 0
-          ? newSkillAllocations
-          : config.skillAllocations,
-    },
+    // Skill perks are applied to the generated scout by startNewGamePlus.
+    // Keeping the player's eight creation points unchanged avoids both
+    // double-applying the perk and invalidating the creation-point contract.
+    config: { ...config },
     reputationBonus,
     extraContacts,
     budgetBonusPercent,

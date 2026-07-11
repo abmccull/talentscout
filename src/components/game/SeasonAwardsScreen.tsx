@@ -306,7 +306,7 @@ function SeasonStatisticsSection({ stats }: { stats: SeasonStats }) {
             value={stats.reportsSubmitted}
           />
           <StatRow
-            label="Avg Quality"
+            label="Avg Craft"
             value={stats.avgReportQuality}
             color={
               stats.avgReportQuality >= 70
@@ -327,7 +327,11 @@ function SeasonStatisticsSection({ stats }: { stats: SeasonStats }) {
           <StatRow label="Matches Attended" value={stats.matchesAttended} />
           <StatRow
             label="Players Discovered"
-            value={`${stats.playersDiscovered} (${stats.wonderkidsDiscovered} wonderkids)`}
+            value={stats.playersDiscovered}
+          />
+          <StatRow
+            label="High-Upside Calls"
+            value={stats.highUpsideCalls ?? 0}
           />
         </div>
 

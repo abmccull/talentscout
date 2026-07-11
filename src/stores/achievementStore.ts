@@ -94,6 +94,9 @@ export interface AchievementState {
    */
   dismissToast: (id: string) => void;
 
+  /** Clear the current notification batch after its summary toast is shown. */
+  dismissAllToasts: () => void;
+
   /** Returns true if the given achievement ID has been unlocked. */
   isUnlocked: (id: string) => boolean;
 
@@ -185,6 +188,10 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
     set((prev) => ({
       pendingToasts: prev.pendingToasts.filter((toastId) => toastId !== id),
     }));
+  },
+
+  dismissAllToasts() {
+    set({ pendingToasts: [] });
   },
 
   isUnlocked(id: string) {

@@ -176,7 +176,7 @@ export const NETWORK_SELECTORS = {
 
 export const SELECTORS = {
   // Main Menu
-  newGameButton: 'button:has-text("New Game")',
+  newGameButton: 'button:has-text("New Game"), button:has-text("Start Youth Career")',
   continueButton: 'button:has-text("Continue")',
   loadGameButton: 'button:has-text("Load Game")',
 

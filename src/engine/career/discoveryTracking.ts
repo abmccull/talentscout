@@ -186,9 +186,10 @@ export function calculatePredictionAccuracy(
 /**
  * End-of-season batch processing for all tracked discovery records.
  *
- * For each record:
- *  1. Adds a career snapshot for `currentSeason` (uses the live player data).
- *  2. Recalculates prediction accuracy from the latest player state.
+ * For each record, adds a career snapshot for `currentSeason` using the live
+ * player data. Accuracy is deliberately cleared here and synchronized later
+ * from delayed ScoutReport validation; true PA must never masquerade as the
+ * scout's own prediction.
  *
  * Players not found in the `players` map are skipped silently (handles the
  * edge case where a tracked player has been removed from the world data).
@@ -207,12 +208,9 @@ export function processSeasonDiscoveries(
       return record;
     }
 
-    const withSnapshot = addSeasonSnapshot(record, player, currentSeason);
-    const accuracy = calculatePredictionAccuracy(withSnapshot, player);
-
     return {
-      ...withSnapshot,
-      predictionAccuracy: accuracy,
+      ...addSeasonSnapshot(record, player, currentSeason),
+      predictionAccuracy: undefined,
     };
   });
 }

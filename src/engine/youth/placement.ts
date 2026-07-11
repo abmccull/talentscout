@@ -16,7 +16,10 @@ import type {
   Observation,
   Player,
   ConvictionLevel,
+  League,
 } from "@/engine/core/types";
+import { normalizeCountryKey } from "@/lib/country";
+import { getTransferFlowProbability } from "@/engine/world/transfers";
 
 // =============================================================================
 // HELPERS
@@ -209,6 +212,7 @@ export function processPlacementOutcome(
   const newPlayer: Player = {
     ...youth.player,
     clubId: club.id,
+    contractClubId: club.id,
     contractExpiry: report.season + 3,
     wage: Math.round(youth.player.currentAbility * 50),
   };
@@ -240,25 +244,45 @@ export function processPlacementOutcome(
  * then the top 10 are returned.
  */
 export function getEligibleClubsForPlacement(
-  _youth: UnsignedYouth,
+  youth: UnsignedYouth,
   clubs: Club[],
   scout: Scout,
+  leagues: Record<string, League> = {},
 ): Club[] {
-  const eligible = clubs.filter(
-    (club) => club.youthAcademyRating >= 5 && club.playerIds.length < 30,
-  );
-
-  // Sort by youthAcademyRating descending, then promote scout's club to front
-  const sorted = [...eligible].sort((a, b) => b.youthAcademyRating - a.youthAcademyRating);
-
-  if (scout.currentClubId) {
-    const scoutClubIndex = sorted.findIndex((c) => c.id === scout.currentClubId);
-    if (scoutClubIndex > 0) {
-      // Move scout's club to the front
-      const [scoutClub] = sorted.splice(scoutClubIndex, 1);
-      sorted.unshift(scoutClub);
+  const youthCountry = normalizeCountryKey(youth.country);
+  const clubCountry = (club: Club) => normalizeCountryKey(leagues[club.leagueId]?.country);
+  const routeScore = (club: Club) => {
+    const destinationCountry = clubCountry(club);
+    if (!youthCountry || !destinationCountry) return 0.5;
+    return getTransferFlowProbability(youthCountry, destinationCountry);
+  };
+  const isForeign = (club: Club) => {
+    const destinationCountry = clubCountry(club);
+    return !!youthCountry && !!destinationCountry && youthCountry !== destinationCountry;
+  };
+  const eligible = clubs.filter((club) => {
+    if (
+      club.youthAcademyRating < 5 ||
+      club.playerIds.length + (club.academyPlayerIds?.length ?? 0) >= 40
+    ) {
+      return false;
     }
-  }
+    if (isForeign(club)) {
+      if (youth.player.age < 16) return false;
+      if (routeScore(club) < 0.06) return false;
+    }
+    return true;
+  });
 
-  return sorted.slice(0, 10);
+  return [...eligible]
+    .sort((a, b) => {
+      if (a.id === scout.currentClubId) return -1;
+      if (b.id === scout.currentClubId) return 1;
+      return (
+        Number(isForeign(a)) - Number(isForeign(b)) ||
+        routeScore(b) - routeScore(a) ||
+        b.youthAcademyRating - a.youthAcademyRating
+      );
+    })
+    .slice(0, 10);
 }

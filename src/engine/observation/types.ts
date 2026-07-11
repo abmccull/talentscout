@@ -414,6 +414,8 @@ export interface SessionPlayer {
   focusedPhases: number[];
   /** The lens currently active for this player, if focused. */
   currentLens?: LensType;
+  /** Durable per-phase focus history used to resolve evidence at session end. */
+  focusHistory: Array<{ phaseIndex: number; lens: LensType }>;
 }
 
 // =============================================================================
@@ -488,6 +490,8 @@ export interface SessionConfig {
   targetPlayerId?: string;
   /** The pool of players available to observe in this session. */
   playerPool: { playerId: string; name: string; position: string }[];
+  /** Unresolved hypotheses carried forward from earlier sessions. */
+  initialHypotheses?: Hypothesis[];
   /** RNG seed for deterministic session generation. */
   seed: string;
   /** Current game week. */
@@ -588,15 +592,17 @@ export const ACTIVITY_MODE_MAP: Record<string, ObservationMode> = {
  */
 export const VENUE_PHASE_RANGES: Record<string, [number, number]> = {
   // Youth / Full Observation
-  schoolMatch: [8, 12],
-  grassrootsTournament: [10, 14],
+  // Early Access tuning: youth live-observation loops should feel complete in
+  // roughly 5-8 meaningful beats, not 8-14 mostly passive phase advances.
+  schoolMatch: [5, 8],
+  grassrootsTournament: [6, 8],
   streetFootball: [6, 8],
-  academyTrialDay: [8, 10],
-  youthFestival: [10, 14],
+  academyTrialDay: [5, 7],
+  youthFestival: [6, 8],
 
   // Youth / Full Observation (continued)
-  academyVisit: [8, 10],
-  youthTournament: [10, 14],
+  academyVisit: [5, 7],
+  youthTournament: [6, 8],
 
   // Investigation
   followUpSession: [4, 6],

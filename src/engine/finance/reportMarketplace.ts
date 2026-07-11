@@ -19,6 +19,7 @@ import type {
   InboxMessage,
   Player,
   Position,
+  UnsignedYouth,
 } from "../core/types";
 import {
   ensureClientRelationship,
@@ -374,6 +375,7 @@ function generateBidsForListing(
   week: number,
   season: number,
   clientRelationships: ClientRelationship[],
+  guaranteeBid: boolean = false,
 ): { bids: MarketplaceBid[]; inboxMessages: InboxMessage[] } {
   const newBids: MarketplaceBid[] = [];
   const messages: InboxMessage[] = [];
@@ -389,21 +391,38 @@ function generateBidsForListing(
     ? [clubs[listing.targetClubId]].filter(Boolean) as Club[]
     : Object.values(clubs).filter((c) => c.budget >= listing.price * 0.5);
 
+  const scoredCandidates = candidateClubs.map((club) => ({
+    club,
+    needMatchScore: calculateNeedMatchScore(report, player, club, players),
+  }));
+  const guaranteedClubId = guaranteeBid && listing.bids.length === 0
+    ? scoredCandidates.reduce<{ clubId: string | null; score: number }>(
+        (best, candidate) => candidate.needMatchScore > best.score
+          ? { clubId: candidate.club.id, score: candidate.needMatchScore }
+          : best,
+        { clubId: null, score: Number.NEGATIVE_INFINITY },
+      ).clubId
+    : null;
+
   // Listing age factor: week 1 bids are less likely
   const listingAge = week - listing.listedWeek + (season - listing.listedSeason) * 38;
   const listingAgeFactor = listingAge <= 1 ? 0.7 : 1.0;
 
-  for (const club of candidateClubs) {
+  for (const { club, needMatchScore } of scoredCandidates) {
+    // The onboarding guarantee is intentionally one clear decision, not an
+    // inbox flood. Normal probabilistic competition resumes next week.
+    if (guaranteedClubId && club.id !== guaranteedClubId) continue;
+
     // Skip if club already has a pending bid on this listing
     const hasPending = listing.bids.some(
       (b) => b.clubId === club.id && b.status === "pending",
     );
     if (hasPending) continue;
 
-    const needMatchScore = calculateNeedMatchScore(report, player, club, players);
+    const isGuaranteedFirstBid = club.id === guaranteedClubId;
 
     // Only bid if score > 40
-    if (needMatchScore <= 40) continue;
+    if (needMatchScore <= 40 && !isGuaranteedFirstBid) continue;
 
     // Bid probability
     const affordability = Math.min(1, club.budget / (listing.price * 10));
@@ -422,7 +441,7 @@ function generateBidsForListing(
       marketTemp *
       listingAgeFactor;
 
-    if (!rng.chance(Math.min(0.6, probability))) continue;
+    if (!isGuaranteedFirstBid && !rng.chance(Math.min(0.6, probability))) continue;
 
     // Calculate bid amount
     const priority = derivePriority(needMatchScore);
@@ -568,13 +587,26 @@ export function processMarketplaceBids(
   scout: Scout,
   week: number,
   season: number,
+  unsignedYouth: Record<string, UnsignedYouth> = {},
 ): { finances: FinancialRecord; inboxMessages: InboxMessage[] } {
   let updatedFinances = finances;
   const allInboxMessages: InboxMessage[] = [];
+  const marketplacePlayers: Record<string, Player> = { ...players };
+  for (const youth of Object.values(unsignedYouth)) {
+    marketplacePlayers[youth.player.id] = youth.player;
+  }
 
   const activeListings = updatedFinances.reportListings.filter(
     (l) => l.status === "active",
   );
+
+  // The first completed marketplace loop is a critical onboarding payoff.
+  // Preserve normal market randomness after the player has seen any bid, but
+  // guarantee that their first valid listing receives feedback from the club
+  // with the strongest squad need instead of silently expiring.
+  let firstBidGuaranteeAvailable =
+    updatedFinances.reportSalesRevenue === 0 &&
+    updatedFinances.reportListings.every((listing) => listing.bids.length === 0);
 
   if (activeListings.length === 0) return { finances: updatedFinances, inboxMessages: [] };
 
@@ -584,11 +616,13 @@ export function processMarketplaceBids(
 
     // Generate new bids
     const { bids: newBids, inboxMessages } = generateBidsForListing(
-      rng, listing, report, clubs, players, scout, week, season,
+      rng, listing, report, clubs, marketplacePlayers, scout, week, season,
       updatedFinances.clientRelationships,
+      firstBidGuaranteeAvailable,
     );
 
     if (newBids.length > 0) {
+      firstBidGuaranteeAvailable = false;
       updatedFinances = {
         ...updatedFinances,
         reportListings: updatedFinances.reportListings.map((l) =>

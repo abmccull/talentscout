@@ -542,7 +542,7 @@ export function WorldMap({
       viewBox="0 0 800 450"
       preserveAspectRatio="xMidYMid slice"
       aria-label="World scouting map showing all scoutable countries"
-      role="img"
+      role="group"
       className="absolute inset-0 h-full w-full"
     >
       <GradientDefs />

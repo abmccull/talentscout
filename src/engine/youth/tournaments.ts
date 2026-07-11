@@ -17,9 +17,12 @@ import type {
   TournamentCategory,
   TournamentPrestige,
 } from "@/engine/core/types";
-import { STRUCTURED_YOUTH_TOURNAMENTS } from "@/engine/world/international";
 import { getScoutHomeCountry, getTravelCost } from "@/engine/world/travel";
 import { getContactCoverageCountry } from "@/engine/network/contacts";
+import {
+  getCountryDisplayName,
+  normalizeCountryKey,
+} from "@/lib/country";
 
 // =============================================================================
 // TOURNAMENT TEMPLATE
@@ -181,28 +184,80 @@ function getParticipantCountriesForConfederation(confederation?: string): string
   );
 }
 
-/**
- * International templates built from STRUCTURED_YOUTH_TOURNAMENTS + continental.
- * These use the existing data as the source of truth for FIFA/UEFA/Toulon,
- * and add continental championships.
- */
+/** International youth events owned by the live tournament system. */
 const INTERNATIONAL_TEMPLATES: TournamentTemplate[] = [
-  // From STRUCTURED_YOUTH_TOURNAMENTS
-  ...STRUCTURED_YOUTH_TOURNAMENTS.map((t): TournamentTemplate => ({
-    name: t.name,
+  {
+    name: "U-17 World Cup",
     prestige: "international",
     venueType: "youthFestival",
-    startWeek: t.weekStart,
-    endWeek: t.weekStart + t.duration - 1,
-    poolSizeMultiplier: t.confederation === "FIFA" ? 2.5 : t.confederation === "UEFA" ? 2.0 : 1.8,
-    observationBonus: t.confederation === "FIFA" ? 4 : 3,
-    extraAttributes: t.confederation === "FIFA" ? 2 : 1,
-    autoDiscoverTier: t.confederation === "FIFA" ? 3 : undefined,
-    frequency: t.frequency,
-    phaseOffset: t.phaseOffset,
-    ageGroup: t.ageGroup,
-    confederation: t.confederation === "Open" ? "Open" : t.confederation,
-  })),
+    startWeek: 8,
+    endWeek: 11,
+    poolSizeMultiplier: 2.5,
+    observationBonus: 4,
+    extraAttributes: 2,
+    autoDiscoverTier: 3,
+    frequency: "biennial",
+    phaseOffset: 0,
+    ageGroup: 17,
+    confederation: "FIFA",
+  },
+  {
+    name: "U-20 World Cup",
+    prestige: "international",
+    venueType: "youthFestival",
+    startWeek: 12,
+    endWeek: 15,
+    poolSizeMultiplier: 2.5,
+    observationBonus: 4,
+    extraAttributes: 2,
+    autoDiscoverTier: 3,
+    frequency: "biennial",
+    phaseOffset: 1,
+    ageGroup: 20,
+    confederation: "FIFA",
+  },
+  {
+    name: "UEFA U-17 Championship",
+    prestige: "international",
+    venueType: "youthFestival",
+    startWeek: 20,
+    endWeek: 21,
+    poolSizeMultiplier: 2,
+    observationBonus: 3,
+    extraAttributes: 1,
+    frequency: "biennial",
+    phaseOffset: 0,
+    ageGroup: 17,
+    confederation: "UEFA",
+  },
+  {
+    name: "UEFA U-19 Championship",
+    prestige: "international",
+    venueType: "youthFestival",
+    startWeek: 22,
+    endWeek: 23,
+    poolSizeMultiplier: 2,
+    observationBonus: 3,
+    extraAttributes: 1,
+    frequency: "biennial",
+    phaseOffset: 1,
+    ageGroup: 19,
+    confederation: "UEFA",
+  },
+  {
+    name: "Toulon Tournament",
+    prestige: "international",
+    venueType: "youthFestival",
+    startWeek: 26,
+    endWeek: 27,
+    poolSizeMultiplier: 1.8,
+    observationBonus: 3,
+    extraAttributes: 1,
+    frequency: "annual",
+    phaseOffset: 0,
+    ageGroup: 21,
+    confederation: "Open",
+  },
   // Additional continental championships
   {
     name: "CONMEBOL U-17 Championship",
@@ -288,6 +343,12 @@ const GRASSROOTS_PREFIXES = [
   "Summer Festival", "Youth Open", "Community Shield",
 ];
 
+function normalizeCountryIdentity(country?: string): string | undefined {
+  const trimmed = country?.trim();
+  if (!trimmed) return undefined;
+  return normalizeCountryKey(trimmed) ?? trimmed.toLowerCase();
+}
+
 // =============================================================================
 // CORE FUNCTIONS
 // =============================================================================
@@ -304,8 +365,12 @@ export function generateSeasonTournaments(
   scout: Scout,
 ): Record<string, TournamentEvent> {
   const tournaments: Record<string, TournamentEvent> = {};
-  const scoutCountry = getScoutHomeCountry(scout);
-  const countrySet = new Set(countries.map(c => c.toLowerCase()));
+  const scoutCountry = normalizeCountryIdentity(getScoutHomeCountry(scout)) ?? "england";
+  const countrySet = new Set(
+    countries
+      .map((country) => normalizeCountryIdentity(country))
+      .filter((country): country is string => !!country),
+  );
 
   // 1. Domestic tournaments for all active countries
   for (const tmpl of DOMESTIC_TEMPLATES) {
@@ -320,6 +385,7 @@ export function generateSeasonTournaments(
       id,
       name: tmpl.name,
       country: tmpl.country,
+      countryKey: tmpl.country,
       participantCountries: [tmpl.country],
       category: "named",
       prestige: tmpl.prestige,
@@ -358,6 +424,7 @@ export function generateSeasonTournaments(
       id,
       name: tmpl.name,
       country: hostCountry,
+      countryKey: hostCountry,
       participantCountries: getParticipantCountriesForConfederation(tmpl.confederation),
       category: "international",
       prestige: "international",
@@ -394,10 +461,14 @@ export function discoverTournamentsPassive(
 ): { updatedTournaments: Record<string, TournamentEvent>; discovered: TournamentEvent[] } {
   const updated = { ...tournaments };
   const discovered: TournamentEvent[] = [];
+  const scoutCountryKey = normalizeCountryIdentity(scoutCountry);
+  if (!scoutCountryKey) {
+    return { updatedTournaments: updated, discovered };
+  }
 
   // Average familiarity across all sub-regions in scout's country
   const regionEntries = Object.values(subRegions).filter(
-    sr => sr.country.toLowerCase() === scoutCountry.toLowerCase(),
+    (sr) => normalizeCountryIdentity(sr.country) === scoutCountryKey,
   );
   const avgFamiliarity = regionEntries.length > 0
     ? regionEntries.reduce((sum, sr) => sum + sr.familiarity, 0) / regionEntries.length
@@ -412,7 +483,7 @@ export function discoverTournamentsPassive(
 
     if (t.category === "named") {
       // Domestic: familiarity-based discovery
-      if (t.country.toLowerCase() === scoutCountry.toLowerCase()) {
+      if (normalizeCountryIdentity(t.country) === scoutCountryKey) {
         chance = Math.min(0.45, 0.05 + avgFamiliarity * 0.004);
       }
     } else if (t.category === "international") {
@@ -450,18 +521,20 @@ export function generateGrassrootsTournament(
   contactId?: string,
 ): TournamentEvent {
   const prefix = GRASSROOTS_PREFIXES[rng.nextInt(0, GRASSROOTS_PREFIXES.length - 1)];
-  const regionLabel = subRegionName ?? country.charAt(0).toUpperCase() + country.slice(1);
+  const countryKey = normalizeCountryIdentity(country) ?? country;
+  const regionLabel = subRegionName ?? getCountryDisplayName(countryKey);
   const name = `${regionLabel} ${prefix}`;
   const startOffset = rng.nextInt(1, 3);
   const duration = rng.nextInt(1, 2);
   const startWeek = currentWeek + startOffset;
-  const id = `grass-${country}-w${startWeek}-s${season}-${rng.nextInt(1000, 9999)}`;
+  const id = `grass-${countryKey}-w${startWeek}-s${season}-${rng.nextInt(1000, 9999)}`;
 
   return {
     id,
     name,
-    country,
-    participantCountries: [country],
+    country: countryKey,
+    countryKey,
+    participantCountries: [countryKey],
     subRegionId,
     category: "grassroots",
     prestige: rng.next() < 0.3 ? "regional" : "local",
@@ -503,9 +576,9 @@ export function processContactTournamentTip(
 
   // 60%: discover an existing undiscovered tournament
   const undiscovered = Object.values(tournaments).filter(
-    t => !t.discovered && !t.attended &&
+    (t) => !t.discovered && !t.attended &&
     t.startWeek >= currentWeek && t.startWeek <= currentWeek + 6 &&
-    t.country.toLowerCase() === contactCountry,
+    normalizeCountryIdentity(t.country) === contactCountry,
   );
 
   if (undiscovered.length > 0 && rng.next() < 0.6) {
@@ -521,7 +594,7 @@ export function processContactTournamentTip(
 
   // 40%: generate a new grassroots event
   const matchingRegions = Object.values(subRegions).filter(
-    sr => sr.country.toLowerCase() === contactCountry,
+    (sr) => normalizeCountryIdentity(sr.country) === contactCountry,
   );
   const region = matchingRegions.length > 0
     ? matchingRegions[rng.nextInt(0, matchingRegions.length - 1)]
@@ -585,6 +658,7 @@ export function createAgencyShowcase(
     id,
     name: "Agency Youth Showcase",
     country: scoutCountry,
+    countryKey: scoutCountry,
     participantCountries: [scoutCountry],
     category: "agencyShowcase",
     prestige: "national",

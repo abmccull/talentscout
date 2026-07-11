@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -16,17 +17,20 @@ import {
   Star,
   ClipboardList,
   Search,
-  Sparkles,
   Filter,
   ChevronUp,
   ChevronDown,
   LayoutGrid,
   List,
+  CalendarPlus,
+  ArrowRight,
 } from "lucide-react";
 import type { UnsignedYouth, SubRegion, Observation, TournamentEvent } from "@/engine/core/types";
 import { getPerceivedAbility, type PerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { MiniStarRange } from "@/components/ui/MiniStarRange";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import { getCountryDisplayName } from "@/lib/country";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -157,6 +161,29 @@ function getPerceivedSortValue(
   return (perceived.paLow + perceived.paHigh) / 2;
 }
 
+function getReadLabel(mode: "ca" | "pa"): string {
+  return mode === "ca" ? "Current Read" : "Upside Read";
+}
+
+function getObservationBadge(observationCount: number): {
+  label: string;
+  className: string;
+} | null {
+  if (observationCount >= 3) {
+    return {
+      label: `${observationCount} looks`,
+      className: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+    };
+  }
+  if (observationCount >= 1) {
+    return {
+      label: `${observationCount} look${observationCount === 1 ? "" : "s"}`,
+      className: "border-blue-500/30 bg-blue-500/10 text-blue-300",
+    };
+  }
+  return null;
+}
+
 function sortYouth(
   list: UnsignedYouth[],
   sort: SortOption,
@@ -204,8 +231,8 @@ const SORT_LABELS: Record<SortOption, string> = {
   country: "By Country",
   visibility: "By Visibility",
   pipeline: "By Pipeline",
-  ca: "By CA",
-  pa: "By PA",
+  ca: "By Current Read",
+  pa: "By Upside Read",
 };
 
 function getPipelineStage(
@@ -258,9 +285,9 @@ function YouthCard({
   observationCount,
   onClick,
 }: YouthCardProps) {
-  const isObserved = youth.discoveredBy.includes(scoutId);
   const stage = getPipelineStage(youth, scoutId, reportedIds, observationCount);
   const scoutCount = youth.discoveredBy.length;
+  const observationBadge = getObservationBadge(observationCount);
 
   return (
     <button
@@ -278,14 +305,9 @@ function YouthCard({
             <Badge className={`shrink-0 text-[10px] ${PIPELINE_COLORS[stage]}`}>
               {PIPELINE_LABELS[stage]}
             </Badge>
-            {isObserved && (youth.player.wonderkidTier === "generational" || youth.player.wonderkidTier === "worldClass") && (
-              <Badge className={`shrink-0 text-[10px] ${
-                youth.player.wonderkidTier === "generational"
-                  ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
-                  : "border-blue-500/50 bg-blue-500/10 text-blue-400"
-              }`}>
-                {youth.player.wonderkidTier === "generational" ? <Sparkles size={9} className="mr-1" /> : <Star size={9} className="mr-1" />}
-                {youth.player.wonderkidTier === "generational" ? "Generational" : "World Class"}
+            {observationBadge && (
+              <Badge className={`shrink-0 text-[10px] ${observationBadge.className}`}>
+                {observationBadge.label}
               </Badge>
             )}
           </div>
@@ -303,7 +325,7 @@ function YouthCard({
       <div className="mb-3 grid grid-cols-2 gap-3">
         <div>
           <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">CA</span>
+            <span className="text-zinc-500">{getReadLabel("ca")}</span>
             <span className="text-zinc-600">
               {perceived ? `${getPerceivedSortValue(perceived, "ca").toFixed(1)}★` : "Unknown"}
             </span>
@@ -312,7 +334,7 @@ function YouthCard({
         </div>
         <div>
           <div className="mb-1 flex items-center justify-between text-[10px]">
-            <span className="text-zinc-500">PA</span>
+            <span className="text-zinc-500">{getReadLabel("pa")}</span>
             <span className="text-zinc-600">
               {perceived ? `${getPerceivedSortValue(perceived, "pa").toFixed(1)}★` : "Unknown"}
             </span>
@@ -438,6 +460,7 @@ function UnsignedYouthTab({
 }: UnsignedYouthTabProps) {
   const [tableSortKey, setTableSortKey] = useState<YouthSortKey>("buzz");
   const [tableSortDir, setTableSortDir] = useState<SortDir>("desc");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const handleTableSort = (key: YouthSortKey) => {
     if (tableSortKey === key) {
@@ -542,11 +565,19 @@ function UnsignedYouthTab({
         return tableSortDir === "asc" ? cmp : -cmp;
       })
     : sorted;
+  const activeFilterCount = [
+    filterPosition,
+    minAge,
+    maxAge,
+    filterNationality,
+    filterCountry,
+    observedOnly ? "pipeline" : "",
+  ].filter(Boolean).length;
 
   return (
     <div>
       {/* Controls */}
-      <div className="mb-4 rounded-lg border border-[#27272a] bg-[#141414] p-4">
+      <div className="mb-4 rounded-xl border border-white/10 bg-[#11161c]/95 p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-48">
@@ -557,16 +588,32 @@ function UnsignedYouthTab({
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by name..."
               aria-label="Search youth by name"
-              className="w-full rounded-md border border-[#27272a] bg-[#0a0a0a] py-2 pl-8 pr-3 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="min-h-11 w-full rounded-lg border border-[#27272a] bg-[#0a0a0a] py-2 pl-8 pr-3 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((open) => !open)}
+            aria-expanded={showMobileFilters}
+            aria-controls="youth-advanced-filters"
+            className="flex min-h-11 items-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/5 md:hidden"
+          >
+            <Filter size={15} aria-hidden="true" />
+            Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+          </button>
+
+          <div
+            id="youth-advanced-filters"
+            className={`${showMobileFilters ? "flex" : "hidden"} basis-full flex-col gap-3 rounded-lg border border-white/10 bg-black/15 p-3 md:contents`}
+          >
 
           {/* Position filter */}
           <select
             value={filterPosition}
             onChange={(e) => setFilterPosition(e.target.value)}
             aria-label="Filter by position"
-            className="rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+            className="min-h-11 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
           >
             <option value="">All Positions</option>
             {positions.map((p) => (
@@ -575,8 +622,8 @@ function UnsignedYouthTab({
           </select>
 
           {/* Age range */}
-          <div className="flex items-center gap-2">
-            <label className="text-xs text-zinc-500 shrink-0">Age</label>
+          <div className="flex min-h-11 items-center gap-2">
+            <label className="shrink-0 text-xs text-zinc-400">Age</label>
             <input
               type="number"
               placeholder="Min"
@@ -585,7 +632,7 @@ function UnsignedYouthTab({
               min={13}
               max={21}
               aria-label="Minimum age"
-              className="w-16 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="min-h-11 w-full min-w-0 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-20"
             />
             <span className="text-zinc-600" aria-hidden="true">&ndash;</span>
             <input
@@ -596,7 +643,7 @@ function UnsignedYouthTab({
               min={13}
               max={21}
               aria-label="Maximum age"
-              className="w-16 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="min-h-11 w-full min-w-0 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 sm:w-20"
             />
           </div>
 
@@ -606,7 +653,7 @@ function UnsignedYouthTab({
               value={filterNationality}
               onChange={(e) => setFilterNationality(e.target.value)}
               aria-label="Filter by nationality"
-              className="rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="min-h-11 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
               <option value="">All Nationalities</option>
               {nationalities.map((n) => (
@@ -621,7 +668,7 @@ function UnsignedYouthTab({
               value={filterCountry}
               onChange={(e) => setFilterCountry(e.target.value)}
               aria-label="Filter by region"
-              className="rounded-md border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              className="min-h-11 rounded-lg border border-[#27272a] bg-[#0a0a0a] px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
             >
               <option value="">All Regions</option>
               {countries.map((c) => (
@@ -634,7 +681,7 @@ function UnsignedYouthTab({
           <button
             onClick={() => setObservedOnly(!observedOnly)}
             aria-pressed={observedOnly}
-            className={`rounded-md border px-3 py-2 text-sm transition cursor-pointer ${
+            className={`min-h-11 rounded-lg border px-3 py-2 text-sm transition cursor-pointer ${
               observedOnly
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                 : "border-[#27272a] text-zinc-400 hover:bg-[#1a1a1a] hover:text-white"
@@ -643,6 +690,7 @@ function UnsignedYouthTab({
             <Eye size={12} className="mr-1 inline" />
             My Pipeline
           </button>
+          </div>
 
           {/* View mode toggle */}
           <div className="ml-auto flex gap-1">
@@ -650,7 +698,7 @@ function UnsignedYouthTab({
               onClick={() => setViewMode("card")}
               aria-pressed={viewMode === "card"}
               aria-label="Card view"
-              className={`rounded-md border p-2 transition cursor-pointer ${
+              className={`flex h-11 w-11 items-center justify-center rounded-lg border transition cursor-pointer ${
                 viewMode === "card"
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                   : "border-[#27272a] text-zinc-400 hover:text-white"
@@ -662,7 +710,7 @@ function UnsignedYouthTab({
               onClick={() => setViewMode("list")}
               aria-pressed={viewMode === "list"}
               aria-label="List view"
-              className={`rounded-md border p-2 transition cursor-pointer ${
+              className={`flex h-11 w-11 items-center justify-center rounded-lg border transition cursor-pointer ${
                 viewMode === "list"
                   ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                   : "border-[#27272a] text-zinc-400 hover:text-white"
@@ -675,13 +723,13 @@ function UnsignedYouthTab({
 
         {/* Sort buttons (card view only) */}
         {viewMode === "card" && (
-          <div className="mt-3 flex gap-1 border-t border-[#27272a] pt-3">
+          <div className={`${showMobileFilters ? "flex" : "hidden"} mt-3 flex-wrap gap-2 border-t border-[#27272a] pt-3 md:flex`}>
             {(Object.keys(SORT_LABELS) as SortOption[]).map((option) => (
               <button
                 key={option}
                 onClick={() => setSort(option)}
                 aria-pressed={sort === option}
-                className={`rounded-md border px-3 py-1.5 text-xs transition cursor-pointer ${
+                className={`min-h-11 rounded-lg border px-3 py-2 text-xs transition cursor-pointer ${
                   sort === option
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
                     : "border-[#27272a] text-zinc-400 hover:bg-[#1a1a1a] hover:text-white"
@@ -698,8 +746,8 @@ function UnsignedYouthTab({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Users size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm text-zinc-500">No unsigned youth found.</p>
-            <p className="mt-1 text-xs text-zinc-600">
+            <p className="text-sm text-zinc-300">No unsigned youth found.</p>
+            <p className="mt-1 text-xs text-zinc-400">
               Scout youth venues to discover unsigned players in the world.
             </p>
           </CardContent>
@@ -716,8 +764,8 @@ function UnsignedYouthTab({
                     ["age", "Age"],
                     ["nationality", "Nat"],
                     ["value", "Value"],
-                    ["ca", "CA"],
-                    ["pa", "PA"],
+                    ["ca", "Read"],
+                    ["pa", "Upside"],
                     ["buzz", "Buzz"],
                     ["visibility", "Vis"],
                     ["pipeline", "Stage"],
@@ -741,7 +789,7 @@ function UnsignedYouthTab({
               <tbody>
                 {displayList.map((y) => {
                   const stage = getPipelineStage(y, scoutId, reportedIds, observationCountByPlayer.get(y.player.id) ?? 0);
-                  const isObserved = y.discoveredBy.includes(scoutId);
+                  const observationBadge = getObservationBadge(observationCountByPlayer.get(y.player.id) ?? 0);
                   return (
                     <tr
                       key={y.id}
@@ -762,10 +810,10 @@ function UnsignedYouthTab({
                           <span className="font-medium text-white">
                             {y.player.firstName} {y.player.lastName}
                           </span>
-                          {isObserved && (y.player.wonderkidTier === "generational" || y.player.wonderkidTier === "worldClass") && (
-                            <span className={`text-[10px] ${y.player.wonderkidTier === "generational" ? "text-amber-400" : "text-blue-400"}`}>
-                              {y.player.wonderkidTier === "generational" ? "\u2605" : "\u2726"}
-                            </span>
+                          {observationBadge && (
+                            <Badge className={`text-[10px] ${observationBadge.className}`}>
+                              {observationBadge.label}
+                            </Badge>
                           )}
                         </div>
                       </td>
@@ -868,8 +916,8 @@ function SubRegionsTab({ subRegions }: SubRegionsTabProps) {
         <div key={country}>
           <div className="mb-3 flex items-center gap-2">
             <Globe size={14} className="text-zinc-500" aria-hidden="true" />
-            <h3 className="text-sm font-semibold capitalize text-zinc-300">
-              {country}
+            <h3 className="text-sm font-semibold text-zinc-300">
+              {getCountryDisplayName(country)}
             </h3>
             <Badge variant="secondary" className="text-[10px]">
               {grouped[country].length}
@@ -1030,7 +1078,7 @@ export function YouthScoutingScreen() {
   const [filterCountry, setFilterCountry] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPosition, setFilterPosition] = useState("");
-  const [observedOnly, setObservedOnly] = useState(false);
+  const [observedOnly, setObservedOnly] = useState(IS_YOUTH_EARLY_ACCESS);
   const [viewMode, setViewMode] = useState<ViewMode>("card");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
@@ -1080,7 +1128,25 @@ export function YouthScoutingScreen() {
       .filter((r) => r.scoutId === scout.id)
       .map((r) => r.unsignedYouthId),
   );
-  const reportedCount = reportedIds.size;
+  const observationCountByPlayer = new Map<string, number>();
+  for (const observation of Object.values(gameState.observations)) {
+    observationCountByPlayer.set(
+      observation.playerId,
+      (observationCountByPlayer.get(observation.playerId) ?? 0) + 1,
+    );
+  }
+  const repeatLookCount = youthList.filter(
+    (youth) => (observationCountByPlayer.get(youth.player.id) ?? 0) >= 2,
+  ).length;
+  const decisionReadyCount = youthList.filter((youth) => {
+    if (youth.placed || reportedIds.has(youth.id)) return false;
+    const perceived = getPerceivedAbility(Object.values(gameState.observations), youth.player.id);
+    return (
+      (observationCountByPlayer.get(youth.player.id) ?? 0) >= 2 &&
+      perceived != null &&
+      (perceived.caConfidence >= 0.7 || perceived.paConfidence >= 0.7)
+    );
+  }).length;
 
   const handleSelectYouth = (playerId: string) => {
     selectPlayer(playerId);
@@ -1093,26 +1159,76 @@ export function YouthScoutingScreen() {
     { id: "venues", label: "Venues", icon: School },
     { id: "tournaments", label: "Tournaments", icon: Trophy },
   ];
+  const pipelineContent = (
+    <UnsignedYouthTab
+      youth={youthList}
+      scoutId={scout.id}
+      sort={sort}
+      setSort={setSort}
+      filterCountry={filterCountry}
+      setFilterCountry={setFilterCountry}
+      countries={countries}
+      positions={positions}
+      filterPosition={filterPosition}
+      setFilterPosition={setFilterPosition}
+      searchQuery={searchQuery}
+      setSearchQuery={setSearchQuery}
+      observedOnly={observedOnly}
+      setObservedOnly={setObservedOnly}
+      reportedIds={reportedIds}
+      onSelectYouth={handleSelectYouth}
+      viewMode={viewMode}
+      setViewMode={setViewMode}
+      minAge={minAge}
+      setMinAge={setMinAge}
+      maxAge={maxAge}
+      setMaxAge={setMaxAge}
+      nationalities={nationalities}
+      filterNationality={filterNationality}
+      setFilterNationality={setFilterNationality}
+      observations={Object.values(gameState.observations)}
+    />
+  );
 
   return (
     <GameLayout>
-      <div className="p-6">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold">Youth Scouting</h1>
-          <p className="text-sm text-zinc-400">
-            Discover and develop unsigned youth talent
-          </p>
+        <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.12),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-xl shadow-black/20 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Recruitment board</p>
+              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                {IS_YOUTH_EARLY_ACCESS ? "Prospects" : "Youth Scouting"}
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
+                Your working pipeline of leads, repeat observations, placement decisions, and outcomes. Ratings show your evidence—not hidden truth.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
+                  {totalYouth} known in current markets
+                </span>
+                <span className="rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 font-semibold text-amber-200">
+                  {legacyScore.totalScore} legacy points
+                </span>
+              </div>
+            </div>
+            <Button className="min-h-11 shrink-0" onClick={() => setScreen("calendar")}>
+              <CalendarPlus size={16} className="mr-2" aria-hidden="true" />
+              Plan discovery work
+              <ArrowRight size={15} className="ml-2" aria-hidden="true" />
+            </Button>
+          </div>
         </div>
 
         {/* Summary stats */}
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Known</p>
-                  <p className="text-2xl font-bold text-white">{totalYouth}</p>
+                  <p className="text-xs text-zinc-400">My Pipeline</p>
+                  <p className="text-2xl font-bold text-white">{discoveredByScout}</p>
                 </div>
                 <Users size={20} className="text-zinc-600" aria-hidden="true" />
               </div>
@@ -1122,9 +1238,9 @@ export function YouthScoutingScreen() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Discovered</p>
+                  <p className="text-xs text-zinc-400">Repeat Looks</p>
                   <p className="text-2xl font-bold text-emerald-400">
-                    {discoveredByScout}
+                    {repeatLookCount}
                   </p>
                 </div>
                 <Eye size={20} className="text-emerald-600" aria-hidden="true" />
@@ -1135,9 +1251,9 @@ export function YouthScoutingScreen() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Reported</p>
+                  <p className="text-xs text-zinc-400">Decisions Ready</p>
                   <p className="text-2xl font-bold text-blue-400">
-                    {reportedCount}
+                    {decisionReadyCount}
                   </p>
                 </div>
                 <ClipboardList size={20} className="text-blue-600" aria-hidden="true" />
@@ -1148,7 +1264,7 @@ export function YouthScoutingScreen() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-zinc-500">Placed</p>
+                  <p className="text-xs text-zinc-400">Placed</p>
                   <p className="text-2xl font-bold text-amber-400">
                     {placedCount}
                   </p>
@@ -1157,7 +1273,7 @@ export function YouthScoutingScreen() {
               </div>
             </CardContent>
           </Card>
-          <Card data-tutorial-id="youth-legacy-score">
+          {!IS_YOUTH_EARLY_ACCESS && <Card data-tutorial-id="youth-legacy-score">
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -1169,67 +1285,43 @@ export function YouthScoutingScreen() {
                 <Star size={20} className="text-amber-600" aria-hidden="true" />
               </div>
             </CardContent>
-          </Card>
+          </Card>}
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6 flex gap-1 border-b border-[#27272a] pb-0">
-          {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              aria-selected={activeTab === id}
-              role="tab"
-              className={`flex cursor-pointer items-center gap-2 rounded-t-md px-4 py-2.5 text-sm font-medium transition ${
-                activeTab === id
-                  ? "border-b-2 border-emerald-500 text-emerald-400"
-                  : "text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <Icon size={14} aria-hidden="true" />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div role="tabpanel">
-          {activeTab === "unsigned" && (
-            <UnsignedYouthTab
-              youth={youthList}
-              scoutId={scout.id}
-              sort={sort}
-              setSort={setSort}
-              filterCountry={filterCountry}
-              setFilterCountry={setFilterCountry}
-              countries={countries}
-              positions={positions}
-              filterPosition={filterPosition}
-              setFilterPosition={setFilterPosition}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              observedOnly={observedOnly}
-              setObservedOnly={setObservedOnly}
-              reportedIds={reportedIds}
-              onSelectYouth={handleSelectYouth}
-              viewMode={viewMode}
-              setViewMode={setViewMode}
-              minAge={minAge}
-              setMinAge={setMinAge}
-              maxAge={maxAge}
-              setMaxAge={setMaxAge}
-              nationalities={nationalities}
-              filterNationality={filterNationality}
-              setFilterNationality={setFilterNationality}
-              observations={Object.values(gameState.observations)}
-            />
-          )}
-          {activeTab === "subRegions" && (
-            <SubRegionsTab subRegions={subRegionList} />
-          )}
-          {activeTab === "venues" && <VenuesTab />}
-          {activeTab === "tournaments" && <TournamentsTab currentWeek={gameState?.currentWeek ?? 1} tournaments={gameState?.youthTournaments ?? {}} />}
-        </div>
+        {IS_YOUTH_EARLY_ACCESS ? (
+          <section aria-label="My prospect pipeline">{pipelineContent}</section>
+        ) : (
+          <>
+            <div className="mb-6 flex gap-1 overflow-x-auto border-b border-[#27272a]" role="tablist" aria-label="Youth scouting views">
+              {TAB_CONFIG.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  id={`youth-tab-${id}`}
+                  onClick={() => setActiveTab(id)}
+                  aria-selected={activeTab === id}
+                  aria-controls={`youth-panel-${id}`}
+                  role="tab"
+                  className={`flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-t-md px-4 py-2.5 text-sm font-medium transition ${
+                    activeTab === id
+                      ? "border-b-2 border-emerald-500 text-emerald-400"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  <Icon size={14} aria-hidden="true" />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div id={`youth-panel-${activeTab}`} role="tabpanel" aria-labelledby={`youth-tab-${activeTab}`}>
+              {activeTab === "unsigned" && pipelineContent}
+              {activeTab === "subRegions" && <SubRegionsTab subRegions={subRegionList} />}
+              {activeTab === "venues" && <VenuesTab />}
+              {activeTab === "tournaments" && (
+                <TournamentsTab currentWeek={gameState.currentWeek} tournaments={gameState.youthTournaments ?? {}} />
+              )}
+            </div>
+          </>
+        )}
       </div>
     </GameLayout>
   );

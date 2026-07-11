@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { ScrollReveal } from "./ScrollReveal";
 const blocks = [
   {
@@ -51,9 +52,12 @@ export function CoreLoop() {
                 delay={0.15}
                 className="w-full md:w-1/2"
               >
-                <img
+                <Image
                   src={block.screenshot}
                   alt={block.alt}
+                  width={1280}
+                  height={720}
+                  unoptimized
                   className="rounded-xl border border-zinc-800"
                   style={{ aspectRatio: "16/9", objectFit: "cover", width: "100%" }}
                 />

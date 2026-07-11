@@ -66,7 +66,6 @@ export {
   processAgentDemands,
   evaluateNegotiationOutcome,
   processActiveNegotiations,
-  applyCompletedTransfer,
   walkAwayFromNegotiation,
   getRecommendedOffer,
   getPersonalityDescription,

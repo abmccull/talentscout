@@ -72,7 +72,7 @@ export type { TrainingOption } from "./employeeSkills";
 export { LIFESTYLE_TIERS, getDefaultLifestyle, changeLifestyle, getLifestyleReputationPenalty, getLifestyleNetworkingBonus } from "./lifestyle";
 export { calculatePerformanceBonusAmount, calculateSigningBonus, calculateDiscoveryBonus, calculateDepartmentBonusPool, calculateGoldenParachute } from "./clubBonuses";
 export { calculateReportPrice, estimateReportPriceRange, listReport, withdrawListing, expireOldListings, processMarketplaceBids, acceptBid, declineBid, acceptExclusiveUpgrade } from "./reportMarketplace";
-export { calculatePlacementFee, calculateYouthPlacementFee, calculateSellOnPercentage, processSellOnClauses, checkPlacementFeeEligibility, triggerPlacementFee } from "./placementFees";
+export { calculatePlacementFee, calculateSellOnPercentage, processSellOnClauses, checkPlacementFeeEligibility, triggerPlacementFee } from "./placementFees";
 export { generateRetainerOffers, acceptRetainer, cancelRetainer, processRetainerDeliveries, recordRetainerDelivery, processRetainerRenewals } from "./retainers";
 export { OFFICE_TIERS, SALARY_BY_ROLE, upgradeOffice, hireEmployee, fireEmployee, processEmployeeWeek, calculateAgencyOverhead } from "./agency";
 export type { EmployeeWorkResult } from "./employeeWork";

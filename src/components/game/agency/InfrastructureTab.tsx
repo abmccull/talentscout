@@ -75,12 +75,12 @@ export function InfrastructureTab() {
       <Card>
         <CardHeader><CardTitle className="text-base">Data Subscription</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center gap-y-1 text-xs text-zinc-400">
             Current: <Badge variant="outline" className="ml-1">{infrastructure?.dataSubscription ?? "none"}</Badge>
             {infrastructure?.dataSubscription && infrastructure.dataSubscription !== "none" && (
               <span className="ml-2 text-emerald-400">+{(getDataSubscriptionBonus(infrastructure.dataSubscription) * 100).toFixed(0)}% data quality</span>
             )}
-          </p>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {(["basic", "premium", "elite"] as DataSubscriptionTier[]).map((tier) => {
               const current = infrastructure?.dataSubscription ?? "none";
@@ -118,12 +118,12 @@ export function InfrastructureTab() {
       <Card>
         <CardHeader><CardTitle className="text-base">Travel Budget</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center gap-y-1 text-xs text-zinc-400">
             Current: <Badge variant="outline" className="ml-1">{infrastructure?.travelBudget ?? "economy"}</Badge>
             {infrastructure?.travelBudget && infrastructure.travelBudget !== "economy" && (
               <span className="ml-2 text-sky-400">{((1 - getTravelBudgetFatigue(infrastructure.travelBudget)) * 100).toFixed(0)}% less travel fatigue</span>
             )}
-          </p>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(["standard", "business"] as TravelBudgetTier[]).map((tier) => {
               const current = infrastructure?.travelBudget ?? "economy";
@@ -161,12 +161,12 @@ export function InfrastructureTab() {
       <Card>
         <CardHeader><CardTitle className="text-base">Office Equipment</CardTitle></CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-xs text-zinc-400">
+          <div className="flex flex-wrap items-center gap-y-1 text-xs text-zinc-400">
             Current: <Badge variant="outline" className="ml-1">{infrastructure?.officeEquipment ?? "basic"}</Badge>
             {infrastructure?.officeEquipment && infrastructure.officeEquipment !== "basic" && (
               <span className="ml-2 text-amber-400">+{(getOfficeEquipmentBonus(infrastructure.officeEquipment) * 100).toFixed(0)}% report quality</span>
             )}
-          </p>
+          </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {(["upgraded", "professional"] as OfficeEquipmentTier[]).map((tier) => {
               const current = infrastructure?.officeEquipment ?? "basic";

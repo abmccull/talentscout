@@ -18,7 +18,6 @@ import {
   Zap,
   Sparkles,
   Wand2,
-  FastForward,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type { Activity, ActivityType } from "@/engine/core/types";
@@ -42,6 +41,8 @@ import { generateWeekPreview } from "@/engine/core/weekPreview";
 import type { WeekPreview } from "@/engine/core/weekPreview";
 import { BatchSummary } from "./BatchSummary";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -76,7 +77,6 @@ export function CalendarScreen() {
     pendingCalendarActivity,
     setPendingCalendarActivity,
     autoSchedule,
-    batchAdvance,
     batchSummary,
     dismissBatchSummary,
   } = useGameStore();
@@ -96,21 +96,18 @@ export function CalendarScreen() {
   }, []);
 
   // Week preview panel collapsed state
-  const [previewCollapsed, setPreviewCollapsed] = useState(false);
+  const [previewCollapsed, setPreviewCollapsed] = useState(true);
 
   // Click-to-place: selected activity + pending day for targetPool activities
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedPendingDay, setSelectedPendingDay] = useState<number | null>(null);
+  const [placementYouthId, setPlacementYouthId] = useState<string | null>(null);
 
   // Drag-and-drop state
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
 
   // Hover state for multi-slot preview during click-to-place
   const [hoverDay, setHoverDay] = useState<number | null>(null);
-
-  // Batch advance dialog state
-  const [showBatchDialog, setShowBatchDialog] = useState(false);
-  const [batchWeeks, setBatchWeeks] = useState(4);
 
   // Empty-day warning dialog
   const [showEmptyDayWarning, setShowEmptyDayWarning] = useState(false);
@@ -130,6 +127,7 @@ export function CalendarScreen() {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setSelectedActivity(null);
+        setPlacementYouthId(null);
         setHoverDay(null);
       }
     };
@@ -182,7 +180,25 @@ export function CalendarScreen() {
   }
 
   // Engine-driven activities — specialization-aware, properly gated
-  const engineActivities = getAvailableCalendarActivities();
+  const availableActivities = getAvailableCalendarActivities();
+  const engineActivities = availableActivities;
+  const selectedPlacementYouth = placementYouthId
+    ? Object.values(gameState.unsignedYouth).find(
+        (youth) => youth.id === placementYouthId || youth.player.id === placementYouthId,
+      )
+    : undefined;
+  const placementClubTargets = selectedPlacementYouth
+    ? getEligibleClubsForPlacement(
+        selectedPlacementYouth,
+        Object.values(gameState.clubs),
+        gameState.scout,
+        gameState.leagues,
+      ).map((club) => ({
+        id: club.id,
+        name: club.name,
+        description: `Academy ${club.youthAcademyRating}/20 · Reputation ${club.reputation}/100`,
+      }))
+    : [];
 
   const canScheduleAt = (activity: Activity, dayIndex: number): boolean => {
     if (dayIndex + activity.slots > maxSlots) return false;
@@ -303,6 +319,21 @@ export function CalendarScreen() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
+                    <span className="text-zinc-500">Reputation</span>
+                    <span
+                      className={
+                        lastWeekSummary.reputationChange > 0
+                          ? "font-semibold text-emerald-400"
+                          : lastWeekSummary.reputationChange < 0
+                            ? "font-semibold text-red-400"
+                            : "font-semibold text-zinc-300"
+                      }
+                    >
+                      {lastWeekSummary.reputationChange > 0 ? "+" : ""}
+                      {lastWeekSummary.reputationChange.toFixed(1)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border border-[#27272a] px-3 py-2">
                     <span className="text-zinc-500">Matches</span>
                     <span className="text-white font-semibold">{lastWeekSummary.matchesAttended}</span>
                   </div>
@@ -383,10 +414,11 @@ export function CalendarScreen() {
         )}
 
         {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#10151b]/92 p-5 shadow-xl shadow-black/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
           <div>
-            <div className="mb-1 flex items-center gap-2">
-              <h1 className="text-2xl font-bold">Weekly Planner</h1>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Weekly command</p>
+            <div className="mb-1 flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Planner</h1>
               <span
                 className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${SEASON_PHASE_CLASSES[seasonPhase]}`}
               >
@@ -396,30 +428,60 @@ export function CalendarScreen() {
             <p className="text-sm text-zinc-400">
               Week {currentWeek} — Season {currentSeason}
             </p>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
+              Commit your seven days to finding leads, deepening evidence, making recommendations, and protecting your judgment.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200">
+                {slotsUsed}/7 days committed
+              </span>
+              <span className={`rounded-full border px-3 py-1.5 font-semibold ${
+                severity === "danger"
+                  ? "border-red-400/25 bg-red-400/10 text-red-200"
+                  : severity === "warn"
+                    ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+                    : "border-sky-400/25 bg-sky-400/10 text-sky-200"
+              }`}>
+                {Math.round(scout.fatigue)}% fatigue
+              </span>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
+                {maxSlots - slotsUsed} open day{maxSlots - slotsUsed === 1 ? "" : "s"}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Tooltip content="Auto-fill empty days with optimal activities based on your watchlist and priorities." side="bottom">
-              <Button variant="outline" size="sm" onClick={() => autoSchedule()} className="gap-1.5">
-                <Wand2 size={14} />
-                Auto-Schedule
-              </Button>
-            </Tooltip>
-            <Tooltip content="Auto-schedule and advance multiple weeks at once." side="bottom">
-              <Button variant="outline" size="sm" onClick={() => setShowBatchDialog(true)} className="gap-1.5">
-                <FastForward size={14} />
-                Batch
-              </Button>
-            </Tooltip>
+          <div className="w-full sm:w-auto">
+            <div className="flex flex-wrap gap-2 sm:justify-end">
+              {!IS_YOUTH_EARLY_ACCESS && (
+                <Tooltip content="Auto-fill empty days with optimal activities based on your watchlist and priorities." side="bottom">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => autoSchedule()}
+                    className="min-w-0 flex-1 gap-1.5 sm:flex-none"
+                  >
+                    <Wand2 size={14} />
+                    Auto-Schedule
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
             <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
-              <Button onClick={() => {
-                const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
-                if (emptyCount > 0) {
-                  setShowEmptyDayWarning(true);
-                } else {
-                  playSFX("calendar-slide");
-                  requestWeekAdvance();
-                }
-              }} data-tutorial-id="advance-week">Advance Week</Button>
+              <Button
+                onClick={() => {
+                  const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
+                  if (emptyCount > 0) {
+                    setShowEmptyDayWarning(true);
+                  } else {
+                    playSFX("calendar-slide");
+                    requestWeekAdvance();
+                  }
+                }}
+                variant={slotsUsed === maxSlots ? "default" : "outline"}
+                className="mt-2 min-h-11 w-full sm:w-auto"
+                data-tutorial-id="advance-week"
+              >
+                Advance Week
+              </Button>
             </Tooltip>
           </div>
         </div>
@@ -441,7 +503,7 @@ export function CalendarScreen() {
         )}
 
         {/* Transfer window banner */}
-        {transferWindowActive && currentWindow && (
+        {!IS_YOUTH_EARLY_ACCESS && transferWindowActive && currentWindow && (
           <div
             className={`mb-4 rounded-md border px-4 py-2.5 text-sm ${
               isDeadlineDay
@@ -465,7 +527,7 @@ export function CalendarScreen() {
 
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (
-          <div className="mb-6 rounded-lg border border-violet-500/20 bg-violet-500/5 p-4">
+          <div className="mb-6 hidden rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 md:block">
             <button
               onClick={() => setPreviewCollapsed(!previewCollapsed)}
               className="mb-2 flex w-full items-center justify-between text-left"
@@ -618,7 +680,7 @@ export function CalendarScreen() {
 
         {/* Upcoming season events */}
         {upcomingEvents.length > 0 && (
-          <div className="mb-6 rounded-lg border border-[#27272a] bg-[#141414] p-3">
+          <div className="mb-6 hidden rounded-xl border border-[#27272a] bg-[#141414] p-3 md:block">
             <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
               <CalendarDays size={12} aria-hidden="true" />
               Upcoming Events
@@ -638,7 +700,7 @@ export function CalendarScreen() {
         )}
 
         {/* Fatigue meter */}
-        <div className="mb-6 rounded-lg border border-[#27272a] bg-[#141414] p-4">
+        <div className="mb-6 hidden rounded-xl border border-[#27272a] bg-[#141414] p-4 md:block">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Fatigue</span>
             <span
@@ -679,11 +741,11 @@ export function CalendarScreen() {
         </div>
 
         {/* Slot usage */}
-        <div className="mb-4 flex items-center gap-3">
-          <span className="text-sm text-zinc-400">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#11161c]/90 px-4 py-3">
+          <span className="text-sm font-medium text-zinc-300">
             Slots used: {slotsUsed} / {maxSlots}
           </span>
-          <div className="flex gap-1">
+          <div className="flex gap-1" role="img" aria-label={`${slotsUsed} of ${maxSlots} days committed`}>
             {Array.from({ length: maxSlots }).map((_, i) => (
               <div
                 key={i}
@@ -693,8 +755,88 @@ export function CalendarScreen() {
           </div>
         </div>
 
-        {/* 7-day grid */}
-        <div className="mb-6 grid grid-cols-7 gap-2" data-tutorial-id="calendar-grid">
+        {/* Responsive itinerary: agenda on phones, dense week grid on larger screens. */}
+        <section id="planner-itinerary" className="mb-6" data-tutorial-id="calendar-grid" aria-labelledby="itinerary-heading">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 id="itinerary-heading" className="text-lg font-semibold text-white">Week itinerary</h2>
+              <p className="mt-1 text-sm text-zinc-400">
+                {selectedActivity
+                  ? `Choose an open day for ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "the selected activity"}.`
+                  : "Select an opportunity below, then place it on an open day."}
+              </p>
+            </div>
+            {selectedActivity && (
+              <Button className="min-h-11 self-start" variant="outline" onClick={() => setSelectedActivity(null)}>
+                Clear selection
+              </Button>
+            )}
+          </div>
+
+          <div className="space-y-2 md:hidden">
+            {DAY_KEYS.map((dayKey, i) => {
+              const activity = activities[i];
+              const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
+              const Icon = display?.icon;
+              const canPlaceSelected = !!selectedActivity && canScheduleAt(selectedActivity, i);
+
+              return (
+                <div
+                  key={dayKey}
+                  className={`flex min-h-[76px] overflow-hidden rounded-xl border ${
+                    activity
+                      ? "border-emerald-400/25 bg-emerald-400/[0.06]"
+                      : canPlaceSelected
+                        ? "border-blue-400/35 bg-blue-400/[0.07]"
+                        : "border-white/10 bg-[#11161c]/90"
+                  }`}
+                >
+                  <div className="flex w-16 shrink-0 flex-col items-center justify-center border-r border-white/10 bg-black/20 px-2">
+                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-200">{DAY_KEYS[i]}</span>
+                    <span className="mt-1 text-[10px] text-zinc-500">Day {i + 1}</span>
+                  </div>
+                  {activity && display && Icon ? (
+                    <div className="flex min-w-0 flex-1 items-center gap-3 p-3">
+                      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/25 ${display.color}`}>
+                        <Icon size={18} aria-hidden="true" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className={`text-sm font-semibold ${display.color}`}>{display.label}</p>
+                        <p className="mt-1 line-clamp-2 text-xs leading-4 text-zinc-300">{activity.description}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => unscheduleActivity(i)}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-red-500/10 hover:text-red-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                        aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
+                      >
+                        <X size={17} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDaySlotClick(i)}
+                      disabled={!canPlaceSelected}
+                      aria-label={
+                        selectedActivity
+                          ? `Place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} on ${DAY_KEYS[i]}`
+                          : `${DAY_KEYS[i]} open day`
+                      }
+                      className={`min-h-11 min-w-0 flex-1 px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                        canPlaceSelected ? "text-blue-100 hover:bg-blue-400/10" : "cursor-default text-zinc-500"
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">{canPlaceSelected ? "Place activity here" : "Open day"}</span>
+                      <span className="mt-1 block text-xs">{canPlaceSelected ? "Tap to commit this opportunity." : "Recovers a small amount of fatigue."}</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden grid-cols-7 gap-2 md:grid">
           {DAY_KEYS.map((dayKey, i) => {
             const activity = activities[i];
             const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
@@ -737,7 +879,20 @@ export function CalendarScreen() {
                 <Tooltip content={selectedActivity ? `Click to place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} here` : "Drag or click an activity card, then place it here."} side="top">
                 <div
                   className={`min-h-[80px] rounded-lg border p-2 transition ${slotClass}`}
+                  role={!activity ? "button" : undefined}
+                  tabIndex={!activity ? 0 : undefined}
+                  aria-label={!activity
+                    ? selectedActivity
+                      ? `Place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} on ${DAY_KEYS[i]}`
+                      : `${DAY_KEYS[i]} open day`
+                    : undefined}
                   onClick={() => handleDaySlotClick(i)}
+                  onKeyDown={(event) => {
+                    if (!activity && (event.key === "Enter" || event.key === " ")) {
+                      event.preventDefault();
+                      handleDaySlotClick(i);
+                    }
+                  }}
                   onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
                   onDragEnter={(e) => { e.preventDefault(); setDragOverDay(i); }}
                   onDragLeave={(e) => {
@@ -767,7 +922,7 @@ export function CalendarScreen() {
                       )}
                     </div>
                   ) : (
-                    <p className={`text-center text-xs mt-2 ${isAnchor || isDragAnchor ? "text-blue-400" : "text-zinc-600"}`}>
+                    <p className={`text-center text-xs mt-2 ${isAnchor || isDragAnchor ? "text-blue-400" : "text-zinc-400"}`}>
                       {isAnchor || isDragAnchor ? "Drop here" : "Empty"}
                     </p>
                   )}
@@ -779,6 +934,7 @@ export function CalendarScreen() {
         </div>
 
         {/* Available activities — grouped by category, specialization-aware */}
+        </section>
         <div data-tutorial-id="calendar-activities">
         <ActivityPanel
           activities={engineActivities}
@@ -792,7 +948,17 @@ export function CalendarScreen() {
           resolveClubName={resolveClubName}
           highlightTargetId={pendingCalendarActivity?.targetId}
           selectedActivity={selectedActivity}
-          onSelectActivity={setSelectedActivity}
+          onSelectActivity={(activity) => {
+            setSelectedActivity(activity);
+            if (activity) {
+              window.setTimeout(() => {
+                document.getElementById("planner-itinerary")?.scrollIntoView({
+                  behavior: "smooth",
+                  block: "start",
+                });
+              }, 50);
+            }
+          }}
         />
         </div>
         </div>
@@ -833,52 +999,12 @@ export function CalendarScreen() {
           </div>
         </div>
       )}
-      {/* Batch advance dialog */}
-      {showBatchDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg border border-blue-500/30 bg-zinc-900 p-6 shadow-xl">
-            <div className="mb-3 flex items-center gap-2 text-blue-400">
-              <FastForward size={18} />
-              <h3 className="text-lg font-semibold">Batch Advance</h3>
-            </div>
-            <p className="mb-4 text-sm text-zinc-300">
-              Auto-schedule and advance multiple weeks. Activities are chosen based
-              on your watchlist and current priorities.
-            </p>
-            <div className="mb-5">
-              <label className="mb-1 block text-xs text-zinc-500">Weeks to advance</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="range"
-                  min={1}
-                  max={8}
-                  value={batchWeeks}
-                  onChange={(e) => setBatchWeeks(Number(e.target.value))}
-                  className="flex-1 accent-blue-500"
-                />
-                <span className="min-w-[2rem] text-center text-lg font-bold text-white">{batchWeeks}</span>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowBatchDialog(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => {
-                setShowBatchDialog(false);
-                batchAdvance(batchWeeks);
-              }}>
-                Advance {batchWeeks} Week{batchWeeks !== 1 ? "s" : ""}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
       {/* Batch summary overlay */}
       {batchSummary && (
         <BatchSummary result={batchSummary} onDismiss={dismissBatchSummary} />
       )}
       {/* TargetPicker modal for click-to-place / drag-and-drop with targetPool activities */}
-      {selectedActivity && selectedPendingDay != null && selectedActivity.targetPool && (
+      {selectedActivity && selectedPendingDay != null && selectedActivity.targetPool && !placementYouthId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-sm mx-4">
             <TargetPicker
@@ -886,6 +1012,10 @@ export function CalendarScreen() {
               targets={selectedActivity.targetPool}
               mode={modalPickerMode}
               onSelect={(targetId) => {
+                if (selectedActivity.type === "writePlacementReport") {
+                  setPlacementYouthId(targetId);
+                  return;
+                }
                 handleSchedule(
                   { ...selectedActivity, targetId, targetPool: undefined },
                   selectedPendingDay,
@@ -896,11 +1026,51 @@ export function CalendarScreen() {
               }}
               onClose={() => {
                 setSelectedPendingDay(null);
+                setPlacementYouthId(null);
               }}
             />
           </div>
         </div>
       )}
+      {selectedActivity?.type === "writePlacementReport" &&
+        selectedPendingDay != null &&
+        placementYouthId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="w-full max-w-sm mx-4 rounded-lg border border-[#27272a] bg-[#0a0a0a] p-3">
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-white">Choose the destination club</p>
+                <p className="mt-1 text-[11px] text-zinc-500">
+                  The club you select will evaluate this specific placement report.
+                </p>
+              </div>
+              <TargetPicker
+                inline
+                targets={placementClubTargets}
+                mode="option"
+                onSelect={(destinationClubId) => {
+                  handleSchedule(
+                    {
+                      ...selectedActivity,
+                      targetId: placementYouthId,
+                      destinationClubId,
+                      targetPool: undefined,
+                    },
+                    selectedPendingDay,
+                  );
+                  setSelectedActivity(null);
+                  setSelectedPendingDay(null);
+                  setPlacementYouthId(null);
+                  setHoverDay(null);
+                }}
+                onClose={() => {
+                  setSelectedActivity(null);
+                  setSelectedPendingDay(null);
+                  setPlacementYouthId(null);
+                }}
+              />
+            </div>
+          </div>
+        )}
     </GameLayout>
   );
 }

@@ -11,6 +11,7 @@
  */
 
 import type { RNG } from "@/engine/rng";
+import type { Player } from "@/engine/core/types";
 import type { ObservationSession, SessionPhase } from "@/engine/observation/types";
 import { generateMoments } from "@/engine/observation/moments";
 import {
@@ -436,6 +437,7 @@ function applyAtmosphereEvent(
 export function populateFullObservationPhases(
   session: ObservationSession,
   rng: RNG,
+  playerProfiles?: Readonly<Record<string, Player>>,
 ): ObservationSession {
   if (session.state !== "setup") {
     return session;
@@ -468,6 +470,7 @@ export function populateFullObservationPhases(
       phase.index,
       totalPhases,
       atmosphere,
+      playerProfiles,
     );
 
     // 2. Generate a narrative description for this phase.

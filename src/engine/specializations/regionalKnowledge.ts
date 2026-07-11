@@ -15,8 +15,12 @@ import type {
   RegionalKnowledge,
   CulturalInsight,
   CountryReputation,
+  Scout,
+  SubRegion,
 } from "@/engine/core/types";
 import { discoverHiddenLeague } from "@/engine/world/hiddenLeagues";
+import { isScoutAbroad } from "@/engine/world/travel";
+import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
 // CONSTANTS
@@ -109,6 +113,76 @@ const DEFAULT_INSIGHT_POOL: CulturalInsight[] = [
  */
 const INSIGHT_THRESHOLDS = [10, 25, 45, 70];
 
+function canonicalizeCountry(value?: string): string | undefined {
+  return normalizeCountryKey(value);
+}
+
+function fallbackNormalizeCountry(value: string): string {
+  return canonicalizeCountry(value) ?? value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function getCountryReputationByCountry(
+  countryReputations: Record<string, CountryReputation>,
+  countryId: string,
+): CountryReputation | undefined {
+  const canonicalCountryId = canonicalizeCountry(countryId);
+  if (!canonicalCountryId) return undefined;
+
+  for (const [key, reputation] of Object.entries(countryReputations)) {
+    const reputationCountry =
+      canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
+    if (reputationCountry === canonicalCountryId) {
+      return reputation;
+    }
+  }
+
+  return undefined;
+}
+
+function resolveScoutHomeCountry(
+  scout: Scout,
+  regionalKnowledge?: Record<string, RegionalKnowledge>,
+): string | undefined {
+  for (const [key, reputation] of Object.entries(scout.countryReputations ?? {})) {
+    const countryId =
+      canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
+    if (countryId && reputation.familiarity >= 50) {
+      return countryId;
+    }
+  }
+
+  const nationalityCountry = countryKeyFromNationality(scout.nationality);
+  if (nationalityCountry) {
+    return nationalityCountry;
+  }
+
+  for (const [key, reputation] of Object.entries(scout.countryReputations ?? {})) {
+    const countryId =
+      canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
+    if (countryId) {
+      return countryId;
+    }
+  }
+
+  return Object.keys(regionalKnowledge ?? {})
+    .map((countryId) => canonicalizeCountry(countryId))
+    .find((countryId): countryId is string => !!countryId);
+}
+
+function resolveScoutEffectiveCountry(state: GameState): string | undefined {
+  const abroadCountry = isScoutAbroad(state.scout, state.currentWeek)
+    ? canonicalizeCountry(state.scout.travelBooking?.destinationCountry)
+    : undefined;
+
+  return (
+    abroadCountry
+    ?? resolveScoutHomeCountry(state.scout, state.regionalKnowledge)
+    ?? state.countries
+      .map((countryId) => canonicalizeCountry(countryId))
+      .find((countryId): countryId is string => !!countryId)
+  );
+}
+
 // =============================================================================
 // CORE: SCOUTING EFFICIENCY CURVE
 // =============================================================================
@@ -200,9 +274,13 @@ export function initializeRegionalKnowledge(
   startingCountry: string,
 ): Record<string, RegionalKnowledge> {
   const knowledge: Record<string, RegionalKnowledge> = {};
+  const homeCountry = canonicalizeCountry(startingCountry) ?? startingCountry;
 
-  for (const country of countries) {
-    const isHome = country === startingCountry;
+  for (const rawCountry of countries) {
+    const country = canonicalizeCountry(rawCountry) ?? rawCountry;
+    if (knowledge[country]) continue;
+
+    const isHome = country === homeCountry;
     const level = isHome ? 25 : 0;
     knowledge[country] = {
       countryId: country,
@@ -215,6 +293,64 @@ export function initializeRegionalKnowledge(
   }
 
   return knowledge;
+}
+
+/**
+ * Keep the legacy country and sub-region familiarity views aligned with the
+ * canonical regional knowledge ledger. Existing more-specific familiarity is
+ * preserved, while country mastery supplies a floor for every sub-region.
+ */
+export function synchronizeRegionalFamiliarity(
+  scout: Scout,
+  subRegions: Record<string, SubRegion>,
+  regionalKnowledge: Record<string, RegionalKnowledge>,
+): { scout: Scout; subRegions: Record<string, SubRegion> } {
+  const knowledgeByNormalizedCountry = new Map(
+    Object.entries(regionalKnowledge).map(([countryId, knowledge]) => [
+      fallbackNormalizeCountry(countryId),
+      knowledge,
+    ]),
+  );
+  const countryReputations = { ...scout.countryReputations };
+
+  for (const [countryId, knowledge] of Object.entries(regionalKnowledge)) {
+    const existingKey = Object.keys(countryReputations).find(
+      (key) => fallbackNormalizeCountry(key) === fallbackNormalizeCountry(countryId),
+    ) ?? countryId;
+    const existing = countryReputations[existingKey];
+    countryReputations[existingKey] = {
+      country: existing?.country ?? countryId,
+      familiarity: Math.max(existing?.familiarity ?? 0, knowledge.knowledgeLevel),
+      reportsSubmitted: existing?.reportsSubmitted ?? 0,
+      successfulFinds: existing?.successfulFinds ?? 0,
+      contactCount: existing?.contactCount ?? 0,
+    };
+  }
+
+  const synchronizedSubRegions = Object.fromEntries(
+    Object.entries(subRegions).map(([id, subRegion]) => {
+      const knowledge = knowledgeByNormalizedCountry.get(
+        fallbackNormalizeCountry(subRegion.country),
+      );
+      return [
+        id,
+        knowledge
+          ? {
+              ...subRegion,
+              familiarity: Math.max(
+                subRegion.familiarity ?? 0,
+                Math.floor(knowledge.knowledgeLevel),
+              ),
+            }
+          : subRegion,
+      ];
+    }),
+  );
+
+  return {
+    scout: { ...scout, countryReputations },
+    subRegions: synchronizedSubRegions,
+  };
 }
 
 /**
@@ -246,19 +382,12 @@ export function processRegionalKnowledgeGrowth(
   const newDiscoveries: Array<{ countryId: string; leagueId: string; leagueName: string }> = [];
   const newInsights: Array<{ countryId: string; insight: CulturalInsight }> = [];
   const newContacts: Array<{ countryId: string; contactId: string }> = [];
+  const currentCountry = resolveScoutEffectiveCountry(state);
 
-  // Determine which country the scout is currently active in
-  const currentCountry =
-    (state.scout.travelBooking?.isAbroad
-      ? state.scout.travelBooking.destinationCountry
-      : undefined) ?? state.countries[0];
-
-  for (const countryId of state.countries) {
-    const prev = knowledge[countryId];
-    if (!prev) continue;
+  for (const [countryId, prev] of Object.entries(knowledge)) {
 
     const rep: CountryReputation | undefined =
-      state.scout.countryReputations[countryId];
+      getCountryReputationByCountry(state.scout.countryReputations, countryId);
 
     let knowledgeGain = 0;
 

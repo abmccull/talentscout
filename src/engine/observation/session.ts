@@ -160,6 +160,7 @@ function buildSessionPlayers(config: SessionConfig): SessionPlayer[] {
     isFocused: false,
     focusedPhases: [],
     currentLens: undefined,
+    focusHistory: [],
   }));
 
   // Ensure targetPlayerId appears first in the list (for UI prominence).
@@ -220,7 +221,10 @@ export function createSession(
       warmupPhases: {},
     },
     flaggedMoments: [],
-    hypotheses: [],
+    hypotheses: (config.initialHypotheses ?? []).map((hypothesis) => ({
+      ...hypothesis,
+      evidence: [...hypothesis.evidence],
+    })),
     insightPointsEarned: 0,
     reflectionNotes: [],
     venueAtmosphere: undefined,
@@ -290,12 +294,47 @@ export function advanceSessionPhase(
   };
 
   // Refresh tokens when the upcoming phase is a halftime phase.
-  if (!isLastPhase && isHalfTimePhase(session, nextPhaseIndex)) {
+  // First-half allocations do not persist into the second half for free.
+  const enteringHalfTime = !isLastPhase && isHalfTimePhase(session, nextPhaseIndex);
+  if (enteringHalfTime) {
     updatedFocusTokens = {
       ...updatedFocusTokens,
       available: session.focusTokens.total,
+      allocations: [],
+      warmupPhases: {},
     };
   }
+
+  const activeLensByPlayer = new Map(
+    updatedAllocations.map((allocation) => [allocation.playerId, allocation.lens]),
+  );
+  const updatedPlayers = session.players.map((player) => {
+    if (enteringHalfTime) {
+      return {
+        ...player,
+        isFocused: false,
+        currentLens: undefined,
+      };
+    }
+
+    const activeLens = activeLensByPlayer.get(player.playerId);
+    if (!activeLens || isLastPhase) return player;
+
+    const focusedPhases = player.focusedPhases.includes(nextPhaseIndex)
+      ? player.focusedPhases
+      : [...player.focusedPhases, nextPhaseIndex];
+    const focusHistory = player.focusHistory.some(
+      (entry) => entry.phaseIndex === nextPhaseIndex && entry.lens === activeLens,
+    )
+      ? player.focusHistory
+      : [...player.focusHistory, { phaseIndex: nextPhaseIndex, lens: activeLens }];
+
+    return {
+      ...player,
+      focusedPhases,
+      focusHistory,
+    };
+  });
 
   if (isLastPhase) {
     return {
@@ -303,6 +342,7 @@ export function advanceSessionPhase(
       state: "reflection",
       currentPhaseIndex: session.phases.length - 1,
       focusTokens: updatedFocusTokens,
+      players: updatedPlayers,
     };
   }
 
@@ -310,6 +350,7 @@ export function advanceSessionPhase(
     ...session,
     currentPhaseIndex: nextPhaseIndex,
     focusTokens: updatedFocusTokens,
+    players: updatedPlayers,
   };
 }
 
@@ -356,7 +397,7 @@ export function allocateFocus(
   }
 
   const player = session.players.find((p) => p.playerId === playerId);
-  if (!player) {
+  if (!player || player.isFocused) {
     return session;
   }
 
@@ -390,6 +431,11 @@ export function allocateFocus(
           focusedPhases: p.focusedPhases.includes(session.currentPhaseIndex)
             ? p.focusedPhases
             : [...p.focusedPhases, session.currentPhaseIndex],
+          focusHistory: p.focusHistory.some(
+            (entry) => entry.phaseIndex === session.currentPhaseIndex && entry.lens === lens,
+          )
+            ? p.focusHistory
+            : [...p.focusHistory, { phaseIndex: session.currentPhaseIndex, lens }],
         }
       : p,
   );
@@ -417,8 +463,20 @@ export function removeFocus(
       : p,
   );
 
+  const updatedWarmup = { ...session.focusTokens.warmupPhases };
+  for (const key of Object.keys(updatedWarmup)) {
+    if (key.startsWith(`${playerId}:`)) delete updatedWarmup[key];
+  }
+
   return {
     ...session,
+    focusTokens: {
+      ...session.focusTokens,
+      allocations: session.focusTokens.allocations.filter(
+        (allocation) => allocation.playerId !== playerId,
+      ),
+      warmupPhases: updatedWarmup,
+    },
     players: updatedPlayers,
   };
 }
@@ -625,7 +683,11 @@ export function addReflectionNote(
  */
 export function getSessionResult(session: ObservationSession): SessionResult {
   const focusedPlayerIds = Array.from(
-    new Set(session.focusTokens.allocations.map((a) => a.playerId)),
+    new Set(
+      session.players
+        .filter((player) => player.focusedPhases.length > 0)
+        .map((player) => player.playerId),
+    ),
   );
 
   const phasesCompleted =

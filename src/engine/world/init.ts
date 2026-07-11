@@ -16,6 +16,7 @@ import type { ClubData, LeagueData, CountryData } from "@/data/types";
 import { generateSquad } from "@/engine/players/generation";
 import { generateSeasonFixtures } from "@/engine/world/fixtures";
 import { generateTacticalStyle } from "@/engine/firstTeam/tacticalStyle";
+import { generateSubRegions } from "@/engine/youth/generation";
 
 export interface WorldState {
   leagues: Record<string, League>;
@@ -66,57 +67,11 @@ function buildTerritory(countryData: CountryData, leagueIds: string[]): Territor
     id: `territory_${countryData.key}`,
     name: countryData.name,
     country: countryData.name,
+    countryKey: countryData.key,
     leagueIds,
     maxScouts: 3,
     assignedScoutIds: [],
   };
-}
-
-// ---------------------------------------------------------------------------
-// Sub-region generation
-// ---------------------------------------------------------------------------
-
-function generateWorldSubRegions(countries: string[]): Record<string, SubRegion> {
-  const SUB_REGION_DATA: Record<string, string[]> = {
-    // Core countries
-    england: ["London", "North West", "North East", "Midlands", "South Coast", "Yorkshire", "East Anglia"],
-    brazil: ["São Paulo", "Rio de Janeiro", "Minas Gerais", "Southern", "Northeast", "North"],
-    argentina: ["Buenos Aires", "Rosario", "Córdoba", "Mendoza", "La Plata", "Tucumán"],
-    spain: ["Catalonia", "Madrid", "Andalusia", "Basque Country", "Valencia", "Galicia"],
-    germany: ["Bavaria", "North Rhine-Westphalia", "Saxony", "Hamburg", "Berlin", "Baden-Württemberg"],
-    france: ["Île-de-France", "Provence", "Rhône-Alpes", "Brittany", "Alsace", "Midi-Pyrénées"],
-    // Secondary countries — North America
-    usa: ["East Coast", "West Coast", "Midwest", "South", "Pacific NW"],
-    mexico: ["CDMX", "Monterrey", "Guadalajara", "Puebla", "Tijuana"],
-    canada: ["Ontario", "Quebec", "British Columbia", "Prairies"],
-    // Secondary countries — Africa
-    nigeria: ["Lagos", "Abuja", "South-South", "North"],
-    ghana: ["Greater Accra", "Ashanti", "Northern"],
-    ivorycoast: ["Abidjan", "Bouaké", "Western"],
-    egypt: ["Cairo", "Alexandria", "Upper Egypt"],
-    southafrica: ["Gauteng", "Western Cape", "KZN", "Eastern Cape"],
-    senegal: ["Dakar", "Thiès", "Saint-Louis"],
-    cameroon: ["Centre", "Littoral", "West"],
-    // Secondary countries — Asia
-    japan: ["Kanto", "Kansai", "Chubu", "Kyushu", "Hokkaido"],
-    southkorea: ["Seoul", "Gyeonggi", "Gyeongsang", "Jeolla"],
-    saudiarabia: ["Riyadh", "Jeddah", "Eastern", "Mecca"],
-    china: ["Beijing", "Shanghai", "Guangdong", "Shandong"],
-    // Secondary countries — Oceania
-    australia: ["NSW", "Victoria", "Queensland", "Western Australia"],
-    newzealand: ["Auckland", "Wellington", "Canterbury"],
-  };
-
-  const result: Record<string, SubRegion> = {};
-  for (const country of countries) {
-    const regions = SUB_REGION_DATA[country.toLowerCase()] ?? ["Central"];
-    for (const name of regions) {
-      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/_+$/, "");
-      const id = `subregion_${country.toLowerCase()}_${slug}`;
-      result[id] = { id, name, country, familiarity: 0 };
-    }
-  }
-  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -218,9 +173,9 @@ export async function initializeWorld(
     const territoryEntry = Object.values(territories).find(
       (t) => t.leagueIds.includes(league.id),
     );
-    const countryKey = territoryEntry
-      ? territoryEntry.id.replace("territory_", "")
-      : "";
+    const countryKey = territoryEntry?.countryKey
+      ?? territoryEntry?.id.replace("territory_", "")
+      ?? "";
 
     if (secondarySet.has(countryKey)) continue; // Skip fixture generation
 
@@ -231,7 +186,12 @@ export async function initializeWorld(
   }
 
   // Generate sub-regions for youth scouting (all countries including secondary).
-  const subRegions = generateWorldSubRegions(allCountryKeys);
+  const subRegions: Record<string, SubRegion> = {};
+  for (const countryData of countryDataList) {
+    for (const subRegion of generateSubRegions(countryData.name)) {
+      subRegions[subRegion.id] = subRegion;
+    }
+  }
 
   return { leagues, clubs, players, fixtures, territories, subRegions };
 }

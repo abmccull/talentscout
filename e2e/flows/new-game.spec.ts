@@ -1,140 +1,157 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "../fixtures";
-import { SPECIALIZATIONS } from "../helpers/selectors";
+import { SPECIALIZATIONS, SELECTORS } from "../helpers/selectors";
+
+const youthEarlyAccess = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+const specializationsUnderTest = youthEarlyAccess
+  ? (["youth"] as const)
+  : SPECIALIZATIONS;
+
+const SPEC_DISPLAY_NAMES: Record<(typeof SPECIALIZATIONS)[number], string> = {
+  youth: "Youth Scout",
+  firstTeam: "First Team Scout",
+  regional: "Regional Expert",
+  data: "Data Scout",
+};
+
+async function allocateEightPoints(page: Page, specialization: keyof typeof SPEC_DISPLAY_NAMES) {
+  const allocations: Record<string, Record<string, number>> = {
+    youth: {
+      technicalEye: 2,
+      physicalAssessment: 1,
+      psychologicalRead: 1,
+      playerJudgment: 1,
+      potentialAssessment: 3,
+    },
+    firstTeam: {
+      technicalEye: 1,
+      physicalAssessment: 1,
+      tacticalUnderstanding: 2,
+      playerJudgment: 3,
+      potentialAssessment: 1,
+    },
+    regional: {
+      technicalEye: 1,
+      psychologicalRead: 1,
+      tacticalUnderstanding: 1,
+      dataLiteracy: 1,
+      playerJudgment: 2,
+      potentialAssessment: 2,
+    },
+    data: {
+      technicalEye: 1,
+      tacticalUnderstanding: 1,
+      dataLiteracy: 4,
+      playerJudgment: 1,
+      potentialAssessment: 1,
+    },
+  };
+
+  for (const [skill, amount] of Object.entries(allocations[specialization])) {
+    for (let i = 0; i < amount; i++) {
+      await page.getByRole("button", { name: `Increase ${skill}` }).click();
+    }
+  }
+}
 
 test.describe("New Game Wizard", () => {
-  // Wizard tests navigate the full UI flow — give extra time for page load
   test.setTimeout(90_000);
 
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
   });
 
-  for (const spec of SPECIALIZATIONS) {
-    test(`complete wizard with ${spec} specialization`, async ({ gamePage }) => {
-      const specDisplayNames: Record<string, string> = {
-        youth: "Youth Scout",
-        firstTeam: "First Team Scout",
-        regional: "Regional Expert",
-        data: "Data Scout",
-      };
+  test("main menu uses the active entry point label", async ({ gamePage }) => {
+    await expect(gamePage.page.locator(SELECTORS.newGameButton).first()).toBeVisible();
 
-      // Navigate to new game
-      await gamePage.page.click('button:has-text("New Game")');
-      await gamePage.page.waitForTimeout(500);
+    if (youthEarlyAccess) {
+      await expect(
+        gamePage.page.getByRole("button", { name: /^Scenarios$/ }),
+      ).toHaveCount(0);
+    }
+  });
 
-      // Step 1: Identity
-      const firstNameInput = gamePage.page.locator('input#scout-first-name, input[placeholder="Alex"]');
-      const lastNameInput = gamePage.page.locator('input#scout-last-name, input[placeholder="Morgan"]');
-      await firstNameInput.fill("E2E");
-      await lastNameInput.fill(`${spec}Tester`);
-      await gamePage.page.click('button:has-text("Continue")');
-      await gamePage.page.waitForTimeout(400);
+  for (const specialization of specializationsUnderTest) {
+    test(`complete wizard with ${specialization} specialization`, async ({ gamePage }) => {
+      await gamePage.startNewGame({
+        firstName: "E2E",
+        lastName: `${specialization}Tester`,
+        specialization,
+      });
 
-      // Step 2: Specialization
-      await gamePage.page.click(`text="${specDisplayNames[spec]}"`);
-      await gamePage.page.click('button:has-text("Continue")');
-      await gamePage.page.waitForTimeout(400);
+      expect(await gamePage.getCurrentScreen()).toBe("dashboard");
+      expect(await gamePage.getSpecialization()).toBe(specialization);
+      expect(await gamePage.getGameStateValue("scout.firstName")).toBe("E2E");
 
-      // Step 3: Skills — accept defaults
-      await gamePage.page.click('button:has-text("Continue")');
-      await gamePage.page.waitForTimeout(400);
-
-      // Step 4: Position — accept freelance default
-      await gamePage.page.click('button:has-text("Continue")');
-      await gamePage.page.waitForTimeout(400);
-
-      // Step 5: World — accept England default
-      await gamePage.page.click('button:has-text("Continue")');
-      await gamePage.page.waitForTimeout(400);
-
-      // Step 6: Review — click begin
-      await gamePage.page.click('button:has-text("Begin Career")');
-      await gamePage.waitForScreen("dashboard", 30_000);
-
-      // Verify we're on the dashboard
-      const screen = await gamePage.getCurrentScreen();
-      expect(screen).toBe("dashboard");
-
-      // Verify correct specialization was set
-      const actualSpec = await gamePage.getSpecialization();
-      expect(actualSpec).toBe(spec);
-
-      // Verify scout name
-      const firstName = await gamePage.getGameStateValue("scout.firstName");
-      expect(firstName).toBe("E2E");
+      if (youthEarlyAccess) {
+        expect(await gamePage.getGameStateValue("scout.currentClubId")).toBeFalsy();
+        expect(await gamePage.getGameStateValue("scout.salary")).toBe(0);
+      }
 
       gamePage.expectNoConsoleErrors();
     });
   }
 
   test("wizard enforces required fields on step 1", async ({ gamePage }) => {
-    await gamePage.page.click('button:has-text("New Game")');
-    await gamePage.page.waitForTimeout(500);
+    await gamePage.page.locator(SELECTORS.newGameButton).first().click();
 
-    // Clear both name fields and try to advance
-    const firstNameInput = gamePage.page.locator('input#scout-first-name, input[placeholder="Alex"]');
-    const lastNameInput = gamePage.page.locator('input#scout-last-name, input[placeholder="Morgan"]');
+    const firstNameInput = gamePage.page.locator(SELECTORS.firstNameInput);
+    const lastNameInput = gamePage.page.locator(SELECTORS.lastNameInput);
+    const continueButton = gamePage.page.getByRole("button", { name: /^Continue$/ });
 
     await firstNameInput.fill("");
     await lastNameInput.fill("");
+    await expect(continueButton).toBeDisabled();
 
-    const continueBtn = gamePage.page.locator('button:has-text("Continue")');
+    await firstNameInput.fill("Test");
+    await expect(continueButton).toBeDisabled();
 
-    // Try to advance with empty names — button should be disabled
-    const isDisabled = await continueBtn.isDisabled();
+    await lastNameInput.fill("Scout");
+    await expect(continueButton).toBeEnabled();
 
-    if (isDisabled) {
-      // Correct: button is disabled when names are empty
-      expect(isDisabled).toBe(true);
+    await continueButton.click();
+    if (youthEarlyAccess) {
+      await expect(
+        gamePage.page.getByRole("heading", { name: "Customize Your Skills" }),
+      ).toBeVisible();
+    } else {
+      await expect(
+        gamePage.page.getByRole("button", { name: /Youth Scout/ }),
+      ).toBeVisible();
+    }
+  });
+
+  test("wizard requires exactly eight skill points before continuing", async ({ gamePage }) => {
+    await gamePage.page.locator(SELECTORS.newGameButton).first().click();
+
+    await gamePage.page.locator(SELECTORS.firstNameInput).fill("Youth");
+    await gamePage.page.locator(SELECTORS.lastNameInput).fill("Tester");
+    await gamePage.page.getByRole("button", { name: /^Continue$/ }).click();
+
+    if (!youthEarlyAccess) {
+      await gamePage.page
+        .getByRole("button", { name: new RegExp(SPEC_DISPLAY_NAMES.youth) })
+        .click();
+      await gamePage.page.getByRole("button", { name: /^Continue$/ }).click();
     }
 
-    // Fill first name only
-    await firstNameInput.fill("Test");
-    // Continue should still be disabled (last name empty)
-    await gamePage.page.waitForTimeout(200);
+    await expect(
+      gamePage.page.getByText(/Assign all 8 bonus skill points to continue/i),
+    ).toBeVisible();
+    await expect(gamePage.page.getByRole("button", { name: /^Continue$/ })).toBeDisabled();
 
-    // Fill both and verify we can advance
-    await lastNameInput.fill("Scout");
-    await gamePage.page.waitForTimeout(200);
-    await continueBtn.click();
-    await gamePage.page.waitForTimeout(400);
+    await allocateEightPoints(gamePage.page, "youth");
+    await expect(
+      gamePage.page.getByText(/All 8 bonus skill points assigned/i),
+    ).toBeVisible();
+    await expect(gamePage.page.getByRole("button", { name: /^Continue$/ })).toBeEnabled();
 
-    // Now specialization cards should be visible
-    await expect(gamePage.page.locator('text="Youth Scout"')).toBeVisible();
-  });
+    await gamePage.page.getByRole("button", { name: /^Continue$/ }).click();
 
-  test("back button returns to previous step", async ({ gamePage }) => {
-    await gamePage.page.click('button:has-text("New Game")');
-    await gamePage.page.waitForTimeout(500);
-
-    // Fill step 1 and advance
-    const firstNameInput = gamePage.page.locator('input#scout-first-name, input[placeholder="Alex"]');
-    const lastNameInput = gamePage.page.locator('input#scout-last-name, input[placeholder="Morgan"]');
-    await firstNameInput.fill("Test");
-    await lastNameInput.fill("Scout");
-    await gamePage.page.click('button:has-text("Continue")');
-    await gamePage.page.waitForTimeout(400);
-
-    // Now on step 2 — verify specialization cards visible
-    await expect(gamePage.page.locator('text="Youth Scout"')).toBeVisible();
-
-    // Go back — use exact match to avoid matching "← Back to Menu"
-    await gamePage.page.click('button:text-is("Back")');
-    await gamePage.page.waitForTimeout(400);
-
-    // Should be back on step 1 — name inputs should be visible with values
-    const firstNameValue = await firstNameInput.inputValue();
-    expect(firstNameValue).toBe("Test");
-  });
-
-  test("back to menu returns to main menu", async ({ gamePage }) => {
-    await gamePage.page.click('button:has-text("New Game")');
-    await gamePage.page.waitForTimeout(500);
-
-    await gamePage.page.click('button:has-text("Back to Menu")');
-    await gamePage.page.waitForTimeout(300);
-
-    const screen = await gamePage.getCurrentScreen();
-    expect(screen).toBe("mainMenu");
+    if (youthEarlyAccess) {
+      await expect(
+        gamePage.page.getByRole("heading", { name: "Build Your World" }),
+      ).toBeVisible();
+    }
   });
 });

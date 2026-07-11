@@ -1,0 +1,252 @@
+
+> talentscout@1.0.0 dev
+> next dev --port 3001
+
+   ▲ Next.js 15.5.20
+   - Local:        http://localhost:3001
+   - Network:      http://192.168.68.59:3001
+
+ ✓ Starting...
+ ✓ Ready in 2.2s
+ ○ Compiling /play ...
+ ✓ Compiled /play in 4.4s (3848 modules)
+ GET /play 200 in 5808ms
+ GET /play 200 in 56ms
+ ✓ Compiled in 7.9s (3862 modules)
+ ✓ Compiled in 1352ms (3862 modules)
+ ⨯ ./src/lib/db.ts
+Error:   [31mx[0m Nullish coalescing operator(??) requires parens when mixing with logical operators
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\lib\db.ts[0m:211:1]
+ [2m208[0m |   if (!state.playerMovementHistory) state.playerMovementHistory = [];
+ [2m209[0m |   for (const player of Object.values(state.players ?? {})) {
+ [2m210[0m |     if (player.contractClubId === undefined) {
+ [2m211[0m |       player.contractClubId = player.loanParentClubId ?? player.clubId || undefined;
+     : [35;1m                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+ [2m212[0m |     }
+ [2m213[0m |   }
+ [2m213[0m |
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/lib/db.ts
+./src/components/game/SettingsScreen.tsx
+./src/app/play/page.tsx
+ ✓ Compiled in 1434ms (3862 modules)
+ ✓ Compiled in 1452ms (3862 modules)
+ ✓ Compiled in 2.2s (3864 modules)
+ ✓ Compiled in 2.5s (3864 modules)
+ ✓ Compiled in 861ms (3864 modules)
+ ✓ Compiled in 672ms (3864 modules)
+ ✓ Compiled in 730ms (3864 modules)
+ ✓ Compiled in 790ms (3864 modules)
+ ✓ Compiled in 709ms (3864 modules)
+ ✓ Compiled in 571ms (3864 modules)
+ ✓ Compiled in 614ms (3864 modules)
+ ✓ Compiled in 753ms (3864 modules)
+ ✓ Compiled in 841ms (3864 modules)
+ ✓ Compiled in 785ms (3864 modules)
+ ✓ Compiled in 641ms (3864 modules)
+ ✓ Compiled in 960ms (3864 modules)
+ ✓ Compiled in 751ms (3864 modules)
+ ✓ Compiled in 1460ms (3864 modules)
+ ✓ Compiled in 2.5s (3864 modules)
+ ✓ Compiled in 937ms (3864 modules)
+ ✓ Compiled in 1186ms (3864 modules)
+ ✓ Compiled in 981ms (3864 modules)
+ ✓ Compiled in 2.4s (3864 modules)
+ ✓ Compiled in 520ms (3864 modules)
+ ⚠ ./src/engine/world/index.ts
+export 'findCrossCountryTransferDestination' (reexported as 'findCrossCountryTransferDestination') was not found in './transfers' (possible exports: getTransferFlowProbability)
+
+Import trace for requested module:
+./src/engine/world/index.ts
+./src/stores/gameStore.ts
+./src/app/play/page.tsx
+
+./src/engine/world/index.ts
+export 'processCrossCountryTransfers' (reexported as 'processCrossCountryTransfers') was not found in './transfers' (possible exports: getTransferFlowProbability)
+
+Import trace for requested module:
+./src/engine/world/index.ts
+./src/stores/gameStore.ts
+./src/app/play/page.tsx
+
+./src/engine/world/index.ts
+export 'findCrossCountryTransferDestination' (reexported as 'findCrossCountryTransferDestination') was not found in './transfers' (possible exports: getTransferFlowProbability)
+
+Import trace for requested module:
+./src/engine/world/index.ts
+./src/stores/gameStore.ts
+./src/app/play/page.tsx
+
+./src/engine/world/index.ts
+export 'processCrossCountryTransfers' (reexported as 'processCrossCountryTransfers') was not found in './transfers' (possible exports: getTransferFlowProbability)
+
+Import trace for requested module:
+./src/engine/world/index.ts
+./src/stores/gameStore.ts
+./src/app/play/page.tsx
+ ✓ Compiled in 981ms (3864 modules)
+ ✓ Compiled in 613ms (3864 modules)
+ ✓ Compiled in 1123ms (3864 modules)
+ ✓ Compiled in 1956ms (3864 modules)
+ ✓ Compiled in 1143ms (3864 modules)
+ ✓ Compiled in 594ms (3864 modules)
+ ✓ Compiled in 722ms (3864 modules)
+ ✓ Compiled in 566ms (3864 modules)
+ ✓ Compiled in 642ms (3864 modules)
+ ✓ Compiled in 815ms (3864 modules)
+ ✓ Compiled in 845ms (3864 modules)
+ ✓ Compiled in 849ms (3864 modules)
+ ✓ Compiled in 576ms (3864 modules)
+ ✓ Compiled in 973ms (3864 modules)
+ ✓ Compiled in 272ms (1678 modules)
+ ✓ Compiled in 586ms (3864 modules)
+ ✓ Compiled in 1026ms (3864 modules)
+ ✓ Compiled in 523ms (3864 modules)
+ ✓ Compiled in 735ms (3864 modules)
+ ✓ Compiled in 982ms (3864 modules)
+ ✓ Compiled in 1436ms (3864 modules)
+ ✓ Compiled in 634ms (3864 modules)
+ ✓ Compiled in 888ms (3864 modules)
+ ✓ Compiled in 1541ms (3864 modules)
+ ✓ Compiled in 561ms (3864 modules)
+ ✓ Compiled in 2.5s (3864 modules)
+ ✓ Compiled in 650ms (3864 modules)
+ ✓ Compiled in 594ms (3864 modules)
+ ✓ Compiled in 688ms (3864 modules)
+ ✓ Compiled in 1023ms (3864 modules)
+ ✓ Compiled in 680ms (3864 modules)
+ ✓ Compiled in 692ms (3864 modules)
+ ✓ Compiled in 1457ms (3864 modules)
+ ✓ Compiled in 637ms (3864 modules)
+ ✓ Compiled in 823ms (3864 modules)
+ ✓ Compiled in 1181ms (3864 modules)
+ ✓ Compiled in 1066ms (3864 modules)
+ ✓ Compiled in 883ms (3864 modules)
+ ✓ Compiled in 612ms (3864 modules)
+ ✓ Compiled in 832ms (3864 modules)
+ ✓ Compiled in 1057ms (3864 modules)
+ ✓ Compiled in 619ms (3864 modules)
+ ✓ Compiled in 695ms (3864 modules)
+ ✓ Compiled in 3.2s (3864 modules)
+ ✓ Compiled in 571ms (3864 modules)
+ ✓ Compiled in 573ms (3864 modules)
+ ✓ Compiled in 1067ms (3864 modules)
+ ✓ Compiled in 855ms (3864 modules)
+ ✓ Compiled in 614ms (3864 modules)
+ ✓ Compiled in 4s (3864 modules)
+ ✓ Compiled in 4.7s (3864 modules)
+ ✓ Compiled in 973ms (3864 modules)
+ ✓ Compiled in 1218ms (3864 modules)
+ ✓ Compiled in 611ms (3864 modules)
+ ✓ Compiled in 1303ms (3864 modules)
+ ✓ Compiled in 735ms (3864 modules)
+ ✓ Compiled in 688ms (3864 modules)
+ ✓ Compiled in 868ms (3864 modules)
+ ✓ Compiled in 1333ms (3864 modules)
+ ✓ Compiled in 277ms (1678 modules)
+ ✓ Compiled in 1888ms (3866 modules)
+ ✓ Compiled in 674ms (3866 modules)
+ ✓ Compiled in 1327ms (3866 modules)
+ ✓ Compiled in 1315ms (3866 modules)
+ ✓ Compiled in 1423ms (3866 modules)
+ ✓ Compiled in 1284ms (3866 modules)
+ ✓ Compiled in 702ms (3866 modules)
+ ✓ Compiled in 1313ms (1679 modules)
+ ✓ Compiled in 1216ms (1679 modules)
+ ✓ Compiled in 298ms (1679 modules)
+ ✓ Compiled in 339ms (1679 modules)
+ ✓ Compiled in 1413ms (3866 modules)
+ ✓ Compiled in 2.4s (3866 modules)
+ ✓ Compiled in 5.5s (3866 modules)
+ ✓ Compiled in 736ms (3866 modules)
+ ✓ Compiled in 1601ms (3866 modules)
+ ✓ Compiled in 6.8s (3866 modules)
+ ✓ Compiled in 8s (3866 modules)
+ ✓ Compiled in 842ms (3866 modules)
+ ✓ Compiled in 818ms (3866 modules)
+ ✓ Compiled in 1559ms (3866 modules)
+ ✓ Compiled in 3s (1679 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\5.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\5.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ✓ Compiled in 9.3s (3866 modules)
+ ✓ Compiled in 1006ms (3866 modules)
+ ✓ Compiled in 886ms (3866 modules)
+ ✓ Compiled in 1582ms (3868 modules)
+ ✓ Compiled in 2.3s (3868 modules)
+ ✓ Compiled in 848ms (3868 modules)
+ ✓ Compiled in 900ms (3868 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 940ms (3868 modules)
+ ✓ Compiled in 2.5s (3868 modules)
+ ✓ Compiled in 2.3s (3868 modules)
+ ✓ Compiled in 1406ms (3868 modules)
+ ✓ Compiled in 977ms (3868 modules)
+ ✓ Compiled in 2.2s (3868 modules)
+ ✓ Compiled in 1111ms (1680 modules)
+ ✓ Compiled in 18.6s (3868 modules)
+ ✓ Compiled in 1390ms (3868 modules)
+ ✓ Compiled in 4.5s (3868 modules)
+ ✓ Compiled in 12.7s (3868 modules)
+ ✓ Compiled in 3.3s (3868 modules)
+ ✓ Compiled in 1007ms (3868 modules)
+ ✓ Compiled in 1290ms (3868 modules)
+ ✓ Compiled in 14.6s (3868 modules)
+ ✓ Compiled in 2.6s (3868 modules)
+ ✓ Compiled in 2.5s (3868 modules)
+ ✓ Compiled in 2.1s (3868 modules)
+ ✓ Compiled in 2.6s (3868 modules)
+ ✓ Compiled in 1032ms (3868 modules)
+ ✓ Compiled in 932ms (3868 modules)
+ ✓ Compiled in 2.2s (3868 modules)
+ ✓ Compiled in 9.9s (3868 modules)
+ ✓ Compiled in 4.1s (3868 modules)
+ ✓ Compiled in 3.3s (3868 modules)
+ ✓ Compiled in 1294ms (3868 modules)
+ ✓ Compiled in 1478ms (3868 modules)
+ ✓ Compiled in 1687ms (3868 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\3.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\3.pack.gz'
+ ✓ Compiled in 17.8s (3868 modules)
+ ✓ Compiled in 1449ms (3868 modules)
+ ✓ Compiled in 469ms (1680 modules)
+ ✓ Compiled in 534ms (1680 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 1802ms (1680 modules)
+ ✓ Compiled in 924ms (1680 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ✓ Compiled in 12.1s (3868 modules)
+ ✓ Compiled in 674ms (1680 modules)
+ ✓ Compiled in 479ms (1680 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack from C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development.pack.gz failed: TypeError: Cannot read properties of undefined (reading 'hasStartTime')
+ ✓ Compiled in 2.8s (3868 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz'
+ ✓ Compiled in 520ms (1680 modules)
+ ✓ Compiled in 376ms (1680 modules)
+ ✓ Compiled in 549ms (1680 modules)
+ ✓ Compiled in 384ms (1680 modules)
+ ✓ Compiled in 1383ms (1680 modules)
+ ✓ Compiled in 2.2s (3868 modules)
+ ✓ Compiled in 2.6s (3868 modules)
+ ✓ Compiled in 1039ms (3868 modules)
+ ✓ Compiled in 891ms (3868 modules)
+ ✓ Compiled in 353ms (1680 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\server-development\0.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development\0.pack.gz'
+ ✓ Compiled in 8.8s (1680 modules)
+ ✓ Compiled in 3.9s (1680 modules)
+ ✓ Compiled in 2.6s (1680 modules)
+ ✓ Compiled in 364ms (1680 modules)
+ ✓ Compiled in 2.4s (1680 modules)
+ ✓ Compiled in 2.1s (1680 modules)
+ ✓ Compiled in 3.9s (1680 modules)
+ ✓ Compiled in 2s (1680 modules)
+ ✓ Compiled in 324ms (1680 modules)
+ ✓ Compiled in 1766ms (1680 modules)

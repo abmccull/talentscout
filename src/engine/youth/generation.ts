@@ -13,6 +13,7 @@ import type { Player, Club, Position, UnsignedYouth, SubRegion } from "@/engine/
 import { ALL_POSITIONS } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
 import type { CountryData } from "@/data/types";
+import { normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
 // INTERNAL TYPES
@@ -367,10 +368,12 @@ export function generateSubRegions(country: string): SubRegion[] {
   };
 
   const names = regionNames[country] ?? [];
+  const countryKey = normalizeCountryKey(country);
   return names.map((name) => ({
     id: `subregion_${toSlug(country)}_${toSlug(name)}`,
     name,
     country,
+    countryKey,
     familiarity: 0,
   }));
 }
@@ -587,7 +590,9 @@ export function processYouthAging(
     // Skip already resolved youth
     if (youth.placed || youth.retired) continue;
 
-    const age = youth.player.age;
+    // The pass runs immediately before the global season-end birthday update,
+    // so decisions use the age the player is entering next season.
+    const age = youth.player.age + 1;
 
     // --- Age 19+: forced exit ---
     if (age >= 19) {
@@ -649,21 +654,21 @@ export function processYouthAging(
  *
  * @returns
  *   retiredPlayerIds - IDs of all players who retired this cycle.
- *   updatedClubs     - Club map with playerIds pruned of retired players.
  */
 export function processPlayerRetirement(
   rng: RNG,
   players: Record<string, Player>,
-  clubs: Record<string, Club>,
+  _clubs: Record<string, Club>,
   _currentSeason: number,
-): {
-  retiredPlayerIds: string[];
-  updatedClubs: Record<string, Club>;
-} {
+): { retiredPlayerIds: string[] } {
   const retiredPlayerIds: string[] = [];
 
   for (const player of Object.values(players)) {
-    const age = player.age;
+    const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    // Unattached players are owned by the free-agent pool lifecycle.
+    if (!ownerClubId) continue;
+    // Retirement is decided at the season boundary using next season's age.
+    const age = player.age + 1;
 
     if (age >= 38) {
       // Automatic retirement
@@ -689,26 +694,5 @@ export function processPlayerRetirement(
     // Age < 33: no retirement chance
   }
 
-  if (retiredPlayerIds.length === 0) {
-    return { retiredPlayerIds, updatedClubs: clubs };
-  }
-
-  // Build a set for O(1) lookup
-  const retiredSet = new Set(retiredPlayerIds);
-
-  // Update clubs: remove retired players from playerIds without mutating input
-  const updatedClubs: Record<string, Club> = {};
-  for (const [clubId, club] of Object.entries(clubs)) {
-    const hadRetired = club.playerIds.some((pid) => retiredSet.has(pid));
-    if (hadRetired) {
-      updatedClubs[clubId] = {
-        ...club,
-        playerIds: club.playerIds.filter((pid) => !retiredSet.has(pid)),
-      };
-    } else {
-      updatedClubs[clubId] = club;
-    }
-  }
-
-  return { retiredPlayerIds, updatedClubs };
+  return { retiredPlayerIds };
 }

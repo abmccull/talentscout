@@ -36,6 +36,7 @@ const LOAN_REPUTATION_DELTAS: Record<string, number> = {
   "buy-option-exercised": 8,
   "neutral": 1,
   "unsuccessful": -3,
+  "recalled-early": -1,
   "terminated": -5,
   "monitoring-report": 1,
 } as const;
@@ -48,6 +49,7 @@ const LOAN_XP_AWARDS: Record<string, number> = {
   "buy-option-exercised": 50,
   "neutral": 10,
   "unsuccessful": 0,
+  "recalled-early": 5,
   "terminated": 0,
   "monitoring-report": 5,
 } as const;
@@ -130,7 +132,12 @@ export function processLoanOutcomeReputation(
   week: number,
   season: number,
   rng: RNG,
-): { reputationDelta: number; xpAward: number; message: InboxMessage } {
+): {
+  reputationDelta: number;
+  xpAward: number;
+  message: InboxMessage;
+  updatedRecommendation?: LoanRecommendation;
+} {
   const { reputationDelta, xpAward } = calculateLoanOutcomeRewards(
     scout, outcome, deal, player,
   );
@@ -161,13 +168,16 @@ export function processLoanOutcomeReputation(
     relatedEntityType: "player",
   };
 
-  // Mark recommendation as having been evaluated
-  if (recommendation) {
-    recommendation.outcome = outcome;
-    recommendation.reputationApplied = true;
-  }
+  const updatedRecommendation = recommendation
+    ? {
+        ...recommendation,
+        status: "completed" as const,
+        outcome,
+        reputationApplied: true,
+      }
+    : undefined;
 
-  return { reputationDelta, xpAward, message };
+  return { reputationDelta, xpAward, message, updatedRecommendation };
 }
 
 // =============================================================================
@@ -199,6 +209,7 @@ export function generateLoanRecommendation(
     rationale,
     suggestedDuration,
     suggestedWageContribution,
+    status: "pending",
     reputationApplied: false,
   };
 }

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 interface TabsContextValue {
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  baseId: string;
 }
 
 const TabsContext = React.createContext<TabsContextValue | null>(null);
@@ -24,6 +25,7 @@ interface TabsProps extends React.HTMLAttributes<HTMLDivElement> {
 
 function Tabs({ defaultValue, value, onValueChange, className, children, ...props }: TabsProps) {
   const [internalValue, setInternalValue] = React.useState(defaultValue);
+  const baseId = React.useId();
   const activeTab = value ?? internalValue;
   const setActiveTab = React.useCallback((tab: string) => {
     setInternalValue(tab);
@@ -31,7 +33,7 @@ function Tabs({ defaultValue, value, onValueChange, className, children, ...prop
   }, [onValueChange]);
 
   return (
-    <TabsContext.Provider value={{ activeTab, setActiveTab }}>
+    <TabsContext.Provider value={{ activeTab, setActiveTab, baseId }}>
       <div className={cn("w-full", className)} {...props}>{children}</div>
     </TabsContext.Provider>
   );
@@ -52,11 +54,13 @@ interface TabsTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 }
 
 function TabsTrigger({ value, className, ...props }: TabsTriggerProps) {
-  const { activeTab, setActiveTab } = useTabs();
+  const { activeTab, setActiveTab, baseId } = useTabs();
   const isActive = activeTab === value;
   return (
     <button
       role="tab"
+      id={`${baseId}-tab-${value}`}
+      aria-controls={`${baseId}-panel-${value}`}
       aria-selected={isActive}
       onClick={() => setActiveTab(value)}
       className={cn(
@@ -74,9 +78,17 @@ interface TabsContentProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 function TabsContent({ value, className, ...props }: TabsContentProps) {
-  const { activeTab } = useTabs();
+  const { activeTab, baseId } = useTabs();
   if (activeTab !== value) return null;
-  return <div className={cn("mt-2", className)} {...props} />;
+  return (
+    <div
+      id={`${baseId}-panel-${value}`}
+      role="tabpanel"
+      aria-labelledby={`${baseId}-tab-${value}`}
+      className={cn("mt-2", className)}
+      {...props}
+    />
+  );
 }
 
 export { Tabs, TabsList, TabsTrigger, TabsContent };
