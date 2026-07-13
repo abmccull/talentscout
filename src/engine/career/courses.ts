@@ -14,6 +14,11 @@ import type {
   CourseEffect,
   CareerTier,
 } from "@/engine/core/types";
+import {
+  addGameWeeksWithSeasonLength,
+  isGameDateAtOrAfter,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "@/engine/core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Course catalog
@@ -254,6 +259,7 @@ export function enrollInCourse(
   week: number,
   season: number,
   scoutTier?: CareerTier,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): EnrollmentResult {
   // Already enrolled in a course
   if (finances.activeEnrollment) {
@@ -298,12 +304,17 @@ export function enrollInCourse(
     };
   }
 
+  const completion = addGameWeeksWithSeasonLength(
+    { season, week },
+    course.durationWeeks,
+    seasonLength,
+  );
   const enrollment: CourseEnrollment = {
     courseId,
     startWeek: week,
     startSeason: season,
-    completionWeek: week + course.durationWeeks,
-    completionSeason: season, // simplified: assumes no season boundary crossing
+    completionWeek: completion.week,
+    completionSeason: completion.season,
   };
 
   return {
@@ -336,14 +347,20 @@ export function enrollInCourse(
 export function processWeeklyCourseProgress(
   finances: FinancialRecord,
   week: number,
-  _season: number,
+  season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
   if (!finances.activeEnrollment) return finances;
 
   const enrollment = finances.activeEnrollment;
 
-  // Not yet complete
-  if (week < enrollment.completionWeek) return finances;
+  // Normalize old enrollments whose completion week overflowed a season.
+  const completion = addGameWeeksWithSeasonLength(
+    { season: enrollment.completionSeason, week: 1 },
+    Math.max(0, enrollment.completionWeek - 1),
+    seasonLength,
+  );
+  if (!isGameDateAtOrAfter({ season, week }, completion)) return finances;
 
   // Course completed
   return {

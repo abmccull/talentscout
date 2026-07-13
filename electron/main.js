@@ -565,10 +565,14 @@ ipcMain.handle("steam:setCloudSave", (_event, slot, data) => {
 
   try {
     const filename = `talentscout_${normalizedSlot}.json`;
-    steamClient.cloud.writeFile(filename, payload);
+    const written = steamClient.cloud.writeFile(filename, payload);
+    if (!written) {
+      throw new Error(`Steam Cloud refused to write ${filename}`);
+    }
     console.log("[Steam] Cloud save written: %s (%d bytes)", filename, payload.length);
   } catch (err) {
     console.warn("[Steam] Cloud save write failed:", err.message);
+    throw err;
   }
 });
 
@@ -578,7 +582,7 @@ ipcMain.handle("steam:getCloudSave", (_event, slot) => {
 
   try {
     const filename = `talentscout_${normalizedSlot}.json`;
-    if (!steamClient.cloud.isFileExists(filename)) {
+    if (!steamClient.cloud.fileExists(filename)) {
       return null;
     }
     const data = steamClient.cloud.readFile(filename);
@@ -588,6 +592,20 @@ ipcMain.handle("steam:getCloudSave", (_event, slot) => {
     console.warn("[Steam] Cloud save read failed:", err.message);
     return null;
   }
+});
+
+ipcMain.handle("steam:deleteCloudSave", (_event, slot) => {
+  const normalizedSlot = assertSteamSlot(slot);
+  if (!steamClient) return;
+
+  const filename = `talentscout_${normalizedSlot}.json`;
+  if (!steamClient.cloud.fileExists(filename)) return;
+
+  const deleted = steamClient.cloud.deleteFile(filename);
+  if (!deleted) {
+    throw new Error(`Steam Cloud refused to delete ${filename}`);
+  }
+  console.log("[Steam] Cloud save deleted:", filename);
 });
 
 ipcMain.handle("steam:getPlayerName", () => {

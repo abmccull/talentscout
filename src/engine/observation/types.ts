@@ -47,6 +47,17 @@ export type HypothesisState =
   | "confirmed"
   | "debunked";
 
+/** The real source that produced a durable piece of hypothesis evidence. */
+export type HypothesisEvidenceSource =
+  | "observation"
+  | "contactIntel"
+  | "reflection"
+  | "careerOutcome"
+  | "legacy";
+
+/** Qualitative signal carried by evidence before it is interpreted against a claim. */
+export type HypothesisEvidenceSignal = "positive" | "negative" | "mixed";
+
 // =============================================================================
 // FOCUS TOKEN SYSTEM
 // =============================================================================
@@ -126,28 +137,28 @@ export interface PlayerMoment {
 // =============================================================================
 
 /**
- * Consequence that flows from a dialogue choice or triggers automatically
- * at the end of a dialogue node with no options.
+ * Consequence that flows from an explicit dialogue choice.
  */
 export interface DialogueConsequence {
   /** Narrative text shown to the player describing what happens. */
   narrativeText: string;
   /** Change to the contact relationship score (-5 to +5 typical range). */
   relationshipDelta?: number;
-  /** Update to an active hypothesis — push it toward supported or contradicted. */
-  hypothesisUpdate?: {
-    hypothesisId: string;
-    direction: "for" | "against";
-  };
-  /** A direct attribute reveal as a result of this dialogue branch. */
-  attributeReveal?: {
-    playerId: string;
-    attribute: PlayerAttribute;
-    /** Confidence of the reveal on a 0–1 scale. */
-    confidence: number;
-  };
   /** Bonus insight points awarded for this outcome. */
   insightBonus?: number;
+}
+
+/** Immutable, auditable result of one investigation response. */
+export interface DialogueChoiceResolution {
+  phaseIndex: number;
+  nodeId: string;
+  optionId: string;
+  optionText: string;
+  narrativeText: string;
+  insightPointsAwarded: number;
+  /** The bounded change actually applied, not merely the requested delta. */
+  relationshipDeltaApplied: number;
+  sourceContactId?: string;
 }
 
 /**
@@ -182,8 +193,6 @@ export interface DialogueNode {
   text: string;
   /** Choices available to the scout at this node. */
   options: DialogueOption[];
-  /** Auto-applied consequence when the node resolves with no active choice. */
-  consequence?: DialogueConsequence;
 }
 
 // =============================================================================
@@ -211,6 +220,14 @@ export interface DataPoint {
   relatedAttributes?: PlayerAttribute[];
 }
 
+/** Immutable reward snapshot for the one analysis point selected in a phase. */
+export interface DataPointSelectionResolution {
+  phaseIndex: number;
+  pointId: string;
+  pointLabel: string;
+  insightPointsAwarded: number;
+}
+
 // =============================================================================
 // STRATEGIC CHOICES (Quick Interaction Mode)
 // =============================================================================
@@ -230,6 +247,29 @@ export interface StrategicChoice {
   effect: string;
   /** The category of real-world impact this choice produces. */
   outcomeType: "territory" | "priority" | "network" | "technique";
+  /** Bounded, player-visible tradeoff applied exactly once when locked. */
+  impact: StrategicChoiceImpact;
+}
+
+/** Mechanical consequences attached to a strategic choice. */
+export interface StrategicChoiceImpact {
+  /** Insight banked by completing the session after making this choice. */
+  insightPoints: number;
+  /** Extra fatigue banked by completing the session after making this choice. */
+  fatigueDelta: number;
+  /** Bonus used when deriving the completed session's quality tier. */
+  qualityModifier: number;
+}
+
+/** Immutable snapshot of a strategic choice at the moment it is locked. */
+export interface StrategicChoiceResolution {
+  phaseIndex: number;
+  choiceId: string;
+  choiceText: string;
+  outcomeType: StrategicChoice["outcomeType"];
+  insightPointsAwarded: number;
+  fatigueDelta: number;
+  qualityModifier: number;
 }
 
 // =============================================================================
@@ -293,14 +333,32 @@ export interface VenueAtmosphere {
  * A single piece of evidence supporting or contradicting a hypothesis.
  */
 export interface HypothesisEvidence {
+  /** Stable deterministic id. Optional only for evidence loaded from old saves. */
+  id?: string;
   /** Game week this evidence was gathered. */
   week: number;
+  /** Game season this evidence was gathered. Optional for old saves. */
+  season?: number;
   /** Whether the evidence supports or contradicts the hypothesis. */
   direction: "for" | "against";
   /** Narrative description of what was observed or learned. */
   description: string;
   /** How strongly this evidence affects the hypothesis state. */
   strength: "weak" | "moderate" | "strong";
+  /** Kind of source that produced the evidence. */
+  sourceType?: HypothesisEvidenceSource;
+  /** Observation, session, contact-intel, or outcome id backing this evidence. */
+  sourceId?: string;
+  /** Scouting context in which the evidence was gathered. */
+  context?: string;
+  /**
+   * Evidence with the same independence key counts as one source when a
+   * hypothesis is resolved. This prevents several moments from one match from
+   * masquerading as several independent confirmations.
+   */
+  independenceKey?: string;
+  /** Raw qualitative signal before comparison with the claim's expected signal. */
+  signal?: HypothesisEvidenceSignal;
 }
 
 /**
@@ -320,6 +378,16 @@ export interface Hypothesis {
   state: HypothesisState;
   /** Game week the hypothesis was first formed. */
   createdAtWeek: number;
+  /** Game season the hypothesis was first formed. Optional for old saves. */
+  createdAtSeason?: number;
+  /** Last game date at which independent evidence changed the hypothesis. */
+  lastUpdatedWeek?: number;
+  lastUpdatedSeason?: number;
+  /**
+   * Signal that would support this claim. Auto-generated hypotheses always set
+   * this. Legacy/manual hypotheses default to a positive signal.
+   */
+  expectedSignal?: Exclude<HypothesisEvidenceSignal, "mixed">;
   /** Ordered list of evidence gathered for and against this hypothesis. */
   evidence: HypothesisEvidence[];
 }
@@ -374,14 +442,26 @@ export interface SessionPhase {
   // --- Investigation fields ---
   /** Dialogue nodes to process in this phase (investigation mode). */
   dialogueNodes?: DialogueNode[];
+  /** One immutable selected option per dialogue node, keyed by node id. */
+  selectedDialogueOptionIds?: Record<string, string>;
+  /** Exact applied consequences, keyed by dialogue node id. */
+  dialogueChoiceResolutions?: Record<string, DialogueChoiceResolution>;
 
   // --- Analysis fields ---
   /** Data points presented in this phase (analysis mode). */
   dataPoints?: DataPoint[];
+  /** The one immutable data point selected in this phase. */
+  selectedDataPointId?: string;
+  /** Exact reward applied for the selected data point. */
+  dataPointResolution?: DataPointSelectionResolution;
 
   // --- Quick Interaction fields ---
   /** Strategic choices presented in this phase (quickInteraction mode). */
   choices?: StrategicChoice[];
+  /** The one immutable choice locked for this phase, when resolved. */
+  selectedChoiceId?: string;
+  /** Snapshot used to preserve exact rewards and costs across serialization. */
+  choiceResolution?: StrategicChoiceResolution;
 
   // --- Shared optional fields ---
   /** An atmosphere event that fires at the start of this phase. */
@@ -467,6 +547,12 @@ export interface ObservationSession {
   startedAtSeason: number;
   /** Scout's career path for dialogue text resolution. */
   careerPath?: "club" | "independent";
+  /** Persistent contact whose relationship can be changed by investigation choices. */
+  sourceContactId?: string;
+  /** Snapshot used to explain the relationship affected by this session. */
+  sourceContactName?: string;
+  /** Authoritative in-session relationship after resolved dialogue choices. */
+  sourceRelationshipScore?: number;
 }
 
 // =============================================================================
@@ -500,6 +586,10 @@ export interface SessionConfig {
   season: number;
   /** Scout's career path — affects dialogue text (e.g. "your club" vs "the interested parties"). */
   careerPath?: "club" | "independent";
+  /** Contact whose persistent relationship is at stake in this investigation. */
+  sourceContactId?: string;
+  sourceContactName?: string;
+  sourceRelationshipScore?: number;
 }
 
 /**
@@ -521,6 +611,12 @@ export interface SessionResult {
   hypothesesUpdated: Hypothesis[];
   /** Total insight points earned. */
   insightPointsEarned: number;
+  /** Strategic decisions locked during a quick-interaction session. */
+  strategicChoices: StrategicChoiceResolution[];
+  /** Extra fatigue created by those decisions. Applied only on completion. */
+  fatigueDelta: number;
+  /** Durable quick-interaction modifier used to derive session quality. */
+  qualityModifier: number;
   /** Reflection notes written during the reflection phase. */
   reflectionNotes: string[];
   /** Quality tier label from the activity quality system (e.g. "elite", "good"). */

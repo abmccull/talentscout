@@ -1,0 +1,644 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-12T21:05:14.927Z",
+  "profile": {
+    "kind": "accelerated-season-boundary",
+    "authoritativeTicksPerSeason": 2,
+    "skippedOrdinaryWeeks": true,
+    "seedCount": 1,
+    "seasonCount": 30,
+    "deterministicReplaySeed": "release-soak-15",
+    "maxSerializedBytes": 100663296,
+    "maxGrowthMultiplier": 64,
+    "maxHeapUsedBytes": 1610612736,
+    "maxRssBytes": 2147483648,
+    "maxPostGcHeapGrowthBytes": 1073741824
+  },
+  "aggregate": {
+    "totalCanonicalTicks": 60,
+    "totalCalendarWeeksSpanned": 1380,
+    "largestSaveBytes": 56663504,
+    "largestFinalToInitialRatio": 4.58,
+    "peakHeapUsedBytes": 527871872,
+    "peakRssBytes": 895410176,
+    "weeklyLatencyMs": {
+      "p50": 829.06,
+      "p95": 1401.69,
+      "max": 1524.56
+    }
+  },
+  "runs": [
+    {
+      "seed": "release-soak-15",
+      "reachedSeason": 31,
+      "canonicalTicks": 60,
+      "calendarWeeksSpanned": 1380,
+      "initialBytes": 12372260,
+      "finalBytes": 56663504,
+      "peakBytes": 56663504,
+      "finalToInitialRatio": 4.58,
+      "worldHistorySeasons": 30,
+      "worldHistoryBytes": 12249990,
+      "largestCollections": [
+        {
+          "key": "players",
+          "bytes": 24534688
+        },
+        {
+          "key": "worldHistory",
+          "bytes": 12249990
+        },
+        {
+          "key": "fixtures",
+          "bytes": 7906780
+        },
+        {
+          "key": "playerMovementHistory",
+          "bytes": 4502185
+        },
+        {
+          "key": "retiredPlayers",
+          "bytes": 2414039
+        },
+        {
+          "key": "unsignedYouth",
+          "bytes": 1728197
+        },
+        {
+          "key": "freeAgentPool",
+          "bytes": 1516327
+        },
+        {
+          "key": "clubs",
+          "bytes": 801618
+        },
+        {
+          "key": "loanHistory",
+          "bytes": 384489
+        },
+        {
+          "key": "youthRecruitmentBriefs",
+          "bytes": 174048
+        },
+        {
+          "key": "retiredPlayerIds",
+          "bytes": 71320
+        },
+        {
+          "key": "inbox",
+          "bytes": 69173
+        }
+      ],
+      "memory": {
+        "initial": {
+          "season": 1,
+          "heapUsedBytes": 112462400,
+          "rssBytes": 197201920,
+          "externalBytes": 2314573,
+          "arrayBuffersBytes": 17828
+        },
+        "final": {
+          "season": 31,
+          "heapUsedBytes": 449054656,
+          "rssBytes": 895410176,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        "peakHeapUsedBytes": 527871872,
+        "peakRssBytes": 895410176,
+        "samples": [
+          {
+            "season": 1,
+            "heapUsedBytes": 112462400,
+            "rssBytes": 197201920,
+            "externalBytes": 2314573,
+            "arrayBuffersBytes": 17828
+          },
+          {
+            "season": 2,
+            "heapUsedBytes": 119593152,
+            "rssBytes": 197619712,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 3,
+            "heapUsedBytes": 140427216,
+            "rssBytes": 226983936,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 4,
+            "heapUsedBytes": 171762744,
+            "rssBytes": 259555328,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 5,
+            "heapUsedBytes": 206539832,
+            "rssBytes": 289157120,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 6,
+            "heapUsedBytes": 242243936,
+            "rssBytes": 329068544,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 7,
+            "heapUsedBytes": 267731928,
+            "rssBytes": 367079424,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 8,
+            "heapUsedBytes": 313366648,
+            "rssBytes": 410906624,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 9,
+            "heapUsedBytes": 371726976,
+            "rssBytes": 458665984,
+            "externalBytes": 2314217,
+            "arrayBuffersBytes": 17432
+          },
+          {
+            "season": 10,
+            "heapUsedBytes": 130664504,
+            "rssBytes": 435240960,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 11,
+            "heapUsedBytes": 168726096,
+            "rssBytes": 443346944,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 12,
+            "heapUsedBytes": 225349984,
+            "rssBytes": 449126400,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 13,
+            "heapUsedBytes": 265790728,
+            "rssBytes": 454049792,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 14,
+            "heapUsedBytes": 315821776,
+            "rssBytes": 464998400,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 15,
+            "heapUsedBytes": 380554984,
+            "rssBytes": 479744000,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 16,
+            "heapUsedBytes": 433667208,
+            "rssBytes": 534339584,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 17,
+            "heapUsedBytes": 145362944,
+            "rssBytes": 559513600,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 18,
+            "heapUsedBytes": 204053784,
+            "rssBytes": 562786304,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 19,
+            "heapUsedBytes": 269713456,
+            "rssBytes": 570138624,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 20,
+            "heapUsedBytes": 335152568,
+            "rssBytes": 576614400,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 21,
+            "heapUsedBytes": 403241840,
+            "rssBytes": 583790592,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 22,
+            "heapUsedBytes": 491441592,
+            "rssBytes": 587816960,
+            "externalBytes": 2313836,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 23,
+            "heapUsedBytes": 187314936,
+            "rssBytes": 624807936,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 24,
+            "heapUsedBytes": 250843128,
+            "rssBytes": 632463360,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 25,
+            "heapUsedBytes": 340301096,
+            "rssBytes": 641622016,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 26,
+            "heapUsedBytes": 428397864,
+            "rssBytes": 650842112,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 27,
+            "heapUsedBytes": 527871872,
+            "rssBytes": 651509760,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 28,
+            "heapUsedBytes": 206552512,
+            "rssBytes": 673927168,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 29,
+            "heapUsedBytes": 287102640,
+            "rssBytes": 682270720,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 30,
+            "heapUsedBytes": 372386896,
+            "rssBytes": 687775744,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          },
+          {
+            "season": 31,
+            "heapUsedBytes": 456184040,
+            "rssBytes": 696680448,
+            "externalBytes": 2308769,
+            "arrayBuffersBytes": 17051
+          }
+        ]
+      },
+      "weeklyLatencyMs": {
+        "p50": 829.06,
+        "p95": 1401.69,
+        "max": 1524.56,
+        "mean": 831.08
+      },
+      "digest": "725312abbe08cdec79edbe108f71b42711cf50a3b60073554f29504dd58ad21d"
+    }
+  ],
+  "persistenceReplay": {
+    "seed": "release-soak-15",
+    "reachedSeason": 31,
+    "canonicalTicks": 60,
+    "calendarWeeksSpanned": 1380,
+    "initialBytes": 12372260,
+    "finalBytes": 56663504,
+    "peakBytes": 56663504,
+    "finalToInitialRatio": 4.58,
+    "worldHistorySeasons": 30,
+    "worldHistoryBytes": 12249990,
+    "largestCollections": [
+      {
+        "key": "players",
+        "bytes": 24534688
+      },
+      {
+        "key": "worldHistory",
+        "bytes": 12249990
+      },
+      {
+        "key": "fixtures",
+        "bytes": 7906780
+      },
+      {
+        "key": "playerMovementHistory",
+        "bytes": 4502185
+      },
+      {
+        "key": "retiredPlayers",
+        "bytes": 2414039
+      },
+      {
+        "key": "unsignedYouth",
+        "bytes": 1728197
+      },
+      {
+        "key": "freeAgentPool",
+        "bytes": 1516327
+      },
+      {
+        "key": "clubs",
+        "bytes": 801618
+      },
+      {
+        "key": "loanHistory",
+        "bytes": 384489
+      },
+      {
+        "key": "youthRecruitmentBriefs",
+        "bytes": 174048
+      },
+      {
+        "key": "retiredPlayerIds",
+        "bytes": 71320
+      },
+      {
+        "key": "inbox",
+        "bytes": 69173
+      }
+    ],
+    "memory": {
+      "initial": {
+        "season": 1,
+        "heapUsedBytes": 112462400,
+        "rssBytes": 197201920,
+        "externalBytes": 2314573,
+        "arrayBuffersBytes": 17828
+      },
+      "final": {
+        "season": 31,
+        "heapUsedBytes": 449054656,
+        "rssBytes": 895410176,
+        "externalBytes": 2308769,
+        "arrayBuffersBytes": 17051
+      },
+      "peakHeapUsedBytes": 527871872,
+      "peakRssBytes": 895410176,
+      "samples": [
+        {
+          "season": 1,
+          "heapUsedBytes": 112462400,
+          "rssBytes": 197201920,
+          "externalBytes": 2314573,
+          "arrayBuffersBytes": 17828
+        },
+        {
+          "season": 2,
+          "heapUsedBytes": 119593152,
+          "rssBytes": 197619712,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 3,
+          "heapUsedBytes": 140427216,
+          "rssBytes": 226983936,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 4,
+          "heapUsedBytes": 171762744,
+          "rssBytes": 259555328,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 5,
+          "heapUsedBytes": 206539832,
+          "rssBytes": 289157120,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 6,
+          "heapUsedBytes": 242243936,
+          "rssBytes": 329068544,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 7,
+          "heapUsedBytes": 267731928,
+          "rssBytes": 367079424,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 8,
+          "heapUsedBytes": 313366648,
+          "rssBytes": 410906624,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 9,
+          "heapUsedBytes": 371726976,
+          "rssBytes": 458665984,
+          "externalBytes": 2314217,
+          "arrayBuffersBytes": 17432
+        },
+        {
+          "season": 10,
+          "heapUsedBytes": 130664504,
+          "rssBytes": 435240960,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 11,
+          "heapUsedBytes": 168726096,
+          "rssBytes": 443346944,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 12,
+          "heapUsedBytes": 225349984,
+          "rssBytes": 449126400,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 13,
+          "heapUsedBytes": 265790728,
+          "rssBytes": 454049792,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 14,
+          "heapUsedBytes": 315821776,
+          "rssBytes": 464998400,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 15,
+          "heapUsedBytes": 380554984,
+          "rssBytes": 479744000,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 16,
+          "heapUsedBytes": 433667208,
+          "rssBytes": 534339584,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 17,
+          "heapUsedBytes": 145362944,
+          "rssBytes": 559513600,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 18,
+          "heapUsedBytes": 204053784,
+          "rssBytes": 562786304,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 19,
+          "heapUsedBytes": 269713456,
+          "rssBytes": 570138624,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 20,
+          "heapUsedBytes": 335152568,
+          "rssBytes": 576614400,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 21,
+          "heapUsedBytes": 403241840,
+          "rssBytes": 583790592,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 22,
+          "heapUsedBytes": 491441592,
+          "rssBytes": 587816960,
+          "externalBytes": 2313836,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 23,
+          "heapUsedBytes": 187314936,
+          "rssBytes": 624807936,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 24,
+          "heapUsedBytes": 250843128,
+          "rssBytes": 632463360,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 25,
+          "heapUsedBytes": 340301096,
+          "rssBytes": 641622016,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 26,
+          "heapUsedBytes": 428397864,
+          "rssBytes": 650842112,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 27,
+          "heapUsedBytes": 527871872,
+          "rssBytes": 651509760,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 28,
+          "heapUsedBytes": 206552512,
+          "rssBytes": 673927168,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 29,
+          "heapUsedBytes": 287102640,
+          "rssBytes": 682270720,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 30,
+          "heapUsedBytes": 372386896,
+          "rssBytes": 687775744,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        },
+        {
+          "season": 31,
+          "heapUsedBytes": 456184040,
+          "rssBytes": 696680448,
+          "externalBytes": 2308769,
+          "arrayBuffersBytes": 17051
+        }
+      ]
+    },
+    "weeklyLatencyMs": {
+      "p50": 829.06,
+      "p95": 1401.69,
+      "max": 1524.56,
+      "mean": 831.08
+    },
+    "digest": "725312abbe08cdec79edbe108f71b42711cf50a3b60073554f29504dd58ad21d"
+  }
+}

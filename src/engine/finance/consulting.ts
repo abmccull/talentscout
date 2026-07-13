@@ -11,6 +11,11 @@ import type {
   Scout,
   Club,
 } from "../core/types";
+import {
+  addGameWeeksWithSeasonLength,
+  isGameDateAtOrAfter,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -43,6 +48,7 @@ export function generateConsultingOffers(
   clubs: Record<string, Club>,
   week: number,
   season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): ConsultingContract[] {
   if (scout.careerPath !== "independent") return [];
   if ((scout.independentTier ?? 1) < 4) return [];
@@ -60,14 +66,19 @@ export function generateConsultingOffers(
   const config = CONSULTING_CONFIGS[type];
   const repMult = 0.5 + (scout.reputation / 100) * 0.5;
   const fee = Math.round(rng.nextInt(config.feeRange[0], config.feeRange[1]) * repMult);
+  const deadline = addGameWeeksWithSeasonLength(
+    { season, week },
+    config.durationWeeks,
+    seasonLength,
+  );
 
   const contract: ConsultingContract = {
     id: `consult_${club.id}_${week}_${season}`,
     clubId: club.id,
     type,
     fee,
-    deadline: week + config.durationWeeks,
-    deadlineSeason: season,
+    deadline: deadline.week,
+    deadlineSeason: deadline.season,
     status: "active",
   };
 
@@ -98,10 +109,16 @@ export function processConsultingDeadline(
   finances: FinancialRecord,
   week: number,
   season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
   const updated = finances.consultingContracts.map((c) => {
     if (c.status !== "active") return c;
-    if (c.deadlineSeason === season && week >= c.deadline) {
+    const deadline = addGameWeeksWithSeasonLength(
+      { season: c.deadlineSeason, week: 1 },
+      Math.max(0, c.deadline - 1),
+      seasonLength,
+    );
+    if (isGameDateAtOrAfter({ season, week }, deadline)) {
       return { ...c, status: "failed" as const };
     }
     return c;

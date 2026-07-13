@@ -1,0 +1,50 @@
+name: Nightly Simulation Soak
+
+on:
+  schedule:
+    - cron: "17 9 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-simulation-soak
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "22"
+  NEXT_PUBLIC_BUILD_VERSION: ${{ github.sha }}
+
+jobs:
+  simulation-soak:
+    name: Canonical and accelerated long-career soaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:e2e
+      - run: npm run test:e2e:soak
+      - run: npm run test:release-soak
+      - run: npm run test:replayability:nightly
+
+      - name: Upload soak evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: simulation-soak-evidence
+          path: |
+            playwright-report/
+            test-results/
+            artifacts/soak/
+            artifacts/replayability/nightly-summary.json
+          if-no-files-found: ignore
+          retention-days: 30

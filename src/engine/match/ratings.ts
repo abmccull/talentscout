@@ -279,19 +279,36 @@ export function calculateAttendedMatchRatings(
 ): Record<string, PlayerMatchRating> {
   // Flatten all events across all phases
   const allEvents = phases.flatMap((p) => p.events);
+  const recordedMinutes = (playerId: string): number => {
+    const substitutionMinute = allEvents
+      .filter((event) => event.playerId === playerId && event.type === "substitution")
+      .map((event) => event.minute)
+      .sort((left, right) => left - right)[0];
+    return substitutionMinute === undefined
+      ? 90
+      : Math.max(1, Math.min(90, substitutionMinute));
+  };
 
   const ratings: Record<string, PlayerMatchRating> = {};
 
   for (const player of homePlayers) {
-    ratings[player.id] = calculatePlayerMatchRating(
-      player, allEvents, homeGoals, awayGoals, awayGoals, fixtureId,
-    );
+    ratings[player.id] = {
+      ...calculatePlayerMatchRating(
+        player, allEvents, homeGoals, awayGoals, awayGoals, fixtureId,
+      ),
+      started: true,
+      minutesPlayed: recordedMinutes(player.id),
+    };
   }
 
   for (const player of awayPlayers) {
-    ratings[player.id] = calculatePlayerMatchRating(
-      player, allEvents, awayGoals, homeGoals, homeGoals, fixtureId,
-    );
+    ratings[player.id] = {
+      ...calculatePlayerMatchRating(
+        player, allEvents, awayGoals, homeGoals, homeGoals, fixtureId,
+      ),
+      started: true,
+      minutesPlayed: recordedMinutes(player.id),
+    };
   }
 
   return ratings;
@@ -423,6 +440,8 @@ export function generateSimulatedMatchRatings(
       ratings[player.id] = {
         playerId: player.id,
         fixtureId,
+        started: true,
+        minutesPlayed: 90,
         rating,
         eventCount: 0,
         stats,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { Activity, League, Specialization } from "@/engine/core/types";
@@ -10,7 +10,7 @@ import {
   SPECIALIZATION_THEMES,
   type ActivityCategory,
 } from "@/engine/core/activityMetadata";
-import { ActivityCard, ACTIVITY_DISPLAY } from "./ActivityCard";
+import { ActivityCard } from "./ActivityCard";
 
 interface ActivityPanelProps {
   activities: Activity[];
@@ -25,6 +25,7 @@ interface ActivityPanelProps {
   highlightTargetId?: string;
   selectedActivity?: Activity | null;
   onSelectActivity?: (activity: Activity | null) => void;
+  openDayCount: number;
 }
 
 const CATEGORY_HELP: Record<ActivityCategory, string> = {
@@ -32,6 +33,17 @@ const CATEGORY_HELP: Record<ActivityCategory, string> = {
   networking: "Private intel, background context, and future access to better leads.",
   recovery: "Protect your judgment, travel cleanly, and improve your own craft.",
 };
+
+function activityPlanningKey(activity: Activity): string {
+  return activity.instanceId ?? [
+    activity.type,
+    activity.targetId ?? "none",
+    activity.destinationClubId ?? "none",
+    activity.slots,
+    activity.description,
+    activity.targetPool?.map((target) => target.id).join(",") ?? "none",
+  ].join(":");
+}
 
 export function ActivityPanel({
   activities,
@@ -46,8 +58,10 @@ export function ActivityPanel({
   highlightTargetId,
   selectedActivity,
   onSelectActivity,
+  openDayCount,
 }: ActivityPanelProps) {
   const theme = SPECIALIZATION_THEMES[specialization];
+  const [activeCategory, setActiveCategory] = useState<ActivityCategory>("scouting");
 
   const enrichedActivities = useMemo(() => {
     return activities.map((activity) => {
@@ -132,116 +146,131 @@ export function ActivityPanel({
       .filter((category) => sortedGrouped[category].length > 0);
   }, [sortedGrouped]);
 
+  useEffect(() => {
+    if (sortedCategories.includes(activeCategory)) return;
+    setActiveCategory(sortedCategories[0] ?? "scouting");
+  }, [activeCategory, sortedCategories]);
+
+  useEffect(() => {
+    if (!selectedActivity) return;
+    setActiveCategory(ACTIVITY_CATEGORIES[selectedActivity.type] ?? "scouting");
+  }, [selectedActivity]);
+
+  const selectedActivityKey = selectedActivity
+    ? activityPlanningKey(selectedActivity)
+    : null;
+  const activeActivities = sortedGrouped[activeCategory] ?? [];
+  const activeConfig = ACTIVITY_CATEGORY_CONFIG[activeCategory];
+  const activeLabel = activeConfig.specLabel?.[specialization] ?? activeConfig.label;
+
   return (
     <Card className="border-[#2a2a2f] bg-[#111111]/95 shadow-2xl shadow-black/20">
-      <CardHeader className="space-y-4 pb-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
+      <CardHeader className="space-y-3 pb-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-xl text-white">Opportunity Board</CardTitle>
+              <CardTitle className="text-lg text-white">Opportunity Board</CardTitle>
               <Badge variant="secondary" className="border-white/10 bg-white/5 text-zinc-200">
-                {activities.length} live options
+                {activities.length} live
               </Badge>
             </div>
-            <p className="max-w-3xl text-sm leading-6 text-zinc-300">
-              Select an opportunity, then place it in the itinerary. Venue and tournament
-              context stays here so planning decisions happen in one workspace.
+            <p className="mt-1 text-sm text-zinc-400">
+              Compare the cost, choose one opportunity, then commit it to the sticky itinerary.
             </p>
           </div>
           <div
-            className={`inline-flex min-h-11 items-center gap-2 self-start rounded-full border px-4 py-2 text-sm font-medium ${theme.bgClass} ${theme.textClass} ${theme.borderClass}`}
+            className={`inline-flex min-h-9 items-center gap-2 self-start rounded-full border px-3 py-1.5 text-xs font-medium ${theme.bgClass} ${theme.textClass} ${theme.borderClass}`}
           >
             {theme.label}
           </div>
         </div>
 
-        {selectedActivity && (
-          <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-200/70">
-                  Ready To Place
-                </p>
-                <p className="mt-1 text-base font-semibold text-blue-50">
-                  {ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"}
-                </p>
-                <p className="mt-1 text-sm text-blue-100/80">
-                  Pick an open day in the itinerary below to lock this into the week.
-                </p>
-              </div>
+        <div
+          role="tablist"
+          aria-label="Opportunity categories"
+          className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]"
+        >
+          {sortedCategories.map((category) => {
+            const config = ACTIVITY_CATEGORY_CONFIG[category];
+            const label = config.specLabel?.[specialization] ?? config.label;
+            const selected = category === activeCategory;
+            return (
               <button
+                key={category}
+                id={`opportunity-tab-${category}`}
                 type="button"
-                onClick={() => onSelectActivity?.(null)}
-                className="min-h-11 rounded-xl border border-blue-400/30 bg-blue-500/10 px-4 text-sm font-semibold text-blue-50 transition hover:bg-blue-500/20"
+                role="tab"
+                aria-selected={selected}
+                aria-controls="opportunity-category-panel"
+                onClick={() => setActiveCategory(category)}
+                className={`min-h-11 shrink-0 rounded-lg border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                  selected
+                    ? "border-emerald-400/35 bg-emerald-500/15 text-emerald-100"
+                    : "border-white/10 bg-black/20 text-zinc-300 hover:bg-white/5"
+                }`}
               >
-                Clear Selection
+                {label} <span className="ml-1 text-xs opacity-70">{sortedGrouped[category].length}</span>
               </button>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </div>
       </CardHeader>
 
-      <CardContent className="space-y-6">
-        {sortedCategories.map((category) => {
-          const config = ACTIVITY_CATEGORY_CONFIG[category];
-          const sectionActivities = sortedGrouped[category];
-          const sectionLabel = config.specLabel?.[specialization] ?? config.label;
+      <CardContent className="pt-1">
+        <section
+          id="opportunity-category-panel"
+          role="tabpanel"
+          aria-labelledby={`opportunity-tab-${activeCategory}`}
+        >
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-zinc-200">
+                {activeLabel}
+              </h3>
+              <p className="mt-1 text-sm text-zinc-400">{CATEGORY_HELP[activeCategory]}</p>
+            </div>
 
-          return (
-            <section key={category} className="space-y-4 border-t border-white/6 pt-5 first:border-t-0 first:pt-0">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-200">
-                      {sectionLabel}
-                    </h3>
-                    <Badge variant="outline" className="border-white/10 bg-white/5 text-xs text-zinc-300">
-                      {sectionActivities.length}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-zinc-400">{CATEGORY_HELP[category]}</p>
-                </div>
+            {activeCategory === "scouting" && availableMatchLeagues.length > 1 && (
+              <label className="flex min-w-48 flex-col gap-1 text-xs font-medium text-zinc-400">
+                Match League
+                <select
+                  value={hasActiveLeagueFilter ? leagueFilter : "all"}
+                  onChange={(event) => onLeagueFilterChange(event.target.value)}
+                  className="min-h-11 rounded-lg border border-[#2a2a2f] bg-[#0d0d0f] px-3 text-sm text-zinc-100 outline-none transition focus:border-emerald-500/40"
+                >
+                  <option value="all">All Leagues</option>
+                  {availableMatchLeagues.map((league) => (
+                    <option key={league.id} value={league.id}>
+                      {league.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
 
-                {category === "scouting" && availableMatchLeagues.length > 1 && (
-                  <label className="flex flex-col gap-1 text-xs font-medium text-zinc-400">
-                    Match League
-                    <select
-                      value={hasActiveLeagueFilter ? leagueFilter : "all"}
-                      onChange={(e) => onLeagueFilterChange(e.target.value)}
-                      className="min-h-11 rounded-xl border border-[#2a2a2f] bg-[#0d0d0f] px-3 text-sm text-zinc-100 outline-none transition focus:border-emerald-500/40"
-                    >
-                      <option value="all">All Leagues</option>
-                      {availableMatchLeagues.map((league) => (
-                        <option key={league.id} value={league.id}>
-                          {league.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
-                {sectionActivities.map((activity, index) => (
-                  <ActivityCard
-                    key={`${activity.instanceId ?? activity.type}-${activity.targetId ?? "none"}-${index}`}
-                    activity={activity}
-                    canScheduleAt={canScheduleAt}
-                    onSchedule={onSchedule}
-                    highlighted={
-                      !!highlightTargetId &&
-                      (activity.targetId === highlightTargetId ||
-                        activity.targetPool?.some((target) => target.id === highlightTargetId) ===
-                          true)
-                    }
-                    isSelected={selectedActivity === activity}
-                    onSelect={onSelectActivity}
-                  />
-                ))}
-              </div>
-            </section>
-          );
-        })}
+          <div className="space-y-2">
+            {activeActivities.map((activity) => {
+              const key = activityPlanningKey(activity);
+              return (
+                <ActivityCard
+                  key={key}
+                  activity={activity}
+                  canScheduleAt={canScheduleAt}
+                  onSchedule={onSchedule}
+                  highlighted={
+                    !!highlightTargetId &&
+                    (activity.targetId === highlightTargetId ||
+                      activity.targetPool?.some((target) => target.id === highlightTargetId) === true)
+                  }
+                  isSelected={selectedActivityKey === key}
+                  onSelect={onSelectActivity}
+                  openDayCount={openDayCount}
+                />
+              );
+            })}
+          </div>
+        </section>
       </CardContent>
     </Card>
   );

@@ -86,6 +86,9 @@ test.describe("New Game Wizard", () => {
       if (youthEarlyAccess) {
         expect(await gamePage.getGameStateValue("scout.currentClubId")).toBeFalsy();
         expect(await gamePage.getGameStateValue("scout.salary")).toBe(0);
+        expect(await gamePage.getGameStateValue("runManifest.originId")).toBe("academy-apprentice");
+        expect(await gamePage.getGameStateValue("runManifest.flawId")).toBe("stubborn-convictions");
+        expect(await gamePage.getGameStateValue("runManifest.doctrineIds.0")).toBe("evidence-first");
       }
 
       gamePage.expectNoConsoleErrors();
@@ -153,5 +156,20 @@ test.describe("New Game Wizard", () => {
         gamePage.page.getByRole("heading", { name: "Build Your World" }),
       ).toBeVisible();
     }
+  });
+
+  test("Youth presets allocate the same explicit eight-point budget", async ({ gamePage }) => {
+    test.skip(!youthEarlyAccess, "Youth presets belong to the focused Early Access creator");
+    await gamePage.page.locator(SELECTORS.newGameButton).first().click();
+    await gamePage.page.locator(SELECTORS.firstNameInput).fill("Preset");
+    await gamePage.page.locator(SELECTORS.lastNameInput).fill("Scout");
+    await gamePage.page.getByRole("button", { name: /^Continue$/ }).click();
+
+    const preset = gamePage.page.getByRole("button", { name: /Projection Specialist/ });
+    await preset.click();
+
+    await expect(preset).toHaveAttribute("aria-pressed", "true");
+    await expect(gamePage.page.getByText(/All 8 bonus skill points assigned/i)).toBeVisible();
+    await expect(gamePage.page.getByRole("button", { name: /^Continue$/ })).toBeEnabled();
   });
 });

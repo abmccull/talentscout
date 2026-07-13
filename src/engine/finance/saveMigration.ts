@@ -16,6 +16,10 @@ import type {
 } from "../core/types";
 import type { RNG } from "../rng/index";
 import { ensureEmployeeSkills } from "./employeeSkills";
+import {
+  addGameWeeksWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "../core/gameDate";
 
 /**
  * Default lifestyle config for a given career tier.
@@ -40,6 +44,39 @@ const DEFAULT_OFFICE: Office = {
 };
 
 /**
+ * Add the one legacy opening entry needed to reconcile cash to its ledger.
+ * The saved balance never changes, and the delta formula makes this idempotent.
+ */
+export function reconcileFinancialLedger(
+  finances: FinancialRecord,
+): FinancialRecord {
+  const transactions = Array.isArray(finances.transactions)
+    ? finances.transactions
+    : [];
+  const recordedBalance = transactions.reduce(
+    (sum, transaction) =>
+      sum + (Number.isFinite(transaction.amount) ? transaction.amount : 0),
+    0,
+  );
+  const openingDelta = finances.balance - recordedBalance;
+  if (openingDelta === 0) return finances;
+
+  return {
+    ...finances,
+    transactions: [
+      {
+        week: 0,
+        season: 1,
+        amount: openingDelta,
+        description: "Opening balance (legacy reconciliation)",
+        kind: "openingBalance",
+      },
+      ...transactions,
+    ],
+  };
+}
+
+/**
  * Migrate a legacy FinancialRecord to the new schema.
  * Safe to call on already-migrated records (no-op on existing fields).
  */
@@ -47,14 +84,14 @@ export function migrateFinancialRecord(
   old: FinancialRecord,
   scout: Scout,
 ): FinancialRecord {
-  // If already migrated, return as-is
+  // Existing new-shape records may still predate the opening-balance ledger.
   if (old.careerPath !== undefined) {
-    return old;
+    return reconcileFinancialLedger(old);
   }
 
   const careerPath: CareerPath = scout.careerPath ?? "club";
 
-  return {
+  return reconcileFinancialLedger({
     ...old,
 
     // Ensure new expense types exist in the expenses record
@@ -109,7 +146,7 @@ export function migrateFinancialRecord(
     pendingEmployeeEvents: [],
     satelliteOffices: [],
     awards: [],
-  };
+  });
 }
 
 /**
@@ -118,20 +155,30 @@ export function migrateFinancialRecord(
  */
 export function migrateReportListingBids(
   finances: FinancialRecord,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
   const needsMigration = finances.reportListings.some(
-    (l) => !Array.isArray(l.bids),
+    (l) => !Array.isArray(l.bids)
+      || !Number.isInteger(l.biddingEndsWeek)
+      || !Number.isInteger(l.biddingEndsSeason),
   );
   if (!needsMigration) return finances;
 
   return {
     ...finances,
-    reportListings: finances.reportListings.map((l) => ({
-      ...l,
-      bids: l.bids ?? [],
-      biddingEndsWeek: l.biddingEndsWeek ?? l.listedWeek + 2,
-      biddingEndsSeason: l.biddingEndsSeason ?? l.listedSeason,
-    })),
+    reportListings: finances.reportListings.map((l) => {
+      const biddingEnds = addGameWeeksWithSeasonLength(
+        { week: l.listedWeek, season: l.listedSeason },
+        2,
+        seasonLength,
+      );
+      return {
+        ...l,
+        bids: l.bids ?? [],
+        biddingEndsWeek: l.biddingEndsWeek ?? biddingEnds.week,
+        biddingEndsSeason: l.biddingEndsSeason ?? biddingEnds.season,
+      };
+    }),
   };
 }
 

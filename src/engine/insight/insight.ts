@@ -387,6 +387,41 @@ export function getAffordableActions(
   });
 }
 
+export interface InsightActionAvailability {
+  action: InsightAction;
+  cost: number;
+  canUse: boolean;
+  reason?: string;
+}
+
+/**
+ * Single presentation contract for the insight catalogue. It deliberately
+ * includes blocked actions so the UI can explain cost/cooldown gates without
+ * ever presenting a non-action as enabled.
+ */
+export function getInsightActionAvailability(
+  state: InsightState,
+  scout: Scout,
+  currentMode: ObservationMode,
+  perkModifiers?: { costReduction?: number },
+): InsightActionAvailability[] {
+  return getAvailableActions(state, scout, currentMode).map((action) => {
+    const availability = canUseInsight(
+      state,
+      action.id,
+      scout,
+      currentMode,
+      perkModifiers,
+    );
+    return {
+      action,
+      cost: formatInsightCost(action, perkModifiers),
+      canUse: availability.canUse,
+      reason: availability.reason,
+    };
+  });
+}
+
 // =============================================================================
 // 11. getInsightActionById
 // =============================================================================

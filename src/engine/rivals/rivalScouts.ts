@@ -28,7 +28,13 @@ import type {
   Club,
   Contact,
   InboxMessage,
+  PlayerMovementEvent,
 } from "@/engine/core/types";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
+import {
+  resolvePlayerMovements,
+  type LifecycleWorldState,
+} from "@/engine/world/playerLifecycle";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -48,6 +54,8 @@ export interface RivalWeekResult {
  * Result of resolving a poach counter-bid.
  */
 export interface PoachBidResult {
+  /** Whether a valid, affordable bid was actually submitted. */
+  attempted: boolean;
   /** Whether the counter-bid succeeded. */
   success: boolean;
   /** Cost of the counter-bid (150% of market value). */
@@ -56,6 +64,36 @@ export interface PoachBidResult {
   reputationChange: number;
   /** Updated rival with adjusted rivalry stats. */
   updatedRival: RivalScout;
+  /** Honest explanation when no bid or player movement could be completed. */
+  rejectionReason?: string;
+  /** Authoritative lifecycle state after a successful move. */
+  lifecycle: LifecycleWorldState;
+  /** Movement written by the lifecycle resolver on success. */
+  movement?: PlayerMovementEvent;
+}
+
+export interface RivalSimulationModifiers {
+  discoveryChanceMultiplier?: number;
+  poachChanceMultiplier?: number;
+  signingChanceMultiplier?: number;
+}
+
+function modifiedChance(base: number, multiplier = 1): number {
+  return Math.min(0.95, Math.max(0, base * multiplier));
+}
+
+export interface RivalSigningResult {
+  success: boolean;
+  cost: number;
+  lifecycle: LifecycleWorldState;
+  movement?: PlayerMovementEvent;
+  rejectionReason?: string;
+}
+
+export interface PoachBidEligibility {
+  eligible: boolean;
+  cost: number;
+  reason?: string;
 }
 
 /** Enhanced result from processRivalScoutWeek (F8). */
@@ -416,6 +454,7 @@ export function processRivalWeek(
 export function processRivalScoutWeek(
   rng: RNG,
   state: GameState,
+  modifiers: RivalSimulationModifiers = {},
 ): RivalScoutWeekResult {
   const updatedRivals: Record<string, RivalScout> = {};
   const poachWarnings: { rivalId: string; playerId: string }[] = [];
@@ -424,6 +463,7 @@ export function processRivalScoutWeek(
   const newActivities: RivalActivity[] = [];
   const newMessages: InboxMessage[] = [];
   const lostPlayerIds: string[] = [];
+  const queuedPoachPlayerIds = new Set<string>();
 
   // Build the set of player IDs the scout has reported on (for poach logic)
   const reportedPlayerIds = new Set<string>(
@@ -439,11 +479,13 @@ export function processRivalScoutWeek(
     scoutPlayerIds.add(report.playerId);
   }
 
-  // Get this week's fixtures for match attendance logic
-  // Note: Fixture type has no season field — fixtures are regenerated each
-  // season, so filtering by week alone is sufficient.
+  // Historical fixture records remain available for world history, so rival
+  // attendance must be scoped to the active competition season.
   const weekFixtures = Object.values(state.fixtures).filter(
-    (f) => f.week === state.currentWeek,
+    (f) =>
+      isFixtureInSeason(f, state.currentSeason) &&
+      f.week === state.currentWeek &&
+      !f.played,
   );
 
   for (const rival of Object.values(state.rivalScouts)) {
@@ -560,38 +602,24 @@ export function processRivalScoutWeek(
           relatedEntityType: "player",
         });
 
-        // --- 5. Chance the rival's club signs the player (player lost) ---
+        // --- 5. Chance the rival's club makes a signing attempt ---
+        // The weekly store resolves the resulting attempt through the
+        // authoritative player lifecycle before any message claims a signing.
         const signingChance = computeSigningChance(updatedRival, progress);
-        if (rng.chance(signingChance)) {
-          lostPlayerIds.push(updatedRival.currentTarget);
-          newActivities.push({
-            rivalId: rival.id,
-            type: "playerSigned",
-            playerId: updatedRival.currentTarget,
-            week: state.currentWeek,
-            season: state.currentSeason,
-          });
-
-          newMessages.push({
-            id: `rival-signed-${rival.id}-${updatedRival.currentTarget}-w${state.currentWeek}`,
-            week: state.currentWeek,
-            season: state.currentSeason,
-            type: "event",
-            title: "Player Signed by Rival",
-            body: `${getClubName(rival.clubId, state)} has signed ${playerName} following ${rival.name}'s recommendation. This opportunity is no longer available.`,
-            read: false,
-            actionRequired: false,
-            relatedId: updatedRival.currentTarget,
-            relatedEntityType: "player",
-          });
-
-          // Remove the signed player from target list
-          updatedRival = {
-            ...updatedRival,
-            targetPlayerIds: updatedRival.targetPlayerIds.filter(
-              (id) => id !== updatedRival.currentTarget,
-            ),
-          };
+        if (rng.chance(modifiedChance(
+          signingChance,
+          modifiers.signingChanceMultiplier,
+        ))) {
+          if (
+            reportedPlayerIds.has(updatedRival.currentTarget) &&
+            !queuedPoachPlayerIds.has(updatedRival.currentTarget)
+          ) {
+            queuedPoachPlayerIds.add(updatedRival.currentTarget);
+            poachSignings.push({
+              rivalId: rival.id,
+              playerId: updatedRival.currentTarget,
+            });
+          }
         }
 
         // Clear current target and deadline after report submission
@@ -604,7 +632,10 @@ export function processRivalScoutWeek(
     }
 
     // --- 6. Discovery (same as legacy) ---
-    if (rng.chance(DISCOVERY_CHANCE)) {
+    if (rng.chance(modifiedChance(
+      DISCOVERY_CHANCE,
+      modifiers.discoveryChanceMultiplier,
+    ))) {
       const newTarget = discoverNewTarget(rng, updatedRival, state);
       if (newTarget !== null) {
         const alreadyTracking = updatedRival.targetPlayerIds.includes(newTarget);
@@ -628,7 +659,10 @@ export function processRivalScoutWeek(
     updatedRival = { ...updatedRival, competingForPlayers };
 
     // --- 8. Poach warning check ---
-    if (rng.chance(POACH_CHANCE)) {
+    if (rng.chance(modifiedChance(
+      POACH_CHANCE,
+      modifiers.poachChanceMultiplier,
+    ))) {
       if (competingForPlayers.length > 0) {
         const targetId = rng.pick(competingForPlayers);
         poachWarnings.push({ rivalId: rival.id, playerId: targetId });
@@ -642,13 +676,19 @@ export function processRivalScoutWeek(
     const signingChancePoach = hasSharedTargets
       ? POACH_SIGNING_CHANCE + SHARED_TARGET_URGENCY_BOOST
       : POACH_SIGNING_CHANCE;
-    if (rng.chance(signingChancePoach)) {
+    if (rng.chance(modifiedChance(
+      signingChancePoach,
+      modifiers.signingChanceMultiplier,
+    ))) {
       const reportedSharedIds = updatedRival.targetPlayerIds.filter((pid) =>
         reportedPlayerIds.has(pid),
       );
       if (reportedSharedIds.length > 0) {
         const signedPlayerId = rng.pick(reportedSharedIds);
-        poachSignings.push({ rivalId: rival.id, playerId: signedPlayerId });
+        if (!queuedPoachPlayerIds.has(signedPlayerId)) {
+          queuedPoachPlayerIds.add(signedPlayerId);
+          poachSignings.push({ rivalId: rival.id, playerId: signedPlayerId });
+        }
       }
     }
 
@@ -748,23 +788,145 @@ export function getSharedTargets(
 // 4b. Poach Counter-Bid Resolution
 // =============================================================================
 
+function contractOwner(player: Player): string | undefined {
+  return (player.contractClubId ?? player.loanParentClubId ?? player.clubId) || undefined;
+}
+
 /**
- * Resolve a counter-bid attempt against a rival who has poached a player.
- *
- * Cost: 150% of the player's market value.
- * Success rate: 40% base, adjusted by scout reputation vs rival quality.
- * On success: reputation +5, rival gets a "loss".
- * On failure: reputation -2, money wasted, rival gets a "win".
+ * Resolve an NPC club's claimed signing through the same lifecycle used by
+ * transfers and free agents everywhere else in the simulation.
+ */
+export function resolveRivalSigningAttempt(
+  lifecycle: LifecycleWorldState,
+  rival: RivalScout,
+  playerId: string,
+  week: number,
+  season: number,
+): RivalSigningResult {
+  const player = lifecycle.players[playerId];
+  const destination = lifecycle.clubs[rival.clubId];
+  if (!player || !destination) {
+    return {
+      success: false,
+      cost: 0,
+      lifecycle,
+      rejectionReason: "The player or rival club is no longer active.",
+    };
+  }
+
+  const owner = contractOwner(player);
+  if (owner === rival.clubId) {
+    return {
+      success: false,
+      cost: 0,
+      lifecycle,
+      rejectionReason: "The player is already registered with the rival club.",
+    };
+  }
+
+  const cost = owner
+    ? Math.max(0, Math.round(player.marketValue))
+    : Math.max(0, Math.round(player.marketValue * 0.1));
+  const resolution = resolvePlayerMovements(
+    lifecycle,
+    owner
+      ? [{
+          type: "permanentTransfer" as const,
+          playerId,
+          fromClubId: owner,
+          toClubId: rival.clubId,
+          fee: cost,
+          wage: Math.max(100, player.wage),
+          contractLength: 3,
+          reason: `Signed following ${rival.name}'s recommendation`,
+        }]
+      : [{
+          type: "freeAgentSigning" as const,
+          playerId,
+          toClubId: rival.clubId,
+          wage: Math.max(100, player.wage),
+          signingBonus: cost,
+          contractLength: 3,
+          reason: `Signed following ${rival.name}'s recommendation`,
+        }],
+    week,
+    season,
+  );
+  const movement = resolution.applied[0];
+  return movement
+    ? { success: true, cost, lifecycle: resolution.state, movement }
+    : {
+        success: false,
+        cost,
+        lifecycle,
+        rejectionReason:
+          resolution.rejected[0]?.reason ?? "The rival club could not complete the signing.",
+      };
+}
+
+/** Explain whether the player's current employer can make a valid counter-bid. */
+export function getPoachCounterBidEligibility(
+  lifecycle: LifecycleWorldState,
+  rival: RivalScout,
+  player: Player,
+  scout: Scout,
+): PoachBidEligibility {
+  const cost = Math.max(
+    0,
+    Math.round(player.marketValue * COUNTER_BID_COST_MULTIPLIER),
+  );
+  const scoutClubId = scout.currentClubId;
+  if (!scoutClubId) {
+    return { eligible: false, cost, reason: "You need a current employer to submit a club bid." };
+  }
+  const scoutClub = lifecycle.clubs[scoutClubId];
+  if (!scoutClub || scoutClubId === rival.clubId) {
+    return { eligible: false, cost, reason: "There is no valid destination club for the bid." };
+  }
+  if (contractOwner(player) !== rival.clubId || player.onLoan) {
+    return { eligible: false, cost, reason: "The player's contract state no longer permits this transfer." };
+  }
+  if (scoutClub.budget < cost) {
+    return {
+      eligible: false,
+      cost,
+      reason: `${scoutClub.name} cannot afford the ${cost.toLocaleString()} fee.`,
+    };
+  }
+  return { eligible: true, cost };
+}
+
+/**
+ * Resolve a counter-bid and, on success, commit the transfer and club budgets
+ * through the authoritative player lifecycle. Failed bids do not spend money.
  */
 export function resolvePoachCounterBid(
   rng: RNG,
   rival: RivalScout,
   player: Player,
   scout: Scout,
+  lifecycle: LifecycleWorldState,
+  week: number,
+  season: number,
 ): PoachBidResult {
-  const cost = Math.round(player.marketValue * COUNTER_BID_COST_MULTIPLIER);
+  const eligibility = getPoachCounterBidEligibility(
+    lifecycle,
+    rival,
+    player,
+    scout,
+  );
+  if (!eligibility.eligible || !scout.currentClubId) {
+    return {
+      attempted: false,
+      success: false,
+      cost: eligibility.cost,
+      reputationChange: 0,
+      updatedRival: rival,
+      rejectionReason: eligibility.reason,
+      lifecycle,
+    };
+  }
 
-  // Adjust success rate based on scout reputation vs rival quality
   const scoutFactor = scout.reputation / 100;
   const rivalFactor = (rival.quality - 1) / 4;
   const adjustedChance = clamp(
@@ -773,30 +935,62 @@ export function resolvePoachCounterBid(
     0.7,
   );
 
-  const success = rng.chance(adjustedChance);
-
-  if (success) {
+  if (!rng.chance(adjustedChance)) {
     return {
-      success: true,
-      cost,
-      reputationChange: 5,
+      attempted: true,
+      success: false,
+      cost: eligibility.cost,
+      reputationChange: -2,
       updatedRival: {
         ...rival,
-        winsAgainstPlayer: rival.winsAgainstPlayer ?? 0,
-        lossesToPlayer: (rival.lossesToPlayer ?? 0) + 1,
+        winsAgainstPlayer: (rival.winsAgainstPlayer ?? 0) + 1,
+        lossesToPlayer: rival.lossesToPlayer ?? 0,
       },
+      lifecycle,
+    };
+  }
+
+  const resolution = resolvePlayerMovements(
+    lifecycle,
+    [{
+      type: "permanentTransfer",
+      playerId: player.id,
+      fromClubId: rival.clubId,
+      toClubId: scout.currentClubId,
+      fee: eligibility.cost,
+      wage: Math.max(100, player.wage),
+      contractLength: 3,
+      reason: `Counter-bid backed by ${scout.firstName} ${scout.lastName}`,
+    }],
+    week,
+    season,
+  );
+  const movement = resolution.applied[0];
+  if (!movement) {
+    return {
+      attempted: true,
+      success: false,
+      cost: eligibility.cost,
+      reputationChange: 0,
+      updatedRival: rival,
+      rejectionReason:
+        resolution.rejected[0]?.reason ?? "The transfer could not be completed.",
+      lifecycle,
     };
   }
 
   return {
-    success: false,
-    cost,
-    reputationChange: -2,
+    attempted: true,
+    success: true,
+    cost: eligibility.cost,
+    reputationChange: 5,
     updatedRival: {
       ...rival,
-      winsAgainstPlayer: (rival.winsAgainstPlayer ?? 0) + 1,
-      lossesToPlayer: rival.lossesToPlayer ?? 0,
+      winsAgainstPlayer: rival.winsAgainstPlayer ?? 0,
+      lossesToPlayer: (rival.lossesToPlayer ?? 0) + 1,
     },
+    lifecycle: resolution.state,
+    movement,
   };
 }
 

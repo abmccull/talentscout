@@ -24,12 +24,15 @@ export interface ObjectiveStatus {
 
 export interface ScenarioProgress {
   scenarioId: string;
+  /** False when the save references a removed or unknown definition. */
+  valid: boolean;
   objectives: ObjectiveStatus[];
   /** True when every required objective is completed. */
   allRequiredComplete: boolean;
   /** True when the scenario has been failed (cannot be won). */
   failed: boolean;
   failReason?: string;
+  invalidReason?: string;
 }
 
 export interface FailCheck {
@@ -63,12 +66,15 @@ export function checkScenarioObjectives(
   const scenario = getScenarioById(scenarioId);
 
   if (scenario === undefined) {
-    // Unknown scenario — treat as trivially complete so the game doesn't block.
+    // Fail closed: removed content cannot become a free completion reward.
     return {
       scenarioId,
+      valid: false,
       objectives: [],
-      allRequiredComplete: true,
-      failed: false,
+      allRequiredComplete: false,
+      failed: true,
+      failReason: getInvalidScenarioReason(scenarioId),
+      invalidReason: getInvalidScenarioReason(scenarioId),
     };
   }
 
@@ -87,6 +93,7 @@ export function checkScenarioObjectives(
 
   return {
     scenarioId,
+    valid: true,
     objectives,
     allRequiredComplete,
     failed: failCheck.failed,
@@ -101,7 +108,7 @@ export function checkScenarioObjectives(
  * failed before all objectives have been attempted (e.g., the deadline passed).
  *
  * Generic fail condition:
- *  - The number of seasons played since game start exceeds `estimatedSeasons`.
+ *  - The first season after the configured `estimatedSeasons` budget begins.
  *    ("You ran out of time.")
  *
  * Scenario-specific overrides are applied after the generic check.
@@ -115,13 +122,15 @@ export function isScenarioFailed(
   scenarioId: string,
 ): FailCheck {
   const scenario = getScenarioById(scenarioId);
-  if (scenario === undefined) return { failed: false };
+  if (scenario === undefined) {
+    return { failed: true, reason: getInvalidScenarioReason(scenarioId) };
+  }
 
   const seasonsElapsed =
     state.currentSeason - scenario.setup.startingSeason;
 
-  // Generic: exceeded the estimated season budget
-  if (seasonsElapsed > scenario.estimatedSeasons) {
+  // The starting season counts as the first playable scenario season.
+  if (seasonsElapsed >= scenario.estimatedSeasons) {
     return {
       failed: true,
       reason: `You exceeded the ${scenario.estimatedSeasons}-season target for this scenario.`,
@@ -134,21 +143,10 @@ export function isScenarioFailed(
       // Fail if week 28 has passed and 3 recommend-level reports haven't been filed
       const windowClose = 28;
       if (state.currentWeek > windowClose) {
-        const qualified = Object.values(state.reports).filter((r) => {
-          const ORDER = {
-            note: 0,
-            recommend: 1,
-            strongRecommend: 2,
-            tablePound: 3,
-          };
-          return ORDER[r.conviction] >= ORDER["recommend"];
-        });
-        if (qualified.length < 3) {
-          return {
-            failed: true,
-            reason: "The winter window closed before you submitted 3 quality reports.",
-          };
-        }
+        return {
+          failed: true,
+          reason: "The winter window closed before three required reports were completed on time.",
+        };
       }
       break;
     }
@@ -177,6 +175,10 @@ export function isScenarioFailed(
   }
 
   return { failed: false };
+}
+
+export function getInvalidScenarioReason(scenarioId: string): string {
+  return `Scenario "${scenarioId}" is unavailable in this version. It cannot complete or grant rewards and will be archived safely.`;
 }
 
 // =============================================================================

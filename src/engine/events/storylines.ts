@@ -21,6 +21,7 @@
 
 import type { GameState, NarrativeEvent, NarrativeEventType, StorylineState } from "../core/types";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
+import { getSeasonLength } from "@/engine/core/gameLoop";
 
 // =============================================================================
 // RE-EXPORT StorylineState as Storyline for external consumers
@@ -97,20 +98,24 @@ function generateStoryEventId(rng: SimpleRNG): string {
 }
 
 /**
- * Return the total week-count of the current point in the game,
- * treating each season as 38 weeks. Used to compare across season boundaries.
+ * Return the total week-count using the authoritative fixture-derived season
+ * length. This keeps scheduled beats aligned with the real competition year.
  */
-function absoluteWeek(season: number, week: number): number {
-  return (season - 1) * 38 + week;
+function absoluteWeek(state: GameState, season: number, week: number): number {
+  return (season - 1) * getSeasonLength(state.fixtures) + week;
 }
 
 /**
  * Given an absolute week count, return { season, week }.
- * Seasons start at 1; weeks run 1–38.
+ * Seasons start at 1; week bounds come from the persisted fixture calendar.
  */
-function fromAbsoluteWeek(abs: number): { season: number; week: number } {
-  const season = Math.floor((abs - 1) / 38) + 1;
-  const week = ((abs - 1) % 38) + 1;
+function fromAbsoluteWeek(
+  state: GameState,
+  abs: number,
+): { season: number; week: number } {
+  const seasonLength = getSeasonLength(state.fixtures);
+  const season = Math.floor((abs - 1) / seasonLength) + 1;
+  const week = ((abs - 1) % seasonLength) + 1;
   return { season, week };
 }
 
@@ -801,9 +806,10 @@ const STORYLINE_TRIGGER_CHANCE = 0.05;
 export function checkStorylineTriggers(
   state: GameState,
   rng: SimpleRNG,
+  triggerChance = STORYLINE_TRIGGER_CHANCE,
 ): Storyline | null {
   // Step 1: weekly trigger roll
-  if (rng.next() >= STORYLINE_TRIGGER_CHANCE) return null;
+  if (rng.next() >= Math.min(0.5, Math.max(0, triggerChance))) return null;
 
   // Step 2: cap check
   const active = state.activeStorylines.filter((s) => !s.resolved);
@@ -860,7 +866,7 @@ export function processActiveStorylines(
 ): StorylineTickResult {
   const events: NarrativeEvent[] = [];
   const updatedStorylines: Storyline[] = [];
-  const currentAbs = absoluteWeek(state.currentSeason, state.currentWeek);
+  const currentAbs = absoluteWeek(state, state.currentSeason, state.currentWeek);
 
   for (const storyline of state.activeStorylines) {
     if (storyline.resolved) {
@@ -868,7 +874,18 @@ export function processActiveStorylines(
       continue;
     }
 
-    const stageAbs = absoluteWeek(storyline.nextStageSeason, storyline.nextStageWeek);
+    // Choice beats are hard narrative gates. The continuation schedule is
+    // persisted on awaitingChoice and activated only by choice resolution.
+    if (storyline.awaitingChoice) {
+      updatedStorylines.push(storyline);
+      continue;
+    }
+
+    const stageAbs = absoluteWeek(
+      state,
+      storyline.nextStageSeason,
+      storyline.nextStageWeek,
+    );
 
     // Not yet time for this stage
     if (currentAbs < stageAbs) {
@@ -895,16 +912,47 @@ export function processActiveStorylines(
       continue;
     }
 
-    // Generate stage event
-    const event = stage.generateEvent(storyline.context, state, rng);
-    if (event !== null) {
-      events.push(event);
+    // Link the generated event to its persisted storyline so choice actions
+    // can update the correct context without conflating it with EventChain.
+    const generatedEvent = stage.generateEvent(storyline.context, state, rng);
+    if (generatedEvent !== null) {
+      events.push({
+        ...generatedEvent,
+        storylineId: storyline.id,
+        storylineStage: storyline.currentStage,
+      });
     }
 
     const nextStageIndex = storyline.currentStage + 1;
     const allStagesDone = nextStageIndex >= template.stages.length;
 
-    if (allStagesDone) {
+    const choiceEvent = generatedEvent !== null &&
+      (generatedEvent.choices?.length ?? 0) > 0;
+
+    if (choiceEvent) {
+      let nextStageWeek: number | undefined;
+      let nextStageSeason: number | undefined;
+      if (!allStagesDone) {
+        const nextStage = template.stages[nextStageIndex];
+        const nextAbs = currentAbs + nextStage.weekDelay;
+        const nextDate = fromAbsoluteWeek(state, nextAbs);
+        nextStageWeek = nextDate.week;
+        nextStageSeason = nextDate.season;
+      }
+
+      updatedStorylines.push({
+        ...storyline,
+        resolved: false,
+        awaitingChoice: {
+          eventId: generatedEvent.id,
+          stageIndex: storyline.currentStage,
+          nextStageIndex,
+          nextStageWeek,
+          nextStageSeason,
+          terminal: allStagesDone,
+        },
+      });
+    } else if (allStagesDone) {
       updatedStorylines.push({
         ...storyline,
         currentStage: nextStageIndex,
@@ -913,7 +961,10 @@ export function processActiveStorylines(
     } else {
       const nextStage = template.stages[nextStageIndex];
       const nextAbs = currentAbs + nextStage.weekDelay;
-      const { season: nextStageSeason, week: nextStageWeek } = fromAbsoluteWeek(nextAbs);
+      const { season: nextStageSeason, week: nextStageWeek } = fromAbsoluteWeek(
+        state,
+        nextAbs,
+      );
 
       updatedStorylines.push({
         ...storyline,
@@ -954,6 +1005,7 @@ export function resolveStorylineChoice(
   stageIndex: number,
   choiceIndex: number,
   rng: SimpleRNG,
+  eventId?: string,
 ): StorylineChoiceResult {
   const effectTag = deriveEffectTag(storyline.templateId, stageIndex, choiceIndex);
 
@@ -1034,8 +1086,30 @@ export function resolveStorylineChoice(
       break;
   }
 
+  const pending = storyline.awaitingChoice;
+  const resolvesPendingChoice = pending !== undefined &&
+    pending.stageIndex === stageIndex &&
+    (eventId === undefined || pending.eventId === eventId);
+
+  const updatedStoryline: Storyline = resolvesPendingChoice
+    ? {
+        ...storyline,
+        context: updatedContext,
+        currentStage: pending.nextStageIndex,
+        nextStageWeek: pending.nextStageWeek ?? storyline.nextStageWeek,
+        nextStageSeason: pending.nextStageSeason ?? storyline.nextStageSeason,
+        resolved: pending.terminal,
+        awaitingChoice: undefined,
+      }
+    : {
+        // Legacy saves may already have advanced or terminalized the storyline
+        // before the choice event was resolved. Still record and apply it.
+        ...storyline,
+        context: updatedContext,
+      };
+
   return {
-    storyline: { ...storyline, context: updatedContext },
+    storyline: updatedStoryline,
     reputationChange,
     fatigueChange,
     message,

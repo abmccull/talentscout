@@ -24,6 +24,12 @@ import type {
 } from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
+import {
+  addGameWeeksWithSeasonLength,
+  gameWeeksBetweenWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "@/engine/core/gameDate";
 
 // =============================================================================
 // CONSTANTS
@@ -144,22 +150,23 @@ export function calculateLoanTerms(
   currentWeek: number,
   currentSeason: number,
   rng: RNG,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): Omit<LoanDeal, "id" | "status" | "scoutId" | "performanceRecord"> {
-  // Duration: 4-40 weeks, biased toward half-season or full-season
+  const maximumDuration = Math.max(MAX_LOAN_DURATION, seasonLength);
+  // Duration: 4 weeks through the active full-season range.
   const durationOptions = [
     { item: rng.nextInt(MIN_LOAN_DURATION, 15), weight: 30 },  // short loan
     { item: rng.nextInt(16, 25), weight: 40 },                  // half-season
-    { item: rng.nextInt(26, MAX_LOAN_DURATION), weight: 30 },   // full season
+    { item: rng.nextInt(26, maximumDuration), weight: 30 },     // full season
   ];
   const duration = rng.pickWeighted(durationOptions);
 
   // Calculate end week/season
-  let endWeek = currentWeek + duration;
-  let endSeason = currentSeason;
-  if (endWeek > 38) {
-    endWeek -= 38;
-    endSeason += 1;
-  }
+  const endDate = addGameWeeksWithSeasonLength(
+    { week: currentWeek, season: currentSeason },
+    duration,
+    seasonLength,
+  );
 
   // Loan fee: 5-15% of player's weekly wage × duration
   const feePercent = rng.nextFloat(0.05, 0.15);
@@ -185,8 +192,8 @@ export function calculateLoanTerms(
     loanClubId: loanClub.id,
     startWeek: currentWeek,
     startSeason: currentSeason,
-    endWeek,
-    endSeason,
+    endWeek: endDate.week,
+    endSeason: endDate.season,
     loanFee,
     wageContribution,
     buyOptionFee,
@@ -201,13 +208,19 @@ export function calculateLoanTerms(
 /**
  * Evaluate the outcome of a completed loan deal based on performance.
  */
-export function evaluateLoanOutcome(deal: LoanDeal): LoanOutcome {
+export function evaluateLoanOutcome(
+  deal: LoanDeal,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+): LoanOutcome {
   const perf = deal.performanceRecord;
   if (!perf) return "neutral";
 
   // Calculate possible appearances (rough: 1 per week of loan)
-  const durationWeeks =
-    (deal.endSeason - deal.startSeason) * 38 + (deal.endWeek - deal.startWeek);
+  const durationWeeks = gameWeeksBetweenWithSeasonLength(
+    { week: deal.startWeek, season: deal.startSeason },
+    { week: deal.endWeek, season: deal.endSeason },
+    seasonLength,
+  );
   const possibleAppearances = Math.max(1, Math.floor(durationWeeks * 0.7)); // ~70% weeks have fixtures
 
   const appearanceRate = perf.appearances / possibleAppearances;
@@ -242,6 +255,7 @@ export function processLoanReturns(
   week: number,
   season: number,
   rng: RNG,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): { deals: LoanDeal[]; messages: InboxMessage[] } {
   const activeLoans = state.activeLoans ?? [];
   const returning: LoanDeal[] = [];
@@ -253,12 +267,12 @@ export function processLoanReturns(
       const player = state.players[deal.playerId];
       const parentClub = state.clubs[deal.parentClubId];
       const loanClub = state.clubs[deal.loanClubId];
-      let outcome = evaluateLoanOutcome(deal);
+      let outcome = evaluateLoanOutcome(deal, seasonLength);
       if (
         outcome === "buy-option-exercised" &&
         (!deal.buyOptionFee || (loanClub?.budget ?? 0) < deal.buyOptionFee)
       ) {
-        outcome = evaluateLoanOutcome({ ...deal, buyOptionFee: undefined });
+        outcome = evaluateLoanOutcome({ ...deal, buyOptionFee: undefined }, seasonLength);
       }
       const completed: LoanDeal = { ...deal, status: "completed", outcome };
       returning.push(completed);
@@ -312,6 +326,7 @@ export function processAILoanDeals(
   week: number,
   season: number,
   rng: RNG,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): {
   deals: LoanDeal[];
   messages: InboxMessage[];
@@ -411,11 +426,16 @@ export function processAILoanDeals(
 
     const duration = Math.max(
       MIN_LOAN_DURATION,
-      Math.min(MAX_LOAN_DURATION, Math.round(recommendation.suggestedDuration)),
+      Math.min(
+        Math.max(MAX_LOAN_DURATION, seasonLength),
+        Math.round(recommendation.suggestedDuration),
+      ),
     );
-    const rawEndWeek = week + duration;
-    const endSeason = season + Math.floor((rawEndWeek - 1) / 38);
-    const endWeek = ((rawEndWeek - 1) % 38) + 1;
+    const endDate = addGameWeeksWithSeasonLength(
+      { week, season },
+      duration,
+      seasonLength,
+    );
     const wageContribution = Math.max(
       0,
       Math.min(100, Math.round(recommendation.suggestedWageContribution)),
@@ -436,8 +456,8 @@ export function processAILoanDeals(
       loanClubId: targetClub.id,
       startWeek: week,
       startSeason: season,
-      endWeek,
-      endSeason,
+      endWeek: endDate.week,
+      endSeason: endDate.season,
       loanFee,
       wageContribution,
       buyOptionFee: rng.chance(0.15)
@@ -505,10 +525,22 @@ export function processAILoanDeals(
       state.leagues,
     );
     if (!destination) continue;
-    const terms = calculateLoanTerms(player, club, destination, week, season, rng);
+    const terms = calculateLoanTerms(
+      player,
+      club,
+      destination,
+      week,
+      season,
+      rng,
+      seasonLength,
+    );
     const durationWeeks = Math.max(
       1,
-      (terms.endSeason - terms.startSeason) * 38 + (terms.endWeek - terms.startWeek),
+      gameWeeksBetweenWithSeasonLength(
+        { week: terms.startWeek, season: terms.startSeason },
+        { week: terms.endWeek, season: terms.endSeason },
+        seasonLength,
+      ),
     );
     const totalCommitment = terms.loanFee + Math.round(
       player.wage * durationWeeks * terms.wageContribution / 100,
@@ -561,6 +593,7 @@ export function processLoanPerformance(
   week: number,
   season: number,
   rng: RNG,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): LoanDeal[] {
   const activeLoans = state.activeLoans ?? [];
   const updatedLoans: LoanDeal[] = [];
@@ -592,6 +625,7 @@ export function processLoanPerformance(
     const hasFixture = loanClub
       ? Object.values(state.fixtures).some(
           (f) =>
+            isFixtureInSeason(f, season) &&
             f.week === week &&
             (f.homeClubId === loanClub.id || f.awayClubId === loanClub.id),
         )
@@ -629,7 +663,11 @@ export function processLoanPerformance(
     // Satisfaction calculations
     const elapsedWeeks = Math.max(
       1,
-      (season - deal.startSeason) * 38 + (week - deal.startWeek) + 1,
+      gameWeeksBetweenWithSeasonLength(
+        { week: deal.startWeek, season: deal.startSeason },
+        { week, season },
+        seasonLength,
+      ) + 1,
     );
     const appearanceRate = newAppearances / elapsedWeeks;
     const parentSatisfaction = Math.min(100, Math.max(0,

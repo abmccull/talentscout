@@ -9,6 +9,16 @@ import type {
   EmployeeEvent,
   Scout,
 } from "../core/types";
+import {
+  getEmployeePayEffects,
+  getEmployeeSalaryBand,
+  renegotiateEmployeeSalary,
+} from "./employeeEconomics";
+import {
+  addGameWeeksWithSeasonLength,
+  gameWeeksBetweenWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Event generation
@@ -19,7 +29,7 @@ import type {
  * Returns null if no event occurs or the employee is on leave.
  *
  * Event probabilities:
- *  - Poaching:         2% (quality > 12 only)
+ *  - Poaching:         0.4%-12% from quality and visible pay position
  *  - Training request: 5%
  *  - Personal issue:   2%
  *  - Breakthrough:     3% (scout, quality > 10 only)
@@ -31,16 +41,39 @@ export function checkEmployeeEvents(
   scout: Scout,
   week: number,
   season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): EmployeeEvent | null {
   // On-leave employees don't generate events
   if (employee.onLeave) return null;
 
-  // Poaching: rival agency targets high-quality staff
-  if (employee.quality > 12 && rng.chance(0.02)) {
-    const rivalOffer = Math.round(employee.salary * 1.3);
-    const matchSalary = Math.round(employee.salary * 1.2);
+  // Poaching pressure is driven by visible employee quality and pay position.
+  // Premium contracts substantially reduce, but never fully remove, the risk.
+  const salaryBand = getEmployeeSalaryBand(employee, scout.reputation);
+  const payEffects = getEmployeePayEffects(employee, scout.reputation);
+  const qualityPressure = Math.max(0, Math.min(0.025, (employee.quality - 8) * 0.0025));
+  const poachingChance = Math.max(
+    0.004,
+    Math.min(0.12, payEffects.poachingChance + qualityPressure),
+  );
+  const alreadyHasPoachingOffer = finances.pendingEmployeeEvents.some(
+    (event) => event.employeeId === employee.id && event.type === "poaching",
+  );
+  if (employee.quality > 8 && !alreadyHasPoachingOffer && rng.chance(poachingChance)) {
+    const rivalOffer = Math.min(
+      salaryBand.maximum + Math.round(salaryBand.marketRate * 0.15),
+      Math.max(salaryBand.fairMaximum, Math.round(salaryBand.marketRate * 1.2)),
+    );
+    const matchSalary = Math.min(
+      salaryBand.maximum,
+      Math.max(salaryBand.fairMinimum, Math.round(employee.salary * 1.2 / 25) * 25),
+    );
+    const deadline = addGameWeeksWithSeasonLength(
+      { season, week },
+      2,
+      seasonLength,
+    );
     return {
-      id: `evt_poach_${employee.id}_${week}`,
+      id: `evt_poach_${employee.id}_s${season}_w${week}`,
       type: "poaching",
       employeeId: employee.id,
       description: `A rival agency is trying to poach ${employee.name} with a £${rivalOffer}/mo offer.`,
@@ -50,6 +83,7 @@ export function checkEmployeeEvents(
           cost: 0,
           moraleChange: 5,
           effect: "matchSalary",
+          salary: matchSalary,
         },
         {
           label: "Let them go",
@@ -58,16 +92,21 @@ export function checkEmployeeEvents(
           effect: "acceptPoach",
         },
       ],
-      deadline: week + 2,
-      deadlineSeason: season,
+      deadline: deadline.week,
+      deadlineSeason: deadline.season,
     };
   }
 
   // Training request: employee wants professional development
   if (rng.chance(0.05)) {
     const trainingCost = Math.round(500 + employee.quality * 100);
+    const deadline = addGameWeeksWithSeasonLength(
+      { season, week },
+      3,
+      seasonLength,
+    );
     return {
-      id: `evt_train_${employee.id}_${week}`,
+      id: `evt_train_${employee.id}_s${season}_w${week}`,
       type: "trainingRequest",
       employeeId: employee.id,
       description: `${employee.name} wants to attend a professional development course.`,
@@ -85,15 +124,20 @@ export function checkEmployeeEvents(
           effect: "declineTraining",
         },
       ],
-      deadline: week + 3,
-      deadlineSeason: season,
+      deadline: deadline.week,
+      deadlineSeason: deadline.season,
     };
   }
 
   // Personal issue: employee requests time off
   if (rng.chance(0.02)) {
+    const deadline = addGameWeeksWithSeasonLength(
+      { season, week },
+      1,
+      seasonLength,
+    );
     return {
-      id: `evt_personal_${employee.id}_${week}`,
+      id: `evt_personal_${employee.id}_s${season}_w${week}`,
       type: "personalIssue",
       employeeId: employee.id,
       description: `${employee.name} has requested time off for personal reasons.`,
@@ -111,15 +155,20 @@ export function checkEmployeeEvents(
           effect: "denyLeave",
         },
       ],
-      deadline: week + 1,
-      deadlineSeason: season,
+      deadline: deadline.week,
+      deadlineSeason: deadline.season,
     };
   }
 
   // Breakthrough: high-quality scout discovers promising talent
   if (employee.role === "scout" && employee.quality > 10 && rng.chance(0.03)) {
+    const deadline = addGameWeeksWithSeasonLength(
+      { season, week },
+      4,
+      seasonLength,
+    );
     return {
-      id: `evt_break_${employee.id}_${week}`,
+      id: `evt_break_${employee.id}_s${season}_w${week}`,
       type: "breakthrough",
       employeeId: employee.id,
       description: `${employee.name} discovered a promising talent during their scouting work!`,
@@ -131,8 +180,8 @@ export function checkEmployeeEvents(
           effect: "ignore",
         },
       ],
-      deadline: week + 4,
-      deadlineSeason: season,
+      deadline: deadline.week,
+      deadlineSeason: deadline.season,
     };
   }
 
@@ -152,6 +201,9 @@ export function resolveEmployeeEvent(
   finances: FinancialRecord,
   eventId: string,
   optionIndex: number,
+  week: number,
+  season: number,
+  employerReputation = 50,
 ): FinancialRecord {
   const event = finances.pendingEmployeeEvents.find((e) => e.id === eventId);
   if (!event) return finances;
@@ -167,7 +219,20 @@ export function resolveEmployeeEvent(
 
   // Apply financial cost
   if (option.cost) {
-    updated = { ...updated, balance: updated.balance - option.cost };
+    updated = {
+      ...updated,
+      balance: updated.balance - option.cost,
+      transactions: [
+        ...updated.transactions,
+        {
+          week,
+          season,
+          amount: -option.cost,
+          description: `Employee event: ${event.type}`,
+          referenceId: `employee-event-cost:${event.id}:${optionIndex}`,
+        },
+      ],
+    };
   }
 
   // Apply morale change and per-effect special logic to the target employee
@@ -181,7 +246,6 @@ export function resolveEmployeeEvent(
           return {
             ...emp,
             morale: Math.min(100, emp.morale + option.moraleChange),
-            salary: Math.round(emp.salary * 1.2),
           };
 
         case "acceptPoach":
@@ -232,6 +296,26 @@ export function resolveEmployeeEvent(
     }),
   };
 
+  if (option.effect === "matchSalary") {
+    const target = updated.employees.find((employee) => employee.id === event.employeeId);
+    if (target) {
+      const band = getEmployeeSalaryBand(target, employerReputation);
+      const requestedSalary = option.salary
+        ?? Math.min(
+          band.maximum,
+          Math.max(band.fairMinimum, Math.round(target.salary * 1.2 / 25) * 25),
+        );
+      updated = renegotiateEmployeeSalary(
+        updated,
+        target.id,
+        requestedSalary,
+        employerReputation,
+        week,
+        season,
+      );
+    }
+  }
+
   // Remove poached employee
   if (option.effect === "acceptPoach") {
     updated = {
@@ -256,16 +340,26 @@ export function expireEmployeeEvents(
   finances: FinancialRecord,
   week: number,
   season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
-  const currentTotal = season * 52 + week;
-
   const { expired, remaining } = finances.pendingEmployeeEvents.reduce<{
     expired: EmployeeEvent[];
     remaining: EmployeeEvent[];
   }>(
     (acc, event) => {
-      const deadlineTotal = event.deadlineSeason * 52 + event.deadline;
-      if (currentTotal > deadlineTotal) {
+      // Normalize pre-authority saves whose deadline overflowed the authored
+      // season (for example S1 W40 in a 38-week competition).
+      const deadline = addGameWeeksWithSeasonLength(
+        { season: event.deadlineSeason, week: 1 },
+        Math.max(0, event.deadline - 1),
+        seasonLength,
+      );
+      const isPastDeadline = gameWeeksBetweenWithSeasonLength(
+        deadline,
+        { season, week },
+        seasonLength,
+      ) > 0;
+      if (isPastDeadline) {
         acc.expired.push(event);
       } else {
         acc.remaining.push(event);

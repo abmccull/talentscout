@@ -26,6 +26,10 @@ import {
   calculateSpecMonthlyBonus,
   calculateSpecUniqueIncome,
 } from "./specializationIncome";
+import {
+  normalizeEmployeeContract,
+  normalizeEmployeeContractsInRecord,
+} from "./employeeEconomics";
 
 // =============================================================================
 // CONSTANTS
@@ -41,6 +45,32 @@ const EQUIPMENT_UPGRADE_COSTS: Record<number, number> = {
 
 /** Maximum equipment level. */
 const MAX_EQUIPMENT_LEVEL = 5;
+
+/**
+ * Apply one auditable cash movement.
+ *
+ * Keeping the balance mutation and its ledger entry in the same helper makes
+ * it impossible for callers such as difficulty modifiers or legacy perks to
+ * change cash without explaining where the money came from.
+ */
+export function applyBalanceTransaction(
+  finances: FinancialRecord,
+  amount: number,
+  week: number,
+  season: number,
+  description: string,
+): FinancialRecord {
+  if (!Number.isFinite(amount) || amount === 0) return finances;
+
+  return {
+    ...finances,
+    balance: finances.balance + amount,
+    transactions: [
+      ...finances.transactions,
+      { week, season, amount, description },
+    ],
+  };
+}
 
 /** Balance floor below which the scout is considered broke. */
 const BROKE_THRESHOLD = -500;
@@ -142,6 +172,7 @@ const STARTER_STIPEND: Record<DifficultyLevel, number> = {
 export function initializeFinances(scout: Scout, careerPath?: CareerPath, difficulty?: DifficultyLevel): FinancialRecord {
   const monthlyIncome = scout.salary * 4; // weekly salary × 4 weeks
   const path = careerPath ?? scout.careerPath ?? "club";
+  const startingCash = STARTING_CASH[difficulty ?? "normal"];
 
   const defaultEquipment: EquipmentInventory = {
     ownedItems: [...DEFAULT_OWNED_ITEMS],
@@ -153,11 +184,17 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath, diffic
 
   // Build a temporary record so we can calculate initial expenses
   const stub: FinancialRecord = {
-    balance: STARTING_CASH[difficulty ?? "normal"],
+    balance: startingCash,
     monthlyIncome,
     expenses: emptyExpenses(),
     equipmentLevel: 1,
-    transactions: [],
+    transactions: [{
+      week: 0,
+      season: 1,
+      amount: startingCash,
+      description: "Opening balance",
+      kind: "openingBalance",
+    }],
     equipment: defaultEquipment,
     careerPath: path,
     independentTier: path === "independent" ? 1 : undefined,
@@ -212,20 +249,74 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath, diffic
 export function processStarterStipend(
   finances: FinancialRecord,
   difficulty: DifficultyLevel,
+  week: number,
+  season: number,
 ): FinancialRecord {
+  if (finances.transactions.some(
+    (transaction) => transaction.week === week
+      && transaction.season === season
+      && transaction.description === "Starter scouting stipend",
+  )) {
+    return finances;
+  }
   const weeksRemaining = finances.starterBonus?.starterStipendWeeksRemaining ?? 0;
   if (!finances.starterBonus || weeksRemaining <= 0) {
     return finances;
   }
   const stipend = STARTER_STIPEND[difficulty] ?? STARTER_STIPEND.normal;
+  const paid = applyBalanceTransaction(
+    finances,
+    stipend,
+    week,
+    season,
+    "Starter scouting stipend",
+  );
   return {
-    ...finances,
-    balance: finances.balance + stipend,
+    ...paid,
     starterBonus: {
-      ...finances.starterBonus,
+      ...paid.starterBonus,
       starterStipendWeeksRemaining: weeksRemaining - 1,
     },
   };
+}
+
+/** Apply the cash deltas introduced by a difficulty profile. */
+export function applyDifficultyFinancialAdjustments(
+  finances: FinancialRecord,
+  incomeAdjustment: number,
+  expenseAdjustment: number,
+  week: number,
+  season: number,
+): FinancialRecord {
+  const alreadyAdjustedIncome = finances.transactions.some(
+    (transaction) => transaction.week === week
+      && transaction.season === season
+      && transaction.description === "Difficulty income adjustment",
+  );
+  let updated = alreadyAdjustedIncome
+    ? finances
+    : applyBalanceTransaction(
+      finances,
+      incomeAdjustment,
+      week,
+      season,
+      "Difficulty income adjustment",
+    );
+  const alreadyAdjustedExpenses = updated.transactions.some(
+    (transaction) => transaction.week === week
+      && transaction.season === season
+      && transaction.description === "Difficulty expense adjustment",
+  );
+  updated = alreadyAdjustedExpenses
+    ? updated
+    : applyBalanceTransaction(
+      updated,
+      -expenseAdjustment,
+      week,
+      season,
+      "Difficulty expense adjustment",
+    );
+  return updated;
 }
 
 function defaultLifestyleForTier(tier: CareerTier): LifestyleConfig {
@@ -291,7 +382,13 @@ export function calculateMonthlyExpenses(
 
   // --- Employee salaries (agency) ---
   const employeeSalaries = finances.employees
-    ? finances.employees.reduce((sum, e) => sum + e.salary, 0)
+    ? finances.employees.reduce(
+      (sum, employee) => sum + normalizeEmployeeContract(
+        employee,
+        scout.reputation,
+      ).employee.salary,
+      0,
+    )
     : 0;
 
   // --- Marketing spend (agency) ---
@@ -346,9 +443,32 @@ export function processWeeklyFinances(
     return finances;
   }
 
+  const payrollReference = `monthly-finance:s${currentSeason}w${currentWeek}`;
+  const currentCycleTransactions = finances.transactions.filter(
+    (transaction) => transaction.week === currentWeek
+      && transaction.season === currentSeason,
+  );
+  const alreadyProcessed = currentCycleTransactions.some(
+    (transaction) => transaction.referenceId === `${payrollReference}:scout-income`,
+  ) || (
+    currentCycleTransactions.some((transaction) => transaction.description === "Monthly salary")
+    && currentCycleTransactions.some((transaction) => transaction.description === "Monthly expenses")
+  );
+  if (alreadyProcessed) {
+    return finances;
+  }
+
+  const normalizedFinances = normalizeEmployeeContractsInRecord(
+    finances,
+    scout.reputation,
+    currentWeek,
+    currentSeason,
+  );
+
   // Recalculate expenses to capture any changes (new NPC scouts, travel, etc.).
-  const currentExpenses = calculateMonthlyExpenses(scout, finances);
+  const currentExpenses = calculateMonthlyExpenses(scout, normalizedFinances);
   const totalExpenses = sumExpenses(currentExpenses);
+  const operatingExpenses = totalExpenses - currentExpenses.employeeSalaries;
   const monthlyIncome = scout.salary * 4;
 
   // Specialization income bonus/penalty (B9: lock income sources by spec)
@@ -363,6 +483,7 @@ export function processWeeklyFinances(
     season: currentSeason,
     amount: monthlyIncome,
     description: "Monthly salary",
+    referenceId: `${payrollReference}:scout-income`,
   });
 
   if (totalSpecIncome !== 0) {
@@ -373,24 +494,36 @@ export function processWeeklyFinances(
       description: totalSpecIncome >= 0
         ? "Specialization income bonus"
         : "Specialization income penalty",
+      referenceId: `${payrollReference}:specialization-income`,
     });
   }
 
   transactions.push({
     week: currentWeek,
     season: currentSeason,
-    amount: -totalExpenses,
-    description: "Monthly expenses",
+    amount: -operatingExpenses,
+    description: "Monthly operating expenses",
+    referenceId: `${payrollReference}:operating-expenses`,
   });
 
+  for (const employee of normalizedFinances.employees) {
+    transactions.push({
+      week: currentWeek,
+      season: currentSeason,
+      amount: -employee.salary,
+      description: `Employee salary: ${employee.name} (${employee.role})`,
+      referenceId: `${payrollReference}:employee:${employee.id}`,
+    });
+  }
+
   let result: FinancialRecord = {
-    ...finances,
-    balance: finances.balance + monthlyIncome + totalSpecIncome - totalExpenses,
+    ...normalizedFinances,
+    balance: normalizedFinances.balance + monthlyIncome + totalSpecIncome - totalExpenses,
     monthlyIncome,
     expenses: currentExpenses,
     specBonusApplied: specBonus,
     specUniqueIncome,
-    transactions: [...finances.transactions, ...transactions],
+    transactions: [...normalizedFinances.transactions, ...transactions],
   };
 
   // Process monthly loan interest accrual

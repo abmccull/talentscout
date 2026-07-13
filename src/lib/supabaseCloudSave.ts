@@ -26,6 +26,12 @@
 import { supabase } from "./supabase";
 import type { GameState } from "@/engine/core/types";
 import { migrateSaveState } from "./db";
+import {
+  createSaveEnvelope,
+  extractSavePlayerExperience,
+  extractSaveStatePayload,
+} from "./saveEnvelope";
+import { mergePersistedPlayerExperience } from "./playerExperience";
 import type {
   CloudSaveProvider,
   CloudSaveSlot,
@@ -116,7 +122,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
         specialization: state.scout.primarySpecialization,
         reputation: state.scout.reputation,
         saved_at: Date.now(),
-        state: state as unknown as Record<string, unknown>,
+        state: createSaveEnvelope(state) as unknown as Record<string, unknown>,
       },
       { onConflict: "user_id,slot" },
     );
@@ -141,7 +147,11 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
     if (error) throw new Error(`Cloud load failed: ${error.message}`);
     if (!data) return null;
 
-    return migrateSaveState(data.state);
+    const playerExperience = extractSavePlayerExperience(data.state);
+    if (playerExperience) {
+      mergePersistedPlayerExperience(playerExperience);
+    }
+    return migrateSaveState(extractSaveStatePayload(data.state));
   }
 
   /**

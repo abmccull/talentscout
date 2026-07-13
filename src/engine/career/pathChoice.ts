@@ -13,6 +13,10 @@ import type {
   IndependentTier,
   CareerTier,
 } from "@/engine/core/types";
+import {
+  transitionToClubCareer,
+  transitionToIndependentCareer,
+} from "./transitions";
 
 // ---------------------------------------------------------------------------
 // Independent tier requirements
@@ -47,9 +51,23 @@ export function canChooseIndependentPath(
   scout: Scout,
   finances: FinancialRecord,
 ): boolean {
+  return canChooseCareerPath(scout, finances);
+}
+
+/**
+ * Shared eligibility for the first deliberate career-path commitment.
+ * Both options become available from the same body of earned work; the club
+ * path must not be an easier hidden default than the independent path.
+ */
+export function canChooseCareerPath(
+  scout: Scout,
+  finances: FinancialRecord,
+): boolean {
   return (
-    scout.reputation >= 15 &&
-    scout.reportsSubmitted >= 1 &&
+    scout.careerPathChosen !== true &&
+    scout.careerTier >= 2 &&
+    scout.reputation >= 20 &&
+    scout.reportsSubmitted >= 5 &&
     finances.balance >= 500
   );
 }
@@ -67,19 +85,25 @@ export function chooseCareerPath(
   finances: FinancialRecord,
   path: CareerPath,
 ): { scout: Scout; finances: FinancialRecord } {
-  const updatedScout: Scout = {
-    ...scout,
-    careerPath: path,
-    independentTier: path === "independent" ? 1 : undefined,
+  const isInitialChoice = scout.careerPathChosen !== true;
+  const transition = path === "independent"
+    ? transitionToIndependentCareer(scout, finances)
+    : transitionToClubCareer(scout, finances);
+  return {
+    scout: {
+      ...transition.scout,
+      careerPathChosen: true,
+      ...(path === "independent" && isInitialChoice
+        ? { independentTier: scout.careerTier }
+        : {}),
+    },
+    finances: {
+      ...transition.finances,
+      ...(path === "independent" && isInitialChoice
+        ? { independentTier: scout.careerTier }
+        : {}),
+    },
   };
-
-  const updatedFinances: FinancialRecord = {
-    ...finances,
-    careerPath: path,
-    independentTier: path === "independent" ? 1 : undefined,
-  };
-
-  return { scout: updatedScout, finances: updatedFinances };
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +130,10 @@ export function checkIndependentTierAdvancement(
   if (scout.careerPath !== "independent") return null;
 
   const currentTier = scout.independentTier ?? 1;
+  // Before the first explicit path decision, work may earn the common Tier-2
+  // threshold that unlocks the choice. It may not silently advance the player
+  // any further down the independent branch.
+  if (scout.careerPathChosen !== true && currentTier >= 2) return null;
   const nextTier = (currentTier + 1) as IndependentTier;
   if (nextTier > 5) return null;
 

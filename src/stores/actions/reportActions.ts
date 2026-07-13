@@ -6,10 +6,24 @@
  * prediction auto-generation, and retainer/client delivery tracking.
  */
 import type { GetState, SetState } from "./types";
-import type { ConvictionLevel, InboxMessage } from "@/engine/core/types";
+import type {
+  ConvictionLevel,
+  InboxMessage,
+  ScoutReport,
+  StructuredReportInput,
+} from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
-import { calculateReportCraftQualityDetailed, generateReportContent, finalizeReport } from "@/engine/reports/reporting";
+import { generateReportContent, prepareReportSubmission } from "@/engine/reports/reporting";
+import {
+  ensureScoutingCaseForReport,
+  getScoutingCaseId,
+} from "@/engine/reports/scoutingCases";
+import {
+  applyStructuredReportInput,
+  validateStructuredReportInput,
+} from "@/engine/reports/structuredYouthReport";
+import { getRemainingTablePounds } from "@/engine/reports/conviction";
 import { updateReputation } from "@/engine/career/progression";
 import { recordDiscovery } from "@/engine/career/index";
 import {
@@ -30,6 +44,7 @@ import {
 } from "@/engine/data";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
+import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 
 export function createReportActions(get: GetState, set: SetState) {
   return {
@@ -39,7 +54,13 @@ export function createReportActions(get: GetState, set: SetState) {
       useTutorialStore.getState().startSequence("firstReportWriting");
     },
 
-    submitReport: (conviction: ConvictionLevel, summary: string, strengths: string[], weaknesses: string[]) => {
+    submitReport: (
+      conviction: ConvictionLevel,
+      summary: string,
+      strengths: string[],
+      weaknesses: string[],
+      structured?: StructuredReportInput,
+    ) => {
       const { gameState, selectedPlayerId } = get();
       if (!gameState || !selectedPlayerId) return;
 
@@ -49,35 +70,139 @@ export function createReportActions(get: GetState, set: SetState) {
       const player = resolvedPlayer.player;
       const canonicalPlayerId = resolvedPlayer.playerId;
 
+      if (
+        conviction === "tablePound"
+        && getRemainingTablePounds({
+          reports: Object.values(gameState.reports),
+          scoutId: gameState.scout.id,
+          season: gameState.currentSeason,
+          careerTier: gameState.scout.careerTier,
+        }) <= 0
+      ) {
+        const messageId = `table-pound-spent-s${gameState.currentSeason}`;
+        set({
+          gameState: {
+            ...gameState,
+            inbox: gameState.inbox.some((message) => message.id === messageId)
+              ? gameState.inbox
+              : [...gameState.inbox, {
+                  id: messageId,
+                  week: gameState.currentWeek,
+                  season: gameState.currentSeason,
+                  type: "feedback",
+                  title: "No table-pounds remaining",
+                  body: "You have already staked your maximum reputational capital this season. Choose a lower conviction or wait until next season.",
+                  read: false,
+                  actionRequired: true,
+                }],
+          },
+        });
+        return;
+      }
+
+      if (structured) {
+        const validation = validateStructuredReportInput(
+          structured,
+          gameState.youthRecruitmentBriefs[structured.briefId],
+        );
+        if (!validation.valid) {
+          const messageId = `report-validation-${canonicalPlayerId}-${gameState.currentSeason}-${gameState.currentWeek}`;
+          set({
+            gameState: {
+              ...gameState,
+              inbox: gameState.inbox.some((message) => message.id === messageId)
+                ? gameState.inbox
+                : [...gameState.inbox, {
+                    id: messageId,
+                    week: gameState.currentWeek,
+                    season: gameState.currentSeason,
+                    type: "feedback",
+                    title: "Report needs professional context",
+                    body: validation.errors.join("\n"),
+                    read: false,
+                    actionRequired: true,
+                    relatedId: canonicalPlayerId,
+                    relatedEntityType: "player",
+                  }],
+            },
+          });
+          return;
+        }
+      }
+
       const observations = Object.values(gameState.observations).filter(
         (o) => o.playerId === canonicalPlayerId
       );
       const draft = generateReportContent(player, observations, gameState.scout);
-      const report = finalizeReport(
-        draft,
-        conviction,
-        summary,
-        strengths,
-        weaknesses,
-        gameState.scout,
-        gameState.currentWeek,
-        gameState.currentSeason,
-        canonicalPlayerId
-      );
-
-      // F14: Include infrastructure + equipment report quality bonus
+      // F14: Include infrastructure + equipment report quality bonus. This
+      // exact preparation path is also used by ReportWriter's live preview.
       const infraEffectsForReport = calculateInfrastructureEffects(gameState.scoutingInfrastructure);
       const submitEquipBonuses = gameState.finances?.equipment
         ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
         : undefined;
       const totalReportQualityBonus = infraEffectsForReport.reportQualityBonus + (submitEquipBonuses?.reportQuality ?? 0);
-      const qualityDetailed = calculateReportCraftQualityDetailed(
-        report,
+      const prepared = prepareReportSubmission({
+        draft,
+        conviction,
+        summary,
+        strengths,
+        weaknesses,
+        scout: gameState.scout,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+        playerId: canonicalPlayerId,
         observations,
-        gameState.scout,
-        player,
-        totalReportQualityBonus,
-      );
+        playerContext: player,
+        reportQualityBonus: totalReportQualityBonus,
+      });
+      let report = prepared.report;
+      const previousReport = Object.values(gameState.reports)
+        .filter((candidate) =>
+          candidate.playerId === canonicalPlayerId
+          && candidate.scoutId === gameState.scout.id
+          && (!structured || candidate.briefId === structured.briefId)
+        )
+        .sort((left, right) =>
+          right.submittedSeason - left.submittedSeason
+          || right.submittedWeek - left.submittedWeek
+          || (right.revision ?? 1) - (left.revision ?? 1)
+          || right.id.localeCompare(left.id)
+        )[0];
+      if (structured) {
+        const duplicate = Object.values(gameState.reports).find((candidate) =>
+          candidate.submittedWeek === gameState.currentWeek
+          && candidate.submittedSeason === gameState.currentSeason
+          && candidate.playerId === canonicalPlayerId
+          && candidate.briefId === structured.briefId
+          && candidate.summary === summary
+          && candidate.conviction === conviction
+        );
+        if (duplicate) {
+          set({ currentScreen: "reportHistory" });
+          return;
+        }
+        report = applyStructuredReportInput(report, structured, previousReport);
+        report = {
+          ...report,
+          caseId: previousReport?.caseId
+            ?? getScoutingCaseId(gameState.scout.id, canonicalPlayerId, structured.briefId),
+        };
+      }
+
+      // A report ID is the immutable scout/player/week revision key. A retry,
+      // double click, or stale ReportWriter must not overwrite that revision or
+      // replay reputation, delivery, prediction, and tutorial side effects.
+      if (gameState.reports[report.id]) {
+        set({
+          currentScreen: "reportHistory",
+          ...(gameState.scout.careerPath === "independent"
+            ? { pendingListingReportId: report.id }
+            : {}),
+        });
+        return;
+      }
+
+      const qualityDetailed = prepared.quality;
       const quality = qualityDetailed.score;
 
       const repBefore = gameState.scout.reputation;
@@ -97,7 +222,7 @@ export function createReportActions(get: GetState, set: SetState) {
         reportsSubmitted: baseUpdatedScout.reportsSubmitted + 1,
       };
       const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
-      let scoredReport = {
+      let scoredReport: ScoutReport = {
         ...report,
         qualityScore: quality,
         reputationDelta,
@@ -109,6 +234,11 @@ export function createReportActions(get: GetState, set: SetState) {
           ]),
         ),
       };
+      const caseLink = ensureScoutingCaseForReport(
+        gameState.scoutingCases ?? {},
+        scoredReport,
+      );
+      scoredReport = caseLink.report;
 
       // Record discovery if this player has not been tracked before
       const alreadyDiscovered = gameState.discoveryRecords.some(
@@ -301,9 +431,10 @@ export function createReportActions(get: GetState, set: SetState) {
       const isIndependent = gameState.scout.careerPath === "independent";
 
       set({
-        gameState: {
+        gameState: synchronizeInternationalAssignmentProgress({
           ...gameState,
           reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
+          scoutingCases: caseLink.scoutingCases,
           scout: updatedScoutAfterResponse,
           finances: updatedFinances,
           discoveryRecords: updatedDiscoveryRecords,
@@ -313,7 +444,7 @@ export function createReportActions(get: GetState, set: SetState) {
           inbox: responseInboxMessage
             ? [...gameState.inbox, responseInboxMessage]
             : gameState.inbox,
-        },
+        }),
         currentScreen: "reportHistory",
         ...(isIndependent ? { pendingListingReportId: scoredReport.id } : {}),
       });

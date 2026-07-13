@@ -13,25 +13,42 @@ import type {
   ScoutSkill,
   ScoutAttribute,
 } from "@/engine/core/types";
+import {
+  createRunManifest,
+  repairRunManifest,
+  validateRunManifest,
+} from "@/engine/run";
+import { createConsequenceEngineState } from "@/engine/consequences";
+import { createEventDirectorState } from "@/engine/events/eventDirector";
+import { migrateRivalOrganizationState } from "@/engine/rivals";
+import { reconcileScenarioAuthority } from "@/engine/scenarios/scenarioAuthority";
 import type { CountryData } from "@/data/types";
-import { getSteam } from "@/lib/steam/steamInterface";
 import { getUnlockedPerks } from "@/engine/specializations/perks";
+import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
+import { compactLongCareerHistory } from "@/engine/world/saveRetention";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
+import {
+  createSaveEnvelope,
+  migrateSaveEnvelope,
+  type SaveEnvelope,
+} from "@/lib/saveEnvelope";
+import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
+import { migrateLegacyTransferParticipation } from "@/engine/firstTeam/transferTracker";
+import { migratePoliticalMeetingState } from "@/engine/career/politicalMeetings";
+import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
 
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
 
-export interface SaveRecord {
+export interface SaveRecord extends SaveEnvelope<GameState> {
   slot: number; // 0 = autosave, 1-5 = manual saves
   name: string;
-  savedAt: number; // Date.now()
   season: number;
   week: number;
   scoutName: string;
   specialization: string;
   reputation: number;
-  state: GameState;
 }
 
 /**
@@ -108,19 +125,35 @@ export function migrateFreeAgentGeography(state: GameState): void {
       resolveFreeAgentCountryKey(state, agent)
       ?? agent.country;
   }
+
+  // Older saves (and pre-fix same-week movement conflicts) can retain a pool
+  // index entry after the authoritative player has signed or retired. Repair
+  // that derived index at every save boundary rather than preserving a player
+  // in mutually incompatible contract states.
+  state.freeAgentPool.agents = agents.filter((agent) => {
+    const player = state.players?.[agent.playerId];
+    return Boolean(
+      player
+      && !player.clubId
+      && !player.contractClubId
+      && !player.loanParentClubId
+      && !player.onLoan,
+    );
+  });
 }
 
 export async function saveGame(
   slot: number,
   name: string,
   state: GameState,
-): Promise<void> {
+): Promise<SaveRecord> {
   migrateFreeAgentGeography(state);
 
+  const envelope = createSaveEnvelope(state);
   const record: SaveRecord = {
+    ...envelope,
     slot,
     name,
-    savedAt: Date.now(),
     season: state.currentSeason,
     week: state.currentWeek,
     scoutName: `${state.scout.firstName} ${state.scout.lastName}`,
@@ -130,21 +163,15 @@ export async function saveGame(
   };
   await db.saves.put(record);
 
-  // Sync to Steam Cloud (no-op in web builds).
-  const steam = getSteam();
-  if (steam.isAvailable()) {
-    try {
-      await steam.setCloudSave(slot, JSON.stringify(record));
-    } catch {
-      // Steam cloud save failure is non-fatal.
-    }
-  }
+  return record;
 }
 
 export async function loadGame(slot: number): Promise<GameState | null> {
-  const record = await db.saves.get(slot);
-  if (!record) return null;
-  return migrateSaveState(record.state);
+  const rawRecord: unknown = await db.saves.get(slot);
+  if (!rawRecord) return null;
+  const record = migrateSaveRecord(rawRecord);
+  mergePersistedPlayerExperience(record.playerExperience);
+  return record.state;
 }
 
 export async function listSaves(): Promise<Omit<SaveRecord, "state">[]> {
@@ -160,6 +187,57 @@ export async function deleteSave(slot: number): Promise<void> {
 
 export async function autosave(state: GameState): Promise<void> {
   await saveGame(AUTOSAVE_SLOT, "Autosave", state);
+}
+
+/** Validate and migrate a complete persisted record from any backend. */
+export function migrateSaveRecord(raw: unknown): SaveRecord {
+  const envelope = migrateSaveEnvelope(raw);
+  const requiredMetadata = [
+    "slot",
+    "name",
+    "season",
+    "week",
+    "scoutName",
+    "specialization",
+    "reputation",
+  ] as const;
+
+  for (const key of requiredMetadata) {
+    if (!(key in envelope)) {
+      throw new Error(`Invalid save data: missing record metadata ${key}`);
+    }
+  }
+
+  const record = envelope as unknown as SaveRecord;
+  if (!Number.isInteger(record.slot) || record.slot < 0 || record.slot > MAX_MANUAL_SLOTS) {
+    throw new Error("Invalid save data: slot must be between 0 and 5");
+  }
+  if (typeof record.name !== "string" || record.name.length === 0) {
+    throw new Error("Invalid save data: missing save name");
+  }
+  if (!Number.isInteger(record.season) || record.season < 1) {
+    throw new Error("Invalid save data: season must be a positive integer");
+  }
+  if (!Number.isInteger(record.week) || record.week < 1) {
+    throw new Error("Invalid save data: week must be a positive integer");
+  }
+  if (typeof record.scoutName !== "string" || record.scoutName.length === 0) {
+    throw new Error("Invalid save data: missing scout name");
+  }
+  if (
+    typeof record.specialization !== "string" ||
+    !["youth", "firstTeam", "regional", "data"].includes(record.specialization)
+  ) {
+    throw new Error("Invalid save data: unsupported specialization");
+  }
+  if (typeof record.reputation !== "number" || !Number.isFinite(record.reputation)) {
+    throw new Error("Invalid save data: reputation must be finite");
+  }
+
+  return {
+    ...record,
+    state: migrateSaveState(record.state),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -197,10 +275,48 @@ export function migrateSaveState(raw: unknown): GameState {
   }
   if (!state.territories) state.territories = {};
   if (!state.countries) state.countries = ["england"];
+  if (!state.runManifest) {
+    state.runManifest = createRunManifest({
+      rootSeed: state.seed || "legacy-import",
+      specialization: state.scout.primarySpecialization ?? "youth",
+      difficulty: state.difficulty ?? "normal",
+      selectedCountries: state.countries,
+      startingCountry: state.countries[0],
+      integrity: "legacy-import",
+      creationRulesVersion: "legacy-pre-run-manifest",
+    });
+  } else {
+    try {
+      if (validateRunManifest(state.runManifest, state.seed).length > 0) {
+        state.runManifest = repairRunManifest(
+          state.runManifest,
+          state.seed || state.runManifest.rootSeed,
+        );
+      }
+    } catch {
+      state.runManifest = createRunManifest({
+        rootSeed: state.seed || "legacy-import",
+        specialization: state.scout.primarySpecialization ?? "youth",
+        difficulty: state.difficulty ?? "normal",
+        selectedCountries: state.countries,
+        startingCountry: state.countries[0],
+        integrity: "legacy-import",
+        creationRulesVersion: "legacy-pre-run-manifest",
+      });
+    }
+  }
+  state.consequenceState = createConsequenceEngineState(state.consequenceState);
+  state.eventDirector = createEventDirectorState(state.eventDirector);
 
   // Phase 2 defaults — narrative, rivals, tools, manager profiles
   if (!state.narrativeEvents) state.narrativeEvents = [];
   if (!state.rivalScouts) state.rivalScouts = {};
+  state.rivalOrganizationState = migrateRivalOrganizationState(
+    state.seed || state.runManifest.rootSeed,
+    state.rivalScouts,
+    state.rivalOrganizationState,
+    Math.max(1, state.currentSeason),
+  );
   if (!state.unlockedTools) state.unlockedTools = [];
   if (!state.managerProfiles) state.managerProfiles = {};
 
@@ -229,6 +345,8 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.placementReports) state.placementReports = {};
   if (!state.gutFeelings) state.gutFeelings = [];
   if (!state.reflectionJournal) state.reflectionJournal = {};
+  if (!state.youthRecruitmentBriefs) state.youthRecruitmentBriefs = {};
+  if (!state.recommendationReviews) state.recommendationReviews = {};
   if (!state.alumniRecords) state.alumniRecords = [];
   if (!state.legacyScore) state.legacyScore = { youthFound: 0, firstTeamBreakthroughs: 0, internationalCapsFromFinds: 0, totalScore: 0, clubsWorkedAt: 0, countriesScouted: 0, careerHighTier: 0, totalSeasons: 0, bestDiscoveryName: "", bestDiscoveryPA: 0, scenariosCompleted: 0 };
   // Backfill extended LegacyScore fields on saves that predate them
@@ -241,6 +359,19 @@ export function migrateSaveState(raw: unknown): GameState {
   if (state.legacyScore.scenariosCompleted === undefined) state.legacyScore.scenariosCompleted = 0;
   if (!state.subRegions) state.subRegions = {};
   if (!state.internationalAssignments) state.internationalAssignments = [];
+  state.internationalAssignments = state.internationalAssignments.map(
+    migrateInternationalAssignment,
+  );
+  if (state.activeInternationalAssignment) {
+    state.activeInternationalAssignment = {
+      ...migrateInternationalAssignment(state.activeInternationalAssignment),
+      acceptedWeek: state.activeInternationalAssignment.acceptedWeek ?? state.currentWeek,
+      acceptedSeason: state.activeInternationalAssignment.acceptedSeason ?? state.currentSeason,
+    };
+  }
+  state.internationalAssignmentHistory = (
+    state.internationalAssignmentHistory ?? []
+  ).map(migrateInternationalAssignment);
   if (!state.retiredPlayerIds) state.retiredPlayerIds = [];
   if (!state.retiredPlayers) state.retiredPlayers = {};
   if (!state.playerMovementHistory) state.playerMovementHistory = [];
@@ -260,6 +391,16 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.scout.attributeXp)
     state.scout.attributeXp = {} as Partial<Record<ScoutAttribute, number>>;
   if (state.scout.specializationXp === undefined) state.scout.specializationXp = 0;
+  if (state.scout.careerPath === undefined) {
+    state.scout.careerPath = state.scout.currentClubId ? "club" : "independent";
+  }
+  // Established legacy careers keep their inferred historical choice. Only a
+  // Tier-1 scout without an employer receives the new explicit decision.
+  if (state.scout.careerPathChosen === undefined) {
+    state.scout.careerPathChosen = Boolean(
+      state.scout.currentClubId || state.scout.careerTier >= 2,
+    );
+  }
   state.scout.unlockedPerks = Array.from(new Set([
     ...(state.scout.unlockedPerks ?? []),
     ...getUnlockedPerks(
@@ -279,7 +420,7 @@ export function migrateSaveState(raw: unknown): GameState {
   // First-Team Scouting System defaults
   if (!state.managerDirectives) state.managerDirectives = [];
   if (!state.clubResponses) state.clubResponses = [];
-  if (!state.transferRecords) state.transferRecords = [];
+  state.transferRecords = migrateLegacyTransferParticipation(state.transferRecords);
   if (!state.systemFitCache) state.systemFitCache = {};
 
   // Data Scouting System defaults
@@ -289,7 +430,15 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.anomalyFlags) state.anomalyFlags = [];
   if (!state.analystReports) state.analystReports = {};
 
-  return state;
+  // Every persistence entrypoint must reconcile legacy cash to its source
+  // ledger, not only the Zustand load path.
+  if (state.finances) {
+    state.finances = reconcileFinancialLedger(state.finances);
+  }
+
+  return reconcileScenarioAuthority(
+    migratePoliticalMeetingState(compactLongCareerHistory(state)),
+  );
 }
 
 export { db };

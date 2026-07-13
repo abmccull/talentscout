@@ -29,6 +29,9 @@ const RENEWAL_CHANCE_LOW = 0.30;     // CA < 50
 const HIGH_REP_RENEWAL_BOOST = 0.15;   // rep > 75
 const LOW_REP_RENEWAL_PENALTY = -0.10; // rep < 30
 
+/** Senior contracts above this depth are allowed to expire by ability order. */
+export const SENIOR_SQUAD_RENEWAL_CAP = 32;
+
 /** Pool duration tiers by CA (max weeks before dropout). */
 const POOL_DURATION_ELITE = 4;      // CA 75+
 const POOL_DURATION_QUALITY = 8;    // CA 60-74
@@ -84,6 +87,22 @@ export function processContractExpiries(
   const renewedPlayerIds: string[] = [];
   const renewals: ContractExpiryResult["renewals"] = [];
   const messages: InboxMessage[] = [];
+  const renewalPriorityByClub = new Map<string, Set<string>>();
+  for (const club of Object.values(state.clubs)) {
+    const ranked = (club.playerIds ?? [])
+      .map((playerId) => state.players[playerId])
+      .filter((player): player is Player => Boolean(player))
+      .sort(
+        (a, b) =>
+          b.currentAbility - a.currentAbility
+          || b.potentialAbility - a.potentialAbility
+          || a.age - b.age
+          || a.id.localeCompare(b.id),
+      )
+      .slice(0, SENIOR_SQUAD_RENEWAL_CAP)
+      .map((player) => player.id);
+    renewalPriorityByClub.set(club.id, new Set(ranked));
+  }
 
   for (const [playerId, player] of Object.entries(state.players)) {
     const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
@@ -94,6 +113,8 @@ export function processContractExpiries(
 
     const club = state.clubs[ownerClubId];
     if (!club) continue;
+    const overCapacity = (club.playerIds?.length ?? 0) > SENIOR_SQUAD_RENEWAL_CAP;
+    const retainedForSquadDepth = renewalPriorityByClub.get(ownerClubId)?.has(playerId) ?? false;
 
     // Determine renewal probability
     let renewalChance = getRenewalChance(player.currentAbility);
@@ -105,7 +126,7 @@ export function processContractExpiries(
     // Clamp to [0.05, 0.95]
     renewalChance = Math.min(0.95, Math.max(0.05, renewalChance));
 
-    if (rng.chance(renewalChance)) {
+    if ((!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance)) {
       // Club renews: extend contract by 1-3 seasons
       const extension = rng.nextInt(1, 3);
       renewals.push({

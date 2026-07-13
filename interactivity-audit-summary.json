@@ -1,0 +1,179 @@
+{
+  "audit_date": "2026-07-12",
+  "scope": "Youth Scout release-candidate interactivity and rendered gameplay",
+  "release_standard": "Every product and rendered-design category must score at least 9.0 from verified behavior",
+  "verdict": "hold",
+  "verdict_reason": "Core interaction and system cohesion are strong, but overall rendered design and gameplay interactivity are 8.9, and manual accessibility, moderated usability, low-end performance, comparative history, actor breadth, and packaged-runtime gates remain open.",
+  "viewports": [
+    "1440x900",
+    "390x844"
+  ],
+  "rendered_evidence": {
+    "core_screenshots": 64,
+    "core_desktop_screenshots": 32,
+    "core_mobile_screenshots": 32,
+    "world_archive_screenshots": 2,
+    "academy_case_capture_set": "Supplemental desktop/mobile captures include recruitment-identity briefing states"
+  },
+  "scores": {
+    "overall_design": 8.9,
+    "system_cohesion": 9.2,
+    "gameplay_interactivity": 8.9,
+    "dimensions": {
+      "visual_hierarchy": 8.9,
+      "layout_and_spacing": 8.8,
+      "typography": 8.8,
+      "color_and_contrast": 9.1,
+      "components_and_states": 9.0,
+      "interaction_and_feedback": 8.9,
+      "information_architecture_and_navigation": 9.1,
+      "task_flow_design": 8.9,
+      "accessibility_and_inclusive_ux_provisional": 8.9,
+      "imagery_and_iconography": 8.7,
+      "brand_visual_system": 9.1,
+      "emotional_trust_and_polish": 8.9
+    },
+    "interaction_dimensions": {
+      "direct_manipulation": 8.7,
+      "agency_per_minute": 8.9,
+      "spatial_visual_simulation": 8.8,
+      "feedback_and_game_feel": 8.9,
+      "interaction_variety": 8.8,
+      "embodied_scouting_fantasy": 9.0,
+      "spectacle_and_emotional_payoff": 8.9,
+      "mobile_touch_playability": 9.0
+    }
+  },
+  "implemented_systems": [
+    "Responsive gameplay shell and safe-area mobile navigation",
+    "Interactive Observation Pitch with pointer, touch, keyboard, and synchronized list",
+    "Visual Week Journey with Commitment, Context, and Consequence beats",
+    "Evidence Board with hypotheses, claims, conflicts, unknowns, and source calibration",
+    "Persisted Report Room presentation strategies",
+    "Visible club recruitment identities and authored-evidence opportunity fit",
+    "Interactive Rival Operations Network",
+    "International assignment deliverables and exactly-once grading",
+    "Manager and board political meetings with memory, cooldowns, costs, and directives",
+    "Actor-specific special-event memories and delayed obligations",
+    "Consequence Cinema and Career Story Reel",
+    "Interactive bounded World Archive with season and public-player drill-through",
+    "Compact non-blocking achievement notifications and constrained tooltips",
+    "Seeded replayability telemetry using semantic divergence"
+  ],
+  "verification": {
+    "typescript": "passed",
+    "lint": "passed with zero warnings",
+    "scoped_diff_whitespace": "passed",
+    "unit_tests": "382/382 passed",
+    "core_visual_stories": "2/2 passed with 64 refreshed desktop/mobile screenshots",
+    "academy_case_visual_stories": "1/1 passed with desktop/mobile recruitment-identity evidence, Axe, document overflow, and main-region overflow checks",
+    "world_archive_stories": "1/1 passed with desktop/mobile renders, Axe, dialog semantics, focus containment, Escape focus restoration, mobile season selection, player drill-through, and overflow checks",
+    "accessibility_stories": "5/5 passed",
+    "cross_screen_smoke": "4/4 passed",
+    "ten_season_every_week_browser_soak": "passed in approximately 3.7 minutes",
+    "youth_browser_suite": "45/45 passed on the first attempt in approximately 5.3 minutes",
+    "shipping_build": "passed",
+    "play_first_load_js_kb": 614,
+    "play_first_load_gate_kb": 650,
+    "serious_or_critical_axe_violations_in_instrumented_states": 0
+  },
+  "replayability": {
+    "metric_definitions": {
+      "semantic_adjacent_repeat": "adjacentEventRepeatRate; repeated semantic gameplay beat",
+      "broad_event_type_adjacent_repeat": "adjacentEventTypeRepeatRate; broad taxonomy reuse, including distinct stages of one chain"
+    },
+    "release_run": {
+      "seeds": 100,
+      "seasons": 3,
+      "result": "passed",
+      "composite_trajectory_uniqueness_percent": 100.0,
+      "event_trajectory_uniqueness_percent": 100.0,
+      "average_semantic_distance_percent": 95.22,
+      "average_overlap_percent": 4.78,
+      "special_trajectory_uniqueness_percent": 82.0,
+      "event_catalog_coverage_percent": 97.56,
+      "semantic_adjacent_repeat_percent": 0.0,
+      "broad_event_type_adjacent_repeat_percent": 16.73,
+      "special_event_short_window_repeat_percent": 0.0,
+      "long_tension_cap_run_percent": 0.0,
+      "maximum_tension_cap_streak_weeks": 8,
+      "dead_director_state_percent": 0.0,
+      "runaway_director_state_percent": 0.0
+    },
+    "nightly_run": {
+      "seeds": 1000,
+      "seasons": 10,
+      "result": "passed",
+      "composite_trajectory_uniqueness_percent": 100.0,
+      "event_trajectory_uniqueness_percent": 100.0,
+      "average_semantic_distance_percent": 96.12,
+      "average_overlap_percent": 3.88,
+      "special_trajectory_uniqueness_percent": 99.9,
+      "event_catalog_coverage_percent": 97.56,
+      "semantic_adjacent_repeat_percent": 0.0,
+      "broad_event_type_adjacent_repeat_percent": 16.53,
+      "special_event_short_window_repeat_percent": 0.0,
+      "special_event_lifetime_repeat_percent": 29.55,
+      "long_tension_cap_run_percent": 2.9,
+      "maximum_tension_cap_streak_weeks": 15,
+      "dead_director_run_percent": 0.3,
+      "dead_director_state_percent": 0.03,
+      "runaway_director_run_percent": 0.0,
+      "runaway_director_state_percent": 0.0
+    },
+    "semantic_projection_excludes": [
+      "seed identifiers",
+      "run identifiers",
+      "names",
+      "timestamps",
+      "generated identifiers"
+    ]
+  },
+  "long_career_evidence": {
+    "profile": "accelerated season-boundary",
+    "seeds": 20,
+    "seasons_per_seed": 30,
+    "authoritative_ticks_per_season": 2,
+    "ordinary_weeks_skipped": true,
+    "total_canonical_ticks": 1200,
+    "calendar_weeks_spanned": 27600,
+    "world_history_seasons_retained_per_completed_run": 30,
+    "largest_serialized_save_bytes": 57764170,
+    "largest_final_to_initial_save_ratio": 4.63,
+    "peak_heap_used_bytes": 760949888,
+    "peak_rss_bytes": 972283904,
+    "boundary_tick_latency_ms": {
+      "p50": 809.06,
+      "p95": 1681.18,
+      "maximum": 1874.86
+    },
+    "deterministic_persistence_replay": "passed for release-soak-01 with matching final digest",
+    "scope_note": "Proves boundary rollover, bounded archive retention, save-growth limits, isolated-process memory ceilings, and deterministic persistence; does not replace the separate ten-season every-week browser soak or low-end runtime profiling."
+  },
+  "verified_defects_closed": [
+    "Mobile Live Observation clipping and inaccessible controls",
+    "Mobile Week Simulation horizontal overflow",
+    "Bottom navigation occluding required content",
+    "Observation focus control with no authoritative effect",
+    "Quick-choice branch persistence and duplicate reward risk",
+    "Scenario and insight-action integrity gaps",
+    "Cosmetic and repeat-farmable Youth political interactions",
+    "Political radio semantics, focus, target size, and contrast",
+    "Transfer evaluation based on fabricated participation and hidden truth",
+    "International rewards disconnected from destination deliverables",
+    "Unreachable career path and missing organic leadership progression",
+    "Club recruitment modifiers operating without an explanation at the decision point",
+    "World history existing only as transient or static information",
+    "Achievement toasts obscuring gameplay and tooltips creating overflow"
+  ],
+  "remaining_release_blockers": [
+    "Report and Planner progressive disclosure to reduce vertical sprawl",
+    "Side-by-side club, manager, and player timeline comparison",
+    "Recurring interactive memory and conflicts for agents, families, journalists, employees, and individual rival scouts",
+    "Greater venue, portrait, event-treatment, motion, and audio variety",
+    "Manual NVDA and VoiceOver completion",
+    "Moderated 12-player usability study with median SUS at least 85",
+    "Low-end mobile and desktop frame-time plus store-subscription profiling",
+    "Packaged save, offline, recovery, installer, Steam fallback, cloud-conflict, interrupted-write, and supported-platform proof"
+  ]
+}

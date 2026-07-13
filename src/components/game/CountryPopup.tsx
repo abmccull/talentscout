@@ -111,6 +111,8 @@ export function CountryPopup({
   onClose,
 }: CountryPopupProps) {
   const popupRef = React.useRef<HTMLDivElement>(null);
+  const closeButtonRef = React.useRef<HTMLButtonElement>(null);
+  const titleId = React.useId();
   const [entering, setEntering] = React.useState(true);
 
   // Entry animation
@@ -118,6 +120,24 @@ export function CountryPopup({
     const raf = requestAnimationFrame(() => setEntering(false));
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // This is a non-modal dossier: move keyboard focus into it without trapping
+  // the player, then consume Escape before the app-level Escape-to-Desk
+  // shortcut can run. InternationalScreen restores focus to the opener.
+  React.useEffect(() => {
+    (closeButtonRef.current ?? popupRef.current)?.focus({ preventScroll: true });
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      onClose();
+    };
+
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [onClose]);
 
   // Calculate position: prefer right of dot, flip left if in right third
   const popupWidth = 300;
@@ -162,26 +182,32 @@ export function CountryPopup({
         left,
         top,
         width: popupWidth,
-        transform: entering ? "scale(0.9)" : "scale(1)",
+        transform: entering ? "translateY(-6px)" : "translateY(0)",
         opacity: entering ? 0 : 1,
         transition: "transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease",
       }}
       role="dialog"
-      aria-label={`${countryName} intel dossier`}
+      aria-modal="false"
+      aria-labelledby={titleId}
+      tabIndex={-1}
     >
       <div className="rounded-xl border border-zinc-700/60 bg-zinc-950/92 shadow-2xl backdrop-blur-xl overflow-hidden">
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-2">
           <div>
-            <h3 className="text-lg font-bold text-white leading-tight">{countryName}</h3>
+            <h3 id={titleId} className="text-lg font-bold text-white leading-tight">
+              {countryName}<span className="sr-only"> intel dossier</span>
+            </h3>
             <p className="text-xs text-zinc-500 mt-0.5">{continentLabel}</p>
           </div>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
-            className="flex-shrink-0 rounded-md p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300 transition-colors"
+            className="inline-flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
             aria-label="Close"
           >
-            <X size={16} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

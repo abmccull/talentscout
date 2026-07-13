@@ -43,6 +43,7 @@ import { BatchSummary } from "./BatchSummary";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
+import { getSeasonLength } from "@/engine/core/gameDate";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -156,12 +157,13 @@ export function CalendarScreen() {
   if (!gameState) return null;
 
   const { schedule, currentWeek, currentSeason, scout } = gameState;
+  const seasonLength = getSeasonLength(gameState.fixtures, currentSeason);
   const activities = schedule.activities ?? [];
   const slotsUsed = activities.filter(Boolean).length;
   const maxSlots = 7;
   const severity = fatigueSeverity(scout.fatigue);
 
-  const seasonPhase = getSeasonPhase(currentWeek);
+  const seasonPhase = getSeasonPhase(currentWeek, seasonLength);
   const upcomingEvents = getUpcomingSeasonEvents(gameState.seasonEvents, currentWeek, 3);
   const internationalBreak = isInternationalBreak(gameState.seasonEvents, currentWeek);
   const abroad = isScoutAbroad(scout, currentWeek);
@@ -187,12 +189,25 @@ export function CalendarScreen() {
         (youth) => youth.id === placementYouthId || youth.player.id === placementYouthId,
       )
     : undefined;
+  const placementSourceReport = selectedPlacementYouth
+    ? Object.values(gameState.reports)
+        .filter((report) =>
+          report.playerId === selectedPlacementYouth.player.id
+          && report.scoutId === gameState.scout.id
+        )
+        .sort((left, right) =>
+          right.submittedSeason - left.submittedSeason
+          || right.submittedWeek - left.submittedWeek
+          || right.id.localeCompare(left.id)
+        )[0]
+    : undefined;
   const placementClubTargets = selectedPlacementYouth
     ? getEligibleClubsForPlacement(
         selectedPlacementYouth,
         Object.values(gameState.clubs),
         gameState.scout,
         gameState.leagues,
+        { preferredClubId: placementSourceReport?.intendedClubId },
       ).map((club) => ({
         id: club.id,
         name: club.name,
@@ -268,7 +283,10 @@ export function CalendarScreen() {
 
   return (
     <GameLayout>
-      <div className="p-4 md:p-6 relative">
+      <div
+        data-testid="planner-scroll-region"
+        className="relative h-[calc(100dvh_-_8.5rem_-_env(safe-area-inset-bottom))] overflow-y-auto overscroll-contain p-4 md:h-screen md:p-6"
+      >
         <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.85} />
         <div className="relative z-10">
         {/* Week Summary Overlay */}
@@ -414,7 +432,7 @@ export function CalendarScreen() {
         )}
 
         {/* Header */}
-        <div className="mb-5 flex flex-col gap-4 rounded-2xl border border-white/10 bg-[#10151b]/92 p-5 shadow-xl shadow-black/20 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="mb-4 flex flex-col gap-3 rounded-xl border border-white/10 bg-[#10151b]/92 p-4 shadow-xl shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">Weekly command</p>
             <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -428,10 +446,10 @@ export function CalendarScreen() {
             <p className="text-sm text-zinc-400">
               Week {currentWeek} — Season {currentSeason}
             </p>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
-              Commit your seven days to finding leads, deepening evidence, making recommendations, and protecting your judgment.
+            <p className="mt-1 max-w-2xl text-sm text-zinc-300">
+              Spend seven finite days on the evidence, access, and recovery that matter most.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 font-semibold text-emerald-200">
                 {slotsUsed}/7 days committed
               </span>
@@ -525,9 +543,154 @@ export function CalendarScreen() {
           </div>
         )}
 
+        {/* The itinerary is the Planner's persistent attention budget. It stays
+            available while the player compares opportunities below. */}
+        <section
+          id="planner-itinerary"
+          data-tutorial-id="calendar-grid"
+          aria-labelledby="itinerary-heading"
+          className="sticky -top-4 z-20 -mx-2 mb-4 rounded-xl border border-emerald-400/20 bg-[#0c1217]/95 p-3 shadow-2xl shadow-black/40 backdrop-blur-xl sm:mx-0 md:top-0"
+        >
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 id="itinerary-heading" className="text-sm font-semibold text-white">
+                  Weekly itinerary
+                </h2>
+                <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
+                  {slotsUsed}/7 days committed
+                </span>
+                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                  severity === "danger"
+                    ? "border-red-400/25 bg-red-400/10 text-red-200"
+                    : severity === "warn"
+                      ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+                      : "border-sky-400/25 bg-sky-400/10 text-sky-200"
+                }`}>
+                  {Math.round(scout.fatigue)}% fatigue
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-zinc-300" aria-live="polite">
+                {selectedActivity
+                  ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"}: choose a highlighted start day.`
+                  : `${maxSlots - slotsUsed} open day${maxSlots - slotsUsed === 1 ? "" : "s"}. Select one opportunity below to compare and place it.`}
+              </p>
+            </div>
+            {selectedActivity && (
+              <Button
+                className="min-h-11 self-start sm:self-auto"
+                variant="outline"
+                onClick={() => {
+                  setSelectedActivity(null);
+                  setPlacementYouthId(null);
+                  setHoverDay(null);
+                }}
+              >
+                Clear selection
+              </Button>
+            )}
+          </div>
+
+          <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] md:grid md:grid-cols-7 md:overflow-visible md:pb-0">
+            {DAY_KEYS.map((dayKey, dayIndex) => {
+              const activity = activities[dayIndex];
+              const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
+              const Icon = display?.icon;
+              const canPlaceSelected = !!selectedActivity && canScheduleAt(selectedActivity, dayIndex);
+              const isDropTarget = dragOverDay === dayIndex && !activity;
+
+              return (
+                <div
+                  key={dayKey}
+                  className={`relative min-h-[76px] min-w-[112px] snap-start rounded-lg border p-2 transition md:min-w-0 ${
+                    activity
+                      ? "border-emerald-400/25 bg-emerald-400/[0.06]"
+                      : canPlaceSelected || isDropTarget
+                        ? "border-blue-400/40 bg-blue-400/[0.08]"
+                        : "border-white/10 bg-black/25"
+                  }`}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    setDragOverDay(dayIndex);
+                  }}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node)) {
+                      setDragOverDay(null);
+                    }
+                  }}
+                  onDrop={(event) => handleDaySlotDrop(event, dayIndex)}
+                  onMouseEnter={() => {
+                    if (selectedActivity) setHoverDay(dayIndex);
+                  }}
+                  onMouseLeave={() => {
+                    if (selectedActivity) setHoverDay(null);
+                  }}
+                >
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-zinc-400">
+                    {t(`dayLabels.${dayKey}`)}
+                  </p>
+                  {activity && display && Icon ? (
+                    <div className="mt-1 flex items-center gap-2 pr-11">
+                      <Icon size={15} className={`shrink-0 ${display.color}`} aria-hidden="true" />
+                      <span className={`line-clamp-2 text-xs font-semibold leading-4 ${display.color}`}>
+                        {display.label}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => unscheduleActivity(dayIndex)}
+                        className="absolute right-0 top-0 flex h-11 w-11 items-center justify-center rounded-md text-zinc-400 transition hover:bg-red-500/10 hover:text-red-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                        aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
+                      >
+                        <X size={15} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleDaySlotClick(dayIndex)}
+                      disabled={!canPlaceSelected}
+                      aria-label={
+                        selectedActivity
+                          ? `Place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} on ${DAY_KEYS[dayIndex]}`
+                          : `${DAY_KEYS[dayIndex]} open day`
+                      }
+                      className={`mt-1 min-h-11 w-full rounded-md px-1 text-left text-xs transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                        canPlaceSelected
+                          ? "font-semibold text-blue-100 hover:bg-blue-400/10"
+                          : "cursor-default text-zinc-500"
+                      }`}
+                    >
+                      {canPlaceSelected ? "Place here" : "Open day"}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {(upcomingEvents.length > 0 || severity !== "ok") && (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-white/8 pt-2 text-[11px]">
+              {upcomingEvents[0] && (
+                <span className="text-zinc-300">
+                  Next event: <strong className="font-semibold text-white">{upcomingEvents[0].name}</strong> in W{upcomingEvents[0].startWeek}
+                </span>
+              )}
+              {severity !== "ok" && (
+                <span className={severity === "danger" ? "text-red-300" : "text-amber-300"}>
+                  {severity === "danger" ? "Accuracy at risk; recovery is urgent." : "Moderate fatigue; protect room for recovery."}
+                </span>
+              )}
+            </div>
+          )}
+        </section>
+
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (
-          <div className="mb-6 hidden rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 md:block">
+          <div className="mb-4 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
             <button
               onClick={() => setPreviewCollapsed(!previewCollapsed)}
               className="mb-2 flex w-full items-center justify-between text-left"
@@ -678,9 +841,15 @@ export function CalendarScreen() {
           </div>
         )}
 
+        <details className="mb-4 rounded-xl border border-white/10 bg-[#11161c]/90">
+          <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+            Detailed schedule and week context
+            <span className="text-xs font-normal text-zinc-400">Optional drill-down</span>
+          </summary>
+          <div className="border-t border-white/8 p-4">
         {/* Upcoming season events */}
         {upcomingEvents.length > 0 && (
-          <div className="mb-6 hidden rounded-xl border border-[#27272a] bg-[#141414] p-3 md:block">
+          <div className="mb-4 rounded-xl border border-[#27272a] bg-[#141414] p-3">
             <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
               <CalendarDays size={12} aria-hidden="true" />
               Upcoming Events
@@ -700,7 +869,7 @@ export function CalendarScreen() {
         )}
 
         {/* Fatigue meter */}
-        <div className="mb-6 hidden rounded-xl border border-[#27272a] bg-[#141414] p-4 md:block">
+        <div className="mb-4 rounded-xl border border-[#27272a] bg-[#141414] p-4">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Fatigue</span>
             <span
@@ -756,10 +925,10 @@ export function CalendarScreen() {
         </div>
 
         {/* Responsive itinerary: agenda on phones, dense week grid on larger screens. */}
-        <section id="planner-itinerary" className="mb-6" data-tutorial-id="calendar-grid" aria-labelledby="itinerary-heading">
+        <section id="planner-itinerary-details" aria-labelledby="itinerary-details-heading">
           <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 id="itinerary-heading" className="text-lg font-semibold text-white">Week itinerary</h2>
+              <h2 id="itinerary-details-heading" className="text-lg font-semibold text-white">Week itinerary details</h2>
               <p className="mt-1 text-sm text-zinc-400">
                 {selectedActivity
                   ? `Choose an open day for ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "the selected activity"}.`
@@ -935,6 +1104,8 @@ export function CalendarScreen() {
 
         {/* Available activities — grouped by category, specialization-aware */}
         </section>
+          </div>
+        </details>
         <div data-tutorial-id="calendar-activities">
         <ActivityPanel
           activities={engineActivities}
@@ -948,16 +1119,9 @@ export function CalendarScreen() {
           resolveClubName={resolveClubName}
           highlightTargetId={pendingCalendarActivity?.targetId}
           selectedActivity={selectedActivity}
+          openDayCount={maxSlots - slotsUsed}
           onSelectActivity={(activity) => {
             setSelectedActivity(activity);
-            if (activity) {
-              window.setTimeout(() => {
-                document.getElementById("planner-itinerary")?.scrollIntoView({
-                  behavior: "smooth",
-                  block: "start",
-                });
-              }, 50);
-            }
           }}
         />
         </div>
@@ -1039,8 +1203,8 @@ export function CalendarScreen() {
             <div className="w-full max-w-sm mx-4 rounded-lg border border-[#27272a] bg-[#0a0a0a] p-3">
               <div className="mb-3">
                 <p className="text-xs font-semibold text-white">Choose the destination club</p>
-                <p className="mt-1 text-[11px] text-zinc-500">
-                  The club you select will evaluate this specific placement report.
+                <p className="mt-1 text-xs text-zinc-300">
+                  The club will evaluate the filed report, its evidence, and the conviction you chose.
                 </p>
               </div>
               <TargetPicker

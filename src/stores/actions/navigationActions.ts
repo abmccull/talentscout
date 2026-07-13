@@ -114,7 +114,14 @@ export function createNavigationActions(get: GetState, set: SetState) {
       const messages: InboxMessage[] = [];
 
       for (const contact of contacts) {
-        const intel = getHiddenAttributeIntel(rng, contact, canonicalPlayerId, player);
+        const intel = getHiddenAttributeIntel(
+          rng,
+          contact,
+          canonicalPlayerId,
+          player,
+          undefined,
+          { week: state.gameState.currentWeek, season: state.gameState.currentSeason },
+        );
         if (intel) {
           // Avoid duplicate intel for the same attribute
           const alreadyHas = existingIntel.some((e) => e.attribute === intel.attribute);

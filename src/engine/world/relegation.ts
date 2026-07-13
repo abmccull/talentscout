@@ -1,12 +1,11 @@
 /**
  * Relegation and promotion system for end-of-season league dynamics.
  *
- * At the end of each season:
- *  - Bottom 3 clubs in top-tier (tier 1) leagues get relegated:
+ * At the end of each season, at every adjacent league boundary:
+ *  - Bottom 3 clubs in the upper league get relegated:
  *      reputation -10, budget -20%, 30% chance per player to become transfer-listed.
- *  - Top 3 clubs in second-tier (tier 2) leagues get promoted:
+ *  - Top 3 clubs in the lower league get promoted:
  *      reputation +10, budget +15%.
- *  - Countries with no tier 2 league still penalize bottom clubs in tier 1.
  *
  * Standings-based pricing modifiers:
  *  - Bottom 5 clubs in any league: player prices -10%
@@ -15,8 +14,7 @@
  * Design notes:
  *  - Pure functions: no mutations, no side effects.
  *  - All randomness flows through the RNG instance.
- *  - Does not move clubs between leagues -- only adjusts reputation, budget,
- *    and player transfer availability flags.
+ *  - Club.leagueId and both League.clubIds collections change atomically.
  */
 
 import type { RNG } from "@/engine/rng";
@@ -25,6 +23,7 @@ import type {
   Club,
   Player,
   League,
+  Fixture,
   StandingEntry,
   InboxMessage,
 } from "@/engine/core/types";
@@ -37,13 +36,18 @@ import { buildStandings } from "@/engine/core/standings";
 export interface RelegationEvent {
   clubId: string;
   clubName: string;
-  leagueId: string;
+  /** League the club competed in during the completed season. */
+  fromLeagueId: string;
+  /** League the club will compete in next season. */
+  toLeagueId: string;
   type: "relegated" | "promoted";
   reputationChange: number;
   budgetMultiplier: number;
 }
 
 export interface RelegationResult {
+  /** Season whose final standings produced this result. */
+  season: number;
   events: RelegationEvent[];
   /** Player IDs flagged as available for transfer due to relegation. */
   flaggedPlayerIds: string[];
@@ -81,7 +85,8 @@ function sortStandings(entries: StandingEntry[]): StandingEntry[] {
     (a, b) =>
       b.points - a.points ||
       b.goalDifference - a.goalDifference ||
-      b.goalsFor - a.goalsFor,
+      b.goalsFor - a.goalsFor ||
+      a.clubId.localeCompare(b.clubId),
   );
 }
 
@@ -92,7 +97,12 @@ function getLeagueStandingsSorted(
   league: League,
   state: GameState,
 ): StandingEntry[] {
-  const standingsMap = buildStandings(league.id, state.fixtures, state.clubs);
+  const standingsMap = buildStandings(
+    league.id,
+    state.fixtures,
+    state.clubs,
+    state.currentSeason,
+  );
   return sortStandings(Object.values(standingsMap));
 }
 
@@ -113,10 +123,7 @@ function makeMessageId(prefix: string, rng: RNG): string {
 }
 
 /**
- * Find the paired league for promotion/relegation within the same country.
- *
- * For a tier 1 league, returns the tier 2 league in the same country (if any).
- * For a tier 2 league, returns the tier 1 league in the same country (if any).
+ * Find the adjacent league for promotion/relegation within the same country.
  */
 function findPairedLeague(
   league: League,
@@ -149,93 +156,135 @@ export function processRelegationPromotion(
   const flaggedPlayerIds: string[] = [];
   const messages: InboxMessage[] = [];
 
-  // Track which leagues we've already processed to avoid double-processing
-  const processedLeagueIds = new Set<string>();
+  const upperLeagues = Object.values(state.leagues)
+    .filter((league) =>
+      findPairedLeague(league, state.leagues, league.tier + 1) !== null,
+    )
+    .sort(
+      (a, b) =>
+        a.country.localeCompare(b.country) ||
+        a.tier - b.tier ||
+        a.id.localeCompare(b.id),
+    );
 
-  for (const league of Object.values(state.leagues)) {
-    if (processedLeagueIds.has(league.id)) continue;
+  for (const upperLeague of upperLeagues) {
+    const lowerLeague = findPairedLeague(
+      upperLeague,
+      state.leagues,
+      upperLeague.tier + 1,
+    );
+    if (!lowerLeague) continue;
 
-    if (league.tier === 1) {
-      processedLeagueIds.add(league.id);
+    const upperStandings = getLeagueStandingsSorted(upperLeague, state);
+    const lowerStandings = getLeagueStandingsSorted(lowerLeague, state);
+    // Secondary talent-pool leagues deliberately have no fixtures. They must
+    // not move clubs based on an all-zero alphabetical pseudo-table.
+    if (
+      !upperStandings.some((entry) => entry.played > 0) ||
+      !lowerStandings.some((entry) => entry.played > 0)
+    ) {
+      continue;
+    }
+    const movementCount = Math.min(
+      RELEGATION_ZONE_SIZE,
+      PROMOTION_ZONE_SIZE,
+      upperStandings.length,
+      lowerStandings.length,
+    );
+    if (movementCount === 0) continue;
 
-      const standings = getLeagueStandingsSorted(league, state);
-      if (standings.length < RELEGATION_ZONE_SIZE) continue;
+    for (const entry of upperStandings.slice(-movementCount)) {
+      const club = state.clubs[entry.clubId];
+      if (!club) continue;
 
-      // Bottom 3 get relegated
-      const relegated = standings.slice(-RELEGATION_ZONE_SIZE);
-      for (const entry of relegated) {
-        const club = state.clubs[entry.clubId];
-        if (!club) continue;
+      events.push({
+        clubId: club.id,
+        clubName: club.name,
+        fromLeagueId: upperLeague.id,
+        toLeagueId: lowerLeague.id,
+        type: "relegated",
+        reputationChange: -RELEGATION_REPUTATION_PENALTY,
+        budgetMultiplier: RELEGATION_BUDGET_MULTIPLIER,
+      });
 
-        events.push({
-          clubId: club.id,
-          clubName: club.name,
-          leagueId: league.id,
-          type: "relegated",
-          reputationChange: -RELEGATION_REPUTATION_PENALTY,
-          budgetMultiplier: RELEGATION_BUDGET_MULTIPLIER,
-        });
-
-        // Flag players for transfer
-        for (const playerId of club.playerIds) {
-          if (rng.chance(RELEGATION_TRANSFER_FLAG_CHANCE)) {
-            flaggedPlayerIds.push(playerId);
-          }
-        }
-
-        messages.push({
-          id: makeMessageId("relegation", rng),
-          week: state.currentWeek,
-          season: state.currentSeason,
-          type: "news",
-          title: `${club.name} has been relegated!`,
-          body: `${club.name} finished in the bottom ${RELEGATION_ZONE_SIZE} of ${league.name} and has been relegated. Players may become available at reduced prices.`,
-          read: false,
-          actionRequired: false,
-          relatedId: club.id,
-        });
-      }
-
-      // Check for a tier 2 league in the same country for promotion
-      const tier2League = findPairedLeague(league, state.leagues, 2);
-      if (tier2League) {
-        processedLeagueIds.add(tier2League.id);
-
-        const tier2Standings = getLeagueStandingsSorted(tier2League, state);
-        if (tier2Standings.length < PROMOTION_ZONE_SIZE) continue;
-
-        // Top 3 get promoted
-        const promoted = tier2Standings.slice(0, PROMOTION_ZONE_SIZE);
-        for (const entry of promoted) {
-          const club = state.clubs[entry.clubId];
-          if (!club) continue;
-
-          events.push({
-            clubId: club.id,
-            clubName: club.name,
-            leagueId: tier2League.id,
-            type: "promoted",
-            reputationChange: PROMOTION_REPUTATION_BONUS,
-            budgetMultiplier: PROMOTION_BUDGET_MULTIPLIER,
-          });
-
-          messages.push({
-            id: makeMessageId("promotion", rng),
-            week: state.currentWeek,
-            season: state.currentSeason,
-            type: "news",
-            title: `${club.name} promoted!`,
-            body: `${club.name} finished in the top ${PROMOTION_ZONE_SIZE} of ${tier2League.name} and has been promoted! They'll be looking to strengthen their squad.`,
-            read: false,
-            actionRequired: false,
-            relatedId: club.id,
-          });
+      for (const playerId of club.playerIds) {
+        if (rng.chance(RELEGATION_TRANSFER_FLAG_CHANCE)) {
+          flaggedPlayerIds.push(playerId);
         }
       }
+
+      messages.push({
+        id: makeMessageId("relegation", rng),
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "news",
+        title: `${club.name} has been relegated!`,
+        body: `${club.name} finished in the bottom ${movementCount} of ${upperLeague.name} and will compete in ${lowerLeague.name} next season. Players may become available at reduced prices.`,
+        read: false,
+        actionRequired: false,
+        relatedId: club.id,
+      });
+    }
+
+    for (const entry of lowerStandings.slice(0, movementCount)) {
+      const club = state.clubs[entry.clubId];
+      if (!club) continue;
+
+      events.push({
+        clubId: club.id,
+        clubName: club.name,
+        fromLeagueId: lowerLeague.id,
+        toLeagueId: upperLeague.id,
+        type: "promoted",
+        reputationChange: PROMOTION_REPUTATION_BONUS,
+        budgetMultiplier: PROMOTION_BUDGET_MULTIPLIER,
+      });
+
+      messages.push({
+        id: makeMessageId("promotion", rng),
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "news",
+        title: `${club.name} promoted!`,
+        body: `${club.name} finished in the top ${movementCount} of ${lowerLeague.name} and will compete in ${upperLeague.name} next season. They'll be looking to strengthen their squad.`,
+        read: false,
+        actionRequired: false,
+        relatedId: club.id,
+      });
     }
   }
 
-  return { events, flaggedPlayerIds, messages };
+  return {
+    season: state.currentSeason,
+    events,
+    flaggedPlayerIds: [...new Set(flaggedPlayerIds)],
+    messages,
+  };
+}
+
+/**
+ * Resolve promotion and relegation from the completed table, including match
+ * results produced by the current weekly tick but not yet committed to state.
+ * This prevents the final round from being silently excluded at rollover.
+ */
+export function processRelegationPromotionIncludingFixtures(
+  state: GameState,
+  fixturesPlayedThisTick: readonly Fixture[],
+  rng: RNG,
+): RelegationResult {
+  if (fixturesPlayedThisTick.length === 0) {
+    return processRelegationPromotion(state, rng);
+  }
+
+  const completedFixtures = { ...state.fixtures };
+  for (const fixture of fixturesPlayedThisTick) {
+    completedFixtures[fixture.id] = fixture;
+  }
+
+  return processRelegationPromotion(
+    { ...state, fixtures: completedFixtures },
+    rng,
+  );
 }
 
 /**
@@ -252,14 +301,29 @@ export function processRelegationPromotion(
 export function applyRelegationResult(
   state: GameState,
   result: RelegationResult,
-): { clubs: Record<string, Club>; players: Record<string, Player> } {
+): {
+  clubs: Record<string, Club>;
+  players: Record<string, Player>;
+  leagues: Record<string, League>;
+} {
   const updatedClubs = { ...state.clubs };
   const updatedPlayers = { ...state.players };
+  const updatedLeagues = Object.fromEntries(
+    Object.entries(state.leagues).map(([id, league]) => [
+      id,
+      { ...league, clubIds: [...league.clubIds] },
+    ]),
+  );
+  const appliedRelegatedClubIds = new Set<string>();
 
-  // Apply club reputation and budget changes
+  // Apply league membership, reputation, and budget in one transaction. A
+  // replayed result is a no-op because the club is no longer in fromLeagueId.
   for (const event of result.events) {
     const club = updatedClubs[event.clubId];
-    if (!club) continue;
+    const fromLeague = updatedLeagues[event.fromLeagueId];
+    const toLeague = updatedLeagues[event.toLeagueId];
+    if (!club || !fromLeague || !toLeague) continue;
+    if (club.leagueId !== event.fromLeagueId) continue;
 
     const newReputation = Math.max(
       MIN_CLUB_REPUTATION,
@@ -269,15 +333,26 @@ export function applyRelegationResult(
 
     updatedClubs[event.clubId] = {
       ...club,
+      leagueId: event.toLeagueId,
       reputation: newReputation,
       budget: newBudget,
     };
+
+    fromLeague.clubIds = fromLeague.clubIds.filter((id) => id !== club.id);
+    if (!toLeague.clubIds.includes(club.id)) {
+      toLeague.clubIds = [...toLeague.clubIds, club.id];
+    }
+    if (event.type === "relegated") {
+      appliedRelegatedClubIds.add(club.id);
+    }
   }
 
   // Flag players at relegated clubs: lower morale to make them transfer-eligible
   for (const playerId of result.flaggedPlayerIds) {
     const player = updatedPlayers[playerId];
     if (!player) continue;
+    const owningClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+    if (!appliedRelegatedClubIds.has(owningClubId)) continue;
 
     updatedPlayers[playerId] = {
       ...player,
@@ -285,7 +360,7 @@ export function applyRelegationResult(
     };
   }
 
-  return { clubs: updatedClubs, players: updatedPlayers };
+  return { clubs: updatedClubs, players: updatedPlayers, leagues: updatedLeagues };
 }
 
 // =============================================================================
@@ -347,18 +422,18 @@ export type StandingZone = "promotion" | "relegation" | "normal";
 export function classifyStandingZone(
   position: number,
   totalClubs: number,
-  leagueTier: number,
+  _leagueTier: number,
   hasLowerTier: boolean,
   hasUpperTier: boolean,
 ): StandingZone {
-  // Top 3 in tier 2 with a tier 1 league = promotion zone
-  if (leagueTier === 2 && hasUpperTier && position < PROMOTION_ZONE_SIZE) {
+  // Top clubs in any non-top division with an adjacent upper league.
+  if (hasUpperTier && position < PROMOTION_ZONE_SIZE) {
     return "promotion";
   }
 
-  // Bottom 3 in tier 1 with a tier 2 league = relegation zone
-  // Also apply relegation zone even without tier 2 (just reputation penalty)
-  if (leagueTier === 1 && position >= totalClubs - RELEGATION_ZONE_SIZE) {
+  // Bottom clubs only show as relegation candidates when a real lower league
+  // exists. This keeps the UI aligned with the structural world transition.
+  if (hasLowerTier && position >= totalClubs - RELEGATION_ZONE_SIZE) {
     return "relegation";
   }
 

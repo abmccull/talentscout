@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, CalendarPlus, ArrowLeft } from "lucide-react";
-import type { Fixture } from "@/engine/core/types";
 import { ClubCrest } from "@/components/game/ClubCrest";
+import { getSeasonLength } from "@/engine/core/gameDate";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
 
 export function FixtureBrowser() {
   const { gameState, scheduleMatch, getClub, getLeague, setScreen, pendingFixtureClubFilter, setPendingFixtureClubFilter } = useGameStore();
@@ -35,7 +36,9 @@ export function FixtureBrowser() {
 
   const fixtures = useMemo(() => {
     if (!gameState) return [];
-    let result = Object.values(gameState.fixtures);
+    let result = Object.values(gameState.fixtures).filter((fixture) =>
+      isFixtureInSeason(fixture, gameState.currentSeason),
+    );
 
     if (leagueFilter) {
       result = result.filter((f) => f.leagueId === leagueFilter);
@@ -66,6 +69,10 @@ export function FixtureBrowser() {
   }, [gameState, leagueFilter, weekMin, weekMax, clubSearch, showPlayed]);
 
   if (!gameState) return null;
+  const seasonLength = getSeasonLength(
+    gameState.fixtures,
+    gameState.currentSeason,
+  );
 
   return (
     <GameLayout>
@@ -80,7 +87,9 @@ export function FixtureBrowser() {
 
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Fixture Browser</h1>
-          <p className="text-sm text-zinc-400">{fixtures.length} fixtures shown</p>
+          <p className="text-sm text-zinc-400">
+            Season {gameState.currentSeason} · weeks 1–{seasonLength} · {fixtures.length} fixtures shown
+          </p>
         </div>
 
         {/* Filters */}
@@ -100,14 +109,17 @@ export function FixtureBrowser() {
               ))}
             </select>
             <div className="flex items-center gap-2">
-              <label className="text-xs text-zinc-500 shrink-0">Week</label>
+              <label className="text-xs text-zinc-500 shrink-0">
+                Week (1–{seasonLength})
+              </label>
               <input
                 type="number"
                 placeholder="Min"
                 value={weekMin}
                 onChange={(e) => setWeekMin(e.target.value)}
                 min={1}
-                max={38}
+                max={seasonLength}
+                aria-label={`Minimum fixture week, 1 to ${seasonLength}`}
                 className="w-16 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
               <span className="text-zinc-600">–</span>
@@ -117,7 +129,8 @@ export function FixtureBrowser() {
                 value={weekMax}
                 onChange={(e) => setWeekMax(e.target.value)}
                 min={1}
-                max={38}
+                max={seasonLength}
+                aria-label={`Maximum fixture week, 1 to ${seasonLength}`}
                 className="w-16 rounded-md border border-[#27272a] bg-[#0a0a0a] px-2 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>

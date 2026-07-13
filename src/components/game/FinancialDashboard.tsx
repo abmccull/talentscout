@@ -31,6 +31,7 @@ import {
 } from "@/engine/finance";
 import type { ExpenseType, LoanType } from "@/engine/core/types";
 import type { EquipmentSlot } from "@/engine/finance";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -857,8 +858,14 @@ export function FinancialDashboard() {
                       activeConsulting.map((c) => {
                         const weeksRemaining = Math.max(
                           0,
-                          (c.deadlineSeason - gameState.currentSeason) * 52 +
-                            c.deadline - gameState.currentWeek,
+                          gameWeeksBetween(
+                            gameState.fixtures,
+                            {
+                              season: gameState.currentSeason,
+                              week: gameState.currentWeek,
+                            },
+                            { season: c.deadlineSeason, week: c.deadline },
+                          ),
                         );
                         return (
                           <div

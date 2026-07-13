@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "status": "scaffold-review-required",
+  "lastReviewed": null,
+  "reviewInstructions": "Replace reviewRequired with approved or rejected only after source files, provider terms at generation time, prompts, and commercial-use rights have been verified by the release owner.",
+  "assetGroups": [
+    {
+      "id": "meshy-generated-images",
+      "paths": [
+        "public/images/avatars/*.png",
+        "public/images/backgrounds/**/*.png",
+        "public/images/branding/*.png",
+        "public/images/steam/*.png"
+      ],
+      "source": "scripts/generate-images.mjs",
+      "generator": "Meshy AI Text-to-Image API",
+      "rightsStatus": "reviewRequired",
+      "evidence": [],
+      "notes": [
+        "Archive prompts, generation dates, provider plan, and applicable terms before release.",
+        "public/images/backgrounds/reports-desk.png requires a specific fictional-brand and third-party-IP visual review."
+      ]
+    },
+    {
+      "id": "elevenlabs-generated-audio",
+      "paths": [
+        "public/audio/ambience/*.mp3",
+        "public/audio/music/*.mp3",
+        "public/audio/sfx/*.mp3"
+      ],
+      "source": [
+        "scripts/generate-audio.mjs",
+        "scripts/generate-music.mjs"
+      ],
+      "generator": "ElevenLabs Sound Generation and Music APIs",
+      "rightsStatus": "reviewRequired",
+      "evidence": [],
+      "notes": [
+        "Archive prompt plans, generation dates, provider plan, and applicable commercial-use terms before release.",
+        "Review music for vocal, likeness, and unintended copyrighted-material similarity risks."
+      ]
+    },
+    {
+      "id": "procedural-svg-identity",
+      "paths": [
+        "src/components/game/PlayerAvatar.tsx",
+        "src/components/game/ClubCrest.tsx",
+        "src/lib/avatarGenerator.ts"
+      ],
+      "source": "project-authored procedural code",
+      "generator": null,
+      "rightsStatus": "projectSource",
+      "evidence": [
+        "git history"
+      ],
+      "notes": [
+        "Keep shapes and marks fictional; add regression review if real club or sponsor marks are introduced."
+      ]
+    }
+  ]
+}

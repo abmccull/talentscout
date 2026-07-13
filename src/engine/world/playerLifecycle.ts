@@ -8,6 +8,10 @@ import type {
   PlayerMovementEvent,
   PlayerMovementType,
 } from "@/engine/core/types";
+import {
+  gameWeeksBetweenWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "@/engine/core/gameDate";
 
 export interface LifecycleWorldState {
   players: Record<string, Player>;
@@ -170,10 +174,17 @@ function defaultWage(player: Player): number {
   return Math.max(100, player.wage, Math.round(player.currentAbility * 60));
 }
 
-function loanDurationWeeks(deal: LoanDeal): number {
+function loanDurationWeeks(
+  deal: LoanDeal,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+): number {
   return Math.max(
     1,
-    (deal.endSeason - deal.startSeason) * 38 + (deal.endWeek - deal.startWeek),
+    gameWeeksBetweenWithSeasonLength(
+      { week: deal.startWeek, season: deal.startSeason },
+      { week: deal.endWeek, season: deal.endSeason },
+      seasonLength,
+    ),
   );
 }
 
@@ -257,6 +268,7 @@ export function resolvePlayerMovements(
   intents: PlayerMovementIntent[],
   currentWeek: number,
   currentSeason: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): LifecycleResolution {
   let state = cloneState(input);
   const applied: PlayerMovementEvent[] = [];
@@ -469,7 +481,7 @@ export function resolvePlayerMovements(
       }
       const wageContribution = Math.max(0, Math.min(100, deal.wageContribution));
       const wageCommitment = Math.round(
-        player.wage * loanDurationWeeks(deal) * wageContribution / 100,
+        player.wage * loanDurationWeeks(deal, seasonLength) * wageContribution / 100,
       );
       const totalLoanCost = deal.loanFee + wageCommitment;
       if (loanClub.budget < totalLoanCost) {
@@ -599,6 +611,18 @@ export function resolvePlayerMovements(
       applied.push(movement);
     }
   }
+
+  // A higher-priority transition can invalidate a free-agent signing selected
+  // earlier in the weekly tick (for example a last-minute renewal or transfer).
+  // The pool is a derived availability index, so never retain an entry once
+  // the authoritative player record owns a contract or registration.
+  state.freeAgentPool = {
+    ...state.freeAgentPool,
+    agents: state.freeAgentPool.agents.filter((agent) => {
+      const player = state.players[agent.playerId];
+      return Boolean(player && !contractOwner(player) && !player.onLoan);
+    }),
+  };
 
   state.playerMovementHistory.push(...applied);
   return { state, applied, rejected };

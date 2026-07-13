@@ -32,6 +32,37 @@ const DEFAULT_VOLUMES: VolumeState = {
 
 const CROSSFADE_DURATION_MS = 1000;
 
+const SFX_COOLDOWNS_MS: Readonly<Record<string, number>> = {
+  click: 45,
+  "page-turn": 80,
+  notification: 250,
+  error: 250,
+  whistle: 600,
+  "season-end-whistle": 1_200,
+  "crowd-goal": 600,
+  "crowd-miss": 400,
+  "crowd-chant": 1_500,
+  "report-submit": 800,
+  "level-up": 1_200,
+  promotion: 1_200,
+  achievement: 1_200,
+  discovery: 1_200,
+  "job-offer": 1_200,
+  "calendar-slide": 120,
+  travel: 600,
+  "camera-shutter": 180,
+};
+
+const DUCKING_SFX = new Set([
+  "season-end-whistle",
+  "report-submit",
+  "level-up",
+  "promotion",
+  "achievement",
+  "discovery",
+  "job-offer",
+]);
+
 export class AudioEngine {
   private static instance: AudioEngine;
 
@@ -46,6 +77,14 @@ export class AudioEngine {
   /** Deferred playback requests while audio assets are still lazy-loading. */
   private pendingMusicId: string | null = null;
   private pendingAmbienceId: string | null = null;
+
+  /** Scene mix is temporary and never changes the player's saved settings. */
+  private sceneMusicGain = 1;
+  private sceneAmbienceGain = 1;
+  private musicDuckGain = 1;
+  private musicDuckTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastSfxAt = new Map<string, number>();
+  private scheduledStops = new WeakMap<HowlType, ReturnType<typeof setTimeout>>();
 
   private listeners = new Set<ChangeListener>();
 
@@ -140,10 +179,19 @@ export class AudioEngine {
     if (!this.isBrowserEnv()) return;
     const assets = this.getAssets();
     if (!assets) return;
+
+    const now = Date.now();
+    const cooldown = SFX_COOLDOWNS_MS[sfxId] ?? 0;
+    const lastPlayedAt = this.lastSfxAt.get(sfxId) ?? Number.NEGATIVE_INFINITY;
+    if (now - lastPlayedAt < cooldown) return;
+
     const howl = assets.getHowl(sfxId, "sfx");
     const vol = this.effectiveVolume("sfx");
     howl.volume(vol);
     howl.play();
+    this.lastSfxAt.set(sfxId, now);
+
+    if (DUCKING_SFX.has(sfxId)) this.duckMusic();
   }
 
   playAmbience(ambienceId: string): void {
@@ -204,6 +252,13 @@ export class AudioEngine {
     this.notify();
   }
 
+  /** Apply a temporary scene mix without modifying persisted channel settings. */
+  setSceneMix(mix: { musicGain: number; ambienceGain: number }): void {
+    this.sceneMusicGain = this.clamp01(mix.musicGain);
+    this.sceneAmbienceGain = this.clamp01(mix.ambienceGain);
+    this.applyVolumes();
+  }
+
   getVolumes(): VolumeState {
     // Return the same reference — this.volumes is replaced (never mutated)
     // by setVolume/mute/unmute, so callers already get a stable snapshot.
@@ -247,12 +302,11 @@ export class AudioEngine {
 
     if (fromHowl && fromHowl !== toHowl) {
       fromHowl.fade(fromHowl.volume(), 0, durationMs);
-      setTimeout(() => {
-        fromHowl.stop();
-      }, durationMs);
+      this.scheduleStop(fromHowl, durationMs);
     }
 
     // Start new track at 0 and fade in to target volume.
+    this.cancelScheduledStop(toHowl);
     toHowl.volume(0);
     if (!toHowl.playing()) {
       toHowl.play();
@@ -264,13 +318,54 @@ export class AudioEngine {
 
   private fadeOut(howl: HowlType, durationMs = CROSSFADE_DURATION_MS): void {
     howl.fade(howl.volume(), 0, durationMs);
-    setTimeout(() => howl.stop(), durationMs);
+    this.scheduleStop(howl, durationMs);
+  }
+
+  private scheduleStop(howl: HowlType, durationMs: number): void {
+    this.cancelScheduledStop(howl);
+    const timer = setTimeout(() => {
+      this.scheduledStops.delete(howl);
+      howl.stop();
+    }, durationMs);
+    this.scheduledStops.set(howl, timer);
+  }
+
+  private cancelScheduledStop(howl: HowlType): void {
+    const timer = this.scheduledStops.get(howl);
+    if (timer) clearTimeout(timer);
+    this.scheduledStops.delete(howl);
   }
 
   /** Returns the effective (possibly muted) volume for a given channel. */
   private effectiveVolume(channel: AudioChannel): number {
     if (this.volumes.muted) return 0;
-    return this.volumes.master * this.volumes[channel];
+    const sceneGain = channel === "music"
+      ? this.sceneMusicGain * this.musicDuckGain
+      : channel === "ambience"
+        ? this.sceneAmbienceGain
+        : 1;
+    return this.volumes.master * this.volumes[channel] * sceneGain;
+  }
+
+  private duckMusic(durationMs = 1_250): void {
+    if (this.musicDuckTimer) clearTimeout(this.musicDuckTimer);
+
+    this.musicDuckGain = 0.28;
+    if (this.currentMusic) {
+      this.currentMusic.fade(this.currentMusic.volume(), this.effectiveVolume("music"), 120);
+    }
+
+    this.musicDuckTimer = setTimeout(() => {
+      this.musicDuckTimer = null;
+      this.musicDuckGain = 1;
+      if (this.currentMusic) {
+        this.currentMusic.fade(this.currentMusic.volume(), this.effectiveVolume("music"), 260);
+      }
+    }, durationMs);
+  }
+
+  private clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
   }
 
   /** Re-apply current volume state to live Howl instances. */

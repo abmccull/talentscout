@@ -10,6 +10,7 @@ import type {
   EmployeeTraining,
   FinancialRecord,
 } from "../core/types";
+import { getEmployeeSalaryBand } from "./employeeEconomics";
 
 // ---------------------------------------------------------------------------
 // Role skill definitions
@@ -125,16 +126,8 @@ export function computeSalaryFromSkills(
   skills: EmployeeSkills,
   role: AgencyEmployeeRole,
 ): number {
-  const SALARY_RANGES: Record<AgencyEmployeeRole, [number, number]> = {
-    scout: [500, 2000],
-    analyst: [400, 1500],
-    administrator: [300, 1000],
-    relationshipManager: [600, 2500],
-    mentee: [200, 600],
-  };
-  const [min, max] = SALARY_RANGES[role];
   const quality = deriveQuality(skills);
-  return Math.round(min + (quality / 20) * (max - min));
+  return getEmployeeSalaryBand({ role, quality, experience: 0 }, 50).marketRate;
 }
 
 // ---------------------------------------------------------------------------

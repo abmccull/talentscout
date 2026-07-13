@@ -14,6 +14,7 @@ import type {
   PerformanceReview,
   ScoutPerformanceSnapshot,
 } from "./types";
+import { annualizeMonthlyAmount } from "./annualization";
 
 // =============================================================================
 // OUTPUT TYPES
@@ -332,6 +333,7 @@ export function computeScoutPerformance(state: GameState): ScoutPerformanceData 
     const seasonFinances = new Map<number, { income: number; expenses: number }>();
 
     for (const tx of finances.transactions) {
+      if (tx.kind === "openingBalance") continue;
       if (!seasonFinances.has(tx.season)) {
         seasonFinances.set(tx.season, { income: 0, expenses: 0 });
       }
@@ -356,8 +358,8 @@ export function computeScoutPerformance(state: GameState): ScoutPerformanceData 
       });
     }
   } else {
-    // Estimate from salary history if finances not tracked
-    lifetimeEarnings = scout.salary * 4 * seasonsPlayed * 38; // rough weekly over seasons
+    // Salaries are monthly and accrue year-round, independent of league length.
+    lifetimeEarnings = annualizeMonthlyAmount(scout.salary, seasonsPlayed);
     lifetimeExpenses = lifetimeEarnings * 0.6; // rough estimate
   }
 

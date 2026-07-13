@@ -14,6 +14,10 @@
 
 import type { Scout, TravelBooking, CountryReputation, Fixture, Territory } from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
+import {
+  LEGACY_SEASON_LENGTH_WEEKS,
+  normalizeGameWeek,
+} from "@/engine/core/gameDate";
 
 // =============================================================================
 // CONTINENT CLASSIFICATION
@@ -130,10 +134,6 @@ function getCountryReputationByIdentity(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function normaliseSeasonWeek(week: number, seasonLength = 38): number {
-  return ((week - 1) % seasonLength + seasonLength) % seasonLength + 1;
 }
 
 /**
@@ -355,10 +355,14 @@ export function bookTravel(
   destinationCountry: string,
   departureWeek: number,
   duration: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): Scout {
   const homeCountry = getScoutHomeCountry(scout);
-  const normalisedDepartureWeek = normaliseSeasonWeek(departureWeek);
-  const normalisedReturnWeek = normaliseSeasonWeek(departureWeek + duration);
+  const normalisedDepartureWeek = normalizeGameWeek(departureWeek, seasonLength);
+  const normalisedReturnWeek = normalizeGameWeek(
+    departureWeek + duration,
+    seasonLength,
+  );
 
   const booking: TravelBooking = {
     destinationCountry,

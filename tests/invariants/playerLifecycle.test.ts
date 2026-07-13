@@ -263,6 +263,46 @@ describe("authoritative player lifecycle", () => {
     expect(signed.state.freeAgentPool.agents).toEqual([]);
     expect(signed.state.freeAgentPool.totalSignedThisSeason).toBe(1);
   });
+
+  it("removes stale pool entries when a higher-priority contract transition wins", () => {
+    const input = world();
+    input.freeAgentPool = emptyPool([{
+      playerId: "p1",
+      country: "England",
+      releasedFrom: "b",
+      releasedSeason: 1,
+      weeksInPool: 2,
+      maxWeeksInPool: 20,
+      wageExpectation: 900,
+      signingBonusExpectation: 2_000,
+      discoverySource: null,
+      discoveredByScout: false,
+      npcInterest: [],
+      status: "signed",
+    }]);
+
+    const resolved = resolvePlayerMovements(input, [
+      {
+        type: "contractRenewal",
+        playerId: "p1",
+        clubId: "a",
+        contractLength: 2,
+      },
+      {
+        type: "freeAgentSigning",
+        playerId: "p1",
+        toClubId: "b",
+        wage: 1_100,
+        signingBonus: 2_000,
+        contractLength: 2,
+      },
+    ], 12, 2);
+
+    expect(resolved.applied.map((event) => event.type)).toEqual(["contractRenewal"]);
+    expect(resolved.rejected).toHaveLength(1);
+    expect(resolved.state.players.p1.contractClubId).toBe("a");
+    expect(resolved.state.freeAgentPool.agents).toEqual([]);
+  });
 });
 
 describe("supporting lifecycle invariants", () => {

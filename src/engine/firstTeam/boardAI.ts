@@ -24,6 +24,12 @@ import type {
   BoardPersonality,
   InboxMessage,
 } from "@/engine/core/types";
+import {
+  addGameWeeks,
+  getSeasonLength,
+  isGameDateAtOrAfter,
+} from "@/engine/core/gameDate";
+import { conductBoardMeeting } from "@/engine/career/politicalMeetings";
 
 // =============================================================================
 // CONSTANTS
@@ -183,6 +189,7 @@ export function generateBoardProfile(rng: RNG): BoardProfile {
     budgetMultiplier: DEFAULT_BUDGET_MULTIPLIER,
     ultimatumIssued: false,
     ultimatumDeadline: undefined,
+    ultimatumDeadlineSeason: undefined,
     recentDirectives: [],
   };
 }
@@ -246,14 +253,18 @@ export function evaluateBoardSatisfaction(
   // --- Negative triggers ---
 
   // Check for missed directive deadlines this week
+  const deadlinePressureWeek = Math.max(
+    1,
+    getSeasonLength(state.fixtures, state.currentSeason) - 2,
+  );
   const missedDirectives = state.managerDirectives.filter(
     (d) =>
       !d.fulfilled &&
       d.season === state.currentSeason &&
-      state.currentWeek >= 36, // only penalize near season end
+      state.currentWeek >= deadlinePressureWeek, // only penalize near season end
   );
-  if (missedDirectives.length > 0 && state.currentWeek === 36) {
-    // Apply deadline pressure once at week 36
+  if (missedDirectives.length > 0 && state.currentWeek === deadlinePressureWeek) {
+    // Apply deadline pressure once, two weeks before the real season boundary.
     satisfactionDelta -= config.missedDeadlineLoss * missedDirectives.length;
     patienceDelta -= config.patienceLoss * missedDirectives.length;
   }
@@ -283,7 +294,13 @@ export function evaluateBoardSatisfaction(
   if (
     profile.ultimatumIssued &&
     profile.ultimatumDeadline !== undefined &&
-    state.currentWeek >= profile.ultimatumDeadline &&
+    isGameDateAtOrAfter(
+      { week: state.currentWeek, season: state.currentSeason },
+      {
+        week: profile.ultimatumDeadline,
+        season: profile.ultimatumDeadlineSeason ?? state.currentSeason,
+      },
+    ) &&
     profile.satisfactionLevel < config.criticalThreshold + 15
   ) {
     // Ultimatum deadline reached without sufficient improvement
@@ -355,15 +372,20 @@ export function generateBoardReaction(
     if (!profile.ultimatumIssued) {
       reactionType = "ultimatum";
       trigger = "Board satisfaction critically low";
-      const deadline = Math.min(state.currentWeek + 8, 38);
+      const deadline = addGameWeeks(
+        state.fixtures,
+        { week: state.currentWeek, season: state.currentSeason },
+        8,
+      );
       message =
-        `The board has issued a formal ultimatum. You have until week ${deadline} ` +
+        `The board has issued a formal ultimatum. You have until season ${deadline.season}, week ${deadline.week} ` +
         "to demonstrate significant improvement or face serious consequences. " +
         "Budget allocations have been reduced.";
       updatedProfile = {
         ...updatedProfile,
         ultimatumIssued: true,
-        ultimatumDeadline: deadline,
+        ultimatumDeadline: deadline.week,
+        ultimatumDeadlineSeason: deadline.season,
         budgetMultiplier: clamp(
           updatedProfile.budgetMultiplier - config.budgetCut,
           0.5,
@@ -417,6 +439,7 @@ export function generateBoardReaction(
           // Clear any previous ultimatum on high satisfaction
           ultimatumIssued: false,
           ultimatumDeadline: undefined,
+          ultimatumDeadlineSeason: undefined,
         };
       } else {
         reactionType = "praise";
@@ -428,6 +451,7 @@ export function generateBoardReaction(
           ...updatedProfile,
           ultimatumIssued: false,
           ultimatumDeadline: undefined,
+          ultimatumDeadlineSeason: undefined,
         };
       }
     }
@@ -553,94 +577,15 @@ export function adjustDirectiveDifficulty(
  */
 export function processBoardMeeting(
   state: GameState,
-  rng: RNG,
+  _rng: RNG,
 ): { updatedProfile: BoardProfile; message: InboxMessage } | null {
-  const profile = state.boardProfile;
-  if (!profile) return null;
-  if (state.scout.careerTier < 5) return null;
-
-  const config = PERSONALITY_CONFIGS[profile.personality];
-
-  // Base meeting boost
-  let satisfactionBoost = 5;
-  let patienceBoost = 8;
-
-  // Hands-off boards don't care for meetings as much
-  if (profile.personality === "hands-off") {
-    satisfactionBoost = 2;
-    patienceBoost = 3;
-  }
-
-  // Impatient boards appreciate face-time more
-  if (profile.personality === "impatient") {
-    satisfactionBoost = 7;
-    patienceBoost = 10;
-  }
-
-  // Small RNG variance
-  satisfactionBoost += rng.nextFloat(-1, 2);
-  patienceBoost += rng.nextFloat(-1, 2);
-
-  const updatedProfile: BoardProfile = {
-    ...profile,
-    satisfactionLevel: clamp(
-      profile.satisfactionLevel + satisfactionBoost,
-      0,
-      100,
-    ),
-    patience: clamp(profile.patience + patienceBoost, 0, 100),
-  };
-
-  // If meeting during ultimatum period, show some leniency
-  if (profile.ultimatumIssued && profile.ultimatumDeadline !== undefined) {
-    // Extend deadline by 2 weeks
-    updatedProfile.ultimatumDeadline = Math.min(
-      profile.ultimatumDeadline + 2,
-      38,
-    );
-  }
-
-  const msg: InboxMessage = {
-    id: generateId("msg", rng),
-    week: state.currentWeek,
-    season: state.currentSeason,
-    type: "feedback",
-    title: "Board Meeting Concluded",
-    body: getBoardMeetingMessage(profile.personality, updatedProfile.satisfactionLevel, config),
-    read: false,
-    actionRequired: false,
-  };
-
-  return { updatedProfile, message: msg };
-}
-
-function getBoardMeetingMessage(
-  personality: BoardPersonality,
-  satisfaction: number,
-  config: PersonalityConfig,
-): string {
-  if (satisfaction > config.praiseThreshold) {
-    return (
-      "The board meeting went very well. The directors are pleased with your " +
-      "presentation and confident in the department's direction."
-    );
-  }
-  if (satisfaction > config.warningThreshold) {
-    return (
-      "The board acknowledged your efforts and discussed upcoming expectations. " +
-      "They remain cautiously optimistic about the department's trajectory."
-    );
-  }
-  if (personality === "hands-off") {
-    return (
-      "The board listened politely but seemed disengaged. They prefer to let " +
-      "results speak for themselves rather than holding frequent meetings."
-    );
-  }
-  return (
-    "The meeting was tense. The board made their displeasure clear but your " +
-    "willingness to discuss the situation in person has bought some goodwill."
+  const result = conductBoardMeeting(state, "accountability");
+  if (!result.executed || !result.state.boardProfile) return null;
+  const message = result.state.inbox.find(
+    (candidate) => candidate.id === `board-meeting-${state.scout.currentClubId}-s${state.currentSeason}-w${state.currentWeek}`,
   );
+  if (!message) return null;
+  return { updatedProfile: result.state.boardProfile, message };
 }
 
 // =============================================================================

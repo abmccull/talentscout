@@ -1,0 +1,205 @@
+{
+  "assessment_date": "2026-07-12",
+  "candidate": "local-uncommitted-youth-scout-worktree",
+  "release_standard": {
+    "minimum_category_score": 9.0,
+    "requires_every_category_to_pass": true,
+    "requires_packaged_runtime_verification": true,
+    "requires_moderated_usability": true,
+    "requires_manual_assistive_technology": true
+  },
+  "verdict": "HOLD",
+  "release_eligible": false,
+  "product_scores": {
+    "world_credibility": 9.0,
+    "scouting_depth": 9.0,
+    "decision_quality": 9.0,
+    "career_progression": 8.9,
+    "relationships_and_politics": 8.9,
+    "information_design_and_usability": 8.9,
+    "replayability": 9.2,
+    "emotional_engagement": 8.9
+  },
+  "design_scores": {
+    "overall_rendered_design": 8.9,
+    "visual_hierarchy": 8.9,
+    "layout_and_spacing": 8.9,
+    "typography": 8.8,
+    "color_and_contrast": 9.1,
+    "components_and_states": 9.0,
+    "interaction_and_feedback": 8.9,
+    "information_architecture_and_navigation": 9.1,
+    "task_flow_design": 9.0,
+    "accessibility_and_inclusive_ux": 8.9,
+    "imagery_and_iconography": 8.7,
+    "brand_visual_system": 9.1,
+    "emotional_trust_and_polish": 8.8,
+    "system_cohesion": 9.2,
+    "gameplay_interactivity": 8.9
+  },
+  "automated_verification": {
+    "typescript": "pass",
+    "lint": "pass-zero-warnings",
+    "diff_whitespace": "pass",
+    "unit_tests": {
+      "files": 56,
+      "passed": 382,
+      "total": 382,
+      "status": "pass"
+    },
+    "cross_screen_smoke": {
+      "passed": 4,
+      "total": 4,
+      "status": "pass"
+    },
+    "visual_interactivity": {
+      "passed": 2,
+      "total": 2,
+      "status": "pass",
+      "targeted_rendered_audits": [
+        "academy-placement",
+        "world-archive"
+      ],
+      "desktop_and_mobile": true,
+      "axe_and_overflow_checks": true
+    },
+    "accessibility": {
+      "passed": 5,
+      "total": 5,
+      "status": "pass",
+      "serious_or_critical_axe_violations": 0
+    },
+    "ten_season_every_week_browser_soak": {
+      "status": "pass",
+      "duration_minutes_approximate": 3.7
+    },
+    "youth_browser_suite": {
+      "passed": 45,
+      "total": 45,
+      "status": "pass-first-attempt",
+      "retries": 0,
+      "duration_minutes_approximate": 5.3
+    },
+    "shipping_build": {
+      "status": "pass",
+      "play_first_load_js_kb": 614,
+      "gate_kb": 650
+    },
+    "accelerated_thirty_season_integrity": {
+      "status": "pass",
+      "seeds": 20,
+      "seasons_per_seed": 30,
+      "authoritative_ticks": 1200,
+      "ticks_per_season": 2,
+      "calendar_weeks_spanned": 27600,
+      "every_intervening_week_processed": false,
+      "deterministic_replay": true,
+      "archives_with_exactly_thirty_seasons": 20,
+      "largest_serialized_save_bytes": 57764170,
+      "largest_serialized_save_mib": 55.09,
+      "largest_save_growth_ratio": 4.63,
+      "peak_heap_bytes": 760949888,
+      "peak_heap_mib": 725.7,
+      "peak_rss_bytes": 972283904,
+      "peak_rss_mib": 927.24,
+      "tick_latency_ms": {
+        "p50": 809.06,
+        "p95": 1681.18,
+        "maximum": 1874.86
+      }
+    }
+  },
+  "replayability_telemetry": {
+    "schema_version": 2,
+    "release_100_seeds_3_seasons": {
+      "status": "pass",
+      "average_semantic_distance_percent": 95.22,
+      "average_overlap_percent": 4.78,
+      "special_trajectory_uniqueness_percent": 82.0,
+      "semantic_adjacent_repeat_percent": 0.0,
+      "broad_event_type_adjacent_repeat_percent": 16.73,
+      "long_max_tension_run_percent": 0.0,
+      "dead_state_percent": 0.0
+    },
+    "nightly_1000_seeds_10_seasons": {
+      "status": "pass",
+      "average_semantic_distance_percent": 96.12,
+      "average_overlap_percent": 3.88,
+      "special_trajectory_uniqueness_percent": 99.9,
+      "semantic_adjacent_repeat_percent": 0.0,
+      "broad_event_type_adjacent_repeat_percent": 16.53,
+      "long_max_tension_run_percent": 2.9,
+      "dead_state_percent": 0.03,
+      "dead_run_percent": 0.3,
+      "runaway_state_percent": 0.0
+    },
+    "semantic_projection_excludes_cosmetic_identity": true
+  },
+  "completed_blockers": [
+    {
+      "id": "compact-living-world-history",
+      "status": "complete-core-bounded-thirty-season-archive"
+    },
+    {
+      "id": "active-club-and-regional-identities",
+      "status": "complete-core-recruitment-opportunity-integration"
+    },
+    {
+      "id": "event-director-balance-and-content-scale",
+      "status": "complete-balance-thresholds-content-expansion-remains"
+    }
+  ],
+  "unverified_release_gates": {
+    "twenty_seed_thirty_season_every_week_full_world_soak": false,
+    "packaged_windows_full_release_matrix": false,
+    "packaged_macos": false,
+    "packaged_linux": false,
+    "steam_offline_cloud_conflict_and_crash_recovery": false,
+    "moderated_twelve_player_sus_at_least_85": false,
+    "manual_nvda_completion": false,
+    "manual_voiceover_completion": false,
+    "low_end_runtime_and_subscription_profile": false
+  },
+  "remaining_blockers": [
+    {
+      "priority": "P0",
+      "id": "packaged-runtime-matrix",
+      "effort": "XL"
+    },
+    {
+      "priority": "P0",
+      "id": "every-week-long-horizon-and-accelerated-equivalence",
+      "effort": "L"
+    },
+    {
+      "priority": "P0",
+      "id": "save-size-memory-and-low-end-runtime-profile",
+      "effort": "L"
+    },
+    {
+      "priority": "P1",
+      "id": "full-stakeholder-ecology",
+      "effort": "XL"
+    },
+    {
+      "priority": "P1",
+      "id": "longitudinal-scout-calibration-expansion",
+      "effort": "L"
+    },
+    {
+      "priority": "P1",
+      "id": "late-career-pressure-and-recovery-breadth",
+      "effort": "L"
+    },
+    {
+      "priority": "P1",
+      "id": "outcome-explanation-and-emotional-presentation-breadth",
+      "effort": "L"
+    },
+    {
+      "priority": "P2",
+      "id": "moderated-usability-and-manual-accessibility",
+      "effort": "M"
+    }
+  ]
+}

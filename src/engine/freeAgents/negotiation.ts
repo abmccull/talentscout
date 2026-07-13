@@ -22,6 +22,10 @@ import type {
   ConvictionLevel,
   InboxMessage,
 } from "@/engine/core/types";
+import {
+  addGameWeeksWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "@/engine/core/gameDate";
 
 // =============================================================================
 // CONSTANTS
@@ -32,7 +36,6 @@ const MAX_ROUNDS = 3;
 
 /** Deadline: negotiations expire this many weeks after start. */
 const NEGOTIATION_DEADLINE_WEEKS = 3;
-const WEEKS_PER_SEASON = 38;
 
 /** Wage tolerance: player accepts if offer is within this % of expectation. */
 const WAGE_ACCEPTANCE_TOLERANCE = 0.85;
@@ -105,8 +108,13 @@ export function initiateFreeAgentNegotiation(
   currentWeek: number,
   currentSeason: number,
   rng: RNG,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FreeAgentNegotiation {
-  const rawDeadlineWeek = currentWeek + NEGOTIATION_DEADLINE_WEEKS;
+  const deadlineDate = addGameWeeksWithSeasonLength(
+    { week: currentWeek, season: currentSeason },
+    NEGOTIATION_DEADLINE_WEEKS,
+    seasonLength,
+  );
   const negotiation: FreeAgentNegotiation = {
     freeAgentId: agent.playerId,
     offeredWage,
@@ -114,8 +122,8 @@ export function initiateFreeAgentNegotiation(
     offeredContractLength,
     round: 1,
     status: "pending",
-    deadline: ((rawDeadlineWeek - 1) % WEEKS_PER_SEASON) + 1,
-    deadlineSeason: currentSeason + Math.floor((rawDeadlineWeek - 1) / WEEKS_PER_SEASON),
+    deadline: deadlineDate.week,
+    deadlineSeason: deadlineDate.season,
     startSeason: currentSeason,
   };
 

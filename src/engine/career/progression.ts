@@ -22,6 +22,10 @@ import type {
   BoardDirective,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import {
+  getSeasonEndWindow,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "@/engine/core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Reputation event union
@@ -65,7 +69,7 @@ const TIER_REPUTATION_REQUIREMENTS: Record<CareerTier, number> = {
   5: 90,
 };
 
-/** Weekly salary bands (£) per career tier */
+/** Monthly salary bands (£) per career tier. */
 const SALARY_BANDS: Record<CareerTier, { min: number; max: number }> = {
   1: { min: 0,     max: 0 },     // Freelance — no salary
   2: { min: 500,   max: 1500 },
@@ -616,15 +620,42 @@ export function generateJobOffers(
   scout: Scout,
   clubs: Record<string, Club>,
   season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+): JobOffer[] {
+  const targetTier = determineTargetTier(scout);
+  if (targetTier === null) return [];
+
+  return generateJobOffersForTier(
+    rng,
+    scout,
+    clubs,
+    season,
+    targetTier,
+    seasonLength,
+  );
+}
+
+/**
+ * Generate openings for an explicitly selected tier.
+ *
+ * The normal offer market targets the next tier. The first club-path choice is
+ * different: the player has already earned their current tier through work and
+ * is choosing an employer at that level, so it needs a current-tier opening.
+ */
+export function generateJobOffersForTier(
+  rng: RNG,
+  scout: Scout,
+  clubs: Record<string, Club>,
+  season: number,
+  targetTier: CareerTier,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): JobOffer[] {
   const offers: JobOffer[] = [];
 
-  const targetTier = determineTargetTier(scout);
-  if (targetTier === null) return offers;
-
-  // Try aligned clubs first; fall back to any club in the band for tier 3+
+  // Try aligned clubs first; a real career choice must not disappear because
+  // a generated world lacks an exact philosophy match in a narrow tier band.
   let candidateClubs = filterCandidateClubs(clubs, scout, targetTier, true);
-  if (candidateClubs.length === 0 && targetTier >= 3) {
+  if (candidateClubs.length === 0) {
     candidateClubs = filterCandidateClubs(clubs, scout, targetTier, false);
   }
   if (candidateClubs.length === 0) return offers;
@@ -641,7 +672,14 @@ export function generateJobOffers(
   const shuffled = rng.shuffle(candidateClubs).slice(0, offerCount);
 
   for (const club of shuffled) {
-    offers.push(buildJobOffer(rng, club, scout, targetTier, season));
+    offers.push(buildJobOffer(
+      rng,
+      club,
+      scout,
+      targetTier,
+      season,
+      seasonLength,
+    ));
   }
 
   return offers;
@@ -692,6 +730,7 @@ function buildJobOffer(
   scout: Scout,
   tier: CareerTier,
   season: number,
+  seasonLength: number,
 ): JobOffer {
   const band = SALARY_BANDS[tier];
 
@@ -705,7 +744,8 @@ function buildJobOffer(
 
   const role = ROLE_TITLE_BY_SPEC[scout.primarySpecialization][tier];
   const contractLength = rng.nextInt(1, 3);
-  const expiresWeek = rng.nextInt(35, 38); // Last weeks of the season
+  const expiryWindow = getSeasonEndWindow(seasonLength, 4);
+  const expiresWeek = rng.nextInt(expiryWindow.startWeek, expiryWindow.endWeek);
 
   return {
     id: `offer_${club.id}_s${season}_${rng.nextInt(1000, 9999)}`,
@@ -722,6 +762,55 @@ function buildJobOffer(
 // Accept job offer
 // ---------------------------------------------------------------------------
 
+/** A pending offer remains actionable through the end of its expiry week. */
+export function canAcceptJobOffer(
+  offer: JobOffer,
+  currentWeek: number,
+  currentSeason?: number,
+): boolean {
+  const generatedSeason = getGeneratedJobOfferSeason(offer);
+  if (
+    currentSeason !== undefined &&
+    generatedSeason !== undefined &&
+    generatedSeason < currentSeason
+  ) {
+    return false;
+  }
+  return currentWeek <= offer.expiresWeek;
+}
+
+function getGeneratedJobOfferSeason(offer: JobOffer): number | undefined {
+  const match = offer.id.match(/_s(\d+)_\d+$/);
+  if (!match) return undefined;
+  const season = Number.parseInt(match[1], 10);
+  return Number.isFinite(season) ? season : undefined;
+}
+
+/**
+ * Resolve offers whose deadline is consumed by advancing the current week.
+ * Returning both collections lets the store close matching action messages.
+ */
+export function expireJobOffersAtWeekEnd(
+  offers: JobOffer[],
+  currentWeek: number,
+  currentSeason?: number,
+): { active: JobOffer[]; expired: JobOffer[] } {
+  const active: JobOffer[] = [];
+  const expired: JobOffer[] = [];
+
+  for (const offer of offers) {
+    const generatedSeason = getGeneratedJobOfferSeason(offer);
+    const isFromPriorSeason =
+      currentSeason !== undefined &&
+      generatedSeason !== undefined &&
+      generatedSeason < currentSeason;
+    if (isFromPriorSeason || offer.expiresWeek <= currentWeek) expired.push(offer);
+    else active.push(offer);
+  }
+
+  return { active, expired };
+}
+
 /**
  * Apply an accepted job offer to the scout and return the updated Scout.
  * Does not mutate the input.
@@ -729,13 +818,33 @@ function buildJobOffer(
 export function acceptJobOffer(scout: Scout, offer: JobOffer, currentSeason: number): Scout {
   return {
     ...scout,
+    careerPath: "club",
+    careerPathChosen: true,
+    independentTier: undefined,
     careerTier: offer.tier,
     currentClubId: offer.clubId,
     contractEndSeason: (currentSeason + offer.contractLength),
     salary: offer.salary,
     clubTrust: 50, // Start with neutral trust at a new employer
-    // Reset season-specific stats on new job
-    reportsSubmitted: 0,
-    successfulFinds: 0,
+  };
+}
+
+/**
+ * End club employment without erasing the career that produced it.
+ * Lifetime counters, reputation, skills, discoveries, and XP are deliberately
+ * retained; only fields that assert an active employer relationship are reset.
+ */
+export function endClubEmployment(scout: Scout): Scout {
+  return {
+    ...scout,
+    careerPath: "independent",
+    careerPathChosen: true,
+    independentTier: 1,
+    currentClubId: undefined,
+    contractEndSeason: undefined,
+    salary: 0,
+    clubTrust: 0,
+    managerRelationship: undefined,
+    boardDirectives: [],
   };
 }

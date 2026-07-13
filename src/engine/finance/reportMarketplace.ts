@@ -25,6 +25,12 @@ import {
   ensureClientRelationship,
   recordClientDelivery,
 } from "./clientRelationships";
+import {
+  addGameWeeksWithSeasonLength,
+  gameWeeksBetweenWithSeasonLength,
+  isGameDateAtOrAfter,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -281,10 +287,18 @@ export function listReport(
   targetClubId: string | undefined,
   week: number,
   season: number,
+  caseId?: string,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
+  const biddingEnds = addGameWeeksWithSeasonLength(
+    { week, season },
+    2,
+    seasonLength,
+  );
   const listing: ReportListing = {
     id: `listing_${reportId}_${week}_${season}`,
     reportId,
+    caseId,
     price,
     isExclusive,
     targetClubId,
@@ -292,8 +306,8 @@ export function listReport(
     listedWeek: week,
     listedSeason: season,
     bids: [],
-    biddingEndsWeek: week + 2,
-    biddingEndsSeason: season,
+    biddingEndsWeek: biddingEnds.week,
+    biddingEndsSeason: biddingEnds.season,
   };
 
   return {
@@ -334,14 +348,17 @@ export function expireOldListings(
   finances: FinancialRecord,
   currentWeek: number,
   currentSeason: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
   const updated = finances.reportListings.map((listing) => {
     if (listing.status !== "active") return listing;
 
     // Calculate age — simplified: same-season only for now
-    const age = listing.listedSeason === currentSeason
-      ? currentWeek - listing.listedWeek
-      : currentWeek + (38 - listing.listedWeek); // Cross-season approximation
+    const age = gameWeeksBetweenWithSeasonLength(
+      { week: listing.listedWeek, season: listing.listedSeason },
+      { week: currentWeek, season: currentSeason },
+      seasonLength,
+    );
 
     if (age >= MAX_LISTING_AGE_WEEKS) {
       return {
@@ -376,6 +393,7 @@ function generateBidsForListing(
   season: number,
   clientRelationships: ClientRelationship[],
   guaranteeBid: boolean = false,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): { bids: MarketplaceBid[]; inboxMessages: InboxMessage[] } {
   const newBids: MarketplaceBid[] = [];
   const messages: InboxMessage[] = [];
@@ -405,7 +423,11 @@ function generateBidsForListing(
     : null;
 
   // Listing age factor: week 1 bids are less likely
-  const listingAge = week - listing.listedWeek + (season - listing.listedSeason) * 38;
+  const listingAge = gameWeeksBetweenWithSeasonLength(
+    { week: listing.listedWeek, season: listing.listedSeason },
+    { week, season },
+    seasonLength,
+  );
   const listingAgeFactor = listingAge <= 1 ? 0.7 : 1.0;
 
   for (const { club, needMatchScore } of scoredCandidates) {
@@ -465,7 +487,12 @@ function generateBidsForListing(
       Math.min(Math.round(listing.price * 2.5), amount),
     );
 
-    const bidExpiry = week + rng.nextInt(2, 3);
+    const bidDurationWeeks = rng.nextInt(2, 3);
+    const bidExpiry = addGameWeeksWithSeasonLength(
+      { week, season },
+      bidDurationWeeks,
+      seasonLength,
+    );
 
     // Derive human-readable bid reason
     const positionCount = player
@@ -488,8 +515,8 @@ function generateBidsForListing(
       amount,
       placedWeek: week,
       placedSeason: season,
-      expiryWeek: bidExpiry,
-      expirySeason: season,
+      expiryWeek: bidExpiry.week,
+      expirySeason: bidExpiry.season,
       status: "pending",
       needMatchScore,
       bidReason,
@@ -505,7 +532,7 @@ function generateBidsForListing(
       season,
       type: "marketplaceBid",
       title: `Bid from ${club.name}`,
-      body: `${club.name} has placed a bid of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidExpiry - week} week${bidExpiry - week > 1 ? "s" : ""}.`,
+      body: `${club.name} has placed a bid of £${amount.toLocaleString()} on your report.\nThey have a ${positionNeed} need at ${player?.position ?? "this position"} and appear ${interestLevel}.\nThe bid expires in ${bidDurationWeeks} week${bidDurationWeeks > 1 ? "s" : ""}.`,
       read: false,
       actionRequired: true,
       relatedId: bid.id,
@@ -538,7 +565,12 @@ function generateBidsForListing(
         // Upgrade price: 2-3x the listing price
         const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
         const upgradeAmount = Math.round(listing.price * upgradeMult);
-        const bidExpiry = week + rng.nextInt(2, 3);
+        const bidDurationWeeks = rng.nextInt(2, 3);
+        const bidExpiry = addGameWeeksWithSeasonLength(
+          { week, season },
+          bidDurationWeeks,
+          seasonLength,
+        );
 
         const upgradeBid: MarketplaceBid = {
           id: `bid_upgrade_${listing.id}_${club.id}_${week}`,
@@ -547,8 +579,8 @@ function generateBidsForListing(
           amount: upgradeAmount,
           placedWeek: week,
           placedSeason: season,
-          expiryWeek: bidExpiry,
-          expirySeason: season,
+          expiryWeek: bidExpiry.week,
+          expirySeason: bidExpiry.season,
           status: "pending",
           needMatchScore,
           isExclusiveUpgrade: true,
@@ -588,6 +620,7 @@ export function processMarketplaceBids(
   week: number,
   season: number,
   unsignedYouth: Record<string, UnsignedYouth> = {},
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): { finances: FinancialRecord; inboxMessages: InboxMessage[] } {
   let updatedFinances = finances;
   const allInboxMessages: InboxMessage[] = [];
@@ -619,6 +652,7 @@ export function processMarketplaceBids(
       rng, listing, report, clubs, marketplacePlayers, scout, week, season,
       updatedFinances.clientRelationships,
       firstBidGuaranteeAvailable,
+      seasonLength,
     );
 
     if (newBids.length > 0) {
@@ -641,7 +675,13 @@ export function processMarketplaceBids(
         if (l.id !== listing.id) return l;
         let changed = false;
         const updatedBids = l.bids.map((b) => {
-          if (b.status === "pending" && b.expiryWeek <= week && b.expirySeason <= season) {
+          if (
+            b.status === "pending"
+            && isGameDateAtOrAfter(
+              { week, season },
+              { week: b.expiryWeek, season: b.expirySeason },
+            )
+          ) {
             changed = true;
             allInboxMessages.push({
               id: `inbox_bid_expired_${b.id}`,

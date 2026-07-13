@@ -37,10 +37,26 @@ test.describe("Report Writing", () => {
   test("report writer exposes only valid conviction options", async ({ gamePage }) => {
     await prepareObservedYouthPlayer(gamePage);
 
-    await expect(gamePage.page.getByRole("radio", { name: /^Note\b/ })).toBeVisible();
-    await expect(gamePage.page.getByRole("radio", { name: /^Recommend\b/ })).toBeVisible();
+    const note = gamePage.page.getByRole("radio", { name: /^Note\b/ });
+    const recommend = gamePage.page.getByRole("radio", { name: /^Recommend\b/ });
+    await expect(note).toBeVisible();
+    await expect(recommend).toBeVisible();
     await expect(gamePage.page.getByRole("radio", { name: /^Strong Recommend\b/ })).toBeVisible();
     await expect(gamePage.page.getByRole("radio", { name: /^Table Pound\b/ })).toBeVisible();
+
+    const monitor = gamePage.page.getByRole("radio", { name: /^Monitor\b/ });
+    const inviteForTrial = gamePage.page.getByRole("radio", { name: /^Invite for trial\b/ });
+    await expect(monitor).toHaveJSProperty("tagName", "INPUT");
+    await monitor.focus();
+    await gamePage.page.keyboard.press("Space");
+    await expect(monitor).toBeChecked();
+    await gamePage.page.keyboard.press("ArrowRight");
+    await expect(inviteForTrial).toBeChecked();
+
+    await expect(note).toHaveJSProperty("tagName", "INPUT");
+    await note.focus();
+    await gamePage.page.keyboard.press("ArrowRight");
+    await expect(recommend).toBeChecked();
     await expect(gamePage.page.getByRole("button", { name: /^Submit Report$/ })).toBeEnabled();
 
     gamePage.expectNoConsoleErrors();

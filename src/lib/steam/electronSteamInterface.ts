@@ -89,6 +89,11 @@ export class ElectronSteamInterface implements SteamInterface {
     return api().steam.getCloudSave(String(slot));
   }
 
+  async deleteCloudSave(slot: number): Promise<void> {
+    if (!hasElectronAPI()) return;
+    await api().steam.deleteCloudSave(String(slot));
+  }
+
   getPlayerName(): string | null {
     return this._playerName;
   }

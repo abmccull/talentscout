@@ -11,6 +11,10 @@ import type {
   EconomicEventType,
   TransferWindowState,
 } from "../core/types";
+import {
+  gameWeeksBetweenWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Market temperature
@@ -82,17 +86,27 @@ const EVENT_CONFIGS: Record<EconomicEventType, {
 /**
  * Potentially generate a new economic event. ~5% chance per week.
  */
+export interface EconomicEventGenerationOptions {
+  chanceMultiplier?: number;
+  impactMultiplier?: number;
+}
+
 export function generateEconomicEvent(
   rng: RNG,
   finances: FinancialRecord,
   week: number,
   season: number,
+  options: EconomicEventGenerationOptions = {},
 ): EconomicEvent | null {
   // Don't stack too many events
   if (finances.activeEconomicEvents.length >= 2) return null;
 
   // 5% chance per week
-  if (!rng.chance(0.05)) return null;
+  const eventChance = Math.min(
+    0.5,
+    Math.max(0, 0.05 * (options.chanceMultiplier ?? 1)),
+  );
+  if (!rng.chance(eventChance)) return null;
 
   const types: EconomicEventType[] = [
     "marketCrash", "tvDealBonanza", "ffpInvestigation", "newOwnership", "wageCap",
@@ -103,12 +117,17 @@ export function generateEconomicEvent(
   if (finances.activeEconomicEvents.some((e) => e.type === type)) return null;
 
   const config = EVENT_CONFIGS[type];
+  const impactMultiplier = Math.min(
+    2,
+    Math.max(0, options.impactMultiplier ?? 1),
+  );
+  const marketMultiplier = 1 + (config.multiplier - 1) * impactMultiplier;
 
   return {
     id: `event_${type}_${week}_${season}`,
     type,
     description: config.description,
-    multiplier: config.multiplier,
+    multiplier: Math.max(0.2, marketMultiplier),
     startWeek: week,
     startSeason: season,
     durationWeeks: config.durationWeeks,
@@ -135,11 +154,14 @@ export function expireEconomicEvents(
   finances: FinancialRecord,
   currentWeek: number,
   currentSeason: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
   const active = finances.activeEconomicEvents.filter((event) => {
-    const elapsed = event.startSeason === currentSeason
-      ? currentWeek - event.startWeek
-      : currentWeek + (38 - event.startWeek);
+    const elapsed = gameWeeksBetweenWithSeasonLength(
+      { week: event.startWeek, season: event.startSeason },
+      { week: currentWeek, season: currentSeason },
+      seasonLength,
+    );
     return elapsed < event.durationWeeks;
   });
 

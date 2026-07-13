@@ -23,7 +23,16 @@ import type {
   Club,
   Scout,
   Specialization,
+  ScoutSourcePerspective,
+  PlayerAttribute,
 } from "@/engine/core/types";
+import {
+  adjustRecommendationForPerspective,
+  buildNPCAttributeEvidenceClaims,
+  buildNPCRecommendationEvidenceClaim,
+  capComparableClaims,
+  deriveNPCScoutPerspective,
+} from "@/engine/scout/sourcePerspectives";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -150,7 +159,7 @@ export function generateNPCScoutRoster(
     // Unique enough ID for in-game use (seed + index + suffix)
     const idSuffix = rng.nextInt(100000, 999999).toString(16);
 
-    result.push({
+    const generatedScout: NPCScout = {
       id:               `npc_${idSuffix}`,
       firstName,
       lastName,
@@ -161,6 +170,10 @@ export function generateNPCScoutRoster(
       reportsSubmitted: 0,
       morale:           rng.nextInt(6, 9), // Start with decent morale
       territoryId:      undefined,
+    };
+    result.push({
+      ...generatedScout,
+      evidencePerspective: deriveNPCScoutPerspective(generatedScout),
     });
   }
 
@@ -264,13 +277,16 @@ export function processNPCScoutingWeek(
     const finalQuality = clamp(noisyQuality, 1, 100);
 
     const readings = generateSimplifiedReadings(rng, npcScout, player, finalQuality);
-    const recommendation = deriveRecommendation(finalQuality, player);
+    const perspective = deriveNPCScoutPerspective(npcScout);
+    const recommendation = deriveRecommendation(finalQuality, player, perspective);
     const summary = buildReportSummary(npcScout, player, finalQuality, readings);
 
     const idSuffix = rng.nextInt(100000, 999999).toString(16);
 
+    const reportId = `npc_report_${idSuffix}`;
+    const sourceName = `${npcScout.firstName} ${npcScout.lastName}`;
     const report: NPCScoutReport = {
-      id:               `npc_report_${idSuffix}`,
+      id:               reportId,
       npcScoutId:       npcScout.id,
       playerId:         player.id,
       week,
@@ -279,6 +295,28 @@ export function processNPCScoutingWeek(
       summary,
       recommendation,
       reviewed:         false,
+      sourcePerspective: perspective,
+      evidenceClaims: capComparableClaims([
+        buildNPCRecommendationEvidenceClaim({
+          reportId,
+          playerId: player.id,
+          sourceName,
+          perspective,
+          recommendation,
+          quality: finalQuality,
+          week,
+          season,
+        }),
+        ...buildNPCAttributeEvidenceClaims({
+          reportId,
+          playerId: player.id,
+          sourceName,
+          perspective,
+          readings,
+          week,
+          season,
+        }),
+      ]),
     };
 
     reports.push(report);
@@ -447,7 +485,7 @@ function generateSimplifiedReadings(
   npcScout: NPCScout,
   player: Player,
   quality: number,
-): { attribute: string; perceivedValue: number; confidence: number }[] {
+): { attribute: PlayerAttribute; perceivedValue: number; confidence: number }[] {
   // 3 readings at poor quality, up to 6 at excellent
   const readingCount = Math.round(3 + (quality / 100) * 3);
   const count        = clamp(readingCount, 3, 6);
@@ -484,10 +522,14 @@ function generateSimplifiedReadings(
 function deriveRecommendation(
   quality: number,
   player: Player,
+  perspective: ScoutSourcePerspective,
 ): NPCScoutReport["recommendation"] {
   // Combine quality and player ability into a single signal
   const abilityFactor = player.currentAbility / 200; // 0–1
-  const signal        = quality * 0.7 + abilityFactor * 100 * 0.3;
+  const signal = adjustRecommendationForPerspective(
+    quality * 0.7 + abilityFactor * 100 * 0.3,
+    perspective,
+  );
 
   if (signal >= 75) return "pursue";
   if (signal >= 45) return "shortlist";

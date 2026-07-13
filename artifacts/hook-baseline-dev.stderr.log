@@ -1,0 +1,378 @@
+ ⚠ ./src/engine/consequences/stakeholderEcology.ts
+Attempted import error: 'elapsedGameWeeks' is not exported from '@/engine/core/gameDate' (imported as 'elapsedGameWeeks').
+
+Import trace for requested module:
+./src/engine/consequences/stakeholderEcology.ts
+./src/engine/consequences/index.ts
+./src/stores/gameStore.ts
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/calendar/ActivityCard.tsx
+Error:   [31mx[0m Expected '</', got ')'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\calendar\ActivityCard.tsx[0m:497:1]
+ [2m494[0m |                   </span>
+ [2m495[0m |                 ))}
+ [2m496[0m |               </div>
+ [2m497[0m |             ))}
+     : [35;1m             ^[0m
+ [2m498[0m |           </div>
+ [2m499[0m | 
+ [2m500[0m |           <div className="mt-3 flex flex-col gap-2 border-t border-white/8 pt-3 sm:flex-row sm:items-center sm:justify-between">
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/calendar/ActivityCard.tsx
+./src/components/game/CalendarScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/NewGameScreen.tsx
+Error:   [31mx[0m Expected '</', got '{'
+     ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\NewGameScreen.tsx[0m:946:1]
+ [2m943[0m |                   </CardContent>
+ [2m944[0m |                 </Card>
+ [2m945[0m | 
+ [2m946[0m |                 {/* Identity form */}
+     : [35;1m                ^[0m
+ [2m947[0m |                 <Card>
+ [2m948[0m |                   <CardHeader>
+ [2m949[0m |                     <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/NewGameScreen.tsx
+./src/app/play/page.tsx
+ ⚠ Cross origin request detected from 127.0.0.1 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+ ⨯ ./src/components/game/CalendarScreen.tsx
+Error:   [31mx[0m Expected '</', got 'jsx text (
+  [31m|[0m       )'
+      ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\CalendarScreen.tsx[0m:1124:1]
+ [2m1121[0m |             />
+ [2m1122[0m |             </div>
+ [2m1123[0m |             </div>
+ [2m1124[0m | [35;1m,[0m[35;1m-[0m[35;1m>[0m       </div>
+ [2m1125[0m | [35;1m`[0m[35;1m-[0m[35;1m>[0m       {/* Empty-day warning dialog */}
+ [2m1126[0m |           {showEmptyDayWarning && (
+ [2m1127[0m |             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+ [2m1128[0m |               <div role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg border border-amber-500/30 bg-zinc-900 p-6 shadow-xl">
+      `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/CalendarScreen.tsx
+./src/app/play/page.tsx
+ ⨯ ./src/components/game/CalendarScreen.tsx
+Error:   [31mx[0m Expected '</', got 'jsx text (
+  [31m|[0m       )'
+      ,-[[36;1;4mC:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\src\components\game\CalendarScreen.tsx[0m:1124:1]
+ [2m1121[0m |             />
+ [2m1122[0m |             </div>
+ [2m1123[0m |             </div>
+ [2m1124[0m | [35;1m,[0m[35;1m-[0m[35;1m>[0m       </div>
+ [2m1125[0m | [35;1m`[0m[35;1m-[0m[35;1m>[0m       {/* Empty-day warning dialog */}
+ [2m1126[0m |           {showEmptyDayWarning && (
+ [2m1127[0m |             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+ [2m1128[0m |               <div role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg border border-amber-500/30 bg-zinc-900 p-6 shadow-xl">
+      `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/game/CalendarScreen.tsx
+./src/app/play/page.tsx
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app-paths-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\server\\app-paths-manifest.json',
+  page: '/play'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json',
+  page: '/play'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app-paths-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\server\\app-paths-manifest.json',
+  page: '/play'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json',
+  page: '/play'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development-fallback\0.pack.gz_' -> 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\cache\webpack\client-development-fallback\0.pack.gz'
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json',
+  page: '/play'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json',
+  page: '/play'
+}
+ ⨯ [Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+[Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\routes-manifest.json'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\routes-manifest.json'
+}
+ ⨯ Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\vendor-chunks\@swc.js'
+    at <unknown> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\page.js:716:47)
+    at Object.<anonymous> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\page.js:719:3) {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\server\\vendor-chunks\\@swc.js',
+  page: '/'
+}
+ ⨯ Error: Cannot find module './611.js'
+Require stack:
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\webpack-runtime.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\pages\_document.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\require.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\load-components.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\utils.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\swc\options.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\swc\index.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\config.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\next.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\pages\_document.js:1:376)
+    at Object.<anonymous> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\pages\_document.js:1:422) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+Error: ENOENT: no such file or directory, open 'C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\vendor-chunks\@swc.js'
+    at <unknown> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\page.js:716:47)
+    at Object.<anonymous> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\app\page.js:719:3) {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\hands\\OneDrive\\Pictures\\TalentScout\\talentscout\\.next\\server\\vendor-chunks\\@swc.js',
+  page: '/'
+}
+ ⨯ Error: Cannot find module './611.js'
+Require stack:
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\webpack-runtime.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\pages\_document.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\require.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\load-components.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\utils.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\swc\options.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\swc\index.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\build\next-config-ts\transpile-config.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\config.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\next.js
+- C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\node_modules\next\dist\server\lib\start-server.js
+    at <unknown> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\pages\_document.js:1:376)
+    at Object.<anonymous> (C:\Users\hands\OneDrive\Pictures\TalentScout\talentscout\.next\server\pages\_document.js:1:422) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [Array]
+}
+[TypeError: Cannot read properties of undefined (reading '/_app')]
+ ⨯ [TypeError: Cannot read properties of undefined (reading '/_app')]
+[TypeError: Cannot read properties of undefined (reading '/_app')]

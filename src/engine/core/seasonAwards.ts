@@ -16,6 +16,7 @@ import type {
   ScoutReport,
 } from "./types";
 import { deriveSeasonReviewMetrics } from "../career/seasonReviewContext";
+import { annualizeMonthlyAmount } from "./annualization";
 
 // =============================================================================
 // CONSTANTS
@@ -121,12 +122,12 @@ function computeSeasonStats(
   const finances = state.finances;
   const income = finances
     ? finances.transactions
-        .filter((t) => t.season === season && t.amount > 0)
+        .filter((t) => t.kind !== "openingBalance" && t.season === season && t.amount > 0)
         .reduce((sum, t) => sum + t.amount, 0)
-    : state.scout.salary * 38; // approximate weekly salary * 38 weeks
+    : annualizeMonthlyAmount(state.scout.salary);
   const expenses = finances
     ? finances.transactions
-        .filter((t) => t.season === season && t.amount < 0)
+        .filter((t) => t.kind !== "openingBalance" && t.season === season && t.amount < 0)
         .reduce((sum, t) => sum + Math.abs(t.amount), 0)
     : 0;
   const profitLoss = income - expenses;

@@ -14,6 +14,30 @@
  */
 
 import type { GameState, Position } from "./types";
+import { getCareerElapsedWeeks } from "./gameDate";
+
+/**
+ * Count countries where the scout has generated real career evidence.
+ * World initialization creates dormant reputation records for active
+ * countries, so record presence alone cannot mean that a country was scouted.
+ */
+export function countCountriesScouted(state: GameState): number {
+  return Object.values(state.scout.countryReputations ?? {}).filter(
+    (reputation) =>
+      reputation.familiarity > 50
+      || reputation.reportsSubmitted > 0
+      || reputation.successfulFinds > 0
+      || reputation.contactCount > 0,
+  ).length;
+}
+
+/** Career weeks played on the fixture-derived competition calendar. */
+export function countCareerWeeksPlayed(state: GameState): number {
+  return getCareerElapsedWeeks(state.fixtures, {
+    season: state.currentSeason,
+    week: state.currentWeek,
+  });
+}
 
 // =============================================================================
 // TYPES
@@ -90,13 +114,13 @@ const PROGRESS_CALCULATORS: Record<
 
   // Countries
   "countries-3": (s) =>
-    numericProgress(Object.keys(s.scout.countryReputations).length, 3),
+    numericProgress(countCountriesScouted(s), 3),
   "countries-6": (s) =>
-    numericProgress(Object.keys(s.scout.countryReputations).length, 6),
+    numericProgress(countCountriesScouted(s), 6),
   "countries-10": (s) =>
-    numericProgress(Object.keys(s.scout.countryReputations).length, 10),
+    numericProgress(countCountriesScouted(s), 10),
   "countries-15": (s) =>
-    numericProgress(Object.keys(s.scout.countryReputations).length, 15),
+    numericProgress(countCountriesScouted(s), 15),
 
   // Alumni
   "alumni-5": (s) => numericProgress(s.alumniRecords.length, 5),
@@ -107,7 +131,7 @@ const PROGRESS_CALCULATORS: Record<
 
   // Marathon
   "marathon": (s) =>
-    numericProgress((s.currentSeason - 1) * 52 + s.currentWeek, 50),
+    numericProgress(countCareerWeeksPlayed(s), 50),
 
   // Observations
   "observations-50": (s) =>

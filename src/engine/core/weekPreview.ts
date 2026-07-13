@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { ACTIVITY_SLOT_COSTS } from "./calendar";
 import { isScoutAbroad } from "../world/travel";
+import { isFixtureInSeason } from "../world/fixtures";
 
 // =============================================================================
 // Types (F16)
@@ -203,7 +204,10 @@ export function generateWeekPreview(state: GameState): WeekPreview {
 
   // 1. Get this week's unplayed fixtures
   const weekFixtures = Object.values(fixtures).filter(
-    (f) => f.week === currentWeek && !f.played,
+    (f) =>
+      isFixtureInSeason(f, state.currentSeason) &&
+      f.week === currentWeek &&
+      !f.played,
   );
 
   // 2. Build lookup indexes
@@ -315,7 +319,10 @@ export function suggestOptimalSchedule(
 
   // 2. Get relevant matches and suggest attending the top ones
   const weekFixtures = Object.values(fixtures).filter(
-    (f) => f.week === currentWeek && !f.played,
+    (f) =>
+      isFixtureInSeason(f, state.currentSeason) &&
+      f.week === currentWeek &&
+      !f.played,
   );
   const clubPlayerIndex = buildClubPlayerIndex(players);
   const watchlistSet = new Set(watchlist ?? []);

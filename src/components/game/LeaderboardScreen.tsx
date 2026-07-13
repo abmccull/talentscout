@@ -10,6 +10,7 @@ import { Award, Trophy, Loader2, Globe, HardDrive } from "lucide-react";
 import { getLeaderboard } from "@/lib/leaderboard";
 import type { LeaderboardEntry } from "@/engine/core/types";
 import { BETA_GLOBAL_LEADERBOARD_MESSAGE } from "@/config/beta";
+import { getSeasonLength, isGameSeasonComplete } from "@/engine/core/gameDate";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -189,7 +190,14 @@ export function LeaderboardScreen() {
   if (!gameState) return null;
 
   const scoutName = `${gameState.scout.firstName} ${gameState.scout.lastName}`;
-  const isEndOfSeason = gameState.currentWeek >= 38;
+  const seasonLength = getSeasonLength(
+    gameState.fixtures,
+    gameState.currentSeason,
+  );
+  const isEndOfSeason = isGameSeasonComplete(gameState.fixtures, {
+    week: gameState.currentWeek,
+    season: gameState.currentSeason,
+  });
 
   // ── Submit handler ────────────────────────────────────────────────────────
 
@@ -223,7 +231,7 @@ export function LeaderboardScreen() {
           <div>
             <h1 className="text-2xl font-bold">Leaderboard</h1>
             <p className="text-sm text-zinc-400">
-              Top scouts ranked by season score on this device
+              Top scouts ranked by season score on this device · Season {gameState.currentSeason}, week {gameState.currentWeek} of {seasonLength}
             </p>
           </div>
 

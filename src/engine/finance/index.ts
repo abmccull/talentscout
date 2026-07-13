@@ -18,6 +18,8 @@ export {
   applyFirstReportBonus,
   applyFirstPlacementBonus,
   processStarterStipend,
+  applyBalanceTransaction,
+  applyDifficultyFinancialAdjustments,
 } from "./expenses";
 
 export {
@@ -51,7 +53,12 @@ export type {
   EquipmentInventory,
 } from "./equipmentCatalog";
 
-export { migrateFinancialRecord, migrateEmployeeSkillsInRecord, migrateReportListingBids } from "./saveMigration";
+export {
+  migrateFinancialRecord,
+  migrateEmployeeSkillsInRecord,
+  migrateReportListingBids,
+  reconcileFinancialLedger,
+} from "./saveMigration";
 export {
   ROLE_SKILL_NAMES,
   ROLE_SKILL_DESCRIPTIONS,
@@ -67,6 +74,21 @@ export {
   getSkillSummary,
 } from "./employeeSkills";
 export type { TrainingOption } from "./employeeSkills";
+export {
+  getEmployeeSalaryBand,
+  getEmployeePayPosition,
+  getEmployeePayEffects,
+  processEmployeePaySatisfaction,
+  normalizeEmployeeContract,
+  normalizeEmployeeContractsInRecord,
+  renegotiateEmployeeSalary,
+} from "./employeeEconomics";
+export type {
+  EmployeePayPosition,
+  EmployeeSalaryBand,
+  EmployeePayEffects,
+  NormalizedEmployeeContract,
+} from "./employeeEconomics";
 
 // Economics Revamp modules
 export { LIFESTYLE_TIERS, getDefaultLifestyle, changeLifestyle, getLifestyleReputationPenalty, getLifestyleNetworkingBonus } from "./lifestyle";
@@ -84,6 +106,12 @@ export { processAnnualAwards } from "./awards";
 export { getLoanEligibility, takeLoan, processLoanPayment, repayLoanEarly } from "./loans";
 export { generateConsultingOffers, acceptConsulting, processConsultingDeadline, completeConsulting } from "./consulting";
 export { calculateProfitAndLoss, forecastCashFlow, calculateRevenueBreakdown, calculateNetWorth } from "./dashboard";
+export {
+  getRecoverySuggestions,
+  isBankruptcyRecoveryActive,
+  processDistress,
+  sellEquipmentForCash,
+} from "./distress";
 
 // F14: Financial Strategy Layer
 export {

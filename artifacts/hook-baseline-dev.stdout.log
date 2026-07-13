@@ -1,0 +1,168 @@
+
+> talentscout@1.0.0 dev
+> next dev
+
+   ▲ Next.js 15.5.20
+   - Local:        http://localhost:3000
+   - Network:      http://192.168.68.51:3000
+
+ ✓ Starting...
+ ✓ Ready in 3.5s
+ ○ Compiling /play ...
+ ✓ Compiled /play in 16.7s (4041 modules)
+ GET /play 200 in 2050ms
+ GET /play 200 in 374ms
+ ✓ Compiled in 2.2s (1763 modules)
+ ✓ Compiled in 360ms (1763 modules)
+ GET /play 200 in 134ms
+ ✓ Compiled in 1052ms (1763 modules)
+ ✓ Compiled in 959ms (1763 modules)
+ ✓ Compiled in 414ms (1763 modules)
+ ✓ Compiled in 428ms (1763 modules)
+ ✓ Compiled in 342ms (1763 modules)
+ ✓ Compiled in 761ms (1763 modules)
+ ✓ Compiled in 711ms (1763 modules)
+ ✓ Compiled in 2.1s (1765 modules)
+ ✓ Compiled in 417ms (1765 modules)
+ ✓ Compiled in 491ms (1765 modules)
+ ✓ Compiled in 488ms (1765 modules)
+ ✓ Compiled in 597ms (1765 modules)
+ ✓ Compiled in 480ms (1765 modules)
+ ✓ Compiled in 544ms (1765 modules)
+ ✓ Compiled in 572ms (1765 modules)
+ ✓ Compiled in 438ms (1765 modules)
+ ✓ Compiled in 553ms (1765 modules)
+ ✓ Compiled in 672ms (1765 modules)
+ ✓ Compiled in 631ms (1765 modules)
+ ✓ Compiled in 1856ms (1766 modules)
+ ✓ Compiled in 577ms (1766 modules)
+ ✓ Compiled in 477ms (1766 modules)
+ ✓ Compiled in 436ms (1766 modules)
+ ✓ Compiled in 442ms (1766 modules)
+ ✓ Compiled in 579ms (1766 modules)
+ ✓ Compiled in 426ms (1766 modules)
+ ✓ Compiled in 503ms (1767 modules)
+ ✓ Compiled in 491ms (1767 modules)
+ ✓ Compiled in 573ms (1767 modules)
+ ✓ Compiled in 562ms (1767 modules)
+ ✓ Compiled in 328ms (1767 modules)
+ ✓ Compiled in 315ms (1767 modules)
+ ✓ Compiled in 593ms (1767 modules)
+ ✓ Compiled in 2.2s (1767 modules)
+ ✓ Compiled in 519ms (1767 modules)
+ ✓ Compiled in 539ms (1767 modules)
+ ✓ Compiled in 779ms (1767 modules)
+ ✓ Compiled in 346ms (1767 modules)
+ ✓ Compiled in 1567ms (1770 modules)
+ ✓ Compiled in 437ms (1770 modules)
+ ✓ Compiled in 520ms (1770 modules)
+ ✓ Compiled in 394ms (1770 modules)
+ ✓ Compiled in 493ms (1770 modules)
+ ✓ Compiled in 859ms (1770 modules)
+ ✓ Compiled in 503ms (1770 modules)
+ ✓ Compiled in 434ms (1770 modules)
+ ✓ Compiled in 345ms (1770 modules)
+ ✓ Compiled in 2.4s (1770 modules)
+ ✓ Compiled in 585ms (1770 modules)
+ ✓ Compiled in 385ms (1770 modules)
+ ✓ Compiled in 341ms (1771 modules)
+ ✓ Compiled in 682ms (1771 modules)
+ ✓ Compiled in 498ms (1771 modules)
+ ✓ Compiled in 922ms (1772 modules)
+ ✓ Compiled in 561ms (1772 modules)
+ ✓ Compiled in 375ms (1772 modules)
+ ✓ Compiled in 1049ms (1772 modules)
+ ✓ Compiled in 371ms (1772 modules)
+ ✓ Compiled in 549ms (1772 modules)
+ ✓ Compiled in 413ms (1772 modules)
+ ✓ Compiled in 356ms (1772 modules)
+ ✓ Compiled in 392ms (1773 modules)
+ ✓ Compiled in 343ms (1773 modules)
+ ✓ Compiled in 396ms (1773 modules)
+ ✓ Compiled in 574ms (1773 modules)
+ ✓ Compiled in 375ms (1773 modules)
+ ✓ Compiled in 446ms (1773 modules)
+ ✓ Compiled in 360ms (1773 modules)
+ ✓ Compiled in 327ms (1773 modules)
+ ✓ Compiled in 357ms (1773 modules)
+ ✓ Compiled in 907ms (1773 modules)
+ ✓ Compiled in 530ms (1773 modules)
+ ✓ Compiled in 420ms (1773 modules)
+ ✓ Compiled in 349ms (1773 modules)
+ ✓ Compiled in 347ms (1773 modules)
+ ✓ Compiled in 343ms (1773 modules)
+ ✓ Compiled in 421ms (1773 modules)
+ ✓ Compiled in 527ms (1773 modules)
+ ✓ Compiled in 730ms (1773 modules)
+ ✓ Compiled in 432ms (1773 modules)
+ ✓ Compiled in 625ms (1773 modules)
+ ✓ Compiled in 492ms (1773 modules)
+ ✓ Compiled in 426ms (1773 modules)
+ ✓ Compiled in 821ms (1777 modules)
+ ✓ Compiled in 374ms (1777 modules)
+ ✓ Compiled in 545ms (1777 modules)
+ ✓ Compiled in 498ms (1777 modules)
+ ✓ Compiled in 429ms (1777 modules)
+ ✓ Compiled in 1303ms (1777 modules)
+ ✓ Compiled in 573ms (1777 modules)
+ ✓ Compiled in 479ms (1777 modules)
+ ✓ Compiled in 895ms (1777 modules)
+ ✓ Compiled in 395ms (1777 modules)
+ ✓ Compiled in 590ms (1777 modules)
+ ✓ Compiled in 380ms (1777 modules)
+ ✓ Compiled in 332ms (1777 modules)
+ ○ Compiling /play ...
+ ✓ Compiled /play in 2.4s (2283 modules)
+ GET /play 200 in 4809ms
+ ✓ Compiled in 862ms (1777 modules)
+ GET /play 200 in 117ms
+ ✓ Compiled in 927ms (4060 modules)
+ GET /play 200 in 234ms
+ ✓ Compiled in 498ms (1777 modules)
+ ✓ Compiled in 1145ms (4060 modules)
+ ✓ Compiled in 685ms (4060 modules)
+ ✓ Compiled in 415ms (1777 modules)
+ GET /play 200 in 830ms
+ GET /play 200 in 58ms
+ ✓ Compiled in 432ms (1777 modules)
+ ✓ Compiled in 798ms (4060 modules)
+ ✓ Compiled in 3.5s (4060 modules)
+ ✓ Compiled in 1006ms (4060 modules)
+ ✓ Compiled in 684ms (4060 modules)
+ ✓ Compiled in 1346ms (4060 modules)
+ GET /play 200 in 1028ms
+ GET /play 200 in 87ms
+ ✓ Compiled in 481ms (1777 modules)
+ GET /play 200 in 77ms
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 14.6s (4408 modules)
+ GET /play 500 in 25435ms
+ GET /play 500 in 1362ms
+ GET /play 500 in 20268ms
+ GET /play 500 in 1425ms
+ ✓ Compiled in 4.4s (4408 modules)
+ GET /play 500 in 1145ms
+ GET /play 500 in 282ms
+ ✓ Compiled in 3.7s (4408 modules)
+ ✓ Compiled in 430ms (1930 modules)
+ ✓ Compiled in 400ms (1930 modules)
+ ✓ Compiled in 529ms (1930 modules)
+ ✓ Compiled in 6.5s (4408 modules)
+ ✓ Compiled in 3.5s (4312 modules)
+ ✓ Compiled in 796ms (4312 modules)
+ ✓ Compiled in 470ms (1929 modules)
+ ✓ Compiled in 527ms (1929 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 2.4s (4311 modules)
+ ○ Compiling /_error ...
+ ✓ Compiled /_error in 1145ms (4407 modules)
+ GET / 500 in 3898ms
+ GET / 500 in 43ms
+ GET / 307 in 637ms
+ ✓ Compiled in 2.9s (4421 modules)
+ ✓ Compiled in 739ms (4421 modules)
+ ✓ Compiled in 945ms (4421 modules)
+ ✓ Compiled in 467ms (1930 modules)
+ GET / 307 in 340ms
+ GET /play 200 in 453ms
+[?25h

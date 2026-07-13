@@ -8,23 +8,48 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target, DollarSign, X } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { ConvictionLevel, AttributeReading, PlayerAttribute, SystemFitResult } from "@/engine/core/types";
+import type {
+  ConvictionLevel,
+  AttributeReading,
+  JudgmentCategory,
+  PlayerAttribute,
+  PlayerRole,
+  ReflectionHypothesisRecord,
+  StructuredReportInput,
+  SystemFitResult,
+  YouthPresentationApproach,
+} from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import {
+  evaluatePresentationStrategy,
   generateReportContent,
-  estimateReportQuality,
+  PRESENTATION_APPROACHES,
+  prepareReportSubmission,
 } from "@/engine/reports";
-import { estimateReportPriceRange, getActiveEquipmentBonuses } from "@/engine/finance";
+import {
+  calculateInfrastructureEffects,
+  estimateReportPriceRange,
+  getActiveEquipmentBonuses,
+} from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
-import { starsToAbility } from "@/engine/scout/starRating";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useTranslations } from "next-intl";
 import { ARCHETYPE_LABELS, ARCHETYPE_DESCRIPTIONS } from "@/engine/players/personalityEffects";
-import { resolvePlayerEntity } from "@/lib/playerResolution";
+import {
+  getResolvedContactIntel,
+  getResolvedPlayerIds,
+  resolvePlayerEntity,
+} from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
+import { ROLE_DEFINITIONS } from "@/engine/players/roles";
+import { validateStructuredReportInput } from "@/engine/reports/structuredYouthReport";
+import { getRemainingTablePounds } from "@/engine/reports/conviction";
+import { EvidenceBoard } from "@/components/game/evidence";
+import { getSeasonLength } from "@/engine/core/gameDate";
+import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
@@ -79,6 +104,25 @@ interface DescriptorOption {
 
 const MAX_STRENGTHS = 3;
 const MAX_WEAKNESSES = 2;
+const JUDGMENT_CATEGORIES: JudgmentCategory[] = ["potential", "roleFit", "characterRisk"];
+const JUDGMENT_LABELS: Record<JudgmentCategory, string> = {
+  potential: "Development potential",
+  roleFit: "Tactical role fit",
+  characterRisk: "Character and adaptation risk",
+};
+
+function isBoardIntelMessage(title: string, body: string): boolean {
+  const text = `${title} ${body}`.toLowerCase();
+  return ["coach", "parent", "family", "contact", "intel", "tip", "gossip"]
+    .some((token) => text.includes(token));
+}
+
+interface CategoryDraft {
+  verdict: string;
+  confidence: "low" | "medium" | "high";
+  uncertainty: string;
+  hypothesisIds: string[];
+}
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -127,14 +171,14 @@ function FormIndicator({ form }: { form: number }) {
 }
 
 export function ReportWriter() {
-  const {
-    gameState,
-    selectedPlayerId,
-    setScreen,
-    submitReport,
-    getPlayerObservations,
-    getClub,
-  } = useGameStore();
+  const gameState = useGameStore((state) => state.gameState);
+  const selectedPlayerId = useGameStore((state) => state.selectedPlayerId);
+  const setScreen = useGameStore((state) => state.setScreen);
+  const submitReport = useGameStore((state) => state.submitReport);
+  const getPlayerObservations = useGameStore(
+    (state) => state.getPlayerObservations,
+  );
+  const getClub = useGameStore((state) => state.getClub);
 
   const { playSFX } = useAudio();
   const t = useTranslations("report");
@@ -144,6 +188,35 @@ export function ReportWriter() {
   const [summary, setSummary] = useState("");
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
+  const [briefId, setBriefId] = useState("");
+  const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
+  const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
+  const [recruitmentNeed, setRecruitmentNeed] = useState("");
+  const [projectedRole, setProjectedRole] = useState<PlayerRole | "">("");
+  const [recommendedAction, setRecommendedAction] = useState<StructuredReportInput["recommendedAction"]>("inviteForTrial");
+  const [riskInput, setRiskInput] = useState("Adaptation to academy structure");
+  const [estimatedWeeklyWage, setEstimatedWeeklyWage] = useState(250);
+  const [alternativePlayerId, setAlternativePlayerId] = useState("");
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<JudgmentCategory, CategoryDraft>>({
+    potential: {
+      verdict: "Shows a credible development pathway if the positive indicators repeat.",
+      confidence: "medium",
+      uncertainty: "Long-term growth has not yet been observed.",
+      hypothesisIds: [],
+    },
+    roleFit: {
+      verdict: "The observed actions suggest a plausible fit for the proposed role.",
+      confidence: "medium",
+      uncertainty: "Needs evidence in another tactical context.",
+      hypothesisIds: [],
+    },
+    characterRisk: {
+      verdict: "No decisive character concern, but the evidence remains incomplete.",
+      confidence: "low",
+      uncertainty: "Pressure response and adaptability need further evidence.",
+      hypothesisIds: [],
+    },
+  });
   const draftApplied = useRef(false);
 
   // Derive data before any early return
@@ -203,50 +276,218 @@ export function ReportWriter() {
     return generateReportContent(player, observations, gameState.scout);
   }, [player, gameState, observations]);
 
-  // Compute average confidence and perceived CA from merged readings
-  const { avgConfidence, perceivedCA } = useMemo(() => {
-    const readings = Array.from(merged.values());
-    if (readings.length === 0) return { avgConfidence: 0, perceivedCA: undefined };
-    const avg = readings.reduce((s, r) => s + r.confidence, 0) / readings.length;
-    const weightedAvg = readings.reduce((s, r) => s + r.perceivedValue, 0) / readings.length;
-    return { avgConfidence: avg, perceivedCA: Math.round(weightedAvg * 10) };
-  }, [merged]);
+  const equipmentReportQualityBonus = useMemo(() => {
+    if (!gameState?.finances?.equipment) return 0;
+    const bonuses = getActiveEquipmentBonuses(gameState.finances.equipment.loadout);
+    return bonuses.reportQuality;
+  }, [gameState?.finances?.equipment]);
 
-  // Live quality preview -- updates whenever relevant inputs change
-  const qualityPreview = useMemo(
-    () =>
-      estimateReportQuality({
-        observationCount: observations.length,
-        avgConfidence,
-        convictionLevel: conviction,
-        strengthCount: selectedStrengths.length,
-        weaknessCount: selectedWeaknesses.length,
-        availableStrengthCount: draft?.suggestedStrengthClaims.length,
-        availableWeaknessCount: draft?.suggestedWeaknessClaims.length,
-        scoutSkills: gameState?.scout.skills ?? {},
-        assessedAttributeCount: merged.size,
-        position: player?.position,
-        perceivedCA,
-        age: player?.age,
-        perceivedPA: draft?.perceivedPARange
-          ? starsToAbility((draft.perceivedPARange[0] + draft.perceivedPARange[1]) / 2)
-          : undefined,
-      }),
-    [
-      observations.length,
-      avgConfidence,
+  const infrastructureReportQualityBonus = useMemo(
+    () => gameState
+      ? calculateInfrastructureEffects(gameState.scoutingInfrastructure).reportQualityBonus
+      : 0,
+    [gameState],
+  );
+  const unsignedYouth = useMemo(
+    () => gameState && canonicalPlayerId
+      ? Object.values(gameState.unsignedYouth).find((youth) => youth.player.id === canonicalPlayerId)
+      : undefined,
+    [canonicalPlayerId, gameState],
+  );
+  const isYouthCase = Boolean(
+    gameState?.scout.primarySpecialization === "youth" && unsignedYouth,
+  );
+  const matchingBriefs = useMemo(() => {
+    if (!gameState || !player || !isYouthCase) return [];
+    return Object.values(gameState.youthRecruitmentBriefs)
+      .filter((brief) =>
+        brief.status === "open"
+      )
+      .sort((left, right) =>
+        Number(
+          right.requiredPositions.includes(player.position)
+          || player.secondaryPositions.some((position) => right.requiredPositions.includes(position)),
+        ) - Number(
+          left.requiredPositions.includes(player.position)
+          || player.secondaryPositions.some((position) => left.requiredPositions.includes(position)),
+        )
+        || right.competitionPressure - left.competitionPressure
+        || left.expiresSeason - right.expiresSeason
+        || left.expiresWeek - right.expiresWeek
+      );
+  }, [gameState, isYouthCase, player]);
+  const activeBrief = matchingBriefs.find((brief) => brief.id === briefId);
+  const activeBriefClub = activeBrief && gameState
+    ? gameState.clubs[activeBrief.clubId]
+    : undefined;
+  const activeRecruitmentIdentity = activeBrief && activeBriefClub
+    ? deriveBriefRecruitmentIdentity(activeBriefClub, activeBrief)
+    : undefined;
+  const compatibleRoles = useMemo(
+    () => player
+      ? ROLE_DEFINITIONS.filter((definition) => definition.positions.includes(player.position))
+          .map((definition) => definition.role)
+      : [],
+    [player],
+  );
+  const playerHypotheses = useMemo(() => {
+    if (!gameState || !canonicalPlayerId) return [];
+    const latest = new Map<string, ReflectionHypothesisRecord>();
+    Object.values(gameState.reflectionJournal)
+      .sort((left, right) => left.createdAt - right.createdAt)
+      .forEach((entry) => entry.hypotheses.forEach((hypothesis) => {
+        if (hypothesis.playerId === canonicalPlayerId) latest.set(hypothesis.id, hypothesis);
+      }));
+    return [...latest.values()];
+  }, [canonicalPlayerId, gameState]);
+  const alternativeCandidates = useMemo(() => {
+    if (!gameState || !player) return [];
+    return Object.values(gameState.unsignedYouth)
+      .filter((youth) =>
+        youth.player.id !== player.id
+        && !youth.placed
+        && !youth.retired
+        && youth.player.position === player.position
+        && Object.values(gameState.observations).some((observation) => observation.playerId === youth.player.id)
+      )
+      .slice(0, 8);
+  }, [gameState, player]);
+  const remainingTablePounds = gameState
+    ? getRemainingTablePounds({
+        reports: Object.values(gameState.reports),
+        scoutId: gameState.scout.id,
+        season: gameState.currentSeason,
+        careerTier: gameState.scout.careerTier,
+      })
+    : 0;
+
+  useEffect(() => {
+    if (!isYouthCase || matchingBriefs.length === 0) return;
+    if (!matchingBriefs.some((brief) => brief.id === briefId)) {
+      setBriefId(matchingBriefs[0].id);
+    }
+  }, [briefId, isYouthCase, matchingBriefs]);
+
+  useEffect(() => {
+    if (!activeBrief || !player || !gameState) return;
+    const receivingClub = gameState.clubs[activeBrief.clubId];
+    setRecruitmentNeed(
+      `${receivingClub?.name ?? "The academy"} needs a ${activeBrief.requiredPositions.join("/")} prospect for a ${activeBrief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()} pathway.`,
+    );
+    setProjectedRole(activeBrief.preferredRole ?? compatibleRoles[0] ?? "");
+    setEstimatedWeeklyWage(Math.min(activeBrief.weeklyWageBudget, Math.max(150, Math.round(activeBrief.weeklyWageBudget * 0.75))));
+  }, [activeBrief, compatibleRoles, gameState, player]);
+
+  useEffect(() => {
+    if (playerHypotheses.length === 0) return;
+    const idsFor = (category: JudgmentCategory) => playerHypotheses
+      .filter((hypothesis) => {
+        if (category === "roleFit") return hypothesis.domain === "tactical";
+        if (category === "characterRisk") return hypothesis.domain === "mental" || hypothesis.domain === "hidden";
+        return hypothesis.domain === "technical" || hypothesis.domain === "physical";
+      })
+      .map((hypothesis) => hypothesis.id);
+    setCategoryDrafts((current) => Object.fromEntries(
+      JUDGMENT_CATEGORIES.map((category) => [category, {
+        ...current[category],
+        hypothesisIds: current[category].hypothesisIds.length > 0
+          ? current[category].hypothesisIds
+          : idsFor(category),
+      }]),
+    ) as Record<JudgmentCategory, CategoryDraft>);
+  }, [playerHypotheses]);
+
+  const structuredInput = useMemo<StructuredReportInput | undefined>(() => {
+    if (!isYouthCase || !activeBrief || !projectedRole) return undefined;
+    return {
+      briefId: activeBrief.id,
+      intendedClubId: activeBrief.clubId,
+      intendedAudience,
+      presentationApproach,
+      recruitmentNeed,
+      projectedRole,
+      recommendedAction,
+      riskFactors: riskInput.split("\n").map((risk) => risk.trim()).filter(Boolean),
+      estimatedWeeklyWage,
+      decisionDeadlineWeek: activeBrief.expiresWeek,
+      decisionDeadlineSeason: activeBrief.expiresSeason,
+      categoryVerdicts: Object.fromEntries(
+        JUDGMENT_CATEGORIES.map((category) => [category, {
+          verdict: categoryDrafts[category].verdict,
+          confidence: categoryDrafts[category].confidence,
+          hypothesisIds: categoryDrafts[category].hypothesisIds,
+          acknowledgedUncertainty: categoryDrafts[category].uncertainty,
+        }]),
+      ) as StructuredReportInput["categoryVerdicts"],
+      alternativePlayerIds: alternativePlayerId ? [alternativePlayerId] : [],
+    };
+  }, [
+    activeBrief,
+    alternativePlayerId,
+    categoryDrafts,
+    estimatedWeeklyWage,
+    intendedAudience,
+    isYouthCase,
+    presentationApproach,
+    projectedRole,
+    recommendedAction,
+    recruitmentNeed,
+    riskInput,
+  ]);
+  const structuredValidation = useMemo(
+    () => structuredInput
+      ? validateStructuredReportInput(structuredInput, activeBrief)
+      : { valid: !isYouthCase, errors: isYouthCase ? ["Select a matching academy brief."] : [] },
+    [activeBrief, isYouthCase, structuredInput],
+  );
+  const totalReportQualityBonus =
+    equipmentReportQualityBonus + infrastructureReportQualityBonus;
+
+  // Live quality preview uses the exact pure preparation path used by the
+  // submission action, including infrastructure and equipment bonuses.
+  const qualityPreview = useMemo(() => {
+    if (!draft || !gameState || !player || !canonicalPlayerId) {
+      return {
+        score: 0,
+        breakdown: {
+          observationDepth: 0,
+          confidenceLevel: 0,
+          convictionFit: 0,
+          detail: 0,
+          scoutSkill: 0,
+          equipmentBonus: 0,
+        },
+        hints: [] as string[],
+      };
+    }
+
+    return prepareReportSubmission({
+      draft,
       conviction,
-      selectedStrengths.length,
-      selectedWeaknesses.length,
-      draft?.suggestedStrengthClaims.length,
-      draft?.suggestedWeaknessClaims.length,
-      gameState?.scout.skills,
-      merged.size,
-      player?.position,
-      perceivedCA,
-      player?.age,
-      draft?.perceivedPARange,
-    ]
+      summary,
+      strengths: selectedStrengths,
+      weaknesses: selectedWeaknesses,
+      scout: gameState.scout,
+      week: gameState.currentWeek,
+      season: gameState.currentSeason,
+      playerId: canonicalPlayerId,
+      observations,
+      playerContext: player,
+      reportQualityBonus: totalReportQualityBonus,
+    }).quality;
+  },
+    [
+      draft,
+      gameState,
+      player,
+      canonicalPlayerId,
+      conviction,
+      summary,
+      selectedStrengths,
+      selectedWeaknesses,
+      observations,
+      totalReportQualityBonus,
+    ],
   );
 
   const strengthOptions = useMemo<DescriptorOption[]>(
@@ -284,13 +525,6 @@ export function ReportWriter() {
     ),
     [selectedWeaknesses, weaknessClaimsByDescriptor],
   );
-
-  // Equipment report quality bonus for display
-  const equipmentReportQualityBonus = useMemo(() => {
-    if (!gameState?.finances?.equipment) return 0;
-    const bonuses = getActiveEquipmentBonuses(gameState.finances.equipment.loadout);
-    return bonuses.reportQuality;
-  }, [gameState?.finances?.equipment]);
 
   // Live pricing estimate for independent scouts
   const isIndependent = gameState?.scout.careerPath === "independent";
@@ -407,6 +641,44 @@ export function ReportWriter() {
     );
   }
 
+  const boardCanonicalPlayerId = canonicalPlayerId ?? selectedPlayerId;
+  const boardPlayerIds = new Set(getResolvedPlayerIds(gameState, boardCanonicalPlayerId));
+  const boardContactIntel = getResolvedContactIntel(gameState, boardCanonicalPlayerId);
+  const boardMessages = gameState.inbox
+    .filter((message) =>
+      Boolean(message.relatedId)
+      && boardPlayerIds.has(message.relatedId!)
+      && isBoardIntelMessage(message.title, message.body),
+    )
+    .map((message) => ({
+      id: message.id,
+      title: message.title,
+      body: message.body,
+      week: message.week,
+      season: message.season,
+    }));
+  const boardJournalEntries = Object.values(gameState.reflectionJournal)
+    .filter((entry) => entry.playerIds.some((id) => boardPlayerIds.has(id)));
+  const boardReports = Object.values(gameState.reports)
+    .filter((report) => boardPlayerIds.has(report.playerId));
+  const boardNpcReports = Object.values(gameState.npcReports ?? {})
+    .filter((report) => boardPlayerIds.has(report.playerId));
+  const boardSeasonLength = getSeasonLength(gameState.fixtures, gameState.currentSeason);
+  const selectedBoardHypothesisIds = JUDGMENT_CATEGORIES.flatMap(
+    (category) => categoryDrafts[category].hypothesisIds,
+  );
+
+  const updateCategoryDraft = (
+    category: JudgmentCategory,
+    update: Partial<CategoryDraft>,
+  ) => {
+    setIsDirty(true);
+    setCategoryDrafts((current) => ({
+      ...current,
+      [category]: { ...current[category], ...update },
+    }));
+  };
+
   const toggleStrength = (option: DescriptorOption) => {
     const isSelected = selectedStrengths.includes(option.descriptor);
     const canAdd = isSelected || selectedStrengths.length < MAX_STRENGTHS;
@@ -461,18 +733,26 @@ export function ReportWriter() {
   };
 
   const handleSubmit = () => {
-    if (!summary.trim()) return;
+    if (!summary.trim() || (isYouthCase && !structuredInput)) return;
     setIsDirty(false);
     playSFX("report-submit");
-    submitReport(conviction, summary.trim(), selectedStrengths, selectedWeaknesses);
+    submitReport(
+      conviction,
+      summary.trim(),
+      selectedStrengths,
+      selectedWeaknesses,
+      isYouthCase ? structuredInput : undefined,
+    );
   };
 
   const isTablePound = conviction === "tablePound";
-  const canSubmit = summary.trim().length > 0 && observations.length > 0;
+  const canSubmit = summary.trim().length > 0
+    && observations.length > 0
+    && (!isYouthCase || structuredValidation.valid);
 
   return (
     <GameLayout>
-      <div className="relative min-h-full p-4 sm:p-6 lg:p-8">
+      <div className="relative min-h-full p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
         <div className="relative z-10 mx-auto max-w-6xl">
         <button
@@ -499,6 +779,429 @@ export function ReportWriter() {
             </p>
           </div>
         </div>
+
+        {isYouthCase && (
+          <section
+            className="mb-6 rounded-2xl border border-emerald-400/25 bg-[linear-gradient(145deg,rgba(16,185,129,0.11),rgba(16,21,27,0.98)_44%)] p-4 shadow-xl shadow-black/20 sm:p-6"
+            aria-labelledby="academy-case-heading"
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Academy placement case</p>
+                <h2 id="academy-case-heading" className="mt-1 text-xl font-bold text-white">Answer a real club need</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-300">
+                  The club will judge fit, evidence, price, risk, and your calibration—not hidden player ability.
+                </p>
+              </div>
+              {activeBrief && (
+                <Badge variant="warning" className="w-fit text-[10px]">
+                  Pressure {activeBrief.competitionPressure}/100
+                </Badge>
+              )}
+            </div>
+
+            {matchingBriefs.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+                No open brief currently accepts this player&apos;s age. Keep observing or wait for the next academy request.
+              </div>
+            ) : (
+              <div className="mt-5 space-y-5">
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_repeat(3,minmax(0,0.65fr))]">
+                  <label className="text-xs font-medium text-zinc-300">
+                    Recruitment brief
+                    <select
+                      value={briefId}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setBriefId(event.target.value);
+                      }}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-[#0b0f13] px-3 text-sm text-white outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/40"
+                    >
+                      {matchingBriefs.map((brief) => (
+                        <option key={brief.id} value={brief.id}>
+                          {gameState.clubs[brief.clubId]?.name ?? "Unknown club"} — {brief.requiredPositions.join("/")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Deadline</p>
+                    <p className="mt-1 text-sm font-semibold text-white">
+                      S{activeBrief?.expiresSeason} W{activeBrief?.expiresWeek}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Wage ceiling</p>
+                    <p className="mt-1 text-sm font-semibold text-white">£{activeBrief?.weeklyWageBudget.toLocaleString()}/wk</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Risk appetite</p>
+                    <p className="mt-1 text-sm font-semibold capitalize text-white">{activeBrief?.riskTolerance}</p>
+                  </div>
+                </div>
+
+                {activeRecruitmentIdentity && activeBrief && (
+                  <div
+                    className="rounded-xl border border-sky-400/20 bg-sky-400/[0.07] p-4"
+                    data-testid="recruitment-identity-briefing"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-300">
+                      Recruitment room identity
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{activeRecruitmentIdentity.label}</p>
+                        <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-300">
+                          This club will weight {activeBrief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()} more heavily. Evidence, fit, price, and risk still matter; the same case can land differently in another recruitment room.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="w-fit shrink-0 text-[10px]">
+                        One lens, not the verdict
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <label className="text-xs font-medium text-zinc-300 md:col-span-2">
+                    Recruitment need
+                    <textarea
+                      value={recruitmentNeed}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setRecruitmentNeed(event.target.value);
+                      }}
+                      rows={3}
+                      className="mt-2 w-full rounded-lg border border-white/10 bg-black/25 p-3 text-sm leading-5 text-white outline-none focus:border-emerald-400/50"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-zinc-300">
+                    Intended audience
+                    <select
+                      value={intendedAudience}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setIntendedAudience(event.target.value as StructuredReportInput["intendedAudience"]);
+                      }}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-[#0b0f13] px-3 text-sm text-white"
+                    >
+                      <option value="academyDirector">Academy director</option>
+                      <option value="headOfRecruitment">Head of recruitment</option>
+                      <option value="sportingDirector">Sporting director</option>
+                      <option value="client">Independent client</option>
+                    </select>
+                  </label>
+                  <label className="text-xs font-medium text-zinc-300">
+                    Projected role
+                    <select
+                      value={projectedRole}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setProjectedRole(event.target.value as PlayerRole);
+                      }}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-[#0b0f13] px-3 text-sm capitalize text-white"
+                    >
+                      {compatibleRoles.map((role) => (
+                        <option key={role} value={role}>{attrLabel(role)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <fieldset>
+                  <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Recommended next step</legend>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    {([
+                      ["monitor", "Monitor", "Preserve optionality and seek more evidence."],
+                      ["inviteForTrial", "Invite for trial", "Ask the club to test the weakest part of the case."],
+                      ["offerAcademyPlace", "Offer academy place", "Stand behind a signing recommendation now."],
+                    ] as const).map(([value, label, description]) => (
+                      <div key={value} className="relative">
+                        <input
+                          id={`recommended-action-${value}`}
+                          className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                          type="radio"
+                          name="recommended-action"
+                          value={value}
+                          checked={recommendedAction === value}
+                          onChange={() => {
+                            setIsDirty(true);
+                            setRecommendedAction(value);
+                          }}
+                        />
+                        <label
+                          htmlFor={`recommended-action-${value}`}
+                          className={`block min-h-16 cursor-pointer rounded-xl border p-3 text-left transition hover:border-white/20 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-400 ${
+                            recommendedAction === value
+                              ? "border-emerald-400/55 bg-emerald-400/10"
+                              : "border-white/10 bg-black/20"
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold text-white">{label}</span>
+                          <span className="mt-1 block text-xs leading-4 text-zinc-400">{description}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </fieldset>
+
+                <EvidenceBoard
+                  mode="report"
+                  playerName={`${player.firstName} ${player.lastName}`}
+                  observations={observations}
+                  contactIntel={boardContactIntel}
+                  npcReports={boardNpcReports}
+                  currentWeek={gameState.currentWeek}
+                  currentSeason={gameState.currentSeason}
+                  seasonLength={boardSeasonLength}
+                  messages={boardMessages}
+                  flaggedMoments={boardJournalEntries.flatMap((entry) => entry.flaggedMoments ?? [])}
+                  hypotheses={playerHypotheses}
+                  reports={boardReports}
+                  unknowns={JUDGMENT_CATEGORIES.map((category) => categoryDrafts[category].uncertainty)}
+                  selectedHypothesisIds={selectedBoardHypothesisIds}
+                  onToggleHypothesis={(hypothesisId, category) => {
+                    const selected = categoryDrafts[category].hypothesisIds.includes(hypothesisId);
+                    updateCategoryDraft(category, {
+                      hypothesisIds: selected
+                        ? categoryDrafts[category].hypothesisIds.filter((id) => id !== hypothesisId)
+                        : [...categoryDrafts[category].hypothesisIds, hypothesisId],
+                    });
+                  }}
+                />
+
+                <section data-testid="report-presentation-room" className="overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#0d1519] shadow-[0_22px_70px_-45px_rgba(34,211,238,0.6)]" aria-labelledby="presentation-room-title">
+                  <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.16),transparent_42%)] p-4 sm:p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Boardroom step</p>
+                        <h3 id="presentation-room-title" className="mt-1 text-lg font-bold text-white">Choose how you make the case</h3>
+                        <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-400">
+                          Framing changes what the room notices. It cannot improve the underlying evidence, and every approach gives something up.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="w-fit border-cyan-400/25 bg-cyan-400/5 text-cyan-200">Small, bounded effect</Badge>
+                    </div>
+                  </div>
+
+                  <fieldset className="p-3 sm:p-5">
+                    <legend className="sr-only">Presentation approach</legend>
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      {PRESENTATION_APPROACHES.map((approach) => {
+                        const selected = presentationApproach === approach.id;
+                        const preview = activeBrief ? evaluatePresentationStrategy({
+                          approach: approach.id,
+                          intendedAudience,
+                          brief: activeBrief,
+                          contextCount: contexts.length,
+                          hypothesisCount: playerHypotheses.length,
+                          riskFactorCount: riskInput.split("\n").map((risk) => risk.trim()).filter(Boolean).length,
+                          roleMatch: !activeBrief.preferredRole || activeBrief.preferredRole === projectedRole,
+                        }) : null;
+                        const alignment = preview?.alignmentAdjustment ?? 0;
+                        return (
+                          <label
+                            key={approach.id}
+                            className={`relative min-h-48 cursor-pointer rounded-xl border p-4 text-left transition focus-within:outline-none focus-within:ring-2 focus-within:ring-cyan-300 ${
+                              selected
+                                ? "border-cyan-300/60 bg-cyan-300/10 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.12)]"
+                                : "border-white/10 bg-black/20 hover:border-white/25"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="youth-presentation-approach"
+                              value={approach.id}
+                              checked={selected}
+                              onChange={() => {
+                                setIsDirty(true);
+                                setPresentationApproach(approach.id);
+                              }}
+                              className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                            />
+                            <span className="flex items-start justify-between gap-3">
+                              <span>
+                                <span className="block text-sm font-bold text-white">{approach.label}</span>
+                                <span className="mt-1 block text-[11px] leading-4 text-zinc-400">{approach.roomLine}</span>
+                              </span>
+                              <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] ${
+                                alignment > 0
+                                  ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+                                  : alignment < 0
+                                  ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
+                                  : "border-white/10 bg-white/5 text-zinc-400"
+                              }`}>
+                                Room {alignment > 0 ? `+${alignment}` : alignment}
+                              </span>
+                            </span>
+                            <span className="mt-4 block rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05] p-2.5 text-[10px] leading-4 text-emerald-100/80">
+                              <strong className="text-emerald-300">Emphasis:</strong> {approach.emphasis}
+                            </span>
+                            <span className="mt-2 block rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-2.5 text-[10px] leading-4 text-amber-100/75">
+                              <strong className="text-amber-300">Tradeoff:</strong> {approach.tradeoff}
+                            </span>
+                            <span className="mt-3 block text-[9px] uppercase tracking-[0.12em] text-zinc-500">
+                              Evidence {approach.adjustments.evidence >= 0 ? "+" : ""}{approach.adjustments.evidence} · Fit {approach.adjustments.briefFit >= 0 ? "+" : ""}{approach.adjustments.briefFit} · Risk {approach.adjustments.risk >= 0 ? "+" : ""}{approach.adjustments.risk} · Conviction {approach.adjustments.conviction >= 0 ? "+" : ""}{approach.adjustments.conviction}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {activeBrief && (() => {
+                      const selectedImpact = evaluatePresentationStrategy({
+                        approach: presentationApproach,
+                        intendedAudience,
+                        brief: activeBrief,
+                        contextCount: contexts.length,
+                        hypothesisCount: playerHypotheses.length,
+                        riskFactorCount: riskInput.split("\n").map((risk) => risk.trim()).filter(Boolean).length,
+                        roleMatch: !activeBrief.preferredRole || activeBrief.preferredRole === projectedRole,
+                      });
+                      return (
+                        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4" aria-live="polite">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-white">Room read: {selectedImpact.label}</p>
+                            <span className="text-xs font-bold tabular-nums text-cyan-200">Alignment {selectedImpact.presentationScore}/100</span>
+                          </div>
+                          <ul className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-400 sm:grid-cols-2">
+                            {selectedImpact.reasons.slice(0, 4).map((reason) => <li key={reason} className="flex gap-2"><span className="text-cyan-300">•</span><span>{reason}</span></li>)}
+                          </ul>
+                        </div>
+                      );
+                    })()}
+                  </fieldset>
+                </section>
+
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {JUDGMENT_CATEGORIES.map((category) => {
+                    const categoryHypotheses = playerHypotheses.filter((hypothesis) => {
+                      if (category === "roleFit") return hypothesis.domain === "tactical";
+                      if (category === "characterRisk") return hypothesis.domain === "mental" || hypothesis.domain === "hidden";
+                      return hypothesis.domain === "technical" || hypothesis.domain === "physical";
+                    });
+                    return (
+                      <fieldset key={category} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                        <legend className="px-1 text-sm font-semibold text-white">{JUDGMENT_LABELS[category]}</legend>
+                        <label className="mt-2 block text-[11px] font-medium text-zinc-400">
+                          Verdict
+                          <textarea
+                            value={categoryDrafts[category].verdict}
+                            onChange={(event) => updateCategoryDraft(category, { verdict: event.target.value })}
+                            rows={3}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 p-2 text-xs leading-5 text-white outline-none focus:border-emerald-400/50"
+                          />
+                        </label>
+                        <label className="mt-3 block text-[11px] font-medium text-zinc-400">
+                          Confidence
+                          <select
+                            value={categoryDrafts[category].confidence}
+                            onChange={(event) => updateCategoryDraft(category, { confidence: event.target.value as CategoryDraft["confidence"] })}
+                            className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-[#0b0f13] px-2 text-xs capitalize text-white"
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                        </label>
+                        <label className="mt-3 block text-[11px] font-medium text-zinc-400">
+                          What remains unknown
+                          <textarea
+                            value={categoryDrafts[category].uncertainty}
+                            onChange={(event) => updateCategoryDraft(category, { uncertainty: event.target.value })}
+                            rows={2}
+                            className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 p-2 text-xs leading-5 text-white outline-none focus:border-emerald-400/50"
+                          />
+                        </label>
+                        <div className="mt-3 space-y-2">
+                          <p className="text-[11px] font-medium text-zinc-400">Supporting hypotheses</p>
+                          {categoryHypotheses.length === 0 ? (
+                            <p className="rounded-md border border-dashed border-white/10 p-2 text-[11px] leading-4 text-amber-200/80">No preserved hypothesis in this evidence family.</p>
+                          ) : categoryHypotheses.map((hypothesis) => {
+                            const checked = categoryDrafts[category].hypothesisIds.includes(hypothesis.id);
+                            return (
+                              <label key={hypothesis.id} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border border-white/10 p-2 text-[11px] leading-4 text-zinc-300">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => updateCategoryDraft(category, {
+                                    hypothesisIds: checked
+                                      ? categoryDrafts[category].hypothesisIds.filter((id) => id !== hypothesis.id)
+                                      : [...categoryDrafts[category].hypothesisIds, hypothesis.id],
+                                  })}
+                                  className="mt-0.5 h-4 w-4 accent-emerald-500"
+                                />
+                                <span>{hypothesis.text} <span className="text-zinc-500">({hypothesis.state})</span></span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    );
+                  })}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="text-xs font-medium text-zinc-300">
+                    Material risks, one per line
+                    <textarea
+                      value={riskInput}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setRiskInput(event.target.value);
+                      }}
+                      rows={3}
+                      className="mt-2 w-full rounded-lg border border-white/10 bg-black/25 p-3 text-sm text-white outline-none focus:border-emerald-400/50"
+                    />
+                  </label>
+                  <label className="text-xs font-medium text-zinc-300">
+                    Estimated weekly wage
+                    <input
+                      type="number"
+                      min={0}
+                      step={50}
+                      value={estimatedWeeklyWage}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setEstimatedWeeklyWage(Number(event.target.value));
+                      }}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white outline-none focus:border-emerald-400/50"
+                    />
+                    {activeBrief && estimatedWeeklyWage > activeBrief.weeklyWageBudget && (
+                      <span className="mt-1 block text-[11px] text-amber-300">Above the club&apos;s stated ceiling.</span>
+                    )}
+                  </label>
+                  <label className="text-xs font-medium text-zinc-300">
+                    Alternative target
+                    <select
+                      value={alternativePlayerId}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setAlternativePlayerId(event.target.value);
+                      }}
+                      className="mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-[#0b0f13] px-3 text-sm text-white"
+                    >
+                      <option value="">No credible alternative yet</option>
+                      {alternativeCandidates.map((candidate) => (
+                        <option key={candidate.player.id} value={candidate.player.id}>
+                          {candidate.player.firstName} {candidate.player.lastName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {!structuredValidation.valid && (
+                  <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+                    <p className="text-xs font-semibold text-amber-200">Complete the professional artifact before filing:</p>
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/80">
+                      {structuredValidation.errors.map((error) => <li key={error}>{error}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {observations.length === 0 && (
           <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
@@ -552,36 +1255,57 @@ export function ReportWriter() {
                     {canSubmit ? "Ready to file" : "Needs judgment"}
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Report conviction">
-                  {CONVICTION_KEYS.map((key) => (
-                    <button
-                      key={`decision-${key}`}
-                      type="button"
-                      role="radio"
-                      aria-checked={conviction === key}
-                      onClick={() => {
-                        setIsDirty(true);
-                        setConviction(key);
-                        useTutorialStore.getState().completeMilestone("wroteReport");
-                        playSFX("page-turn");
-                      }}
-                      className={`min-h-12 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
-                        conviction === key
-                          ? key === "tablePound"
-                            ? "border-red-400/60 bg-red-400/10 text-red-200"
-                            : "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
-                          : "border-white/10 bg-white/[0.025] text-zinc-300 hover:border-white/20"
-                      }`}
-                    >
-                      {t(`convictions.${key}`)}
-                    </button>
-                  ))}
-                </div>
+                <fieldset>
+                  <legend className="sr-only">Report conviction</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CONVICTION_KEYS.map((key) => {
+                      const isDisabled = key === "tablePound" && remainingTablePounds <= 0;
+                      return (
+                        <div key={`decision-${key}`} className="relative">
+                          <input
+                            id={`report-conviction-${key}`}
+                            className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                            type="radio"
+                            name="report-conviction"
+                            value={key}
+                            checked={conviction === key}
+                            disabled={isDisabled}
+                            onChange={() => {
+                              setIsDirty(true);
+                              setConviction(key);
+                              useTutorialStore.getState().completeMilestone("wroteReport");
+                              playSFX("page-turn");
+                            }}
+                          />
+                          <label
+                            htmlFor={`report-conviction-${key}`}
+                            className={`block min-h-12 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-400 ${
+                              isDisabled
+                                ? "cursor-not-allowed opacity-40"
+                                : "cursor-pointer hover:border-white/20"
+                            } ${
+                              conviction === key
+                                ? key === "tablePound"
+                                  ? "border-red-400/60 bg-red-400/10 text-red-200"
+                                  : "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
+                                : "border-white/10 bg-white/[0.025] text-zinc-300"
+                            }`}
+                          >
+                            {t(`convictions.${key}`)}
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </fieldset>
                 {isTablePound && (
                   <p className="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 p-3 text-xs leading-5 text-red-200">
                     This stakes meaningful reputation on the outcome. Use it only when the evidence deserves that risk.
                   </p>
                 )}
+                <p className="mt-2 text-[11px] text-zinc-400">
+                  Table-pounds remaining this season: <span className="font-semibold text-white">{remainingTablePounds}</span>
+                </p>
                 <div className="mt-4 grid grid-cols-2 gap-2" data-tutorial-id="report-submit">
                   <Button className="min-h-11" variant="outline" onClick={handleBack}>
                     {tc("cancel")}
@@ -760,7 +1484,7 @@ export function ReportWriter() {
                             </span>
                             <Tooltip
                               content="Confidence based on number and quality of observations for this attribute"
-                              side="top"
+                              side="left"
                             >
                               <span
                                 className={`shrink-0 text-xs cursor-help ${confidenceColor(reading.confidence)}`}
@@ -1133,9 +1857,9 @@ export function ReportWriter() {
                   </div>
                 )}
 
-                {equipmentReportQualityBonus > 0 && (
+                {totalReportQualityBonus > 0 && (
                   <p className="mt-2 text-[10px] text-emerald-500">
-                    +{Math.round(equipmentReportQualityBonus * 100)}% from equipment
+                    +{Math.round(totalReportQualityBonus * 100)} points from infrastructure and equipment
                   </p>
                 )}
 
@@ -1277,82 +2001,6 @@ export function ReportWriter() {
               </CardContent>
             </Card>
           )}
-
-          {/* Conviction level */}
-          <Card className="hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
-                <Tooltip content={t("convictionTooltip")} side="top">
-                  <span>{t("convictionLevel")}</span>
-                </Tooltip>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div
-                className="grid grid-cols-2 gap-3 sm:grid-cols-4"
-                role="radiogroup"
-                aria-label="Conviction level"
-              >
-                {CONVICTION_KEYS.map((key) => (
-                  <button
-                    key={key}
-                    onClick={() => {
-                      setIsDirty(true);
-                      setConviction(key);
-                      useTutorialStore.getState().completeMilestone("wroteReport");
-                      playSFX("page-turn");
-                    }}
-                    role="radio"
-                    aria-checked={conviction === key}
-                    className={`rounded-lg border p-3 text-left transition ${
-                      conviction === key
-                        ? key === "tablePound"
-                          ? "border-red-500 bg-red-500/10"
-                          : key === "strongRecommend"
-                          ? "border-emerald-500 bg-emerald-500/10"
-                          : "border-zinc-500 bg-zinc-500/10"
-                        : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
-                    }`}
-                  >
-                    <p
-                      className={`text-sm font-semibold mb-1 ${
-                        key === "tablePound" && conviction === key
-                          ? "text-red-400"
-                          : key === "strongRecommend" && conviction === key
-                          ? "text-emerald-400"
-                          : "text-white"
-                      }`}
-                    >
-                      {key === "tablePound" ? (
-                        <Tooltip content={t("tablePoundTooltip")} side="top">
-                          <span className="underline decoration-dotted underline-offset-2 cursor-help">{t(`convictions.${key}`)}</span>
-                        </Tooltip>
-                      ) : (
-                        t(`convictions.${key}`)
-                      )}
-                    </p>
-                    <p className="text-xs text-zinc-500 leading-tight">{t(`convictions.${key}Desc`)}</p>
-                  </button>
-                ))}
-              </div>
-
-              {isTablePound && (
-                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-                  <AlertTriangle
-                    size={16}
-                    className="mt-0.5 shrink-0 text-red-400"
-                    aria-hidden="true"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold text-red-400">{t("reputationOnLine")}</p>
-                    <p className="text-xs text-red-400/80 mt-0.5">
-                      {t("tablePoundWarning")}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           {/* Submit */}
           <div className="hidden">

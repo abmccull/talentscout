@@ -54,7 +54,11 @@ export interface EventTemplate {
    */
   prerequisites: (state: GameState) => boolean;
   /** Optional player-facing choices. Each item has a label and an effect tag. */
-  choices?: ReadonlyArray<{ label: string; effect: string }>;
+  choices?: ReadonlyArray<{
+    label: string;
+    effect: string;
+    knownTradeoffs?: string[];
+  }>;
 }
 
 // =============================================================================
@@ -104,6 +108,27 @@ function anyContactName(state: GameState): string {
   const contacts = Object.values(state.contacts);
   if (contacts.length === 0) return "a contact";
   return contacts[0].name;
+}
+
+/**
+ * Bind confidentiality dilemmas to the promise with the nearest deadline.
+ * Object insertion order is not a gameplay priority and can differ after
+ * migrations or save reconstruction, so every caller shares this ordering.
+ */
+export function getPriorityConfidentialityObligation(state: GameState) {
+  return Object.values(state.consequenceState?.obligations ?? {})
+    .filter((obligation) =>
+      obligation.status === "active" && obligation.kind === "confidentiality"
+    )
+    .sort((left, right) =>
+      (left.dueAt?.season ?? Number.MAX_SAFE_INTEGER)
+        - (right.dueAt?.season ?? Number.MAX_SAFE_INTEGER)
+      || (left.dueAt?.week ?? Number.MAX_SAFE_INTEGER)
+        - (right.dueAt?.week ?? Number.MAX_SAFE_INTEGER)
+      || left.createdAt.season - right.createdAt.season
+      || left.createdAt.week - right.createdAt.week
+      || left.id.localeCompare(right.id)
+    )[0];
 }
 
 /** Returns the name of a report player older than 10 weeks (for hiddenGemVindication). */
@@ -801,6 +826,42 @@ const exclusiveAccessTemplate: EventTemplate = {
   ],
 };
 
+const confidentialityDilemmaTemplate: EventTemplate = {
+  type: "confidentialityDilemma",
+  titleTemplate: "The Price of Confidential Access",
+  descriptionTemplate: (ctx) => {
+    const contact = ctx.contactName ?? "the source who trusted you";
+    const player = ctx.playerName ?? "the player you observed";
+    return (
+      `Your club wants the private detail behind your assessment of ${player}. ` +
+      `${contact} granted that access on the condition it stayed confidential. ` +
+      "Refusing protects the source and future access but may weaken your influence in the room; " +
+      "sharing it could strengthen this recommendation while permanently changing who trusts you."
+    );
+  },
+  prerequisites: (state) => Object.values(state.consequenceState?.obligations ?? {}).some(
+    (obligation) => obligation.status === "active" && obligation.kind === "confidentiality",
+  ),
+  choices: [
+    {
+      label: "Protect the source",
+      effect: "confidentialityKeep",
+      knownTradeoffs: [
+        "Fulfils the confidentiality promise and strengthens long-term access",
+        "The club must decide without the most sensitive supporting detail",
+      ],
+    },
+    {
+      label: "Share the private detail",
+      effect: "confidentialityLeak",
+      knownTradeoffs: [
+        "Gives the club stronger immediate evidence for this recommendation",
+        "Breaches the promise and can close this source and connected networks",
+      ],
+    },
+  ],
+};
+
 const agentDoubleDealingTemplate: EventTemplate = {
   type: "agentDoubleDealing",
   titleTemplate: "Agent Playing Both Sides",
@@ -1025,6 +1086,7 @@ export const EVENT_TEMPLATES: ReadonlyArray<EventTemplate> = [
   // Network Events
   contactBetrayalTemplate,
   exclusiveAccessTemplate,
+  confidentialityDilemmaTemplate,
   agentDoubleDealingTemplate,
   journalistExposeTemplate,
   networkExpansionTemplate,
@@ -1320,6 +1382,24 @@ export function buildEventContext(
         careerTier: scout.careerTier,
         reputation: scout.reputation,
       };
+
+    case "confidentialityDilemma": {
+      const obligation = getPriorityConfidentialityObligation(state);
+      const contact = obligation ? state.contacts[obligation.creditor.id] : undefined;
+      return {
+        contactName: contact?.name,
+        playerName: firstReportPlayerName(state),
+        careerTier: scout.careerTier,
+        reputation: scout.reputation,
+      };
+    }
+
+    case "careerCrossroads":
+      return {
+        playerName: firstReportPlayerName(state),
+        careerTier: scout.careerTier,
+        reputation: scout.reputation,
+      };
   }
 }
 
@@ -1334,6 +1414,16 @@ export function extractRelatedIds(
   const scout = state.scout;
 
   switch (type) {
+    case "confidentialityDilemma": {
+      const obligation = getPriorityConfidentialityObligation(state);
+      return obligation ? [obligation.creditor.id] : [];
+    }
+
+    case "careerCrossroads": {
+      const report = Object.values(state.reports)[0];
+      return report ? [report.playerId] : [];
+    }
+
     case "rivalPoach":
     case "rivalPoachBid":
     case "debutHatTrick":

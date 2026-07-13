@@ -12,7 +12,9 @@ test.describe("Achievement feedback", () => {
       },
     });
 
-    await expect(gamePage.page.getByRole("status", { name: /Achievement unlocked:/ })).toBeVisible();
+    const toast = gamePage.page.getByRole("status", { name: /Achievements? unlocked:/ });
+    await expect(toast).toBeVisible();
+    await expect(toast.getByText(/\+\d+ more/)).toHaveCount(0);
     await gamePage.page.evaluate(() => {
       const button = document.createElement("button");
       button.id = "toast-click-target";

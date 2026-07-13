@@ -21,6 +21,7 @@ import type {
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
+import { getSeasonLength } from "@/engine/core/gameLoop";
 
 // =============================================================================
 // Constants
@@ -86,9 +87,9 @@ function generateChainEventId(rng: RNG): string {
   return `evt_${id}`;
 }
 
-/** Compute absolute week from season + week (38 weeks per season). */
-function absoluteWeek(season: number, week: number): number {
-  return (season - 1) * 38 + week;
+/** Compute an absolute narrative week using the persisted fixture calendar. */
+function absoluteWeek(state: GameState, season: number, week: number): number {
+  return (season - 1) * getSeasonLength(state.fixtures) + week;
 }
 
 /** Get a random player name from state (for context). */
@@ -1098,7 +1099,7 @@ export function startChain(
   if (!template.canTrigger(state)) return null;
 
   const context = template.initContext(state, rng);
-  const currentAbs = absoluteWeek(state.currentSeason, state.currentWeek);
+  const currentAbs = absoluteWeek(state, state.currentSeason, state.currentWeek);
 
   const chain: EventChain = {
     id: generateChainId(rng),
@@ -1130,8 +1131,17 @@ export function startChain(
   const updatedChain: EventChain = {
     ...chain,
     currentStep: 1,
+    resolved: template.steps.length === 1 &&
+      (eventWithFollowUp.choices?.length ?? 0) === 0,
     eventIds: [eventWithFollowUp.id],
     nextStepWeek: nextStepAbs ?? currentAbs,
+    awaitingChoice: (eventWithFollowUp.choices?.length ?? 0) > 0
+      ? {
+          eventId: eventWithFollowUp.id,
+          stepIndex: 0,
+          terminal: template.steps.length === 1,
+        }
+      : undefined,
   };
 
   return { chain: updatedChain, event: eventWithFollowUp };
@@ -1165,13 +1175,21 @@ export function advanceChain(
     return { chain, event: null };
   }
 
+  if (chain.awaitingChoice && choiceIndex === undefined) {
+    return { chain, event: null };
+  }
+
   // Record choice for previous step if provided
   const choiceHistory = [...chain.choiceHistory];
   if (choiceIndex !== undefined) {
-    choiceHistory[chain.currentStep - 1] = choiceIndex;
+    choiceHistory[chain.awaitingChoice?.stepIndex ?? chain.currentStep - 1] = choiceIndex;
   }
 
-  const chainWithChoice: EventChain = { ...chain, choiceHistory };
+  const chainWithChoice: EventChain = {
+    ...chain,
+    choiceHistory,
+    awaitingChoice: choiceIndex !== undefined ? undefined : chain.awaitingChoice,
+  };
 
   const stepIndex = chain.currentStep;
   if (stepIndex >= template.steps.length) {
@@ -1190,7 +1208,7 @@ export function advanceChain(
     return { chain: { ...chainWithChoice, resolved: true }, event: null };
   }
 
-  const currentAbs = absoluteWeek(state.currentSeason, state.currentWeek);
+  const currentAbs = absoluteWeek(state, state.currentSeason, state.currentWeek);
   const nextStepIndex = stepIndex + 1;
   const allDone = nextStepIndex >= template.steps.length;
 
@@ -1206,9 +1224,16 @@ export function advanceChain(
   const updatedChain: EventChain = {
     ...chainWithChoice,
     currentStep: nextStepIndex,
-    resolved: allDone,
+    resolved: allDone && (eventWithFollowUp.choices?.length ?? 0) === 0,
     eventIds: [...chainWithChoice.eventIds, eventWithFollowUp.id],
     nextStepWeek: nextStepAbs ?? currentAbs,
+    awaitingChoice: (eventWithFollowUp.choices?.length ?? 0) > 0
+      ? {
+          eventId: eventWithFollowUp.id,
+          stepIndex,
+          terminal: allDone,
+        }
+      : undefined,
   };
 
   return { chain: updatedChain, event: eventWithFollowUp };
@@ -1221,10 +1246,37 @@ export function advanceChain(
  * @returns Array of chains whose next step is due (nextStepWeek <= current absolute week).
  */
 export function checkPendingChains(state: GameState): EventChain[] {
-  const currentAbs = absoluteWeek(state.currentSeason, state.currentWeek);
+  const currentAbs = absoluteWeek(state, state.currentSeason, state.currentWeek);
   return (state.eventChains ?? []).filter(
-    (chain) => !chain.resolved && chain.nextStepWeek <= currentAbs,
+    (chain) => !chain.resolved &&
+      !chain.awaitingChoice &&
+      chain.nextStepWeek <= currentAbs,
   );
+}
+
+/** Record a choice and release (or terminalize) its persisted chain gate. */
+export function resolveChainChoice(
+  chain: EventChain,
+  eventId: string,
+  choiceIndex: number,
+  legacyStepIndex?: number,
+): EventChain {
+  const pending = chain.awaitingChoice;
+  const resolvesPendingChoice = pending?.eventId === eventId;
+  const stepIndex = resolvesPendingChoice
+    ? pending.stepIndex
+    : legacyStepIndex ?? Math.max(0, chain.currentStep - 1);
+  const choiceHistory = [...chain.choiceHistory];
+  choiceHistory[stepIndex] = choiceIndex;
+
+  return {
+    ...chain,
+    choiceHistory,
+    resolved: resolvesPendingChoice && pending.terminal
+      ? true
+      : chain.resolved,
+    awaitingChoice: resolvesPendingChoice ? undefined : chain.awaitingChoice,
+  };
 }
 
 /**
@@ -1284,11 +1336,14 @@ export function computeChainChoiceEffects(
   chain: EventChain,
   choiceIndex: number,
   rng: RNG,
+  choiceStepIndex?: number,
 ): { reputationChange: number; fatigueChange: number } {
   // Default: moderate rep change based on choice index
   // First choices tend to be proactive (higher reward/risk),
   // last choices tend to be cautious (lower reward/risk)
-  const stepIndex = chain.currentStep - 1;
+  const stepIndex = choiceStepIndex ??
+    chain.awaitingChoice?.stepIndex ??
+    chain.currentStep - 1;
   const template = findChainTemplate(chain.templateKey);
   if (!template) return { reputationChange: 0, fatigueChange: 0 };
 

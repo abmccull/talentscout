@@ -18,6 +18,8 @@ import type {
   ObservationSession,
   SessionPhase,
   StrategicChoice,
+  StrategicChoiceImpact,
+  StrategicChoiceResolution,
 } from "@/engine/observation/types";
 
 // =============================================================================
@@ -32,7 +34,9 @@ interface QuickPhaseTemplate {
   /** Narrative prompt presented to the scout at this phase. */
   prompt: string;
   /** The strategic choices available. */
-  choices: Omit<StrategicChoice, "id">[];
+  choices: Array<
+    Omit<StrategicChoice, "id" | "impact"> & { impact?: StrategicChoiceImpact }
+  >;
 }
 
 /**
@@ -54,6 +58,26 @@ interface QuickInteractionTemplate {
   /** Optional pool of closing phases. One is picked at random when the session has 3 phases. */
   phase3Pool?: QuickPhaseTemplate[];
 }
+
+/**
+ * Every outcome profile offers a different benefit/cost curve. None strictly
+ * dominates another across insight, fatigue, and completed-session quality.
+ */
+export const QUICK_CHOICE_IMPACTS: Record<
+  StrategicChoice["outcomeType"],
+  StrategicChoiceImpact
+> = {
+  priority: { insightPoints: 5, fatigueDelta: 2, qualityModifier: 0 },
+  technique: { insightPoints: 3, fatigueDelta: 1, qualityModifier: 2 },
+  network: { insightPoints: 2, fatigueDelta: 0, qualityModifier: 1 },
+  territory: { insightPoints: 4, fatigueDelta: 1, qualityModifier: 0 },
+};
+
+const MAX_CHOICE_INSIGHT = 6;
+const MAX_CHOICE_FATIGUE = 3;
+const MAX_CHOICE_QUALITY = 3;
+const PENDING_FOLLOW_UP_DESCRIPTION =
+  "Your next decision will be shaped by the approach you lock in here.";
 
 // =============================================================================
 // PHASE DESCRIPTION BANKS
@@ -582,34 +606,43 @@ export const QUICK_INTERACTION_TEMPLATES: Record<string, QuickInteractionTemplat
  * stable for a given activity type and phase layout.
  */
 function buildChoice(
-  raw: Omit<StrategicChoice, "id">,
+  raw: Omit<StrategicChoice, "id" | "impact"> & { impact?: StrategicChoiceImpact },
   phaseIndex: number,
   choiceIndex: number,
   sessionId: string,
 ): StrategicChoice {
+  const impact = sanitizeChoiceImpact(
+    raw.impact ?? QUICK_CHOICE_IMPACTS[raw.outcomeType],
+  );
   return {
     id: `${sessionId}-p${phaseIndex}-c${choiceIndex}`,
     ...raw,
+    impact,
   };
 }
 
 /**
- * Selects the Phase-2 template to use based on what was chosen in Phase 1.
- *
- * The last choice in the Phase-1 array is used as the "selected" choice when
- * an explicit selection hasn't been recorded (the phase hasn't been played
- * yet). In practice the RNG populates all phases upfront, so we pick a
- * representative Phase-2 by sampling the Phase-1 choices with the RNG.
+ * Clamps authored or legacy impacts so malformed state cannot create runaway
+ * rewards or fatigue.
  */
+function sanitizeChoiceImpact(impact: StrategicChoiceImpact): StrategicChoiceImpact {
+  const boundedInteger = (value: number, maximum: number) =>
+    Number.isFinite(value)
+      ? Math.max(0, Math.min(maximum, Math.round(value)))
+      : 0;
+  return {
+    insightPoints: boundedInteger(impact.insightPoints, MAX_CHOICE_INSIGHT),
+    fatigueDelta: boundedInteger(impact.fatigueDelta, MAX_CHOICE_FATIGUE),
+    qualityModifier: boundedInteger(impact.qualityModifier, MAX_CHOICE_QUALITY),
+  };
+}
+
+/** Selects Phase 2 from the outcome the player actually locked in. */
 function resolvePhase2Template(
   template: QuickInteractionTemplate,
-  rng: RNG,
+  outcomeType: StrategicChoice["outcomeType"],
 ): QuickPhaseTemplate {
-  // Sample a Phase-1 outcome type via the RNG so the Phase-2 selection is
-  // deterministic for a given seed but appears organic.
-  const phase1Choices = template.phase1.choices;
-  const sampledChoice = rng.pick(phase1Choices);
-  const followUp = template.phase2ByOutcome[sampledChoice.outcomeType];
+  const followUp = template.phase2ByOutcome[outcomeType];
   return followUp ?? template.phase2Default;
 }
 
@@ -653,6 +686,181 @@ function populatePhase(
     ...phase,
     description: description + " " + phaseTemplate.prompt,
     choices,
+    selectedChoiceId: undefined,
+    choiceResolution: undefined,
+  };
+}
+
+function createPendingFollowUpPhase(phase: SessionPhase): SessionPhase {
+  return {
+    ...phase,
+    description: PENDING_FOLLOW_UP_DESCRIPTION,
+    choices: undefined,
+    selectedChoiceId: undefined,
+    choiceResolution: undefined,
+  };
+}
+
+function normalizeLegacyChoice(choice: StrategicChoice): StrategicChoice {
+  const legacyChoice = choice as StrategicChoice & { impact?: StrategicChoiceImpact };
+  return {
+    ...choice,
+    impact: sanitizeChoiceImpact(
+      legacyChoice.impact ?? QUICK_CHOICE_IMPACTS[choice.outcomeType],
+    ),
+  };
+}
+
+function buildChoiceResolution(
+  phaseIndex: number,
+  choice: StrategicChoice,
+): StrategicChoiceResolution {
+  return {
+    phaseIndex,
+    choiceId: choice.id,
+    choiceText: choice.text,
+    outcomeType: choice.outcomeType,
+    insightPointsAwarded: choice.impact.insightPoints,
+    fatigueDelta: choice.impact.fatigueDelta,
+    qualityModifier: choice.impact.qualityModifier,
+  };
+}
+
+/** Returns immutable strategic-choice snapshots in phase order. */
+export function getStrategicChoiceResolutions(
+  session: ObservationSession,
+): StrategicChoiceResolution[] {
+  if (session.mode !== "quickInteraction") return [];
+
+  return session.phases.flatMap((phase) => {
+    if (phase.choiceResolution) return [phase.choiceResolution];
+    if (!phase.selectedChoiceId) return [];
+    const selected = phase.choices?.find((choice) => choice.id === phase.selectedChoiceId);
+    return selected ? [buildChoiceResolution(phase.index, normalizeLegacyChoice(selected))] : [];
+  });
+}
+
+/**
+ * Repairs transient pre-integrity sessions without inventing a past choice.
+ * Legacy active sessions are rewound to their first unresolved decision, and
+ * their preselected Phase 2 is discarded until Phase 1 is honestly resolved.
+ */
+export function migrateQuickInteractionSession(
+  session: ObservationSession,
+  rng: RNG,
+): ObservationSession {
+  if (session.mode !== "quickInteraction") return session;
+
+  const template = QUICK_INTERACTION_TEMPLATES[session.activityType];
+  if (!template) return session;
+
+  let phases: SessionPhase[] = session.phases.map((phase) => {
+    const choices = phase.choices?.map(normalizeLegacyChoice);
+    const selected = phase.selectedChoiceId
+      ? choices?.find((choice) => choice.id === phase.selectedChoiceId)
+      : undefined;
+    return {
+      ...phase,
+      choices,
+      selectedChoiceId: selected ? selected.id : undefined,
+      choiceResolution: selected
+        ? phase.choiceResolution ?? buildChoiceResolution(phase.index, selected)
+        : undefined,
+    };
+  });
+
+  const phase1 = phases[0];
+  const selectedPhase1 = phase1?.selectedChoiceId
+    ? phase1.choices?.find((choice) => choice.id === phase1.selectedChoiceId)
+    : undefined;
+
+  if (phases[1]) {
+    if (!selectedPhase1) {
+      phases = phases.map((phase, index) =>
+        index === 1 ? createPendingFollowUpPhase(phase) : phase,
+      );
+    } else if (!phases[1].selectedChoiceId) {
+      const followUp = resolvePhase2Template(template, selectedPhase1.outcomeType);
+      phases = phases.map((phase, index) =>
+        index === 1
+          ? populatePhase(phase, followUp, session.activityType, session.id, rng)
+          : phase,
+      );
+    }
+  }
+
+  let currentPhaseIndex = session.currentPhaseIndex;
+  if (session.state === "active") {
+    const firstUnresolved = phases.findIndex(
+      (phase, index) =>
+        index <= currentPhaseIndex
+        && (!phase.choices?.length || !phase.selectedChoiceId || !phase.choiceResolution),
+    );
+    if (firstUnresolved >= 0) currentPhaseIndex = firstUnresolved;
+  }
+
+  return {
+    ...session,
+    phases,
+    currentPhaseIndex,
+  };
+}
+
+/**
+ * Locks one choice for the current phase, awards it once, and materializes the
+ * Phase-2 branch from the player's actual Phase-1 outcome.
+ */
+export function resolveQuickInteractionChoice(
+  session: ObservationSession,
+  choiceId: string,
+  rng: RNG,
+): ObservationSession {
+  if (session.mode !== "quickInteraction" || session.state !== "active") {
+    return session;
+  }
+
+  const existingPhase = session.phases[session.currentPhaseIndex];
+  if (existingPhase?.selectedChoiceId && existingPhase.choiceResolution) {
+    return session;
+  }
+
+  const migrated = migrateQuickInteractionSession(session, rng);
+  const phase = migrated.phases[migrated.currentPhaseIndex];
+  if (!phase?.choices?.length || phase.selectedChoiceId || phase.choiceResolution) {
+    return migrated;
+  }
+
+  const choice = phase.choices.find((candidate) => candidate.id === choiceId);
+  if (!choice) return migrated;
+
+  const resolution = buildChoiceResolution(phase.index, choice);
+  let phases = migrated.phases.map((candidate, index) =>
+    index === migrated.currentPhaseIndex
+      ? {
+          ...candidate,
+          selectedChoiceId: choice.id,
+          choiceResolution: resolution,
+        }
+      : candidate,
+  );
+
+  if (phase.index === 0 && phases[1]) {
+    const template = QUICK_INTERACTION_TEMPLATES[migrated.activityType];
+    if (template) {
+      const followUp = resolvePhase2Template(template, choice.outcomeType);
+      phases = phases.map((candidate, index) =>
+        index === 1
+          ? populatePhase(candidate, followUp, migrated.activityType, migrated.id, rng)
+          : candidate,
+      );
+    }
+  }
+
+  return {
+    ...migrated,
+    phases,
+    insightPointsEarned:
+      migrated.insightPointsEarned + resolution.insightPointsAwarded,
   };
 }
 
@@ -694,15 +902,15 @@ export function populateQuickInteractionPhases(
     return session;
   }
 
-  const phase2Template = resolvePhase2Template(template, rng);
-
   const populatedPhases: SessionPhase[] = session.phases.map((phase) => {
     if (phase.index === 0) {
       return populatePhase(phase, template.phase1, session.activityType, session.id, rng);
     }
 
     if (phase.index === 1) {
-      return populatePhase(phase, phase2Template, session.activityType, session.id, rng);
+      // Phase 2 is deliberately not selected up front. The player's locked
+      // Phase-1 outcome materializes this branch in resolveQuickInteractionChoice.
+      return createPendingFollowUpPhase(phase);
     }
 
     // Phase index 2 (optional third phase) — pick from the pool if available.

@@ -4,14 +4,15 @@
  *
  * Design notes:
  *  - Pure functional: no mutations, no side effects.
- *  - All randomness flows through the RNG instance passed in.
- *  - Outcome classification uses player CA trajectory, appearances, and
- *    injury history to determine WHY a transfer succeeded or failed.
+ *  - RNG is used only for record identity. Outcome evidence and classification
+ *    are deterministic across save/reload and manual/batch advancement.
+ *  - Outcome explanations use persisted match participation, ratings, dated
+ *    injuries, and movement. A missing cause stays explicitly unresolved.
  *
  * Flow:
  *  1. createTransferRecord()  — called when a transfer occurs for a scouted player.
- *  2. updateTransferRecords() — called at end-of-season to update CA and appearances.
- *  3. classifyOutcome()       — determines hit/decent/flop and narrative reason.
+ *  2. updateTransferRecords() — captures an idempotent observable season ledger.
+ *  3. classifyOutcome()       — determines supported hit/decent/flop evidence.
  *  4. applyScoutAccountability() — adjusts scout reputation based on outcome + conviction.
  */
 
@@ -24,7 +25,13 @@ import type {
   Player,
   PlayerMatchRating,
   InboxMessage,
+  Fixture,
+  TransferSeasonParticipation,
+  TransferEvidenceLevel,
+  TransferMovementStatus,
 } from "@/engine/core/types";
+import { LEGACY_SEASON_LENGTH_WEEKS } from "@/engine/core/gameDate";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
 
 // =============================================================================
 // CONSTANTS
@@ -36,21 +43,8 @@ import type {
  */
 const MIN_SEASONS_FOR_CLASSIFICATION = 2;
 
-/**
- * CA gain threshold to classify as a "hit" (player improved significantly).
- */
-const HIT_CA_GAIN_THRESHOLD = 10;
-
-/**
- * CA loss threshold to classify as a "flop" (player regressed or stagnated).
- */
-const FLOP_CA_CHANGE_THRESHOLD = -5;
-
-/**
- * Appearance threshold below which a player is considered to have had
- * "low appearances" — suggests tactical mismatch or character issues.
- */
-const LOW_APPEARANCES_THRESHOLD = 15;
+/** Minimum explicit rating samples before a performance claim is supportable. */
+const MIN_RATING_SAMPLES = 5;
 
 /**
  * Scout accountability reputation deltas.
@@ -119,6 +113,7 @@ export function createTransferRecord(
     currentCA: playerCA,
     seasonsSinceTransfer: 0,
     appearances: undefined,
+    seasonParticipation: [],
     outcome: undefined,
     outcomeReason: undefined,
     accountabilityApplied: false,
@@ -129,66 +124,217 @@ export function createTransferRecord(
 // 2. generateSeasonSnapshot — update records with current player data
 // =============================================================================
 
-/**
- * Simulated appearance count for a player over a season.
- * Based on injury weeks and form — healthy, in-form players get more appearances.
- *
- * A full season of 38 match weeks with no injuries ≈ 30–38 appearances.
- * Injuries and poor form reduce this significantly.
- */
-function simulateAppearances(
-  rng: RNG,
-  player: Player,
-  seasonsSinceTransfer: number,
-): number {
-  // Base appearances for a full season
-  const BASE_APPEARANCES = 30;
-
-  // Injury penalty: if currently injured, appearances drop significantly
-  const injuryPenalty = player.injured
-    ? Math.min(BASE_APPEARANCES, player.injuryWeeksRemaining * 2)
-    : 0;
-
-  // Form modifier: form ranges [-3, 3]; negative form reduces appearances
-  const formModifier = Math.max(-8, Math.min(5, player.form * 2));
-
-  // First-season adjustment: new signings may take time to integrate
-  const adaptationPenalty = seasonsSinceTransfer === 1 ? rng.nextInt(3, 8) : 0;
-
-  // Professionalism affects consistency of selection
-  const profBonus = Math.max(0, (player.attributes.professionalism - 10) / 2);
-
-  const appearances = Math.round(
-    BASE_APPEARANCES - injuryPenalty + formModifier - adaptationPenalty + profBonus,
-  );
-
-  return Math.max(0, Math.min(38, appearances));
+export interface TransferRecordUpdateContext {
+  fixtures: Record<string, Fixture>;
+  completedSeason: number;
+  /** Fixture-derived active season length. */
+  seasonLength: number;
+  retiredPlayerIds?: ReadonlySet<string> | readonly string[];
 }
 
 /**
- * Compute average match rating for a player from per-fixture match ratings.
- * Returns undefined if fewer than 5 ratings exist (insufficient data).
+ * Remove fabricated legacy appearance totals and randomized causal labels.
+ * Historical classification/accountability is preserved because reputation
+ * may already have changed; only unsupported evidence claims are withdrawn.
  */
-function computeAvgMatchRating(
-  playerId: string,
-  matchRatings: Record<string, Record<string, PlayerMatchRating>>,
-): number | undefined {
-  const ratings: number[] = [];
-  for (const fixtureRatings of Object.values(matchRatings)) {
-    const r = fixtureRatings[playerId];
-    if (r) ratings.push(r.rating);
+export function migrateLegacyTransferParticipation(
+  records: TransferRecord[] | undefined,
+): TransferRecord[] {
+  return (records ?? []).map((record) => {
+    if (record.seasonParticipation !== undefined) return record;
+    return {
+      ...record,
+      appearances: undefined,
+      avgMatchRating: undefined,
+      seasonParticipation: [],
+      outcomeReason: record.outcomeReason ? "insufficientEvidence" : undefined,
+      outcomeEvidenceLevel: "none",
+      outcomeEvidence: [
+        "Historical participation was not recorded by the match engine; no causal explanation is available.",
+      ],
+    };
+  });
+}
+
+function hasRecordedParticipation(rating: PlayerMatchRating): boolean {
+  if (rating.minutesPlayed !== undefined) return rating.minutesPlayed > 0;
+  if (rating.started !== undefined) return rating.started;
+  // Legacy rating rows represented participating players before the explicit
+  // fields existed. They remain valid rating evidence, but never imply minutes.
+  return true;
+}
+
+function resolveMovementStatus(
+  record: TransferRecord,
+  player: Player,
+  retiredPlayerIds: ReadonlySet<string>,
+): TransferMovementStatus {
+  if (retiredPlayerIds.has(player.id)) return "retired";
+  if (player.onLoan && player.loanParentClubId === record.toClubId) {
+    return "loanedFromDestination";
   }
-  if (ratings.length < 5) return undefined;
-  return Math.round((ratings.reduce((s, v) => s + v, 0) / ratings.length) * 10) / 10;
+  if (player.clubId === record.toClubId || player.contractClubId === record.toClubId) {
+    return "atDestination";
+  }
+  if (!player.clubId && !player.contractClubId) return "unattached";
+  return "movedOn";
+}
+
+function isOnOrAfterTransfer(
+  record: TransferRecord,
+  season: number,
+  week: number,
+): boolean {
+  return season > record.transferSeason
+    || (season === record.transferSeason && week >= record.transferWeek);
+}
+
+function evidenceLevelFor(
+  appearances: number,
+  teamMatches: number,
+  seasonLength: number,
+  movementStatus: TransferMovementStatus,
+  recordedInjuryWeeks: number,
+): TransferEvidenceLevel {
+  const requiredOpportunities = Math.max(5, Math.round(seasonLength * 0.13));
+  const materialInjuryBurden = Math.max(4, Math.round(seasonLength * 0.13));
+  if (
+    appearances >= MIN_RATING_SAMPLES
+    || teamMatches >= requiredOpportunities
+    || recordedInjuryWeeks >= materialInjuryBurden
+    || movementStatus !== "atDestination"
+  ) {
+    return "sufficient";
+  }
+  if (appearances > 0 || teamMatches > 0) return "limited";
+  return "none";
+}
+
+/** Build one immutable season ledger row from canonical world evidence. */
+export function buildTransferSeasonParticipation(
+  record: TransferRecord,
+  player: Player,
+  matchRatings: Record<string, Record<string, PlayerMatchRating>>,
+  context: TransferRecordUpdateContext,
+): TransferSeasonParticipation {
+  const retiredIds = context.retiredPlayerIds instanceof Set
+    ? context.retiredPlayerIds
+    : new Set(context.retiredPlayerIds ?? []);
+  const relevantFixtures = Object.values(context.fixtures).filter((fixture) =>
+    fixture.played
+    && isFixtureInSeason(fixture, context.completedSeason)
+    && isOnOrAfterTransfer(record, context.completedSeason, fixture.week)
+    && (fixture.homeClubId === record.toClubId || fixture.awayClubId === record.toClubId)
+  );
+
+  const ratings: PlayerMatchRating[] = [];
+  for (const fixture of relevantFixtures) {
+    const rating = matchRatings[fixture.id]?.[record.playerId];
+    if (rating && hasRecordedParticipation(rating)) ratings.push(rating);
+  }
+
+  const minutesRatings = ratings.filter((rating) => rating.minutesPlayed !== undefined);
+  const minutesPlayed = minutesRatings.length > 0
+    ? minutesRatings.reduce((total, rating) => total + (rating.minutesPlayed ?? 0), 0)
+    : undefined;
+  const avgMatchRating = ratings.length > 0
+    ? Math.round(
+      ratings.reduce((total, rating) => total + rating.rating, 0) / ratings.length * 10,
+    ) / 10
+    : undefined;
+  const injuries = (player.injuryHistory?.injuries ?? []).filter((injury) =>
+    injury.occurredSeason === context.completedSeason
+    && isOnOrAfterTransfer(record, injury.occurredSeason, injury.occurredWeek)
+  );
+  const recordedInjuryWeeks = injuries.reduce(
+    (total, injury) => total + Math.max(0, injury.recoveryWeeks),
+    0,
+  );
+  const movementStatus = resolveMovementStatus(record, player, retiredIds);
+
+  return {
+    season: context.completedSeason,
+    seasonLength: context.seasonLength,
+    teamMatches: relevantFixtures.length,
+    appearances: ratings.length,
+    starts: ratings.filter((rating) => rating.started === true).length,
+    ...(minutesPlayed !== undefined ? { minutesPlayed } : {}),
+    appearancesWithoutMinutes: ratings.length - minutesRatings.length,
+    ...(avgMatchRating !== undefined ? { avgMatchRating } : {}),
+    injuryIncidents: injuries.length,
+    recordedInjuryWeeks,
+    movementStatus,
+    evidenceLevel: evidenceLevelFor(
+      ratings.length,
+      relevantFixtures.length,
+      context.seasonLength,
+      movementStatus,
+      recordedInjuryWeeks,
+    ),
+  };
+}
+
+function summarizeParticipation(
+  seasons: TransferSeasonParticipation[],
+): Pick<TransferRecord, "appearances" | "avgMatchRating" | "outcomeEvidenceLevel" | "outcomeEvidence"> {
+  const appearances = seasons.reduce((total, season) => total + season.appearances, 0);
+  const teamMatches = seasons.reduce((total, season) => total + season.teamMatches, 0);
+  const ratingPoints = seasons.reduce(
+    (total, season) => total + (season.avgMatchRating ?? 0) * season.appearances,
+    0,
+  );
+  const avgMatchRating = appearances > 0
+    ? Math.round(ratingPoints / appearances * 10) / 10
+    : undefined;
+  const explicitMinutes = seasons.reduce(
+    (total, season) => total + (season.minutesPlayed ?? 0),
+    0,
+  );
+  const appearancesWithoutMinutes = seasons.reduce(
+    (total, season) => total + season.appearancesWithoutMinutes,
+    0,
+  );
+  const injuryIncidents = seasons.reduce((total, season) => total + season.injuryIncidents, 0);
+  const injuryWeeks = seasons.reduce((total, season) => total + season.recordedInjuryWeeks, 0);
+  const evidenceLevel: TransferEvidenceLevel = seasons.some(
+    (season) => season.evidenceLevel === "sufficient",
+  )
+    ? "sufficient"
+    : seasons.some((season) => season.evidenceLevel === "limited")
+      ? "limited"
+      : "none";
+  const latest = seasons.at(-1);
+  const evidence = [
+    `${appearances} recorded appearances in ${teamMatches} destination-club fixtures.`,
+    ...(explicitMinutes > 0
+      ? [`${explicitMinutes} explicitly recorded minutes.`]
+      : []),
+    ...(appearancesWithoutMinutes > 0
+      ? [`Exact minutes were unavailable for ${appearancesWithoutMinutes} appearances.`]
+      : []),
+    ...(avgMatchRating !== undefined
+      ? [`${avgMatchRating.toFixed(1)} average rating from recorded appearances.`]
+      : []),
+    ...(injuryIncidents > 0
+      ? [`${injuryIncidents} dated injury incidents carrying ${injuryWeeks} recovery weeks.`]
+      : []),
+    ...(latest && latest.movementStatus !== "atDestination"
+      ? [`Latest recorded movement status: ${latest.movementStatus}.`]
+      : []),
+  ];
+
+  return {
+    appearances,
+    ...(avgMatchRating !== undefined ? { avgMatchRating } : {}),
+    outcomeEvidenceLevel: evidenceLevel,
+    outcomeEvidence: evidence,
+  };
 }
 
 /**
  * Update all transfer records with end-of-season data.
- * Increments seasonsSinceTransfer, updates CA and appearances, and
- * classifies outcome when enough data exists.
- *
- * When matchRatings are provided and a player has ≥5 real ratings,
- * the avgMatchRating is stored on the record for richer outcome analysis.
+ * Stores one idempotent evidence row per completed season, updates CA, and
+ * classifies only when enough observable evidence exists.
  *
  * Returns updated records — input is not mutated.
  */
@@ -196,37 +342,55 @@ export function updateTransferRecords(
   rng: RNG,
   records: TransferRecord[],
   players: Record<string, Player>,
-  matchRatings?: Record<string, Record<string, PlayerMatchRating>>,
+  matchRatings: Record<string, Record<string, PlayerMatchRating>> = {},
+  context?: TransferRecordUpdateContext,
 ): TransferRecord[] {
+  // Retained for API compatibility with older callers. Classification itself
+  // deliberately consumes no random values.
+  void rng;
   return records.map((record) => {
     const player = players[record.playerId];
     if (!player) return record;
 
-    const newSeasonsSince = record.seasonsSinceTransfer + 1;
-    const newAppearances = simulateAppearances(rng, player, newSeasonsSince);
-
-    // Accumulate appearances across seasons
-    const totalAppearances = (record.appearances ?? 0) + newAppearances;
-
-    // Use real match ratings when available (≥5 ratings)
-    const avgRating = matchRatings
-      ? computeAvgMatchRating(record.playerId, matchRatings)
-      : undefined;
+    const completedSeason = context?.completedSeason
+      ?? record.transferSeason + record.seasonsSinceTransfer;
+    const effectiveContext: TransferRecordUpdateContext = context ?? {
+      fixtures: {},
+      completedSeason,
+      seasonLength: LEGACY_SEASON_LENGTH_WEEKS,
+    };
+    const priorSeasons = [...(record.seasonParticipation ?? [])]
+      .sort((left, right) => left.season - right.season);
+    const alreadyRecorded = priorSeasons.some(
+      (season) => season.season === effectiveContext.completedSeason,
+    );
+    const seasons = alreadyRecorded
+      ? priorSeasons
+      : [
+          ...priorSeasons,
+          buildTransferSeasonParticipation(record, player, matchRatings, effectiveContext),
+        ].sort((left, right) => left.season - right.season);
+    const summary = summarizeParticipation(seasons);
+    const seasonsSinceTransfer = Math.max(
+      record.seasonsSinceTransfer,
+      effectiveContext.completedSeason - record.transferSeason + 1,
+    );
 
     let updated: TransferRecord = {
       ...record,
       currentCA: player.currentAbility,
-      seasonsSinceTransfer: newSeasonsSince,
-      appearances: totalAppearances,
-      ...(avgRating !== undefined ? { avgMatchRating: avgRating } : {}),
+      seasonsSinceTransfer,
+      seasonParticipation: seasons,
+      ...summary,
     };
 
-    // Classify outcome once we have enough data and outcome is not yet set
+    // Classify once the minimum time and evidence gates are both met. An
+    // unresolved record keeps being reviewed in later seasons.
     if (
-      newSeasonsSince >= MIN_SEASONS_FOR_CLASSIFICATION &&
+      seasonsSinceTransfer >= MIN_SEASONS_FOR_CLASSIFICATION &&
       updated.outcome === undefined
     ) {
-      const classified = classifyOutcome(rng, updated, player);
+      const classified = classifyOutcome(updated, player);
       updated = { ...updated, ...classified };
     }
 
@@ -241,68 +405,84 @@ export function updateTransferRecords(
 /**
  * Classify a transfer outcome and determine the narrative reason.
  *
- * Classification logic:
- *  - Hit:    CA increased by >= HIT_CA_GAIN_THRESHOLD since transfer
- *  - Flop:   CA decreased by >= |FLOP_CA_CHANGE_THRESHOLD| since transfer
- *  - Decent: Everything in between
+ * Classification uses only observable destination-club participation and
+ * ratings. Hidden current ability remains historical engine state, but cannot
+ * by itself create a player-facing success/failure verdict.
  *
- * Reason logic depends on outcome and contextual factors:
- *  - Flop + low appearances → "tacticalMismatch" or "characterIssues"
- *  - Flop + player injured  → "injury"
- *  - Flop + decent appearances but low rating → "overrated"
- *  - Hit + high rating → "perfectFit" or "exceededExpectations"
- *  - Decent + improving trend → "slowAdaptation" or "lateBloom"
+ * Reasons describe observable evidence, not inferred causes. In particular,
+ * low participation never proves a tactical or character problem.
  */
 export function classifyOutcome(
-  rng: RNG,
   record: TransferRecord,
   player: Player,
-): { outcome: TransferOutcome; outcomeReason: TransferOutcomeReason } {
-  const caChange = (record.currentCA ?? player.currentAbility) - record.caAtTransfer;
-  const appearances = record.appearances ?? 0;
-
-  // Determine outcome classification
-  let outcome: TransferOutcome;
-  if (caChange >= HIT_CA_GAIN_THRESHOLD) {
-    outcome = "hit";
-  } else if (caChange <= FLOP_CA_CHANGE_THRESHOLD) {
-    outcome = "flop";
-  } else {
-    outcome = "decent";
+): {
+  outcome?: TransferOutcome;
+  outcomeReason: TransferOutcomeReason;
+} {
+  const seasons = [...(record.seasonParticipation ?? [])]
+    .sort((left, right) => left.season - right.season);
+  const evidenceLevel = record.outcomeEvidenceLevel
+    ?? summarizeParticipation(seasons).outcomeEvidenceLevel;
+  if (evidenceLevel !== "sufficient") {
+    return { outcome: undefined, outcomeReason: "insufficientEvidence" };
   }
 
-  // Determine narrative reason
-  let outcomeReason: TransferOutcomeReason;
-
-  // avgMatchRating from real match data, when available
+  void player;
+  const appearances = record.appearances ?? 0;
   const avgRating = record.avgMatchRating;
+  const latestMovement = seasons.at(-1)?.movementStatus;
+  const teamMatches = seasons.reduce((total, season) => total + season.teamMatches, 0);
+  const injuryWeeks = seasons.reduce(
+    (total, season) => total + season.recordedInjuryWeeks,
+    0,
+  );
+  const appearanceRate = teamMatches > 0 ? appearances / teamMatches : 0;
+  const requiredOpportunities = Math.max(
+    5,
+    Math.round((seasons.at(-1)?.seasonLength ?? LEGACY_SEASON_LENGTH_WEEKS) * 0.13),
+  );
+  const injuryBurdenThreshold = Math.max(
+    4,
+    Math.round((seasons.at(-1)?.seasonLength ?? LEGACY_SEASON_LENGTH_WEEKS) * 0.13),
+  );
+  const ratingTrend = seasons
+    .filter((season) => season.avgMatchRating !== undefined)
+    .map((season) => season.avgMatchRating as number);
 
-  if (outcome === "flop") {
-    if (player.injured || player.injuryWeeksRemaining > 0) {
-      // Player has injury history — that's the primary reason
-      outcomeReason = "injury";
-    } else if (appearances < LOW_APPEARANCES_THRESHOLD * record.seasonsSinceTransfer) {
-      // Low appearances suggests the player didn't fit
-      outcomeReason = rng.chance(0.5) ? "tacticalMismatch" : "characterIssues";
-    } else {
-      // Had appearances but performed poorly — simply overrated
-      outcomeReason = "overrated";
-    }
-  } else if (outcome === "hit") {
-    // High-performing transfer — use match rating to strengthen reason
-    if (caChange >= HIT_CA_GAIN_THRESHOLD * 2 || (avgRating !== undefined && avgRating >= 7.5)) {
-      outcomeReason = "exceededExpectations";
-    } else {
-      outcomeReason = rng.chance(0.6) ? "perfectFit" : "exceededExpectations";
-    }
-  } else {
-    // Decent outcome — check if the trend is improving
-    if (caChange > 0 || (avgRating !== undefined && avgRating >= 6.5)) {
-      outcomeReason = rng.chance(0.5) ? "slowAdaptation" : "lateBloom";
-    } else {
-      // Stagnated or slight decline, but not a flop
-      outcomeReason = rng.chance(0.5) ? "slowAdaptation" : "tacticalMismatch";
-    }
+  let outcome: TransferOutcome | undefined;
+  if (teamMatches >= requiredOpportunities && appearanceRate < 0.2) {
+    outcome = "flop";
+  } else if (avgRating !== undefined && appearances >= MIN_RATING_SAMPLES) {
+    if (avgRating >= 7.2 && appearanceRate >= 0.4) outcome = "hit";
+    else if (avgRating < 6 || appearanceRate < 0.2) outcome = "flop";
+    else outcome = "decent";
+  }
+
+  // Determine an evidence label. These branches do not pretend to know why a
+  // coach selected a player or how they behaved away from recorded matches.
+  let outcomeReason: TransferOutcomeReason = "insufficientEvidence";
+
+  if (latestMovement === "retired") {
+    outcomeReason = "retired";
+  } else if (latestMovement === "movedOn" || latestMovement === "unattached") {
+    outcomeReason = "movedOn";
+  } else if (injuryWeeks >= injuryBurdenThreshold && appearanceRate < 0.5) {
+    outcomeReason = "injury";
+  } else if (avgRating !== undefined && avgRating >= 7.2 && outcome === "hit") {
+    outcomeReason = "strongPerformance";
+  } else if (
+    ratingTrend.length >= 2
+    && ratingTrend.at(-1)! - ratingTrend[0] >= 0.4
+  ) {
+    outcomeReason = "slowAdaptation";
+  } else if (appearanceRate < 0.35) {
+    outcomeReason = "limitedOpportunity";
+  } else if (avgRating !== undefined && avgRating >= 7.3) {
+    outcomeReason = "strongPerformance";
+  } else if (avgRating !== undefined && avgRating < 6) {
+    outcomeReason = "underperformed";
+  } else if (avgRating !== undefined && appearances >= MIN_RATING_SAMPLES) {
+    outcomeReason = "steadyContribution";
   }
 
   return { outcome, outcomeReason };
@@ -361,7 +541,7 @@ export function applyScoutAccountability(
       : "Unknown Player";
     const clubName = toClub?.name ?? "Unknown Club";
 
-    const reasonLabel = OUTCOME_REASON_LABELS[record.outcomeReason ?? "overrated"];
+    const reasonLabel = OUTCOME_REASON_LABELS[record.outcomeReason ?? "insufficientEvidence"];
     const isPositive = delta > 0;
 
     messages.push({
@@ -481,7 +661,7 @@ export function linkReportsToTransfers(
  * Human-readable labels for outcome reasons.
  */
 export const OUTCOME_REASON_LABELS: Record<TransferOutcomeReason, string> = {
-  injury: "Persistent injuries prevented the player from establishing themselves",
+  injury: "Recorded injuries coincided with materially reduced availability",
   tacticalMismatch: "The player did not fit the club's tactical system",
   characterIssues: "Off-field character issues hindered their adaptation",
   overrated: "The player's ability was overestimated in the scouting report",
@@ -489,6 +669,13 @@ export const OUTCOME_REASON_LABELS: Record<TransferOutcomeReason, string> = {
   exceededExpectations: "The player exceeded all expectations and developed rapidly",
   slowAdaptation: "The player needed time to adapt but is showing steady improvement",
   lateBloom: "A late bloomer who is now beginning to fulfil their potential",
+  limitedOpportunity: "The player recorded limited first-team involvement; no cause is inferred",
+  strongPerformance: "Recorded match ratings show sustained strong performance",
+  steadyContribution: "Recorded match ratings show a steady first-team contribution",
+  underperformed: "Recorded match ratings remained below the expected performance benchmark",
+  movedOn: "The player is no longer at the destination club",
+  retired: "The player's retirement is recorded in the football world",
+  insufficientEvidence: "There is not enough recorded evidence to explain the outcome yet",
 };
 
 /**
@@ -512,6 +699,13 @@ export const OUTCOME_REASON_COLORS: Record<TransferOutcomeReason, string> = {
   exceededExpectations: "bg-cyan-500/10 text-cyan-300 border-cyan-500/20",
   slowAdaptation: "bg-amber-500/10 text-amber-300 border-amber-500/20",
   lateBloom: "bg-blue-500/10 text-blue-300 border-blue-500/20",
+  limitedOpportunity: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+  strongPerformance: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+  steadyContribution: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+  underperformed: "bg-red-500/10 text-red-300 border-red-500/20",
+  movedOn: "bg-violet-500/10 text-violet-300 border-violet-500/20",
+  retired: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+  insufficientEvidence: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
 };
 
 /**
@@ -526,4 +720,11 @@ export const OUTCOME_REASON_SHORT_LABELS: Record<TransferOutcomeReason, string> 
   exceededExpectations: "Exceeded Expectations",
   slowAdaptation: "Slow Adaptation",
   lateBloom: "Late Bloom",
+  limitedOpportunity: "Limited Opportunity",
+  strongPerformance: "Strong Performance",
+  steadyContribution: "Steady Contribution",
+  underperformed: "Underperformed",
+  movedOn: "Moved On",
+  retired: "Retired",
+  insufficientEvidence: "Evidence Pending",
 };

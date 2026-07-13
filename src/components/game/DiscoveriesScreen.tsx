@@ -196,17 +196,23 @@ function DiscoveryCard({
         </div>
       )}
 
-      {transferRecord?.outcome && (
+      {transferRecord && (transferRecord.outcome || transferRecord.outcomeReason) && (
         <div>
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
             Transfer Outcome
           </p>
           <div className="flex items-center gap-1.5">
-            <span
-              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase ${OUTCOME_COLORS[transferRecord.outcome]}`}
-            >
-              {transferRecord.outcome}
-            </span>
+            {transferRecord.outcome ? (
+              <span
+                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase ${OUTCOME_COLORS[transferRecord.outcome]}`}
+              >
+                {transferRecord.outcome}
+              </span>
+            ) : (
+              <span className="inline-flex items-center rounded-md border border-zinc-500/20 bg-zinc-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-zinc-300">
+                Unresolved
+              </span>
+            )}
             {transferRecord.outcomeReason && (
               <span
                 className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}

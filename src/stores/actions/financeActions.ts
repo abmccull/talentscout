@@ -61,10 +61,19 @@ import {
   fireAssistantScout,
   assignAssistantScout,
   unassignAssistantScout,
+  renegotiateEmployeeSalary,
 } from "@/engine/finance";
 import { creditForLoanRepayment } from "@/engine/finance/creditScore";
 import { sellEquipmentForCash as sellEquipmentForCashEngine } from "@/engine/finance/distress";
-import { chooseCareerPath } from "@/engine/career/pathChoice";
+import { canChooseCareerPath } from "@/engine/career/pathChoice";
+import {
+  applyCareerPathTransition,
+  applyClubEmploymentTransition,
+} from "@/engine/career/transitions";
+import {
+  canAcceptJobOffer,
+  generateJobOffersForTier,
+} from "@/engine/career/progression";
 import { enrollInCourse } from "@/engine/career/courses";
 import {
   generateLoanRecommendation,
@@ -78,6 +87,7 @@ import {
   generateNegotiationMessage,
 } from "@/engine/freeAgents/negotiation";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
+import { getSeasonLength } from "@/engine/core/gameDate";
 import {
   getLifecycleWorld,
   resolvePlayerMovements,
@@ -85,6 +95,11 @@ import {
 } from "@/engine/world/playerLifecycle";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
+import {
+  attachListingToCase,
+  ensureScoutingCaseForReport,
+  recordMarketplaceDelivery,
+} from "@/engine/reports/scoutingCases";
 
 function completeFreeAgentSigning(
   state: GameState,
@@ -108,6 +123,7 @@ function completeFreeAgentSigning(
     }],
     state.currentWeek,
     state.currentSeason,
+    getSeasonLength(state.fixtures, state.currentSeason),
   );
   return resolution.applied.length > 0
     ? withLifecycleWorld(state, resolution.state)
@@ -161,14 +177,61 @@ export function createFinanceActions(get: GetState, set: SetState) {
     chooseCareerPath: (path: CareerPath) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
-      const result = chooseCareerPath(gameState.scout, gameState.finances, path);
-      set({
-        gameState: {
-          ...gameState,
-          scout: result.scout,
-          finances: result.finances,
-        },
-      });
+      if (!canChooseCareerPath(gameState.scout, gameState.finances)) return;
+
+      if (path === "club") {
+        const currentTierOffers = gameState.jobOffers.filter(
+          (offer) =>
+            offer.tier === gameState.scout.careerTier
+            && canAcceptJobOffer(
+              offer,
+              gameState.currentWeek,
+              gameState.currentSeason,
+            ),
+        );
+        const generatedOffers = currentTierOffers.length > 0
+          ? []
+          : generateJobOffersForTier(
+              createRNG(
+                `${gameState.seed}-career-path-club-s${gameState.currentSeason}w${gameState.currentWeek}`,
+              ),
+              gameState.scout,
+              gameState.clubs,
+              gameState.currentSeason,
+              gameState.scout.careerTier,
+              getSeasonLength(gameState.fixtures, gameState.currentSeason),
+            );
+        const offer = currentTierOffers[0] ?? generatedOffers[0];
+        if (!offer) {
+          set({
+            gameState: {
+              ...gameState,
+              inbox: [
+                ...gameState.inbox,
+                {
+                  id: `career-path-no-opening-s${gameState.currentSeason}w${gameState.currentWeek}`,
+                  week: gameState.currentWeek,
+                  season: gameState.currentSeason,
+                  type: "feedback",
+                  title: "No suitable club opening",
+                  body: "No club at your earned level is hiring this week. Your career-path choice remains open; build your reputation or try again after the market changes.",
+                  read: false,
+                  actionRequired: false,
+                },
+              ],
+            },
+          });
+          return;
+        }
+
+        const stateWithOffer = generatedOffers.length > 0
+          ? { ...gameState, jobOffers: [...gameState.jobOffers, ...generatedOffers] }
+          : gameState;
+        set({ gameState: applyClubEmploymentTransition(stateWithOffer, offer) });
+        return;
+      }
+
+      set({ gameState: applyCareerPathTransition(gameState, path) });
     },
 
     changeLifestyle: (level: LifestyleLevel) => {
@@ -183,11 +246,31 @@ export function createFinanceActions(get: GetState, set: SetState) {
     listReportForSale: (reportId: string, price: number, isExclusive: boolean, targetClubId?: string) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
+      const report = gameState.reports[reportId];
+      if (!report) return;
+      const linked = ensureScoutingCaseForReport(gameState.scoutingCases ?? {}, report);
       const updated = listReport(
         gameState.finances, reportId, price, isExclusive,
         targetClubId, gameState.currentWeek, gameState.currentSeason,
+        linked.scoutingCase.id,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
-      set({ gameState: { ...gameState, finances: updated } });
+      const listingId = `listing_${reportId}_${gameState.currentWeek}_${gameState.currentSeason}`;
+      const scoutingCases = attachListingToCase(
+        linked.scoutingCases,
+        linked.scoutingCase.id,
+        listingId,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          finances: updated,
+          reports: { ...gameState.reports, [reportId]: linked.report },
+          scoutingCases,
+        },
+      });
       useTutorialStore.getState().completeMilestone("checkedInbox");
     },
 
@@ -206,6 +289,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const bid = listing.bids.find((candidate) => candidate.id === bidId);
+      if (!bid || bid.status !== "pending") return;
       const updated = acceptBid(
         gameState.finances, listing.id, bidId,
         gameState.currentWeek, gameState.currentSeason,
@@ -214,7 +299,44 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const updatedInbox = gameState.inbox.map((m) =>
         m.relatedId === bidId ? { ...m, read: true, actionRequired: false } : m,
       );
-      set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+      const report = gameState.reports[listing.reportId];
+      if (!report) {
+        set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+        return;
+      }
+      const recorded = recordMarketplaceDelivery({
+        scoutingCases: gameState.scoutingCases ?? {},
+        reportDeliveries: gameState.reportDeliveries ?? {},
+        report,
+        listing,
+        bid,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+      });
+      const finances = {
+        ...updated,
+        reportListings: updated.reportListings.map((candidate) =>
+          candidate.id === listing.id
+            ? {
+                ...candidate,
+                caseId: recorded.delivery.caseId,
+                deliveryIds: candidate.deliveryIds?.includes(recorded.delivery.id)
+                  ? candidate.deliveryIds
+                  : [...(candidate.deliveryIds ?? []), recorded.delivery.id],
+              }
+            : candidate,
+        ),
+      };
+      set({
+        gameState: {
+          ...gameState,
+          finances,
+          inbox: updatedInbox,
+          reports: { ...gameState.reports, [report.id]: recorded.report },
+          scoutingCases: recorded.scoutingCases,
+          reportDeliveries: recorded.reportDeliveries,
+        },
+      });
     },
 
     declineMarketplaceBid: (bidId: string) => {
@@ -238,6 +360,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
         l.bids.some((b) => b.id === bidId),
       );
       if (!listing) return;
+      const bid = listing.bids.find((candidate) => candidate.id === bidId);
+      if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return;
       const updated = acceptExclusiveUpgrade(
         gameState.finances, listing.id, bidId,
         gameState.currentWeek, gameState.currentSeason,
@@ -252,7 +376,44 @@ export function createFinanceActions(get: GetState, set: SetState) {
           ? { ...m, read: true, actionRequired: false }
           : m,
       );
-      set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+      const report = gameState.reports[listing.reportId];
+      if (!report) {
+        set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+        return;
+      }
+      const recorded = recordMarketplaceDelivery({
+        scoutingCases: gameState.scoutingCases ?? {},
+        reportDeliveries: gameState.reportDeliveries ?? {},
+        report,
+        listing,
+        bid,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+      });
+      const finances = {
+        ...updated,
+        reportListings: updated.reportListings.map((candidate) =>
+          candidate.id === listing.id
+            ? {
+                ...candidate,
+                caseId: recorded.delivery.caseId,
+                deliveryIds: candidate.deliveryIds?.includes(recorded.delivery.id)
+                  ? candidate.deliveryIds
+                  : [...(candidate.deliveryIds ?? []), recorded.delivery.id],
+              }
+            : candidate,
+        ),
+      };
+      set({
+        gameState: {
+          ...gameState,
+          finances,
+          inbox: updatedInbox,
+          reports: { ...gameState.reports, [report.id]: recorded.report },
+          scoutingCases: recorded.scoutingCases,
+          reportDeliveries: recorded.reportDeliveries,
+        },
+      });
     },
 
     acceptRetainerContract: (contract: RetainerContract) => {
@@ -282,6 +443,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         gameState.finances, courseId,
         gameState.currentWeek, gameState.currentSeason,
         gameState.scout.careerTier,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
       if (result.success) {
         set({ gameState: { ...gameState, finances: result.finances } });
@@ -318,9 +480,21 @@ export function createFinanceActions(get: GetState, set: SetState) {
     hireAgencyEmployee: (role: AgencyEmployeeRole) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
-      const rng = createRNG(`${gameState.seed}-hire-${gameState.currentWeek}`);
+      const actionSequence = (gameState.finances.actionSequence ?? 0) + 1;
+      const rng = createRNG(
+        `${gameState.runManifest.rootSeed}-hire-s${gameState.currentSeason}w${gameState.currentWeek}-a${actionSequence}`,
+      );
       const regions = gameState.countries ?? [];
-      const updated = hireEmployee(rng, gameState.finances, role, gameState.currentWeek, gameState.currentSeason, regions);
+      const updated = hireEmployee(
+        rng,
+        gameState.finances,
+        role,
+        gameState.currentWeek,
+        gameState.currentSeason,
+        regions,
+        actionSequence,
+        gameState.scout.reputation,
+      );
       if (updated) {
         set({ gameState: { ...gameState, finances: updated } });
       }
@@ -329,7 +503,12 @@ export function createFinanceActions(get: GetState, set: SetState) {
     fireAgencyEmployee: (employeeId: string) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
-      const updated = fireEmployee(gameState.finances, employeeId);
+      const updated = fireEmployee(
+        gameState.finances,
+        employeeId,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
       set({ gameState: { ...gameState, finances: updated } });
     },
 
@@ -350,11 +529,25 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!gameState?.finances) return;
       const club = gameState.clubs[clubId];
       if (!club) return;
-      const rng = createRNG(`${gameState.seed}-pitch-${gameState.currentWeek}`);
-      const result = pitchToClub(rng, gameState.scout, gameState.finances, club, pitchType);
+      const actionSequence = (gameState.finances.actionSequence ?? 0) + 1;
+      const rng = createRNG(
+        `${gameState.runManifest.rootSeed}-pitch-s${gameState.currentSeason}w${gameState.currentWeek}-a${actionSequence}`,
+      );
+      const sequencedFinances = {
+        ...gameState.finances,
+        actionSequence,
+      };
+      const result = pitchToClub(
+        rng,
+        gameState.scout,
+        gameState.finances,
+        club,
+        pitchType,
+        actionSequence,
+      );
       if (result.success && result.offeredContract) {
         const financesWithRelationship = ensureClientRelationship(
-          gameState.finances, clubId, gameState.currentWeek, gameState.currentSeason,
+          sequencedFinances, clubId, gameState.currentWeek, gameState.currentSeason,
         );
         set({
           gameState: {
@@ -365,32 +558,52 @@ export function createFinanceActions(get: GetState, set: SetState) {
             },
           },
         });
+      } else {
+        // Failed pitches still consume their deterministic action ordinal, so
+        // reload/retry cannot replay the same roll or later reuse its ID.
+        set({ gameState: { ...gameState, finances: sequencedFinances } });
       }
     },
 
     resolveAgencyEmployeeEvent: (eventId: string, optionIndex: number) => {
       const { gameState } = get();
       if (!gameState?.finances) return;
-      const updated = resolveEmployeeEventEngine(gameState.finances, eventId, optionIndex);
+      const updated = resolveEmployeeEventEngine(
+        gameState.finances,
+        eventId,
+        optionIndex,
+        gameState.currentWeek,
+        gameState.currentSeason,
+        gameState.scout.reputation,
+      );
       set({ gameState: { ...gameState, finances: updated } });
     },
 
     adjustEmployeeSalary: (employeeId: string, newSalary: number) => {
       const { gameState } = get();
       if (!gameState?.finances) return;
-      const updated = {
-        ...gameState.finances,
-        employees: gameState.finances.employees.map((emp) =>
-          emp.id === employeeId ? { ...emp, salary: newSalary } : emp,
-        ),
-      };
+      const updated = renegotiateEmployeeSalary(
+        gameState.finances,
+        employeeId,
+        newSalary,
+        gameState.scout.reputation,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
       set({ gameState: { ...gameState, finances: updated } });
     },
 
     openAgencySatelliteOffice: (region: string) => {
       const { gameState } = get();
       if (!gameState?.finances) return;
-      const updated = openSatelliteOffice(gameState.finances, region, gameState.currentWeek, gameState.currentSeason);
+      const actionSequence = (gameState.finances.actionSequence ?? 0) + 1;
+      const updated = openSatelliteOffice(
+        gameState.finances,
+        region,
+        gameState.currentWeek,
+        gameState.currentSeason,
+        actionSequence,
+      );
       if (updated) set({ gameState: { ...gameState, finances: updated } });
     },
 
@@ -552,9 +765,12 @@ export function createFinanceActions(get: GetState, set: SetState) {
 
     hireAssistantScoutAction: () => {
       const { gameState } = get();
-      if (!gameState) return;
-      const rng = createRNG(`${gameState.seed}-hire-asst-${gameState.currentWeek}`);
-      const updated = hireAssistantScout(rng, gameState);
+      if (!gameState?.finances) return;
+      const actionSequence = (gameState.finances.actionSequence ?? 0) + 1;
+      const rng = createRNG(
+        `${gameState.runManifest.rootSeed}-hire-asst-s${gameState.currentSeason}w${gameState.currentWeek}-a${actionSequence}`,
+      );
+      const updated = hireAssistantScout(rng, gameState, actionSequence);
       if (updated) set({ gameState: updated });
     },
 
@@ -708,6 +924,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         }],
         gameState.currentWeek,
         gameState.currentSeason,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
       if (resolution.applied.length === 0) {
         const failedNeg = { ...neg, phase: "collapsed" as const };
@@ -837,6 +1054,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         gameState.currentWeek,
         gameState.currentSeason,
         rng,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
       const message = generateNegotiationMessage(negotiation, player, club, rng, gameState.currentWeek, gameState.currentSeason);
 
@@ -1055,6 +1273,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         }],
         gameState.currentWeek,
         gameState.currentSeason,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
       if (resolution.applied.length === 0) return;
       const lifecycleState = withLifecycleWorld(gameState, resolution.state);

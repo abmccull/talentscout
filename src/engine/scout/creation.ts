@@ -19,6 +19,10 @@ import type {
 import { RNG } from "@/engine/rng";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getUnlockedPerks } from "@/engine/specializations/perks";
+import {
+  applyScoutIdentityStartingEffects,
+  scoutIdentitySelectionFromConfig,
+} from "@/engine/run/scoutIdentity";
 
 // ---------------------------------------------------------------------------
 // Base skill profiles per specialization
@@ -223,7 +227,7 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
   const salary = startingClubId ? 800 : 0;
   const careerPath = startingClubId ? "club" : "independent";
 
-  return {
+  const scout: Scout = {
     id,
     firstName: config.scoutFirstName,
     lastName: config.scoutLastName,
@@ -241,6 +245,7 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
 
     careerTier,
     careerPath,
+    careerPathChosen: Boolean(startingClubId),
     reputation: 10,
     clubTrust: startingClubId ? 20 : 0,
     specializationReputation: 5,
@@ -272,6 +277,10 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
     },
     boardDirectives: [],
   };
+  return applyScoutIdentityStartingEffects(
+    scout,
+    scoutIdentitySelectionFromConfig(config),
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -51,26 +51,27 @@ export function Tooltip({ content, side = "top", children }: TooltipProps) {
       onBlur={hide}
     >
       {children}
-      <span
-        role="tooltip"
-        className={[
-          "absolute z-50 w-max max-w-xs pointer-events-none",
-          "bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-3 py-2 shadow-xl",
-          "transition-opacity duration-150",
-          visible ? "opacity-100" : "opacity-0",
-          positionClasses[side],
-        ].join(" ")}
-      >
-        {content}
-        {/* Arrow */}
+      {visible && (
         <span
-          aria-hidden="true"
+          role="tooltip"
           className={[
-            "absolute w-0 h-0 border-4",
-            arrowClasses[side],
+            "absolute z-50 w-max max-w-xs pointer-events-none",
+            "bg-zinc-900 border border-zinc-700 text-zinc-200 text-xs rounded-lg px-3 py-2 shadow-xl",
+            "animate-in fade-in-0 duration-150",
+            positionClasses[side],
           ].join(" ")}
-        />
-      </span>
+        >
+          {content}
+          {/* Arrow */}
+          <span
+            aria-hidden="true"
+            className={[
+              "absolute w-0 h-0 border-4",
+              arrowClasses[side],
+            ].join(" ")}
+          />
+        </span>
+      )}
     </span>
   );
 }

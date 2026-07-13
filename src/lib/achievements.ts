@@ -11,6 +11,10 @@
  */
 
 import type { GameState, Position } from "@/engine/core/types";
+import {
+  countCareerWeeksPlayed,
+  countCountriesScouted,
+} from "@/engine/core/achievementEngine";
 import { ALL_PERKS } from "@/engine/specializations/perks";
 import { getScenarioById, checkScenarioObjectives } from "@/engine/scenarios";
 
@@ -192,11 +196,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "first-perk",
     name: "Specializing",
-    description: "Unlock your first perk.",
-    hint: "Earn a specialization perk by levelling up.",
+    description: "Earn your first additional specialization perk.",
+    hint: "Level up after starting your career to earn another perk.",
     category: "gettingStarted",
     icon: "⭐",
-    check: (state) => state.scout.unlockedPerks.length >= 1,
+    check: (state) => state.scout.specializationLevel > 1 && state.scout.unlockedPerks.length > 1,
   },
   {
     id: "first-equipment",
@@ -205,7 +209,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Buy your first scouting tool.",
     category: "gettingStarted",
     icon: "🔧",
-    check: (state) => state.unlockedTools.length >= 1,
+    check: (state) => state.finances?.transactions.some(
+      (transaction) => transaction.description.startsWith("Purchased "),
+    ) ?? false,
   },
   {
     id: "first-youth",
@@ -595,7 +601,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Expand your reach to 3 different countries.",
     category: "worldExplorer",
     icon: "✈️",
-    check: (state) => Object.keys(state.scout.countryReputations).length >= 3,
+    check: (state) => countCountriesScouted(state) >= 3,
   },
   {
     id: "countries-6",
@@ -604,7 +610,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Build a presence across 6 countries.",
     category: "worldExplorer",
     icon: "🗺️",
-    check: (state) => Object.keys(state.scout.countryReputations).length >= 6,
+    check: (state) => countCountriesScouted(state) >= 6,
   },
   {
     id: "countries-10",
@@ -613,7 +619,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Establish yourself in 10 countries around the world.",
     category: "worldExplorer",
     icon: "🌐",
-    check: (state) => Object.keys(state.scout.countryReputations).length >= 10,
+    check: (state) => countCountriesScouted(state) >= 10,
   },
   {
     id: "countries-15",
@@ -622,7 +628,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Build a truly global scouting network across 15 countries.",
     category: "worldExplorer",
     icon: "🛸",
-    check: (state) => Object.keys(state.scout.countryReputations).length >= 15,
+    check: (state) => countCountriesScouted(state) >= 15,
   },
   {
     id: "home-mastery",
@@ -942,8 +948,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "hidden",
     icon: "🏃",
     hidden: true,
-    check: (state) =>
-      (state.currentSeason - 1) * 52 + state.currentWeek >= 50,
+    check: (state) => countCareerWeeksPlayed(state) >= 50,
   },
 ];
 

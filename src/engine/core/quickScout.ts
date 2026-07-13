@@ -25,6 +25,7 @@ import type {
   Contact,
   ScoutSkill,
   Player,
+  ScoutSourcePerspective,
 } from "./types";
 import {
   ACTIVITY_FATIGUE_COSTS,
@@ -36,6 +37,13 @@ import {
   createWeekSchedule,
 } from "./calendar";
 import { processWeeklyTick, advanceWeek } from "./gameLoop";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
+import { addGameWeeks } from "./gameDate";
+import {
+  adjustRecommendationForPerspective,
+  buildNPCRecommendationEvidenceClaim,
+  deriveNPCScoutPerspective,
+} from "@/engine/scout/sourcePerspectives";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -85,7 +93,12 @@ export function autoScheduleWeek(
   const available = getAvailableActivities(
     scout,
     state.currentWeek,
-    Object.values(state.fixtures).filter((f) => f.week === state.currentWeek && !f.played),
+    Object.values(state.fixtures).filter(
+      (f) =>
+        isFixtureInSeason(f, state.currentSeason) &&
+        f.week === state.currentWeek &&
+        !f.played,
+    ),
     Object.values(state.contacts),
     state.subRegions,
     state.observations,
@@ -96,6 +109,8 @@ export function autoScheduleWeek(
       loanRecommendations: state.loanRecommendations,
       transferWindow: state.transferWindow,
     },
+    state.youthTournaments,
+    state.reports,
   );
 
   // Estimate current fatigue trajectory across the week
@@ -549,6 +564,7 @@ export function delegateScoutingTask(
   // Calculate estimated weeks: quality 5 = 2 weeks, quality 1 = 3 weeks
   const estimatedWeeks = npcScout.quality >= 4 ? 2 : 3;
   const completionTiming = estimateDelegationCompletion(
+    state.fixtures,
     state.currentWeek,
     state.currentSeason,
     estimatedWeeks,
@@ -611,20 +627,16 @@ export function delegateScoutingTask(
 }
 
 function estimateDelegationCompletion(
+  fixtures: GameState["fixtures"],
   startWeek: number,
   startSeason: number,
   estimatedWeeks: number,
 ): { week: number; season: number } {
-  const WEEKS_PER_SEASON_ESTIMATE = 38;
-  const projectedWeek = startWeek + estimatedWeeks;
-  if (projectedWeek <= WEEKS_PER_SEASON_ESTIMATE) {
-    return { week: projectedWeek, season: startSeason };
-  }
-
-  return {
-    week: projectedWeek - WEEKS_PER_SEASON_ESTIMATE,
-    season: startSeason + 1,
-  };
+  return addGameWeeks(
+    fixtures,
+    { week: startWeek, season: startSeason },
+    estimatedWeeks,
+  );
 }
 
 function clampDelegationReportQuality(value: number): number {
@@ -649,8 +661,12 @@ function specializationBonus(npcScout: NPCScout, player: Player): number {
 function deriveDelegationRecommendation(
   quality: number,
   player: Player,
+  perspective: ScoutSourcePerspective,
 ): NPCScoutReport["recommendation"] {
-  const signal = quality * 0.7 + (player.currentAbility / 200) * 100 * 0.3;
+  const signal = adjustRecommendationForPerspective(
+    quality * 0.7 + (player.currentAbility / 200) * 100 * 0.3,
+    perspective,
+  );
   if (signal >= 75) return "pursue";
   if (signal >= 45) return "shortlist";
   return "monitor";
@@ -670,8 +686,10 @@ function createDelegationReport(
     rng.gaussian(baseQuality + focusedBonus - fatiguePenalty, 6),
   );
   const quality = clampDelegationReportQuality(noisyQuality);
-  const recommendation = deriveDelegationRecommendation(quality, player);
+  const perspective = deriveNPCScoutPerspective(npcScout);
+  const recommendation = deriveDelegationRecommendation(quality, player, perspective);
   const reportId = `npc_deleg_${delegation.id}_${state.currentSeason}_${state.currentWeek}`;
+  const sourceName = `${npcScout.firstName} ${npcScout.lastName}`;
   const summary =
     `${npcScout.firstName} ${npcScout.lastName} completed a focused follow-up on ` +
     `${player.firstName} ${player.lastName}. ` +
@@ -689,6 +707,17 @@ function createDelegationReport(
     summary,
     recommendation,
     reviewed: false,
+    sourcePerspective: perspective,
+    evidenceClaims: [buildNPCRecommendationEvidenceClaim({
+      reportId,
+      playerId: player.id,
+      sourceName,
+      perspective,
+      recommendation,
+      quality,
+      week: state.currentWeek,
+      season: state.currentSeason,
+    })],
   };
 }
 

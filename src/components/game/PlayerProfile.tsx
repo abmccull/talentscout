@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useState, useMemo } from "react";
-import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X, Globe, ChevronRight } from "lucide-react";
+import { FileText, ArrowLeft, Eye, Star, ArrowUp, ArrowDown, Minus, MessageCircle, GraduationCap, Target, TrendingUp, TrendingDown, AlertTriangle, CalendarPlus, ClipboardList, Phone, Users, HeartPulse, Handshake, Flame, Snowflake, Send, RotateCcw, X, Globe, ChevronRight } from "lucide-react";
 import type {
   AttributeReading,
   HiddenIntel,
@@ -35,6 +35,8 @@ import { canAddActivity } from "@/engine/core/calendar";
 import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip";
 import { getCountryDisplayName } from "@/engine/network/contacts";
 import { formatObservationActivityLabel } from "@/engine/observation/reflection";
+import { getHighestValueNextContext } from "@/engine/observation/informationGain";
+import { getYouthRivalPressure, getYouthRivalPressureBand } from "@/engine/rivals";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
 import { normalizeCountryKey } from "@/lib/country";
@@ -43,6 +45,8 @@ import {
   getResolvedPlayerIds,
   resolvePlayerEntity,
 } from "@/lib/playerResolution";
+import { EvidenceBoard } from "@/components/game/evidence";
+import { getSeasonLength } from "@/engine/core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -230,7 +234,7 @@ function ReliabilityDots({ reliability }: { reliability: number }) {
   const total = 5;
   const filled = Math.round(reliability * total);
   return (
-    <div className="flex items-center gap-0.5" aria-label={`Reliability: ${filled} out of ${total}`}>
+    <div className="flex items-center gap-0.5" role="img" aria-label={`Reliability: ${filled} out of ${total}`}>
       {Array.from({ length: total }).map((_, i) => (
         <div
           key={i}
@@ -1116,6 +1120,10 @@ export function PlayerProfile() {
   const [loanDuration, setLoanDuration] = useState(20);
 
   if (!gameState || !selectedPlayerId) return null;
+  const seasonLength = getSeasonLength(
+    gameState.fixtures,
+    gameState.currentSeason,
+  );
 
   const resolvedPlayer = resolvePlayerEntity(gameState, selectedPlayerId);
   if (!resolvedPlayer) return null;
@@ -1235,6 +1243,8 @@ export function PlayerProfile() {
     : null;
 
   const contactIntel: HiddenIntel[] = getResolvedContactIntel(gameState, canonicalPlayerId);
+  const npcEvidenceReports = Object.values(gameState.npcReports ?? {})
+    .filter((report) => relatedPlayerIds.has(report.playerId));
   const dossierEntries: PlayerEvidenceEntry[] = Object.values(
     gameState.reflectionJournal ?? {},
   )
@@ -1310,6 +1320,54 @@ export function PlayerProfile() {
     }
     return (right.submittedWeek ?? 0) - (left.submittedWeek ?? 0);
   })[0];
+  const relevantBriefs = unsignedYouthRecord
+    ? Object.values(gameState.youthRecruitmentBriefs)
+        .filter((brief) =>
+          brief.status === "open"
+          && player.age <= brief.maxAge
+          && (
+            brief.requiredPositions.includes(player.position)
+            || player.secondaryPositions.some((position) => brief.requiredPositions.includes(position))
+          )
+        )
+        .sort((left, right) => right.competitionPressure - left.competitionPressure)
+    : [];
+  const latestHypotheses = (() => {
+    const byId = new Map<string, ReflectionHypothesisRecord>();
+    [...dossierEntries].reverse().forEach((entry) => entry.hypotheses.forEach((hypothesis) => {
+      byId.set(hypothesis.id, hypothesis);
+    }));
+    return [...byId.values()];
+  })();
+  const nextObservationContext = unsignedYouthRecord && !unsignedYouthRecord.placed
+    ? getHighestValueNextContext({
+        observations,
+        playerId: canonicalPlayerId,
+        candidateContexts: [
+          "schoolMatch",
+          "grassrootsTournament",
+          "academyTrialDay",
+          "followUpSession",
+          "parentCoachMeeting",
+          "trainingGround",
+        ],
+        targetDomains: latestHypotheses
+          .filter((hypothesis) => hypothesis.state !== "confirmed" && hypothesis.state !== "debunked")
+          .map((hypothesis) => hypothesis.domain),
+      })
+    : null;
+  const trackingYouthRivals = unsignedYouthRecord
+    ? Object.values(gameState.rivalScouts)
+        .filter((rival) =>
+          rival.specialization === "youth"
+          && rival.targetPlayerIds.includes(canonicalPlayerId)
+        )
+        .map((rival) => {
+          const pressure = getYouthRivalPressure(rival, unsignedYouthRecord);
+          return { rival, pressure, band: getYouthRivalPressureBand(pressure) };
+        })
+        .sort((left, right) => right.pressure - left.pressure)
+    : [];
   const unansweredAttributes = Array.from(byDomain.values()).flatMap((domainAttrs) =>
     domainAttrs
       .filter(([, reading]) => !reading)
@@ -1322,10 +1380,10 @@ export function PlayerProfile() {
       ? "Get a live view before you commit."
       : reports.length === 0
       ? "Turn the read into a report."
-      : unsignedYouthRecord && !unsignedYouthRecord.placed
-      ? "Decide if this prospect is ready for placement."
       : foreignYouthCountry && !unsignedYouthRecord?.placed
       ? `Travel to ${getCountryDisplayName(foreignYouthCountry)} before escalating.`
+      : unsignedYouthRecord && !unsignedYouthRecord.placed
+      ? "Decide if this prospect is ready for placement."
       : "Choose the most useful follow-up.";
   const nextDecisionReason =
     observations.length === 0
@@ -1347,7 +1405,7 @@ export function PlayerProfile() {
 
   return (
     <GameLayout>
-      <div className="p-4 sm:p-6 lg:p-8">
+      <div className="p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         {/* Back button */}
         <button
           onClick={() => setScreen(specialization === "youth" ? "youthScouting" : "playerDatabase")}
@@ -1501,6 +1559,7 @@ export function PlayerProfile() {
                 disabled={pendingLoanRecommendation}
                 onClick={() => {
                   setLoanTargetClubId(loanTargetClubs[0].id);
+                  setLoanDuration(Math.round(seasonLength / 2));
                   setLoanDialogOpen(true);
                 }}
                 title={pendingLoanRecommendation ? "A loan recommendation is awaiting a response" : "Choose a development loan destination"}
@@ -1631,6 +1690,102 @@ export function PlayerProfile() {
             </Button>
           </CardContent>
         </Card>
+
+        {unsignedYouthRecord && !unsignedYouthRecord.placed && (
+          <section className="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]" aria-label="Academy case evidence">
+            <Card className="border-sky-400/20 bg-[#111820]/95">
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base text-white">
+                  <ClipboardList size={17} className="text-sky-300" aria-hidden="true" />
+                  Brief fit and opportunity cost
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 p-5 pt-1">
+                {relevantBriefs.length === 0 ? (
+                  <p className="text-sm leading-6 text-zinc-400">No open academy brief currently matches this player&apos;s position and age. A speculative report can still preserve the judgment, but it has no immediate club need behind it.</p>
+                ) : relevantBriefs.slice(0, 2).map((brief) => (
+                  <div key={brief.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">{gameState.clubs[brief.clubId]?.name ?? "Academy client"}</p>
+                        <p className="mt-1 font-semibold text-white">{brief.requiredPositions.join("/")} · {brief.preferredRole ? formatAttribute(brief.preferredRole) : "Open role"}</p>
+                      </div>
+                      <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-[10px]">
+                        {brief.competitionPressure}/100 pressure
+                      </Badge>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-300">
+                      <span className="rounded-full border border-white/10 px-2 py-1">Due S{brief.expiresSeason} W{brief.expiresWeek}</span>
+                      <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
+                      <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border-violet-400/20 bg-[#15131d]/95">
+              <CardHeader className="p-5 pb-3">
+                <CardTitle className="flex items-center gap-2 text-base text-white">
+                  <Target size={17} className="text-violet-300" aria-hidden="true" />
+                  Highest-value next evidence
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 pt-1">
+                {nextObservationContext ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-lg font-bold text-white">{formatAttribute(nextObservationContext.context)}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{nextObservationContext.sourceFamily} evidence family</p>
+                      </div>
+                      <Badge variant={nextObservationContext.gainBand === "high" ? "success" : nextObservationContext.gainBand === "medium" ? "warning" : "outline"}>
+                        Gain {nextObservationContext.score}/100
+                      </Badge>
+                    </div>
+                    <ul className="mt-4 space-y-2 text-xs leading-5 text-zinc-300">
+                      {nextObservationContext.reasons.slice(0, 3).map((reason) => (
+                        <li key={reason} className="flex gap-2"><span className="text-violet-300">•</span><span>{reason}</span></li>
+                      ))}
+                    </ul>
+                    <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-zinc-400">
+                      <span>{latestHypotheses.length} preserved hypothes{latestHypotheses.length === 1 ? "is" : "es"}</span>
+                      <span>·</span>
+                      <span>{nextObservationContext.sameContextIndependentSources} prior independent source{nextObservationContext.sameContextIndependentSources === 1 ? "" : "s"} in this context</span>
+                    </div>
+                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => setScreen("calendar")}>Plan this evidence</Button>
+                  </>
+                ) : (
+                  <p className="text-sm text-zinc-400">No further youth evidence is currently required.</p>
+                )}
+              </CardContent>
+            </Card>
+            {trackingYouthRivals.length > 0 && (
+              <Card className="border-red-400/20 bg-red-400/[0.05] lg:col-span-2">
+                <CardContent className="p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-red-300">Contested prospect</p>
+                      <h3 className="mt-1 text-base font-bold text-white">Other scouts are building their own case</h3>
+                    </div>
+                    <Badge variant="destructive">{trackingYouthRivals.length} rival{trackingYouthRivals.length === 1 ? "" : "s"}</Badge>
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                    {trackingYouthRivals.slice(0, 4).map(({ rival, pressure, band }) => (
+                      <div key={rival.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-white">{rival.name}</p>
+                          <Badge variant={band === "imminent" ? "destructive" : band === "contested" ? "warning" : "outline"} className="text-[10px]">{band}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-400">{gameState.clubs[rival.clubId]?.name ?? "Rival organization"} · Pressure {pressure}/100</p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </section>
+        )}
 
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -1786,11 +1941,11 @@ export function PlayerProfile() {
                   {foreignYouthCountry ? " — you will need to travel there to scout in person." : "."}
                 </p>
 
-                {!unsignedYouthRecord.placed && (
+                {!unsignedYouthRecord.placed && latestReport && (
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-4 border-amber-500/40 text-amber-400 hover:border-amber-400 hover:text-amber-300"
+                    className="mt-4 min-h-11 border-amber-500/40 text-amber-300 hover:border-amber-400 hover:text-amber-200"
                     onClick={() => {
                       setPendingCalendarActivity({
                         type: "writePlacementReport",
@@ -1801,7 +1956,28 @@ export function PlayerProfile() {
                     }}
                   >
                     <FileText size={12} className="mr-1.5" aria-hidden="true" />
-                    Recommend to Club
+                    Pitch Filed Report
+                  </Button>
+                )}
+                {!unsignedYouthRecord.placed && !latestReport && observations.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 min-h-11 border-emerald-500/40 text-emerald-300 hover:border-emerald-400 hover:text-emerald-200"
+                    onClick={() => startReport(canonicalPlayerId)}
+                  >
+                    <FileText size={12} className="mr-1.5" aria-hidden="true" />
+                    File Report First
+                  </Button>
+                )}
+                {!unsignedYouthRecord.placed && observations.length === 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 min-h-11"
+                    onClick={() => setScreen("calendar")}
+                  >
+                    Plan First Observation
                   </Button>
                 )}
               </CardContent>
@@ -2097,8 +2273,37 @@ export function PlayerProfile() {
             )}
 
             <div>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                Evidence Board
+              </h2>
+              <EvidenceBoard
+                playerName={`${player.firstName} ${player.lastName}`}
+                observations={observations}
+                contactIntel={contactIntel}
+                npcReports={npcEvidenceReports}
+                currentWeek={gameState.currentWeek}
+                currentSeason={gameState.currentSeason}
+                seasonLength={seasonLength}
+                messages={dossierInboxIntel.map((message) => ({
+                  id: message.id,
+                  title: message.title,
+                  body: message.body,
+                  week: message.week,
+                  season: message.season,
+                }))}
+                flaggedMoments={dossierEntries.flatMap((entry) => entry.flaggedMoments)}
+                hypotheses={latestHypotheses}
+                reports={reports}
+                unknowns={unansweredAttributes.slice(0, 6).map((attribute) =>
+                  `${attribute} has not been observed with enough clarity.`,
+                )}
+                onStartReport={() => startReport(canonicalPlayerId)}
+              />
+            </div>
+
+            <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
-                Evidence Dossier
+                Evidence Log
               </h2>
               <Card>
                 <CardContent className="px-4 pb-4 pt-4">
@@ -2497,8 +2702,10 @@ export function PlayerProfile() {
                   className="mt-1.5 w-full rounded-md border border-[#27272a] bg-[#141414] px-3 py-2 text-sm text-white"
                 >
                   <option value={12}>12 weeks · short-term test</option>
-                  <option value={20}>20 weeks · half season</option>
-                  <option value={38}>38 weeks · full season</option>
+                  <option value={Math.round(seasonLength / 2)}>
+                    {Math.round(seasonLength / 2)} weeks · half season
+                  </option>
+                  <option value={seasonLength}>{seasonLength} weeks · full season</option>
                 </select>
               </label>
             </div>

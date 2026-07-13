@@ -27,6 +27,21 @@ export {
   withLifecycleWorld,
   resolvePlayerMovements,
 } from './playerLifecycle';
+
+export {
+  deriveRegionRecruitmentIdentity,
+  deriveClubRecruitmentIdentity,
+  deriveBriefRecruitmentIdentity,
+  evaluateRecruitmentIdentityFit,
+} from './recruitmentIdentity';
+export type {
+  RecruitmentFocus,
+  RegionRecruitmentArchetype,
+  ClubRecruitmentArchetype,
+  RegionRecruitmentIdentity,
+  ClubRecruitmentIdentity,
+  RecruitmentIdentityFit,
+} from './recruitmentIdentity';
 export type {
   LifecycleWorldState,
   LifecycleResolution,

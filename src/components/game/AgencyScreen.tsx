@@ -215,7 +215,7 @@ export function AgencyScreen() {
             <Card>
               <CardContent className="p-3">
                 <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Monthly Overhead</p>
-                <p className="text-base font-bold text-amber-400">£{calculateAgencyOverhead(finances).toLocaleString()}/mo</p>
+                <p className="text-base font-bold text-amber-400">£{calculateAgencyOverhead(finances, scout.reputation).toLocaleString()}/mo</p>
               </CardContent>
             </Card>
             <Card>

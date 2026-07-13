@@ -9,7 +9,14 @@
  */
 
 import type { RNG } from "@/engine/rng";
-import type { Player, Club, Position, UnsignedYouth, SubRegion } from "@/engine/core/types";
+import type {
+  Player,
+  Club,
+  Position,
+  UnsignedYouth,
+  SubRegion,
+  PlayerMovementEvent,
+} from "@/engine/core/types";
 import { ALL_POSITIONS } from "@/engine/core/types";
 import { generatePlayer } from "@/engine/players/generation";
 import type { CountryData } from "@/data/types";
@@ -398,6 +405,7 @@ export function generateRegionalYouth(
   week: number,
   subRegions: SubRegion[],
   wonderkidMultiplier: number = 1.0,
+  generationNamespace = "regional",
 ): UnsignedYouth[] {
   // 30% chance this country produces youth this week
   if (!rng.chance(0.3)) {
@@ -432,6 +440,7 @@ export function generateRegionalYouth(
       clubId: "",
       currentSeason: season,
       clubReputation: 50,
+      idNamespace: `unsigned_${generationNamespace}_${country.key}_s${season}_w${week}`,
       firstName,
       lastName,
     });
@@ -537,6 +546,7 @@ export function generateAcademyIntake(
       clubId: club.id,
       currentSeason: season,
       clubReputation: club.reputation,
+      idNamespace: `academy_${club.id}_s${season}`,
       firstName,
       lastName,
     });
@@ -636,6 +646,37 @@ export function processYouthAging(
   }
 
   return { updated, autoSigned, retired };
+}
+
+/**
+ * Commit the optimistic placement flags produced by processYouthAging only
+ * when the authoritative lifecycle transaction recorded the matching move.
+ */
+export function reconcileYouthSigningPlacements(
+  unsignedYouth: Record<string, UnsignedYouth>,
+  autoSigned: ReadonlyArray<{ youthId: string; clubId: string }>,
+  appliedMovements: readonly PlayerMovementEvent[],
+): Record<string, UnsignedYouth> {
+  const appliedSigningKeys = new Set(
+    appliedMovements
+      .filter((movement) => movement.type === "youthSigning")
+      .map((movement) => `${movement.playerId}:${movement.toClubId ?? ""}`),
+  );
+  let reconciled = unsignedYouth;
+
+  for (const { youthId, clubId } of autoSigned) {
+    const youth = reconciled[youthId];
+    if (!youth) continue;
+    if (appliedSigningKeys.has(`${youth.player.id}:${clubId}`)) continue;
+    if (reconciled === unsignedYouth) reconciled = { ...unsignedYouth };
+    reconciled[youthId] = {
+      ...youth,
+      placed: false,
+      placedClubId: undefined,
+    };
+  }
+
+  return reconciled;
 }
 
 // =============================================================================

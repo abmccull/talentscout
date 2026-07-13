@@ -32,8 +32,17 @@
 import { getSteam } from "@/lib/steam/steamInterface";
 import { supabase } from "@/lib/supabase";
 import { SupabaseCloudSaveProvider } from "@/lib/supabaseCloudSave";
-import { saveGame, loadGame, listSaves, deleteSave, migrateSaveState, type SaveRecord } from "@/lib/db";
+import {
+  saveGame,
+  loadGame,
+  listSaves,
+  deleteSave,
+  migrateSaveRecord,
+  migrateSaveState,
+  type SaveRecord,
+} from "@/lib/db";
 import { captureException } from "@/lib/sentry";
+import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -213,28 +222,13 @@ function slotNumberToName(slot: number): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Parse the timestamp out of a raw Steam Cloud save blob without fully
- * deserialising the game state.  The Steam backend stores a full SaveRecord
- * JSON object (see db.ts saveGame()), so we only need the `savedAt` field.
+ * Parse the timestamp from a validated, supported Steam Cloud save record.
+ * Future or corrupt records are deliberately excluded from conflict choices.
  *
  * Returns null when the blob is missing, empty, or malformed.
  */
 function parseSteamTimestamp(raw: string | null): number | null {
-  if (!raw) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      "savedAt" in parsed &&
-      typeof (parsed as { savedAt: unknown }).savedAt === "number"
-    ) {
-      return (parsed as { savedAt: number }).savedAt;
-    }
-  } catch {
-    // Malformed JSON — treat as empty.
-  }
-  return null;
+  return parseSteamSaveRecord(raw)?.savedAt ?? null;
 }
 
 /**
@@ -279,24 +273,7 @@ function buildPreview(raw: string): string {
 function parseSteamSaveRecord(raw: string | null): SaveRecord | null {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      !("slot" in parsed) ||
-      !("name" in parsed) ||
-      !("savedAt" in parsed) ||
-      !("season" in parsed) ||
-      !("week" in parsed) ||
-      !("scoutName" in parsed) ||
-      !("specialization" in parsed) ||
-      !("reputation" in parsed) ||
-      !("state" in parsed)
-    ) {
-      return null;
-    }
-
-    return parsed as SaveRecord;
+    return migrateSaveRecord(JSON.parse(raw) as unknown);
   } catch {
     return null;
   }
@@ -343,11 +320,23 @@ class SaveProviderImpl implements SaveProvider {
 
     const saveName =
       displayName ?? (slotName === "autosave" ? "Autosave" : `Save ${slot}`);
-    await saveGame(slot, saveName, state);
-    // IndexedDB succeeded — from here on, secondary writes are fire-and-forget.
-    // Note: db.saveGame() already mirrors the canonical SaveRecord envelope to
-    // Steam Cloud when Steam is available. Avoid writing `data` again here,
-    // which may not include `savedAt` metadata expected by cloud reads.
+    const record = await saveGame(slot, saveName, state);
+    let steamUpload: Promise<void> | null = null;
+    const steam = getSteam();
+    if (this.includeSteam && steam.isAvailable()) {
+      steamUpload = steam
+        .setCloudSave(slot, JSON.stringify(record))
+        .catch((err: unknown) => {
+          console.warn(
+            `SaveProvider: Steam Cloud write failed for slot "${slotName}":`,
+            err,
+          );
+          captureException(err);
+          if (options?.waitForCloud) throw err;
+        });
+    }
+    // IndexedDB succeeded. Remote providers receive the same versioned record
+    // so reads, conflict checks, and deletion share one canonical shape.
 
     // ---- Secondary write: Supabase ----------------------------------------
     let supabaseUpload: Promise<void> | null = null;
@@ -370,8 +359,12 @@ class SaveProviderImpl implements SaveProvider {
         });
     }
 
-    if (options?.waitForCloud && supabaseUpload) {
-      await supabaseUpload;
+    if (options?.waitForCloud) {
+      await Promise.all(
+        [steamUpload, supabaseUpload].filter(
+          (upload): upload is Promise<void> => upload !== null,
+        ),
+      );
     }
   }
 
@@ -448,6 +441,7 @@ class SaveProviderImpl implements SaveProvider {
       const raw = await steam.getCloudSave(slot);
       const record = parseSteamSaveRecord(raw);
       if (!record) return null;
+      mergePersistedPlayerExperience(record.playerExperience);
 
       return {
         data: JSON.stringify(record.state),
@@ -689,6 +683,11 @@ class SaveProviderImpl implements SaveProvider {
     const tasks: Promise<void>[] = [];
 
     tasks.push(deleteSave(slot));
+
+    const steam = getSteam();
+    if (this.includeSteam && steam.isAvailable()) {
+      tasks.push(steam.deleteCloudSave(slot));
+    }
 
     if (supabase && this.userId) {
       const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);

@@ -4,6 +4,7 @@
 
 import type { RNG } from "../rng/index";
 import type { FinancialRecord, AwardRecord, Scout } from "../core/types";
+import { LEGACY_SEASON_LENGTH_WEEKS } from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Annual award processing
@@ -25,6 +26,7 @@ export function processAnnualAwards(
   finances: FinancialRecord,
   scout: Scout,
   season: number,
+  awardWeek = LEGACY_SEASON_LENGTH_WEEKS,
 ): { finances: FinancialRecord; wonAwards: AwardRecord[] } {
   // Only tier 5 agencies are eligible
   if ((scout.independentTier ?? 1) < 5) {
@@ -82,7 +84,7 @@ export function processAnnualAwards(
       awards: [...updated.awards, award],
       transactions: [
         ...updated.transactions,
-        { week: 52, season, amount: award.cashBonus, description: `Award: ${award.title}` },
+        { week: awardWeek, season, amount: award.cashBonus, description: `Award: ${award.title}` },
       ],
     };
   }

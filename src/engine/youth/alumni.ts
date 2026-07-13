@@ -121,9 +121,17 @@ export function createAlumniRecord(
   clubId: string,
   week: number,
   season: number,
+  source?: {
+    caseId?: string;
+    placementReportId?: string;
+    originatingReportId?: string;
+  },
 ): AlumniRecord {
   return {
     id: `alumni_${youth.id}`,
+    caseId: source?.caseId,
+    placementReportId: source?.placementReportId,
+    originatingReportId: source?.originatingReportId,
     playerId: youth.player.id,
     placedClubId: clubId,
     currentClubId: clubId,

@@ -27,6 +27,7 @@ import type {
 } from "@/engine/core/types";
 import { evaluateTransferWillingness } from "@/engine/players/personalityEffects";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
+import { addGameWeeks } from "@/engine/core/gameDate";
 
 // =============================================================================
 // CONSTANTS
@@ -39,7 +40,6 @@ const MAX_ROUNDS = 4;
 
 /** Deadline window: negotiations expire this many weeks after start. */
 const NEGOTIATION_DEADLINE_WEEKS = 4;
-const WEEKS_PER_SEASON = 38;
 
 /** Chance per round that a rival bid appears (5-15%). */
 const RIVAL_BID_CHANCE_MIN = 0.05;
@@ -220,9 +220,11 @@ export function initiateNegotiation(
   const agentInvolved = rng.chance(AGENT_INVOLVEMENT_CHANCE);
   const agentDemands = agentInvolved ? processAgentDemands(rng, player) : undefined;
 
-  const rawDeadlineWeek = state.currentWeek + NEGOTIATION_DEADLINE_WEEKS;
-  const deadlineSeason = state.currentSeason + Math.floor((rawDeadlineWeek - 1) / WEEKS_PER_SEASON);
-  const deadline = ((rawDeadlineWeek - 1) % WEEKS_PER_SEASON) + 1;
+  const deadlineDate = addGameWeeks(
+    state.fixtures,
+    { week: state.currentWeek, season: state.currentSeason },
+    NEGOTIATION_DEADLINE_WEEKS,
+  );
 
   return {
     id: generateId("neg", rng),
@@ -233,8 +235,8 @@ export function initiateNegotiation(
     rounds: [],
     maxRounds,
     rivalBids: [],
-    deadline,
-    deadlineSeason,
+    deadline: deadlineDate.week,
+    deadlineSeason: deadlineDate.season,
     clubPersonality,
     agentInvolved,
     agentDemands,

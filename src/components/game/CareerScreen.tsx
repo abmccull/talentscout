@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,7 @@ import {
   Minus,
   BarChart3,
   Shield,
-  Megaphone,
+  Swords,
   Trophy,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
@@ -38,6 +38,11 @@ import type {
   ScoutSkill,
   ScoutAttribute,
   Specialization,
+  ManagerMeetingApproach,
+  BoardMeetingApproach,
+  Scout,
+  ManagerProfile,
+  BoardProfile,
 } from "@/engine/core/types";
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
@@ -47,10 +52,22 @@ import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
 import { COURSE_CATALOG } from "@/engine/career/courses";
 import { calculatePreferenceAlignment } from "@/engine/analytics/dataTension";
-import { calculateManagerSatisfaction } from "@/engine/career/management";
+import {
+  BOARD_MEETING_APPROACHES,
+  MANAGER_MEETING_APPROACHES,
+  getBoardMeetingEligibility,
+  getManagerMeetingEligibility,
+  type PoliticalMeetingEligibility,
+} from "@/engine/career/politicalMeetings";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import {
+  formatRunFingerprint,
+  getWorldTraitDefinitions,
+} from "@/engine/run";
+import { ConsequenceCinema } from "./consequence-cinema/ConsequenceCinema";
+import { LeadershipPortfolioPanel } from "./career/LeadershipPortfolioPanel";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -300,17 +317,299 @@ function JobOfferCard({ offer, clubName, onAccept, onDecline }: JobOfferCardProp
 
 // ─── CareerScreen ─────────────────────────────────────────────────────────────
 
+interface PoliticalMeetingCardsProps {
+  scout: Scout;
+  managerProfile?: ManagerProfile;
+  boardProfile?: BoardProfile;
+  managerApproach: ManagerMeetingApproach;
+  boardApproach: BoardMeetingApproach;
+  managerEligibility: PoliticalMeetingEligibility | null;
+  boardEligibility: PoliticalMeetingEligibility | null;
+  onManagerApproachChange: (approach: ManagerMeetingApproach) => void;
+  onBoardApproachChange: (approach: BoardMeetingApproach) => void;
+  onMeetManager: () => void;
+  onMeetBoard: () => void;
+}
+
+/** Shared presentation for the authoritative manager and board meeting engines. */
+function PoliticalMeetingCards({
+  scout,
+  managerProfile,
+  boardProfile,
+  managerApproach,
+  boardApproach,
+  managerEligibility,
+  boardEligibility,
+  onManagerApproachChange,
+  onBoardApproachChange,
+  onMeetManager,
+  onMeetBoard,
+}: PoliticalMeetingCardsProps) {
+  return (
+    <>
+      {scout.careerTier >= 4 && scout.managerRelationship && (
+        <Card data-testid="manager-political-meeting">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <UserCheck size={14} aria-hidden="true" />
+              Manager Relationship
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm font-medium text-white">
+              {scout.managerRelationship.managerName}
+            </p>
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Trust</span>
+                <span className="font-semibold text-blue-300">
+                  {Math.round(scout.managerRelationship.trust)}/100
+                </span>
+              </div>
+              <Progress
+                value={scout.managerRelationship.trust}
+                max={100}
+                indicatorClassName="bg-blue-500"
+              />
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Influence</span>
+                <span className="font-semibold text-purple-300">
+                  {Math.round(scout.managerRelationship.influence)}/100
+                </span>
+              </div>
+              <Progress
+                value={scout.managerRelationship.influence}
+                max={100}
+                indicatorClassName="bg-purple-500"
+              />
+            </div>
+            <div className="rounded-md border border-[#3f3f46] bg-zinc-950/40 px-3 py-2 text-xs">
+              <span className="text-zinc-400">Preferred style</span>
+              <p className="mt-0.5 font-medium text-zinc-200">
+                {(managerProfile?.preference ?? scout.managerRelationship.scoutingPreference)
+                  .replace(/([A-Z])/g, " $1")
+                  .replace(/^./, (character) => character.toUpperCase())}
+              </p>
+            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-semibold text-zinc-300">
+                Meeting approach
+              </legend>
+              {MANAGER_MEETING_APPROACHES.map((approach) => (
+                <label
+                  key={approach.id}
+                  className={`flex min-h-11 cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors ${
+                    managerApproach === approach.id
+                      ? "border-blue-400/70 bg-blue-500/10"
+                      : "border-[#3f3f46] hover:border-zinc-500"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="manager-meeting-approach"
+                    value={approach.id}
+                    checked={managerApproach === approach.id}
+                    onChange={() => onManagerApproachChange(approach.id)}
+                    className="mt-0.5 accent-blue-500"
+                  />
+                  <span>
+                    <span className="block text-xs font-semibold text-zinc-100">
+                      {approach.label}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-zinc-400">
+                      {approach.tradeoff}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 w-full disabled:border-zinc-600 disabled:bg-zinc-900 disabled:text-zinc-400 disabled:opacity-100"
+              disabled={!managerEligibility?.eligible}
+              onClick={onMeetManager}
+            >
+              Meet Manager · {managerEligibility?.fatigueCost ?? 4} fatigue
+            </Button>
+            {!managerEligibility?.eligible && managerEligibility?.reason && (
+              <p className="text-xs text-amber-300" role="status">
+                {managerEligibility.reason}
+              </p>
+            )}
+            {scout.managerRelationship.lastMeetingOutcome && (
+              <div
+                className="rounded-md border border-blue-500/20 bg-blue-500/5 px-3 py-2"
+                aria-live="polite"
+                data-testid="manager-meeting-outcome"
+              >
+                <p className="text-xs font-semibold text-blue-300">Last meeting</p>
+                <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+                  {scout.managerRelationship.lastMeetingOutcome.summary}
+                </p>
+                {scout.managerRelationship.lastMeetingOutcome.memoryReason && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                    {scout.managerRelationship.lastMeetingOutcome.memoryReason}
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {scout.careerTier >= 5 && (
+        <Card data-testid="board-political-meeting">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Shield size={14} className="text-indigo-300" aria-hidden="true" />
+              Board Relations
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {boardProfile && (
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-zinc-400">Board Satisfaction</span>
+                  <span
+                    className={`font-semibold ${
+                      boardProfile.satisfactionLevel >= 70
+                        ? "text-emerald-300"
+                        : boardProfile.satisfactionLevel >= 40
+                          ? "text-amber-300"
+                          : "text-red-300"
+                    }`}
+                  >
+                    {Math.round(boardProfile.satisfactionLevel)}/100
+                  </span>
+                </div>
+                <Progress
+                  value={boardProfile.satisfactionLevel}
+                  max={100}
+                  indicatorClassName={
+                    boardProfile.satisfactionLevel >= 70
+                      ? "bg-emerald-500"
+                      : boardProfile.satisfactionLevel >= 40
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                  }
+                />
+              </div>
+            )}
+
+            {scout.boardDirectives.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Active Directives
+                </p>
+                <div className="space-y-1.5">
+                  {scout.boardDirectives.map((directive) => (
+                    <div
+                      key={directive.id}
+                      className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
+                        directive.completed
+                          ? "border-emerald-500/20 bg-emerald-500/5"
+                          : "border-[#3f3f46]"
+                      }`}
+                    >
+                      <span className={directive.completed ? "text-emerald-300" : "text-zinc-300"}>
+                        {directive.description}
+                      </span>
+                      {directive.completed ? (
+                        <CheckCircle size={12} className="shrink-0 text-emerald-300" aria-hidden="true" />
+                      ) : (
+                        <span className="shrink-0 text-zinc-400">S{directive.deadline}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {boardProfile && (
+              <div className="rounded-md border border-[#3f3f46] bg-zinc-950/40 px-3 py-2 text-xs">
+                <span className="text-zinc-400">Board personality</span>
+                <p className="mt-0.5 font-medium capitalize text-zinc-200">
+                  {boardProfile.personality}
+                </p>
+              </div>
+            )}
+            <fieldset className="space-y-2">
+              <legend className="text-xs font-semibold text-zinc-300">Board approach</legend>
+              {BOARD_MEETING_APPROACHES.map((approach) => (
+                <label
+                  key={approach.id}
+                  className={`flex min-h-11 cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors ${
+                    boardApproach === approach.id
+                      ? "border-indigo-400/70 bg-indigo-500/10"
+                      : "border-[#3f3f46] hover:border-zinc-500"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="board-meeting-approach"
+                    value={approach.id}
+                    checked={boardApproach === approach.id}
+                    onChange={() => onBoardApproachChange(approach.id)}
+                    className="mt-0.5 accent-indigo-500"
+                  />
+                  <span>
+                    <span className="block text-xs font-semibold text-zinc-100">{approach.label}</span>
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-zinc-400">
+                      {approach.tradeoff}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            <Button
+              size="sm"
+              variant="outline"
+              className="min-h-11 w-full disabled:border-zinc-600 disabled:bg-zinc-900 disabled:text-zinc-400 disabled:opacity-100"
+              disabled={!boardEligibility?.eligible}
+              onClick={onMeetBoard}
+            >
+              <Shield size={14} className="mr-2" aria-hidden="true" />
+              Meet Board · {boardEligibility?.fatigueCost ?? 8} fatigue
+            </Button>
+            {!boardEligibility?.eligible && boardEligibility?.reason && (
+              <p className="text-xs text-amber-300" role="status">
+                {boardEligibility.reason}
+              </p>
+            )}
+            {boardProfile?.lastMeetingOutcome && (
+              <p
+                className="rounded-md border border-indigo-500/20 bg-indigo-500/5 px-3 py-2 text-xs leading-relaxed text-zinc-300"
+                aria-live="polite"
+                data-testid="board-meeting-outcome"
+              >
+                {boardProfile.lastMeetingOutcome.summary}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+}
+
 export function CareerScreen() {
-  const {
-    gameState,
-    acceptJob,
-    declineJob,
-    getClub,
-    setScreen,
-    unlockSecondarySpecialization,
-    meetManager,
-    presentToBoard,
-  } = useGameStore();
+  const gameState = useGameStore((state) => state.gameState);
+  const acceptJob = useGameStore((state) => state.acceptJob);
+  const declineJob = useGameStore((state) => state.declineJob);
+  const getClub = useGameStore((state) => state.getClub);
+  const setScreen = useGameStore((state) => state.setScreen);
+  const selectPlayer = useGameStore((state) => state.selectPlayer);
+  const unlockSecondarySpecialization = useGameStore(
+    (state) => state.unlockSecondarySpecialization,
+  );
+  const meetManager = useGameStore((state) => state.meetManager);
+  const meetBoard = useGameStore((state) => state.meetBoard);
+  const resolveLeadershipResponsibility = useGameStore(
+    (state) => state.resolveLeadershipResponsibility,
+  );
 
   const { scout, currentSeason, jobOffers, performanceReviews } = gameState ?? {
     scout: undefined,
@@ -343,8 +642,7 @@ export function CareerScreen() {
 
   // Career path choice eligibility — derive before early return
   const showPathChoice =
-    (scout?.careerTier ?? 0) >= 2 &&
-    scout?.careerPath === "club" &&
+    scout?.careerPathChosen !== true &&
     finances !== null &&
     scout !== undefined &&
     canChooseIndependentPath(scout, finances);
@@ -390,25 +688,53 @@ export function CareerScreen() {
     ? calculatePreferenceAlignment(scout, currentClubManager)
     : null;
 
-  // Manager satisfaction — derive before early return
-  // Note: passing empty directives array gives neutral 15/30 on that component
-  const managerSatisfaction = scout?.managerRelationship
-    ? calculateManagerSatisfaction(
-        scout.managerRelationship,
-        Object.values(gameState?.reports ?? {}),
-        [],
-      )
+  const [managerMeetingApproach, setManagerMeetingApproach] =
+    useState<ManagerMeetingApproach>("listen");
+  const [boardMeetingApproach, setBoardMeetingApproach] =
+    useState<BoardMeetingApproach>("accountability");
+  const managerMeetingEligibility = gameState
+    ? getManagerMeetingEligibility(gameState)
+    : null;
+  const boardMeetingEligibility = gameState
+    ? getBoardMeetingEligibility(gameState)
     : null;
 
-  // Board directives
-  const boardDirectives = scout?.boardDirectives ?? [];
-
-  // Present to board state
-  const [boardPresented, setBoardPresented] = useState(false);
-  const boardTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(boardTimerRef.current), []);
-
   if (!gameState || !scout) return null;
+
+  const runTraits = getWorldTraitDefinitions(gameState.runManifest.worldTraitIds);
+  const consequenceCinemaSource = {
+    rootSeed: gameState.runManifest.rootSeed,
+    players: gameState.players,
+    retiredPlayers: gameState.retiredPlayers,
+    clubs: gameState.clubs,
+    contacts: gameState.contacts,
+    rivalScouts: gameState.rivalScouts,
+    rivalOrganizations: gameState.rivalOrganizationState?.organizations ?? {},
+    reports: gameState.reports,
+    recommendationReviews: gameState.recommendationReviews,
+    discoveryRecords: gameState.discoveryRecords,
+    playerMovementHistory: gameState.playerMovementHistory,
+    consequenceState: gameState.consequenceState,
+  };
+  const activeObligations = Object.values(gameState.consequenceState.obligations)
+    .filter((obligation) => obligation.status === "active")
+    .sort((left, right) =>
+      (left.dueAt?.season ?? Number.MAX_SAFE_INTEGER) - (right.dueAt?.season ?? Number.MAX_SAFE_INTEGER)
+      || (left.dueAt?.week ?? Number.MAX_SAFE_INTEGER) - (right.dueAt?.week ?? Number.MAX_SAFE_INTEGER),
+    );
+  const recentDecisions = Object.values(gameState.consequenceState.decisions)
+    .filter((decision) => decision.selectedOptionId)
+    .sort((left, right) =>
+      (right.selectedAt?.season ?? right.offeredAt.season) - (left.selectedAt?.season ?? left.offeredAt.season)
+      || (right.selectedAt?.week ?? right.offeredAt.week) - (left.selectedAt?.week ?? left.offeredAt.week),
+    )
+    .slice(0, 8);
+  const rivalOrganizationCount = Object.keys(
+    gameState.rivalOrganizationState?.organizations ?? {},
+  ).length;
+  const openRivalOpportunityCount = Object.values(
+    gameState.rivalOrganizationState?.opportunities ?? {},
+  ).filter((opportunity) => opportunity.status === "open").length;
 
   const youthPlacementReports = Object.values(gameState.placementReports ?? {}).filter(
     (report) => report.scoutId === scout.id,
@@ -486,7 +812,7 @@ export function CareerScreen() {
   if (scout.primarySpecialization === "youth") {
     return (
       <GameLayout>
-        <div className="relative min-h-screen p-4 sm:p-6 lg:p-8">
+        <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
           <ScreenBackground src="/images/backgrounds/career-journey.png" opacity={0.88} />
           <div className="relative z-10 mx-auto max-w-[1480px]">
             <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.13),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-2xl shadow-black/25 sm:p-6 lg:p-8">
@@ -546,12 +872,95 @@ export function CareerScreen() {
               </TabsList>
 
               <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
+                <h2 className="sr-only">Career overview</h2>
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <CareerMetricTile label="Reputation" value={`${Math.round(scout.reputation)}/100`} helper="Trust earned through decisions" tone="emerald" />
                   <CareerMetricTile label="Placements" value={`${acceptedPlacements}`} helper={`${pendingPlacements} awaiting response`} tone="blue" />
                   <CareerMetricTile label="Discoveries" value={`${youthDiscoveryRecords.length}`} helper={`${scout.discoveryCredits.length} credited outcomes`} tone="amber" />
                   <CareerMetricTile label="Skill Average" value={`${averageSkill.toFixed(1)}/20`} helper={`${scout.reportsSubmitted} reports submitted`} />
                 </div>
+
+                <Card className="border-fuchsia-400/20 bg-[radial-gradient(circle_at_top_right,rgba(217,70,239,0.09),transparent_42%),rgba(17,22,28,0.95)]">
+                  <CardHeader className="pb-3">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Shield size={17} className="text-fuchsia-300" aria-hidden="true" />
+                          This career&apos;s world conditions
+                        </CardTitle>
+                        <p className="mt-1 text-sm leading-6 text-zinc-400">
+                          These seed-locked conditions shape talent, competition, markets, and story pacing for the full career.
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="border-fuchsia-400/25 font-mono text-[10px] text-fuchsia-200">
+                        {formatRunFingerprint(gameState.runManifest.fingerprint)}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="grid gap-3 md:grid-cols-3">
+                    {runTraits.length === 0 ? (
+                      <p className="text-sm text-zinc-400 md:col-span-3">
+                        This imported career predates seeded world conditions, so its original simulation rules are preserved.
+                      </p>
+                    ) : runTraits.map((trait) => (
+                      <div key={trait.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
+                          {trait.dimension}
+                        </p>
+                        <p className="mt-1 font-semibold text-white">{trait.name}</p>
+                        <p className="mt-2 text-xs leading-5 text-zinc-400">{trait.description}</p>
+                        <ul className="mt-3 space-y-1 text-[11px] leading-5 text-zinc-300">
+                          {trait.playerFacingEffects.map((effect) => (
+                            <li key={effect} className="flex gap-2">
+                              <span aria-hidden="true" className="text-fuchsia-300">&bull;</span>
+                              <span>{effect}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                    {rivalOrganizationCount > 0 && (
+                      <div className="flex flex-col gap-3 rounded-xl border border-fuchsia-400/15 bg-fuchsia-400/[0.04] p-4 md:col-span-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <Swords size={15} className="text-fuchsia-300" aria-hidden="true" />
+                            Competitive recruitment landscape
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-400">
+                            {rivalOrganizationCount} persistent organization{rivalOrganizationCount === 1 ? "" : "s"} are pursuing their own agendas
+                            {openRivalOpportunityCount > 0
+                              ? `, with ${openRivalOpportunityCount} opening${openRivalOpportunityCount === 1 ? "" : "s"} available now.`
+                              : "."}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant={openRivalOpportunityCount > 0 ? "default" : "outline"}
+                          className="min-h-11 shrink-0"
+                          onClick={() => setScreen("rivals")}
+                        >
+                          {openRivalOpportunityCount > 0 ? "Respond to openings" : "View rival landscape"}
+                          <ArrowRight size={15} className="ml-2" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {scout.careerTier >= 4 && (
+                  <LeadershipPortfolioPanel
+                    portfolio={gameState.leadershipPortfolio}
+                    players={gameState.players}
+                    npcScouts={gameState.npcScouts}
+                    npcDelegations={gameState.npcDelegations}
+                    onChoice={resolveLeadershipResponsibility}
+                    onOpenPlayer={(playerId) => {
+                      selectPlayer(playerId);
+                      setScreen("playerProfile");
+                    }}
+                    onOpenNpcManagement={() => setScreen("npcManagement")}
+                  />
+                )}
 
                 {showPathChoice && finances && (
                   <Card className="border-amber-400/25 bg-amber-400/[0.06]">
@@ -635,9 +1044,39 @@ export function CareerScreen() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {(scout.managerRelationship || scout.careerTier >= 5) && (
+                  <section aria-labelledby="club-politics-title" className="space-y-3">
+                    <div>
+                      <h2 id="club-politics-title" className="text-base font-semibold text-white">
+                        Club politics
+                      </h2>
+                      <p className="mt-1 text-sm leading-6 text-zinc-400">
+                        Choose how you use evidence, trust, and accountability. These conversations create
+                        directives, memories, fatigue, and future access.
+                      </p>
+                    </div>
+                    <div className="grid gap-5 lg:grid-cols-2">
+                      <PoliticalMeetingCards
+                        scout={scout}
+                        managerProfile={currentClubManager}
+                        boardProfile={gameState.boardProfile}
+                        managerApproach={managerMeetingApproach}
+                        boardApproach={boardMeetingApproach}
+                        managerEligibility={managerMeetingEligibility}
+                        boardEligibility={boardMeetingEligibility}
+                        onManagerApproachChange={setManagerMeetingApproach}
+                        onBoardApproachChange={setBoardMeetingApproach}
+                        onMeetManager={() => meetManager(managerMeetingApproach)}
+                        onMeetBoard={() => meetBoard(boardMeetingApproach)}
+                      />
+                    </div>
+                  </section>
+                )}
               </TabsContent>
 
               <TabsContent value="development" className="mt-0 space-y-5" data-tutorial-id="career-skills">
+                <h2 className="sr-only">Scout development</h2>
                 <div className="grid gap-5 xl:grid-cols-2">
                   <Card className="border-white/10 bg-[#11161c]/95">
                     <CardHeader className="pb-3">
@@ -722,11 +1161,77 @@ export function CareerScreen() {
               </TabsContent>
 
               <TabsContent value="trackRecord" className="mt-0 space-y-5">
+                <h2 className="sr-only">Career track record</h2>
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <CareerMetricTile label="Reports Filed" value={`${youthPlacementReports.length}`} helper="Placement recommendations" />
                   <CareerMetricTile label="Accepted" value={`${acceptedPlacements}`} helper="Trials and academy offers" tone="emerald" />
                   <CareerMetricTile label="Tracked Players" value={`${discoveredPlayerIds.size}`} helper="Across full careers" tone="blue" />
                   <CareerMetricTile label="Legacy" value={`${gameState.legacyScore.totalScore}`} helper="Outcome-weighted impact" tone="amber" />
+                </div>
+                <ConsequenceCinema
+                  source={consequenceCinemaSource}
+                  onOpenPlayer={(playerId) => {
+                    selectPlayer(playerId);
+                    setScreen("playerProfile");
+                  }}
+                  onOpenReport={() => setScreen("reportHistory")}
+                />
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(300px,0.75fr)]">
+                  <Card className="border-white/10 bg-[#11161c]/95">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <Shield size={17} className="text-fuchsia-300" aria-hidden="true" />
+                        Decision legacy
+                      </CardTitle>
+                      <p className="text-sm text-zinc-400">The calls you made, the alternatives you closed, and whether their consequences have finished unfolding.</p>
+                    </CardHeader>
+                    <CardContent>
+                      {recentDecisions.length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-white/15 p-6 text-center text-sm text-zinc-400">Your consequential choices will be recorded here.</p>
+                      ) : (
+                        <ol className="space-y-2">
+                          {recentDecisions.map((decision) => {
+                            const selected = decision.options.find((option) => option.id === decision.selectedOptionId);
+                            const date = decision.selectedAt ?? decision.offeredAt;
+                            return (
+                              <li key={decision.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="font-semibold text-white">{String(decision.metadata?.title ?? selected?.label ?? "Career decision")}</p>
+                                  <Badge variant="outline" className={decision.status === "resolved" ? "border-emerald-400/25 text-emerald-200" : "border-amber-400/25 text-amber-200"}>
+                                    {decision.status}
+                                  </Badge>
+                                </div>
+                                <p className="mt-1 text-sm text-zinc-300">{selected?.label ?? decision.selectedOptionId}</p>
+                                <p className="mt-2 text-[11px] text-zinc-500">
+                                  {formatWeekSeason(date.season, date.week)} &middot; {decision.selectionKind === "default" ? "Deadline decision" : "Chosen by you"} &middot; {Math.max(0, decision.options.length - 1)} alternatives closed
+                                </p>
+                              </li>
+                            );
+                          })}
+                        </ol>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-white/10 bg-[#11161c]/95">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">Promises &amp; obligations</CardTitle>
+                      <p className="text-sm text-zinc-400">Access creates debts. Future opportunities may force you to choose between keeping a promise and advancing your career.</p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {activeObligations.length === 0 ? (
+                        <p className="text-sm leading-6 text-zinc-400">No active promises. Relationship choices can create duties that persist beyond the original event.</p>
+                      ) : activeObligations.map((obligation) => (
+                        <div key={obligation.id} className="rounded-xl border border-amber-400/20 bg-amber-400/[0.05] p-3">
+                          <p className="text-sm font-semibold capitalize text-amber-100">{obligation.kind.replace(/([A-Z])/g, " $1")}</p>
+                          <p className="mt-1 text-xs leading-5 text-zinc-300">{obligation.terms}</p>
+                          <p className="mt-2 text-[11px] text-zinc-500">
+                            {obligation.dueAt ? `Due ${formatWeekSeason(obligation.dueAt.season, obligation.dueAt.week)}` : "Ongoing"}
+                          </p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
                 </div>
                 <Card className="border-white/10 bg-[#11161c]/95">
                   <CardHeader className="pb-3">
@@ -765,6 +1270,7 @@ export function CareerScreen() {
               </TabsContent>
 
               <TabsContent value="finances" className="mt-0 space-y-5">
+                <h2 className="sr-only">Career finances</h2>
                 {!finances ? (
                   <Card><CardContent className="p-8 text-center text-sm text-zinc-400">Financial records are not available in this save.</CardContent></Card>
                 ) : (
@@ -821,7 +1327,7 @@ export function CareerScreen() {
 
   return (
     <GameLayout>
-      <div className="relative p-6">
+      <div className="relative p-4 sm:p-6 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         <ScreenBackground src="/images/backgrounds/career-journey.png" opacity={0.80} />
         <div className="relative z-10">
         <div className="mb-6">
@@ -1288,7 +1794,7 @@ export function CareerScreen() {
                         className={`rounded-md border p-3 transition ${
                           isUnlocked
                             ? "border-emerald-500/30 bg-emerald-500/5"
-                            : "border-[#27272a] bg-[#0f0f0f] opacity-70"
+                            : "border-zinc-700 bg-[#0d1116]"
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -1302,15 +1808,14 @@ export function CareerScreen() {
                                   Unlocked
                                 </Badge>
                               ) : (
-                                <Lock
-                                  size={10}
-                                  className="shrink-0 text-zinc-600"
-                                  aria-hidden="true"
-                                />
+                                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-zinc-600 bg-zinc-900 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-zinc-300">
+                                  <Lock size={10} aria-hidden="true" />
+                                  Locked
+                                </span>
                               )}
                               <span
                                 className={`text-xs font-semibold truncate ${
-                                  isUnlocked ? "text-white" : "text-zinc-500"
+                                  isUnlocked ? "text-white" : "text-zinc-300"
                                 }`}
                               >
                                 {def?.name ?? tool.id}
@@ -1324,22 +1829,22 @@ export function CareerScreen() {
                             {!isUnlocked && (
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {req.minTier !== undefined && (
-                                  <span className="text-[9px] text-zinc-600">
+                                  <span className="text-[9px] text-zinc-400">
                                     Tier {req.minTier}+
                                   </span>
                                 )}
                                 {req.minReputation !== undefined && (
-                                  <span className="text-[9px] text-zinc-600">
+                                  <span className="text-[9px] text-zinc-400">
                                     Rep {req.minReputation}+
                                   </span>
                                 )}
                                 {req.minSkillLevel !== undefined && (
-                                  <span className="text-[9px] text-zinc-600">
+                                  <span className="text-[9px] text-zinc-400">
                                     {req.minSkillLevel.skill} {req.minSkillLevel.level}+
                                   </span>
                                 )}
                                 {req.minReportsSubmitted !== undefined && (
-                                  <span className="text-[9px] text-zinc-600">
+                                  <span className="text-[9px] text-zinc-400">
                                     {req.minReportsSubmitted} reports
                                   </span>
                                 )}
@@ -1565,153 +2070,20 @@ export function CareerScreen() {
               </Card>
             )}
 
-            {/* Manager relationship — tier 4+ */}
-            {scout.careerTier >= 4 && scout.managerRelationship && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <UserCheck size={14} aria-hidden="true" />
-                    Manager Relationship
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm font-medium">
-                    {scout.managerRelationship.managerName}
-                  </p>
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-zinc-500">Trust</span>
-                      <span className="text-blue-400 font-semibold">
-                        {Math.round(scout.managerRelationship.trust)}/100
-                      </span>
-                    </div>
-                    <Progress
-                      value={scout.managerRelationship.trust}
-                      max={100}
-                      indicatorClassName="bg-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <div className="mb-1 flex items-center justify-between text-xs">
-                      <span className="text-zinc-500">Influence</span>
-                      <span className="text-purple-400 font-semibold">
-                        {Math.round(scout.managerRelationship.influence)}/100
-                      </span>
-                    </div>
-                    <Progress
-                      value={scout.managerRelationship.influence}
-                      max={100}
-                      indicatorClassName="bg-purple-500"
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => meetManager()}
-                  >
-                    Meet Manager
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Board Relations — tier 5 (Director of Football) */}
-            {scout.careerTier >= 5 && (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Shield size={14} className="text-indigo-400" aria-hidden="true" />
-                    Board Relations
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Satisfaction meter */}
-                  {managerSatisfaction !== null && (
-                    <div>
-                      <div className="mb-1 flex items-center justify-between text-xs">
-                        <span className="text-zinc-500">Board Satisfaction</span>
-                        <span
-                          className={`font-semibold ${
-                            managerSatisfaction >= 70
-                              ? "text-emerald-400"
-                              : managerSatisfaction >= 40
-                                ? "text-amber-400"
-                                : "text-red-400"
-                          }`}
-                        >
-                          {managerSatisfaction}/100
-                        </span>
-                      </div>
-                      <Progress
-                        value={managerSatisfaction}
-                        max={100}
-                        indicatorClassName={
-                          managerSatisfaction >= 70
-                            ? "bg-emerald-500"
-                            : managerSatisfaction >= 40
-                              ? "bg-amber-500"
-                              : "bg-red-500"
-                        }
-                      />
-                    </div>
-                  )}
-
-                  {/* Active board directives */}
-                  {boardDirectives.length > 0 && (
-                    <div>
-                      <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold">
-                        Active Directives
-                      </p>
-                      <div className="space-y-1.5">
-                        {boardDirectives.map((d) => (
-                          <div
-                            key={d.id}
-                            className={`flex items-center justify-between rounded-md border px-3 py-2 text-xs ${
-                              d.completed
-                                ? "border-emerald-500/20 bg-emerald-500/5"
-                                : "border-[#27272a]"
-                            }`}
-                          >
-                            <span className={d.completed ? "text-emerald-400" : "text-zinc-300"}>
-                              {d.description}
-                            </span>
-                            {d.completed ? (
-                              <CheckCircle size={12} className="shrink-0 text-emerald-400" />
-                            ) : (
-                              <span className="text-zinc-600 shrink-0">
-                                S{d.deadline}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Present to Board */}
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => {
-                      presentToBoard();
-                      setBoardPresented(true);
-                      clearTimeout(boardTimerRef.current);
-                      boardTimerRef.current = setTimeout(() => setBoardPresented(false), 3000);
-                    }}
-                  >
-                    <Megaphone size={14} className="mr-2" />
-                    Present to Board
-                  </Button>
-                  {boardPresented && (
-                    <p className="text-xs text-emerald-400 text-center">
-                      Presentation delivered — reputation boosted!
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            {/* Club politics use the same authoritative controls as the Youth career hub. */}
+            <PoliticalMeetingCards
+              scout={scout}
+              managerProfile={currentClubManager}
+              boardProfile={gameState.boardProfile}
+              managerApproach={managerMeetingApproach}
+              boardApproach={boardMeetingApproach}
+              managerEligibility={managerMeetingEligibility}
+              boardEligibility={boardMeetingEligibility}
+              onManagerApproachChange={setManagerMeetingApproach}
+              onBoardApproachChange={setBoardMeetingApproach}
+              onMeetManager={() => meetManager(managerMeetingApproach)}
+              onMeetBoard={() => meetBoard(boardMeetingApproach)}
+            />
 
             {/* Job offers */}
             <Card>

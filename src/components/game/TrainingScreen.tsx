@@ -22,6 +22,7 @@ import {
   hasRequiredCoursesForTier,
 } from "@/engine/career/courses";
 import type { Course, CourseEffect } from "@/engine/core/types";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
 // Category labels and tab keys
@@ -79,13 +80,15 @@ export function TrainingScreen() {
     : null;
 
   // Calculate progress for active course
-  const effectiveWeek =
-    (gameState.currentSeason - 1) * 52 + gameState.currentWeek;
-  const enrollmentStartWeek = activeEnrollment
-    ? (activeEnrollment.startSeason - 1) * 52 + activeEnrollment.startWeek
-    : 0;
   const weeksElapsed = activeEnrollment
-    ? Math.max(0, effectiveWeek - enrollmentStartWeek)
+    ? Math.max(0, gameWeeksBetween(
+        gameState.fixtures,
+        {
+          season: activeEnrollment.startSeason,
+          week: activeEnrollment.startWeek,
+        },
+        { season: gameState.currentSeason, week: gameState.currentWeek },
+      ))
     : 0;
   const totalWeeks = activeCourse?.durationWeeks ?? 1;
   const progressPct = Math.min(100, Math.round((weeksElapsed / totalWeeks) * 100));

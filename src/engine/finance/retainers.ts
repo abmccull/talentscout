@@ -85,7 +85,7 @@ export function generateRetainerOffers(
     const monthlyFee = rng.nextInt(config.monthlyFeeRange[0], config.monthlyFeeRange[1]);
 
     offers.push({
-      id: `retainer_${club.id}_${Date.now()}`,
+      id: `retainer_${club.id}_${rng.nextInt(100000, 999999)}`,
       clubId: club.id,
       tier,
       monthlyFee,

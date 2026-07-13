@@ -171,7 +171,7 @@ export function GuidedChecklist() {
               {/* Title */}
               <span
                 className={`flex-1 text-xs leading-snug ${
-                  done ? "text-zinc-500 line-through" : "text-zinc-200"
+                  done ? "text-zinc-400 line-through" : "text-zinc-200"
                 }`}
               >
                 {milestone.title}
@@ -197,7 +197,7 @@ export function GuidedChecklist() {
       <div className="border-t border-zinc-800 px-4 py-2.5">
         <button
           onClick={skipGuidedSession}
-          className="text-xs text-zinc-500 underline-offset-2 transition hover:text-zinc-300 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
+          className="inline-flex min-h-11 items-center text-xs text-zinc-400 underline-offset-2 transition hover:text-zinc-200 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
         >
           Skip Tutorial
         </button>

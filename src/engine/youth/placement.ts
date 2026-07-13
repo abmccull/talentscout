@@ -122,7 +122,6 @@ export function generatePlacementReport(
  *                           rating 10–15 → * 1.0
  *                           rating < 10 → * 1.3
  *   Youth buzz level:       * (0.7 + youth.buzzLevel / 300)      → [0.7x, 1.03x]
- *   Youth PA indicator:     if potentialAbility > 150 → * 1.2
  *   Perk bonus:             if placementReputationBonus → * 1.25
  *
  * Result is clamped to [0.05, 0.95].
@@ -157,11 +156,6 @@ export function calculateClubAcceptanceChance(
 
   // Youth buzz modifier: range [0.7, 1.03]
   chance *= 0.7 + youth.buzzLevel / 300;
-
-  // High-PA bonus
-  if (youth.player.potentialAbility > 150) {
-    chance *= 1.2;
-  }
 
   // Perk bonus
   if (perkModifiers?.placementReputationBonus) {
@@ -239,15 +233,17 @@ export function processPlacementOutcome(
  *  - youthAcademyRating >= 5
  *  - playerIds.length < 30 (squad not full)
  *
- * The scout's own club (if any) appears first regardless of academy rating.
- * Results are sorted by youthAcademyRating descending (best academies first),
- * then the top 10 are returned.
+ * An eligible preferred audience from an authored report appears first. The
+ * scout's own club (if any) is otherwise prioritized regardless of academy
+ * rating. Remaining results are ordered by route credibility and academy
+ * quality, then capped at 10 for presentation.
  */
 export function getEligibleClubsForPlacement(
   youth: UnsignedYouth,
   clubs: Club[],
   scout: Scout,
   leagues: Record<string, League> = {},
+  options: { preferredClubId?: string } = {},
 ): Club[] {
   const youthCountry = normalizeCountryKey(youth.country);
   const clubCountry = (club: Club) => normalizeCountryKey(leagues[club.leagueId]?.country);
@@ -276,6 +272,13 @@ export function getEligibleClubsForPlacement(
 
   return [...eligible]
     .sort((a, b) => {
+      // A filed report may already have a real intended audience (most notably
+      // a club-issued academy brief). Keep that eligible club inside the
+      // bounded shortlist even when stronger academies would otherwise push it
+      // below the presentation cap. Preference never bypasses the eligibility
+      // checks above.
+      if (a.id === options.preferredClubId && b.id !== options.preferredClubId) return -1;
+      if (b.id === options.preferredClubId && a.id !== options.preferredClubId) return 1;
       if (a.id === scout.currentClubId) return -1;
       if (b.id === scout.currentClubId) return 1;
       return (

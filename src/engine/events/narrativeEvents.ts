@@ -36,6 +36,7 @@ import {
   CHAIN_TRIGGER_CHANCE,
 } from "./eventChains";
 import type { ChainStartResult, ChainAdvanceResult } from "./eventChains";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // =============================================================================
 // Constants
@@ -55,7 +56,6 @@ const EVENT_COOLDOWN_WEEKS = 2;
  * primary specialization.  Higher values make specialization more deterministic.
  */
 const SPECIALIZATION_WEIGHT_MULTIPLIER = 2;
-const DEFAULT_SEASON_LENGTH_WEEKS = 38;
 
 // =============================================================================
 // Specialization weight map
@@ -133,16 +133,12 @@ function generateMessageId(rng: RNG): string {
   return `msg_${id}`;
 }
 
-function getSeasonLengthFromState(state: GameState): number {
-  let maxWeek = DEFAULT_SEASON_LENGTH_WEEKS;
-  for (const fixture of Object.values(state.fixtures)) {
-    if (fixture.week > maxWeek) maxWeek = fixture.week;
-  }
-  return maxWeek;
-}
-
 function toAbsoluteWeek(state: GameState, season: number, week: number): number {
-  return season * getSeasonLengthFromState(state) + week;
+  return gameWeeksBetween(
+    state.fixtures,
+    { season: 1, week: 1 },
+    { season, week },
+  );
 }
 
 /**
@@ -161,12 +157,13 @@ function mostRecentEventWeek(state: GameState): number {
 function templateWeight(
   template: EventTemplate,
   specialization: Specialization,
+  typeWeights: Partial<Record<NarrativeEventType, number>> = {},
 ): number {
   const relevant = SPECIALIZATION_EVENT_MAP[template.type];
   if (relevant && relevant.includes(specialization)) {
-    return SPECIALIZATION_WEIGHT_MULTIPLIER;
+    return SPECIALIZATION_WEIGHT_MULTIPLIER * (typeWeights[template.type] ?? 1);
   }
-  return 1;
+  return typeWeights[template.type] ?? 1;
 }
 
 /**
@@ -181,11 +178,22 @@ function pickWeightedTemplate(
   rng: RNG,
   eligible: EventTemplate[],
   specialization: Specialization,
+  typeWeights: Partial<Record<NarrativeEventType, number>> = {},
 ): EventTemplate {
-  const weights = eligible.map((t) => templateWeight(t, specialization));
+  const weights = eligible.map((t) => Math.max(
+    0,
+    templateWeight(t, specialization, typeWeights),
+  ));
   const totalWeight = weights.reduce((acc, w) => acc + w, 0);
 
-  let roll = rng.nextInt(0, totalWeight - 1);
+  // A zero weight is an intentional director veto (normally the immediately
+  // previous event type). If every eligible template is vetoed, repeating is
+  // preferable to producing a dead deck, so fall back to a seeded uniform pick.
+  if (totalWeight <= 0) {
+    return eligible[Math.floor(rng.next() * eligible.length)] ?? eligible[0];
+  }
+
+  let roll = rng.next() * totalWeight;
   for (let i = 0; i < eligible.length; i++) {
     roll -= weights[i];
     if (roll < 0) return eligible[i];
@@ -193,6 +201,48 @@ function pickWeightedTemplate(
 
   // Fallback (should not be reached)
   return eligible[eligible.length - 1];
+}
+
+function buildTemplateEvent(
+  template: EventTemplate,
+  rng: RNG,
+  state: GameState,
+): NarrativeEvent {
+  const ctx = buildEventContext(template.type, state);
+  const relatedIds = extractRelatedIds(template.type, state);
+  return {
+    id: generateEventId(rng),
+    type: template.type,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    title: template.titleTemplate,
+    description: resolveCareerPathText(
+      template.descriptionTemplate(ctx),
+      state.scout.careerPath,
+    ),
+    relatedIds,
+    acknowledged: false,
+    choices: template.choices
+      ? template.choices.map((choice) => ({
+          ...choice,
+          knownTradeoffs: choice.knownTradeoffs ? [...choice.knownTradeoffs] : undefined,
+          label: resolveCareerPathText(choice.label, state.scout.careerPath),
+        }))
+      : undefined,
+    selectedChoice: undefined,
+  };
+}
+
+/** Build a specific eligible authored beat for state-driven director duties. */
+export function generateNarrativeEventOfType(
+  rng: RNG,
+  state: GameState,
+  type: NarrativeEventType,
+): NarrativeEvent | null {
+  const template = EVENT_TEMPLATES.find(
+    (candidate) => candidate.type === type && candidate.prerequisites(state),
+  );
+  return template ? buildTemplateEvent(template, rng, state) : null;
 }
 
 // =============================================================================
@@ -209,6 +259,13 @@ export interface WeeklyEventResult {
   advancedChain?: ChainAdvanceResult;
   /** If a new chain was started, the chain start result. */
   newChain?: ChainStartResult;
+}
+
+export interface NarrativeGenerationOptions {
+  triggerChance?: number;
+  cooldownWeeks?: number;
+  chainTriggerChance?: number;
+  typeWeights?: Partial<Record<NarrativeEventType, number>>;
 }
 
 /**
@@ -232,6 +289,7 @@ export interface WeeklyEventResult {
 export function generateWeeklyEvent(
   rng: RNG,
   state: GameState,
+  options: NarrativeGenerationOptions = {},
 ): WeeklyEventResult {
   // Step 0 (F2) — prioritize pending chain continuations.
   // Chain events bypass the weekly roll and cooldown.
@@ -248,19 +306,31 @@ export function generateWeeklyEvent(
   }
 
   // Step 1 — weekly trigger roll
-  if (!rng.chance(WEEKLY_EVENT_CHANCE)) {
+  const triggerChance = Math.min(
+    0.75,
+    Math.max(0, options.triggerChance ?? WEEKLY_EVENT_CHANCE),
+  );
+  if (!rng.chance(triggerChance)) {
     return { event: null };
   }
 
   // Step 2 — cooldown check
   const lastWeek = mostRecentEventWeek(state);
   const currentAbsoluteWeek = toAbsoluteWeek(state, state.currentSeason, state.currentWeek);
-  if (currentAbsoluteWeek - lastWeek < EVENT_COOLDOWN_WEEKS) {
+  const cooldownWeeks = Math.max(
+    0,
+    Math.floor(options.cooldownWeeks ?? EVENT_COOLDOWN_WEEKS),
+  );
+  if (currentAbsoluteWeek - lastWeek < cooldownWeeks) {
     return { event: null };
   }
 
   // Step 3 (F2) — 10% chance to trigger a new chain instead of a standalone event
-  if (rng.chance(CHAIN_TRIGGER_CHANCE)) {
+  const chainTriggerChance = Math.min(
+    0.75,
+    Math.max(0, options.chainTriggerChance ?? CHAIN_TRIGGER_CHANCE),
+  );
+  if (rng.chance(chainTriggerChance)) {
     const chainResult = tryTriggerChain(rng, state);
     if (chainResult) {
       return {
@@ -281,34 +351,11 @@ export function generateWeeklyEvent(
     rng,
     [...eligible],
     state.scout.primarySpecialization,
+    options.typeWeights,
   );
 
   // Step 6 — build contextual content
-  const ctx = buildEventContext(template.type, state);
-  const relatedIds = extractRelatedIds(template.type, state);
-
-  const event: NarrativeEvent = {
-    id: generateEventId(rng),
-    type: template.type,
-    week: state.currentWeek,
-    season: state.currentSeason,
-    title: template.titleTemplate,
-    description: resolveCareerPathText(
-      template.descriptionTemplate(ctx),
-      state.scout.careerPath,
-    ),
-    relatedIds,
-    acknowledged: false,
-    choices: template.choices
-      ? template.choices.map((c) => ({
-          ...c,
-          label: resolveCareerPathText(c.label, state.scout.careerPath),
-        }))
-      : undefined,
-    selectedChoice: undefined,
-  };
-
-  return { event };
+  return { event: buildTemplateEvent(template, rng, state) };
 }
 
 // =============================================================================
@@ -878,6 +925,57 @@ export function resolveEventChoice(
       }
       break;
 
+    case "careerCrossroads":
+      if (effect === "crossroadsAllIn") {
+        reputationChange = 1;
+        fatigueChange = 8;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You signed the recommendation in your own name. The club will act, and the result will return to your career record after the player has had time to respond. The upside is considerable; so is the exposure.",
+        ));
+      } else if (effect === "crossroadsCoalition") {
+        reputationChange = 2;
+        fatigueChange = 4;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You assembled a small coalition around the recommendation. The evidence is stronger and the political risk is shared, but no single scout will own the full credit if it succeeds.",
+        ));
+      } else {
+        reputationChange = -1;
+        fatigueChange = -2;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You declined to attach your name. Your reputation is protected from the football outcome, but decision-makers noticed that your conviction stopped short of action.",
+        ));
+      }
+      break;
+
+    case "confidentialityDilemma":
+      if (effect === "confidentialityKeep") {
+        reputationChange = 2;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You refused to trade private access for short-term influence. Your source now knows the promise meant something when keeping it was expensive.",
+        ));
+      } else {
+        reputationChange = 4;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "The information strengthened your immediate position, but its origin will not remain secret forever. The source relationship has paid the price for the shortcut.",
+        ));
+      }
+      break;
+
     // -------------------------------------------------------------------------
     // Informational-only events — these should not have choices, but if
     // resolveEventChoice is called defensively on them, handle gracefully.
@@ -959,6 +1057,11 @@ type EventEffect =
   | "journalistRefuse"
   | "counterBid"
   | "concede"
+  | "crossroadsAllIn"
+  | "crossroadsCoalition"
+  | "crossroadsWalkAway"
+  | "confidentialityKeep"
+  | "confidentialityLeak"
   | string; // fallback for any future template additions
 
 // ---------------------------------------------------------------------------
@@ -1002,9 +1105,8 @@ function resolveRivalPoachBidChoice(effect: EventEffect): number {
 function rivalPoachBidOutcomeBody(effect: EventEffect): string {
   if (effect === "counterBid") {
     return (
-      "You've submitted a counter-bid for the player. The outcome will depend " +
-      "on your reputation and the strength of your offer. Check back shortly " +
-      "for the result."
+      "You've authorized your club to submit a counter-bid. The result is " +
+      "recorded against the real transfer and budget state."
     );
   }
   return (

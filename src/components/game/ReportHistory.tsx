@@ -7,7 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, X, ChevronDown, ChevronUp, DollarSign, GitCompareArrows, Gavel, Crown, AlertTriangle, TrendingUp, BookOpen } from "lucide-react";
-import type { ScoutReport, ConvictionLevel, ReportListing, TransferRecord, MarketplaceBid, ReflectionJournalEntry } from "@/engine/core/types";
+import type {
+  ClubDecision,
+  ScoutReport,
+  ConvictionLevel,
+  RecommendationReview,
+  ReportListing,
+  TransferRecord,
+  MarketplaceBid,
+  ReflectionJournalEntry,
+  YouthRecruitmentBrief,
+} from "@/engine/core/types";
 import {
   OUTCOME_COLORS,
   OUTCOME_REASON_COLORS,
@@ -19,6 +29,11 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { formatObservationActivityLabel } from "@/engine/observation/reflection";
+import {
+  buildScoutingCaseTimeline,
+  type ScoutingCaseTimeline,
+} from "@/engine/reports/scoutingCaseTimeline";
+import { ScoutingCaseTimelineView } from "./ScoutingCaseTimeline";
 
 const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
   note: "Note",
@@ -53,10 +68,25 @@ interface ReportDetailModalProps {
   report: ScoutReport;
   playerName: string;
   transferRecord?: TransferRecord;
+  brief?: YouthRecruitmentBrief;
+  clubDecision?: ClubDecision;
+  reviews: RecommendationReview[];
+  clubName?: string;
+  caseTimeline?: ScoutingCaseTimeline;
   onClose: () => void;
 }
 
-function ReportDetailModal({ report, playerName, transferRecord, onClose }: ReportDetailModalProps) {
+function ReportDetailModal({
+  report,
+  playerName,
+  transferRecord,
+  brief,
+  clubDecision,
+  reviews,
+  clubName,
+  caseTimeline,
+  onClose,
+}: ReportDetailModalProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
@@ -64,7 +94,7 @@ function ReportDetailModal({ report, playerName, transferRecord, onClose }: Repo
       aria-modal="true"
       aria-label={`Report for ${playerName}`}
     >
-      <div className="w-full max-w-2xl max-h-[85vh] overflow-auto rounded-xl border border-[#27272a] bg-[#0a0a0a] shadow-2xl">
+      <div className="w-full max-w-3xl max-h-[85vh] overflow-auto rounded-xl border border-[#27272a] bg-[#0a0a0a] shadow-2xl [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         <div className="flex items-center justify-between border-b border-[#27272a] p-5">
           <div>
             <h2 className="text-lg font-bold">{playerName}</h2>
@@ -152,16 +182,109 @@ function ReportDetailModal({ report, playerName, transferRecord, onClose }: Repo
             )}
           </div>
 
+          {report.briefId && (
+            <section className="rounded-xl border border-sky-400/20 bg-sky-400/[0.05] p-4" aria-labelledby="professional-artifact-heading">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-300">Professional artifact · Revision {report.revision ?? 1}</p>
+                  <h3 id="professional-artifact-heading" className="mt-1 text-base font-bold text-white">{clubName ?? "Academy client"} recruitment recommendation</h3>
+                </div>
+                {brief && <Badge variant={brief.status === "fulfilled" ? "success" : brief.status === "expired" ? "destructive" : "warning"}>{brief.status}</Badge>}
+              </div>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">{report.recruitmentNeed}</p>
+              <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-5">
+                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Audience</dt><dd className="mt-1 font-semibold capitalize text-white">{report.intendedAudience?.replace(/([A-Z])/g, " $1")}</dd></div>
+                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Presentation</dt><dd className="mt-1 font-semibold capitalize text-white">{report.presentationApproach?.replace(/([A-Z])/g, " $1") ?? "Legacy neutral"}</dd></div>
+                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Projected role</dt><dd className="mt-1 font-semibold capitalize text-white">{report.projectedRole?.replace(/([A-Z])/g, " $1")}</dd></div>
+                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Next step</dt><dd className="mt-1 font-semibold capitalize text-white">{report.recommendedAction?.replace(/([A-Z])/g, " $1")}</dd></div>
+                <div className="rounded-lg bg-black/20 p-3"><dt className="text-zinc-500">Price context</dt><dd className="mt-1 font-semibold text-white">£{report.estimatedWeeklyWage?.toLocaleString() ?? "—"}/wk</dd></div>
+              </dl>
+              <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                {Object.entries(report.categoryVerdicts ?? {}).map(([category, verdict]) => verdict && (
+                  <div key={category} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold capitalize text-white">{category.replace(/([A-Z])/g, " $1")}</p>
+                      <Badge variant={verdict.confidence === "high" ? "success" : verdict.confidence === "medium" ? "warning" : "outline"} className="text-[10px]">{verdict.confidence}</Badge>
+                    </div>
+                    <p className="mt-2 text-xs leading-5 text-zinc-300">{verdict.verdict}</p>
+                    <p className="mt-2 text-[11px] leading-4 text-amber-200/80">Unknown: {verdict.acknowledgedUncertainty}</p>
+                    <p className="mt-2 text-[10px] text-zinc-500">{verdict.hypothesisIds.length} preserved hypothesis link{verdict.hypothesisIds.length === 1 ? "" : "s"}</p>
+                  </div>
+                ))}
+              </div>
+              {(report.riskFactors?.length ?? 0) > 0 && (
+                <div className="mt-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Disclosed risks</p>
+                  <div className="mt-2 flex flex-wrap gap-2">{report.riskFactors?.map((risk) => <Badge key={risk} variant="outline" className="text-[10px]">{risk}</Badge>)}</div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {clubDecision && (
+            <section className="rounded-xl border border-amber-400/20 bg-amber-400/[0.05] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-300">Club decision</p>
+                  <h3 className="mt-1 text-base font-bold capitalize text-white">{clubDecision.outcome.replace(/([A-Z])/g, " $1")}</h3>
+                </div>
+                {clubDecision.scoreBreakdown && <Badge variant="warning">Decision score {clubDecision.scoreBreakdown.total}/100</Badge>}
+              </div>
+              <ul className="mt-3 space-y-1.5 text-xs leading-5 text-zinc-300">
+                {(clubDecision.reasons ?? (clubDecision.reason ? [clubDecision.reason] : [])).map((reason) => <li key={reason} className="flex gap-2"><span className="text-amber-300">•</span><span>{reason}</span></li>)}
+              </ul>
+              {clubDecision.scoreBreakdown && (
+                <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
+                  {Object.entries(clubDecision.scoreBreakdown).filter(([key]) => key !== "total").map(([key, value]) => (
+                    <div key={key} className="rounded-md bg-black/20 p-2"><span className="block capitalize text-zinc-500">{key.replace(/([A-Z])/g, " $1")}</span><span className="font-semibold text-white">{value}/100</span></div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {caseTimeline && <ScoutingCaseTimelineView timeline={caseTimeline} />}
+
+          {reviews.length > 0 && (
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500">Long-term recommendation reviews</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {reviews.map((review) => (
+                  <div key={review.id} className="rounded-xl border border-violet-400/20 bg-violet-400/[0.05] p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-white">{review.checkpoint === "oneSeason" ? "One-season review" : "Two-season review"}</p>
+                      <Badge variant={review.status === "complete" ? "success" : "outline"}>{review.status}</Badge>
+                    </div>
+                    {review.status === "complete" ? (
+                      <>
+                        <p className="mt-3 text-2xl font-bold text-violet-200">{review.overallScore ?? "—"}<span className="text-sm text-zinc-500">/100</span></p>
+                        <ul className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-300">{(review.findings ?? []).slice(0, 4).map((finding) => <li key={finding}>{finding}</li>)}</ul>
+                      </>
+                    ) : (
+                      <p className="mt-3 text-xs text-zinc-400">Due Season {review.dueSeason}, Week {review.dueWeek}. The original judgment stays open until real career evidence exists.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Transfer Outcome */}
-          {transferRecord?.outcome && (
+          {transferRecord && (transferRecord.outcome || transferRecord.outcomeReason) && (
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
                 Transfer Outcome
               </h3>
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`inline-block rounded px-2 py-1 text-xs font-semibold border ${OUTCOME_COLORS[transferRecord.outcome]}`}>
-                  {transferRecord.outcome.charAt(0).toUpperCase() + transferRecord.outcome.slice(1)}
-                </span>
+                {transferRecord.outcome ? (
+                  <span className={`inline-block rounded px-2 py-1 text-xs font-semibold border ${OUTCOME_COLORS[transferRecord.outcome]}`}>
+                    {transferRecord.outcome.charAt(0).toUpperCase() + transferRecord.outcome.slice(1)}
+                  </span>
+                ) : (
+                  <span className="inline-block rounded border border-zinc-500/20 bg-zinc-500/10 px-2 py-1 text-xs font-semibold text-zinc-300">
+                    Outcome unresolved
+                  </span>
+                )}
                 {transferRecord.outcomeReason && (
                   <span className={`inline-block rounded px-2 py-1 text-xs border ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}>
                     {OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}
@@ -172,12 +295,14 @@ function ReportDetailModal({ report, playerName, transferRecord, onClose }: Repo
                     {transferRecord.appearances} appearances
                   </span>
                 )}
-                {transferRecord.currentCA != null && transferRecord.caAtTransfer != null && (
-                  <span className={`text-xs font-semibold ${transferRecord.currentCA >= transferRecord.caAtTransfer ? "text-emerald-400" : "text-red-400"}`}>
-                    CA: {transferRecord.caAtTransfer} → {transferRecord.currentCA}
-                  </span>
-                )}
               </div>
+              {(transferRecord.outcomeEvidence ?? []).length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-zinc-400">
+                  {transferRecord.outcomeEvidence?.slice(0, 3).map((evidence) => (
+                    <li key={evidence}>{evidence}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
@@ -465,6 +590,8 @@ export function ReportHistory() {
   const [listingReport, setListingReport] = useState<ScoutReport | null>(null);
   const [expandedBidsListingId, setExpandedBidsListingId] = useState<string | null>(null);
   const [expandedJournalId, setExpandedJournalId] = useState<string | null>(null);
+  const [reportQuery, setReportQuery] = useState("");
+  const [reportPage, setReportPage] = useState(1);
 
   if (!gameState) return null;
 
@@ -520,11 +647,36 @@ export function ReportHistory() {
     if (bPending > 0 && aPending === 0) return 1;
     return b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason;
   });
+  const normalizedReportQuery = reportQuery.trim().toLowerCase();
+  const filteredReports = normalizedReportQuery.length === 0
+    ? sortedReports
+    : sortedReports.filter((report) => {
+        const player = resolvePlayerEntity(gameState, report.playerId)?.player;
+        const playerName = player ? `${player.firstName} ${player.lastName}` : "unknown player";
+        return playerName.toLowerCase().includes(normalizedReportQuery)
+          || report.summary.toLowerCase().includes(normalizedReportQuery)
+          || CONVICTION_LABELS[report.conviction].toLowerCase().includes(normalizedReportQuery);
+      });
+  const reportsPerPage = 20;
+  const reportPageCount = Math.max(1, Math.ceil(filteredReports.length / reportsPerPage));
+  const safeReportPage = Math.min(reportPage, reportPageCount);
+  const visibleReports = filteredReports.slice(
+    (safeReportPage - 1) * reportsPerPage,
+    safeReportPage * reportsPerPage,
+  );
   const journalEntries = Object.values(
     gameState.reflectionJournal ?? {},
   ).sort((a: ReflectionJournalEntry, b: ReflectionJournalEntry) =>
     b.season - a.season || b.week - a.week || b.createdAt - a.createdAt,
   );
+  const scoutingCases = Object.values(gameState.scoutingCases ?? {});
+  const casesNeedingDelivery = scoutingCases.filter(
+    (scoutingCase) => scoutingCase.status === "reported" && scoutingCase.deliveryIds.length === 0,
+  );
+  const awaitingDecisionDeliveries = Object.values(gameState.reportDeliveries ?? {}).filter(
+    (delivery) => delivery.status === "awaitingDecision",
+  );
+  const placedCases = scoutingCases.filter((scoutingCase) => scoutingCase.status === "placed");
   const gutFeelingById = new Map(
     gameState.gutFeelings.map((gutFeeling) => [gutFeeling.id, gutFeeling] as const),
   );
@@ -544,6 +696,31 @@ export function ReportHistory() {
         return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
       })()
     : "";
+  const selectedReportDelivery = selectedReport
+    ? Object.values(gameState.reportDeliveries).find((delivery) =>
+        delivery.reportId === selectedReport.id && delivery.channel === "directPlacement"
+      )
+      ?? Object.values(gameState.reportDeliveries).find((delivery) => delivery.reportId === selectedReport.id)
+    : undefined;
+  const selectedClubDecision = selectedReportDelivery?.decisionId
+    ? gameState.clubDecisions[selectedReportDelivery.decisionId]
+    : undefined;
+  const selectedBrief = selectedReport?.briefId
+    ? gameState.youthRecruitmentBriefs[selectedReport.briefId]
+    : undefined;
+  const selectedReviews = selectedReport
+    ? Object.values(gameState.recommendationReviews).filter((review) => review.reportId === selectedReport.id)
+    : [];
+  const selectedAudienceClubName = selectedReport?.intendedClubId
+    ? gameState.clubs[selectedReport.intendedClubId]?.name
+    : undefined;
+  const selectedCaseId = selectedReport
+    ? selectedReport.caseId
+      ?? scoutingCases.find((scoutingCase) => scoutingCase.reportIds.includes(selectedReport.id))?.id
+    : undefined;
+  const selectedCaseTimeline = selectedCaseId
+    ? buildScoutingCaseTimeline(gameState, selectedCaseId) ?? undefined
+    : undefined;
 
   const listingPlayerName = listingReport
     ? (() => {
@@ -561,7 +738,18 @@ export function ReportHistory() {
   const renderTransferOutcome = (report: ScoutReport) => {
     const transferRecord = transferByReportId.get(report.id);
     if (!transferRecord) return <span className="text-zinc-600 text-xs">—</span>;
-    if (!transferRecord.outcome) return <span className="text-zinc-500 text-xs">Pending</span>;
+    if (!transferRecord.outcome) {
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-zinc-500 text-xs">Unresolved</span>
+          {transferRecord.outcomeReason && (
+            <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] border ${OUTCOME_REASON_COLORS[transferRecord.outcomeReason]}`}>
+              {OUTCOME_REASON_SHORT_LABELS[transferRecord.outcomeReason]}
+            </span>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div className="flex flex-col gap-0.5">
@@ -575,6 +763,46 @@ export function ReportHistory() {
         )}
       </div>
     );
+  };
+
+  const renderDeliveryStatus = (report: ScoutReport) => {
+    const deliveries = Object.values(gameState.reportDeliveries ?? {}).filter(
+      (delivery) => delivery.reportId === report.id,
+    );
+    const directDelivery = deliveries.find((delivery) => delivery.channel === "directPlacement");
+    if (directDelivery?.status === "awaitingDecision") {
+      return <Badge variant="warning" className="text-[10px]">Awaiting club decision</Badge>;
+    }
+    if (directDelivery?.decisionId) {
+      const decision = gameState.clubDecisions?.[directDelivery.decisionId];
+      if (decision) {
+        return (
+          <Badge
+            variant={decision.outcome === "accepted"
+              ? "success"
+              : decision.outcome === "trial" || decision.outcome === "followUpRequested"
+                ? "warning"
+                : "destructive"}
+            className="text-[10px] capitalize"
+          >
+            {decision.outcome}
+          </Badge>
+        );
+      }
+    }
+    const marketplaceSales = deliveries.filter((delivery) => delivery.channel === "marketplaceSale");
+    if (marketplaceSales.length > 0) {
+      return (
+        <Badge variant="secondary" className="text-[10px]">
+          Intel sold to {marketplaceSales.length} club{marketplaceSales.length === 1 ? "" : "s"}
+        </Badge>
+      );
+    }
+    const listing = listingByReportId[report.id];
+    if (listing?.status === "active") {
+      return <Badge variant="outline" className="text-[10px]">Listed</Badge>;
+    }
+    return <span className="text-xs text-zinc-300">Not delivered</span>;
   };
 
   const renderListingBids = (listing: ReportListing) => (
@@ -640,7 +868,7 @@ export function ReportHistory() {
                 )}
                 <Button
                   size="sm"
-                  className={`h-6 text-[10px] ${
+                  className={`min-h-11 text-xs ${
                     isUpgrade
                       ? "bg-amber-600 hover:bg-amber-500"
                       : "bg-emerald-700 hover:bg-emerald-600"
@@ -656,7 +884,7 @@ export function ReportHistory() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-6 text-[10px] text-zinc-400 hover:text-red-400"
+                  className="min-h-11 text-xs text-zinc-300 hover:text-red-300"
                   onClick={() => declineMarketplaceBid(bid.id)}
                 >
                   Decline
@@ -739,7 +967,7 @@ export function ReportHistory() {
 
   return (
     <GameLayout>
-      <div className="relative min-h-full p-6">
+      <div className="relative min-h-full p-6 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
         <div className="relative z-10">
         <div className="mb-6">
@@ -828,6 +1056,59 @@ export function ReportHistory() {
           )}
         </div>
 
+        <Card className="mb-6 border-emerald-900/50 bg-zinc-950/70">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Recommendation Action Queue</CardTitle>
+            <p className="text-sm text-zinc-300">
+              Filed opinions, club decisions, and placed-player follow-up from the same case history.
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-3 pt-0 sm:grid-cols-3">
+            <button
+              type="button"
+              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:border-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+              onClick={() => {
+                const nextCase = casesNeedingDelivery[0];
+                const report = nextCase ? gameState.reports[nextCase.reportIds.at(-1) ?? ""] : undefined;
+                if (report && isIndependent) setListingReport(report);
+                else if (nextCase) {
+                  selectPlayer(nextCase.playerId);
+                  setScreen("playerProfile");
+                }
+              }}
+              disabled={casesNeedingDelivery.length === 0}
+            >
+              <span className="block text-2xl font-bold text-emerald-300">{casesNeedingDelivery.length}</span>
+              <span className="text-xs text-zinc-300">Filed reports needing delivery</span>
+            </button>
+            <button
+              type="button"
+              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:border-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+              onClick={() => {
+                const delivery = awaitingDecisionDeliveries[0];
+                const scoutingCase = delivery ? gameState.scoutingCases[delivery.caseId] : undefined;
+                if (scoutingCase) {
+                  selectPlayer(scoutingCase.playerId);
+                  setScreen("playerProfile");
+                }
+              }}
+              disabled={awaitingDecisionDeliveries.length === 0}
+            >
+              <span className="block text-2xl font-bold text-amber-300">{awaitingDecisionDeliveries.length}</span>
+              <span className="text-xs text-zinc-300">Awaiting club decisions</span>
+            </button>
+            <button
+              type="button"
+              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:border-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+              onClick={() => setScreen("career")}
+              disabled={placedCases.length === 0}
+            >
+              <span className="block text-2xl font-bold text-sky-300">{placedCases.length}</span>
+              <span className="text-xs text-zinc-300">Placed cases to track</span>
+            </button>
+          </CardContent>
+        </Card>
+
         {/* Comparison action bar */}
         {comparisonReportIds.length > 0 && (
           <div className="mb-4 flex flex-col gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3 sm:flex-row sm:items-center" data-tutorial-id="reporthistory-compare">
@@ -856,21 +1137,49 @@ export function ReportHistory() {
           </div>
         )}
 
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <label className="block min-w-0 sm:max-w-sm sm:flex-1">
+            <span className="mb-1 block text-xs font-medium text-zinc-300">Search filed reports</span>
+            <input
+              type="search"
+              value={reportQuery}
+              onChange={(event) => {
+                setReportQuery(event.target.value);
+                setReportPage(1);
+              }}
+              placeholder="Player, summary, or conviction"
+              className="min-h-11 w-full rounded-md border border-zinc-700 bg-zinc-950/80 px-3 text-sm text-white placeholder:text-zinc-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+            />
+          </label>
+          <p className="text-xs text-zinc-300" role="status">
+            {filteredReports.length} report{filteredReports.length === 1 ? "" : "s"}
+          </p>
+        </div>
+
         {/* Reports table */}
         <Card data-tutorial-id="reporthistory-list">
           <CardContent className="p-0">
-            {sortedReports.length === 0 ? (
+            {filteredReports.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <FileText size={32} className="mb-3 text-zinc-700" aria-hidden="true" />
-                <p className="text-sm text-zinc-300">No reports filed yet.</p>
-                <p className="mt-1 text-xs text-zinc-400">
-                  Observe players and write your first scouting report.
+                <p className="text-sm text-zinc-300">
+                  {reports.length === 0 ? "No reports filed yet." : "No reports match that search."}
                 </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {reports.length === 0
+                    ? "Observe players and write your first scouting report."
+                    : "Try a player name, report summary, or conviction level."}
+                </p>
+                {reports.length === 0 && (
+                  <Button className="mt-4 min-h-11" onClick={() => setScreen("calendar")}>
+                    Plan scouting work
+                  </Button>
+                )}
               </div>
             ) : (
               <>
                 <div className="space-y-3 p-3 md:hidden">
-                  {sortedReports.map((report) => {
+                  {visibleReports.map((report) => {
                     const player = resolvePlayerEntity(gameState, report.playerId)?.player;
                     const playerName = player
                       ? `${player.firstName} ${player.lastName}`
@@ -940,21 +1249,15 @@ export function ReportHistory() {
                         <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
                           <div>
                             <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                              Club Response
+                              Delivery / Club Decision
                             </dt>
                             <dd className="mt-1">
-                              {report.clubResponse ? (
-                                <Badge variant="secondary" className="text-[10px] capitalize">
-                                  {report.clubResponse}
-                                </Badge>
-                              ) : (
-                                <span className="text-zinc-600 text-xs">Pending</span>
-                              )}
+                              {renderDeliveryStatus(report)}
                             </dd>
                           </div>
                           <div>
                             <dt className="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
-                              Transfer Outcome
+                              Player Movement
                             </dt>
                             <dd className="mt-1">{renderTransferOutcome(report)}</dd>
                           </div>
@@ -988,13 +1291,13 @@ export function ReportHistory() {
                       <th className="px-4 py-3 font-medium">Craft</th>
                       <th className="px-4 py-3 font-medium">Rep</th>
                       <th className="px-4 py-3 font-medium">Week</th>
-                      <th className="px-4 py-3 font-medium">Club Response</th>
-                      <th className="px-4 py-3 font-medium">Transfer Outcome</th>
+                      <th className="px-4 py-3 font-medium">Delivery / Decision</th>
+                      <th className="px-4 py-3 font-medium">Player Movement</th>
                       <th className="px-4 py-3 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {sortedReports.map((report) => {
+                    {visibleReports.map((report) => {
                       const player = resolvePlayerEntity(gameState, report.playerId)?.player;
                       const playerName = player
                         ? `${player.firstName} ${player.lastName}`
@@ -1062,19 +1365,24 @@ export function ReportHistory() {
                             W{report.submittedWeek} S{report.submittedSeason}
                           </td>
                           <td className="px-4 py-3">
-                            {report.clubResponse ? (
-                              <Badge variant="secondary" className="text-[10px] capitalize">
-                                {report.clubResponse}
-                              </Badge>
-                            ) : (
-                              <span className="text-zinc-600 text-xs">Pending</span>
-                            )}
+                            {renderDeliveryStatus(report)}
                           </td>
                           <td className="px-4 py-3">
                             {(() => {
                               const tr = transferByReportId.get(report.id);
                               if (!tr) return <span className="text-zinc-600 text-xs">—</span>;
-                              if (!tr.outcome) return <span className="text-zinc-500 text-xs">Pending</span>;
+                              if (!tr.outcome) {
+                                return (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-zinc-500 text-xs">Unresolved</span>
+                                    {tr.outcomeReason && (
+                                      <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] border ${OUTCOME_REASON_COLORS[tr.outcomeReason]}`}>
+                                        {OUTCOME_REASON_SHORT_LABELS[tr.outcomeReason]}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
                               return (
                                 <div className="flex flex-col gap-0.5">
                                   <span className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold border ${OUTCOME_COLORS[tr.outcome]}`}>
@@ -1215,7 +1523,7 @@ export function ReportHistory() {
                                           )}
                                           <Button
                                             size="sm"
-                                            className={`text-[10px] h-6 ${
+                                            className={`min-h-11 text-xs ${
                                               isUpgrade
                                                 ? "bg-amber-600 hover:bg-amber-500"
                                                 : "bg-emerald-700 hover:bg-emerald-600"
@@ -1231,7 +1539,7 @@ export function ReportHistory() {
                                           <Button
                                             size="sm"
                                             variant="ghost"
-                                            className="text-[10px] h-6 text-zinc-400 hover:text-red-400"
+                                            className="min-h-11 text-xs text-zinc-300 hover:text-red-300"
                                             onClick={() => declineMarketplaceBid(bid.id)}
                                           >
                                             Decline
@@ -1251,6 +1559,32 @@ export function ReportHistory() {
                   </tbody>
                 </table>
                 </div>
+                {reportPageCount > 1 && (
+                  <nav
+                    aria-label="Filed report pages"
+                    className="flex items-center justify-between gap-3 border-t border-zinc-800 p-3"
+                  >
+                    <Button
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={safeReportPage === 1}
+                      onClick={() => setReportPage((page) => Math.max(1, page - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs text-zinc-300">
+                      Page {safeReportPage} of {reportPageCount}
+                    </span>
+                    <Button
+                      variant="outline"
+                      className="min-h-11"
+                      disabled={safeReportPage === reportPageCount}
+                      onClick={() => setReportPage((page) => Math.min(reportPageCount, page + 1))}
+                    >
+                      Next
+                    </Button>
+                  </nav>
+                )}
               </>
             )}
           </CardContent>
@@ -1449,6 +1783,11 @@ export function ReportHistory() {
           report={selectedReport}
           playerName={selectedPlayerName}
           transferRecord={transferByReportId.get(selectedReport.id)}
+          brief={selectedBrief}
+          clubDecision={selectedClubDecision}
+          reviews={selectedReviews}
+          clubName={selectedAudienceClubName}
+          caseTimeline={selectedCaseTimeline}
           onClose={() => setSelectedReport(null)}
         />
       )}

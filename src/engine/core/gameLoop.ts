@@ -58,6 +58,7 @@ import {
 import {
   processYouthAging,
   processPlayerRetirement,
+  reconcileYouthSigningPlacements,
 } from "../youth/generation";
 import { processAlumniWeek, generateAlumniSeasonSummary } from "../youth/alumni";
 import { generateSeasonEvents, getActiveSeasonEvents } from "./seasonEvents";
@@ -84,7 +85,7 @@ import { getContactCoverageCountry, getCountryDisplayName } from "../network/con
 import type { CardEvent, DisciplinaryRecord, TransferNegotiation, BoardReaction, BoardProfile, TacticalMatchup } from "./types";
 import { calculateTacticalMatchup } from "../match/tactics";
 import {
-  processRelegationPromotion,
+  processRelegationPromotionIncludingFixtures,
   applyRelegationResult,
   getStandingsPriceModifier,
 } from "../world/relegation";
@@ -113,6 +114,18 @@ import {
 } from "../world/playerLifecycle";
 import { processLoanOutcomeReputation } from "../firstTeam/loanIntegration";
 import { applyScoutSkillXp } from "../scout/progression";
+import {
+  isFixtureInSeason,
+  normalizeFixtureSeasons,
+} from "../world/fixtures";
+import { getSeasonLength, isGameDateAtOrAfter } from "./gameDate";
+import { recordCompletedSeasonWorldHistory } from "../world/worldHistory";
+import {
+  collectCausallyReferencedPlayerIds,
+  retainRequiredFixtureHistory,
+} from "../world/saveRetention";
+
+export { getSeasonLength } from "./gameDate";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -315,12 +328,6 @@ export interface TickResult {
 // =============================================================================
 
 /**
- * Minimum season length in weeks. Actual season length is determined
- * dynamically from the maximum fixture week across all leagues.
- */
-const MIN_SEASON_LENGTH_WEEKS = 38;
-
-/**
  * Fatigue recovered per week from natural rest (no rest activity).
  * Rest activities grant an additional bonus on top.
  */
@@ -379,27 +386,64 @@ function clamp(value: number, min: number, max: number): number {
  * Compute the average current ability of a club's squad.
  * Returns 100 (an average pro) if the club has no players on record.
  */
+export function selectStartingXI(
+  club: Club,
+  players: Record<string, Player>,
+  disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
+): Player[] {
+  const eligible = club.playerIds
+    .map((playerId) => players[playerId])
+    .filter((player): player is Player => {
+      if (!player || player.injured) return false;
+      return (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0;
+    })
+    .sort((left, right) => {
+      const scoreDelta = (right.currentAbility + right.form * 2)
+        - (left.currentAbility + left.form * 2);
+      return scoreDelta !== 0 ? scoreDelta : left.id.localeCompare(right.id);
+    });
+
+  if (eligible.length <= 11) return eligible;
+
+  const selected: Player[] = [];
+  const selectedIds = new Set<string>();
+  const take = (positions: Set<Position>, limit: number) => {
+    for (const player of eligible) {
+      if (selected.length >= 11 || limit <= 0) break;
+      if (!selectedIds.has(player.id) && positions.has(player.position)) {
+        selected.push(player);
+        selectedIds.add(player.id);
+        limit--;
+      }
+    }
+  };
+
+  take(new Set<Position>(["GK"]), 1);
+  take(new Set<Position>(["CB", "LB", "RB"]), 4);
+  take(new Set<Position>(["CDM", "CM", "CAM"]), 4);
+  take(new Set<Position>(["LW", "RW", "ST"]), 2);
+
+  for (const player of eligible) {
+    if (selected.length >= 11) break;
+    if (!selectedIds.has(player.id)) {
+      selected.push(player);
+      selectedIds.add(player.id);
+    }
+  }
+
+  return selected;
+}
+
 function clubAverageAbility(
   club: Club,
   players: Record<string, Player>,
   disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
 ): number {
-  if (club.playerIds.length === 0) return 100;
+  const startingXI = selectStartingXI(club, players, disciplinaryRecords);
+  if (startingXI.length === 0) return 100;
 
-  let found = 0;
-  const total = club.playerIds.reduce((sum, pid) => {
-    const p = players[pid];
-    if (!p) return sum;
-    // Exclude suspended players from the ability calculation
-    const record = disciplinaryRecords[pid];
-    if (record && record.suspensionWeeksRemaining > 0) return sum;
-    // Exclude injured players
-    if (p.injured) return sum;
-    found++;
-    return sum + p.currentAbility;
-  }, 0);
-
-  return found > 0 ? total / found : 100;
+  return startingXI.reduce((sum, player) => sum + player.currentAbility, 0)
+    / startingXI.length;
 }
 
 /**
@@ -550,10 +594,10 @@ function simulateFixture(
 
   // Pick scorers for rating generation — exclude injured players
   const homePlayers = homeClub
-    ? homeClub.playerIds.map((id) => players[id]).filter((p): p is Player => !!p && !p.injured)
+    ? selectStartingXI(homeClub, players, disciplinaryRecords)
     : [];
   const awayPlayers = awayClub
-    ? awayClub.playerIds.map((id) => players[id]).filter((p): p is Player => !!p && !p.injured)
+    ? selectStartingXI(awayClub, players, disciplinaryRecords)
     : [];
   const scorers = pickScorers(rng, homePlayers, homeGoals, awayPlayers, awayGoals);
 
@@ -589,7 +633,11 @@ function simulateWeekFixtures(
   const records = disciplinaryRecords ?? state.disciplinaryRecords ?? {};
 
   for (const fixture of Object.values(state.fixtures)) {
-    if (fixture.week === state.currentWeek && !fixture.played) {
+    if (
+      isFixtureInSeason(fixture, state.currentSeason) &&
+      fixture.week === state.currentWeek &&
+      !fixture.played
+    ) {
       results.push(
         simulateFixture(fixture, state.clubs, state.players, rng, records),
       );
@@ -646,11 +694,10 @@ function computeFormMomentum(
   const currentLock = player.formLockWeeks ?? 0;
 
   // Find if this player's club played this week and determine match quality
-  const clubFixture = weekFixtures.find(
-    (f) => f.homeClubId === player.clubId || f.awayClubId === player.clubId,
-  );
+  const clubFixture = weekFixtures.find((fixture) => fixture.playerRatings?.[player.id]);
+  const currentRating = clubFixture?.playerRatings?.[player.id]?.rating;
 
-  if (!clubFixture || player.injured) {
+  if (currentRating === undefined || player.injured) {
     // No match this week — momentum decays, lock ticks down
     const decayedMomentum = Math.max(0, currentMomentum - 1);
     const decayedLock = Math.max(0, currentLock - 1);
@@ -666,11 +713,21 @@ function computeFormMomentum(
     };
   }
 
-  // Simulate a match quality rating for this player (7.0 +/- noise based on CA)
-  // Higher CA players tend toward higher ratings
-  const baseRating = 5.0 + (player.currentAbility / 200) * 3.0;
-  const matchRating = rng.gaussian(baseRating, 1.2);
-  const clampedRating = Math.min(10, Math.max(1, matchRating));
+  // Reuse the rating already generated for this fixture; form must never roll a
+  // second, contradictory performance result.
+  const clampedRating = currentRating;
+  const recentRatings = [
+    ...(player.recentMatchRatings ?? []).map((entry) => entry.rating),
+    currentRating,
+  ].slice(-6);
+  const countTrailing = (predicate: (rating: number) => boolean): number => {
+    let count = 0;
+    for (let index = recentRatings.length - 1; index >= 0; index--) {
+      if (!predicate(recentRatings[index])) break;
+      count++;
+    }
+    return count;
+  };
 
   // Determine new streak state
   const isHotMatch = clampedRating >= 7.0;
@@ -683,7 +740,7 @@ function computeFormMomentum(
 
   if (isHotMatch && (currentTrend === "rising" || currentTrend === "stable")) {
     // Continuing or starting a hot streak
-    const consecutiveHot = currentTrend === "rising" ? currentMomentum + 3 + 1 : 1;
+    const consecutiveHot = countTrailing((rating) => rating >= 7);
     if (consecutiveHot >= 4) {
       newMomentum = Math.min(10, consecutiveHot - 3);
       newTrend = "rising";
@@ -700,7 +757,7 @@ function computeFormMomentum(
     }
   } else if (isColdMatch && (currentTrend === "falling" || currentTrend === "stable")) {
     // Continuing or starting a cold streak
-    const consecutiveCold = currentTrend === "falling" ? currentMomentum + 3 + 1 : 1;
+    const consecutiveCold = countTrailing((rating) => rating < 5);
     if (consecutiveCold >= 4) {
       newMomentum = Math.min(10, consecutiveCold - 3);
       newTrend = "falling";
@@ -742,6 +799,7 @@ function computeFormMomentum(
   }
 
   void allPlayers; // reserved for future cross-team comparisons
+  void rng; // ratings are generated once on the fixture and reused here
 
   return {
     playerId: player.id,
@@ -1788,21 +1846,12 @@ function computeFatigueRecovery(scout: { attributes: { endurance: number } }): n
  * Determine if this week is the final week of the season.
  * End-of-season triggers performance reviews, contract renewals, etc.
  */
-/**
- * Compute the actual season length from the generated fixtures.
- * Returns the maximum fixture week across all leagues, or the minimum
- * season length if no fixtures exist.
- */
-function getSeasonLength(fixtures: Record<string, Fixture>): number {
-  let maxWeek = MIN_SEASON_LENGTH_WEEKS;
-  for (const fixture of Object.values(fixtures)) {
-    if (fixture.week > maxWeek) maxWeek = fixture.week;
-  }
-  return maxWeek;
-}
-
-function isEndOfSeason(currentWeek: number, fixtures: Record<string, Fixture>): boolean {
-  return currentWeek >= getSeasonLength(fixtures);
+function isEndOfSeason(
+  currentWeek: number,
+  fixtures: Record<string, Fixture>,
+  season: number,
+): boolean {
+  return currentWeek >= getSeasonLength(fixtures, season);
 }
 
 /**
@@ -2026,8 +2075,16 @@ function generateManagerMessages(
 
   const messages: InboxMessage[] = [];
 
-  // Periodic meeting reminder every 4 weeks
-  if (state.currentWeek % 4 === 0) {
+  const now = { week: state.currentWeek, season: state.currentSeason };
+  const nextMeetingAt = relationship.nextMeetingAt;
+  const meetingAvailable = !nextMeetingAt || isGameDateAtOrAfter(now, nextMeetingAt);
+  const newlyAvailable = nextMeetingAt
+    ? nextMeetingAt.week === state.currentWeek && nextMeetingAt.season === state.currentSeason
+    : state.currentWeek % 4 === 0;
+
+  // Remind once when the persisted cooldown expires; legacy saves retain the
+  // old monthly cadence until their first authoritative meeting.
+  if (meetingAvailable && newlyAvailable) {
     messages.push({
       id: makeMessageId("mgr_reminder", rng),
       week: state.currentWeek,
@@ -2065,7 +2122,7 @@ function generateManagerMessages(
 // =============================================================================
 
 /**
- * Evaluate active board directives at the end of the season (week 38).
+ * Evaluate active board directives at the fixture-derived end of the season.
  * Only runs for tier 5 scouts. Returns undefined when conditions are not met.
  */
 function evaluateBoardDirectivesForTick(
@@ -2156,11 +2213,13 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const transfers = transferWindowOpen ? processAITransfers(state, rng) : [];
 
   // 4b. Player loan system
+  const activeSeasonLength = getSeasonLength(state.fixtures, state.currentSeason);
   const updatedActiveLoans = processLoanPerformance(
     state,
     state.currentWeek,
     state.currentSeason,
     rng,
+    activeSeasonLength,
   );
   const loanState = { ...state, activeLoans: updatedActiveLoans };
   const loanReturnResult = processLoanReturns(
@@ -2168,10 +2227,17 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     state.currentWeek,
     state.currentSeason,
     rng,
+    activeSeasonLength,
   );
   const loanWindowOpen = transferWindowOpen;
   const loanDealResult = loanWindowOpen
-    ? processAILoanDeals(loanState, state.currentWeek, state.currentSeason, rng)
+    ? processAILoanDeals(
+        loanState,
+        state.currentWeek,
+        state.currentSeason,
+        rng,
+        activeSeasonLength,
+      )
     : {
         deals: [],
         messages: [],
@@ -2202,7 +2268,11 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   }
 
   // 6. Inbox messages (after computing transfers and injuries so we can ref them)
-  const endOfSeasonTriggered = isEndOfSeason(state.currentWeek, state.fixtures);
+  const endOfSeasonTriggered = isEndOfSeason(
+    state.currentWeek,
+    state.fixtures,
+    state.currentSeason,
+  );
   const newMessages = generateInboxMessages(state, transfers, injuries, rng);
 
   // Append breakthrough notifications
@@ -2217,13 +2287,16 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const closedLoanIds = new Set<string>();
   const loanClosures: Array<{ deal: LoanDeal; outcome: LoanOutcome }> = [];
   for (const deal of loanReturnResult.deals) {
-    let outcome = deal.outcome ?? evaluateLoanOutcome(deal);
+    let outcome = deal.outcome ?? evaluateLoanOutcome(deal, activeSeasonLength);
     if (
       outcome === "buy-option-exercised" &&
       (deal.buyOptionFee === undefined ||
         (state.clubs[deal.loanClubId]?.budget ?? 0) < deal.buyOptionFee)
     ) {
-      outcome = evaluateLoanOutcome({ ...deal, buyOptionFee: undefined });
+      outcome = evaluateLoanOutcome(
+        { ...deal, buyOptionFee: undefined },
+        activeSeasonLength,
+      );
     }
     loanClosures.push({ deal, outcome });
     closedLoanIds.add(deal.id);
@@ -2485,7 +2558,11 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 20. Relegation/promotion processing (season-end only).
   let relegationResult: RelegationResult | undefined;
   if (endOfSeasonTriggered) {
-    relegationResult = processRelegationPromotion(state, rng);
+    relegationResult = processRelegationPromotionIncludingFixtures(
+      state,
+      fixturesPlayed,
+      rng,
+    );
     newMessages.push(...relegationResult.messages);
   }
 
@@ -2680,7 +2757,9 @@ export function advanceWeek(
   tickResult: TickResult,
 ): GameState {
   // ---- Fixtures ----
-  const updatedFixtures = { ...state.fixtures };
+  const updatedFixtures = {
+    ...normalizeFixtureSeasons(state.fixtures, state.currentSeason),
+  };
   for (const played of tickResult.fixturesPlayed) {
     updatedFixtures[played.id] = played;
   }
@@ -2875,10 +2954,18 @@ export function advanceWeek(
   }
 
   // ---- Youth aging: auto-signed youth become regular players ----
+  const youthSigningIdentityCollisions = new Set<string>();
   if (tickResult.youthAgingResult) {
     for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
       const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
       if (youth) {
+        // Never let a generated youth overwrite an established world identity.
+        // Older deterministic RNG streams had only 32 bits of state, so a
+        // long-running save could rarely reuse an active or retired player ID.
+        if (state.players[youth.player.id] || state.retiredPlayers?.[youth.player.id]) {
+          youthSigningIdentityCollisions.add(youth.player.id);
+          continue;
+        }
         // The lifecycle resolver owns the actual signing, contract, and roster.
         const player = {
           ...youth.player,
@@ -2979,7 +3066,10 @@ export function advanceWeek(
 
   for (const deal of tickResult.loanReturns ?? []) {
     const loanClub = updatedClubs[deal.loanClubId];
-    const evaluatedOutcome = deal.outcome ?? evaluateLoanOutcome(deal);
+    const evaluatedOutcome = deal.outcome ?? evaluateLoanOutcome(
+      deal,
+      getSeasonLength(state.fixtures, deal.startSeason),
+    );
     const exerciseBuyOption =
       evaluatedOutcome === "buy-option-exercised" &&
       deal.buyOptionFee !== undefined &&
@@ -3061,7 +3151,7 @@ export function advanceWeek(
   for (const { youthId, clubId } of tickResult.youthAgingResult?.autoSigned ?? []) {
     const youth = tickResult.youthAgingResult?.updatedUnsignedYouth[youthId]
       ?? state.unsignedYouth[youthId];
-    if (!youth) continue;
+    if (!youth || youthSigningIdentityCollisions.has(youth.player.id)) continue;
     movementIntents.push({
       type: "youthSigning",
       playerId: youth.player.id,
@@ -3092,6 +3182,7 @@ export function advanceWeek(
     movementIntents,
     state.currentWeek,
     state.currentSeason,
+    getSeasonLength(state.fixtures, state.currentSeason),
   );
 
   updatedPlayers = lifecycleResolution.state.players;
@@ -3102,6 +3193,11 @@ export function advanceWeek(
   let updatedRetiredPlayerIds = lifecycleResolution.state.retiredPlayerIds;
   const updatedPlayerMovementHistory = lifecycleResolution.state.playerMovementHistory;
   let lifecycleFreeAgentPool = lifecycleResolution.state.freeAgentPool;
+  youthPool = reconcileYouthSigningPlacements(
+    youthPool,
+    tickResult.youthAgingResult?.autoSigned ?? [],
+    lifecycleResolution.applied,
+  );
   const rejectedFreeAgentSigningIds = new Set(
     lifecycleResolution.rejected
       .filter(({ intent }) => intent.type === "freeAgentSigning")
@@ -3263,6 +3359,29 @@ export function advanceWeek(
   if (tickResult.endOfSeasonTriggered) {
     nextWeek = 1;
     nextSeason = state.currentSeason + 1;
+    let updatedLeagues = { ...state.leagues };
+
+    // Preserve final-season facts before age, pricing, and league membership
+    // mutate for the new season. The writer is idempotent, bounded, and uses
+    // only played fixtures, explicit participation, and applied movement data.
+    const updatedWorldHistory = recordCompletedSeasonWorldHistory(
+      state.worldHistory,
+      {
+        totalWeeksPlayed: state.totalWeeksPlayed,
+        leagues: state.leagues,
+        clubs: updatedClubs,
+        players: updatedPlayers,
+        fixtures: updatedFixtures,
+        managerProfiles: state.managerProfiles,
+        matchRatings: updatedMatchRatings,
+        retiredPlayerIds: updatedRetiredPlayerIds,
+        retiredPlayers: updatedRetiredPlayers,
+        playerMovementHistory: updatedPlayerMovementHistory,
+        historicallyRelevantPlayerIds: collectCausallyReferencedPlayerIds(state),
+      },
+      state.currentSeason,
+      tickResult.relegationResult,
+    );
 
     // Age all players by 1 year at season end
     for (const [id, player] of Object.entries(updatedPlayers)) {
@@ -3282,11 +3401,17 @@ export function advanceWeek(
     // flag players at relegated clubs for transfer availability.
     if (tickResult.relegationResult) {
       const relegationChanges = applyRelegationResult(
-        { ...state, clubs: updatedClubs, players: updatedPlayers },
+        {
+          ...state,
+          clubs: updatedClubs,
+          players: updatedPlayers,
+          leagues: updatedLeagues,
+        },
         tickResult.relegationResult,
       );
       updatedClubs = { ...updatedClubs, ...relegationChanges.clubs };
       updatedPlayers = { ...updatedPlayers, ...relegationChanges.players };
+      updatedLeagues = relegationChanges.leagues;
     }
 
     // Reprice the market once per season from current ability, potential, age,
@@ -3308,7 +3433,6 @@ export function advanceWeek(
     }
 
     // Update season in all leagues
-    const updatedLeagues = { ...state.leagues };
     for (const [id, league] of Object.entries(updatedLeagues)) {
       updatedLeagues[id] = { ...league, season: nextSeason };
     }
@@ -3329,10 +3453,22 @@ export function advanceWeek(
       };
     }
     const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);
+    const retainedFixtures = retainRequiredFixtureHistory(
+      {
+        ...state,
+        currentSeason: nextSeason,
+        fixtures: updatedFixtures,
+        players: updatedPlayers,
+        clubs: reconciledClubs,
+        retiredPlayers: updatedRetiredPlayers,
+        retiredPlayerIds: updatedRetiredPlayerIds,
+      },
+      nextSeason,
+    );
 
     return {
       ...state,
-      fixtures: updatedFixtures,
+      fixtures: retainedFixtures,
       players: updatedPlayers,
       clubs: reconciledClubs,
       leagues: updatedLeagues,
@@ -3352,7 +3488,10 @@ export function advanceWeek(
         completed: false,
       },
       unsignedYouth: youthPool,
-      seasonEvents: generateSeasonEvents(nextSeason),
+      seasonEvents: generateSeasonEvents(
+        nextSeason,
+        getSeasonLength(state.fixtures, state.currentSeason),
+      ),
       gutFeelings: updatedGutFeelings,
       retiredPlayerIds: updatedRetiredPlayerIds,
       retiredPlayers: updatedRetiredPlayers,
@@ -3360,8 +3499,11 @@ export function advanceWeek(
       loanHistory: updatedLoanHistory,
       loanRecommendations: updatedLoanRecommendations,
       playerMovementHistory: updatedPlayerMovementHistory,
+      worldHistory: updatedWorldHistory,
       alumniRecords: updatedAlumniRecords,
-      matchRatings: updatedMatchRatings,
+      // Player seasonRatings and WorldHistory now own completed-season facts.
+      // Per-fixture ratings are working data and must not grow forever.
+      matchRatings: {},
       regionalKnowledge: updatedRegionalKnowledge,
       subRegions: synchronizedRegionalState.subRegions,
       disciplinaryRecords: updatedDisciplinaryRecords,

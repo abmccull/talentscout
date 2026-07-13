@@ -34,6 +34,64 @@ interface EventDefinition {
   relevantSpecializations?: Specialization[];
 }
 
+/** Canonical authoring calendar. Definitions are scaled at runtime. */
+export const AUTHORED_SEASON_LENGTH_WEEKS = 38;
+
+function normalizeSeasonLength(seasonLength: number): number {
+  return Number.isInteger(seasonLength) && seasonLength > 0
+    ? seasonLength
+    : AUTHORED_SEASON_LENGTH_WEEKS;
+}
+
+/** Map an authored 38-week event point onto the active competition calendar. */
+export function scaleAuthoredSeasonWeek(
+  authoredWeek: number,
+  seasonLength = AUTHORED_SEASON_LENGTH_WEEKS,
+): number {
+  const targetLength = normalizeSeasonLength(seasonLength);
+  const clampedAuthoredWeek = Math.max(
+    1,
+    Math.min(AUTHORED_SEASON_LENGTH_WEEKS, authoredWeek),
+  );
+  if (targetLength === 1) return 1;
+  return Math.round(
+    ((clampedAuthoredWeek - 1) * (targetLength - 1))
+      / (AUTHORED_SEASON_LENGTH_WEEKS - 1),
+  ) + 1;
+}
+
+/** Evenly spaced, de-duplicated labels for the rendered season timeline. */
+export function getSeasonTimelineLabelWeeks(seasonLength: number): number[] {
+  const targetLength = normalizeSeasonLength(seasonLength);
+  return [...new Set([0, 0.25, 0.5, 0.75, 1].map((progress) => (
+    Math.round(progress * (targetLength - 1)) + 1
+  )))];
+}
+
+/** Percentage position of a week on a fixture-derived season timeline. */
+export function getSeasonWeekProgressPercent(
+  week: number,
+  seasonLength: number,
+): number {
+  const finalWeek = normalizeSeasonLength(seasonLength);
+  if (finalWeek === 1) return 0;
+  const clampedWeek = Math.max(1, Math.min(finalWeek, week));
+  return ((clampedWeek - 1) / (finalWeek - 1)) * 100;
+}
+
+/** Inclusive percentage width of an event segment on the season timeline. */
+export function getSeasonSegmentWidthPercent(
+  startWeek: number,
+  endWeek: number,
+  seasonLength: number,
+): number {
+  const finalWeek = normalizeSeasonLength(seasonLength);
+  if (finalWeek === 1) return 100;
+  const start = Math.max(1, Math.min(finalWeek, startWeek));
+  const end = Math.max(start, Math.min(finalWeek, endWeek));
+  return Math.min(100, ((end - start + 1) / (finalWeek - 1)) * 100);
+}
+
 /**
  * The canonical set of season events in week order.
  * Every entry maps to exactly one SeasonEvent per season.
@@ -478,27 +536,38 @@ const EVENT_DEFINITIONS: readonly EventDefinition[] = [
  * @param season - The season year, e.g. 2024.
  * @returns An ordered array of SeasonEvent objects, sorted by startWeek.
  */
-export function generateSeasonEvents(season: number): SeasonEvent[] {
-  return EVENT_DEFINITIONS.map((def): SeasonEvent => ({
-    id: `se_${season}_${def.type}_${def.startWeek}`,
-    type: def.type,
-    name: def.name,
-    startWeek: def.startWeek,
-    endWeek: def.endWeek,
-    description: def.description,
-    effects: def.effects ? [...def.effects] : undefined,
-    choices: def.choices
-      ? def.choices.map((c) => ({
-          label: c.label,
-          description: c.description,
-          effects: [...c.effects],
-        }))
-      : undefined,
-    relevantSpecializations: def.relevantSpecializations
-      ? [...def.relevantSpecializations]
-      : undefined,
-    resolved: false,
-  }));
+export function generateSeasonEvents(
+  season: number,
+  seasonLength = AUTHORED_SEASON_LENGTH_WEEKS,
+): SeasonEvent[] {
+  const targetLength = normalizeSeasonLength(seasonLength);
+  return EVENT_DEFINITIONS.map((def): SeasonEvent => {
+    const startWeek = scaleAuthoredSeasonWeek(def.startWeek, targetLength);
+    const endWeek = Math.max(
+      startWeek,
+      scaleAuthoredSeasonWeek(def.endWeek, targetLength),
+    );
+    return {
+      id: `se_${season}_${def.type}_${startWeek}`,
+      type: def.type,
+      name: def.name,
+      startWeek,
+      endWeek,
+      description: def.description,
+      effects: def.effects ? [...def.effects] : undefined,
+      choices: def.choices
+        ? def.choices.map((c) => ({
+            label: c.label,
+            description: c.description,
+            effects: [...c.effects],
+          }))
+        : undefined,
+      relevantSpecializations: def.relevantSpecializations
+        ? [...def.relevantSpecializations]
+        : undefined,
+      resolved: false,
+    };
+  });
 }
 
 /**
@@ -561,28 +630,32 @@ export function isInternationalBreak(
 /**
  * Determine the broad phase of the season based on the current week.
  *
- * Phase boundaries:
+ * Canonical 38-week authoring boundaries, proportionally scaled at runtime:
  *  - Weeks  1– 4 → "preseason"
  *  - Weeks  5–15 → "earlyseason"
  *  - Weeks 16–28 → "midseason"
  *  - Weeks 29–36 → "lateseason"
  *  - Weeks 37–38 → "endseason"
  *
- * @param currentWeek - The week number, expected in [1, 38].
+ * @param currentWeek - The week number on the active fixture-derived calendar.
+ * @param seasonLength - Active fixture-derived season length.
  */
 export function getSeasonPhase(
   currentWeek: number,
+  seasonLength = AUTHORED_SEASON_LENGTH_WEEKS,
 ): "preseason" | "earlyseason" | "midseason" | "lateseason" | "endseason" {
-  if (currentWeek <= 4) {
+  const targetLength = normalizeSeasonLength(seasonLength);
+  const week = Math.max(1, Math.min(targetLength, currentWeek));
+  if (week <= scaleAuthoredSeasonWeek(4, targetLength)) {
     return "preseason";
   }
-  if (currentWeek <= 15) {
+  if (week <= scaleAuthoredSeasonWeek(15, targetLength)) {
     return "earlyseason";
   }
-  if (currentWeek <= 28) {
+  if (week <= scaleAuthoredSeasonWeek(28, targetLength)) {
     return "midseason";
   }
-  if (currentWeek <= 36) {
+  if (week <= scaleAuthoredSeasonWeek(36, targetLength)) {
     return "lateseason";
   }
   return "endseason";

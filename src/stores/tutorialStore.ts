@@ -9,6 +9,12 @@
 import { create } from "zustand";
 import { getSequenceById } from "@/components/game/tutorial/tutorialSteps";
 import type { Specialization } from "@/engine/core/types";
+import {
+  mergePersistedPlayerExperience,
+  readPlayerExperience,
+  subscribePlayerExperience,
+  updatePlayerExperience,
+} from "@/lib/playerExperience";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -73,10 +79,18 @@ export type GuidedMilestoneId =
   | "advancedWeek"
   | "attendedMatch"
   | "focusedPlayer"
+  | "flaggedBreakthrough"
   | "completedMatch"
   | "wroteReport"
   | "submittedReport"
   | "checkedInbox";
+
+export type GuidedSessionKind = "firstWeek" | "discoveryHook";
+
+export interface GuidedSessionStartOptions {
+  /** Replay onboarding for this session without clearing profile completion. */
+  forceReplay?: boolean;
+}
 
 export interface ContextualHint {
   id: string;
@@ -94,6 +108,7 @@ interface PersistedTutorialData {
   dismissedHints: string[];
   guidedMilestones: Record<string, boolean>;
   guidedSessionCompleted: boolean;
+  guidedSessionKind: GuidedSessionKind;
   /** Features the player discovered organically (without a tutorial). */
   discoveredFeatures: string[];
 }
@@ -122,16 +137,28 @@ const PERSISTED_DEFAULTS: PersistedTutorialData = {
   dismissedHints: [],
   guidedMilestones: {},
   guidedSessionCompleted: false,
+  guidedSessionKind: "firstWeek",
   discoveredFeatures: [],
 };
 
 function readPersisted(): PersistedTutorialData {
-  if (typeof window === "undefined") return { ...PERSISTED_DEFAULTS };
+  const profileExperience = readPlayerExperience();
+  const withProfileExperience = (
+    data: PersistedTutorialData,
+  ): PersistedTutorialData => ({
+    ...data,
+    dismissed: data.dismissed || profileExperience.tutorial.dismissed,
+    guidedSessionCompleted:
+      data.guidedSessionCompleted || profileExperience.tutorial.completed,
+  });
+  if (typeof window === "undefined") {
+    return withProfileExperience({ ...PERSISTED_DEFAULTS });
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...PERSISTED_DEFAULTS };
+    if (!raw) return withProfileExperience({ ...PERSISTED_DEFAULTS });
     const parsed = JSON.parse(raw) as Partial<PersistedTutorialData>;
-    return {
+    const migrated: PersistedTutorialData = {
       completedSequences: Array.isArray(parsed.completedSequences)
         ? parsed.completedSequences
         : [],
@@ -147,12 +174,27 @@ function readPersisted(): PersistedTutorialData {
           ? parsed.guidedMilestones
           : {},
       guidedSessionCompleted: parsed.guidedSessionCompleted === true,
+      guidedSessionKind: parsed.guidedSessionKind === "discoveryHook"
+        ? "discoveryHook"
+        : "firstWeek",
       discoveredFeatures: Array.isArray(parsed.discoveredFeatures)
         ? parsed.discoveredFeatures
         : [],
     };
+    const mergedExperience = mergePersistedPlayerExperience({
+      guidedSessionCompleted: migrated.guidedSessionCompleted,
+      dismissed: migrated.dismissed,
+      updatedAt: 0,
+    });
+    return {
+      ...migrated,
+      dismissed: migrated.dismissed || mergedExperience.tutorial.dismissed,
+      guidedSessionCompleted:
+        migrated.guidedSessionCompleted
+        || mergedExperience.tutorial.completed,
+    };
   } catch {
-    return { ...PERSISTED_DEFAULTS };
+    return withProfileExperience({ ...PERSISTED_DEFAULTS });
   }
 }
 
@@ -196,8 +238,14 @@ export interface TutorialState {
   /** True while the guided first-week session is in progress. */
   guidedSessionActive: boolean;
 
+  /** Transient override used only when an experienced player requests replay. */
+  guidedSessionForcedReplay: boolean;
+
   /** True once the guided session has been completed (persisted). */
   guidedSessionCompleted: boolean;
+
+  /** Determines whether milestones teach planning first or begin inside a live discovery. */
+  guidedSessionKind: GuidedSessionKind;
 
   /** Record of which milestones the player has reached. */
   guidedMilestones: Record<GuidedMilestoneId, boolean>;
@@ -251,7 +299,11 @@ export interface TutorialState {
   checkAutoAdvance: (condition: string) => void;
 
   // Guided session
-  startGuidedSession: (hasClub: boolean) => void;
+  startGuidedSession: (
+    hasClub: boolean,
+    kind?: GuidedSessionKind,
+    options?: GuidedSessionStartOptions,
+  ) => void;
   completeMilestone: (id: GuidedMilestoneId) => void;
   skipGuidedSession: () => void;
 
@@ -277,23 +329,44 @@ export interface TutorialState {
 // browser after hydration — localStorage is available at that point.
 const persisted = readPersisted();
 
-const MILESTONE_ORDER: GuidedMilestoneId[] = [
+const FIRST_WEEK_MILESTONE_ORDER: GuidedMilestoneId[] = [
   "viewedDashboard",
   "openedCalendar",
   "scheduledActivity",
   "advancedWeek",
   "attendedMatch",
   "focusedPlayer",
+  "flaggedBreakthrough",
   "completedMatch",
   "wroteReport",
   "submittedReport",
   "checkedInbox",
 ];
 
+const DISCOVERY_HOOK_MILESTONE_ORDER: GuidedMilestoneId[] = [
+  "attendedMatch",
+  "focusedPlayer",
+  "flaggedBreakthrough",
+  "completedMatch",
+  "wroteReport",
+  "submittedReport",
+  "checkedInbox",
+  "openedCalendar",
+  "scheduledActivity",
+  "advancedWeek",
+];
+
+function milestoneOrder(kind: GuidedSessionKind): GuidedMilestoneId[] {
+  return kind === "discoveryHook"
+    ? DISCOVERY_HOOK_MILESTONE_ORDER
+    : FIRST_WEEK_MILESTONE_ORDER;
+}
+
 function nextMilestone(
   milestones: Record<GuidedMilestoneId, boolean>,
+  kind: GuidedSessionKind,
 ): GuidedMilestoneId | null {
-  for (const m of MILESTONE_ORDER) {
+  for (const m of milestoneOrder(kind)) {
     if (!milestones[m]) return m;
   }
   return null;
@@ -301,6 +374,10 @@ function nextMilestone(
 
 /** Persist all tutorial state in one write. */
 function persistAll(state: TutorialState): void {
+  updatePlayerExperience({
+    tutorialCompleted: state.guidedSessionCompleted,
+    tutorialDismissed: state.dismissed,
+  });
   writePersisted({
     completedSequences: Array.from(state.completedSequences),
     dismissed: state.dismissed,
@@ -308,6 +385,7 @@ function persistAll(state: TutorialState): void {
     dismissedHints: Array.from(state.dismissedHints),
     guidedMilestones: state.guidedMilestones,
     guidedSessionCompleted: state.guidedSessionCompleted,
+    guidedSessionKind: state.guidedSessionKind,
     discoveredFeatures: Array.from(state.discoveredFeatures),
   });
 }
@@ -319,6 +397,7 @@ const initialMilestones: Record<GuidedMilestoneId, boolean> = {
   advancedWeek: false,
   attendedMatch: false,
   focusedPlayer: false,
+  flaggedBreakthrough: false,
   completedMatch: false,
   wroteReport: false,
   submittedReport: false,
@@ -342,11 +421,13 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
 
   // ── Guided session state ─────────────────────────────────────────────────
   guidedSessionActive: false,
+  guidedSessionForcedReplay: false,
   guidedSessionCompleted: persisted.guidedSessionCompleted,
+  guidedSessionKind: persisted.guidedSessionKind,
   guidedMilestones: restoredMilestones,
   currentGuidedTask: persisted.guidedSessionCompleted
     ? null
-    : nextMilestone(restoredMilestones),
+    : nextMilestone(restoredMilestones, persisted.guidedSessionKind),
 
   // ── Screen guides state ──────────────────────────────────────────────────
   visitedScreens: new Set(persisted.visitedScreens),
@@ -457,6 +538,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
       tutorialActive: false,
       pendingSequence: null,
       guidedSessionActive: false,
+      guidedSessionForcedReplay: false,
       activeScreenGuide: null,
       activeHint: null,
     });
@@ -478,14 +560,17 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
 
   // ── Guided session actions ───────────────────────────────────────────────
 
-  startGuidedSession(hasClub) {
+  startGuidedSession(hasClub, kind = "firstWeek", options = {}) {
     const { dismissed, guidedSessionCompleted } = get();
-    if (dismissed || guidedSessionCompleted) return;
+    const forceReplay = options.forceReplay === true;
+    if (!forceReplay && (dismissed || guidedSessionCompleted)) return;
 
     set({
       guidedSessionActive: true,
+      guidedSessionForcedReplay: forceReplay,
+      guidedSessionKind: kind,
       guidedMilestones: { ...initialMilestones },
-      currentGuidedTask: "viewedDashboard",
+      currentGuidedTask: nextMilestone(initialMilestones, kind),
       mentorName: hasClub ? "Margaret Chen" : "Tommy Reyes",
       mentorTitle: hasClub ? "Director of Recruitment" : "Senior Scout",
     });
@@ -493,17 +578,29 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   },
 
   completeMilestone(id) {
-    const { guidedSessionActive, guidedMilestones, dismissed, pendingScreenGuide } = get();
-    if (dismissed || !guidedSessionActive || guidedMilestones[id]) return;
+    const {
+      guidedSessionActive,
+      guidedMilestones,
+      guidedSessionKind,
+      guidedSessionForcedReplay,
+      dismissed,
+      pendingScreenGuide,
+    } = get();
+    if (
+      (dismissed && !guidedSessionForcedReplay)
+      || !guidedSessionActive
+      || guidedMilestones[id]
+    ) return;
 
     const updated = { ...guidedMilestones, [id]: true };
-    const next = nextMilestone(updated);
+    const next = nextMilestone(updated, guidedSessionKind);
     const allDone = next === null;
 
     set({
       guidedMilestones: updated,
       currentGuidedTask: next,
       guidedSessionActive: !allDone,
+      guidedSessionForcedReplay: allDone ? false : guidedSessionForcedReplay,
       guidedSessionCompleted: allDone || get().guidedSessionCompleted,
     });
     persistAll(get());
@@ -519,6 +616,7 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   skipGuidedSession() {
     set({
       guidedSessionActive: false,
+      guidedSessionForcedReplay: false,
       guidedSessionCompleted: true,
       currentGuidedTask: null,
     });
@@ -528,9 +626,14 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   // ── Screen guide actions ─────────────────────────────────────────────────
 
   recordScreenVisit(screen) {
-    const { visitedScreens, dismissed, guidedSessionActive } = get();
-    if (dismissed) return;
-    if (visitedScreens.has(screen)) return;
+    const {
+      visitedScreens,
+      dismissed,
+      guidedSessionActive,
+      guidedSessionForcedReplay,
+    } = get();
+    if (dismissed && !guidedSessionForcedReplay) return;
+    if (visitedScreens.has(screen) && !guidedSessionForcedReplay) return;
 
     const updated = new Set(visitedScreens);
     updated.add(screen);
@@ -547,8 +650,8 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   },
 
   openScreenGuide(screen) {
-    const { dismissed } = get();
-    if (dismissed) return;
+    const { dismissed, guidedSessionForcedReplay } = get();
+    if (dismissed && !guidedSessionForcedReplay) return;
     set({ activeScreenGuide: screen, screenGuideStep: 0 });
   },
 
@@ -563,8 +666,11 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   // ── Hint actions ─────────────────────────────────────────────────────────
 
   showHint(hint) {
-    const { dismissed, dismissedHints } = get();
-    if (dismissed || dismissedHints.has(hint.id)) return;
+    const { dismissed, dismissedHints, guidedSessionForcedReplay } = get();
+    if (
+      (dismissed && !guidedSessionForcedReplay)
+      || dismissedHints.has(hint.id)
+    ) return;
     set({ activeHint: hint });
   },
 
@@ -588,7 +694,44 @@ export const useTutorialStore = create<TutorialState>((set, get) => ({
   },
 }));
 
+// Save/cloud loads can arrive after Zustand initializes. Keep the live store in
+// sync with the monotonic profile record without coupling persistence to React.
+subscribePlayerExperience((experience) => {
+  useTutorialStore.setState((state) => {
+    const guidedSessionCompleted =
+      state.guidedSessionCompleted || experience.tutorial.completed;
+    const dismissed = state.dismissed || experience.tutorial.dismissed;
+    if (
+      guidedSessionCompleted === state.guidedSessionCompleted
+      && dismissed === state.dismissed
+    ) {
+      return state;
+    }
+    return {
+      ...state,
+      dismissed,
+      guidedSessionCompleted,
+      guidedSessionActive:
+        (dismissed || guidedSessionCompleted) && !state.guidedSessionForcedReplay
+        ? false
+        : state.guidedSessionActive,
+      currentGuidedTask:
+        guidedSessionCompleted && !state.guidedSessionForcedReplay
+        ? null
+        : state.currentGuidedTask,
+      tutorialActive: dismissed ? false : state.tutorialActive,
+      currentSequence: dismissed ? null : state.currentSequence,
+      activeScreenGuide: dismissed ? null : state.activeScreenGuide,
+      activeHint: dismissed ? null : state.activeHint,
+    };
+  });
+});
+
 // Expose store for E2E testing (dev only — stripped in production builds)
-if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+if (
+  typeof window !== "undefined"
+  && (process.env.NODE_ENV !== "production"
+    || process.env.NEXT_PUBLIC_ENABLE_E2E_BRIDGE === "true")
+) {
   (window as any).__TUTORIAL_STORE__ = useTutorialStore;
 }

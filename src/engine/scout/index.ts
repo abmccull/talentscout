@@ -29,3 +29,24 @@ export {
 export type { PerceivedAbility } from './perceivedAbility';
 
 export { applyScoutSkillXp } from './progression';
+
+export {
+  MAX_COMPARABLE_EVIDENCE_SOURCES,
+  MAX_EVIDENCE_CLAIMS_PER_SOURCE,
+  adjustRecommendationForPerspective,
+  buildContactEvidenceClaim,
+  buildNPCAttributeEvidenceClaims,
+  buildNPCRecommendationEvidenceClaim,
+  capComparableClaims,
+  deriveContactPerspective,
+  deriveNPCScoutPerspective,
+  formatEvidenceRange,
+  getEffectiveClaimConfidence,
+  neutralPlayerPerspective,
+  perspectiveAdjustment,
+} from './sourcePerspectives';
+
+export {
+  calibrateEvidenceClaimFromReview,
+  calibrateSourceEvidenceFromReview,
+} from './sourceCalibration';

@@ -24,12 +24,21 @@ import type {
   ReflectionHypothesisRecord,
   UnsignedYouth,
 } from "@/engine/core/types";
-import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, addHypothesis, completeSession, getSessionResult } from "@/engine/observation/session";
+import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, addHypothesis, acceptHypothesis, completeSession, getSessionResult } from "@/engine/observation/session";
 import { populateFullObservationPhases } from "@/engine/observation/fullObservation";
 import { populateAnalysisPhases } from "@/engine/observation/analysis";
 import { populateInvestigationPhases } from "@/engine/observation/investigation";
-import { populateQuickInteractionPhases } from "@/engine/observation/quickInteraction";
+import {
+  resolveDataPointSelection,
+  resolveDialogueOptionSelection,
+} from "@/engine/observation/interactionSelection";
+import {
+  migrateQuickInteractionSession,
+  populateQuickInteractionPhases,
+  resolveQuickInteractionChoice,
+} from "@/engine/observation/quickInteraction";
 import { generateReflection, type ReflectionResult } from "@/engine/observation/reflection";
+import { applySessionEvidenceToHypotheses } from "@/engine/observation/evidence";
 import { createInsightState, accumulateInsight, calculateCapacity, canUseInsight, spendInsight } from "@/engine/insight/insight";
 import { executeInsightAction } from "@/engine/insight/actions";
 import { createRNG } from "@/engine/rng";
@@ -39,17 +48,70 @@ import { calculateSystemFit } from "@/engine/firstTeam";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { observePlayerLight } from "@/engine/scout/perception";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
+import {
+  claimOpeningDiscovery,
+  isOpeningDiscoverySession,
+  resolveOpeningCaseChoice as resolveOpeningCaseChoiceEngine,
+  shapeOpeningObservationSession,
+  type OpeningCaseChoiceId,
+} from "@/engine/youth/openingCase";
+import { shapeVeteranPrologueSession } from "@/engine/youth/veteranPrologueSession";
+
+const INVESTIGATION_CONTACT_TYPES: Partial<
+  Record<ActivityType, GameState["contacts"][string]["type"][]>
+> = {
+  followUpSession: ["academyCoach", "schoolCoach", "grassrootsOrganizer", "localScout"],
+  parentCoachMeeting: ["schoolCoach", "academyCoach", "academyDirector"],
+  contractNegotiation: ["agent", "youthAgent"],
+  networkMeeting: [
+    "agent",
+    "scout",
+    "clubStaff",
+    "journalist",
+    "academyCoach",
+    "sportingDirector",
+    "grassrootsOrganizer",
+    "schoolCoach",
+    "youthAgent",
+    "academyDirector",
+    "localScout",
+  ],
+  agentShowcase: ["agent", "youthAgent"],
+  freeAgentOutreach: ["agent", "youthAgent"],
+  loanMonitoring: ["clubStaff", "academyCoach", "sportingDirector"],
+};
+
+function resolveInvestigationContact(
+  gameState: GameState,
+  activityType: ActivityType,
+  targetPlayerId: string | undefined,
+  requestedContactId: string | undefined,
+): GameState["contacts"][string] | undefined {
+  if (requestedContactId && gameState.contacts[requestedContactId]) {
+    return gameState.contacts[requestedContactId];
+  }
+
+  const allowedTypes = INVESTIGATION_CONTACT_TYPES[activityType];
+  if (!allowedTypes?.length) return undefined;
+  const allowed = new Set(allowedTypes);
+
+  return Object.values(gameState.contacts)
+    .filter((contact) => allowed.has(contact.type))
+    .sort((left, right) => {
+      const leftKnowsTarget = targetPlayerId && left.knownPlayerIds.includes(targetPlayerId) ? 1 : 0;
+      const rightKnowsTarget = targetPlayerId && right.knownPlayerIds.includes(targetPlayerId) ? 1 : 0;
+      return rightKnowsTarget - leftKnowsTarget
+        || right.relationship - left.relationship
+        || left.id.localeCompare(right.id);
+    })[0];
+}
 
 function serializeReflectionHypotheses(
   session: ObservationSession,
 ): ReflectionHypothesisRecord[] {
   return session.hypotheses.map((hypothesis) => ({
-    id: hypothesis.id,
-    playerId: hypothesis.playerId,
-    text: hypothesis.text,
-    domain: hypothesis.domain,
-    state: hypothesis.state,
-    createdAtWeek: hypothesis.createdAtWeek,
+    ...hypothesis,
     evidence: hypothesis.evidence.map((item) => ({ ...item })),
   }));
 }
@@ -408,6 +470,7 @@ export function createObservationActions(get: GetState, set: SetState) {
       options?: {
         activityInstanceId?: string;
         returnScreen?: GameScreen;
+        contactId?: string;
       },
     ) => {
       const { gameState, weekSimulation } = get();
@@ -452,6 +515,12 @@ export function createObservationActions(get: GetState, set: SetState) {
           return profile ? [[entry.playerId, profile] as const] : [];
         }),
       );
+      const sourceContact = resolveInvestigationContact(
+        gameState,
+        activityType as ActivityType,
+        targetId,
+        options?.contactId,
+      );
 
       const config = {
         activityType: activityType as ActivityType,
@@ -464,6 +533,9 @@ export function createObservationActions(get: GetState, set: SetState) {
         week: gameState.currentWeek,
         season: gameState.currentSeason,
         careerPath: gameState.scout.careerPath as "club" | "independent" | undefined,
+        sourceContactId: sourceContact?.id,
+        sourceContactName: sourceContact?.name,
+        sourceRelationshipScore: sourceContact?.relationship,
       };
 
       let session = createSession(config, rng);
@@ -484,8 +556,26 @@ export function createObservationActions(get: GetState, set: SetState) {
           break;
       }
 
+      const openingLead = targetId ? playerProfiles[targetId] : undefined;
+      if (openingLead && isOpeningDiscoverySession(session)) {
+        const veteranPrologue = gameState.veteranPrologue;
+        session = veteranPrologue
+          && veteranPrologue.activityInstanceId === session.activityInstanceId
+          ? shapeVeteranPrologueSession(session, openingLead, veteranPrologue)
+          : shapeOpeningObservationSession(session, openingLead);
+      }
+
+      const completionId = session.activityInstanceId ?? session.id;
+      if ((gameState.completedInteractiveSessions ?? []).includes(completionId)) {
+        return;
+      }
+
       set({
         activeSession: session,
+        gameState: {
+          ...gameState,
+          activeObservationSession: session,
+        },
         sessionReturnScreen: options?.returnScreen
           ?? (get().weekSimulation ? "weekSimulation" : "dashboard"),
         currentScreen: "observation" as GameScreen,
@@ -495,9 +585,19 @@ export function createObservationActions(get: GetState, set: SetState) {
     beginSession: () => {
       const { activeSession, gameState } = get();
       if (!activeSession) return;
-      const updatedSession = startSession(activeSession);
-      set({ activeSession: updatedSession });
-
+      const sessionForStart = activeSession.mode === "quickInteraction"
+        ? migrateQuickInteractionSession(
+            activeSession,
+            createRNG(`${gameState?.seed ?? activeSession.id}-quick-branch-${activeSession.id}`),
+          )
+        : activeSession;
+      const updatedSession = startSession(sessionForStart);
+      set({
+        activeSession: updatedSession,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updatedSession }
+          : gameState,
+      });
       if (
         gameState?.scout.primarySpecialization === "youth" &&
         activeSession.state === "setup" &&
@@ -508,25 +608,36 @@ export function createObservationActions(get: GetState, set: SetState) {
     },
 
     advanceSessionPhase: () => {
-      const { activeSession } = get();
+      const { activeSession, gameState } = get();
       if (!activeSession) return;
-      const updated = advanceSessionPhase(activeSession);
-      set({ activeSession: updated });
+      const sessionForAdvance = activeSession.mode === "quickInteraction"
+        ? migrateQuickInteractionSession(
+            activeSession,
+            createRNG(`${gameState?.seed ?? activeSession.id}-quick-branch-${activeSession.id}`),
+          )
+        : activeSession;
+      const updated = advanceSessionPhase(sessionForAdvance);
+      set({
+        activeSession: updated,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updated }
+          : gameState,
+      });
 
       // If we transitioned to reflection, generate reflection content
-      if (updated.state === "reflection" && activeSession.state === "active") {
-        const { gameState } = get();
-        if (!gameState) return;
-        const rng = createRNG(`${gameState.seed}-reflection-${gameState.currentWeek}`);
+      if (updated.state === "reflection" && sessionForAdvance.state === "active") {
+        const latestGameState = get().gameState;
+        if (!latestGameState) return;
+        const rng = createRNG(`${latestGameState.seed}-reflection-${latestGameState.currentWeek}`);
         // Equipment gutFeelingBonus: boost effective intuition for gut feeling trigger chance
         // checkGutFeelingTrigger uses intuition/200 as bonus, so multiply equipment bonus by 200
-        const reflEquipBonuses = gameState.finances?.equipment
-          ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+        const reflEquipBonuses = latestGameState.finances?.equipment
+          ? getActiveEquipmentBonuses(latestGameState.finances.equipment.loadout)
           : undefined;
         const gutBoost = (reflEquipBonuses?.gutFeelingBonus ?? 0) * 200;
 
         // Check if scout has the PA estimate perk (Generational Eye)
-        const hasPAEstimatePerk = gameState.scout.unlockedPerks.some((perkId) => {
+        const hasPAEstimatePerk = latestGameState.scout.unlockedPerks.some((perkId) => {
           const perk = ALL_PERKS.find((p) => p.id === perkId);
           return perk?.effect.type === "paEstimate";
         });
@@ -535,11 +646,11 @@ export function createObservationActions(get: GetState, set: SetState) {
         const reflectionResult = generateReflection(
           updated,
           rng,
-          gameState.scout.attributes.intuition + gutBoost,
-          gameState.scout.specializationLevel,
+          latestGameState.scout.attributes.intuition + gutBoost,
+          latestGameState.scout.specializationLevel,
           { paEstimate: hasPAEstimatePerk },
           paAccuracyBonus,
-          gameState.players,
+          latestGameState.players,
         );
         set({ lastReflectionResult: reflectionResult });
       }
@@ -550,7 +661,12 @@ export function createObservationActions(get: GetState, set: SetState) {
       if (!activeSession) return;
       const wasFocused = activeSession.players.find((player) => player.playerId === playerId)?.isFocused ?? false;
       const updatedSession = allocateFocus(activeSession, playerId, lens);
-      set({ activeSession: updatedSession });
+      set({
+        activeSession: updatedSession,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updatedSession }
+          : gameState,
+      });
 
       if (
         gameState?.scout.primarySpecialization === "youth" &&
@@ -562,28 +678,86 @@ export function createObservationActions(get: GetState, set: SetState) {
     },
 
     removeSessionFocus: (playerId: string) => {
-      const { activeSession } = get();
+      const { activeSession, gameState } = get();
       if (!activeSession) return;
-      set({ activeSession: removeFocus(activeSession, playerId) });
+      const updatedSession = removeFocus(activeSession, playerId);
+      set({
+        activeSession: updatedSession,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updatedSession }
+          : gameState,
+      });
     },
 
     flagSessionMoment: (momentId: string, reaction: SessionFlaggedMoment['reaction']) => {
-      const { activeSession } = get();
+      const { activeSession, gameState } = get();
       if (!activeSession) return;
-      set({ activeSession: flagMoment(activeSession, momentId, reaction) });
+      const updatedSession = flagMoment(activeSession, momentId, reaction);
+      set({
+        activeSession: updatedSession,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updatedSession }
+          : gameState,
+      });
+
+      const flaggedMoment = updatedSession.flaggedMoments.find(
+        (candidate) => candidate.moment.id === momentId,
+      );
+      if (
+        gameState?.scout.primarySpecialization === "youth"
+        && isOpeningDiscoverySession(updatedSession)
+        && flaggedMoment?.moment.isStandout
+        && flaggedMoment.moment.playerId === gameState.openingCase?.playerId
+      ) {
+        useTutorialStore.getState().completeMilestone("flaggedBreakthrough");
+      }
     },
 
     addSessionNote: (note: string) => {
-      const { activeSession } = get();
+      const { activeSession, gameState } = get();
       if (!activeSession) return;
-      set({ activeSession: addReflectionNote(activeSession, note) });
+      const updatedSession = addReflectionNote(activeSession, note);
+      set({
+        activeSession: updatedSession,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updatedSession }
+          : gameState,
+      });
     },
 
     addSessionHypothesis: (playerId: string, text: string, domain: string) => {
-      const { activeSession, gameState } = get();
+      const { activeSession, gameState, lastReflectionResult } = get();
       if (!activeSession || !gameState) return;
       const week = gameState.currentWeek;
-      set({ activeSession: addHypothesis(activeSession, playerId, text, domain as AttributeDomain, week) });
+      const suggested = lastReflectionResult?.suggestedHypotheses.find(
+        (hypothesis: ObservationSession["hypotheses"][number]) =>
+          hypothesis.playerId === playerId
+          && hypothesis.text === text
+          && hypothesis.domain === domain,
+      );
+      const updatedSession = suggested
+          ? acceptHypothesis(
+              activeSession,
+              suggested,
+              week,
+              gameState.currentSeason,
+            )
+          : addHypothesis(
+              activeSession,
+              playerId,
+              text,
+              domain as AttributeDomain,
+              week,
+              gameState.currentSeason,
+            );
+      set({
+        activeSession: updatedSession,
+        gameState: {
+          ...gameState,
+          activeObservationSession: updatedSession,
+        },
+      });
+
     },
 
     endObservationSession: () => {
@@ -595,8 +769,18 @@ export function createObservationActions(get: GetState, set: SetState) {
         weekSimulation,
       } = get();
       if (!activeSession || !gameState) return;
+      if (
+        isOpeningDiscoverySession(activeSession)
+        && activeSession.state !== "reflection"
+        && activeSession.state !== "complete"
+      ) {
+        return;
+      }
 
-      const completed = completeSession(activeSession);
+      const sessionWithEvidence = activeSession.state === "reflection"
+        ? applySessionEvidenceToHypotheses(activeSession).session
+        : activeSession;
+      const completed = completeSession(sessionWithEvidence);
       const result = getSessionResult(completed);
       const didCompleteLifecycle =
         activeSession.state === "reflection" && completed.state === "complete";
@@ -618,7 +802,13 @@ export function createObservationActions(get: GetState, set: SetState) {
       const scout = gameState.scout;
       const currentInsight = (scout.insightState ?? createInsightState()) as InsightState;
       const capacity = calculateCapacity(scout.attributes.intuition);
-      const updatedInsight = accumulateInsight(currentInsight, result.insightPointsEarned, capacity);
+      // Incomplete sessions do not bank rewards. Otherwise the same scheduled
+      // activity can be abandoned and relaunched to farm its early choices.
+      const bankedInsight = didCompleteLifecycle ? result.insightPointsEarned : 0;
+      const updatedInsight = accumulateInsight(currentInsight, bankedInsight, capacity);
+      const completedFatigue = didCompleteLifecycle
+        ? Math.max(0, Math.min(100, scout.fatigue + result.fatigueDelta))
+        : scout.fatigue;
 
       // Track the completed session
       const completedSessions = new Set(gameState.completedInteractiveSessions ?? []);
@@ -629,17 +819,25 @@ export function createObservationActions(get: GetState, set: SetState) {
 
       const fallbackReturnScreen: GameScreen =
         get().weekSimulation ? "weekSimulation" : "dashboard";
-      const nextScreen = sessionReturnScreen ?? fallbackReturnScreen;
+      const requestedNextScreen = sessionReturnScreen ?? fallbackReturnScreen;
       const {
         gutFeelings: persistedGutFeelings,
         gutFeelingId,
-      } = persistGutFeeling(completed, lastReflectionResult as ReflectionResult | null, gameState.gutFeelings);
-      const reflectionJournalEntry = buildReflectionJournalEntry(
-        completed,
-        lastReflectionResult as ReflectionResult | null,
-        gutFeelingId,
-        observationBatch.observationIds,
-      );
+      } = didCompleteLifecycle
+        ? persistGutFeeling(
+            completed,
+            lastReflectionResult as ReflectionResult | null,
+            gameState.gutFeelings,
+          )
+        : { gutFeelings: gameState.gutFeelings, gutFeelingId: undefined };
+      const reflectionJournalEntry = didCompleteLifecycle
+        ? buildReflectionJournalEntry(
+            completed,
+            lastReflectionResult as ReflectionResult | null,
+            gutFeelingId,
+            observationBatch.observationIds,
+          )
+        : null;
       const reflectionJournal = reflectionJournalEntry
         ? {
             ...gameState.reflectionJournal,
@@ -647,11 +845,39 @@ export function createObservationActions(get: GetState, set: SetState) {
           }
         : gameState.reflectionJournal;
 
+      const synchronizedState = synchronizeInternationalAssignmentProgress({
+        ...gameState,
+        activeObservationSession: null,
+        players: observationBatch.players,
+        unsignedYouth: observationBatch.unsignedYouth,
+        observations: {
+          ...gameState.observations,
+          ...observationBatch.observations,
+        },
+        scout: {
+          ...scout,
+          fatigue: completedFatigue,
+          insightState: updatedInsight,
+        },
+        completedInteractiveSessions: didCompleteLifecycle
+          ? [...completedSessions]
+          : (gameState.completedInteractiveSessions ?? []),
+        gutFeelings: persistedGutFeelings,
+        reflectionJournal,
+      });
+      const openingDiscoveryCompleted = didCompleteLifecycle
+        && isOpeningDiscoverySession(completed);
+      const nextGameState = openingDiscoveryCompleted
+        ? claimOpeningDiscovery(synchronizedState)
+        : synchronizedState;
+
       set({
         activeSession: null,
         sessionReturnScreen: null,
         lastReflectionResult: null,
-        currentScreen: nextScreen,
+        currentScreen: openingDiscoveryCompleted
+          ? "openingDiscovery" as GameScreen
+          : requestedNextScreen,
         weekSimulation: weekSimulation?.youthVenueResults && observationBatch.simulatedYouth
           ? {
               ...weekSimulation,
@@ -661,24 +887,7 @@ export function createObservationActions(get: GetState, set: SetState) {
               },
             }
           : weekSimulation,
-        gameState: {
-          ...gameState,
-          players: observationBatch.players,
-          unsignedYouth: observationBatch.unsignedYouth,
-          observations: {
-            ...gameState.observations,
-            ...observationBatch.observations,
-          },
-          scout: {
-            ...scout,
-            insightState: updatedInsight,
-          },
-          completedInteractiveSessions: didCompleteLifecycle
-            ? [...completedSessions]
-            : (gameState.completedInteractiveSessions ?? []),
-          gutFeelings: persistedGutFeelings,
-          reflectionJournal,
-        },
+        gameState: nextGameState,
       });
 
       if (
@@ -689,20 +898,32 @@ export function createObservationActions(get: GetState, set: SetState) {
       }
     },
 
+    resolveOpeningDiscoveryChoice: (choiceId: OpeningCaseChoiceId) => {
+      const { gameState } = get();
+      if (!gameState) return;
+      const resolved = resolveOpeningCaseChoiceEngine(gameState, choiceId);
+      if (resolved === gameState) return;
+      set({
+        gameState: resolved,
+        selectedPlayerId: resolved.openingCase?.playerId ?? get().selectedPlayerId,
+        currentScreen: "reportWriter" as GameScreen,
+      });
+    },
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Insight Actions
     // ═══════════════════════════════════════════════════════════════════════════
 
     useInsight: (actionId: InsightActionId) => {
       const { activeSession, gameState } = get();
-      if (!activeSession || !gameState) return;
+      if (!activeSession || !gameState) return false;
 
       const scout = gameState.scout;
       const insightState = (scout.insightState ?? createInsightState()) as InsightState;
 
       // Check if can use
       const check = canUseInsight(insightState, actionId, scout, activeSession.mode);
-      if (!check.canUse) return;
+      if (!check.canUse) return false;
 
       // Spend IP and check for fizzle
       const rng = createRNG(`${gameState.seed}-insight-${gameState.currentWeek}-${actionId}`);
@@ -770,6 +991,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         },
         lastInsightResult: result,
       });
+      return true;
     },
 
     dismissInsightResult: () => {
@@ -777,65 +999,69 @@ export function createObservationActions(get: GetState, set: SetState) {
     },
 
     selectDialogueOption: (nodeId: string, optionId: string) => {
-      const { activeSession } = get();
-      if (!activeSession || activeSession.state !== "active") return;
+      const { activeSession, gameState } = get();
+      if (!activeSession || !gameState) return;
 
-      const phase = activeSession.phases[activeSession.currentPhaseIndex];
-      if (!phase?.dialogueNodes) return;
+      const selection = resolveDialogueOptionSelection(activeSession, nodeId, optionId);
+      if (!selection.applied || !selection.resolution) return;
 
-      const node = phase.dialogueNodes.find((n) => n.id === nodeId);
-      if (!node) return;
-      const option = node.options.find((o) => o.id === optionId);
-      if (!option) return;
-
-      // Apply insight bonus from the dialogue consequence
-      const insightBonus = option.outcome.insightBonus ?? 0;
+      const sourceContactId = selection.resolution.sourceContactId;
+      const sourceContact = sourceContactId
+        ? gameState.contacts[sourceContactId]
+        : undefined;
+      const contacts = sourceContact
+        ? {
+            ...gameState.contacts,
+            [sourceContact.id]: {
+              ...sourceContact,
+              relationship: selection.session.sourceRelationshipScore
+                ?? sourceContact.relationship,
+              lastInteractionWeek: gameState.currentWeek,
+              dormant: (selection.session.sourceRelationshipScore
+                ?? sourceContact.relationship) <= 20,
+            },
+          }
+        : gameState.contacts;
+      const updatedGameState = {
+        ...gameState,
+        contacts,
+        activeObservationSession: selection.session,
+      };
 
       set({
-        activeSession: {
-          ...activeSession,
-          insightPointsEarned: activeSession.insightPointsEarned + insightBonus,
-        },
+        activeSession: selection.session,
+        gameState: updatedGameState,
       });
     },
 
     selectDataPoint: (pointId: string) => {
-      const { activeSession } = get();
-      if (!activeSession || activeSession.state !== "active") return;
+      const { activeSession, gameState } = get();
+      if (!activeSession || !gameState) return;
 
-      const phase = activeSession.phases[activeSession.currentPhaseIndex];
-      if (!phase?.dataPoints) return;
-
-      const point = phase.dataPoints.find((p) => p.id === pointId);
-      if (!point) return;
-
-      // Selecting a highlighted data point earns bonus insight
-      const insightBonus = point.isHighlighted ? 3 : 1;
+      const selection = resolveDataPointSelection(activeSession, pointId);
+      if (!selection.applied) return;
 
       set({
-        activeSession: {
-          ...activeSession,
-          insightPointsEarned: activeSession.insightPointsEarned + insightBonus,
+        activeSession: selection.session,
+        gameState: {
+          ...gameState,
+          activeObservationSession: selection.session,
         },
       });
     },
 
     selectStrategicChoice: (choiceId: string) => {
-      const { activeSession } = get();
+      const { activeSession, gameState } = get();
       if (!activeSession || activeSession.state !== "active") return;
-
-      const phase = activeSession.phases[activeSession.currentPhaseIndex];
-      if (!phase?.choices) return;
-
-      const choice = phase.choices.find((c) => c.id === choiceId);
-      if (!choice) return;
-
-      // Strategic choices always earn a flat insight bonus
+      const rng = createRNG(
+        `${gameState?.seed ?? activeSession.id}-quick-branch-${activeSession.id}`,
+      );
+      const updatedSession = resolveQuickInteractionChoice(activeSession, choiceId, rng);
       set({
-        activeSession: {
-          ...activeSession,
-          insightPointsEarned: activeSession.insightPointsEarned + 5,
-        },
+        activeSession: updatedSession,
+        gameState: gameState
+          ? { ...gameState, activeObservationSession: updatedSession }
+          : gameState,
       });
     },
   };

@@ -330,6 +330,36 @@ export interface LightObservationEvidenceOptions {
 }
 
 /**
+ * Count distinct prior observation records that contain a reading for each
+ * attribute. AttributeReading.observationCount is cumulative display state,
+ * so summing it would compound history (1, 2, 4, 8...) instead of counting
+ * the underlying evidence records (1, 2, 3, 4...).
+ */
+function countPriorAttributeObservations(
+  observations: Observation[],
+  playerId: string,
+): Map<PlayerAttribute, number> {
+  const counts = new Map<PlayerAttribute, number>();
+  const seenObservationIds = new Set<string>();
+
+  for (const observation of observations) {
+    if (observation.playerId !== playerId || seenObservationIds.has(observation.id)) {
+      continue;
+    }
+    seenObservationIds.add(observation.id);
+
+    const attributesInObservation = new Set(
+      observation.attributeReadings.map((reading) => reading.attribute),
+    );
+    for (const attribute of attributesInObservation) {
+      counts.set(attribute, (counts.get(attribute) ?? 0) + 1);
+    }
+  }
+
+  return counts;
+}
+
+/**
  * Generate an observation without match phases.
  * Used by calendar activities: academy visits, youth tournaments,
  * training visits, and video analysis.
@@ -344,15 +374,8 @@ export function observePlayerLight(
   extraAttributes?: number,
   evidenceOptions?: LightObservationEvidenceOptions,
 ): Observation {
-  // Count prior readings for this player
-  const priorCounts = new Map<PlayerAttribute, number>();
-  for (const obs of existingObservations) {
-    if (obs.playerId === player.id) {
-      for (const r of obs.attributeReadings) {
-        priorCounts.set(r.attribute, (priorCounts.get(r.attribute) ?? 0) + r.observationCount);
-      }
-    }
-  }
+  // Count distinct prior evidence records, never cumulative display values.
+  const priorCounts = countPriorAttributeObservations(existingObservations, player.id);
 
   // Context diversity: count distinct context types seen for this player
   const contextDiversity = new Set(existingObservations.filter((o) => o.playerId === player.id).map((o) => o.context)).size / 6;
@@ -451,7 +474,9 @@ export function observePlayerLight(
       bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length
         + (receivesFocusBonus ? Math.max(0, evidenceOptions?.confidenceBonus ?? 0) : 0),
     );
-    const totalCount = (priorCounts.get(attr) ?? 0) + bucket.values.length;
+    // Multiple focused moments can refine this session's estimate, but this is
+    // still one observation record for longitudinal knowledge depth.
+    const totalCount = (priorCounts.get(attr) ?? 0) + 1;
     const domain = ATTRIBUTE_DOMAINS[attr];
     const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
     const skillLevel = scout.skills[skillKey as ScoutSkill];
@@ -567,15 +592,8 @@ export function observePlayer(
   /** The focus lens used for this observation, if any. Pass undefined for general/unfocused. */
   focusLens?: string,
 ): Observation {
-  // Count prior readings for this player
-  const priorCounts = new Map<PlayerAttribute, number>();
-  for (const obs of existingObservations) {
-    if (obs.playerId === player.id) {
-      for (const r of obs.attributeReadings) {
-        priorCounts.set(r.attribute, (priorCounts.get(r.attribute) ?? 0) + r.observationCount);
-      }
-    }
-  }
+  // Count distinct prior evidence records, never cumulative display values.
+  const priorCounts = countPriorAttributeObservations(existingObservations, player.id);
 
   // Context diversity: normalized count of unique context types for this player (0–1)
   const playerObs = existingObservations.filter((o) => o.playerId === player.id);
@@ -631,7 +649,9 @@ export function observePlayer(
   for (const [attr, bucket] of sessionReadings) {
     const avgPerceived = Math.round(bucket.values.reduce((s, v) => s + v, 0) / bucket.values.length);
     const avgConfidence = bucket.confidences.reduce((s, c) => s + c, 0) / bucket.confidences.length;
-    const totalCount = (priorCounts.get(attr) ?? 0) + bucket.values.length;
+    // A match may expose the same attribute in several phases, but it remains
+    // one longitudinal observation record.
+    const totalCount = (priorCounts.get(attr) ?? 0) + 1;
     const domain = ATTRIBUTE_DOMAINS[attr];
     const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
     const skillLevel = scout.skills[skillKey as ScoutSkill];

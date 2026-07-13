@@ -1,0 +1,23 @@
+{
+  "slot": 1,
+  "name": "Legacy golden save",
+  "savedAt": 1720656000000,
+  "season": 2,
+  "week": 7,
+  "scoutName": "Alex Morgan",
+  "specialization": "youth",
+  "reputation": 18,
+  "state": {
+    "currentSeason": 2,
+    "currentWeek": 7,
+    "scout": {
+      "firstName": "Alex",
+      "lastName": "Morgan",
+      "primarySpecialization": "youth",
+      "specializationLevel": 1,
+      "reputation": 18,
+      "skills": {},
+      "unlockedPerks": []
+    }
+  }
+}

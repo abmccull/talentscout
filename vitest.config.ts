@@ -9,7 +9,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
+    include: [
+      "tests/**/*.test.ts",
+      "src/engine/career/seasonReviewContext.test.ts",
+      "src/components/game/evidence/**/*.test.ts",
+    ],
     coverage: { enabled: false },
   },
 });

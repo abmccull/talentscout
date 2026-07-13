@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-12T18:23:15.214Z",
+  "profile": {
+    "kind": "accelerated-season-boundary",
+    "authoritativeTicksPerSeason": 2,
+    "skippedOrdinaryWeeks": true,
+    "seedCount": 1,
+    "seasonCount": 30,
+    "deterministicReplaySeed": "release-soak-01",
+    "maxSerializedBytes": 268435456,
+    "maxGrowthMultiplier": 64
+  },
+  "aggregate": {
+    "totalCanonicalTicks": 60,
+    "totalCalendarWeeksSpanned": 1380,
+    "largestSaveBytes": 149803172,
+    "largestFinalToInitialRatio": 11.81,
+    "weeklyLatencyMs": {
+      "p50": 816.73,
+      "p95": 2223.8,
+      "max": 2353.75
+    }
+  },
+  "runs": [
+    {
+      "seed": "release-soak-01",
+      "reachedSeason": 31,
+      "canonicalTicks": 60,
+      "calendarWeeksSpanned": 1380,
+      "initialBytes": 12681288,
+      "finalBytes": 149803172,
+      "peakBytes": 149803172,
+      "finalToInitialRatio": 11.81,
+      "worldHistorySeasons": 30,
+      "worldHistoryBytes": 52135945,
+      "largestCollections": [
+        {
+          "key": "worldHistory",
+          "bytes": 52135945
+        },
+        {
+          "key": "playerMovementHistory",
+          "bytes": 30693118
+        },
+        {
+          "key": "retiredPlayers",
+          "bytes": 26536563
+        },
+        {
+          "key": "players",
+          "bytes": 22789276
+        },
+        {
+          "key": "unsignedYouth",
+          "bytes": 7839203
+        },
+        {
+          "key": "fixtures",
+          "bytes": 6605686
+        },
+        {
+          "key": "freeAgentPool",
+          "bytes": 1228822
+        },
+        {
+          "key": "clubs",
+          "bytes": 532271
+        },
+        {
+          "key": "retiredPlayerIds",
+          "bytes": 507937
+        },
+        {
+          "key": "loanHistory",
+          "bytes": 369219
+        },
+        {
+          "key": "youthRecruitmentBriefs",
+          "bytes": 173977
+        },
+        {
+          "key": "inbox",
+          "bytes": 68490
+        }
+      ],
+      "weeklyLatencyMs": {
+        "p50": 816.73,
+        "p95": 2223.8,
+        "max": 2353.75,
+        "mean": 964.27
+      },
+      "digest": "6517610100d53b40475c91aca496fa942ab85231f4bff569c9871efba5b90952"
+    }
+  ],
+  "persistenceReplay": {
+    "seed": "release-soak-01",
+    "reachedSeason": 31,
+    "canonicalTicks": 60,
+    "calendarWeeksSpanned": 1380,
+    "initialBytes": 12681288,
+    "finalBytes": 149803172,
+    "peakBytes": 149803172,
+    "finalToInitialRatio": 11.81,
+    "worldHistorySeasons": 30,
+    "worldHistoryBytes": 52135945,
+    "largestCollections": [
+      {
+        "key": "worldHistory",
+        "bytes": 52135945
+      },
+      {
+        "key": "playerMovementHistory",
+        "bytes": 30693118
+      },
+      {
+        "key": "retiredPlayers",
+        "bytes": 26536563
+      },
+      {
+        "key": "players",
+        "bytes": 22789276
+      },
+      {
+        "key": "unsignedYouth",
+        "bytes": 7839203
+      },
+      {
+        "key": "fixtures",
+        "bytes": 6605686
+      },
+      {
+        "key": "freeAgentPool",
+        "bytes": 1228822
+      },
+      {
+        "key": "clubs",
+        "bytes": 532271
+      },
+      {
+        "key": "retiredPlayerIds",
+        "bytes": 507937
+      },
+      {
+        "key": "loanHistory",
+        "bytes": 369219
+      },
+      {
+        "key": "youthRecruitmentBriefs",
+        "bytes": 173977
+      },
+      {
+        "key": "inbox",
+        "bytes": 68490
+      }
+    ],
+    "weeklyLatencyMs": {
+      "p50": 816.73,
+      "p95": 2223.8,
+      "max": 2353.75,
+      "mean": 964.27
+    },
+    "digest": "6517610100d53b40475c91aca496fa942ab85231f4bff569c9871efba5b90952"
+  }
+}

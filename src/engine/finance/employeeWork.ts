@@ -40,7 +40,15 @@ export function getEmployeeEfficiency(employee: AgencyEmployee): number {
   const moraleFactor = employee.morale / 100;
   const fatigueFactor = 1 - employee.fatigue / 200;
   const qualityFactor = employee.quality / 20;
-  return moraleFactor * fatigueFactor * qualityFactor;
+  // Compensation satisfaction changes output by at most -12%/+4%. Quality,
+  // morale, and fatigue remain the primary drivers, so premium pay helps but
+  // never becomes a dominant substitute for good management.
+  const paySatisfaction = Math.max(
+    0,
+    Math.min(100, employee.paySatisfaction ?? 65),
+  );
+  const payFactor = Math.max(0.88, Math.min(1.04, 0.88 + paySatisfaction * 0.0016));
+  return Math.max(0, Math.min(1, moraleFactor * fatigueFactor * qualityFactor * payFactor));
 }
 
 // ---------------------------------------------------------------------------

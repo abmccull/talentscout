@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Circle, Target } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Circle, Target } from "lucide-react";
 import { useGameStore } from "@/stores/gameStore";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
@@ -12,6 +12,31 @@ import type { ScenarioProgress } from "@/engine/scenarios";
 interface ScenarioProgressPanelProps {
   scenarioId: string;
   progress: ScenarioProgress | null;
+}
+
+function InvalidScenarioNotice({
+  scenarioId,
+  reason,
+}: {
+  scenarioId: string;
+  reason: string;
+}) {
+  return (
+    <div
+      className="mb-6 rounded-xl border border-amber-500/30 bg-amber-950/20 p-4"
+      role="alert"
+      data-testid="invalid-scenario-notice"
+    >
+      <div className="flex items-start gap-3">
+        <AlertTriangle size={17} className="mt-0.5 shrink-0 text-amber-400" aria-hidden="true" />
+        <div>
+          <p className="text-sm font-semibold text-amber-200">Scenario archived safely</p>
+          <p className="mt-1 text-xs leading-5 text-zinc-300">{reason}</p>
+          <p className="mt-1 text-[10px] text-zinc-400">Reference: {scenarioId}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // =============================================================================
@@ -28,7 +53,14 @@ export function ScenarioProgressPanel({
 }: ScenarioProgressPanelProps) {
   const scenario = getScenarioById(scenarioId);
 
-  if (!scenario) return null;
+  if (!scenario) {
+    return (
+      <InvalidScenarioNotice
+        scenarioId={scenarioId}
+        reason={progress?.invalidReason ?? `Scenario "${scenarioId}" is unavailable. No completion or reward was granted.`}
+      />
+    );
+  }
 
   const objectives = progress?.objectives ?? scenario.objectives.map((o) => ({
     id: o.id,
@@ -138,7 +170,12 @@ export function ConnectedScenarioProgressPanel() {
   const scenarioProgress = useGameStore((s) => s.scenarioProgress);
 
   const scenarioId = gameState?.activeScenarioId;
-  if (!scenarioId) return null;
+  if (!scenarioId) {
+    const archive = gameState?.invalidScenarioArchives?.at(-1);
+    return archive ? (
+      <InvalidScenarioNotice scenarioId={archive.scenarioId} reason={archive.reason} />
+    ) : null;
+  }
 
   return (
     <ScenarioProgressPanel

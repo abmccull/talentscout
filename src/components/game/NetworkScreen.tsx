@@ -26,6 +26,11 @@ import type { Contact, ContactType, Activity, HiddenIntel, GossipItem } from "@/
 import { getHiddenAttributeIntel, getContactSpecializationBonus } from "@/engine/network/contacts";
 import { RNG } from "@/engine/rng";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import {
+  buildStakeholderEcologyProfile,
+  type StakeholderEcologyProfile,
+} from "@/engine/consequences";
+import { StakeholderEcologyPanel } from "./StakeholderEcologyPanel";
 
 const CONTACT_TYPE_CONFIG: Record<
   ContactType,
@@ -117,6 +122,7 @@ interface IntelEntry {
 
 interface ContactDetailProps {
   contact: Contact;
+  ecology: StakeholderEcologyProfile;
   knownPlayerNames: string[];
   intelEntries: IntelEntry[];
   currentWeek: number;
@@ -146,7 +152,7 @@ function formatAttributeLabel(attribute: string): string {
   return labels[attribute] ?? attribute;
 }
 
-function ContactDetail({ contact, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
+function ContactDetail({ contact, ecology, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
   const config = CONTACT_TYPE_CONFIG[contact.type];
   const Icon = config.icon;
   const trustLevel = contact.trustLevel ?? contact.relationship;
@@ -293,6 +299,8 @@ function ContactDetail({ contact, knownPlayerNames, intelEntries, currentWeek, o
             indicatorClassName="bg-purple-500"
           />
         </div>
+
+        <StakeholderEcologyPanel profile={ecology} />
 
         {/* F3: Betrayal Risk Warning */}
         {betrayalRisk >= 0.05 && (
@@ -556,6 +564,33 @@ export function NetworkScreen() {
     return map;
   }, [gameState, getPlayer]);
 
+  const contactEcologyMap = useMemo(() => {
+    const profiles = new Map<string, StakeholderEcologyProfile>();
+    if (!gameState) return profiles;
+    const resolveEntityName = (entity: { kind: string; id: string }) => {
+      if (entity.kind === "player") {
+        const player = getPlayer(entity.id);
+        return player ? `${player.firstName} ${player.lastName}` : undefined;
+      }
+      if (entity.kind === "contact") return gameState.contacts[entity.id]?.name;
+      if (entity.kind === "club") return gameState.clubs[entity.id]?.name;
+      if (entity.kind === "rival") return gameState.rivalScouts[entity.id]?.name;
+      return undefined;
+    };
+    for (const contact of Object.values(gameState.contacts)) {
+      profiles.set(contact.id, buildStakeholderEcologyProfile({
+        state: gameState.consequenceState,
+        stakeholder: { kind: "contact", id: contact.id },
+        now: { week: gameState.currentWeek, season: gameState.currentSeason },
+        scoutId: gameState.scout.id,
+        baseTrust: contact.trustLevel ?? contact.relationship,
+        baseInfluence: Math.round((contact.relationship + contact.reliability) / 2),
+        resolveEntityName,
+      }));
+    }
+    return profiles;
+  }, [gameState, getPlayer]);
+
   if (!gameState) return null;
 
   const contacts = Object.values(gameState.contacts);
@@ -774,6 +809,7 @@ export function NetworkScreen() {
                 <div data-tutorial-id="network-meet">
                   <ContactDetail
                     contact={selectedContact}
+                    ecology={contactEcologyMap.get(selectedContact.id)!}
                     knownPlayerNames={getKnownPlayerNames(selectedContact)}
                     intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
                     currentWeek={currentWeek}

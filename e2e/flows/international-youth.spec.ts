@@ -1,7 +1,62 @@
+import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "../fixtures";
 import { navItem } from "../helpers/selectors";
 
+async function expectObjectivePanelAccessible(
+  page: import("@playwright/test").Page,
+  testId: string,
+) {
+  const result = await new AxeBuilder({ page })
+    .include(`[data-testid="${testId}"]`)
+    .analyze();
+  expect(
+    result.violations.filter(
+      (violation) => violation.impact === "critical" || violation.impact === "serious",
+    ),
+  ).toEqual([]);
+}
+
 test.describe("Youth geography and travel", () => {
+  test("country dossier owns focus, closes with Escape, and restores its map marker", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      currentSeason: 1,
+      countries: ["england", "brazil"],
+      scout: {
+        careerTier: 2,
+        primarySpecialization: "youth",
+        careerPath: "independent",
+      },
+    });
+
+    await gamePage.navigateTo("internationalView");
+    const brazilMarker = gamePage.page.getByRole("button", {
+      name: /^Brazil.*familiarity/i,
+    });
+    await brazilMarker.focus();
+    await gamePage.page.keyboard.press("Enter");
+
+    const dossier = gamePage.page.getByRole("dialog", {
+      name: "Brazil intel dossier",
+    });
+    const closeButton = dossier.getByRole("button", { name: "Close", exact: true });
+    await expect(dossier).toBeVisible();
+    await expect(closeButton).toBeFocused();
+    const closeBox = await closeButton.boundingBox();
+    expect(closeBox?.width).toBeGreaterThanOrEqual(44);
+    expect(closeBox?.height).toBeGreaterThanOrEqual(44);
+
+    await gamePage.page.keyboard.press("Escape");
+    await expect(dossier).toBeHidden();
+    await expect(brazilMarker).toBeFocused();
+    await expect(gamePage.page.locator(navItem("internationalView"))).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    gamePage.expectNoConsoleErrors();
+  });
+
   test("international travel is visible, funded, scheduled, and becomes the effective location", async ({ gamePage }) => {
     test.setTimeout(120_000);
     await gamePage.goto();
@@ -97,6 +152,93 @@ test.describe("Youth geography and travel", () => {
       };
     });
     expect(arrived).toEqual({ week: 2, destination: "brazil", isAbroad: true });
+    gamePage.expectNoConsoleErrors();
+  });
+
+  test("assignment objectives are visible and travel-only returns fail without rewards", async ({ gamePage }) => {
+    test.setTimeout(120_000);
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      currentSeason: 1,
+      countries: ["england", "brazil"],
+      scout: {
+        careerTier: 3,
+        primarySpecialization: "youth",
+        careerPath: "independent",
+        reputation: 40,
+        fatigue: 5,
+      },
+    });
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      store.getState().loadGame({
+        ...state,
+        finances: { ...state.finances, balance: 100_000 },
+        internationalAssignments: [{
+          id: "e2e-senior-assignment",
+          country: "brazil",
+          region: "South America",
+          description: "Observe a senior friendly and return with evidence.",
+          weekAvailable: 1,
+          duration: 1,
+          reputationReward: 2,
+          type: "seniorFriendly",
+        }],
+        activeInternationalAssignment: null,
+        internationalAssignmentHistory: [],
+      });
+    });
+
+    await gamePage.navigateTo("internationalView");
+    const offerObjectives = gamePage.page.getByTestId("international-assignment-objectives");
+    await expect(offerObjectives).toContainText("Required deliverables");
+    await expect(offerObjectives).toContainText("0/2");
+    await expect(offerObjectives).toContainText("0/1");
+    await expectObjectivePanelAccessible(
+      gamePage.page,
+      "international-assignment-objectives",
+    );
+    await expect(gamePage.page.getByText("Up to +2 rep")).toBeVisible();
+    await gamePage.page.getByRole("button", { name: "Open on Map", exact: true }).click();
+    await expect(gamePage.page.getByText(
+      "Full completion can earn up to +2 reputation; objectives are graded at return.",
+    )).toBeVisible();
+    await gamePage.page.keyboard.press("Escape");
+    await gamePage.page.getByRole("button", { name: "Accept", exact: true }).click();
+
+    const activeObjectives = gamePage.page.getByTestId("active-international-objectives");
+    await expect(activeObjectives).toContainText("Objective progress");
+    await expect(activeObjectives).toContainText(/travel alone earns no assignment reward/i);
+    await expectObjectivePanelAccessible(gamePage.page, "active-international-objectives");
+
+    await gamePage.advanceWeeks(1);
+    await gamePage.setScreen("internationalView");
+    await expect(gamePage.page.getByTestId("active-international-objectives")).toContainText("0/2");
+
+    await gamePage.advanceWeeks(1);
+    const outcome = await gamePage.page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      const history = state.internationalAssignmentHistory ?? [];
+      return {
+        reputation: state.scout.reputation,
+        activeAssignment: state.activeInternationalAssignment,
+        outcome: history.at(-1)?.outcome,
+        completionMessage: state.inbox.find(
+          (message: any) => message.relatedId === "e2e-senior-assignment",
+        )?.body,
+      };
+    });
+    expect(outcome.activeAssignment).toBeNull();
+    expect(outcome.reputation).toBe(39);
+    expect(outcome.outcome).toMatchObject({
+      grade: "failed",
+      completionPercent: 0,
+      reputationDelta: -1,
+      familiarityDelta: 0,
+    });
+    expect(outcome.completionMessage).toContain("Travel alone earns no assignment credit");
     gamePage.expectNoConsoleErrors();
   });
 });

@@ -81,9 +81,8 @@ mac:
   target:
     - target: dmg
     - target: zip
-  # identity: null — signing is handled externally (CI with Apple certificate).
-  # Set to a real Developer ID Application identity string for local signing.
-  identity: null
+  # CI provides a Developer ID certificate through CSC_LINK. Local builds with
+  # no certificate remain unsigned verification artifacts.
   type: distribution
   # Required for Apple notarization submission.
   hardenedRuntime: true

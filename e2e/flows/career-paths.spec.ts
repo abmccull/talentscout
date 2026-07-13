@@ -22,6 +22,28 @@ async function createSubmittedYouthReport(gamePage: GamePage) {
 }
 
 test.describe("Career Paths", () => {
+  test("career hub explains the seed-locked world conditions", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      scout: {
+        firstName: "Replay",
+        lastName: "Tester",
+        primarySpecialization: "youth",
+      },
+    });
+
+    await gamePage.navigateTo("career");
+
+    const conditions = gamePage.page.getByText("This career's world conditions", {
+      exact: true,
+    });
+    await expect(conditions).toBeVisible();
+    await expect(gamePage.page.getByText("talent", { exact: true })).toBeVisible();
+    await expect(gamePage.page.getByText("competition", { exact: true })).toBeVisible();
+    await expect(gamePage.page.getByText("economy", { exact: true })).toBeVisible();
+    gamePage.expectNoConsoleErrors();
+  });
+
   test("freelance youth careers render as independent on the career screen", async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectState({
@@ -99,6 +121,8 @@ test.describe("Career Paths", () => {
           salary: 0,
           contractEndSeason: undefined,
           clubTrust: 22,
+          reportsSubmitted: 12,
+          successfulFinds: 4,
         },
         finances: {
           ...state.finances,
@@ -262,6 +286,8 @@ test.describe("Career Paths", () => {
           careerTier: updated.scout.careerTier,
           salary: updated.scout.salary,
           contractEndSeason: updated.scout.contractEndSeason ?? null,
+          reportsSubmitted: updated.scout.reportsSubmitted,
+          successfulFinds: updated.scout.successfulFinds,
         },
         finances: {
           careerPath: updated.finances.careerPath,
@@ -293,6 +319,8 @@ test.describe("Career Paths", () => {
     });
 
     expect(result.scout.careerPath).toBe("club");
+    expect(result.scout.reportsSubmitted).toBe(12);
+    expect(result.scout.successfulFinds).toBe(4);
     expect(result.scout.independentTier).toBeNull();
     expect(result.scout.currentClubId).toBeTruthy();
     expect(result.scout.careerTier).toBe(3);

@@ -7,12 +7,14 @@ import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
 import { Globe, MapPin, Wallet, Plane } from "lucide-react";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
-import type { CountryReputation, TravelBooking } from "@/engine/core/types";
+import type { CountryReputation, InternationalAssignment, TravelBooking } from "@/engine/core/types";
 import { getTravelCost, getTravelSlots, getTravelDuration, getScoutHomeCountry, getContinentId } from "@/engine/world/travel";
 import { getAvailableAssignments } from "@/engine/world/international";
 import { WorldMap, COUNTRY_COORDS, lonLatToSvg, getTierColors } from "@/components/game/WorldMap";
 import { CountryPopup } from "@/components/game/CountryPopup";
+import { WorldHistoryDrawer } from "@/components/game/WorldHistoryDrawer";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
+import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
 
 // ---------------------------------------------------------------------------
 // Country metadata resolver — works for both core and secondary countries
@@ -147,6 +149,50 @@ function assignmentTypeLabel(type: "youthTournament" | "seniorFriendly" | "scout
   }
 }
 
+function AssignmentObjectives({
+  assignment: source,
+  active = false,
+}: {
+  assignment: InternationalAssignment;
+  active?: boolean;
+}) {
+  const assignment = migrateInternationalAssignment(source);
+  return (
+    <div
+      className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-2.5"
+      data-testid={active ? "active-international-objectives" : "international-assignment-objectives"}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">
+        {active ? "Objective progress" : "Required deliverables"}
+      </p>
+      <ul className="mt-2 space-y-2" aria-label={`${assignmentTypeLabel(assignment.type)} objectives`}>
+        {(assignment.deliverables ?? []).map((deliverable) => {
+          const complete = deliverable.progress >= deliverable.target;
+          return (
+            <li key={deliverable.kind} className="flex items-start justify-between gap-3 text-xs">
+              <span className={complete ? "text-emerald-300" : "text-zinc-300"}>
+                {deliverable.label}
+              </span>
+              <span
+                className={`shrink-0 font-semibold tabular-nums ${complete ? "text-emerald-300" : "text-zinc-400"}`}
+                aria-hidden="true"
+              >
+                {deliverable.progress}/{deliverable.target}
+              </span>
+              <span className="sr-only">
+                {deliverable.progress} of {deliverable.target} complete
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+        Graded at return. Waiting or travel alone earns no assignment reward.
+      </p>
+    </div>
+  );
+}
+
 function AssignmentPanel({
   currentWeek,
   currentSeason,
@@ -161,24 +207,8 @@ function AssignmentPanel({
 }: {
   currentWeek: number;
   currentSeason: number;
-  assignments: Array<{
-    id: string;
-    country: string;
-    region: string;
-    description: string;
-    duration: number;
-    reputationReward: number;
-    type: "youthTournament" | "seniorFriendly" | "scoutingMission";
-  }>;
-  activeAssignment: {
-    id: string;
-    country: string;
-    region: string;
-    description: string;
-    duration: number;
-    reputationReward: number;
-    type: "youthTournament" | "seniorFriendly" | "scoutingMission";
-  } | null;
+  assignments: InternationalAssignment[];
+  activeAssignment: InternationalAssignment | null;
   canAcceptAssignments: boolean;
   scoutBalance: number;
   homeCountry: string;
@@ -187,7 +217,7 @@ function AssignmentPanel({
   onAcceptAssignment: (assignmentId: string) => void;
 }) {
   return (
-    <div className="absolute left-3 top-16 z-20 w-[320px] rounded-xl border border-zinc-700/50 bg-zinc-950/85 p-4 backdrop-blur-md">
+    <div className="absolute left-3 top-16 z-20 max-h-[calc(100%-5.5rem)] w-[min(320px,calc(100%-1.5rem))] overflow-y-auto rounded-xl border border-zinc-700/50 bg-zinc-950/85 p-4 backdrop-blur-md">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">Assignments</p>
@@ -207,6 +237,7 @@ function AssignmentPanel({
             {getCountryMeta(activeAssignment.country).name} · {assignmentTypeLabel(activeAssignment.type)}
           </p>
           <p className="mt-1 text-xs leading-relaxed text-zinc-300">{activeAssignment.description}</p>
+          <AssignmentObjectives assignment={activeAssignment} active />
         </div>
       )}
 
@@ -236,10 +267,11 @@ function AssignmentPanel({
                   <p className="text-[11px] text-zinc-500">{assignment.region} · {assignmentTypeLabel(assignment.type)}</p>
                 </div>
                 <div className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-300">
-                  +{assignment.reputationReward} rep
+                  Up to +{assignment.reputationReward} rep
                 </div>
               </div>
               <p className="text-xs leading-relaxed text-zinc-400">{assignment.description}</p>
+              <AssignmentObjectives assignment={assignment} />
               <div className="mt-3 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[11px] text-zinc-500">
@@ -251,7 +283,7 @@ function AssignmentPanel({
                   <button
                     type="button"
                     onClick={() => onOpenAssignment(assignment.country)}
-                    className="rounded-md border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300 transition hover:border-zinc-600 hover:text-white"
+                    className="min-h-11 rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-zinc-600 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
                   >
                     Open on Map
                   </button>
@@ -259,7 +291,7 @@ function AssignmentPanel({
                     type="button"
                     onClick={() => onAcceptAssignment(assignment.id)}
                     disabled={!canAccept}
-                    className={`rounded-md px-2.5 py-1 text-[11px] font-medium transition ${
+                    className={`min-h-11 rounded-md px-3 py-2 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                       canAccept
                         ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/15"
                         : "cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-600"
@@ -290,26 +322,62 @@ function AssignmentPanel({
 // ---------------------------------------------------------------------------
 
 export function InternationalScreen() {
-  const {
-    gameState,
-    bookInternationalTravel,
-    pendingInternationalCountry,
-    setPendingInternationalCountry,
-  } = useGameStore();
+  const gameState = useGameStore((state) => state.gameState);
+  const bookInternationalTravel = useGameStore((state) => state.bookInternationalTravel);
+  const pendingInternationalCountry = useGameStore((state) => state.pendingInternationalCountry);
+  const setPendingInternationalCountry = useGameStore((state) => state.setPendingInternationalCountry);
+  const selectPlayer = useGameStore((state) => state.selectPlayer);
+  const setScreen = useGameStore((state) => state.setScreen);
   const { playSFX } = useAudio();
-  const { startSequence, checkAutoAdvance } = useTutorialStore();
+  const startSequence = useTutorialStore((state) => state.startSequence);
+  const checkAutoAdvance = useTutorialStore((state) => state.checkAutoAdvance);
 
   // SVG ref for coordinate conversion
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const bookTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const focusRestoreRafRef = useRef<number | null>(null);
+  const popupTriggerRef = useRef<HTMLElement | SVGElement | null>(null);
 
-  useEffect(() => () => clearTimeout(bookTimerRef.current), []);
+  useEffect(() => () => {
+    clearTimeout(bookTimerRef.current);
+    if (focusRestoreRafRef.current !== null) {
+      cancelAnimationFrame(focusRestoreRafRef.current);
+    }
+  }, []);
 
   // Popup state
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [justBooked, setJustBooked] = useState(false);
+
+  const rememberPopupTrigger = useCallback((candidate: Element | null) => {
+    const container = containerRef.current;
+    if (!candidate || !container?.contains(candidate)) return;
+    if (candidate instanceof HTMLElement || candidate instanceof SVGElement) {
+      popupTriggerRef.current = candidate;
+    }
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setSelectedCountry(null);
+    setPopupPos(null);
+    setJustBooked(false);
+
+    const trigger = popupTriggerRef.current;
+    popupTriggerRef.current = null;
+    if (!trigger) return;
+
+    if (focusRestoreRafRef.current !== null) {
+      cancelAnimationFrame(focusRestoreRafRef.current);
+    }
+    focusRestoreRafRef.current = requestAnimationFrame(() => {
+      focusRestoreRafRef.current = null;
+      if (trigger.isConnected) {
+        trigger.focus({ preventScroll: true });
+      }
+    });
+  }, []);
 
   // ── Handlers (must be before early return) ────────────────────────────────
 
@@ -332,18 +400,21 @@ export function InternationalScreen() {
 
   const handleCountrySelect = useCallback(
     (countryKey: string, svgX: number, svgY: number) => {
+      const activeElement = document.activeElement;
+      if (activeElement && svgRef.current?.contains(activeElement)) {
+        rememberPopupTrigger(activeElement);
+      }
+
       // If clicking the same country, toggle off
       if (selectedCountry === countryKey) {
-        setSelectedCountry(null);
-        setPopupPos(null);
-        setJustBooked(false);
+        handleClose();
         return;
       }
 
       openCountryPopup(countryKey, svgX, svgY);
       checkAutoAdvance("countryClicked");
     },
-    [selectedCountry, openCountryPopup, checkAutoAdvance],
+    [selectedCountry, openCountryPopup, checkAutoAdvance, handleClose, rememberPopupTrigger],
   );
 
   const handleBookTravel = useCallback(() => {
@@ -374,11 +445,9 @@ export function InternationalScreen() {
     // Auto-dismiss after 1.5s
     clearTimeout(bookTimerRef.current);
     bookTimerRef.current = setTimeout(() => {
-      setSelectedCountry(null);
-      setPopupPos(null);
-      setJustBooked(false);
+      handleClose();
     }, 1500);
-  }, [gameState, selectedCountry, playSFX, bookInternationalTravel]);
+  }, [gameState, selectedCountry, playSFX, bookInternationalTravel, handleClose]);
 
   const handleAcceptAssignment = useCallback((assignmentId: string) => {
     if (!gameState) return;
@@ -400,27 +469,9 @@ export function InternationalScreen() {
     setJustBooked(true);
     clearTimeout(bookTimerRef.current);
     bookTimerRef.current = setTimeout(() => {
-      setSelectedCountry(null);
-      setPopupPos(null);
-      setJustBooked(false);
+      handleClose();
     }, 1500);
-  }, [gameState, playSFX, bookInternationalTravel]);
-
-  const handleClose = useCallback(() => {
-    setSelectedCountry(null);
-    setPopupPos(null);
-    setJustBooked(false);
-  }, []);
-
-  // Escape key closes popup
-  useEffect(() => {
-    if (!selectedCountry) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [selectedCountry, handleClose]);
+  }, [gameState, playSFX, bookInternationalTravel, handleClose]);
 
   useEffect(() => {
     if (!pendingInternationalCountry) return;
@@ -432,6 +483,7 @@ export function InternationalScreen() {
     }
 
     const projected = lonLatToSvg(coords.lon, coords.lat);
+    popupTriggerRef.current = null;
     openCountryPopup(pendingInternationalCountry, projected.x, projected.y);
     setPendingInternationalCountry(null);
   }, [openCountryPopup, pendingInternationalCountry, setPendingInternationalCountry]);
@@ -570,6 +622,14 @@ export function InternationalScreen() {
       <div
         ref={containerRef}
         className="relative h-full w-full overflow-hidden bg-[#0a0a0a]"
+        onPointerDownCapture={(event) => {
+          const target = event.target instanceof Element
+            ? event.target.closest('[role="button"]')
+            : null;
+          if (target && svgRef.current?.contains(target)) {
+            rememberPopupTrigger(target);
+          }
+        }}
         onClick={(e) => {
           // Click on empty map space closes popup
           if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "svg") {
@@ -595,6 +655,18 @@ export function InternationalScreen() {
         <LocationHUD location={locationName} week={currentWeek} />
         </div>
         <BudgetHUD balance={scoutBalance} />
+        <WorldHistoryDrawer
+          history={gameState.worldHistory}
+          currentSeason={gameState.currentSeason}
+          clubs={gameState.clubs}
+          leagues={gameState.leagues}
+          players={gameState.players}
+          retiredPlayers={gameState.retiredPlayers}
+          onOpenPlayer={(playerId) => {
+            selectPlayer(playerId);
+            setScreen("playerProfile");
+          }}
+        />
         <LegendHUD />
         {booking && <BookingBanner booking={booking} homeName={homeMeta.name} />}
         <AssignmentPanel
@@ -609,6 +681,7 @@ export function InternationalScreen() {
           onOpenAssignment={(country) => {
             const coords = COUNTRY_COORDS[country];
             if (!coords) return;
+            rememberPopupTrigger(document.activeElement);
             const projected = lonLatToSvg(coords.lon, coords.lat);
             openCountryPopup(country, projected.x, projected.y);
           }}
@@ -640,7 +713,7 @@ export function InternationalScreen() {
             bookingActionLabel={selectedAssignment ? "Accept Assignment" : "Book Travel"}
             bookingDetail={
               selectedAssignment
-                ? `Complete this assignment for +${selectedAssignment.reputationReward} reputation.`
+                ? `Full completion can earn up to +${selectedAssignment.reputationReward} reputation; objectives are graded at return.`
                 : undefined
             }
             regionalKnowledge={gameState.regionalKnowledge?.[selectedCountry]}

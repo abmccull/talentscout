@@ -200,6 +200,21 @@ describe("free-agent geography invariants", () => {
     expect(state.freeAgentPool.agents[0].nationality).toBe("South Korean");
   });
 
+  it("removes legacy pool entries for players who already own contracts", () => {
+    const state = makeState();
+    state.players.p1 = {
+      ...state.players.p1,
+      clubId: "club-2",
+      contractClubId: "club-2",
+      contractExpiry: 3,
+      wage: 2_000,
+    };
+
+    migrateFreeAgentGeography(state);
+
+    expect(state.freeAgentPool.agents).toEqual([]);
+  });
+
   it("uses canonical keys for familiarity and territory discovery even on legacy geography labels", () => {
     const state = makeState({
       contacts: {},

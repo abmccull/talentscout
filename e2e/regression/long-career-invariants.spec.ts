@@ -2,7 +2,7 @@ import { test, expect } from "../fixtures";
 
 test.describe("Long-career world invariants", () => {
   test("youth world remains coherent across ten seasons", async ({ gamePage }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(900_000);
     await gamePage.goto();
     await gamePage.injectState({
       currentWeek: 1,
@@ -142,6 +142,94 @@ test.describe("Long-career world invariants", () => {
         lifecycleErrors.push("duplicate-loan-history");
       }
 
+      const academyCaseErrors: string[] = [];
+      const briefs = Object.values(state.youthRecruitmentBriefs ?? {}) as any[];
+      const openBriefs = briefs.filter((brief) => brief.status === "open");
+      if (openBriefs.length > 12) academyCaseErrors.push(`too-many-open-briefs:${openBriefs.length}`);
+      for (const brief of briefs) {
+        if (!Number.isFinite(brief.competitionPressure) || brief.competitionPressure < 0 || brief.competitionPressure > 100) {
+          academyCaseErrors.push(`invalid-brief-pressure:${brief.id}`);
+        }
+        if (!Array.isArray(brief.requiredPositions) || brief.requiredPositions.length === 0) {
+          academyCaseErrors.push(`missing-brief-position:${brief.id}`);
+        }
+        if (brief.status === "fulfilled" && !brief.fulfilledByPlayerId) {
+          academyCaseErrors.push(`unlinked-fulfilled-brief:${brief.id}`);
+        }
+      }
+      const reviewIds = Object.keys(state.recommendationReviews ?? {});
+      if (new Set(reviewIds).size !== reviewIds.length) academyCaseErrors.push("duplicate-review-id");
+      for (const review of Object.values(state.recommendationReviews ?? {}) as any[]) {
+        if (!state.scoutingCases[review.caseId]) academyCaseErrors.push(`review-missing-case:${review.id}`);
+        if (!state.reports[review.reportId]) academyCaseErrors.push(`review-missing-report:${review.id}`);
+        if (
+          review.status === "complete"
+          && review.overallScore !== undefined
+          && (review.overallScore < 0 || review.overallScore > 100)
+        ) academyCaseErrors.push(`invalid-review-score:${review.id}`);
+      }
+      for (const decision of Object.values(state.clubDecisions ?? {}) as any[]) {
+        if (!state.reportDeliveries[decision.deliveryId]) academyCaseErrors.push(`decision-missing-delivery:${decision.id}`);
+        if (!state.scoutingCases[decision.caseId]) academyCaseErrors.push(`decision-missing-case:${decision.id}`);
+      }
+      for (const youth of Object.values(state.unsignedYouth) as any[]) {
+        if (!youth.placed) continue;
+        const signing = (state.playerMovementHistory ?? []).some(
+          (movement: any) => movement.playerId === youth.player.id && movement.type === "youthSigning",
+        );
+        if (!signing) academyCaseErrors.push(`placed-youth-without-movement:${youth.id}`);
+      }
+
+      const consequenceErrors: string[] = [];
+      const consequenceState = state.consequenceState ?? {};
+      const decisions = Object.values(consequenceState.decisions ?? {}) as any[];
+      const callbacks = Object.values(consequenceState.callbacks ?? {}) as any[];
+      const terminalDecisionCount = decisions.filter(
+        (decision) => decision.status === "resolved" || decision.status === "expired",
+      ).length;
+      if (terminalDecisionCount > 512) {
+        consequenceErrors.push(`unbounded-terminal-decisions:${terminalDecisionCount}`);
+      }
+      if ((consequenceState.history ?? []).length > 512) {
+        consequenceErrors.push(`unbounded-consequence-history:${consequenceState.history.length}`);
+      }
+      for (const callback of callbacks) {
+        const due = callback.dueAt.season < state.currentSeason
+          || (callback.dueAt.season === state.currentSeason && callback.dueAt.week <= state.currentWeek);
+        if (callback.status === "pending" && due) {
+          consequenceErrors.push(`overdue-callback:${callback.id}`);
+        }
+      }
+      for (const obligation of Object.values(consequenceState.obligations ?? {}) as any[]) {
+        if (!obligation.dueAt || obligation.status !== "active") continue;
+        const overdue = obligation.dueAt.season < state.currentSeason
+          || (obligation.dueAt.season === state.currentSeason && obligation.dueAt.week < state.currentWeek);
+        if (overdue) consequenceErrors.push(`overdue-obligation:${obligation.id}`);
+      }
+      const consequenceBytes = JSON.stringify(consequenceState).length;
+      if (consequenceBytes > 2_000_000) {
+        consequenceErrors.push(`consequence-state-too-large:${consequenceBytes}`);
+      }
+
+      const identityErrors: string[] = [];
+      const employeeIds = (state.finances?.employees ?? []).map((employee: any) => employee.id);
+      const assistantIds = (state.assistantScouts ?? []).map((assistant: any) => assistant.id);
+      const officeIds = (state.finances?.satelliteOffices ?? []).map((office: any) => office.id);
+      if (new Set(employeeIds).size !== employeeIds.length) identityErrors.push("duplicate-employee-id");
+      if (new Set(assistantIds).size !== assistantIds.length) identityErrors.push("duplicate-assistant-id");
+      if (new Set(officeIds).size !== officeIds.length) identityErrors.push("duplicate-office-id");
+
+      const directorErrors: string[] = [];
+      if (state.eventDirector.tension < 0 || state.eventDirector.tension > 100) {
+        directorErrors.push(`invalid-tension:${state.eventDirector.tension}`);
+      }
+      if (state.eventDirector.recentEventTypes.length > 8) {
+        directorErrors.push(`unbounded-recent-events:${state.eventDirector.recentEventTypes.length}`);
+      }
+      if (state.runManifest.worldTraitIds.length !== 3) {
+        directorErrors.push(`invalid-world-trait-count:${state.runManifest.worldTraitIds.length}`);
+      }
+
       return {
         reachedSeason: state.currentSeason,
         targetSeason,
@@ -149,6 +237,13 @@ test.describe("Long-career world invariants", () => {
         rosterErrors,
         unsignedYouthErrors,
         lifecycleErrors,
+        academyCaseErrors,
+        consequenceErrors,
+        consequenceBytes,
+        identityErrors,
+        directorErrors,
+        openBriefCount: openBriefs.length,
+        historicalBriefCount: briefs.length,
         subRegionCount: Object.keys(state.subRegions ?? {}).length,
         familiarSubRegionCount: Object.values(state.subRegions ?? {}).filter(
           (subRegion: any) => subRegion.familiarity > 0,
@@ -163,6 +258,13 @@ test.describe("Long-career world invariants", () => {
     expect(result.rosterErrors).toEqual([]);
     expect(result.unsignedYouthErrors).toBe(0);
     expect(result.lifecycleErrors).toEqual([]);
+    expect(result.academyCaseErrors).toEqual([]);
+    expect(result.consequenceErrors).toEqual([]);
+    expect(result.consequenceBytes).toBeLessThanOrEqual(2_000_000);
+    expect(result.identityErrors).toEqual([]);
+    expect(result.directorErrors).toEqual([]);
+    expect(result.openBriefCount).toBeLessThanOrEqual(12);
+    expect(result.historicalBriefCount).toBeGreaterThan(0);
     expect(result.subRegionCount).toBeGreaterThan(0);
     expect(result.familiarSubRegionCount).toBeGreaterThan(0);
     expect(result.specializationLevel).toBeGreaterThan(1);

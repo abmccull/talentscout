@@ -4,6 +4,7 @@
  */
 
 import type { Fixture, Club, StandingEntry } from "./types";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
 
 /**
  * Build a standings map from all played fixtures in a league.
@@ -13,6 +14,7 @@ export function buildStandings(
   leagueId: string,
   fixtures: Record<string, Fixture>,
   clubs: Record<string, Club>,
+  season?: number,
 ): Record<string, StandingEntry> {
   const standings: Record<string, StandingEntry> = {};
 
@@ -36,6 +38,7 @@ export function buildStandings(
   // Tally results from played fixtures in this league
   for (const fixture of Object.values(fixtures)) {
     if (fixture.leagueId !== leagueId || !fixture.played) continue;
+    if (season !== undefined && !isFixtureInSeason(fixture, season)) continue;
     if (fixture.homeGoals === undefined || fixture.awayGoals === undefined) continue;
 
     const home = standings[fixture.homeClubId];

@@ -14,7 +14,6 @@ import type {
   DialogueOption,
   DialogueConsequence,
 } from "@/engine/observation/types";
-import type { PlayerAttribute } from "@/engine/core/types";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
@@ -74,72 +73,6 @@ function resolveText(template: string, playerName: string, speakerName: string):
     .replace(/\{playerName\}/g, playerName)
     .replace(/\{speakerName\}/g, speakerName);
 }
-
-// =============================================================================
-// ATTRIBUTE POOLS — which attributes each activity type tends to reveal
-// =============================================================================
-
-const FOLLOW_UP_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "firstTouch",
-  "dribbling",
-  "passing",
-  "composure",
-  "decisionMaking",
-  "workRate",
-  "consistency",
-  "professionalism",
-];
-
-const PARENT_MEETING_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "workRate",
-  "professionalism",
-  "composure",
-  "leadership",
-  "consistency",
-  "bigGameTemperament",
-  "injuryProneness",
-];
-
-const CONTRACT_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "professionalism",
-  "leadership",
-  "bigGameTemperament",
-  "consistency",
-  "composure",
-];
-
-const NETWORK_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "professionalism",
-  "consistency",
-  "workRate",
-  "bigGameTemperament",
-];
-
-const AGENT_SHOWCASE_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "professionalism",
-  "composure",
-  "consistency",
-  "bigGameTemperament",
-  "leadership",
-];
-
-const LOAN_MONITORING_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "professionalism",
-  "workRate",
-  "consistency",
-  "composure",
-  "leadership",
-];
-
-const FREE_AGENT_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "professionalism",
-  "composure",
-  "workRate",
-  "consistency",
-  "decisionMaking",
-  "bigGameTemperament",
-  "injuryProneness",
-];
 
 // =============================================================================
 // DIALOGUE TEMPLATES
@@ -1611,75 +1544,36 @@ const INSIGHT_NARRATIVES = [
 export function generateDialogueConsequence(
   rng: RNG,
   option: DialogueOption,
-  activityType: string,
+  _activityType: string,
 ): DialogueConsequence {
-  const attributePool = getAttributePool(activityType);
   const riskLevel = option.riskLevel;
 
   switch (riskLevel) {
     case "safe":
-      return buildSafeConsequence(rng, attributePool);
+      return buildSafeConsequence(rng);
 
     case "moderate":
-      return buildModerateConsequence(rng, attributePool);
+      return buildModerateConsequence(rng);
 
     case "bold":
-      return buildBoldConsequence(rng, attributePool);
+      return buildBoldConsequence(rng);
   }
 }
 
-function getAttributePool(activityType: string): readonly PlayerAttribute[] {
-  switch (activityType) {
-    case "followUpSession":
-      return FOLLOW_UP_ATTRIBUTES;
-    case "parentCoachMeeting":
-      return PARENT_MEETING_ATTRIBUTES;
-    case "contractNegotiation":
-      return CONTRACT_ATTRIBUTES;
-    case "networkMeeting":
-      return NETWORK_ATTRIBUTES;
-    case "agentShowcase":
-      return AGENT_SHOWCASE_ATTRIBUTES;
-    case "freeAgentOutreach":
-      return FREE_AGENT_ATTRIBUTES;
-    case "loanMonitoring":
-      return LOAN_MONITORING_ATTRIBUTES;
-    default:
-      return FOLLOW_UP_ATTRIBUTES;
-  }
-}
-
-function buildSafeConsequence(
-  rng: RNG,
-  attributePool: readonly PlayerAttribute[],
-): DialogueConsequence {
+function buildSafeConsequence(rng: RNG): DialogueConsequence {
   const narrativeText = rng.pick(SAFE_NARRATIVES);
 
   // Safe choices reliably improve the relationship by a small amount
   const relationshipDelta = rng.nextInt(1, 2);
 
-  // Small chance of a low-confidence attribute hint
-  const revealsAttribute = rng.chance(0.35);
-  const attributeReveal = revealsAttribute
-    ? {
-        playerId: "", // resolved by caller with session target player
-        attribute: rng.pick(attributePool),
-        confidence: rng.nextFloat(0.15, 0.35),
-      }
-    : undefined;
-
   return {
     narrativeText,
     relationshipDelta,
     insightBonus: rng.nextInt(1, 3),
-    attributeReveal,
   };
 }
 
-function buildModerateConsequence(
-  rng: RNG,
-  attributePool: readonly PlayerAttribute[],
-): DialogueConsequence {
+function buildModerateConsequence(rng: RNG): DialogueConsequence {
   // 20% chance of a mildly negative outcome instead of positive
   const isNegative = rng.chance(0.2);
 
@@ -1694,16 +1588,6 @@ function buildModerateConsequence(
 
   const narrativeText = rng.pick(MODERATE_NARRATIVES);
 
-  // Moderate choices have a good chance of a meaningful attribute reveal
-  const revealsAttribute = rng.chance(0.65);
-  const attributeReveal = revealsAttribute
-    ? {
-        playerId: "",
-        attribute: rng.pick(attributePool),
-        confidence: rng.nextFloat(0.35, 0.6),
-      }
-    : undefined;
-
   // Small chance of a bonus insight narrative appended
   const bonusInsightText = rng.chance(0.3) ? ` ${rng.pick(INSIGHT_NARRATIVES)}` : "";
 
@@ -1711,14 +1595,10 @@ function buildModerateConsequence(
     narrativeText: narrativeText + bonusInsightText,
     relationshipDelta: rng.nextInt(0, 1),
     insightBonus: rng.nextInt(3, 6),
-    attributeReveal,
   };
 }
 
-function buildBoldConsequence(
-  rng: RNG,
-  attributePool: readonly PlayerAttribute[],
-): DialogueConsequence {
+function buildBoldConsequence(rng: RNG): DialogueConsequence {
   // 45% chance of a negative outcome — bold choices carry real risk
   const isNegative = rng.chance(0.45);
 
@@ -1733,18 +1613,10 @@ function buildBoldConsequence(
 
   const narrativeText = rng.pick(BOLD_POSITIVE_NARRATIVES);
 
-  // Bold successes almost always reveal an attribute with high confidence
-  const attributeReveal = {
-    playerId: "",
-    attribute: rng.pick(attributePool),
-    confidence: rng.nextFloat(0.6, 0.9),
-  };
-
   return {
     narrativeText,
     relationshipDelta: rng.nextInt(2, 4),
     insightBonus: rng.nextInt(6, 12),
-    attributeReveal,
   };
 }
 
@@ -1895,6 +1767,9 @@ export function populateInvestigationPhases(
         text: resolveCareerPathText(opt.text, session.careerPath),
         outcome: {
           ...opt.outcome,
+          ...(session.sourceContactId
+            ? {}
+            : { relationshipDelta: undefined }),
           narrativeText: resolveCareerPathText(opt.outcome.narrativeText, session.careerPath),
         },
       })),

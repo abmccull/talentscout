@@ -29,6 +29,11 @@ import type {
   AlumniStatus,
 } from "@/engine/core/types";
 import { calculatePlacementSuccessRate } from "@/engine/youth/alumni";
+import {
+  buildScoutingCaseTimeline,
+  type ScoutingCaseTimeline,
+} from "@/engine/reports/scoutingCaseTimeline";
+import { ScoutingCaseTimelineView } from "./ScoutingCaseTimeline";
 
 // ─── Milestone config ─────────────────────────────────────────────────────────
 
@@ -167,6 +172,8 @@ interface AlumniCardProps {
   playerName: string;
   placedClubName: string;
   currentClubName: string;
+  caseId?: string;
+  getCaseTimeline: (caseId: string) => ScoutingCaseTimeline | null;
 }
 
 function AlumniCard({
@@ -174,11 +181,16 @@ function AlumniCard({
   playerName,
   placedClubName,
   currentClubName,
+  caseId,
+  getCaseTimeline,
 }: AlumniCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"milestones" | "timeline" | "stats">("milestones");
+  const [activeTab, setActiveTab] = useState<"casebook" | "milestones" | "timeline" | "stats">("milestones");
   const milestoneCount = record.milestones.length;
   const status = record.currentStatus ?? "academy";
+  const caseTimeline = expanded && activeTab === "casebook" && caseId
+    ? getCaseTimeline(caseId)
+    : null;
 
   return (
     <div className="rounded-lg border border-[#27272a] bg-[#141414]">
@@ -251,8 +263,8 @@ function AlumniCard({
       {expanded && (
         <div className="border-t border-[#27272a] px-4 pb-4 pt-3">
           {/* Tab navigation */}
-          <div className="mb-3 flex gap-1">
-            {(["milestones", "timeline", "stats"] as const).map((tab) => (
+          <div className="mb-3 flex flex-wrap gap-1">
+            {(["casebook", "milestones", "timeline", "stats"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -262,10 +274,26 @@ function AlumniCard({
                     : "text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300"
                 }`}
               >
-                {tab === "milestones" ? "Milestones" : tab === "timeline" ? "Career Timeline" : "Season Stats"}
+                {tab === "casebook"
+                  ? "Originating Case"
+                  : tab === "milestones"
+                    ? "Milestones"
+                    : tab === "timeline"
+                      ? "Career Timeline"
+                      : "Season Stats"}
               </button>
             ))}
           </div>
+
+          {activeTab === "casebook" && (
+            caseTimeline ? (
+              <ScoutingCaseTimelineView timeline={caseTimeline} />
+            ) : (
+              <p className="text-xs text-zinc-500">
+                This legacy alumni record predates the linked scouting case history.
+              </p>
+            )
+          )}
 
           {/* Milestones tab */}
           {activeTab === "milestones" && (
@@ -394,6 +422,18 @@ export function AlumniDashboard() {
     return clubs[clubId]?.name ?? "Unknown Club";
   };
 
+  const getCaseTimeline = (caseId: string): ScoutingCaseTimeline | null =>
+    buildScoutingCaseTimeline(gameState, caseId);
+
+  const getAlumniCaseId = (record: AlumniRecord): string | undefined =>
+    record.caseId
+    ?? (record.originatingReportId
+      ? gameState.reports[record.originatingReportId]?.caseId
+      : undefined)
+    ?? Object.values(gameState.scoutingCases).find(
+      (scoutingCase) => scoutingCase.alumniRecordId === record.id,
+    )?.id;
+
   const successRate = calculatePlacementSuccessRate(alumniRecords);
   const contactGraduates = alumniRecords.filter((r) => r.becameContact).length;
 
@@ -513,6 +553,8 @@ export function AlumniDashboard() {
                   playerName={getPlayerName(record.playerId)}
                   placedClubName={getClubName(record.placedClubId)}
                   currentClubName={getClubName(record.currentClubId)}
+                  caseId={getAlumniCaseId(record)}
+                  getCaseTimeline={getCaseTimeline}
                 />
               ))}
             </div>

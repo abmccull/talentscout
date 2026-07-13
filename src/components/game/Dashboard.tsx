@@ -50,6 +50,8 @@ import { useTranslations } from "next-intl";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { getSeasonLength } from "@/engine/core/gameDate";
+import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -157,7 +159,6 @@ export function Dashboard() {
     scheduleMatch,
     markMessageRead,
     selectPlayer,
-    meetBoard,
     submitLoanMonitoringReport,
   } = useGameStore();
   const [expandedExpenses, setExpandedExpenses] = useState(false);
@@ -196,6 +197,7 @@ export function Dashboard() {
   if (!gameState) return null;
 
   const { scout, currentWeek, currentSeason } = gameState;
+  const seasonLength = getSeasonLength(gameState.fixtures, currentSeason);
   const upcoming = scout.primarySpecialization !== "youth"
     ? getUpcomingFixtures(currentWeek, 8)
     : [];
@@ -315,7 +317,7 @@ export function Dashboard() {
   const transferWindowActive = isTransferWindowOpen(twArray, currentWeek);
 
   // Issue 9: season phase badge
-  const seasonPhase = getSeasonPhase(currentWeek);
+  const seasonPhase = getSeasonPhase(currentWeek, seasonLength);
   // Season phase labels are only used once, so no need for a constant — but
   // keeping a record satisfies the exhaustiveness check and reads clearly.
   const phaseClass: Record<typeof seasonPhase, string> = {
@@ -359,6 +361,28 @@ export function Dashboard() {
   const pendingPlacementCount = Object.values(gameState.placementReports ?? {}).filter(
     (report) => report.scoutId === scout.id && (!report.clubResponse || report.clubResponse === "pending"),
   ).length;
+  const openRecruitmentBriefs = Object.values(gameState.youthRecruitmentBriefs ?? {})
+    .filter((brief) => brief.status === "open")
+    .sort((left, right) =>
+      right.competitionPressure - left.competitionPressure
+      || left.expiresSeason - right.expiresSeason
+      || left.expiresWeek - right.expiresWeek
+    );
+  const dueRecommendationReviews = Object.values(gameState.recommendationReviews ?? {}).filter(
+    (review) => review.status === "complete"
+      && review.completedSeason === currentSeason
+      && review.completedWeek === currentWeek,
+  );
+  const matchForBrief = (brief: (typeof openRecruitmentBriefs)[number]) => observedYouthEvidence
+    .filter((entry) =>
+      !entry.youth.placed
+      && entry.youth.player.age <= brief.maxAge
+      && (
+        brief.requiredPositions.includes(entry.youth.player.position)
+        || entry.youth.player.secondaryPositions.some((position) => brief.requiredPositions.includes(position))
+      )
+    )
+    .sort(sortYouthByEvidence)[0];
   const nextTournament = Object.values(gameState.youthTournaments ?? {})
     .filter(
       (tournament) =>
@@ -439,7 +463,7 @@ export function Dashboard() {
                   <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
                     Youth recruitment room
                   </p>
-                  <h1 aria-label="Dashboard" className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
+                  <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-3xl">
                     Scouting Desk
                   </h1>
                   <p className="mt-1 text-sm text-zinc-300">
@@ -534,6 +558,7 @@ export function Dashboard() {
                 <SeasonTimeline
                   seasonEvents={gameState.seasonEvents}
                   currentWeek={currentWeek}
+                  seasonLength={seasonLength}
                   onResolveEvent={(eventId, choiceIndex) => {
                     useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
                   }}
@@ -562,6 +587,86 @@ export function Dashboard() {
                 </Card>
               ))}
             </section>
+
+            <Card className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
+              <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2 text-base text-white">
+                    <ClipboardList size={18} className="text-sky-300" aria-hidden="true" />
+                    Live academy briefs
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-zinc-400">Real club needs create the deadline, audience, budget, and risk behind each recommendation.</p>
+                </div>
+                <Badge variant="secondary" className="shrink-0">{openRecruitmentBriefs.length} open</Badge>
+              </CardHeader>
+              <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
+                {openRecruitmentBriefs.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-zinc-400">The current brief cycle is closed. New academy needs will arrive as club squads and deadlines change.</p>
+                ) : (
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    {openRecruitmentBriefs.slice(0, 3).map((brief) => {
+                      const match = matchForBrief(brief);
+                      const receivingClub = gameState.clubs[brief.clubId];
+                      const recruitmentIdentity = receivingClub
+                        ? deriveBriefRecruitmentIdentity(receivingClub, brief)
+                        : undefined;
+                      return (
+                        <article key={brief.id} className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">{receivingClub?.name ?? "Academy client"}</p>
+                              <h3 className="mt-1 text-lg font-bold text-white">{brief.requiredPositions.join("/")} pathway</h3>
+                            </div>
+                            <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-[10px]">
+                              {brief.competitionPressure} pressure
+                            </Badge>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-300">
+                            <span className="rounded-full border border-white/10 px-2 py-1">S{brief.expiresSeason} W{brief.expiresWeek}</span>
+                            <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
+                            <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
+                          </div>
+                          {recruitmentIdentity && (
+                            <p className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/[0.06] px-3 py-2 text-[11px] leading-4 text-sky-100">
+                              <span className="font-semibold">{recruitmentIdentity.label}:</span>{" "}
+                              this brief weights {brief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()}.
+                            </p>
+                          )}
+                          <p className="mt-3 flex-1 text-xs leading-5 text-zinc-400">
+                            {match
+                              ? `${match.youth.player.firstName} ${match.youth.player.lastName} is your best known positional match with ${match.observationCount} live look${match.observationCount === 1 ? "" : "s"}.`
+                              : "No known prospect currently matches this profile. Finding one now could create first-mover advantage."}
+                          </p>
+                          <Button
+                            className="mt-4 min-h-11 w-full"
+                            variant={match ? "outline" : "secondary"}
+                            onClick={() => {
+                              if (match) {
+                                selectPlayer(match.youth.player.id);
+                                setScreen("playerProfile");
+                              } else {
+                                setScreen("calendar");
+                              }
+                            }}
+                          >
+                            {match ? "Open matching dossier" : "Plan discovery work"}
+                          </Button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+                {dueRecommendationReviews.length > 0 && (
+                  <button
+                    onClick={() => setScreen("reportHistory")}
+                    className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-400/25 bg-violet-400/10 px-4 text-left text-sm text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                  >
+                    <span>{dueRecommendationReviews.length} long-term recommendation review{dueRecommendationReviews.length === 1 ? "" : "s"} completed this week.</span>
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </button>
+                )}
+              </CardContent>
+            </Card>
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
               <div className="space-y-5">
@@ -664,7 +769,7 @@ export function Dashboard() {
                               </div>
                               <div className="hidden text-right sm:block">
                                 <p className={`text-xs font-semibold ${entry.hasFirmRead ? "text-amber-300" : "text-zinc-300"}`}>{status}</p>
-                                <p className="mt-1 text-[10px] text-zinc-500">{entry.intelCount} contact note{entry.intelCount === 1 ? "" : "s"}</p>
+                                <p className="mt-1 text-[10px] text-zinc-300">{entry.intelCount} contact note{entry.intelCount === 1 ? "" : "s"}</p>
                               </div>
                               <ChevronRight size={17} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" aria-hidden="true" />
                             </button>
@@ -841,6 +946,7 @@ export function Dashboard() {
           <SeasonTimeline
             seasonEvents={gameState.seasonEvents}
             currentWeek={currentWeek}
+            seasonLength={seasonLength}
             onResolveEvent={(eventId, choiceIndex) => {
               useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
             }}
@@ -1153,7 +1259,7 @@ export function Dashboard() {
                         )}
                         {scout.careerTier >= 3 && (
                           <>
-                            <span className="text-zinc-500">|</span>
+                            <span className="text-zinc-400" aria-hidden="true">|</span>
                             <span className="text-blue-400">
                               {getSpecTier3Label(scout.primarySpecialization)}
                             </span>
@@ -1659,7 +1765,7 @@ export function Dashboard() {
                               {mostWatchedYouth.youth.player.firstName} {mostWatchedYouth.youth.player.lastName}
                               <span className="ml-1 text-xs text-zinc-400">{mostWatchedYouth.youth.player.position}</span>
                             </p>
-                            <p className="text-xs text-zinc-500">
+                            <p className="text-xs text-zinc-300">
                               {mostWatchedYouth.observationCount} look{mostWatchedYouth.observationCount === 1 ? "" : "s"}
                               {" · "}
                               {mostWatchedYouth.intelCount} intel note{mostWatchedYouth.intelCount === 1 ? "" : "s"}
@@ -1841,10 +1947,10 @@ export function Dashboard() {
                   variant="outline"
                   size="sm"
                   className="w-full text-xs"
-                  onClick={() => meetBoard()}
+                  onClick={() => setScreen("career")}
                 >
                   <Users size={12} className="mr-1" aria-hidden="true" />
-                  Meet the Board
+                  Open Board Relations
                 </Button>
               </CardContent>
             </Card>
@@ -1888,9 +1994,9 @@ export function Dashboard() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-zinc-400">
                         <span>Age {directive.ageRange[0]}–{directive.ageRange[1]}</span>
-                        <span className="text-zinc-500">·</span>
+                        <span className="text-zinc-400" aria-hidden="true">·</span>
                         <span>{directive.minCAStars}★ min</span>
-                        <span className="text-zinc-500">·</span>
+                        <span className="text-zinc-400" aria-hidden="true">·</span>
                         <span className="text-emerald-400">
                           {directive.budgetAllocation >= 1_000_000
                             ? `£${(directive.budgetAllocation / 1_000_000).toFixed(1)}M`
@@ -2029,7 +2135,7 @@ export function Dashboard() {
                             </Badge>
                           </div>
                           <p className="mt-0.5 text-[10px] text-zinc-400 line-clamp-1">{pred.statement}</p>
-                          <p className="text-[9px] text-zinc-500">Resolves S{pred.resolveBySeason}</p>
+                          <p className="text-[9px] text-zinc-300">Resolves S{pred.resolveBySeason}</p>
                         </div>
                       );
                     })}

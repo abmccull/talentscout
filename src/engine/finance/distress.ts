@@ -8,6 +8,8 @@ import type {
   InboxMessage,
   Scout,
 } from "../core/types";
+import { transitionToBankruptcyRecovery } from "../career/transitions";
+import { DEFAULT_LOADOUT, DEFAULT_OWNED_ITEMS } from "./equipmentCatalog";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -69,6 +71,13 @@ export interface DistressResult {
   forcedRest: boolean;
 }
 
+/** True while bankruptcy recovery forbids normal scouting work. */
+export function isBankruptcyRecoveryActive(
+  finances: FinancialRecord | undefined,
+): boolean {
+  return (finances?.bankruptcyRecoveryCooldown ?? 0) > 0;
+}
+
 /**
  * Process financial distress for one week.
  * Called during advanceWeek after financial processing.
@@ -103,7 +112,12 @@ export function processDistress(
       bankruptcyRecoveryCooldown: cooldown - 1,
       weeksInDistress: weeksInDistress,
     };
-    return { finances: updatedFinances, scout: updatedScout, messages, forcedRest };
+    return {
+      finances: updatedFinances,
+      scout: updatedScout,
+      messages,
+      forcedRest: true,
+    };
   }
 
   // Determine target distress level
@@ -243,18 +257,21 @@ function applyDistressTransition(
       break;
     }
 
-    case "bankruptcy":
+    case "bankruptcy": {
       // Force to tier 1, lose equipment, halve reputation
+      const recovery = transitionToBankruptcyRecovery(updatedScout, updatedFinances);
       updatedScout = {
-        ...updatedScout,
-        reputation: Math.floor(updatedScout.reputation / 2),
-        careerTier: 1 as any,
+        ...recovery.scout,
+        reputation: Math.floor(recovery.scout.reputation / 2),
       };
       updatedFinances = {
-        ...updatedFinances,
-        equipment: updatedFinances.equipment
-          ? { ...updatedFinances.equipment, loadout: { head: null, body: null, accessory: null, tech: null, footwear: null } as any }
-          : updatedFinances.equipment,
+        ...recovery.finances,
+        equipment: recovery.finances.equipment
+          ? {
+              ownedItems: [...DEFAULT_OWNED_ITEMS],
+              loadout: { ...DEFAULT_LOADOUT },
+            }
+          : recovery.finances.equipment,
         retainerContracts: [],
         consultingContracts: [],
         bankruptcyRecoveryCooldown: 10,
@@ -268,6 +285,7 @@ function applyDistressTransition(
         ),
       );
       break;
+    }
 
     case "healthy":
       if (from !== "healthy") {

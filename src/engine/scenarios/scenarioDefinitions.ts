@@ -37,7 +37,7 @@ export interface ScenarioDef {
   /** 2–3 sentence pitch shown in the scenario browser. */
   description: string;
   difficulty: "easy" | "medium" | "hard" | "expert";
-  /** Rough completion target in seasons (informational only). */
+  /** Number of playable seasons before the generic scenario deadline. */
   estimatedSeasons: number;
   category: "starter" | "advanced";
   objectives: ScenarioObjective[];

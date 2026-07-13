@@ -21,7 +21,10 @@ const PUBLIC_IMAGES = path.join(ROOT, "public", "images");
 // Config
 // ---------------------------------------------------------------------------
 
-const API_KEY = "msy_8fPmcptT1MyzpUiQC6LvcnpMMxygkBiE7GXG";
+const API_KEY = process.env.MESHY_API_KEY;
+if (!API_KEY) {
+  throw new Error("MESHY_API_KEY is required. Set it in the environment before generating images.");
+}
 const BASE_URL = "https://api.meshy.ai/openapi/v1";
 const POLL_INTERVAL_MS = 5000;
 const MAX_POLL_ATTEMPTS = 60; // 5 min max wait

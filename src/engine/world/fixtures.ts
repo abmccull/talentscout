@@ -21,6 +21,58 @@ interface UnscheduledFixture {
   awayId: string;
 }
 
+/** Season marker embedded in fixture IDs generated before Fixture.season existed. */
+const LEGACY_FIXTURE_SEASON_PATTERN = /(?:^|-)s(\d+)(?:-|$)/i;
+
+/**
+ * Resolve a fixture's persisted season, falling back to the season embedded
+ * in legacy generated IDs. Truly unscoped fixtures return undefined.
+ */
+export function getFixtureSeason(fixture: Fixture): number | undefined {
+  if (Number.isInteger(fixture.season) && (fixture.season ?? 0) > 0) {
+    return fixture.season;
+  }
+
+  const match = fixture.id.match(LEGACY_FIXTURE_SEASON_PATTERN);
+  if (!match) return undefined;
+
+  const parsed = Number.parseInt(match[1], 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+/**
+ * Legacy fixtures with no season marker are treated as belonging to the
+ * caller's active season until they can be normalized and persisted.
+ */
+export function isFixtureInSeason(fixture: Fixture, season: number): boolean {
+  const fixtureSeason = getFixtureSeason(fixture);
+  return fixtureSeason === undefined || fixtureSeason === season;
+}
+
+/**
+ * Pin legacy fixture records to a concrete season. This is deliberately
+ * idempotent and never rewrites a valid explicit/ID-derived season.
+ */
+export function normalizeFixtureSeasons(
+  fixtures: Record<string, Fixture>,
+  legacyFallbackSeason: number,
+): Record<string, Fixture> {
+  let changed = false;
+  const normalized: Record<string, Fixture> = {};
+
+  for (const [id, fixture] of Object.entries(fixtures)) {
+    const season = getFixtureSeason(fixture) ?? legacyFallbackSeason;
+    if (fixture.season === season) {
+      normalized[id] = fixture;
+      continue;
+    }
+    changed = true;
+    normalized[id] = { ...fixture, season };
+  }
+
+  return changed ? normalized : fixtures;
+}
+
 // ---------------------------------------------------------------------------
 // Round-robin algorithm (circle method)
 // ---------------------------------------------------------------------------
@@ -216,6 +268,7 @@ export function generateSeasonFixtures(
       fixtures.push({
         id: fixtureId,
         leagueId: league.id,
+        season,
         week,
         homeClubId: f.homeId,
         awayClubId: f.awayId,
@@ -226,4 +279,38 @@ export function generateSeasonFixtures(
   });
 
   return fixtures;
+}
+
+/**
+ * Ensure exactly one deterministic fixture schedule exists for every
+ * requested league in a season.
+ *
+ * Existing records win, so replaying a rollover cannot erase results or
+ * generate duplicates. Missing records from a partially written save are
+ * restored from the deterministic schedule. Callers should pass only leagues
+ * that simulate fixtures (secondary talent-pool leagues intentionally do not).
+ */
+export function ensureSeasonFixtures(
+  rng: RNG,
+  leagues: Record<string, League>,
+  fixtures: Record<string, Fixture>,
+  season: number,
+  scheduledLeagueIds: Iterable<string> = Object.keys(leagues),
+  legacyFallbackSeason: number = Math.max(1, season - 1),
+): Record<string, Fixture> {
+  const result = { ...normalizeFixtureSeasons(fixtures, legacyFallbackSeason) };
+  const leagueIds = [...new Set(scheduledLeagueIds)]
+    .filter((leagueId) => leagues[leagueId] !== undefined)
+    .sort((a, b) => a.localeCompare(b));
+
+  for (const leagueId of leagueIds) {
+    const generated = generateSeasonFixtures(rng, leagues[leagueId], season);
+    for (const fixture of generated) {
+      if (!result[fixture.id]) {
+        result[fixture.id] = fixture;
+      }
+    }
+  }
+
+  return result;
 }

@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import type { GameScreen } from "@/stores/gameStore";
 import { useAudio } from "@/lib/audio/useAudio";
-import { AudioEngine } from "@/lib/audio/audioEngine";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,8 +28,15 @@ import {
   Filter,
   DollarSign,
 } from "lucide-react";
-import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain, ChainConsequence, GossipAction, ActionableGossipItem, SeasonEvent } from "@/engine/core/types";
+import type { InboxMessage, InboxMessageType, NarrativeEvent, NarrativeEventType, EventChain, ChainConsequence, GossipAction, ActionableGossipItem, SeasonEvent, Fixture } from "@/engine/core/types";
 import { formatConsequence } from "@/engine/events";
+import { getNarrativeDecisionPolicy } from "@/engine/consequences";
+import {
+  addGameWeeks,
+  formatRelativeGameDate,
+  getSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "@/engine/core/gameDate";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
 // ─── Message type config ──────────────────────────────────────────────────────
@@ -120,6 +126,8 @@ const NARRATIVE_TYPE_CONFIG: Record<
   internationalTournament:     { label: "Tournament",          color: "text-blue-400" },
   scoutingAwardNomination:     { label: "Award",               color: "text-purple-400" },
   financialFairPlayImpact:     { label: "Industry News",       color: "text-amber-400" },
+  careerCrossroads:            { label: "Career Crossroads",   color: "text-fuchsia-400" },
+  confidentialityDilemma:      { label: "Trust Test",          color: "text-amber-300" },
 };
 
 // ─── Filter categories (A7) ──────────────────────────────────────────────────
@@ -180,20 +188,6 @@ function getSeasons(inbox: InboxMessage[]): number[] {
   return Array.from(seasons).sort((a, b) => b - a);
 }
 
-function timeAgo(
-  week: number,
-  season: number,
-  currentWeek: number,
-  currentSeason: number,
-): string {
-  const totalWeeksAgo =
-    (currentSeason - season) * 38 + (currentWeek - week);
-  if (totalWeeksAgo === 0) return "This week";
-  if (totalWeeksAgo === 1) return "1 week ago";
-  if (totalWeeksAgo < 4) return `${totalWeeksAgo} weeks ago`;
-  return `Season ${season}, Week ${week}`;
-}
-
 // ─── ConsequenceList (A5) ────────────────────────────────────────────────────
 
 function ConsequenceList({ consequences }: { consequences: ChainConsequence[] }) {
@@ -222,6 +216,9 @@ function ConsequenceList({ consequences }: { consequences: ChainConsequence[] })
 interface NarrativeEventCardProps {
   event: NarrativeEvent;
   chain?: EventChain;
+  currentWeek: number;
+  currentSeason: number;
+  fixtures: Record<string, Fixture>;
   onAcknowledge: () => void;
   onChoice: (index: number) => void;
 }
@@ -236,12 +233,32 @@ const ESCALATION_CONFIG: Record<number, { label: string; className: string }> = 
 function NarrativeEventCard({
   event,
   chain,
+  currentWeek,
+  currentSeason,
+  fixtures,
   onAcknowledge,
   onChoice,
 }: NarrativeEventCardProps) {
   const typeConfig = NARRATIVE_TYPE_CONFIG[event.type];
   const hasChoices = event.choices && event.choices.length > 0;
   const choiceResolved = event.selectedChoice !== undefined;
+  const decisionPolicy = getNarrativeDecisionPolicy(event);
+  const deadline = addGameWeeks(
+    fixtures,
+    { week: event.week, season: event.season },
+    decisionPolicy.deadlineWeeks,
+  );
+  const seasonLength = getSeasonLength(fixtures, currentSeason);
+  const absoluteWeek = (season: number, week: number) =>
+    (season - 1) * seasonLength + week;
+  const weeksRemaining = Math.max(
+    0,
+    absoluteWeek(deadline.season, deadline.week)
+      - absoluteWeek(currentSeason, currentWeek),
+  );
+  const defaultChoice = decisionPolicy.defaultChoiceIndex === undefined
+    ? undefined
+    : event.choices?.[decisionPolicy.defaultChoiceIndex];
 
   const isChainEvent = !!event.chainId;
   const escalation = event.escalationLevel ?? 0;
@@ -312,6 +329,25 @@ function NarrativeEventCard({
         </p>
       )}
 
+      {hasChoices && !choiceResolved && (
+        <div
+          className="mb-3 grid gap-1 rounded-md border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-zinc-300 sm:grid-cols-2"
+          role="status"
+          aria-label="Decision timing and default"
+        >
+          <p>
+            <span className="font-medium text-amber-300">Decision deadline:</span>{" "}
+            {weeksRemaining === 0
+              ? "Due now"
+              : `${weeksRemaining} week${weeksRemaining === 1 ? "" : "s"} remaining`}
+          </p>
+          <p>
+            <span className="font-medium text-amber-300">If no choice:</span>{" "}
+            {defaultChoice?.label ?? "No automatic choice"}
+          </p>
+        </div>
+      )}
+
       {/* A5: Consequences — shown for auto-events or after choice is resolved */}
       {event.consequences && event.consequences.length > 0 && (!hasChoices || choiceResolved) && (
         <ConsequenceList consequences={event.consequences} />
@@ -319,17 +355,54 @@ function NarrativeEventCard({
 
       {/* Choices or dismiss */}
       {hasChoices && !choiceResolved ? (
-        <div className="flex flex-wrap gap-2">
+        <div
+          className="grid gap-2 sm:grid-cols-2"
+          role="list"
+          aria-label={`Choices for ${event.title}`}
+        >
           {event.choices!.map((choice, i) => (
-            <Button
+            <div
               key={i}
-              size="sm"
-              variant="outline"
-              className="text-xs border-purple-500/40 hover:border-purple-500"
-              onClick={() => onChoice(i)}
+              role="listitem"
+              className="rounded-md border border-zinc-700 bg-zinc-900/70 p-3"
             >
-              {choice.label}
-            </Button>
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <p className="text-sm font-medium text-white">{choice.label}</p>
+                {decisionPolicy.defaultChoiceIndex === i && (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 border-amber-500/40 text-[9px] text-amber-300"
+                  >
+                    Timeout default
+                  </Badge>
+                )}
+              </div>
+              {choice.knownTradeoffs && choice.knownTradeoffs.length > 0 && (
+                <ul
+                  id={`tradeoffs-${event.id}-${i}`}
+                  className="mb-3 space-y-1 text-xs leading-relaxed text-zinc-400"
+                  aria-label={`Known tradeoffs for ${choice.label}`}
+                >
+                  {choice.knownTradeoffs.map((tradeoff) => (
+                    <li key={tradeoff} className="flex gap-1.5">
+                      <span className="text-zinc-600" aria-hidden="true">•</span>
+                      <span>{tradeoff}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-9 w-full border-purple-500/40 text-xs hover:border-purple-500"
+                onClick={() => onChoice(i)}
+                aria-describedby={choice.knownTradeoffs?.length
+                  ? `tradeoffs-${event.id}-${i}`
+                  : undefined}
+              >
+                Choose: {choice.label}
+              </Button>
+            </div>
           ))}
         </div>
       ) : choiceResolved ? (
@@ -427,6 +500,7 @@ interface MessageItemProps {
   isExpanded: boolean;
   currentWeek: number;
   currentSeason: number;
+  seasonLength: number;
   onClick: () => void;
   onViewPlayer?: (playerId: string) => void;
   onWriteReport?: (playerId: string) => void;
@@ -447,6 +521,7 @@ function MessageItem({
   isExpanded,
   currentWeek,
   currentSeason,
+  seasonLength,
   onClick,
   onViewPlayer,
   onWriteReport,
@@ -513,7 +588,11 @@ function MessageItem({
               </span>
             </div>
             <span className="shrink-0 text-xs text-zinc-600">
-              {timeAgo(message.week, message.season, currentWeek, currentSeason)}
+              {formatRelativeGameDate(
+                { week: message.week, season: message.season },
+                { week: currentWeek, season: currentSeason },
+                seasonLength,
+              )}
             </span>
           </div>
 
@@ -745,38 +824,18 @@ export function InboxScreen() {
   const [seasonFilter, setSeasonFilter] = useState<number | "all">("all");
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
-  // Play tension music when dramatic narrative events are present.
-  // Must be above the early return so hooks are called unconditionally.
-  const DRAMATIC_TYPES = new Set([
-    "boardroomCoup", "budgetCut", "scoutingDeptRestructure", "rivalClubPoach",
-    "managerSacked", "clubFinancialTrouble", "playerControversy", "wonderkidPressure",
-    "injurySetback", "contactBetrayal", "agentDoubleDealing", "burnout",
-    "healthScare", "familyEmergency", "youthAcademyScandal", "rivalPoach",
-    "rivalRecruitment", "agentDeception",
-  ]);
-
   const inbox = useMemo(() => gameState?.inbox ?? [], [gameState?.inbox]);
   const currentWeek = gameState?.currentWeek ?? 1;
   const currentSeason = gameState?.currentSeason ?? 1;
+  const seasonLength = gameState
+    ? getSeasonLength(gameState.fixtures, currentSeason)
+    : LEGACY_SEASON_LENGTH_WEEKS;
 
   // Active (unacknowledged) narrative events — with useMemo for perf (A7)
   const activeNarrativeEvents = useMemo(
     () => (gameState?.narrativeEvents ?? []).filter((e) => !e.acknowledged),
     [gameState?.narrativeEvents],
   );
-
-  const hasDramaticEvent = activeNarrativeEvents.some((e) => DRAMATIC_TYPES.has(e.type));
-  useEffect(() => {
-    if (!gameState) return;
-    const audio = AudioEngine.getInstance();
-    if (hasDramaticEvent) {
-      // Override to tension track for dramatic events
-      audio.playMusic("transfer-pressure");
-    } else {
-      // Resume soundtrack rotation for normal inbox browsing
-      audio.playMusic("soundtrack");
-    }
-  }, [hasDramaticEvent, gameState]);
 
   // A7: Compute available seasons
   const availableSeasons = useMemo(() => getSeasons(inbox), [inbox]);
@@ -899,6 +958,9 @@ export function InboxScreen() {
                   key={event.id}
                   event={event}
                   chain={event.chainId ? chainMap.get(event.chainId) : undefined}
+                  currentWeek={currentWeek}
+                  currentSeason={currentSeason}
+                  fixtures={gameState?.fixtures ?? {}}
                   onAcknowledge={() => acknowledgeNarrativeEvent(event.id)}
                   onChoice={(index) =>
                     resolveNarrativeEventChoice(event.id, index)
@@ -933,7 +995,7 @@ export function InboxScreen() {
                     className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition ${
                       isActive
                         ? "bg-emerald-500/20 text-emerald-400"
-                        : "bg-[#141414] text-zinc-500 hover:text-white border border-[#27272a]"
+                        : "bg-[#141414] text-zinc-300 hover:text-white border border-[#27272a]"
                     }`}
                   >
                     {label}
@@ -942,7 +1004,7 @@ export function InboxScreen() {
                         {count}
                       </span>
                     ) : (
-                      <span className="text-zinc-600 ml-0.5">({count})</span>
+                      <span className="ml-0.5 text-zinc-400">({count})</span>
                     )}
                   </button>
                 );
@@ -1051,6 +1113,7 @@ export function InboxScreen() {
                     isExpanded={expandedId === message.id}
                     currentWeek={currentWeek}
                     currentSeason={currentSeason}
+                    seasonLength={seasonLength}
                     onClick={() => handleExpand(message)}
                     onViewPlayer={(playerId) => {
                       selectPlayer(playerId);

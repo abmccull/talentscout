@@ -77,6 +77,7 @@ const OBSERVABLE_ATTRIBUTES: PlayerAttribute[] = [
 export function hireAssistantScout(
   rng: RNG,
   state: GameState,
+  actionSequence = (state.finances?.actionSequence ?? 0) + 1,
 ): GameState | null {
   if (!state.finances) return null;
 
@@ -102,7 +103,7 @@ export function hireAssistantScout(
   const lastName = rng.pick(LAST_NAMES);
 
   const assistant: AssistantScout = {
-    id: `asst_${rng.nextInt(10000, 99999)}_${Date.now()}`,
+    id: `asst_s${state.currentSeason}w${state.currentWeek}_a${actionSequence}`,
     name: `${firstName} ${lastName}`,
     skill,
     salary,
@@ -124,6 +125,10 @@ export function hireAssistantScout(
     assistantScouts: [...currentAssistants, assistant],
     finances: {
       ...state.finances,
+      actionSequence: Math.max(
+        state.finances.actionSequence ?? 0,
+        actionSequence,
+      ),
       balance: state.finances.balance - salary,
       transactions: [...state.finances.transactions, transaction],
     },

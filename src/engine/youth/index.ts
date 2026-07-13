@@ -11,6 +11,7 @@ export {
   generateRegionalYouth,
   generateAcademyIntake,
   processYouthAging,
+  reconcileYouthSigningPlacements,
   processPlayerRetirement,
 } from "./generation";
 
@@ -45,3 +46,11 @@ export {
 // Gut feeling mechanic — narrative flash moments during youth scouting
 export { rollGutFeeling, formatGutFeelingWithPA } from "./gutFeeling";
 export type { GutFeelingPerkModifiers } from "./gutFeeling";
+
+export {
+  advanceYouthRecruitmentBriefs,
+  fulfillYouthRecruitmentBrief,
+  generateYouthRecruitmentBriefs,
+  scoreAcademyClubDecision,
+} from "./academyPlacementCase";
+export type { AcademyDecisionScore } from "./academyPlacementCase";

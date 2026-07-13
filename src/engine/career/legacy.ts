@@ -29,6 +29,8 @@ export const MAX_ACTIVE_PERKS = 3;
 
 /** localStorage key for the cross-career legacy profile. */
 export const LEGACY_PROFILE_STORAGE_KEY = "talentscout_legacy_profile";
+/** Durable save marker for a player-chosen career ending. */
+export const VOLUNTARY_RETIREMENT_MARKER = "career_retired_voluntarily";
 
 // =============================================================================
 // PERK DEFINITIONS
@@ -216,7 +218,38 @@ export function getCareerSeasonOrdinal(currentSeason: number): number {
  * the retirement scenario.
  */
 export function hasRepresentedCareerCompletionState(state: GameState): boolean {
-  return (state.completedScenarioIds ?? []).includes("the_last_season");
+  const completionMarkers = state.completedScenarioIds ?? [];
+  return (
+    completionMarkers.includes("the_last_season") ||
+    completionMarkers.includes(VOLUNTARY_RETIREMENT_MARKER)
+  );
+}
+
+/**
+ * Voluntary retirement becomes available after at least one completed season.
+ * This prevents zero-week New Game+ farming while giving every clean career a
+ * legal, non-scenario route to a durable ending.
+ */
+export function canVoluntarilyRetire(state: GameState): boolean {
+  if (hasRepresentedCareerCompletionState(state)) return false;
+  return (
+    state.legacyScore.totalSeasons >= 1 ||
+    getCareerSeasonOrdinal(state.currentSeason) >= 2
+  );
+}
+
+/** Mark a career complete without mutating the input or inventing a scenario. */
+export function markCareerVoluntarilyRetired(
+  state: GameState,
+): GameState | null {
+  if (!canVoluntarilyRetire(state)) return null;
+  return {
+    ...state,
+    completedScenarioIds: [
+      ...(state.completedScenarioIds ?? []),
+      VOLUNTARY_RETIREMENT_MARKER,
+    ],
+  };
 }
 
 function areCompletedCareersEquivalent(

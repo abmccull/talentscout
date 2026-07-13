@@ -185,42 +185,16 @@ const DEFAULT_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
 ];
 
 const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
-  DEFAULT_GUIDED_MILESTONES[0],
-  DEFAULT_GUIDED_MILESTONES[1],
-  {
-    id: "scheduledActivity",
-    target: "calendar-activities",
-    title: "Schedule a school match",
-    mentorText:
-      "Start with a school match. That is your cleanest first look at live youth talent this week. " +
-      "Schedule it from the activity panel so we can get you into a proper observation session.",
-    mentorTextFreelance:
-      "Book yourself a school match. It's the simplest live route into your first real youth read. " +
-      "Drop it onto the calendar and we'll work from there.",
-    position: "left",
-    interactive: true,
-    screen: "calendar",
-  },
-  {
-    id: "advancedWeek",
-    target: "advance-week",
-    title: "Advance to the school match",
-    mentorText:
-      "Good. Advance the week and let the days play out. When the school match comes up, launch the live session so you're assessing real moments rather than guessing from a summary.",
-    mentorTextFreelance:
-      "Advance the week. When your school match day arrives, open the live session and scout it properly.",
-    position: "top",
-    interactive: true,
-    screen: "calendar",
-  },
   {
     id: "attendedMatch",
     target: "observation-begin-session",
-    title: "Begin the school match session",
+    title: "Take the first look",
     mentorText:
-      "This is your live school match observation. Hit begin and work through it phase by phase. Your reads come from what actually happens here, not from first-team match summaries.",
+      "A school match started early and no academy scout is here yet. One player produced a moment worth a second look. " +
+      "Begin the session. You are not here to confirm a star—you are here to notice evidence before everyone else.",
     mentorTextFreelance:
-      "This is the real job now. Start the school match session and build your notes from what you actually see.",
+      "A school match started early. Nobody from an academy has arrived, but I was told one name might be worth writing down. " +
+      "Start watching. One action can open a case, but it cannot finish one.",
     position: "top",
     interactive: true,
     screen: "observation",
@@ -238,13 +212,27 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     screen: "observation",
   },
   {
+    id: "flaggedBreakthrough",
+    target: "observation-evidence-feed",
+    title: "Write the moment down",
+    mentorText:
+      "There it is—the action that changes the question. Flag the moment as promising. " +
+      "You have not proved the player is special; you have earned a reason to build the case.",
+    mentorTextFreelance:
+      "That is why we came. Flag the breakthrough while it is fresh. " +
+      "Remember: you found a signal, not an answer. The next context decides whether you were early or merely impressed.",
+    position: "left",
+    interactive: true,
+    screen: "observation",
+  },
+  {
     id: "completedMatch",
     target: "observation-session-controls",
     title: "Complete the observation session",
     mentorText:
-      "Keep moving through the phases, then finish the reflection. A session only counts when you've seen it through and logged the result properly.",
+      "Now test the first impression against the rest of the match. Finish the reflection and preserve the uncertainty, not just the highlight.",
     mentorTextFreelance:
-      "Don't bail early. Work through the phases, finish the reflection, and close the session cleanly so the week gets the full value.",
+      "Watch what happens after the standout moment. Finish the reflection and decide what you actually believe.",
     position: "top",
     interactive: true,
     screen: "observation",
@@ -254,9 +242,9 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     target: "report-conviction",
     title: "Write up what you learned",
     mentorText:
-      "Now turn that youth observation into a clear write-up. Keep the conviction level honest and tie every claim back to something you actually saw.",
+      "You were first to write the name down. Now turn the moment and the contradiction into a professional opinion. Keep conviction proportional to the evidence.",
     mentorTextFreelance:
-      "Write the report while the session is still fresh. Good youth notes are specific, restrained, and usable later.",
+      "The name is in your notebook. Write the report while the evidence is fresh, and let the uncertainty stay visible.",
     position: "right",
     interactive: true,
     screen: "reportWriter",
@@ -284,6 +272,42 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     position: "bottom",
     interactive: true,
     screen: "reportHistory",
+  },
+  {
+    id: "openedCalendar",
+    target: "nav-calendar",
+    title: "Plan the second look",
+    mentorText:
+      "The first report preserves what you saw; it does not end the case. Open the Planner and choose the next context before the trail cools.",
+    mentorTextFreelance:
+      "You have a name and a first opinion. Now open the Planner. The second context is where a lucky highlight starts becoming a real scouting case.",
+    position: "bottom",
+    interactive: true,
+    screen: "reportHistory",
+  },
+  {
+    id: "scheduledActivity",
+    target: "calendar-activities",
+    title: "Spend the week with intent",
+    mentorText:
+      "Schedule the work that best tests your open question. Another live context adds more than repeating the same easy observation.",
+    mentorTextFreelance:
+      "Time is your scarce resource. Schedule a follow-up, contact conversation, or contrasting venue that can prove your first read wrong.",
+    position: "left",
+    interactive: true,
+    screen: "calendar",
+  },
+  {
+    id: "advancedWeek",
+    target: "advance-week",
+    title: "Let the world answer back",
+    mentorText:
+      "Advance the week. Your plan will meet form, rival attention, club deadlines, and chance. The consequences will not wait for perfect certainty.",
+    mentorTextFreelance:
+      "Run the week. From here, the case lives in the world: contacts remember, rivals move, clubs react, and your original judgment stays on the record.",
+    position: "top",
+    interactive: true,
+    screen: "calendar",
   },
 ];
 

@@ -25,6 +25,7 @@ import type {
 } from "@/engine/observation/types";
 import type { AttributeDomain } from "@/engine/core/types";
 import { ACTIVITY_MODE_MAP, VENUE_PHASE_RANGES } from "@/engine/observation/types";
+import { getStrategicChoiceResolutions } from "@/engine/observation/quickInteraction";
 
 // =============================================================================
 // CONSTANTS
@@ -232,6 +233,11 @@ export function createSession(
     startedAtWeek: config.week,
     startedAtSeason: config.season,
     careerPath: config.careerPath,
+    sourceContactId: config.sourceContactId,
+    sourceContactName: config.sourceContactName,
+    sourceRelationshipScore: config.sourceContactId
+      ? Math.max(0, Math.min(100, config.sourceRelationshipScore ?? 0))
+      : undefined,
   };
 }
 
@@ -269,6 +275,10 @@ export function advanceSessionPhase(
   session: ObservationSession,
 ): ObservationSession {
   if (session.state !== "active") {
+    return session;
+  }
+
+  if (!isCurrentSessionPhaseResolved(session)) {
     return session;
   }
 
@@ -352,6 +362,17 @@ export function advanceSessionPhase(
     focusTokens: updatedFocusTokens,
     players: updatedPlayers,
   };
+}
+
+/** Quick-interaction phases cannot be skipped before their required choice. */
+export function isCurrentSessionPhaseResolved(session: ObservationSession): boolean {
+  if (session.mode !== "quickInteraction") return true;
+  const phase = session.phases[session.currentPhaseIndex];
+  return Boolean(
+    phase?.choices?.length
+    && phase.selectedChoiceId
+    && phase.choiceResolution,
+  );
 }
 
 /**
@@ -541,6 +562,7 @@ export function addHypothesis(
   text: string,
   domain: AttributeDomain,
   week: number,
+  season = session.startedAtSeason,
 ): ObservationSession {
   if (session.state !== "reflection") {
     return session;
@@ -553,6 +575,10 @@ export function addHypothesis(
     domain,
     state: "open",
     createdAtWeek: week,
+    createdAtSeason: season,
+    lastUpdatedWeek: week,
+    lastUpdatedSeason: season,
+    expectedSignal: "positive",
     evidence: [],
   };
 
@@ -560,6 +586,57 @@ export function addHypothesis(
     ...session,
     hypotheses: [...session.hypotheses, hypothesis],
   };
+}
+
+/**
+ * Accept a fully-formed reflection hypothesis without discarding the evidence
+ * that caused it to be suggested. The existing UI identifies suggestions by
+ * player/text/domain; the store resolves that identity and passes the complete
+ * object here.
+ */
+export function acceptHypothesis(
+  session: ObservationSession,
+  suggested: Hypothesis,
+  week = session.startedAtWeek,
+  season = session.startedAtSeason,
+): ObservationSession {
+  if (session.state !== "reflection") return session;
+  if (
+    session.hypotheses.some(
+      (hypothesis) =>
+        hypothesis.id === suggested.id
+        || (
+          hypothesis.playerId === suggested.playerId
+          && hypothesis.domain === suggested.domain
+          && hypothesis.text === suggested.text
+        ),
+    )
+  ) {
+    return session;
+  }
+
+  const evidence = suggested.evidence.map((item, index) => ({
+    ...item,
+    id: item.id ?? `evidence_${suggested.id}_${index}`,
+    season: item.season ?? season,
+    sourceType: item.sourceType ?? "reflection" as const,
+    sourceId: item.sourceId ?? session.id,
+    context: item.context ?? session.activityType,
+    independenceKey:
+      item.independenceKey
+      ?? `session:${session.id}:${suggested.playerId}:${suggested.domain}`,
+  }));
+  const hypothesis: Hypothesis = {
+    ...suggested,
+    createdAtWeek: suggested.createdAtWeek ?? week,
+    createdAtSeason: suggested.createdAtSeason ?? season,
+    lastUpdatedWeek: suggested.lastUpdatedWeek ?? week,
+    lastUpdatedSeason: suggested.lastUpdatedSeason ?? season,
+    expectedSignal: suggested.expectedSignal ?? "positive",
+    evidence,
+  };
+
+  return { ...session, hypotheses: [...session.hypotheses, hypothesis] };
 }
 
 /**
@@ -694,11 +771,22 @@ export function getSessionResult(session: ObservationSession): SessionResult {
     session.state === "complete" || session.state === "reflection"
       ? session.phases.length
       : session.currentPhaseIndex + 1;
+  const strategicChoices = getStrategicChoiceResolutions(session);
+  const fatigueDelta = strategicChoices.reduce(
+    (total, choice) => total + choice.fatigueDelta,
+    0,
+  );
+  const qualityModifier = strategicChoices.reduce(
+    (total, choice) => total + choice.qualityModifier,
+    0,
+  );
 
   // Derive a quality tier from insight points earned relative to session length.
   // Normalized so shorter modes don't get inflated tiers from fewer phases.
   const rawIpPerPhase =
-    phasesCompleted > 0 ? session.insightPointsEarned / phasesCompleted : 0;
+    phasesCompleted > 0
+      ? (session.insightPointsEarned + qualityModifier) / phasesCompleted
+      : 0;
   const ipPerPhase = rawIpPerPhase * (QUALITY_NORMALIZATION[session.mode] ?? 1.0);
   let qualityTier: string;
   if (ipPerPhase >= 12) {
@@ -725,6 +813,9 @@ export function getSessionResult(session: ObservationSession): SessionResult {
     flaggedMoments: session.flaggedMoments,
     hypothesesUpdated,
     insightPointsEarned: session.insightPointsEarned,
+    strategicChoices,
+    fatigueDelta,
+    qualityModifier,
     reflectionNotes: session.reflectionNotes,
     qualityTier,
     phasesCompleted,

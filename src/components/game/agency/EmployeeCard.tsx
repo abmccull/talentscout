@@ -14,6 +14,11 @@ import {
   BedDouble,
 } from "lucide-react";
 import type { AgencyEmployee, AgencyEmployeeRole } from "@/engine/core/types";
+import {
+  getEmployeePayEffects,
+  getEmployeeSalaryBand,
+} from "@/engine/finance";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -116,16 +121,34 @@ export function EmployeeCard({
 }: EmployeeCardProps) {
   const assignAgencyEmployee = useGameStore((s) => s.assignAgencyEmployee);
   const adjustEmployeeSalary = useGameStore((s) => s.adjustEmployeeSalary);
+  const employerReputation = useGameStore((s) => s.gameState?.scout.reputation ?? 50);
+  const fixtures = useGameStore((s) => s.gameState?.fixtures ?? {});
 
   const [logsOpen, setLogsOpen] = useState(false);
   const [editingSalary, setEditingSalary] = useState(false);
   const [salaryInput, setSalaryInput] = useState(String(emp.salary));
+  const [salaryError, setSalaryError] = useState<string | null>(null);
 
   const assignmentOpts = getAssignmentOptions(emp.role, countries);
   const assignVal = currentAssignmentValue(emp);
+  const salaryBand = getEmployeeSalaryBand(emp, employerReputation);
+  const payEffects = getEmployeePayEffects(emp, employerReputation);
+  const payPositionLabel = payEffects.position === "underMarket"
+    ? "Under market"
+    : payEffects.position === "premium"
+      ? "Premium"
+      : "Fair";
+  const payPositionClass = payEffects.position === "underMarket"
+    ? "border-red-500/30 bg-red-500/10 text-red-300"
+    : payEffects.position === "premium"
+      ? "border-blue-500/30 bg-blue-500/10 text-blue-300"
+      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300";
 
-  const tenureWeeks =
-    (currentSeason - emp.hiredSeason) * 52 + (currentWeek - emp.hiredWeek);
+  const tenureWeeks = Math.max(0, gameWeeksBetween(
+    fixtures,
+    { season: emp.hiredSeason, week: emp.hiredWeek },
+    { season: currentSeason, week: currentWeek },
+  ));
 
   function handleAssignmentChange(value: string) {
     const { type, region } = parseAssignmentValue(value);
@@ -139,9 +162,18 @@ export function EmployeeCard({
 
   function handleSalarySave() {
     const val = parseInt(salaryInput, 10);
-    if (!isNaN(val) && val > 0) {
-      adjustEmployeeSalary(emp.id, val);
+    if (!Number.isFinite(val)) {
+      setSalaryError("Enter a valid monthly salary.");
+      return;
     }
+    if (val < salaryBand.minimum || val > salaryBand.maximum) {
+      setSalaryError(
+        `Offer must be between £${salaryBand.minimum.toLocaleString()} and £${salaryBand.maximum.toLocaleString()}.`,
+      );
+      return;
+    }
+    adjustEmployeeSalary(emp.id, val);
+    setSalaryError(null);
     setEditingSalary(false);
   }
 
@@ -268,53 +300,100 @@ export function EmployeeCard({
         )}
       </div>
 
-      {/* Salary row */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-500">Salary:</span>
+      {/* Salary decision */}
+      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2 space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-zinc-400">Monthly salary</span>
+          <Badge variant="outline" className={`text-[10px] ${payPositionClass}`}>
+            {payPositionLabel}
+          </Badge>
+          <span className="text-[10px] text-zinc-400">
+            Pay satisfaction {Math.round(emp.paySatisfaction ?? 65)}/100
+          </span>
+        </div>
         {editingSalary ? (
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-zinc-400">£</span>
-            <input
-              type="number"
-              value={salaryInput}
-              onChange={(e) => setSalaryInput(e.target.value)}
-              className="w-20 rounded border border-zinc-700 bg-zinc-900 px-1.5 py-0.5 text-xs text-white focus:border-emerald-500 focus:outline-none"
-              aria-label="New salary amount"
-            />
-            <span className="text-xs text-zinc-500">/mo</span>
-            <button
-              onClick={handleSalarySave}
-              className="text-emerald-400 hover:text-emerald-300"
-              aria-label="Save salary"
-            >
-              <Check size={12} aria-hidden="true" />
-            </button>
-            <button
-              onClick={() => {
-                setSalaryInput(String(emp.salary));
-                setEditingSalary(false);
-              }}
-              className="text-zinc-500 hover:text-zinc-300"
-              aria-label="Cancel salary edit"
-            >
-              <X size={12} aria-hidden="true" />
-            </button>
+          <div>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-zinc-400">£</span>
+              <input
+                type="number"
+                min={salaryBand.minimum}
+                max={salaryBand.maximum}
+                step={25}
+                value={salaryInput}
+                onChange={(event) => {
+                  setSalaryInput(event.target.value);
+                  setSalaryError(null);
+                }}
+                className="min-h-11 w-28 rounded border border-zinc-700 bg-zinc-900 px-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                aria-label={`New monthly salary for ${emp.name}`}
+                aria-describedby={`salary-guidance-${emp.id} salary-error-${emp.id}`}
+                aria-invalid={salaryError !== null}
+              />
+              <span className="text-xs text-zinc-400">/mo</span>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={handleSalarySave}
+                className="h-11 w-11 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300"
+                aria-label={`Save salary for ${emp.name}`}
+              >
+                <Check size={12} aria-hidden="true" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                onClick={() => {
+                  setSalaryInput(String(emp.salary));
+                  setSalaryError(null);
+                  setEditingSalary(false);
+                }}
+                className="h-11 w-11 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+                aria-label={`Cancel salary edit for ${emp.name}`}
+              >
+                <X size={12} aria-hidden="true" />
+              </Button>
+            </div>
+            <p id={`salary-error-${emp.id}`} className="mt-1 text-[10px] text-red-300" aria-live="polite">
+              {salaryError}
+            </p>
           </div>
         ) : (
           <div className="flex items-center gap-1">
-            <span className="text-xs text-zinc-300 font-mono">£{emp.salary.toLocaleString()}/mo</span>
-            <button
+            <span className="text-xs text-zinc-200 font-mono">£{emp.salary.toLocaleString()}/mo</span>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
               onClick={() => {
                 setSalaryInput(String(emp.salary));
+                setSalaryError(null);
                 setEditingSalary(true);
               }}
-              className="text-zinc-600 hover:text-zinc-400 transition"
+              className="h-11 w-11 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
               aria-label={`Edit ${emp.name}'s salary`}
             >
               <Pencil size={10} aria-hidden="true" />
-            </button>
+            </Button>
           </div>
         )}
+        <p id={`salary-guidance-${emp.id}`} className="text-xs leading-4 text-zinc-400">
+          Contract band £{salaryBand.minimum.toLocaleString()}–£{salaryBand.maximum.toLocaleString()}
+          {" · "}fair £{salaryBand.fairMinimum.toLocaleString()}–£{salaryBand.fairMaximum.toLocaleString()}
+          {" · "}market £{salaryBand.marketRate.toLocaleString()}
+        </p>
+        <p className="text-xs leading-4 text-zinc-400">
+          Based on {ROLE_LABELS[emp.role]} · {emp.quality}/20 quality · {emp.experience.toLocaleString()} XP · {employerReputation} agency reputation
+        </p>
+        <p className="text-xs leading-4 text-zinc-400">
+          {payEffects.position === "underMarket"
+            ? `Saves £${Math.max(0, salaryBand.marketRate - emp.salary).toLocaleString()}/mo; morale ${payEffects.weeklyMoraleDelta}/wk, ${Math.round(payEffects.retentionRisk * 100)}% exit risk and ${Math.round(payEffects.poachingChance * 100)}% poach pressure.`
+            : payEffects.position === "premium"
+              ? `Costs £${Math.max(0, emp.salary - salaryBand.marketRate).toLocaleString()}/mo above market; improves retention and output up to ${Math.round((payEffects.performanceMultiplier - 1) * 100)}%.`
+              : "Stable compensation: low exit pressure without the cost of a premium contract."}
+        </p>
       </div>
 
       {/* Assignment dropdown */}

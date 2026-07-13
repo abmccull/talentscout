@@ -29,6 +29,7 @@ import type {
   AbilityReading,
   TargetOption,
   TournamentEvent,
+  ScoutReport,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
@@ -644,6 +645,7 @@ export function getAvailableActivities(
     transferWindow?: TransferWindowState;
   },
   youthTournaments?: Record<string, TournamentEvent>,
+  reports?: Record<string, ScoutReport>,
 ): Activity[] {
   const activities: Activity[] = [];
   const observedCounts = collectObservedPlayerCounts(observations);
@@ -892,12 +894,20 @@ export function getAvailableActivities(
       description: "Meet the parent or coach of a youth prospect",
       targetPool: youthPool,
     });
-    activities.push({
-      type: "writePlacementReport",
-      slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
-      description: "Write a placement report for a youth prospect",
-      targetPool: youthPool,
-    });
+    const authoredPlayerIds = new Set(
+      Object.values(reports ?? {})
+        .filter((report) => report.scoutId === scout.id)
+        .map((report) => report.playerId),
+    );
+    const pitchPool = youthPool.filter((target) => authoredPlayerIds.has(target.id));
+    if (pitchPool.length > 0) {
+      activities.push({
+        type: "writePlacementReport",
+        slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
+        description: "Pitch a filed youth report to a suitable club",
+        targetPool: pitchPool,
+      });
+    }
   }
 
   // ── First-team exclusive activities ─────────────────────────────────────────

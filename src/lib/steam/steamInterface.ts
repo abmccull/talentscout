@@ -28,6 +28,9 @@ export interface SteamInterface {
   /** Load data from a Steam Cloud save slot. Returns null if no data. */
   getCloudSave(slot: number): Promise<string | null>;
 
+  /** Delete data from a Steam Cloud save slot. Missing slots are a no-op. */
+  deleteCloudSave(slot: number): Promise<void>;
+
   /** Returns the Steam player's display name, or null if unavailable. */
   getPlayerName(): string | null;
 
@@ -57,6 +60,10 @@ class NoopSteamInterface implements SteamInterface {
 
   async getCloudSave(_slot: number): Promise<string | null> {
     return null;
+  }
+
+  async deleteCloudSave(_slot: number): Promise<void> {
+    // No-op in web builds
   }
 
   getPlayerName(): string | null {

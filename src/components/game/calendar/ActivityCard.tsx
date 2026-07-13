@@ -289,6 +289,7 @@ interface ActivityCardProps {
   highlighted?: boolean;
   isSelected?: boolean;
   onSelect?: (activity: Activity | null) => void;
+  openDayCount: number;
 }
 
 function getBestReturns(activity: Activity): string[] {
@@ -341,6 +342,7 @@ export function ActivityCard({
   highlighted,
   isSelected,
   onSelect,
+  openDayCount,
 }: ActivityCardProps) {
   const display = ACTIVITY_DISPLAY[activity.type];
   const Icon = display.icon;
@@ -394,116 +396,144 @@ export function ActivityCard({
           ? "text-amber-300"
           : "text-red-300";
 
+  const opportunityCost = openDayCount === 0
+    ? `Needs ${activity.slots} day${activity.slots === 1 ? "" : "s"}; none open`
+    : activity.slots === 1
+      ? `Uses 1 of ${openDayCount} open day${openDayCount === 1 ? "" : "s"}`
+      : `Uses ${activity.slots} of ${openDayCount} open days`;
+
   return (
     <article
       draggable
       onDragStart={handleDragStart}
       aria-grabbed={isSelected}
-      className={`rounded-2xl border p-4 transition ${
+      className={`overflow-hidden rounded-xl border transition ${
         isSelected
           ? "border-blue-500/60 bg-blue-500/10 shadow-[0_0_0_1px_rgba(59,130,246,0.25)]"
           : highlighted
             ? "border-emerald-500/50 bg-emerald-500/10"
-            : "border-[#27272a] bg-[#111111]/95 hover:border-zinc-600"
+            : "border-[#27272a] bg-[#111111]/95 hover:border-zinc-600 hover:bg-white/[0.025]"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3">
-            <span
-              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 ${display.color}`}
-            >
-              <Icon size={18} aria-hidden="true" />
+      <button
+        type="button"
+        onClick={handlePrimaryAction}
+        disabled={!onSelect && availableDays.length === 0}
+        aria-expanded={!!isSelected}
+        aria-label={isSelected
+          ? `Cancel selection for ${display.label}`
+          : `${activity.targetPool?.length ? "Choose Day and Target" : "Choose Day"} for ${display.label}`}
+        className="flex min-h-20 w-full items-center gap-3 px-3 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-55 sm:px-4"
+      >
+        <span
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 ${display.color}`}
+        >
+          <Icon size={18} aria-hidden="true" />
+        </span>
+
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <h3 className={`text-sm font-semibold ${display.color}`}>{display.label}</h3>
+            {targetPoolLabel && (
+              <Badge variant="secondary" className="border-white/10 bg-white/5 text-[10px] text-zinc-300">
+                {targetPoolLabel}
+              </Badge>
+            )}
+          </span>
+          <span className="mt-1 block truncate text-xs text-zinc-300">
+            {activity.description || guide.context}
+          </span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+            <span>{opportunityCost}</span>
+            <span className={fatigueTone}>
+              {fatigueCost < 0 ? `${Math.abs(fatigueCost)} fatigue recovered` : `+${fatigueCost} fatigue`}
             </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className={`text-sm font-semibold ${display.color}`}>{display.label}</h3>
-                {targetPoolLabel && (
-                  <Badge variant="secondary" className="border-white/10 bg-white/5 text-[10px] text-zinc-300">
-                    {targetPoolLabel}
-                  </Badge>
-                )}
-              </div>
-              <p className="mt-1 text-xs leading-5 text-zinc-300">
-                {activity.description || guide.context}
+            <span>{availabilityLabel}</span>
+          </span>
+        </span>
+
+        <span
+          className={`shrink-0 rounded-lg border px-2.5 py-2 text-xs font-semibold ${
+            isSelected
+              ? "border-blue-400/35 bg-blue-500/15 text-blue-100"
+              : "border-white/10 bg-white/5 text-zinc-200"
+          }`}
+        >
+          {isSelected ? "Cancel" : "Choose day"}
+        </span>
+      </button>
+
+      {isSelected && (
+        <div className="border-t border-blue-400/20 px-3 pb-4 pt-3 sm:px-4">
+          <div className="grid gap-2 md:grid-cols-2">
+            <div className="rounded-lg border border-white/8 bg-black/20 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                What this context reveals
               </p>
+              <p className="mt-1.5 text-sm leading-5 text-zinc-200">{guide.context}</p>
+            </div>
+            <div className="rounded-lg border border-white/8 bg-black/20 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                Decision to test
+              </p>
+              <p className="mt-1.5 text-sm leading-5 text-zinc-200">{guide.question}</p>
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-3 sm:flex-row sm:items-center sm:justify-between">
+            <span
+              className="text-xs leading-5 text-amber-100/85"
+            >
+              <strong className="font-semibold text-amber-200">Tradeoff:</strong>{" "}
+              {opportunityCost}; {fatigueCost < 0
+                ? `recovers ${Math.abs(fatigueCost)} fatigue but gathers no new evidence.`
+                : `adds ${fatigueCost} fatigue and leaves ${Math.max(0, openDayCount - activity.slots)} open days for other priorities.`}
+            </span>
+
+            {returns.length > 0 && (
+              <div className="flex shrink-0 flex-wrap gap-1.5">
+                {returns.map((item) => (
+                  <span
+                    key={item}
+                    className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2 py-1 text-[11px] text-blue-200"
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2 border-t border-white/8 pt-3 sm:flex-row sm:items-center sm:justify-between">
+            <span className="text-xs text-zinc-400">
+              {activity.targetPool?.length
+                ? "Choose an open day above, then choose the target."
+                : "Choose any highlighted open day in the sticky itinerary."}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onSelect?.(null)}
+                className="min-h-11 rounded-lg border border-white/10 px-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/5"
+              >
+                Cancel
+              </button>
+              {!activity.targetPool?.length && firstAvailableDayIndex >= 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSchedule(activity, firstAvailableDayIndex);
+                    onSelect?.(null);
+                  }}
+                  className="min-h-11 rounded-lg border border-emerald-400/30 bg-emerald-500/15 px-4 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-500/20"
+                >
+                  Add to {DAY_LABELS[firstAvailableDayIndex]}
+                </button>
+              )}
             </div>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <Badge variant="outline" className="border-white/15 bg-black/30 text-xs text-zinc-200">
-            {activity.slots} {activity.slots === 1 ? "day" : "days"}
-          </Badge>
-          <span className={`text-xs font-medium ${fatigueTone}`}>
-            {fatigueCost >= 0 ? "+" : ""}
-            {fatigueCost} fatigue
-          </span>
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <div className="rounded-xl border border-white/8 bg-black/20 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            Context
-          </p>
-          <p className="mt-2 text-sm leading-5 text-zinc-200">{guide.context}</p>
-        </div>
-        <div className="rounded-xl border border-white/8 bg-black/20 p-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            Decision Focus
-          </p>
-          <p className="mt-2 text-sm leading-5 text-zinc-200">{guide.question}</p>
-        </div>
-      </div>
-
-      {returns.length > 0 && (
-        <div className="mt-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
-            Best Returns
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {returns.map((item) => (
-              <span
-                key={item}
-                className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-200"
-              >
-                {item}
-              </span>
-            ))}
-          </div>
-        </div>
       )}
-
-      <div className="mt-4 flex flex-col gap-3 border-t border-white/8 pt-4">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-          <span>{availabilityLabel}</span>
-          {availableDays.length > 0 && (
-            <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-zinc-300">
-              Starts: {availableDays.join(", ")}
-            </span>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={handlePrimaryAction}
-          disabled={availableDays.length === 0}
-          aria-pressed={!!isSelected}
-          className={`min-h-11 rounded-xl px-4 text-sm font-semibold transition ${
-            availableDays.length === 0
-              ? "cursor-not-allowed border border-[#27272a] bg-[#181818] text-zinc-600"
-              : isSelected
-                ? "border border-blue-400/40 bg-blue-500/20 text-blue-100 hover:bg-blue-500/25"
-                : "border border-emerald-500/30 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/20"
-          }`}
-        >
-          {isSelected
-            ? "Cancel Selection"
-            : activity.targetPool?.length
-              ? "Choose Day and Target"
-              : "Choose Day"}
-        </button>
-      </div>
     </article>
   );
 }

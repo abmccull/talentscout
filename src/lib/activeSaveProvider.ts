@@ -1,8 +1,10 @@
-import { useAuthStore } from "@/stores/authStore";
-import { createSaveProvider } from "@/lib/saveProvider";
 import { BETA_CLOUD_SAVES_ENABLED } from "@/config/beta";
 
-export function getActiveSaveProvider() {
+export async function getActiveSaveProvider() {
+  const [{ useAuthStore }, { createSaveProvider }] = await Promise.all([
+    import("@/stores/authStore"),
+    import("@/lib/saveProvider"),
+  ]);
   const { isAuthenticated, userId, cloudSaveEnabled } = useAuthStore.getState();
 
   return createSaveProvider({
@@ -10,11 +12,12 @@ export function getActiveSaveProvider() {
       BETA_CLOUD_SAVES_ENABLED && isAuthenticated && cloudSaveEnabled
         ? userId
         : null,
-    includeSteam: false,
+    includeSteam: true,
   });
 }
 
-export function isSupabaseCloudSaveActive(): boolean {
+export async function isSupabaseCloudSaveActive(): Promise<boolean> {
+  const { useAuthStore } = await import("@/stores/authStore");
   const { isAuthenticated, userId, cloudSaveEnabled } = useAuthStore.getState();
   return Boolean(
     BETA_CLOUD_SAVES_ENABLED && isAuthenticated && userId && cloudSaveEnabled,

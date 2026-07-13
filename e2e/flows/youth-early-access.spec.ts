@@ -53,7 +53,7 @@ async function startFreshYouthCareer(
   ).toBeVisible();
   await gamePage.page.getByRole("button", { name: /^Begin Career$/ }).click();
 
-  await gamePage.waitForScreen("dashboard", 30_000);
+  await gamePage.waitForScreen(options.keepTutorials ? "observation" : "dashboard", 30_000);
 }
 
 async function createListedFirstReport(gamePage: GamePage, scoutLastName: string) {
@@ -111,7 +111,7 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
 
   await gamePage.openFirstYouthPlayerProfile();
   await expect(
-    gamePage.page.getByRole("heading", { name: "Evidence Dossier" }),
+    gamePage.page.getByRole("heading", { name: /Turn the read into a report/ }),
   ).toBeVisible();
   await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
   await gamePage.waitForScreen("reportWriter");
@@ -124,8 +124,8 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
     return reports.at(-1) ?? null;
   });
 
-  expect((latestReport?.attributeAssessments ?? []).length).toBeGreaterThan(0);
   expect(latestReport?.craftBreakdown).toBeTruthy();
+  expect(latestReport?.craftBreakdown?.observationDepth).toBeGreaterThan(0);
   expect(latestReport?.qualityBreakdown).toBeUndefined();
   expect(latestReport?.postTransferRating).toBeUndefined();
   expect(Array.isArray(latestReport?.strengths)).toBe(true);
@@ -144,7 +144,7 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
 test.describe("Youth Early Access", () => {
   test.setTimeout(180_000);
 
-  test("fresh onboarding starts with an actionable calendar task and no out-of-scope dashboard links", async ({ gamePage }) => {
+  test("fresh onboarding starts inside the discovery loop with no out-of-scope workspace links", async ({ gamePage }) => {
     await startFreshYouthCareer(gamePage, "Guide", { keepTutorials: true });
 
     const tutorialState = await gamePage.page.evaluate(() => {
@@ -158,11 +158,14 @@ test.describe("Youth Early Access", () => {
 
     expect(tutorialState).toEqual({
       active: true,
-      currentTask: "openedCalendar",
-      viewedDashboard: true,
+      currentTask: "attendedMatch",
+      viewedDashboard: false,
     });
     await expect(
-      gamePage.page.getByRole("dialog", { name: "Mentor: Open the calendar" }),
+      gamePage.page.getByRole("dialog", { name: "Mentor: Take the first look" }),
+    ).toBeVisible();
+    await expect(
+      gamePage.page.getByRole("heading", { name: "The match started early." }),
     ).toBeVisible();
     await expect(gamePage.page.getByRole("button", { name: "View Agency →" })).toHaveCount(0);
     await expect(gamePage.page.getByRole("button", { name: "Leaderboard" })).toHaveCount(0);

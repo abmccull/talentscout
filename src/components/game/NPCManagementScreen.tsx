@@ -24,6 +24,7 @@ import type {
   Territory,
 } from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { formatEvidenceRange } from "@/engine/scout/sourcePerspectives";
 
 // =============================================================================
 // Constants & helpers
@@ -48,7 +49,7 @@ const RECOMMENDATION_CONFIG: Record<
 /** Render 1–5 filled/empty star characters for quality rating. */
 function QualityStars({ quality }: { quality: number }) {
   return (
-    <span className="flex items-center gap-0.5" aria-label={`Quality: ${quality} out of 5`}>
+    <span className="flex items-center gap-0.5" role="img" aria-label={`Quality: ${quality} out of 5`}>
       {Array.from({ length: 5 }, (_, i) => (
         <Star
           key={i}
@@ -469,6 +470,41 @@ function ReportCard({
 
       <p className="mb-2 text-[11px] leading-relaxed text-zinc-400">{report.summary}</p>
 
+      {report.sourcePerspective && (
+        <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Scout interpretation profile">
+          <Badge variant="outline" className="border-sky-400/25 text-[9px] capitalize text-sky-200">
+            {report.sourcePerspective.lens.replace(/([A-Z])/g, " $1").trim()} lens
+          </Badge>
+          <Badge variant="outline" className="border-white/15 text-[9px] capitalize text-zinc-300">
+            {report.sourcePerspective.riskTolerance} risk
+          </Badge>
+          <Badge variant="outline" className="border-white/15 text-[9px] capitalize text-zinc-300">
+            {report.sourcePerspective.reliabilityBand} reliability
+          </Badge>
+        </div>
+      )}
+
+      {report.evidenceClaims && report.evidenceClaims.length > 0 && (
+        <details className="mb-2 rounded-md border border-white/10 bg-black/20 px-2.5 py-2">
+          <summary className="cursor-pointer text-[10px] font-semibold text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+            Compare {report.evidenceClaims.length} attributed claim{report.evidenceClaims.length === 1 ? "" : "s"}
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {report.evidenceClaims.map((claim) => (
+              <li key={claim.id} className="border-l-2 border-white/10 pl-2 text-[10px] leading-4 text-zinc-400">
+                <span className="block font-medium capitalize text-zinc-200">
+                  {String(claim.category).replace(/([A-Z])/g, " $1").trim()} · {claim.direction} · {formatEvidenceRange(claim.range)}
+                </span>
+                <span>{claim.statement}</span>
+                <span className="mt-0.5 block text-zinc-500">
+                  {Math.round(claim.confidence * 100)}% confidence · {claim.calibration.status}. {claim.explanation}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-[10px] text-zinc-500">
           <Eye size={10} aria-hidden="true" />
@@ -527,7 +563,15 @@ function ReportCard({
 // =============================================================================
 
 export function NPCManagementScreen() {
-  const { gameState, assignNPCScoutTerritory, reviewNPCReport, getPlayer, delegateScouting, toggleWatchlist } = useGameStore();
+  const {
+    gameState,
+    assignNPCScoutTerritory,
+    reviewNPCReport,
+    getPlayer,
+    delegateScouting,
+    toggleWatchlist,
+    resolveLeadershipResponsibility,
+  } = useGameStore();
   const [selectedScoutId, setSelectedScoutId] = useState<string | null>(null);
 
   // All hooks must be called before any conditional return.
@@ -602,6 +646,16 @@ export function NPCManagementScreen() {
     npcScout.territoryId ? gameState.territories[npcScout.territoryId] : undefined;
 
   const unreviewedCount = allNPCReports.filter((r) => !r.reviewed).length;
+  const openLeadershipResponsibilities = Object.values(
+    gameState.leadershipPortfolio?.responsibilities ?? {},
+  ).filter((responsibility) => responsibility.status === "open");
+  const leadershipAttentionRemaining = gameState.leadershipPortfolio
+    ? Math.max(
+        0,
+        gameState.leadershipPortfolio.attentionCapacity
+          - gameState.leadershipPortfolio.attentionUsed,
+      )
+    : 0;
 
   return (
     <GameLayout>
@@ -649,6 +703,59 @@ export function NPCManagementScreen() {
         {/* Main content: scouts exist */}
         {isTierEligible && npcScouts.length > 0 && (
           <div className="space-y-6">
+            {openLeadershipResponsibilities.length > 0 && (
+              <Card className="border-fuchsia-400/20 bg-fuchsia-400/[0.05]" data-testid="leadership-handoffs">
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base">Leadership portfolio handoffs</CardTitle>
+                      <p className="mt-1 text-sm text-zinc-400">
+                        Select a scout below, then assign one open responsibility. The actual report will remain attributable to that scout.
+                      </p>
+                    </div>
+                    <Badge variant={leadershipAttentionRemaining > 0 ? "warning" : "destructive"}>
+                      {leadershipAttentionRemaining} attention left
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-3 md:grid-cols-3">
+                  {openLeadershipResponsibilities.map((responsibility) => {
+                    const selectedScoutBusy = selectedScout
+                      ? Boolean(activeDelegationsByScout[selectedScout.id])
+                      : true;
+                    return (
+                      <div key={responsibility.id} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-fuchsia-300">
+                          {responsibility.title}
+                        </p>
+                        <p className="mt-1 font-semibold text-white">{getPlayerName(responsibility.playerId)}</p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Due S{responsibility.dueSeason} W{responsibility.dueWeek}
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="mt-3 w-full"
+                          disabled={!selectedScout || selectedScoutBusy || leadershipAttentionRemaining < 1}
+                          onClick={() => selectedScout && resolveLeadershipResponsibility(
+                            responsibility.id,
+                            "delegate",
+                            selectedScout.id,
+                          )}
+                        >
+                          {selectedScout
+                            ? selectedScoutBusy
+                              ? "Selected scout busy"
+                              : `Assign ${selectedScout.firstName}`
+                            : "Select a scout"}
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Two-column: roster + detail */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
               {/* Left: NPC Scout roster */}

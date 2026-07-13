@@ -120,7 +120,7 @@ export function HintToast() {
             <button
               onClick={handleDismiss}
               aria-label="Dismiss hint"
-              className="ml-auto flex h-6 w-6 items-center justify-center rounded text-zinc-500 transition-colors hover:text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+              className="ml-auto flex h-11 w-11 items-center justify-center rounded text-zinc-400 transition-colors hover:bg-white/5 hover:text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>

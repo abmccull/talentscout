@@ -1,29 +1,26 @@
 /**
- * Global setup: warm up the Next.js dev server before tests run.
- *
- * The first page load triggers JavaScript bundle compilation which can take
- * 30-60s under load. By warming up here, all test workers get fast page loads.
+ * Global setup: verify the production static export has loaded and hydrated.
  */
 
-import { chromium } from "@playwright/test";
+import { chromium, type FullConfig } from "@playwright/test";
 
-async function globalSetup() {
+async function globalSetup(config: FullConfig) {
   const browser = await chromium.launch();
   const page = await browser.newPage();
+  const baseURL = config.projects[0]?.use.baseURL ?? "http://127.0.0.1:3000";
 
   try {
-    await page.goto("http://localhost:3000/play", {
+    await page.goto(`${baseURL}/play`, {
       timeout: 120_000,
       waitUntil: "domcontentloaded",
     });
-    // Wait for the game store to be hydrated — this forces full JS compilation
-    await page.waitForFunction(
-      () => (window as any).__GAME_STORE__ !== undefined,
-      undefined,
-      { timeout: 120_000 },
-    );
+    await page.getByRole("button", { name: /Start Youth Career|New Game/ }).waitFor({
+      state: "visible",
+      timeout: 120_000,
+    });
   } catch (e) {
-    console.warn("[global-setup] Warmup failed, tests may be slower:", e);
+    console.error("[global-setup] Production export failed to hydrate:", e);
+    throw e;
   } finally {
     await browser.close();
   }

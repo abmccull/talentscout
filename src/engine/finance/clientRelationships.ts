@@ -11,6 +11,10 @@ import type {
   Club,
   PitchResult,
 } from "../core/types";
+import {
+  gameWeeksBetweenWithSeasonLength,
+  LEGACY_SEASON_LENGTH_WEEKS,
+} from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Satisfaction helpers
@@ -49,12 +53,17 @@ export function processClientRelationshipWeek(
   finances: FinancialRecord,
   week: number,
   season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
   const updated = finances.clientRelationships.map((cr) => {
-    // Weeks since last interaction (approximate using season * 52 + week)
-    const currentTotalWeek = season * 52 + week;
-    const lastTotalWeek = cr.lastInteractionSeason * 52 + cr.lastInteractionWeek;
-    const weeksSinceInteraction = currentTotalWeek - lastTotalWeek;
+    const weeksSinceInteraction = gameWeeksBetweenWithSeasonLength(
+      {
+        season: cr.lastInteractionSeason,
+        week: cr.lastInteractionWeek,
+      },
+      { season, week },
+      seasonLength,
+    );
 
     let sat = cr.satisfaction;
     let status = cr.status;
@@ -98,7 +107,19 @@ export function pitchToClub(
   finances: FinancialRecord,
   club: Club,
   pitchType: "coldCall" | "referral" | "showcase",
+  actionSequence = (finances.actionSequence ?? 0) + 1,
 ): PitchResult {
+  const alreadyRetained = finances.retainerContracts.some(
+    (contract) => contract.clubId === club.id && contract.status === "active",
+  ) || finances.pendingRetainerOffers.some(
+    (contract) => contract.clubId === club.id,
+  );
+  if (alreadyRetained) {
+    return {
+      success: false,
+      message: `${club.name} already has an active or pending retainer relationship.`,
+    };
+  }
   const baseRates: Record<"coldCall" | "referral" | "showcase", number> = {
     coldCall: 0.12,
     referral: 0.35,
@@ -141,12 +162,13 @@ export function pitchToClub(
   };
   const [minFee, maxFee] = feeRanges[tier];
   const requiredReports = tier + 1;
+  const monthlyFee = rng.nextInt(minFee, maxFee);
 
   const contract: RetainerContract = {
-    id: `retainer_${club.id}_pitch_${Date.now()}`,
+    id: `retainer_${club.id}_pitch_a${actionSequence}`,
     clubId: club.id,
     tier: tier as 1 | 2 | 3 | 4 | 5,
-    monthlyFee: rng.nextInt(minFee, maxFee),
+    monthlyFee,
     requiredReportsPerMonth: requiredReports,
     reportsDeliveredThisMonth: 0,
     status: "active",

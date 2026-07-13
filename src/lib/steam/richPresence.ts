@@ -20,7 +20,7 @@ export interface RichPresenceContext {
   currentCountry?: string;
   /** Current season year, e.g. 2024. */
   currentSeason?: number;
-  /** Current week within the season, typically 1–38. */
+  /** Current week within the fixture-derived season. */
   currentWeek?: number;
   /**
    * Match fixture label shown while watching a game.

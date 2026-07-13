@@ -177,4 +177,55 @@ describe("country identity invariants", () => {
 
     expect(targets.map((club) => club.id)).toEqual(["madrid", "london"]);
   });
+
+  it("keeps an eligible authored-report audience inside the bounded club shortlist", () => {
+    const clubs = Array.from({ length: 12 }, (_, index) => ({
+      id: `club-${index}`,
+      leagueId: "england",
+      youthAcademyRating: 20 - index,
+      reputation: 50,
+      playerIds: [],
+      academyPlayerIds: [],
+    })) as unknown as Club[];
+    const leagues = {
+      england: { id: "england", country: "England" },
+    } as unknown as Record<string, League>;
+    const youth = {
+      country: "england",
+      player: { age: 15 },
+    } as UnsignedYouth;
+
+    const ordinary = getEligibleClubsForPlacement(
+      youth,
+      clubs,
+      scout("england"),
+      leagues,
+    );
+    expect(ordinary).toHaveLength(10);
+    expect(ordinary.map((club) => club.id)).not.toContain("club-11");
+
+    const preferred = getEligibleClubsForPlacement(
+      youth,
+      clubs,
+      scout("england"),
+      leagues,
+      { preferredClubId: "club-11" },
+    );
+    expect(preferred).toHaveLength(10);
+    expect(preferred[0].id).toBe("club-11");
+
+    const fullPreferred = clubs.map((club) =>
+      club.id === "club-11"
+        ? { ...club, playerIds: Array.from({ length: 40 }, (_, index) => `player-${index}`) }
+        : club,
+    );
+    const stillIneligible = getEligibleClubsForPlacement(
+      youth,
+      fullPreferred,
+      scout("england"),
+      leagues,
+      { preferredClubId: "club-11" },
+    );
+    expect(stillIneligible.map((club) => club.id)).not.toContain("club-11");
+  });
 });

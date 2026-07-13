@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-12T17:56:22.474Z",
+  "profile": {
+    "seedCount": 1,
+    "seasonCount": 1,
+    "deterministicReplaySeed": "release-soak-01",
+    "maxSerializedBytes": 100663296,
+    "maxGrowthMultiplier": 64
+  },
+  "aggregate": {
+    "totalCanonicalTicks": 2,
+    "totalCalendarWeeksSpanned": 46,
+    "largestSaveBytes": 18162101,
+    "largestFinalToInitialRatio": 1.43,
+    "weeklyLatencyMs": {
+      "p50": 340.59,
+      "p95": 340.59,
+      "max": 340.59
+    }
+  },
+  "runs": [
+    {
+      "seed": "release-soak-01",
+      "reachedSeason": 2,
+      "canonicalTicks": 2,
+      "calendarWeeksSpanned": 46,
+      "initialBytes": 12681288,
+      "finalBytes": 18162101,
+      "peakBytes": 18162101,
+      "finalToInitialRatio": 1.43,
+      "worldHistorySeasons": 1,
+      "worldHistoryBytes": 2122058,
+      "weeklyLatencyMs": {
+        "p50": 340.59,
+        "p95": 340.59,
+        "max": 340.59,
+        "mean": 287.88
+      },
+      "digest": "eb524dccbabbba60765d20d8da80aaca283c11e87c674a29a4fa0c7aac3343fe"
+    }
+  ],
+  "persistenceReplay": {
+    "seed": "release-soak-01",
+    "reachedSeason": 2,
+    "canonicalTicks": 2,
+    "calendarWeeksSpanned": 46,
+    "initialBytes": 12681288,
+    "finalBytes": 18162101,
+    "peakBytes": 18162101,
+    "finalToInitialRatio": 1.43,
+    "worldHistorySeasons": 1,
+    "worldHistoryBytes": 2122058,
+    "weeklyLatencyMs": {
+      "p50": 288.23,
+      "p95": 288.23,
+      "max": 288.23,
+      "mean": 208.95
+    },
+    "digest": "eb524dccbabbba60765d20d8da80aaca283c11e87c674a29a4fa0c7aac3343fe"
+  }
+}

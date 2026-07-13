@@ -155,6 +155,12 @@ export class GamePage {
     await this.page
       .locator('input#scout-last-name, input[placeholder="Morgan"]')
       .fill(lastName);
+    if (youthEarlyAccess) {
+      const deskOpening = this.page.getByRole("radio", { name: /Start at the Desk/i });
+      if (await deskOpening.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await deskOpening.evaluate((input: HTMLInputElement) => input.click());
+      }
+    }
     await this.page.click('button:has-text("Continue")');
     await this.page.waitForTimeout(400);
 
@@ -186,6 +192,10 @@ export class GamePage {
 
     await this.page.click('button:has-text("Begin Career")');
     await this.waitForScreen("dashboard", 30_000);
+    // Starting a career intentionally initializes contextual onboarding. E2E
+    // gameplay stories test the underlying screen/action contract, so dismiss
+    // that overlay after creation just as state-injection helpers do.
+    await dismissTutorials(this.page);
   }
 
   async advanceWeek(): Promise<void> {
@@ -331,14 +341,24 @@ export class GamePage {
   }
 
   async completeObservationViaUI(): Promise<void> {
-    const beginObservation = this.page.getByRole("button", { name: /^Begin Observation$/ });
+    await dismissTutorials(this.page);
+    const beginObservation = this.page.locator(
+      '[data-tutorial-id="observation-begin-session"]',
+    );
     await beginObservation.waitFor({ state: "visible", timeout: 10_000 });
     await beginObservation.click();
 
     const focusButton = this.page.locator('button[aria-label^="Add focus to "]').first();
     if (await focusButton.isVisible({ timeout: 1_000 }).catch(() => false)) {
       await focusButton.click();
-      await this.page.getByRole("button", { name: /^technical$/i }).click();
+      const technicalLens = this.page
+        .getByRole("button", { name: /^Use technical lens for /i })
+        .first();
+      if (await technicalLens.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        await technicalLens.click();
+      } else {
+        await this.page.keyboard.press("Escape");
+      }
     }
 
     const flagMoment = this.page.getByRole("button", { name: /^Flag this moment$/ }).first();
@@ -349,6 +369,20 @@ export class GamePage {
 
     let reachedReflection = false;
     for (let step = 0; step < 30; step++) {
+      // Observation milestones can enqueue contextual mentor cards after a
+      // phase transition. Keep gameplay assertions independent from tutorial
+      // pointer interception at every interaction boundary.
+      await dismissTutorials(this.page);
+      const strategicChoice = this.page
+        .getByRole("group", { name: /^(Strategic choices|Response options|Data points)$/ })
+        .locator("button:not(:disabled)")
+        .first();
+      if (
+        await strategicChoice.isVisible({ timeout: 300 }).catch(() => false)
+        && await strategicChoice.isEnabled()
+      ) {
+        await strategicChoice.click();
+      }
       const reflection = this.page.getByRole("button", { name: /^Go to Reflection$/ });
       if (await reflection.isVisible({ timeout: 500 }).catch(() => false)) {
         await reflection.click();
@@ -370,6 +404,7 @@ export class GamePage {
       throw new Error("Observation never reached reflection");
     }
 
+    await dismissTutorials(this.page);
     const completeReflection = this.page.getByRole("button", {
       name: /^Complete (Reflection|Session)$/,
     });
@@ -379,6 +414,7 @@ export class GamePage {
     const continueButton = this.page.getByRole("button", { name: /^Continue$/ });
     const completionRoute = await Promise.race([
       this.waitForScreen("weekSimulation", 10_000).then(() => "weekSimulation" as const),
+      this.waitForScreen("openingDiscovery", 10_000).then(() => "openingDiscovery" as const),
       continueButton
         .waitFor({ state: "visible", timeout: 10_000 })
         .then(() => "continue" as const),

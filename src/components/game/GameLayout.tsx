@@ -7,6 +7,7 @@ import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
 import {
   LayoutDashboard,
   Calendar,
@@ -91,6 +92,8 @@ function getYouthWorkspaceParent(screen: GameScreen): GameScreen {
       return "handbook";
     case "settings":
       return "settings";
+    case "inbox":
+      return "inbox";
     default:
       return "dashboard";
   }
@@ -203,6 +206,7 @@ function saveSeenNav(seen: Set<GameScreen>): void {
 interface NavGateContext {
   tier: number;
   effectiveWeek: number;
+  currentSeason: number;
   countryCount: number;
   careerPath: string;
   specialization: string;
@@ -219,7 +223,7 @@ function getNavVisibility(
 ): boolean {
   if (ALWAYS_VISIBLE.has(screen)) return true;
 
-  const { tier, effectiveWeek, countryCount, specialization, observationCount, reportCount, hasScheduledActivity, hasAttendedMatch } = ctx;
+  const { tier, effectiveWeek, currentSeason, countryCount, specialization, observationCount, reportCount, hasScheduledActivity, hasAttendedMatch } = ctx;
 
   switch (screen) {
     // Inbox: always visible (essential for directives)
@@ -277,9 +281,9 @@ function getNavVisibility(
     case "npcManagement":
       return tier >= 4;
 
-    // Leaderboard: after season 1 (effective week > 52)
+    // Leaderboard: after the first completed season, regardless of calendar length.
     case "leaderboard":
-      return effectiveWeek > 52;
+      return currentSeason > 1;
 
     default:
       return true;
@@ -350,14 +354,16 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   const countryCount = gameState.countries.length;
   const careerPath = gameState.scout.careerPath ?? "club";
   const specialization = gameState.scout.primarySpecialization ?? "";
-  // effectiveWeek accumulates across seasons so week-gated items stay visible
-  // after season 1 ends (season 2+ means week >= 53, unlocking everything)
-  const effectiveWeek =
-    (gameState.currentSeason - 1) * 52 + gameState.currentWeek;
+  // Week gates use the fixture-derived game calendar, not a real-world year.
+  const effectiveWeek = getCareerElapsedWeeks(gameState.fixtures, {
+    season: gameState.currentSeason,
+    week: gameState.currentWeek,
+  });
 
   const navCtx: NavGateContext = {
     tier,
     effectiveWeek,
+    currentSeason: gameState.currentSeason,
     countryCount,
     careerPath,
     specialization,
@@ -389,7 +395,11 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     ? getYouthWorkspaceParent(currentScreen)
     : currentScreen;
   const activeWorkspaceLabel = useYouthEarlyAccessNav
-    ? YOUTH_WORKSPACE_ITEMS.find((item) => item.screen === activeNavScreen)?.label ?? "Desk"
+    ? [
+        ...YOUTH_WORKSPACE_ITEMS,
+        ...YOUTH_SUPPORT_ITEMS,
+        { screen: "inbox" as GameScreen, label: "Inbox", icon: Mail },
+      ].find((item) => item.screen === activeNavScreen)?.label ?? "TalentScout"
     : "TalentScout";
 
   function handleNavClick(screen: GameScreen): void {
@@ -436,32 +446,37 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         Skip to game content
       </a>
 
-      <header className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b border-white/10 bg-[#0b0e12]/95 px-2 backdrop-blur md:hidden">
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-          aria-label="Open navigation menu"
-        >
-          <Menu size={21} aria-hidden="true" />
-        </button>
+      <header className="fixed inset-x-0 top-0 z-30 grid h-14 grid-cols-[5.5rem_minmax(0,1fr)_5.5rem] items-center border-b border-white/10 bg-[#0b0e12]/95 px-2 backdrop-blur md:hidden">
+        <div className="flex items-center">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+            aria-label="Open navigation menu"
+          >
+            <Menu size={21} aria-hidden="true" />
+          </button>
+        </div>
         <div className="min-w-0 text-center">
           <p className="truncate text-sm font-semibold text-white">{activeWorkspaceLabel}</p>
           <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
             Week {gameState.currentWeek} · Season {gameState.currentSeason}
           </p>
         </div>
-        <button
-          onClick={() => handleNavClick("inbox")}
-          className="relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-          aria-label={unreadCount > 0 ? `Open inbox, ${unreadCount} unread` : "Open inbox"}
-        >
-          <Bell size={20} aria-hidden="true" />
-          {unreadCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[9px] font-bold leading-4 text-zinc-950">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center justify-end">
+          <ScreenHelpButton placement="mobileHeader" />
+          <button
+            onClick={() => handleNavClick("inbox")}
+            className="relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+            aria-label={unreadCount > 0 ? `Open inbox, ${unreadCount} unread` : "Open inbox"}
+          >
+            <Bell size={20} aria-hidden="true" />
+            {unreadCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-amber-400 px-1 text-center text-[9px] font-bold leading-4 text-zinc-950">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
       </header>
 
       {/* Mobile backdrop overlay */}
@@ -624,7 +639,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       {useYouthEarlyAccessNav && (
         <nav
           aria-label="Youth Scout workspace"
-          className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-6 border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+          className="fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem+env(safe-area-inset-bottom))] grid-cols-6 border-t border-white/10 bg-[#0b0e12]/98 px-1 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
         >
           {YOUTH_WORKSPACE_ITEMS.map(({ screen, label, icon: Icon }) => {
             const isActive = activeNavScreen === screen;
@@ -649,7 +664,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         id="game-main"
         ref={mainRef}
         tabIndex={-1}
-        className={`relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.07),transparent_34%),linear-gradient(180deg,#0b0e12_0%,#090b0e_100%)] pt-14 focus:outline-none md:pt-0 ${useYouthEarlyAccessNav ? "pb-16 md:pb-0" : ""}`}
+        className={`game-mobile-safe-scroll relative min-w-0 flex-1 overflow-auto bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.07),transparent_34%),linear-gradient(180deg,#0b0e12_0%,#090b0e_100%)] pt-14 focus:outline-none md:pt-0 ${useYouthEarlyAccessNav ? "pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0" : ""}`}
       >
         {autosaveError !== null && (
           <div

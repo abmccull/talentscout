@@ -243,10 +243,18 @@ test.describe("Delayed scout report validation regression", () => {
     expect(validation.validationMessage.body).toContain("Reputation +3");
     expect(validation.reputationAfter).toBeGreaterThan(validation.reputationBefore);
 
-    await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      store.getState().setScreen("discoveries");
+    // Multi-season validation can leave the end-of-season presentation open.
+    // Dismiss that real UI state before asserting the requested workspace;
+    // setting currentScreen behind the overlay races React and caused a flaky
+    // false failure even though the delayed validation had completed.
+    const continueSeason = gamePage.page.getByRole("button", {
+      name: "Continue to Next Season",
     });
+    await gamePage.setScreen("discoveries");
+    if (await continueSeason.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await continueSeason.click();
+      await gamePage.setScreen("discoveries");
+    }
     await gamePage.waitForScreen("discoveries");
     await expect(
       gamePage.page.getByRole("heading", { name: "Career Tracker" }),

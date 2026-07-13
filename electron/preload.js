@@ -97,6 +97,8 @@ const electronAPI = Object.freeze({
       invoke("steam:setCloudSave", assertSteamSlot(slot), assertFilePayload(data)),
     getCloudSave: (slot) =>
       invoke("steam:getCloudSave", assertSteamSlot(slot)),
+    deleteCloudSave: (slot) =>
+      invoke("steam:deleteCloudSave", assertSteamSlot(slot)),
     getPlayerName: () => invoke("steam:getPlayerName"),
     setRichPresence: (key, value) =>
       invoke(

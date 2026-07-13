@@ -28,6 +28,12 @@ import {
   getCountryDisplayName as getSharedCountryDisplayName,
   normalizeCountryKey as normalizeSharedCountryKey,
 } from "@/lib/country";
+import { evaluateStakeholderMemoryPolicy } from "@/engine/consequences/stakeholderMemoryPolicy";
+import type { ConsequenceEngineState, GameDate } from "@/engine/consequences/types";
+import {
+  buildContactEvidenceClaim,
+  deriveContactPerspective,
+} from "@/engine/scout/sourcePerspectives";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -53,6 +59,16 @@ export interface ContactMeetingResult {
   trustDelta: number;
   /** F3: The interaction record for history tracking. */
   interaction: ContactInteraction;
+  /** Player-facing explanation when this contact's memories changed the meeting. */
+  stakeholderMemoryReason?: string;
+  /** Bounded relationship modifier applied before normal 0-100 clamping. */
+  stakeholderMemoryAdjustment?: number;
+}
+
+export interface ContactMeetingMemoryContext {
+  consequenceState: Pick<ConsequenceEngineState, "memories" | "obligations">;
+  now: GameDate;
+  seasonLength?: number;
 }
 
 export type { HiddenIntel } from "@/engine/core/types";
@@ -457,7 +473,7 @@ function generateContact(
   const [relMin, relMax] = reliabilityBase[type];
   const reliability = rng.nextInt(relMin, relMax);
 
-  return {
+  const contact: Contact = {
     id,
     name,
     type,
@@ -475,6 +491,7 @@ function generateContact(
     referralNetwork: [],
     betrayalRisk: 0,
   };
+  return { ...contact, evidencePerspective: deriveContactPerspective(contact) };
 }
 
 // ---------------------------------------------------------------------------
@@ -566,6 +583,7 @@ export function meetContact(
   rng: RNG,
   scout: Scout,
   contact: Contact,
+  memoryContext?: ContactMeetingMemoryContext,
 ): ContactMeetingResult {
   // Networking attribute (1–20) provides a flat relationship bonus
   const networkingAttr = scout.attributes.networking;
@@ -573,29 +591,71 @@ export function meetContact(
 
   // Base relationship change: positive but modest (at least +1 per meeting)
   const baseChange = rng.nextInt(2, 8);
-  const relationshipChange = clamp(baseChange + networkingBonus, 1, 15);
+  const stakeholderMemory = memoryContext
+    ? evaluateStakeholderMemoryPolicy({
+        memories: memoryContext.consequenceState.memories,
+        obligations: memoryContext.consequenceState.obligations,
+        stakeholder: { kind: "contact", id: contact.id },
+        subject: { kind: "scout", id: scout.id },
+        now: memoryContext.now,
+        seasonLength: memoryContext.seasonLength,
+        domain: "contactRelationship",
+      })
+    : undefined;
+  const stakeholderMemoryAdjustment = stakeholderMemory
+    ? clamp(Math.round(stakeholderMemory.scoreAdjustment * 0.25), -3, 3)
+    : 0;
+  const relationshipChange = clamp(
+    baseChange + networkingBonus + stakeholderMemoryAdjustment,
+    stakeholderMemoryAdjustment < 0 ? -2 : 1,
+    15,
+  );
 
   // Intel: only if relationship is high enough (≥ 40)
   const intel: HiddenIntel[] = [];
-  if (contact.relationship >= 40 && rng.chance(0.5)) {
+  if (contact.relationship >= 40 && rng.chance(clamp(
+    0.5 + (stakeholderMemory?.probabilityAdjustment ?? 0),
+    0.1,
+    0.9,
+  ))) {
     // Contact volunteers a piece of intel on a random known player
     if (contact.knownPlayerIds.length > 0) {
       const playerId = rng.pick(contact.knownPlayerIds);
       const attribute = pickHiddenAttributeByContactType(contact.type, rng);
       const isHigh = rng.chance(0.5);
       const hints = HIDDEN_INTEL_HINTS[attribute][isHigh ? "high" : "low"];
+      const hint = rng.pick(hints);
+      const reliability = contact.reliability / 100;
       intel.push({
         playerId,
         attribute,
-        hint: rng.pick(hints),
-        reliability: contact.reliability / 100,
+        hint,
+        reliability,
+        sourceContactId: contact.id,
+        sourceName: contact.name,
+        recordedWeek: memoryContext?.now.week,
+        recordedSeason: memoryContext?.now.season,
+        evidenceClaim: buildContactEvidenceClaim({
+          contact,
+          playerId,
+          attribute,
+          hint,
+          isHigh,
+          reliability,
+          week: memoryContext?.now.week,
+          season: memoryContext?.now.season,
+        }),
       });
     }
   }
 
   // Tips: random player tips at relationship ≥ 25
   const tips: PlayerTip[] = [];
-  if (contact.relationship >= 25 && rng.chance(0.4)) {
+  if (contact.relationship >= 25 && rng.chance(clamp(
+    0.4 + (stakeholderMemory?.probabilityAdjustment ?? 0),
+    0.05,
+    0.85,
+  ))) {
     const tipType = pickTipTypeByContactType(contact.type, rng);
     if (contact.knownPlayerIds.length > 0) {
       const playerId = rng.pick(contact.knownPlayerIds);
@@ -606,7 +666,11 @@ export function meetContact(
   }
 
   // F3: Trust delta from this meeting (similar to relationship change but for trust)
-  const trustDelta = clamp(Math.round(baseChange * 0.7 + networkingBonus * 0.5), 1, 10);
+  const trustDelta = clamp(
+    Math.round(baseChange * 0.7 + networkingBonus * 0.5 + stakeholderMemoryAdjustment * 0.75),
+    stakeholderMemoryAdjustment < 0 ? -2 : 1,
+    10,
+  );
 
   // F3: Record the interaction for history
   const interaction: ContactInteraction = {
@@ -615,7 +679,15 @@ export function meetContact(
     trustDelta,
   };
 
-  return { relationshipChange, intel, tips, trustDelta, interaction };
+  return {
+    relationshipChange,
+    intel,
+    tips,
+    trustDelta,
+    interaction,
+    stakeholderMemoryReason: stakeholderMemory?.reason,
+    stakeholderMemoryAdjustment: stakeholderMemory ? stakeholderMemoryAdjustment : undefined,
+  };
 }
 
 /**
@@ -631,6 +703,7 @@ export function getHiddenAttributeIntel(
   player: Player,
   /** Additive bonus to intel reliability from equipment (0–1 scale). */
   intelReliabilityBonus?: number,
+  recordedAt?: { week: number; season: number },
 ): HiddenIntel | null {
   if (!contact.knownPlayerIds.includes(playerId)) return null;
   if (contact.relationship < 35) return null;
@@ -652,11 +725,26 @@ export function getHiddenAttributeIntel(
   const reliabilityNoise = rng.nextFloat(-0.1, 0.1);
   const reliability = clamp(contact.reliability / 100 + reliabilityNoise + (intelReliabilityBonus ?? 0), 0, 1);
 
+  const hint = rng.pick(hints);
   return {
     playerId,
     attribute,
-    hint: rng.pick(hints),
+    hint,
     reliability,
+    sourceContactId: contact.id,
+    sourceName: contact.name,
+    recordedWeek: recordedAt?.week,
+    recordedSeason: recordedAt?.season,
+    evidenceClaim: buildContactEvidenceClaim({
+      contact,
+      playerId,
+      attribute,
+      hint,
+      isHigh,
+      reliability,
+      week: recordedAt?.week,
+      season: recordedAt?.season,
+    }),
   };
 }
 
@@ -761,7 +849,7 @@ export function generateContactForType(
   const [relMin, relMax] = reliabilityBase[type];
   const reliability = rng.nextInt(relMin, relMax);
 
-  return {
+  const contact: Contact = {
     id,
     name,
     type,
@@ -779,6 +867,7 @@ export function generateContactForType(
     referralNetwork: [],
     betrayalRisk: 0,
   };
+  return { ...contact, evidencePerspective: deriveContactPerspective(contact) };
 }
 
 // ---------------------------------------------------------------------------

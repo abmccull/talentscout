@@ -11,14 +11,42 @@ export type { EventTemplate, EventContext } from "./eventTemplates";
 export { EVENT_TEMPLATES, buildEventContext, extractRelatedIds } from "./eventTemplates";
 
 // Event generation and processing
-export type { EventChoiceResult, WeeklyEventResult } from "./narrativeEvents";
+export type {
+  EventChoiceResult,
+  NarrativeGenerationOptions,
+  WeeklyEventResult,
+} from "./narrativeEvents";
 export {
+  generateNarrativeEventOfType,
   generateWeeklyEvent,
   resolveEventChoice,
   getActiveEvents,
   acknowledgeEvent,
   formatConsequence,
 } from "./narrativeEvents";
+export type {
+  DirectedWeeklyEventResult,
+  EventDirectorState,
+} from "./eventDirector";
+export {
+  createEventDirectorState,
+  directWeeklyNarrativeEvent,
+} from "./eventDirector";
+export type {
+  ScoutingSpecialEventCategory,
+  ScoutingSpecialEventDefinition,
+  ScoutingSpecialEventOptionDefinition,
+  SpecialEventDecisionOptionPayload,
+  SpecialEventSelectionHistory,
+} from "./specialEventDeck";
+export {
+  SCOUTING_SPECIAL_EVENT_DECK,
+  buildSpecialEventDecisionOption,
+  createScoutingSpecialEvent,
+  getScoutingSpecialEventDefinition,
+  getSpecialEventSelectionWeights,
+  selectScoutingSpecialEvent,
+} from "./specialEventDeck";
 
 // Economic events
 export {
@@ -53,6 +81,7 @@ export {
   advanceChain,
   checkPendingChains,
   resolveChain,
+  resolveChainChoice,
   tryTriggerChain,
   computeChainChoiceEffects,
   CHAIN_TRIGGER_CHANCE,

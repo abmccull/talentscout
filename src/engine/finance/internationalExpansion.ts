@@ -30,12 +30,13 @@ export function openSatelliteOffice(
   region: string,
   week: number,
   season: number,
+  actionSequence = (finances.actionSequence ?? 0) + 1,
 ): FinancialRecord | null {
   const setupCost = SETUP_COSTS[region] ?? DEFAULT_SETUP_COST;
   if (finances.balance < setupCost) return null;
 
   const office: SatelliteOffice = {
-    id: `sat_${region}_${Date.now()}`,
+    id: `sat_${region}_s${season}w${week}_a${actionSequence}`,
     region,
     monthlyCost: DEFAULT_MONTHLY_COST,
     qualityBonus: 0.10,
@@ -47,6 +48,7 @@ export function openSatelliteOffice(
 
   return {
     ...finances,
+    actionSequence: Math.max(finances.actionSequence ?? 0, actionSequence),
     balance: finances.balance - setupCost,
     satelliteOffices: [...finances.satelliteOffices, office],
     transactions: [

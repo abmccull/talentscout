@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import type { LegacyScore, Scout, GameState } from "@/engine/core/types";
 import {
+  canVoluntarilyRetire,
   getCareerSeasonOrdinal,
   hasRepresentedCareerCompletionState,
 } from "@/engine/career/legacy";
@@ -189,9 +190,12 @@ function TopDiscoveries({ state }: { state: GameState }) {
 export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
   const setScreen = useGameStore((state) => state.setScreen);
   const completeLegacyCareer = useGameStore((state) => state.completeLegacyCareer);
+  const retireLegacyCareer = useGameStore((state) => state.retireLegacyCareer);
   const tier = getLegacyTier(legacyScore.totalScore);
   const [legacySaved, setLegacySaved] = useState(false);
+  const [confirmingRetirement, setConfirmingRetirement] = useState(false);
   const canCompleteCareer = hasRepresentedCareerCompletionState(gameState);
+  const canRetire = canVoluntarilyRetire(gameState);
 
   const totalReports =
     Object.values(gameState.reports).length +
@@ -340,6 +344,14 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
                 Your career is still active. Keep scouting to build a stronger legacy.
               </p>
               <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+                {canRetire && !confirmingRetirement && (
+                  <button
+                    onClick={() => setConfirmingRetirement(true)}
+                    className="inline-flex items-center gap-2 rounded-lg bg-amber-700 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-amber-600 active:scale-[0.98]"
+                  >
+                    Retire Career
+                  </button>
+                )}
                 <button
                   onClick={() => setScreen("career")}
                   className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-8 py-3 text-base font-semibold text-white shadow-lg transition hover:bg-zinc-700 active:scale-[0.98]"
@@ -355,8 +367,38 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
                   Main Menu
                 </button>
               </div>
+              {confirmingRetirement && (
+                <div className="mx-auto max-w-lg rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-left">
+                  <p className="text-sm font-semibold text-amber-200">
+                    End this career permanently?
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    Retirement records this save as complete and unlocks its earned legacy for future careers.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => {
+                        const profile = retireLegacyCareer();
+                        if (profile) setLegacySaved(true);
+                        setConfirmingRetirement(false);
+                      }}
+                      className="rounded-md bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500"
+                    >
+                      Confirm Retirement
+                    </button>
+                    <button
+                      onClick={() => setConfirmingRetirement(false)}
+                      className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-semibold text-zinc-200 hover:bg-zinc-700"
+                    >
+                      Keep Scouting
+                    </button>
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-zinc-600">
-                New Game+ stays locked until a real career ending is represented in the save state.
+                {canRetire
+                  ? "Retirement is available now. It is permanent for this save."
+                  : "Voluntary retirement unlocks after your first completed season."}
               </p>
             </>
           )}

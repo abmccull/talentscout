@@ -618,6 +618,7 @@ export function estimateReportQuality(params: {
 export interface ReportCraftQualityDetailed {
   score: number;
   breakdown: QualityBreakdown & { equipmentBonus: number };
+  hints: string[];
 }
 
 /**
@@ -663,6 +664,55 @@ export function calculateReportCraftQualityDetailed(
       ...preview.breakdown,
       equipmentBonus: Math.round(equipmentBonus * 10) / 10,
     },
+    hints: preview.hints,
+  };
+}
+
+export interface PrepareReportSubmissionInput {
+  draft: ReportDraft;
+  conviction: ConvictionLevel;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  scout: Scout;
+  week: number;
+  season: number;
+  playerId: string;
+  observations: Observation[];
+  playerContext: Pick<Player, "age" | "position">;
+  reportQualityBonus?: number;
+}
+
+/**
+ * Finalize and score a report through one pure path. Both the Report Writer
+ * preview and the store submission action call this function so the displayed
+ * score, infrastructure/equipment bonus, and persisted craft breakdown cannot
+ * diverge.
+ */
+export function prepareReportSubmission(
+  input: PrepareReportSubmissionInput,
+): { report: ScoutReport; quality: ReportCraftQualityDetailed } {
+  const report = finalizeReport(
+    input.draft,
+    input.conviction,
+    input.summary,
+    input.strengths,
+    input.weaknesses,
+    input.scout,
+    input.week,
+    input.season,
+    input.playerId,
+  );
+
+  return {
+    report,
+    quality: calculateReportCraftQualityDetailed(
+      report,
+      input.observations,
+      input.scout,
+      input.playerContext,
+      input.reportQualityBonus,
+    ),
   };
 }
 
@@ -755,6 +805,25 @@ export function trackPostTransfer(
 function mergeReadingsIntoAssessments(
   observations: Observation[],
 ): AttributeAssessment[] {
+  // Derive evidence depth from distinct observation records. Legacy saves may
+  // contain exponentially inflated AttributeReading.observationCount values;
+  // report confidence must not trust that denormalized display field.
+  const observationCountByAttribute = new Map<PlayerAttribute, number>();
+  const seenObservationIds = new Set<string>();
+  for (const observation of observations) {
+    if (seenObservationIds.has(observation.id)) continue;
+    seenObservationIds.add(observation.id);
+    const observedAttributes = new Set(
+      observation.attributeReadings.map((reading) => reading.attribute),
+    );
+    for (const attribute of observedAttributes) {
+      observationCountByAttribute.set(
+        attribute,
+        (observationCountByAttribute.get(attribute) ?? 0) + 1,
+      );
+    }
+  }
+
   // Collect all readings per attribute across all observations
   const readingMap = new Map<
     PlayerAttribute,
@@ -765,15 +834,16 @@ function mergeReadingsIntoAssessments(
     for (const reading of obs.attributeReadings) {
       const existing = readingMap.get(reading.attribute);
       const confidence = reading.confidence;
+      const evidenceCount = observationCountByAttribute.get(reading.attribute) ?? 1;
 
       if (existing) {
         existing.values.push(reading.perceivedValue);
         existing.confidences.push(confidence);
-        // Approximate a range from perceivedValue using observation count
-        const half = estimateRangeHalf(reading.perceivedValue, reading.observationCount);
+        // Approximate a range using canonical distinct evidence depth.
+        const half = estimateRangeHalf(reading.perceivedValue, evidenceCount);
         existing.ranges.push([reading.perceivedValue - half, reading.perceivedValue + half]);
       } else {
-        const half = estimateRangeHalf(reading.perceivedValue, reading.observationCount);
+        const half = estimateRangeHalf(reading.perceivedValue, evidenceCount);
         readingMap.set(reading.attribute, {
           values: [reading.perceivedValue],
           confidences: [confidence],
@@ -886,7 +956,7 @@ function identifyWeaknessClaims(
   return pickTopClaims(weaknesses, 3);
 }
 
-// TODO: surface in UI — currently generated but never displayed to the player
+/** Player-facing stylistic comparison prompts shown in the report writer. */
 function buildComparisonSuggestions(
   assessments: AttributeAssessment[],
   age: number,

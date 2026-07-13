@@ -242,7 +242,7 @@ export function TutorialOverlay() {
           <span className={`text-xs font-semibold uppercase tracking-wider ${isAhaMoment ? "text-amber-400" : "text-emerald-500"}`}>
             {isAhaMoment ? "Milestone" : "Tutorial"}
           </span>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-zinc-400">
             {currentStep + 1}/{totalSteps}
           </span>
         </div>
@@ -277,7 +277,7 @@ export function TutorialOverlay() {
           <div className="flex items-center gap-2">
             <button
               onClick={skipTutorial}
-              className="text-xs text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline transition"
+              className="inline-flex min-h-11 items-center text-xs text-zinc-400 underline-offset-2 transition hover:text-zinc-200 hover:underline"
             >
               Skip
             </button>
@@ -286,7 +286,7 @@ export function TutorialOverlay() {
             </span>
             <button
               onClick={dismissForever}
-              className="text-xs text-zinc-500 underline-offset-2 hover:text-zinc-300 hover:underline transition"
+              className="inline-flex min-h-11 items-center text-xs text-zinc-400 underline-offset-2 transition hover:text-zinc-200 hover:underline"
             >
               Disable tutorials
             </button>

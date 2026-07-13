@@ -7,12 +7,15 @@ import type {
   SeasonEventEffect,
   SeasonEventEffectType,
 } from "@/engine/core/types";
+import {
+  getSeasonSegmentWidthPercent,
+  getSeasonTimelineLabelWeeks,
+  getSeasonWeekProgressPercent,
+} from "@/engine/core/seasonEvents";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
-
-const TOTAL_WEEKS = 38;
 
 /** Tailwind background colour classes for each event type. */
 const EVENT_TYPE_COLORS: Record<SeasonEventType, string> = {
@@ -91,28 +94,13 @@ const EFFECT_TYPE_BADGE_COLORS: Record<SeasonEventEffectType, string> = {
 interface SeasonTimelineProps {
   seasonEvents: SeasonEvent[];
   currentWeek: number;
+  seasonLength: number;
   onResolveEvent?: (eventId: string, choiceIndex: number) => void;
 }
 
 // =============================================================================
 // HELPERS
 // =============================================================================
-
-/**
- * Convert a week number to a percentage position on the timeline (0-100).
- * Week 1 maps to 0%, week 38 maps to 100%.
- */
-function weekToPercent(week: number): number {
-  return ((week - 1) / (TOTAL_WEEKS - 1)) * 100;
-}
-
-/**
- * Calculate width percentage for a segment spanning startWeek to endWeek
- * inclusive. One week occupies 1/(TOTAL_WEEKS-1) of the bar width.
- */
-function segmentWidthPercent(startWeek: number, endWeek: number): number {
-  return ((endWeek - startWeek + 1) / (TOTAL_WEEKS - 1)) * 100;
-}
 
 /**
  * Format an effect value as a human-readable string.
@@ -218,13 +206,15 @@ function ChoiceModal({
 export function SeasonTimeline({
   seasonEvents,
   currentWeek,
+  seasonLength,
   onResolveEvent,
 }: SeasonTimelineProps) {
   const [choiceEvent, setChoiceEvent] = useState<SeasonEvent | null>(null);
 
   if (seasonEvents.length === 0) return null;
 
-  const currentWeekPercent = weekToPercent(currentWeek);
+  const currentWeekPercent = getSeasonWeekProgressPercent(currentWeek, seasonLength);
+  const labelWeeks = getSeasonTimelineLabelWeeks(seasonLength);
 
   const handleChoose = (choiceIndex: number) => {
     if (choiceEvent && onResolveEvent) {
@@ -237,7 +227,7 @@ export function SeasonTimeline({
     <section aria-label="Season timeline" className="mb-6">
       <div className="rounded-lg border border-[#27272a] bg-[#141414] p-4">
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
-          Season Calendar — Week {currentWeek} of {TOTAL_WEEKS}
+          Season Calendar — Week {currentWeek} of {seasonLength}
         </h2>
 
         {/* Timeline bar */}
@@ -246,14 +236,21 @@ export function SeasonTimeline({
           <div
             className="relative h-4 w-full overflow-hidden rounded-full bg-zinc-800"
             role="img"
-            aria-label={`Season timeline showing week ${currentWeek} of ${TOTAL_WEEKS}. ${seasonEvents
+            aria-label={`Season timeline showing week ${currentWeek} of ${seasonLength}. ${seasonEvents
               .map((event) => `${event.name}, weeks ${event.startWeek} to ${event.endWeek}`)
               .join("; ")}`}
           >
             {/* Event segments */}
             {seasonEvents.map((event) => {
-              const leftPercent = weekToPercent(event.startWeek);
-              const widthPercent = segmentWidthPercent(event.startWeek, event.endWeek);
+              const leftPercent = getSeasonWeekProgressPercent(
+                event.startWeek,
+                seasonLength,
+              );
+              const widthPercent = getSeasonSegmentWidthPercent(
+                event.startWeek,
+                event.endWeek,
+                seasonLength,
+              );
               const colorClass = EVENT_TYPE_COLORS[event.type];
 
               return (
@@ -279,11 +276,7 @@ export function SeasonTimeline({
 
           {/* Week number labels: start, mid, end */}
           <div className="mt-1 flex justify-between text-[10px] text-zinc-400" aria-hidden="true">
-            <span>W1</span>
-            <span>W10</span>
-            <span>W20</span>
-            <span>W28</span>
-            <span>W38</span>
+            {labelWeeks.map((week) => <span key={week}>W{week}</span>)}
           </div>
         </div>
 

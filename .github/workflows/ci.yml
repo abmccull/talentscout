@@ -33,5 +33,17 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Replayability divergence gate
+        run: npm run test:replayability
+
       - name: Build (Next.js static export)
         run: npm run build
+
+      - name: Upload replayability evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: replayability-divergence-evidence
+          path: artifacts/replayability/release-summary.json
+          if-no-files-found: ignore
+          retention-days: 30

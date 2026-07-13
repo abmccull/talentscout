@@ -1,39 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { motion, AnimatePresence } from "framer-motion";
 import { useGameStore } from "@/stores/gameStore";
-import { useAuthStore } from "@/stores/authStore";
-import { MainMenu } from "@/components/game/MainMenu";
-import { NewGameScreen } from "@/components/game/NewGameScreen";
-import { Dashboard } from "@/components/game/Dashboard";
-import { CalendarScreen } from "@/components/game/CalendarScreen";
-import { ObservationScreen } from "@/components/game/ObservationScreen";
-import { PlayerProfile } from "@/components/game/PlayerProfile";
-import { ReportWriter } from "@/components/game/ReportWriter";
-import { ReportHistory } from "@/components/game/ReportHistory";
-import { CareerScreen } from "@/components/game/CareerScreen";
-import { InboxScreen } from "@/components/game/InboxScreen";
-import { SettingsScreen } from "@/components/game/SettingsScreen";
-import { InternationalScreen } from "@/components/game/InternationalScreen";
-import { YouthScoutingScreen } from "@/components/game/YouthScoutingScreen";
-import { WikiScreen } from "@/components/game/wiki/WikiScreen";
-import { WeekSimulationScreen } from "@/components/game/WeekSimulationScreen";
-import { AchievementToast } from "@/components/game/AchievementToast";
-import { MentorOverlay } from "@/components/game/tutorial/MentorOverlay";
-import { GuidedChecklist } from "@/components/game/tutorial/GuidedChecklist";
-import { ScreenGuidePanel } from "@/components/game/tutorial/ScreenGuidePanel";
-import { HintToast } from "@/components/game/tutorial/HintToast";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
-import { Celebration } from "@/components/game/effects/Celebration";
-import { InsightPayoff } from "@/components/game/InsightPayoff";
-import { ScenarioOutcomeOverlay } from "@/components/game/ScenarioOutcomeOverlay";
-import { useAchievementStore } from "@/stores/achievementStore";
-import { useTutorialStore } from "@/stores/tutorialStore";
-import { useScreenMusic } from "@/lib/audio/useScreenMusic";
 import { useKeyboardNav, setFeedbackOpenHandler } from "@/lib/useKeyboardNav";
-import { FeedbackModal } from "@/components/game/FeedbackModal";
 import { ScreenErrorBoundary } from "@/components/game/ScreenErrorBoundary";
 
 function GameScreenLoading() {
@@ -48,8 +19,121 @@ function GameScreenLoading() {
   );
 }
 
+function DialogLoading() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 text-sm text-zinc-200 backdrop-blur-sm"
+    >
+      Loading dialog&hellip;
+    </div>
+  );
+}
+
+// Keep the route shell small. The immediately requested menu is its own chunk,
+// followed by career creation and the primary dashboard only when selected.
+const MainMenu = dynamic(
+  () => import("@/components/game/MainMenu").then((module) => module.MainMenu),
+  { ssr: false, loading: GameScreenLoading },
+);
+const NewGameScreen = dynamic(
+  () => import("@/components/game/NewGameScreen").then((module) => module.NewGameScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const Dashboard = dynamic(
+  () => import("@/components/game/Dashboard").then((module) => module.Dashboard),
+  { ssr: false, loading: GameScreenLoading },
+);
+
+// Optional UI runtimes are isolated from both the menu and workspace chunks.
+const AchievementRuntime = dynamic(
+  () => import("@/components/game/AchievementRuntime").then((module) => module.AchievementRuntime),
+  { ssr: false },
+);
+const TutorialRuntime = dynamic(
+  () => import("@/components/game/tutorial/TutorialRuntime").then((module) => module.TutorialRuntime),
+  { ssr: false },
+);
+const AuthRuntime = dynamic(
+  () => import("@/components/game/AuthRuntime").then((module) => module.AuthRuntime),
+  { ssr: false },
+);
+const ScreenMusicRuntime = dynamic(
+  () => import("@/components/game/ScreenMusicRuntime").then((module) => module.ScreenMusicRuntime),
+  { ssr: false },
+);
+const Celebration = dynamic(
+  () => import("@/components/game/effects/Celebration").then((module) => module.Celebration),
+  { ssr: false, loading: DialogLoading },
+);
+const InsightPayoff = dynamic(
+  () => import("@/components/game/InsightPayoff").then((module) => module.InsightPayoff),
+  { ssr: false, loading: DialogLoading },
+);
+const ScenarioOutcomeOverlay = dynamic(
+  () => import("@/components/game/ScenarioOutcomeOverlay").then((module) => module.ScenarioOutcomeOverlay),
+  { ssr: false, loading: DialogLoading },
+);
+const FeedbackModal = dynamic(
+  () => import("@/components/game/FeedbackModal").then((module) => module.FeedbackModal),
+  { ssr: false, loading: DialogLoading },
+);
+
 // Full-release and later-career screens stay available, but no longer inflate
 // the Youth Early Access launch bundle before a player actually opens them.
+const CalendarScreen = dynamic(
+  () => import("@/components/game/CalendarScreen").then((module) => module.CalendarScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const ObservationScreen = dynamic(
+  () => import("@/components/game/ObservationScreen").then((module) => module.ObservationScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const OpeningDiscoveryScreen = dynamic(
+  () => import("@/components/game/OpeningDiscoveryScreen").then((module) => module.OpeningDiscoveryScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const PlayerProfile = dynamic(
+  () => import("@/components/game/PlayerProfile").then((module) => module.PlayerProfile),
+  { ssr: false, loading: GameScreenLoading },
+);
+const ReportWriter = dynamic(
+  () => import("@/components/game/ReportWriter").then((module) => module.ReportWriter),
+  { ssr: false, loading: GameScreenLoading },
+);
+const ReportHistory = dynamic(
+  () => import("@/components/game/ReportHistory").then((module) => module.ReportHistory),
+  { ssr: false, loading: GameScreenLoading },
+);
+const CareerScreen = dynamic(
+  () => import("@/components/game/CareerScreen").then((module) => module.CareerScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const InboxScreen = dynamic(
+  () => import("@/components/game/InboxScreen").then((module) => module.InboxScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const SettingsScreen = dynamic(
+  () => import("@/components/game/SettingsScreen").then((module) => module.SettingsScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const InternationalScreen = dynamic(
+  () => import("@/components/game/InternationalScreen").then((module) => module.InternationalScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const YouthScoutingScreen = dynamic(
+  () => import("@/components/game/YouthScoutingScreen").then((module) => module.YouthScoutingScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const WikiScreen = dynamic(
+  () => import("@/components/game/wiki/WikiScreen").then((module) => module.WikiScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const WeekSimulationScreen = dynamic(
+  () => import("@/components/game/WeekSimulationScreen").then((module) => module.WeekSimulationScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
 const MatchScreen = dynamic(
   () => import("@/components/game/MatchScreen").then((module) => module.MatchScreen),
   { ssr: false, loading: GameScreenLoading },
@@ -186,6 +270,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <MatchScreen />;
     case "observation":
       return <ObservationScreen />;
+    case "openingDiscovery":
+      return <OpeningDiscoveryScreen />;
     case "matchSummary":
       return <MatchSummaryScreen />;
     case "playerProfile":
@@ -259,44 +345,24 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
 
 function ActiveScreen() {
   const currentScreen = useGameStore((s) => s.currentScreen);
-  // Derive match weather for weather-aware ambience in useScreenMusic
-  const matchWeather = useGameStore((s) => {
-    if (s.currentScreen !== "match" || !s.activeMatch || !s.gameState) return undefined;
-    const fixture = s.gameState.fixtures[s.activeMatch.fixtureId];
-    return fixture?.weather;
-  });
-  useScreenMusic(currentScreen, matchWeather);
 
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={currentScreen}
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.15 }}
-      >
-        <ScreenContent currentScreen={currentScreen} />
-      </motion.div>
-    </AnimatePresence>
+    <div key={currentScreen} className="game-screen-enter">
+      <ScreenContent currentScreen={currentScreen} />
+    </div>
   );
 }
 
 export default function Home() {
-  const initialize = useAuthStore((s) => s.initialize);
-  const gameState = useGameStore((s) => s.gameState);
+  const activeCareerId = useGameStore((s) => s.gameState?.scout.id);
   const setScreen = useGameStore((s) => s.setScreen);
-  const checkAndUnlock = useAchievementStore((s) => s.checkAndUnlock);
   const pendingCelebration = useGameStore((s) => s.pendingCelebration);
   const dismissCelebration = useGameStore((s) => s.dismissCelebration);
   const lastInsightResult = useGameStore((s) => s.lastInsightResult);
   const dismissInsightResult = useGameStore((s) => s.dismissInsightResult);
-  const tutorialActive = useTutorialStore((s) => s.tutorialActive);
-  const currentSequence = useTutorialStore((s) => s.currentSequence);
-  const guidedSessionActive = useTutorialStore((s) => s.guidedSessionActive);
-  const currentGuidedTask = useTutorialStore((s) => s.currentGuidedTask);
-  const activeScreenGuide = useTutorialStore((s) => s.activeScreenGuide);
-  const activeHint = useTutorialStore((s) => s.activeHint);
+  const hasScenarioOutcome = useGameStore(
+    (s) => s.scenarioOutcome !== null && s.scenarioOutcomeScenarioId !== null,
+  );
 
   // Feedback modal state (opened via F1 or Settings)
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -313,50 +379,44 @@ export default function Home() {
     setScreen("dashboard");
   }, [setScreen]);
 
-  // Check for an existing Supabase session once on mount.
-  // initialize() is a no-op if the auth store has not yet been wired to
-  // Supabase — safe to call unconditionally.
+  // Keep the launch bundle lean, then warm the two most likely next
+  // workspaces once a career is active and the browser is idle.
   useEffect(() => {
-    initialize();
-  }, [initialize]);
+    if (!activeCareerId || typeof window === "undefined") return;
+    const prefetch = () => {
+      void Promise.all([
+        import("@/components/game/CalendarScreen"),
+        import("@/components/game/YouthScoutingScreen"),
+      ]);
+    };
+    const timeoutId = window.setTimeout(prefetch, 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [activeCareerId]);
 
   // Register global keyboard shortcuts (Esc, 1-8, Space, ?, F1).
   // Called here — at the root — so the listener is active on every screen.
   useKeyboardNav();
 
-  // Re-run achievement checks whenever the game state changes.
-  // This catches achievements unlocked by advanceWeek(), report submission,
-  // career progression, or any other game-loop mutation.
-  useEffect(() => {
-    if (gameState) {
-      checkAndUnlock(gameState);
-    }
-  }, [gameState, checkAndUnlock]);
-
-  const showMentorOverlay = Boolean(
-    (tutorialActive && currentSequence) || (guidedSessionActive && currentGuidedTask),
-  );
-  const showScreenGuidePanel = !showMentorOverlay && activeScreenGuide != null;
-  const showHintToast = !showMentorOverlay && !showScreenGuidePanel && activeHint != null;
-  const showGuidedChecklist =
-    guidedSessionActive && !showMentorOverlay && !showScreenGuidePanel && !showHintToast;
-
   return (
     <>
+      {/* Auth is optional gameplay infrastructure. Initialize it after the
+          route shell so Supabase does not block the first workspace render. */}
+      <AuthRuntime />
+      <ScreenMusicRuntime />
       {/* SettingsApplier applies CSS classes to <html> for font size,
           colorblind filters, and reduced motion. Renders no visible UI. */}
       <SettingsApplier />
       <ScreenErrorBoundary onRecover={handleErrorRecover}>
         <ActiveScreen />
       </ScreenErrorBoundary>
-      {/* Tutorial surfaces follow a single priority: mentor overlay, screen guide, hint, checklist. */}
-      {showMentorOverlay && <MentorOverlay />}
-      {showScreenGuidePanel && <ScreenGuidePanel />}
-      {showHintToast && <HintToast />}
-      {showGuidedChecklist && <GuidedChecklist />}
-      {/* AchievementToast is a fixed overlay; it renders null when there are
-          no pending achievement notifications. */}
-      <AchievementToast />
+      {/* Career-only runtimes keep tutorial and achievement state out of the
+          launch path while retaining their existing priority and evaluation. */}
+      {activeCareerId && (
+        <>
+          <TutorialRuntime />
+          <AchievementRuntime />
+        </>
+      )}
       {/* Celebration overlay — shows tier-appropriate animation on key milestones. */}
       {pendingCelebration && (
         <Celebration
@@ -374,13 +434,15 @@ export default function Home() {
           onDismiss={dismissInsightResult}
         />
       )}
-      {/* Scenario outcome overlay — shows victory/failure modal at end of scenario. */}
-      <ScenarioOutcomeOverlay />
+      {/* Load the scenario overlay only after an outcome has been latched. */}
+      {activeCareerId && hasScenarioOutcome && <ScenarioOutcomeOverlay />}
       {/* Feedback modal — opened via F1 shortcut or Settings screen */}
-      <FeedbackModal
-        isOpen={isFeedbackOpen}
-        onClose={() => setIsFeedbackOpen(false)}
-      />
+      {isFeedbackOpen && (
+        <FeedbackModal
+          isOpen
+          onClose={() => setIsFeedbackOpen(false)}
+        />
+      )}
     </>
   );
 }

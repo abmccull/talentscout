@@ -472,12 +472,21 @@ function buildHypothesisFromMoments(
   domain: AttributeDomain,
   moments: SessionFlaggedMoment[],
   week: number,
+  season: number,
+  sessionId: string,
+  context: string,
   rng: RNG,
 ): Hypothesis {
   const promising = moments.filter((m) => m.reaction === "promising").length;
   const concerning = moments.filter((m) => m.reaction === "concerning").length;
-  const direction: "for" | "against" =
-    promising >= concerning ? "for" : "against";
+  const averageMomentQuality = moments.length > 0
+    ? moments.reduce((sum, moment) => sum + moment.moment.quality, 0) / moments.length
+    : 5.5;
+  const expectedSignal: "positive" | "negative" = promising === concerning
+    ? (averageMomentQuality >= 5.5 ? "positive" : "negative")
+    : (promising > concerning ? "positive" : "negative");
+  const textDirection: "for" | "against" =
+    expectedSignal === "positive" ? "for" : "against";
 
   const HYPOTHESIS_TEXTS: Record<
     AttributeDomain,
@@ -535,7 +544,7 @@ function buildHypothesisFromMoments(
     },
   };
 
-  const textOptions = HYPOTHESIS_TEXTS[domain][direction];
+  const textOptions = HYPOTHESIS_TEXTS[domain][textDirection];
   const text = rng.pick(textOptions);
 
   const descriptionsByReaction: Record<string, string> = {
@@ -558,12 +567,25 @@ function buildHypothesisFromMoments(
     domain,
     state: "open",
     createdAtWeek: week,
+    createdAtSeason: season,
+    lastUpdatedWeek: week,
+    lastUpdatedSeason: season,
+    expectedSignal,
     evidence: [
       {
+        id: `evidence_${sessionId}_${playerId}_${domain}_initial`,
         week,
-        direction,
+        season,
+        // The flagged moments formed this exact claim, so they support it
+        // whether the claim describes a strength or a concern.
+        direction: "for",
         description: evidenceDescription,
         strength: moments.length >= 3 ? "strong" : moments.length === 2 ? "moderate" : "weak",
+        sourceType: "observation",
+        sourceId: sessionId,
+        context,
+        independenceKey: `session:${sessionId}:${playerId}:${domain}`,
+        signal: expectedSignal,
       },
     ],
   };
@@ -832,6 +854,9 @@ export function generateReflection(
         domain,
         moments,
         session.startedAtWeek,
+        session.startedAtSeason,
+        session.id,
+        session.activityType,
         rng,
       ),
     );

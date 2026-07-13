@@ -23,7 +23,7 @@ export const DEMO_MAX_SEASONS = 2;
 
 export const DEMO_ALLOWED_SPECS: Specialization[] = ["youth"];
 
-export const DEMO_SCENARIO_IDS = ["rescue-job"];
+export const DEMO_SCENARIO_IDS = ["the_rescue_job"];
 
 /**
  * Check if the demo season limit has been reached.

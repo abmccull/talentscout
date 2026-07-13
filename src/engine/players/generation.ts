@@ -41,6 +41,12 @@ export interface PlayerGenConfig {
   currentSeason?: number;
   clubReputation?: number;
   /**
+   * Stable generation scope used to keep IDs from separate deterministic RNG
+   * streams disjoint. Mulberry32 has a 32-bit state, so UUID-shaped values
+   * derived from independent streams can otherwise align during long careers.
+   */
+  idNamespace?: string;
+  /**
    * Pre-computed first name. When provided, generatePlayer skips its own
    * name-generation step and uses this value directly.
    */
@@ -181,11 +187,12 @@ const SECONDARY_POSITIONS: Record<Position, readonly Position[]> = {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function generateId(rng: RNG): string {
+function generateId(rng: RNG, namespace?: string): string {
   const hex = () => rng.nextInt(0, 15).toString(16);
   const seg = (n: number) => Array.from({ length: n }, hex).join("");
   const y = rng.nextInt(8, 11).toString(16);
-  return `${seg(8)}-${seg(4)}-4${seg(3)}-${y}${seg(3)}-${seg(12)}`;
+  const randomId = `${seg(8)}-${seg(4)}-4${seg(3)}-${y}${seg(3)}-${seg(12)}`;
+  return namespace ? `${namespace}_${randomId}` : randomId;
 }
 
 function clampAttr(v: number): number {
@@ -435,7 +442,7 @@ export function generatePlayer(rng: RNG, config: PlayerGenConfig): Player {
   const day = rng.nextInt(1, maxDay);
 
   const player: Player = {
-    id: generateId(rng),
+    id: generateId(rng, config.idNamespace),
     firstName,
     lastName,
     age,

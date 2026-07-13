@@ -15,6 +15,7 @@ import type {
   InternationalAssignment,
 } from "@/engine/core/types";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
 import { getAvailableCountries } from "@/data/index";
 
 // =============================================================================
@@ -240,7 +241,7 @@ export function generateInternationalAssignment(
 
   const duration = assignmentDuration(rng, type);
 
-  return {
+  return migrateInternationalAssignment({
     id: generateAssignmentId(rng),
     country,
     region: getRegionForCountry(country),
@@ -249,7 +250,7 @@ export function generateInternationalAssignment(
     duration,
     reputationReward: assignmentReputationReward(type),
     type,
-  };
+  });
 }
 
 // =============================================================================

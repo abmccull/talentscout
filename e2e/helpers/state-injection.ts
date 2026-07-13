@@ -82,6 +82,13 @@ export async function dismissTutorials(page: Page): Promise<void> {
       localStorage.setItem(key, JSON.stringify(existing));
     } catch {}
   });
+
+  // Zustand updates synchronously, but React removes the rendered mentor card
+  // on the following commit. Do not race the next gameplay click against that
+  // still-mounted pointer-intercepting dialog.
+  await page
+    .locator('[role="dialog"][aria-label^="Mentor:"]')
+    .waitFor({ state: "hidden", timeout: 2_000 });
 }
 
 export async function injectGameState(
@@ -112,6 +119,7 @@ export async function injectGameState(
         nationality: "English",
         avatarId: overrides.scout?.avatarId ?? 1,
         skillAllocations,
+        openingMode: "desk",
       });
 
       const currentState = store.getState().gameState;

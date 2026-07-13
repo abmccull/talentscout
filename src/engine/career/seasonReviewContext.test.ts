@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+import { expect, test } from "vitest";
 
 import type { GameState } from "../core/types";
 import { deriveSeasonReviewMetrics } from "./seasonReviewContext";
@@ -135,16 +134,16 @@ test("deriveSeasonReviewMetrics uses season activity instead of global country s
 
   const metrics = deriveSeasonReviewMetrics(state, 2);
 
-  assert.deepEqual(metrics.countriesScoutedThisSeason.sort(), [
+  expect(metrics.countriesScoutedThisSeason.sort()).toEqual([
     "england",
     "spain",
   ]);
-  assert.deepEqual(metrics.regionsScoutedThisSeason.sort(), [
+  expect(metrics.regionsScoutedThisSeason.sort()).toEqual([
     "catalonia",
     "madrid",
   ]);
-  assert.equal(metrics.homeCountry, "england");
-  assert.equal(metrics.unsignedYouthDiscovered, 2);
-  assert.equal(metrics.successfulPlacements, 1);
-  assert.equal(metrics.alumniMilestonesThisSeason, 1);
+  expect(metrics.homeCountry).toBe("england");
+  expect(metrics.unsignedYouthDiscovered).toBe(2);
+  expect(metrics.successfulPlacements).toBe(1);
+  expect(metrics.alumniMilestonesThisSeason).toBe(1);
 });

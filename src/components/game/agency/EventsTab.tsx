@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Bell, CheckCircle } from "lucide-react";
 import type { EmployeeEvent, AgencyEmployee } from "@/engine/core/types";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,13 +46,16 @@ interface EventsTabProps {
 
 export function EventsTab({ pendingEvents, employees, currentWeek, currentSeason }: EventsTabProps) {
   const resolveAgencyEmployeeEvent = useGameStore((s) => s.resolveAgencyEmployeeEvent);
+  const fixtures = useGameStore((s) => s.gameState?.fixtures ?? {});
 
   const employeeMap = new Map(employees.map((e) => [e.id, e]));
 
   function weeksRemaining(event: EmployeeEvent): number {
-    const currentTotal = currentSeason * 52 + currentWeek;
-    const deadlineTotal = event.deadlineSeason * 52 + event.deadline;
-    return Math.max(0, deadlineTotal - currentTotal);
+    return Math.max(0, gameWeeksBetween(
+      fixtures,
+      { season: currentSeason, week: currentWeek },
+      { season: event.deadlineSeason, week: event.deadline },
+    ));
   }
 
   return (

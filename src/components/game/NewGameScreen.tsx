@@ -1,10 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useGameStore } from "@/stores/gameStore";
+import { useTutorialStore } from "@/stores/tutorialStore";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardDescription } from "@/components/ui/card";
+import {
+  OpeningModeSelector,
+  type VeteranOpeningMode,
+} from "@/components/game/new-game/OpeningModeSelector";
 import type { Specialization, NewGameConfig, ScoutSkill, DifficultyLevel } from "@/engine/core/types";
 import { DIFFICULTY_DESCRIPTIONS } from "@/engine/core/difficulty";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
@@ -27,6 +32,17 @@ import {
   hasCompletedCareer,
   MAX_ACTIVE_PERKS,
 } from "@/engine/career/legacy";
+import {
+  DEFAULT_SCOUT_DOCTRINE_ID,
+  DEFAULT_SCOUT_FLAW_ID,
+  DEFAULT_SCOUT_ORIGIN_ID,
+  SCOUT_DOCTRINES,
+  SCOUT_FLAWS,
+  SCOUT_ORIGINS,
+  type ScoutDoctrineId,
+  type ScoutFlawId,
+  type ScoutOriginId,
+} from "@/engine/run";
 
 // ---------------------------------------------------------------------------
 // Static data
@@ -353,12 +369,80 @@ const YOUTH_EA_STEPS = [
   { id: 6, label: "Review" },
 ] as const;
 
+type YouthSkillPresetId = "potential" | "technical" | "character" | "balanced" | "custom";
+
+const YOUTH_SKILL_PRESETS: Array<{
+  id: Exclude<YouthSkillPresetId, "custom">;
+  name: string;
+  description: string;
+  firstCaseRead: string;
+  originId: ScoutOriginId;
+  flawId: ScoutFlawId;
+  doctrineId: ScoutDoctrineId;
+  allocations: Partial<Record<ScoutSkill, number>>;
+}> = [
+  {
+    id: "potential",
+    name: "Projection Specialist",
+    description: "Best at estimating ceilings and revising long-term potential calls.",
+    firstCaseRead: "You will notice the player's long-term runway before the polish is obvious.",
+    originId: "academy-apprentice",
+    flawId: "stubborn-convictions",
+    doctrineId: "evidence-first",
+    allocations: { potentialAssessment: 5, psychologicalRead: 2, playerJudgment: 1 },
+  },
+  {
+    id: "technical",
+    name: "Technical Spotter",
+    description: "Finds unusual technique early, with less emphasis on physical evidence.",
+    firstCaseRead: "You will catch the disguised touch and passing detail others at the rail miss.",
+    originId: "former-player",
+    flawId: "unknown-quantity",
+    doctrineId: "move-before-market",
+    allocations: { technicalEye: 5, playerJudgment: 2, potentialAssessment: 1 },
+  },
+  {
+    id: "character",
+    name: "Character Reader",
+    description: "Prioritizes mentality, temperament, and responses to pressure.",
+    firstCaseRead: "You will read how the player responds when the match turns against him.",
+    originId: "grassroots-organizer",
+    flawId: "fragile-network",
+    doctrineId: "relationships-first",
+    allocations: { psychologicalRead: 6, potentialAssessment: 1, playerJudgment: 1 },
+  },
+  {
+    id: "balanced",
+    name: "Field Investigator",
+    description: "A flexible evidence-gatherer with no dominant blind spot.",
+    firstCaseRead: "You will build the broadest first hypothesis, but certainty will take more work.",
+    originId: "video-analyst",
+    flawId: "travel-worn",
+    doctrineId: "contrarian-eye",
+    allocations: {
+      technicalEye: 2,
+      physicalAssessment: 1,
+      psychologicalRead: 1,
+      tacticalUnderstanding: 1,
+      dataLiteracy: 1,
+      playerJudgment: 1,
+      potentialAssessment: 1,
+    },
+  },
+];
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function NewGameScreen() {
-  const { setScreen, startNewGame, startNewGamePlus } = useGameStore();
+  const setScreen = useGameStore((state) => state.setScreen);
+  const startNewGame = useGameStore((state) => state.startNewGame);
+  const startNewGamePlus = useGameStore((state) => state.startNewGamePlus);
+  const guidedSessionCompleted = useTutorialStore((state) => state.guidedSessionCompleted);
+  const tutorialsDismissed = useTutorialStore((state) => state.dismissed);
+  const isExperiencedYouthPlayer = IS_YOUTH_EARLY_ACCESS
+    && (guidedSessionCompleted || tutorialsDismissed);
 
   // Legacy profile (read once on mount)
   const legacyProfile = useMemo(() => readLegacyProfile(), []);
@@ -368,6 +452,15 @@ export function NewGameScreen() {
   // New Game+ state
   const [isNewGamePlusMode, setIsNewGamePlusMode] = useState(false);
   const [selectedPerkIds, setSelectedPerkIds] = useState<string[]>([]);
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const startInFlightRef = useRef(false);
+  const [openingMode, setOpeningMode] = useState<"auto" | VeteranOpeningMode>(() =>
+    isExperiencedYouthPlayer ? "dynamic" : "auto",
+  );
+  const effectiveOpeningMode: "auto" | VeteranOpeningMode = isExperiencedYouthPlayer
+    ? openingMode === "auto" ? "dynamic" : openingMode
+    : "auto";
 
   const togglePerk = (perkId: string) => {
     setSelectedPerkIds((prev) => {
@@ -399,10 +492,23 @@ export function NewGameScreen() {
         : spec;
     setSpecializationRaw(nextSpecialization);
     setSkillAllocations({});
+    setSelectedSkillPreset("custom");
   };
 
   // Skill allocations
   const [skillAllocations, setSkillAllocations] = useState<Partial<Record<ScoutSkill, number>>>({});
+  const [selectedSkillPreset, setSelectedSkillPreset] = useState<YouthSkillPresetId>("custom");
+  const [originId, setOriginId] = useState<ScoutOriginId>(DEFAULT_SCOUT_ORIGIN_ID);
+  const [flawId, setFlawId] = useState<ScoutFlawId>(DEFAULT_SCOUT_FLAW_ID);
+  const [doctrineId, setDoctrineId] = useState<ScoutDoctrineId>(DEFAULT_SCOUT_DOCTRINE_ID);
+
+  const applyYouthPersona = (preset: (typeof YOUTH_SKILL_PRESETS)[number]) => {
+    setSelectedSkillPreset(preset.id);
+    setSkillAllocations({ ...preset.allocations });
+    setOriginId(preset.originId);
+    setFlawId(preset.flawId);
+    setDoctrineId(preset.doctrineId);
+  };
 
   // Starting position
   const [startingPosition, setStartingPosition] = useState<"freelance" | "club">("freelance");
@@ -501,6 +607,15 @@ export function NewGameScreen() {
   if (firstName.trim() === "") startRequirements.push("Enter a first name.");
   if (lastName.trim() === "") startRequirements.push("Enter a last name.");
   if (!skillAllocationValidation.valid) startRequirements.push(skillAllocationMessage);
+  if (!SCOUT_ORIGINS.some((definition) => definition.id === originId)) {
+    startRequirements.push("Choose a valid scout origin.");
+  }
+  if (!SCOUT_FLAWS.some((definition) => definition.id === flawId)) {
+    startRequirements.push("Choose a valid scout flaw.");
+  }
+  if (!SCOUT_DOCTRINES.some((definition) => definition.id === doctrineId)) {
+    startRequirements.push("Choose a valid scouting doctrine.");
+  }
   if (IS_YOUTH_EARLY_ACCESS && startingClubId !== "") {
     startRequirements.push("Club starts are disabled in Youth Early Access.");
   }
@@ -509,12 +624,17 @@ export function NewGameScreen() {
   }
 
   const canStart = startRequirements.length === 0;
+  const canQuickStart = IS_YOUTH_EARLY_ACCESS
+    && firstName.trim() !== ""
+    && lastName.trim() !== ""
+    && selectedSkillPreset !== "custom"
+    && canStart;
   const startRequirementMessage = canStart
     ? "All requirements met. Ready to begin."
     : `Before you can begin: ${startRequirements.join(" ")}`;
 
-  const handleStart = () => {
-    if (!canStart) return;
+  const handleStart = async () => {
+    if (!canStart || startInFlightRef.current) return;
 
     const config: NewGameConfig = {
       scoutFirstName: firstName.trim(),
@@ -527,18 +647,33 @@ export function NewGameScreen() {
       nationality,
       avatarId,
       skillAllocations,
+      originId,
+      flawId,
+      doctrineIds: [doctrineId],
+      openingMode: effectiveOpeningMode,
       ...(effectiveSpecialization === "regional" && { startingCountry }),
       ...(effectiveStartingPosition === "club" && startingClubId && { startingClubId }),
     };
 
-    if (isNewGamePlusMode && selectedPerkIds.length > 0) {
-      startNewGamePlus(config, selectedPerkIds).catch((err) => {
-        console.error("[NewGame+] startNewGamePlus failed:", err, err?.stack);
-      });
-    } else {
-      startNewGame(config).catch((err) => {
-        console.error("[NewGame] startNewGame failed:", err, err?.stack);
-      });
+    startInFlightRef.current = true;
+    setIsStarting(true);
+    setStartError(null);
+    try {
+      if (isNewGamePlusMode && selectedPerkIds.length > 0) {
+        await startNewGamePlus(config, selectedPerkIds);
+      } else {
+        await startNewGame(config);
+      }
+    } catch (error) {
+      console.error("[NewGame] Career creation failed:", error);
+      setStartError(
+        error instanceof Error
+          ? error.message
+          : "Career creation failed. Your existing saves are unchanged.",
+      );
+    } finally {
+      startInFlightRef.current = false;
+      setIsStarting(false);
     }
   };
 
@@ -550,7 +685,10 @@ export function NewGameScreen() {
     switch (s) {
       case 1: return firstName.trim() !== "" && lastName.trim() !== "";
       case 2: return true;
-      case 3: return skillAllocationValidation.valid;
+      case 3: return skillAllocationValidation.valid
+        && SCOUT_ORIGINS.some((definition) => definition.id === originId)
+        && SCOUT_FLAWS.some((definition) => definition.id === flawId)
+        && SCOUT_DOCTRINES.some((definition) => definition.id === doctrineId);
       case 4: return effectiveStartingPosition === "freelance" || startingClubId !== "";
       case 5: return true;
       case 6: return canStart;
@@ -586,6 +724,12 @@ export function NewGameScreen() {
   // ---------------------------------------------------------------------------
 
   const specInfo = SPECIALIZATIONS.find((s) => s.id === effectiveSpecialization)!;
+  const selectedOrigin = SCOUT_ORIGINS.find((definition) => definition.id === originId)!;
+  const selectedFlaw = SCOUT_FLAWS.find((definition) => definition.id === flawId)!;
+  const selectedDoctrine = SCOUT_DOCTRINES.find((definition) => definition.id === doctrineId)!;
+  const selectedYouthPreset = YOUTH_SKILL_PRESETS.find(
+    (preset) => preset.id === selectedSkillPreset,
+  );
   const startingClubName =
     startingClubId
       ? Object.values(TOP_LEAGUE_CLUBS).flat().find((c) => c.id === startingClubId)?.name ?? startingClubId
@@ -606,16 +750,22 @@ export function NewGameScreen() {
   return (
     <div className="relative h-screen bg-[var(--background)] flex flex-col overflow-hidden">
       <ScreenBackground src="/images/backgrounds/menu-bg-2.png" opacity={0.8} />
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+      <main
+        aria-labelledby="new-game-heading"
+        className="relative z-10 flex min-h-0 flex-1 flex-col"
+      >
       {/* Top bar */}
       <div className="px-8 pt-6">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
           <button
             onClick={() => setScreen("mainMenu")}
-            className="text-sm text-zinc-400 hover:text-white transition cursor-pointer"
+            className="flex min-h-11 items-center rounded-md px-2 text-sm text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
           >
             &larr; Back to Menu
           </button>
+          <h1 id="new-game-heading" className="text-lg font-semibold tracking-tight text-white sm:text-xl">
+            Create Your Scout
+          </h1>
         </div>
       </div>
 
@@ -633,15 +783,17 @@ export function NewGameScreen() {
                   {/* Dot */}
                   <button
                     onClick={() => isCompleted && goToStep(s.id)}
-                    disabled={isFuture}
+                    disabled={!isCompleted}
+                    aria-current={isCurrent ? "step" : undefined}
                     aria-label={`${s.label}${
                       isCompleted ? " — completed" : isCurrent ? " — current step" : " — upcoming"
                     }`}
                     className={`
                       relative flex items-center justify-center rounded-full transition-all shrink-0
-                      ${isCurrent ? "w-10 h-10 bg-emerald-500 text-white" : ""}
-                      ${isCompleted ? "w-8 h-8 border-2 border-emerald-500 text-emerald-400 cursor-pointer hover:bg-emerald-500/10" : ""}
-                      ${isFuture ? "w-8 h-8 border-2 border-zinc-700 text-zinc-600 cursor-default" : ""}
+                      h-11 w-11
+                      ${isCurrent ? "bg-emerald-700 text-white" : ""}
+                      ${isCompleted ? "border-2 border-emerald-500 text-emerald-300 cursor-pointer hover:bg-emerald-500/10" : ""}
+                      ${isFuture ? "border-2 border-zinc-600 text-zinc-400 cursor-default" : ""}
                     `}
                   >
                     {isCompleted ? (
@@ -664,7 +816,7 @@ export function NewGameScreen() {
           {/* Step labels */}
           <div className="hidden sm:flex items-center justify-between mt-2">
             {steps.map((s, i) => (
-              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-emerald-400 font-medium" : "text-zinc-600"}`}>
+              <div key={s.id} className={`text-xs text-center flex-1 last:flex-none ${i === currentStepIndex ? "text-emerald-300 font-medium" : "text-zinc-400"}`}>
                 {i < steps.length - 1 ? (
                   <span className="inline-block" style={{ width: "calc(100% - 1rem)" }}>{s.label}</span>
                 ) : (
@@ -800,8 +952,8 @@ export function NewGameScreen() {
                   </Card>
                 )}
 
-                {/* Welcome banner */}
-                <Card className="mb-6 border-emerald-800/40 bg-emerald-950/30">
+                {/* The Youth EA quick start below is the orientation. */}
+                {!IS_YOUTH_EARLY_ACCESS && <Card className="mb-6 border-emerald-800/40 bg-emerald-950/30">
                   <CardContent className="pt-6">
                     <div className="flex gap-4 items-start">
                       <div
@@ -822,12 +974,12 @@ export function NewGameScreen() {
                       </div>
                     </div>
                   </CardContent>
-                </Card>
+                </Card>}
 
                 {/* Identity form */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Your Identity</CardTitle>
+                    <h2 className="font-semibold leading-none tracking-tight">Your Identity</h2>
                     <CardDescription>Who are you in the scouting world?</CardDescription>
                   </CardHeader>
                   <CardContent className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -838,7 +990,7 @@ export function NewGameScreen() {
                         type="text"
                         value={firstName}
                         onChange={(e) => setFirstName(e.target.value)}
-                        className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                        className="min-h-11 w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
                         placeholder="Alex"
                         autoComplete="given-name"
                         autoFocus
@@ -851,75 +1003,211 @@ export function NewGameScreen() {
                         type="text"
                         value={lastName}
                         onChange={(e) => setLastName(e.target.value)}
-                        className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                        className="min-h-11 w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
                         placeholder="Morgan"
                         autoComplete="family-name"
                       />
                     </div>
-                    <div>
-                      <label htmlFor="scout-age" className="mb-1 block text-sm text-zinc-400">Age</label>
-                      <input
-                        id="scout-age"
-                        type="number"
-                        value={age}
-                        onChange={(e) => {
-                          const v = parseInt(e.target.value) || 28;
-                          setAge(Math.max(22, Math.min(65, v)));
-                        }}
-                        min={22}
-                        max={65}
-                        className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="scout-nationality" className="mb-1 block text-sm text-zinc-400">Nationality</label>
-                      <select
-                        id="scout-nationality"
-                        value={nationality}
-                        onChange={(e) => setNationality(e.target.value)}
-                        className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
-                      >
-                        {NATIONALITY_OPTIONS.map((nat) => (
-                          <option key={nat} value={nat}>{nat}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className="mb-2 block text-sm text-zinc-400">Your Portrait</label>
-                      <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-                        {[1, 2, 3, 4, 5, 6].map((id) => (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() => setAvatarId(id)}
-                            className={`overflow-hidden rounded-full border-2 transition-all ${
-                              avatarId === id
-                                ? "border-emerald-500 ring-2 ring-emerald-500/40"
-                                : "border-zinc-700 hover:border-zinc-500"
-                            }`}
+                    <details className="group col-span-2 rounded-lg border border-zinc-700/70 bg-zinc-950/35 sm:col-span-4" open={!IS_YOUTH_EARLY_ACCESS}>
+                      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-4 py-2 text-sm font-medium text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                        <span>{IS_YOUTH_EARLY_ACCESS ? "Customize age, nationality, and portrait" : "Scout details"}</span>
+                        <span className="text-xs text-emerald-300 group-open:hidden">Optional</span>
+                        <span className="hidden text-xs text-zinc-500 group-open:inline">Hide</span>
+                      </summary>
+                      <div className="grid gap-4 border-t border-zinc-800 p-4 sm:grid-cols-2">
+                        <div>
+                          <label htmlFor="scout-age" className="mb-1 block text-sm text-zinc-400">Age</label>
+                          <input
+                            id="scout-age"
+                            type="number"
+                            value={age}
+                            onChange={(e) => {
+                              const v = parseInt(e.target.value) || 28;
+                              setAge(Math.max(22, Math.min(65, v)));
+                            }}
+                            min={22}
+                            max={65}
+                            className="min-h-11 w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="scout-nationality" className="mb-1 block text-sm text-zinc-400">Nationality</label>
+                          <select
+                            id="scout-nationality"
+                            value={nationality}
+                            onChange={(e) => setNationality(e.target.value)}
+                            className="min-h-11 w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
                           >
-                            <Image
-                              src={`/images/avatars/scout-${id}.png`}
-                              alt={`Portrait ${id}`}
-                              width={64}
-                              height={64}
-                              unoptimized
-                              className="h-16 w-16 object-cover"
-                              draggable={false}
-                            />
-                          </button>
-                        ))}
+                            {NATIONALITY_OPTIONS.map((nat) => (
+                              <option key={nat} value={nat}>{nat}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <span className="mb-2 block text-sm text-zinc-400">Your Portrait</span>
+                          <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                            {[1, 2, 3, 4, 5, 6].map((id) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => setAvatarId(id)}
+                                className={`overflow-hidden rounded-full border-2 transition-all ${
+                                  avatarId === id
+                                    ? "border-emerald-500 ring-2 ring-emerald-500/40"
+                                    : "border-zinc-700 hover:border-zinc-500"
+                                }`}
+                                aria-label={`Choose portrait ${id}`}
+                                aria-pressed={avatarId === id}
+                              >
+                                <Image
+                                  src={`/images/avatars/scout-${id}.png`}
+                                  alt=""
+                                  width={64}
+                                  height={64}
+                                  unoptimized
+                                  className="h-16 w-16 object-cover"
+                                  draggable={false}
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    </details>
                   </CardContent>
                 </Card>
+
+                {IS_YOUTH_EARLY_ACCESS && (
+                  <Card className="mt-6 overflow-hidden border-emerald-500/40 bg-zinc-950/80 shadow-2xl shadow-emerald-950/30">
+                    <div className="border-b border-emerald-500/20 bg-gradient-to-r from-emerald-950/90 via-zinc-950 to-zinc-950 px-6 py-5">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                            {isExperiencedYouthPlayer
+                              ? "Returning scout · choose your opening"
+                              : "Quick start · first decision in under five minutes"}
+                          </p>
+                          <h2 className="mt-2 text-xl font-semibold text-white">
+                            {isExperiencedYouthPlayer
+                              ? "No two scouting careers need to start alike."
+                              : "A trusted contact has a name for you."}
+                          </h2>
+                          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-300">
+                            {isExperiencedYouthPlayer
+                              ? "Open on an unfamiliar lead, take command at the Desk, or replay the guided discovery case."
+                              : "The school match has already started. Choose the instinct you trust, take the call, and make your first live scouting judgment before the wider market notices."}
+                          </p>
+                        </div>
+                        <span className="w-fit rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-200">
+                          {isExperiencedYouthPlayer
+                            ? "Your career · your opening"
+                            : "3 observation beats · 1 irreversible call"}
+                        </span>
+                      </div>
+                    </div>
+                    <CardContent className="space-y-4 pt-5">
+                      {isExperiencedYouthPlayer && effectiveOpeningMode !== "auto" && (
+                        <OpeningModeSelector value={effectiveOpeningMode} onChange={setOpeningMode} />
+                      )}
+
+                      <fieldset>
+                        <legend className="text-sm font-semibold text-white">What kind of scout are you?</legend>
+                        <p className="mt-1 text-xs text-zinc-400">
+                          This sets your permanent career DNA and changes what you notice in the opening case.
+                          You can use Advanced setup below if you want every control.
+                        </p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {YOUTH_SKILL_PRESETS.map((preset) => {
+                            const isSelected = selectedSkillPreset === preset.id;
+                            return (
+                              <button
+                                key={`quick-${preset.id}`}
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => applyYouthPersona(preset)}
+                                className={`min-h-24 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+                                  isSelected
+                                    ? "border-emerald-400 bg-emerald-500/12 shadow-lg shadow-emerald-950/40"
+                                    : "border-zinc-700 bg-zinc-900/70 hover:border-zinc-500 hover:bg-zinc-900"
+                                }`}
+                              >
+                                <span className="flex items-center justify-between gap-3">
+                                  <span className="font-semibold text-white">{preset.name}</span>
+                                  <span
+                                    aria-hidden="true"
+                                    className={`h-3 w-3 rounded-full border ${isSelected ? "border-emerald-300 bg-emerald-400" : "border-zinc-500"}`}
+                                  />
+                                </span>
+                                <span className="mt-1 block text-xs leading-relaxed text-zinc-300">{preset.description}</span>
+                                <span className="mt-2 block border-l-2 border-amber-400/50 pl-2 text-xs leading-relaxed text-amber-100/90">
+                                  First case: {preset.firstCaseRead}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+
+                      <div className="rounded-xl border border-zinc-700/70 bg-black/25 p-4">
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {selectedYouthPreset
+                                ? `${selectedYouthPreset.name}: ready to begin`
+                                : "Choose a scouting instinct to begin"}
+                            </p>
+                            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                              {effectiveOpeningMode === "desk"
+                                ? "You will begin at the Desk with your first week open for planning. No opening assignment will be created."
+                                : "You will enter a generated case, gather uncertain evidence, flag the moment that changes your opinion, then decide who to tell. The game will remember it."}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStart}
+                            disabled={!canQuickStart || isStarting}
+                            aria-describedby="quick-start-requirements"
+                            className="min-h-12 shrink-0 rounded-lg bg-emerald-500 px-6 py-3 text-sm font-bold text-zinc-950 shadow-lg shadow-emerald-950/40 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            {isStarting
+                              ? "Creating your football world…"
+                              : effectiveOpeningMode === "dynamic"
+                              ? "Follow a fresh lead"
+                              : effectiveOpeningMode === "desk"
+                                ? "Start at the Desk"
+                                : effectiveOpeningMode === "tutorial"
+                                  ? "Replay the discovery case"
+                                  : "Take the call — get to the match"}
+                          </button>
+                        </div>
+                        <p id="quick-start-requirements" className="mt-2 text-xs text-zinc-400" role="status" aria-live="polite">
+                          {startError ?? (isStarting
+                            ? "Generating clubs, players, contacts, and your opening assignment…"
+                            : firstName.trim() === "" || lastName.trim() === ""
+                            ? "Enter your name, then choose a scouting instinct."
+                            : selectedSkillPreset === "custom"
+                              ? "Choose one of the four scouting instincts above."
+                              : `Ready to ${
+                                  effectiveOpeningMode === "desk"
+                                    ? "take control of your first week"
+                                    : effectiveOpeningMode === "dynamic"
+                                      ? "follow a fresh lead"
+                                      : effectiveOpeningMode === "tutorial"
+                                        ? "replay the guided case"
+                                        : "take the call"
+                                }. Advanced setup remains available through Continue.`)}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </>
             )}
 
             {step === 2 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Choose Your Path</CardTitle>
+                  <h2 className="font-semibold leading-none tracking-tight">Choose Your Path</h2>
                   <CardDescription>
                     Choose your scouting focus. This shapes your career path and which clubs want you.
                   </CardDescription>
@@ -1077,9 +1365,9 @@ export function NewGameScreen() {
             {step === 3 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Customize Your Skills</CardTitle>
+                  <h2 className="font-semibold leading-none tracking-tight">Customize Your Skills</h2>
                   <CardDescription>
-                    Allocate {BONUS_POINTS} bonus points across your scouting skills.
+                    Choose the background, weakness, and philosophy that shape this career, then allocate {BONUS_POINTS} bonus skill points.
                     <span className="ml-2 inline-flex items-center gap-1.5 text-emerald-400">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" aria-hidden="true" />
                       {specInfo.name}
@@ -1087,9 +1375,145 @@ export function NewGameScreen() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
+                  <section
+                    aria-labelledby="career-dna-heading"
+                    className="mb-5 rounded-lg border border-zinc-700/70 bg-zinc-950/40 p-4"
+                  >
+                    <h3 id="career-dna-heading" className="text-sm font-semibold text-white">
+                      Career DNA
+                    </h3>
+                    <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+                      These are permanent run conditions. Origins change your starting strengths,
+                      flaws impose real liabilities, and doctrines alter the ongoing football world.
+                    </p>
+                    <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                      <fieldset className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                        <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-emerald-300">
+                          Origin
+                        </legend>
+                        <label htmlFor="scout-origin" className="mb-1 block text-sm font-medium text-white">
+                          Where you learned the trade
+                        </label>
+                        <select
+                          id="scout-origin"
+                          value={originId}
+                          onChange={(event) => setOriginId(event.target.value as ScoutOriginId)}
+                          aria-describedby="scout-origin-detail"
+                          className="min-h-11 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        >
+                          {SCOUT_ORIGINS.map((definition) => (
+                            <option key={definition.id} value={definition.id}>{definition.name}</option>
+                          ))}
+                        </select>
+                        <div id="scout-origin-detail" className="mt-2 space-y-2">
+                          <p className="text-xs leading-relaxed text-zinc-300">{selectedOrigin.description}</p>
+                          <ul className="list-disc space-y-1 pl-4">
+                            {selectedOrigin.playerFacingEffects.map((effect) => (
+                              <li key={effect} className="text-xs leading-relaxed text-emerald-300">{effect}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </fieldset>
+
+                      <fieldset className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                        <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-amber-300">
+                          Flaw
+                        </legend>
+                        <label htmlFor="scout-flaw" className="mb-1 block text-sm font-medium text-white">
+                          What makes the job harder
+                        </label>
+                        <select
+                          id="scout-flaw"
+                          value={flawId}
+                          onChange={(event) => setFlawId(event.target.value as ScoutFlawId)}
+                          aria-describedby="scout-flaw-detail"
+                          className="min-h-11 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        >
+                          {SCOUT_FLAWS.map((definition) => (
+                            <option key={definition.id} value={definition.id}>{definition.name}</option>
+                          ))}
+                        </select>
+                        <div id="scout-flaw-detail" className="mt-2 space-y-2">
+                          <p className="text-xs leading-relaxed text-zinc-300">{selectedFlaw.description}</p>
+                          <ul className="list-disc space-y-1 pl-4">
+                            {selectedFlaw.playerFacingEffects.map((effect) => (
+                              <li key={effect} className="text-xs leading-relaxed text-amber-300">{effect}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </fieldset>
+
+                      <fieldset className="rounded-lg border border-zinc-800 bg-zinc-900/60 p-3">
+                        <legend className="px-1 text-xs font-semibold uppercase tracking-wider text-sky-300">
+                          Doctrine
+                        </legend>
+                        <label htmlFor="scout-doctrine" className="mb-1 block text-sm font-medium text-white">
+                          How you approach uncertainty
+                        </label>
+                        <select
+                          id="scout-doctrine"
+                          value={doctrineId}
+                          onChange={(event) => setDoctrineId(event.target.value as ScoutDoctrineId)}
+                          aria-describedby="scout-doctrine-detail"
+                          className="min-h-11 w-full rounded-md border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        >
+                          {SCOUT_DOCTRINES.map((definition) => (
+                            <option key={definition.id} value={definition.id}>{definition.name}</option>
+                          ))}
+                        </select>
+                        <div id="scout-doctrine-detail" className="mt-2 space-y-2">
+                          <p className="text-xs leading-relaxed text-zinc-300">{selectedDoctrine.description}</p>
+                          <ul className="list-disc space-y-1 pl-4">
+                            {selectedDoctrine.playerFacingEffects.map((effect) => (
+                              <li key={effect} className="text-xs leading-relaxed text-sky-300">{effect}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      </fieldset>
+                    </div>
+                  </section>
                   <div className="space-y-3">
+                    {IS_YOUTH_EARLY_ACCESS && (
+                      <fieldset className="space-y-2 rounded-lg border border-zinc-700/70 bg-zinc-950/40 p-3">
+                        <legend className="px-1 text-sm font-semibold text-white">Starting scouting style</legend>
+                        <p className="text-xs leading-relaxed text-zinc-300">
+                          Presets only allocate the same eight visible points. Choose one, then customize freely.
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {YOUTH_SKILL_PRESETS.map((preset) => (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              aria-pressed={selectedSkillPreset === preset.id}
+                              onClick={() => applyYouthPersona(preset)}
+                              className={`min-h-11 rounded-lg border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                                selectedSkillPreset === preset.id
+                                  ? "border-emerald-500 bg-emerald-500/10"
+                                  : "border-zinc-700 bg-zinc-900/60 hover:border-zinc-500"
+                              }`}
+                            >
+                              <span className="block text-sm font-semibold text-white">{preset.name}</span>
+                              <span className="mt-1 block text-xs leading-relaxed text-zinc-300">{preset.description}</span>
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            aria-pressed={selectedSkillPreset === "custom"}
+                            onClick={() => setSelectedSkillPreset("custom")}
+                            className={`min-h-11 rounded-lg border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
+                              selectedSkillPreset === "custom"
+                                ? "border-emerald-500 bg-emerald-500/10"
+                                : "border-zinc-700 bg-zinc-900/60 hover:border-zinc-500"
+                            }`}
+                          >
+                            <span className="block text-sm font-semibold text-white">Custom</span>
+                            <span className="mt-1 block text-xs text-zinc-300">Build your own emphasis point by point.</span>
+                          </button>
+                        </div>
+                      </fieldset>
+                    )}
                     <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-zinc-500">Remaining Points</span>
+                      <span className="text-xs text-zinc-300">Remaining Points</span>
                       <span className={`text-sm font-bold ${remaining === 0 ? "text-emerald-400" : "text-amber-400"}`}>
                         {remaining} / {BONUS_POINTS}
                       </span>
@@ -1114,21 +1538,22 @@ export function NewGameScreen() {
                           <div className="flex items-center justify-between">
                             <div className="flex-1 min-w-0">
                               <span className="text-sm text-zinc-300">{formatSkillName(skill)}</span>
-                              <span className="ml-2 text-[10px] text-zinc-500">{SKILL_DESCRIPTIONS[skill]}</span>
+                              <span className="ml-2 text-[10px] text-zinc-300">{SKILL_DESCRIPTIONS[skill]}</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
                               <button
-                                onClick={() =>
+                                onClick={() => {
+                                  setSelectedSkillPreset("custom");
                                   setSkillAllocations((prev) => ({
                                     ...prev,
                                     [skill]: Math.max(0, bonus - 1),
-                                  }))
-                                }
+                                  }));
+                                }}
                                 disabled={!canDecrease}
                                 className={`h-11 w-11 rounded text-sm font-bold border transition ${
                                   canDecrease
                                     ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800 cursor-pointer"
-                                    : "border-zinc-800 text-zinc-700 cursor-not-allowed"
+                                    : "border-zinc-700 text-zinc-400 cursor-not-allowed"
                                 }`}
                                 aria-label={`Decrease ${skill}`}
                               >
@@ -1136,17 +1561,18 @@ export function NewGameScreen() {
                               </button>
                               <span className="w-8 text-center text-sm font-mono font-bold text-white">{current}</span>
                               <button
-                                onClick={() =>
+                                onClick={() => {
+                                  setSelectedSkillPreset("custom");
                                   setSkillAllocations((prev) => ({
                                     ...prev,
                                     [skill]: bonus + 1,
-                                  }))
-                                }
+                                  }));
+                                }}
                                 disabled={!canIncrease}
                                 className={`h-11 w-11 rounded text-sm font-bold border transition ${
                                   canIncrease
                                     ? "border-zinc-600 text-zinc-300 hover:bg-zinc-800 cursor-pointer"
-                                    : "border-zinc-800 text-zinc-700 cursor-not-allowed"
+                                    : "border-zinc-700 text-zinc-400 cursor-not-allowed"
                                 }`}
                                 aria-label={`Increase ${skill}`}
                               >
@@ -1161,7 +1587,7 @@ export function NewGameScreen() {
                                 style={{ width: `${(current / 20) * 100}%` }}
                               />
                             </div>
-                            <span className="text-[10px] text-zinc-600 w-16 shrink-0">
+                            <span className="w-16 shrink-0 text-[10px] text-zinc-300">
                               (base {baseVal}{bonus > 0 ? ` +${bonus}` : ""})
                             </span>
                           </div>
@@ -1176,7 +1602,7 @@ export function NewGameScreen() {
             {step === 4 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Starting Position</CardTitle>
+                  <h2 className="font-semibold leading-none tracking-tight">Starting Position</h2>
                   <CardDescription>How do you want to begin your career?</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1351,7 +1777,7 @@ export function NewGameScreen() {
             {step === 5 && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Build Your World</CardTitle>
+                  <h2 className="font-semibold leading-none tracking-tight">Build Your World</h2>
                   <CardDescription>
                     Choose which countries run full weekly simulation. Global talent pools stay active in every save.
                   </CardDescription>
@@ -1371,11 +1797,11 @@ export function NewGameScreen() {
                             isSelected
                               ? "border-emerald-500 bg-emerald-500/10"
                               : "border-[var(--border)] hover:border-zinc-600"
-                          } ${isLocked ? "opacity-75 cursor-default" : ""}`}
+                          } ${isLocked ? "cursor-default" : ""}`}
                         >
                           <div className="flex items-center justify-between mb-1">
                             <h3 className="font-semibold text-white text-sm">{country.name}</h3>
-                            {isLocked && <span className="text-xs text-zinc-500">Home</span>}
+                            {isLocked && <span className="text-xs text-zinc-300">Home</span>}
                           </div>
                           <p className="text-xs text-zinc-400">
                             {country.leagueCount} league{country.leagueCount !== 1 ? "s" : ""}
@@ -1394,18 +1820,18 @@ export function NewGameScreen() {
                   <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--muted)]/50 p-4">
                     <h4 className="text-sm font-semibold text-zinc-300 mb-2">
                       Global Talent Pools
-                      <span className="ml-2 text-xs font-normal text-zinc-500">
+                      <span className="ml-2 text-xs font-normal text-zinc-400">
                         (always active — {SECONDARY_OPTIONS.reduce((sum, c) => sum + c.clubCount, 0)} clubs)
                       </span>
                     </h4>
-                    <p className="text-xs text-zinc-500 mb-3">
+                    <p className="mb-3 text-xs text-zinc-400">
                       Players from these regions are discoverable, signable, and developable — but leagues do not simulate fixtures.
                     </p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                       {SECONDARY_REGIONS.map((region) => (
                         <div key={region.name}>
                           <p className="text-xs font-medium text-zinc-400">{region.name}</p>
-                          <p className="text-xs text-zinc-500">
+                          <p className="text-xs text-zinc-400">
                             {region.countries.map((c) => `${c.name} (${c.clubCount})`).join(", ")}
                           </p>
                         </div>
@@ -1447,7 +1873,7 @@ export function NewGameScreen() {
                       onChange={(e) => setSeed(e.target.value)}
                       className="w-full rounded-md border border-[var(--border)] bg-[var(--muted)] px-3 py-2 text-white focus:outline-none focus:ring-1 focus:ring-[var(--ring)]"
                     />
-                    <p className="mt-1 text-xs text-zinc-500">Same seed = same world. Share with friends.</p>
+                    <p className="mt-1 text-xs text-zinc-400">Same seed = same world. Share with friends.</p>
                   </div>
                 </CardContent>
               </Card>
@@ -1462,7 +1888,7 @@ export function NewGameScreen() {
                     <CardContent className="pt-5">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-zinc-300">Scout</h3>
-                        <button onClick={() => goToStep(1)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                        <button onClick={() => goToStep(1)} className="min-h-11 min-w-11 text-xs text-emerald-300 hover:text-emerald-200 cursor-pointer">Edit</button>
                       </div>
                       <div className="flex items-center gap-3">
                         <Image
@@ -1490,7 +1916,7 @@ export function NewGameScreen() {
                       <CardContent className="pt-5">
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="text-sm font-semibold text-zinc-300">Specialization</h3>
-                          <button onClick={() => goToStep(2)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                          <button onClick={() => goToStep(2)} className="min-h-11 min-w-11 text-xs text-emerald-300 hover:text-emerald-200 cursor-pointer">Edit</button>
                         </div>
                         <p className="text-white font-medium">{specInfo.name}</p>
                         <p className="text-sm text-zinc-400">{specInfo.tagline}</p>
@@ -1503,7 +1929,7 @@ export function NewGameScreen() {
                     <CardContent className="pt-5">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-zinc-300">Skills</h3>
-                        <button onClick={() => goToStep(3)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                        <button onClick={() => goToStep(3)} className="min-h-11 min-w-11 text-xs text-emerald-300 hover:text-emerald-200 cursor-pointer">Edit</button>
                       </div>
                       <div className="space-y-1.5">
                         {skills.map((skill) => {
@@ -1522,13 +1948,37 @@ export function NewGameScreen() {
                     </CardContent>
                   </Card>
 
+                  {/* Run-defining scout identity */}
+                  <Card>
+                    <CardContent className="pt-5">
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="text-sm font-semibold text-zinc-300">Career DNA</h3>
+                        <button onClick={() => goToStep(3)} className="min-h-11 min-w-11 cursor-pointer text-xs text-emerald-300 hover:text-emerald-200">Edit</button>
+                      </div>
+                      <dl className="space-y-2 text-sm">
+                        <div>
+                          <dt className="text-xs uppercase tracking-wider text-zinc-300">Origin</dt>
+                          <dd className="font-medium text-white">{selectedOrigin.name}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wider text-zinc-300">Flaw</dt>
+                          <dd className="font-medium text-amber-300">{selectedFlaw.name}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs uppercase tracking-wider text-zinc-300">Doctrine</dt>
+                          <dd className="font-medium text-sky-300">{selectedDoctrine.name}</dd>
+                        </div>
+                      </dl>
+                    </CardContent>
+                  </Card>
+
                   {/* Position */}
                   {!IS_YOUTH_EARLY_ACCESS && (
                     <Card>
                       <CardContent className="pt-5">
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="text-sm font-semibold text-zinc-300">Position</h3>
-                          <button onClick={() => goToStep(4)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                          <button onClick={() => goToStep(4)} className="min-h-11 min-w-11 text-xs text-emerald-300 hover:text-emerald-200 cursor-pointer">Edit</button>
                         </div>
                         <p className="text-white font-medium">
                           {effectiveStartingPosition === "freelance" ? "Freelance Scout" : "Club Scout"}
@@ -1550,7 +2000,7 @@ export function NewGameScreen() {
                     <CardContent className="pt-5">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-zinc-300">World</h3>
-                        <button onClick={() => goToStep(5)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                        <button onClick={() => goToStep(5)} className="min-h-11 min-w-11 text-xs text-emerald-300 hover:text-emerald-200 cursor-pointer">Edit</button>
                       </div>
                       <p className="text-white font-medium">{worldCountryNames}</p>
                       <p className="text-sm text-zinc-400">{totalClubs} clubs</p>
@@ -1562,12 +2012,44 @@ export function NewGameScreen() {
                     <CardContent className="pt-5">
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-zinc-300">Difficulty</h3>
-                        <button onClick={() => goToStep(5)} className="text-xs text-emerald-400 hover:text-emerald-300 cursor-pointer">Edit</button>
+                        <button onClick={() => goToStep(5)} className="min-h-11 min-w-11 text-xs text-emerald-300 hover:text-emerald-200 cursor-pointer">Edit</button>
                       </div>
                       <p className="text-white font-medium capitalize">{difficulty} difficulty</p>
                       <p className="text-sm text-zinc-400">Seed: {seed}</p>
                     </CardContent>
                   </Card>
+
+                  {/* Returning-player opening */}
+                  {IS_YOUTH_EARLY_ACCESS && isExperiencedYouthPlayer && effectiveOpeningMode !== "auto" && (
+                    <Card>
+                      <CardContent className="pt-5">
+                        <div className="mb-3 flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-zinc-300">Career Opening</h3>
+                          <button
+                            type="button"
+                            onClick={() => goToStep(1)}
+                            className="min-h-11 min-w-11 cursor-pointer text-xs text-emerald-300 hover:text-emerald-200"
+                          >
+                            Edit
+                          </button>
+                        </div>
+                        <p className="font-medium text-white">
+                          {effectiveOpeningMode === "dynamic"
+                            ? "Dynamic prologue"
+                            : effectiveOpeningMode === "desk"
+                              ? "Start at the Desk"
+                              : "Replay tutorial"}
+                        </p>
+                        <p className="mt-1 text-sm text-zinc-400">
+                          {effectiveOpeningMode === "dynamic"
+                            ? "A new lead will be assembled from this career's world seed."
+                            : effectiveOpeningMode === "desk"
+                              ? "Your career opens in the weekly planning workspace."
+                              : "The authored school-match discovery case will guide your first judgment."}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
 
                   {/* New Game+ Perks (only shown when NG+ mode is active) */}
                   {isNewGamePlusMode && selectedPerkIds.length > 0 && (
@@ -1575,7 +2057,7 @@ export function NewGameScreen() {
                       <CardContent className="pt-5">
                         <div className="flex items-center justify-between mb-3">
                           <h3 className="text-sm font-semibold text-amber-300">New Game+ Perks</h3>
-                          <button onClick={() => goToStep(1)} className="text-xs text-amber-400 hover:text-amber-300 cursor-pointer">Edit</button>
+                          <button onClick={() => goToStep(1)} className="min-h-11 min-w-11 text-xs text-amber-300 hover:text-amber-200 cursor-pointer">Edit</button>
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {selectedPerkIds.map((perkId) => {
@@ -1604,7 +2086,7 @@ export function NewGameScreen() {
       <div className="border-t border-zinc-800 bg-[var(--background)] px-8 py-4">
         <div className="mx-auto max-w-4xl flex items-center justify-between">
           {currentStepIndex > 0 ? (
-            <Button variant="outline" onClick={goBack} className="cursor-pointer">
+            <Button variant="outline" onClick={goBack} className="min-h-11 cursor-pointer">
               Back
             </Button>
           ) : (
@@ -1613,32 +2095,36 @@ export function NewGameScreen() {
 
           <div className="flex flex-col items-end gap-2">
             {step !== lastStepId ? (
-              <Button onClick={goNext} disabled={!canAdvance(step)} className="cursor-pointer">
+              <Button onClick={goNext} disabled={!canAdvance(step)} className="min-h-11 cursor-pointer">
                 Continue
               </Button>
             ) : (
-              <Button
-                size="lg"
+              <button
+                type="button"
                 onClick={handleStart}
-                disabled={!canStart}
+                disabled={!canStart || isStarting}
                 aria-describedby="start-requirements"
-                className={`text-white cursor-pointer ${
+                className={`min-h-11 cursor-pointer rounded-md px-8 py-2 text-sm font-semibold shadow transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
                   isNewGamePlusMode
-                    ? "bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400"
-                    : "bg-emerald-600 hover:bg-emerald-700"
+                    ? "bg-gradient-to-r from-amber-500 to-yellow-400 text-zinc-950 hover:from-amber-400 hover:to-yellow-300"
+                    : "bg-emerald-700 text-white hover:bg-emerald-800"
                 }`}
               >
-                {isNewGamePlusMode ? "Begin New Game+" : "Begin Career"}
-              </Button>
+                {isStarting
+                  ? "Creating your football world…"
+                  : isNewGamePlusMode
+                    ? "Begin New Game+"
+                    : "Begin Career"}
+              </button>
             )}
             {step === lastStepId && (
               <p
                 id="start-requirements"
                 role="status"
                 aria-live="polite"
-                className={`max-w-md text-right text-xs ${canStart ? "text-zinc-500" : "text-amber-400"}`}
+                className={`max-w-md text-right text-xs ${startError || !canStart ? "text-amber-300" : "text-zinc-300"}`}
               >
-                {startRequirementMessage}
+                {startError ?? (isStarting ? "Generating clubs, players, contacts, and your opening assignment…" : startRequirementMessage)}
               </p>
             )}
           </div>
@@ -1648,15 +2134,15 @@ export function NewGameScreen() {
       {/* Animation keyframes */}
       <style>{`
         @keyframes slideInRight {
-          from { opacity: 0; transform: translateX(30px); }
-          to { opacity: 1; transform: translateX(0); }
+          from { transform: translateX(30px); }
+          to { transform: translateX(0); }
         }
         @keyframes slideInLeft {
-          from { opacity: 0; transform: translateX(-30px); }
-          to { opacity: 1; transform: translateX(0); }
+          from { transform: translateX(-30px); }
+          to { transform: translateX(0); }
         }
       `}</style>
-      </div>
+      </main>
     </div>
   );
 }

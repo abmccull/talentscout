@@ -12,6 +12,13 @@ import type {
   OfficeTier,
 } from "../core/types";
 import { generateEmployeeSkills, deriveQuality, computeSalaryFromSkills, processSkillXp, processTrainingWeek } from "./employeeSkills";
+import {
+  getEmployeePayEffects,
+  getEmployeeSalaryBand,
+  normalizeEmployeeContract,
+  normalizeEmployeeContractsInRecord,
+  processEmployeePaySatisfaction,
+} from "./employeeEconomics";
 
 // ---------------------------------------------------------------------------
 // Office tiers
@@ -84,23 +91,26 @@ export function hireEmployee(
   week?: number,
   season?: number,
   regions?: string[],
+  actionSequence = (finances.actionSequence ?? 0) + 1,
+  employerReputation = 50,
 ): FinancialRecord | null {
   // Check office capacity
   if (finances.employees.length >= finances.office.maxEmployees) return null;
 
   const skills = generateEmployeeSkills(rng, role);
   const quality = deriveQuality(skills);
-  const salary = computeSalaryFromSkills(skills, role);
+  const legacySalary = computeSalaryFromSkills(skills, role);
 
   const firstName = rng.pick(FIRST_NAMES);
   const lastName = rng.pick(LAST_NAMES);
 
-  const employee: AgencyEmployee = {
-    id: `emp_${Date.now()}_${rng.nextInt(1000, 9999)}`,
+  const employeeDraft: AgencyEmployee = {
+    id: `emp_s${season ?? 1}w${week ?? 1}_a${actionSequence}`,
     name: `${firstName} ${lastName}`,
     role,
     quality,
-    salary,
+    salary: legacySalary,
+    paySatisfaction: 68,
     morale: 70,
     fatigue: 0,
     hiredWeek: week ?? 1,
@@ -114,10 +124,23 @@ export function hireEmployee(
     regionFocusWeeks: 0,
     skills,
   };
+  const band = getEmployeeSalaryBand(employeeDraft, employerReputation);
+  const employee = { ...employeeDraft, salary: band.marketRate };
 
   return {
     ...finances,
+    actionSequence: Math.max(finances.actionSequence ?? 0, actionSequence),
     employees: [...finances.employees, employee],
+    transactions: [
+      ...finances.transactions,
+      {
+        week: week ?? 1,
+        season: season ?? 1,
+        amount: 0,
+        description: `Employee hired: ${employee.name}, ${employee.role}, £${employee.salary}/mo`,
+        referenceId: `employee-hired:${employee.id}`,
+      },
+    ],
   };
 }
 
@@ -127,10 +150,24 @@ export function hireEmployee(
 export function fireEmployee(
   finances: FinancialRecord,
   employeeId: string,
+  week = 0,
+  season = 1,
 ): FinancialRecord {
+  const employee = finances.employees.find((candidate) => candidate.id === employeeId);
+  if (!employee) return finances;
   return {
     ...finances,
     employees: finances.employees.filter((e) => e.id !== employeeId),
+    transactions: [
+      ...finances.transactions,
+      {
+        week,
+        season,
+        amount: 0,
+        description: `Employee contract ended: ${employee.name} at £${employee.salary}/mo`,
+        referenceId: `employee-fired:${employee.id}:s${season}w${week}`,
+      },
+    ],
   };
 }
 
@@ -152,12 +189,29 @@ const QUALITY_THRESHOLDS = [50, 120, 210, 320, 450, 600, 780, 990, 1230, 1500];
 export function processEmployeeWeek(
   rng: RNG,
   finances: FinancialRecord,
+  employerReputation = 50,
+  week = 0,
+  season = 1,
 ): FinancialRecord {
   if (finances.employees.length === 0) return finances;
+  if (
+    week > 0
+    && finances.lastEmployeeEconomicsWeek?.week === week
+    && finances.lastEmployeeEconomicsWeek.season === season
+  ) {
+    return finances;
+  }
 
+  const baseFinances = normalizeEmployeeContractsInRecord(
+    finances,
+    employerReputation,
+    week,
+    season,
+  );
   const resignations: string[] = [];
 
-  const updatedEmployees = finances.employees.map((emp) => {
+  const updatedEmployees = baseFinances.employees.map((rawEmployee) => {
+    const emp = processEmployeePaySatisfaction(rawEmployee, employerReputation);
     // Handle on-leave employees
     if (emp.onLeave) {
       if (emp.leaveReturnWeek !== undefined && emp.leaveReturnWeek <= 0) {
@@ -176,7 +230,10 @@ export function processEmployeeWeek(
     // Overwork penalty
     if (emp.fatigue > 70) moraleDelta -= 3;
     // Good office bonus
-    if (finances.office.tier === "professional" || finances.office.tier === "hq") moraleDelta += 1;
+    if (baseFinances.office.tier === "professional" || baseFinances.office.tier === "hq") moraleDelta += 1;
+    // Compensation is a strategic tradeoff, not a cosmetic field.
+    const payEffects = getEmployeePayEffects(emp, employerReputation);
+    moraleDelta += payEffects.weeklyMoraleDelta;
     // Idle penalty
     if (!emp.currentAssignment || emp.currentAssignment.type === "idle") {
       moraleDelta -= 2;
@@ -202,6 +259,16 @@ export function processEmployeeWeek(
       return emp;
     }
     if (newMorale < 10 && rng.chance(0.10)) {
+      resignations.push(emp.id);
+      return emp;
+    }
+    // Persistently dissatisfied employees can leave even before morale fully
+    // collapses. Seeded RNG keeps this reproducible across save/reload.
+    if (
+      (emp.paySatisfaction ?? 65) <= 25
+      && newMorale <= 40
+      && rng.chance(payEffects.retentionRisk)
+    ) {
       resignations.push(emp.id);
       return emp;
     }
@@ -248,7 +315,26 @@ export function processEmployeeWeek(
   const remaining = updatedEmployees.filter((e) => !resignations.includes(e.id));
 
   // Process training countdown for all employees
-  let financesWithRemaining: FinancialRecord = { ...finances, employees: remaining };
+  let financesWithRemaining: FinancialRecord = {
+    ...baseFinances,
+    employees: remaining,
+    lastEmployeeEconomicsWeek: week > 0 ? { week, season } : baseFinances.lastEmployeeEconomicsWeek,
+    transactions: resignations.length > 0
+      ? [
+          ...baseFinances.transactions,
+          ...resignations.map((employeeId) => {
+            const employee = baseFinances.employees.find((candidate) => candidate.id === employeeId)!;
+            return {
+              week,
+              season,
+              amount: 0,
+              description: `Employee resigned: ${employee.name} (morale ${employee.morale}, pay satisfaction ${employee.paySatisfaction ?? 65})`,
+              referenceId: `employee-resigned:${employee.id}:s${season}w${week}`,
+            };
+          }),
+        ]
+      : baseFinances.transactions,
+  };
   financesWithRemaining = processTrainingWeek(financesWithRemaining);
   return financesWithRemaining;
 }
@@ -260,9 +346,18 @@ export function processEmployeeWeek(
 /**
  * Calculate total agency overhead (monthly).
  */
-export function calculateAgencyOverhead(finances: FinancialRecord): number {
+export function calculateAgencyOverhead(
+  finances: FinancialRecord,
+  employerReputation = 50,
+): number {
   const officeCost = finances.office.monthlyCost;
-  const salaries = finances.employees.reduce((sum, e) => sum + e.salary, 0);
+  const salaries = finances.employees.reduce(
+    (sum, employee) => sum + normalizeEmployeeContract(
+      employee,
+      employerReputation,
+    ).employee.salary,
+    0,
+  );
   const insurance = finances.employees.length > 0
     ? Math.round(finances.employees.length * 50)
     : 0;

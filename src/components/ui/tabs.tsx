@@ -39,11 +39,35 @@ function Tabs({ defaultValue, value, onValueChange, className, children, ...prop
   );
 }
 
-function TabsList({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+function TabsList({ className, onKeyDown, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    onKeyDown?.(event);
+    if (event.defaultPrevented) return;
+
+    const tabs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)'),
+    );
+    const currentIndex = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    if (currentIndex < 0 || tabs.length === 0) return;
+
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    tabs[nextIndex]?.focus();
+    tabs[nextIndex]?.click();
+  };
+
   return (
     <div
       className={cn("inline-flex h-9 items-center justify-center rounded-lg bg-[var(--muted)] p-1 text-[var(--muted-foreground)]", className)}
       role="tablist"
+      aria-orientation="horizontal"
+      onKeyDown={handleKeyDown}
       {...props}
     />
   );
@@ -62,6 +86,7 @@ function TabsTrigger({ value, className, ...props }: TabsTriggerProps) {
       id={`${baseId}-tab-${value}`}
       aria-controls={`${baseId}-panel-${value}`}
       aria-selected={isActive}
+      tabIndex={isActive ? 0 : -1}
       onClick={() => setActiveTab(value)}
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 cursor-pointer",

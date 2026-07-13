@@ -2,7 +2,10 @@ name: Build Desktop App
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       skip_signing:
@@ -18,6 +21,7 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
+  NEXT_PUBLIC_BUILD_VERSION: ${{ github.sha }}
 
 permissions:
   contents: read
@@ -27,7 +31,7 @@ jobs:
   # Quality gate — must pass before any build starts
   # ------------------------------------------------------------------
   quality:
-    name: Lint & Type Check
+    name: Release quality gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -40,10 +44,53 @@ jobs:
       - run: npm ci
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Lint
         run: npm run lint
+
+      - name: Unit and migration tests
+        run: npm run test:unit
+
+      - name: Replayability divergence gate
+        run: npm run test:replayability
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Build production E2E artifact
+        run: npm run build:e2e
+
+      - name: Youth Early Access gameplay suite
+        run: npm run test:e2e:youth-ea
+
+      - name: Cross-screen smoke suite
+        run: npm run test:e2e:smoke
+
+      - name: Accessibility suite
+        run: npm run test:e2e:accessibility
+
+      - name: Build shipping artifact without test bridge
+        run: npm run build
+
+      - name: Verify E2E bridge is absent from shipping JavaScript
+        run: |
+          if grep -R --include='*.js' -E -l '__GAME_STORE__|__TUTORIAL_STORE__' out/_next; then
+            echo "::error::Shipping artifact contains the E2E state bridge"
+            exit 1
+          fi
+
+      - name: Upload browser failure evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: quality-evidence
+          path: |
+            playwright-report/
+            test-results/
+            artifacts/replayability/release-summary.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   # ------------------------------------------------------------------
   # Windows build
@@ -51,6 +98,7 @@ jobs:
   build-windows:
     name: Build Windows
     needs: quality
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -62,30 +110,49 @@ jobs:
 
       - run: npm ci
 
-      # Valve's redistributables are proprietary and arrive through the release
-      # channel, not source control. Manual builds may verify the non-Steam
-      # fallback; tagged release artifacts must contain the real files.
-      - name: Validate Steam SDK files
+      - name: Provision verified Steamworks redistributable
+        env:
+          STEAM_SDK_WINDOWS_URL: ${{ secrets.STEAM_SDK_WINDOWS_URL }}
+          STEAM_SDK_WINDOWS_SHA256: ${{ secrets.STEAM_SDK_WINDOWS_SHA256 }}
+          STEAM_SDK_DOWNLOAD_TOKEN: ${{ secrets.STEAM_SDK_DOWNLOAD_TOKEN }}
+          REQUIRE_STEAM_SDK: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: node scripts/provision-steam-sdk.mjs windows
+
+      - name: Enforce Windows signing credentials for tags
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          $missing = @("steam_api64.dll", "steam_appid.txt") | Where-Object { -not (Test-Path $_) }
-          if ($missing.Count -gt 0 -and "${{ github.ref_type }}" -eq "tag") {
-            Write-Error "Tagged releases require real Steam files: $($missing -join ', ')."
-            exit 1
-          }
-          if ($missing.Count -gt 0) {
-            Write-Host "::warning::Steam files absent; producing an explicit non-Steam verification build."
+          if ([string]::IsNullOrWhiteSpace($env:WIN_CSC_LINK) -or [string]::IsNullOrWhiteSpace($env:WIN_CSC_KEY_PASSWORD)) {
+            throw "Tagged Windows builds require WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD."
           }
 
       - name: Build Next.js (static export)
         run: npm run build
 
-      - name: Build Electron (Windows)
+      - name: Build Electron (Windows, signed when configured)
+        if: github.event_name != 'workflow_dispatch' || inputs.skip_signing != true
         env:
-          # Code signing — omitted if secrets are not configured; build succeeds unsigned.
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: npx electron-builder --win --publish never
+
+      - name: Build Electron (Windows unsigned verification)
+        if: github.event_name == 'workflow_dispatch' && inputs.skip_signing == true
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win --publish never
+
+      - name: Verify Windows signature for tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer not found" }
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          if ($signature.Status -ne "Valid") { throw "Invalid Windows signature: $($signature.Status)" }
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -109,6 +176,7 @@ jobs:
   build-macos:
     name: Build macOS
     needs: quality
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -120,32 +188,64 @@ jobs:
 
       - run: npm ci
 
-      - name: Validate Steam SDK files
+      - name: Provision verified Steamworks redistributable
+        env:
+          STEAM_SDK_MACOS_URL: ${{ secrets.STEAM_SDK_MACOS_URL }}
+          STEAM_SDK_MACOS_SHA256: ${{ secrets.STEAM_SDK_MACOS_SHA256 }}
+          STEAM_SDK_DOWNLOAD_TOKEN: ${{ secrets.STEAM_SDK_DOWNLOAD_TOKEN }}
+          REQUIRE_STEAM_SDK: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: node scripts/provision-steam-sdk.mjs macos
+
+      - name: Enforce macOS signing and notarization credentials for tags
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          missing=""
-          [ -f "libsteam_api.dylib" ] || missing="$missing libsteam_api.dylib"
-          [ -f "steam_appid.txt" ] || missing="$missing steam_appid.txt"
-          if [ -n "$missing" ] && [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "::error::Tagged releases require real Steam files:$missing"
-            exit 1
-          fi
-          if [ -n "$missing" ]; then
-            echo "::warning::Steam files absent; producing an explicit non-Steam verification build."
-          fi
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_ID_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Tagged macOS builds require $name"
+              exit 1
+            fi
+          done
 
       - name: Build Next.js (static export)
         run: npm run build
 
-      - name: Build Electron (macOS)
+      - name: Build Electron (macOS, signed when configured)
+        if: github.event_name != 'workflow_dispatch' || inputs.skip_signing != true
         env:
-          # Code signing — omitted if secrets are not configured; build succeeds unsigned.
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # Notarization — omitted if secrets are not configured.
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac --publish never
+
+      - name: Build Electron (macOS unsigned verification)
+        if: github.event_name == 'workflow_dispatch' && inputs.skip_signing == true
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac --publish never
+
+      - name: Stage architecture-independent macOS Steam depot
+        run: |
+          app_path="$(find dist -maxdepth 2 -type d -name 'TalentScout.app' -print -quit)"
+          if [ -z "$app_path" ]; then
+            echo "::error::Electron builder did not produce TalentScout.app"
+            exit 1
+          fi
+          mkdir -p steam-stage/macos
+          ditto "$app_path" steam-stage/macos/TalentScout.app
+
+      - name: Verify macOS signature and notarization for tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          codesign --verify --deep --strict --verbose=2 steam-stage/macos/TalentScout.app
+          xcrun stapler validate steam-stage/macos/TalentScout.app
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
@@ -161,7 +261,7 @@ jobs:
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name: steam-macos
-          path: dist/mac/
+          path: steam-stage/macos/
           retention-days: 7
 
   # ------------------------------------------------------------------
@@ -170,6 +270,7 @@ jobs:
   build-linux:
     name: Build Linux
     needs: quality
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -181,18 +282,13 @@ jobs:
 
       - run: npm ci
 
-      - name: Validate Steam SDK files
-        run: |
-          missing=""
-          [ -f "libsteam_api.so" ] || missing="$missing libsteam_api.so"
-          [ -f "steam_appid.txt" ] || missing="$missing steam_appid.txt"
-          if [ -n "$missing" ] && [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "::error::Tagged releases require real Steam files:$missing"
-            exit 1
-          fi
-          if [ -n "$missing" ]; then
-            echo "::warning::Steam files absent; producing an explicit non-Steam verification build."
-          fi
+      - name: Provision verified Steamworks redistributable
+        env:
+          STEAM_SDK_LINUX_URL: ${{ secrets.STEAM_SDK_LINUX_URL }}
+          STEAM_SDK_LINUX_SHA256: ${{ secrets.STEAM_SDK_LINUX_SHA256 }}
+          STEAM_SDK_DOWNLOAD_TOKEN: ${{ secrets.STEAM_SDK_DOWNLOAD_TOKEN }}
+          REQUIRE_STEAM_SDK: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        run: node scripts/provision-steam-sdk.mjs linux
 
       - name: Build Next.js (static export)
         run: npm run build
@@ -229,10 +325,18 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Download all build artifacts
+      - name: Download release package artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "*-build"
           path: release-artifacts
+
+      - name: Generate release provenance and checksums
+        run: |
+          node -e 'const fs=require("fs"); fs.writeFileSync("release-artifacts/build-manifest.json", JSON.stringify({product:"TalentScout",version:process.env.GITHUB_REF_NAME,commit:process.env.GITHUB_SHA,workflowRun:process.env.GITHUB_RUN_ID,builtAt:new Date().toISOString()}, null, 2)+"\n")'
+          find release-artifacts/windows-build release-artifacts/macos-build release-artifacts/linux-build release-artifacts/build-manifest.json -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > release-artifacts/SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
@@ -243,6 +347,8 @@ jobs:
             release-artifacts/windows-build/*
             release-artifacts/macos-build/*
             release-artifacts/linux-build/*
+            release-artifacts/build-manifest.json
+            release-artifacts/SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -267,7 +373,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: steam-macos
-          path: dist/mac
+          path: steam-stage/macos
 
       - name: Download Linux build
         uses: actions/download-artifact@v4
@@ -287,13 +393,21 @@ jobs:
         env:
           STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
         run: |
+          if [ -z "$STEAM_CONFIG_VDF" ]; then
+            echo "::error::STEAM_CONFIG_VDF is required for tagged Steam uploads"
+            exit 1
+          fi
           mkdir -p "$HOME/.steam/config"
-          echo "$STEAM_CONFIG_VDF" | base64 -d > "$HOME/.steam/config/config.vdf"
+          printf '%s' "$STEAM_CONFIG_VDF" | base64 -d > "$HOME/.steam/config/config.vdf"
 
       - name: Upload to Steam depots
         env:
           STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
         run: |
+          if [ -z "$STEAM_USERNAME" ]; then
+            echo "::error::STEAM_USERNAME is required for tagged Steam uploads"
+            exit 1
+          fi
           steamcmd +login "$STEAM_USERNAME" \
             +run_app_build "$GITHUB_WORKSPACE/steamcmd/app_build_4455570.vdf" \
             +quit
