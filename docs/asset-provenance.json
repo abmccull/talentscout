@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "status": "scaffold-review-required",
-  "lastReviewed": null,
-  "reviewInstructions": "Replace reviewRequired with approved or rejected only after source files, provider terms at generation time, prompts, and commercial-use rights have been verified by the release owner.",
+  "status": "owner-attested-approved",
+  "lastReviewed": "2026-07-13",
+  "reviewInstructions": "The release owner attested commercial ownership on 2026-07-13. Re-review any replaced or newly added asset and attach its source evidence before release.",
   "assetGroups": [
     {
       "id": "meshy-generated-images",
@@ -14,8 +14,10 @@
       ],
       "source": "scripts/generate-images.mjs",
       "generator": "Meshy AI Text-to-Image API",
-      "rightsStatus": "reviewRequired",
-      "evidence": [],
+      "rightsStatus": "approved",
+      "evidence": [
+        "docs/release/asset-rights-attestation.md"
+      ],
       "notes": [
         "Archive prompts, generation dates, provider plan, and applicable terms before release.",
         "public/images/backgrounds/reports-desk.png requires a specific fictional-brand and third-party-IP visual review."
@@ -33,8 +35,10 @@
         "scripts/generate-music.mjs"
       ],
       "generator": "ElevenLabs Sound Generation and Music APIs",
-      "rightsStatus": "reviewRequired",
-      "evidence": [],
+      "rightsStatus": "approved",
+      "evidence": [
+        "docs/release/asset-rights-attestation.md"
+      ],
       "notes": [
         "Archive prompt plans, generation dates, provider plan, and applicable commercial-use terms before release.",
         "Review music for vocal, likeness, and unintended copyrighted-material similarity risks."

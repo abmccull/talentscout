@@ -22,6 +22,11 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
+import {
+  discoveryOutcomeLabel,
+  getPlayerFacingDiscoverySummaries,
+} from "@/engine/career/playerFacingDiscovery";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 interface HallOfFameProps {
   legacyScore: LegacyScore;
@@ -38,30 +43,9 @@ function getLegacyTier(score: number): { label: string; color: string } {
   return { label: "Newcomer", color: "text-zinc-500" };
 }
 
-function getTopDiscoveries(state: GameState): Array<{
-  name: string;
-  pa: number;
-  nationality: string;
-}> {
-  return state.discoveryRecords
-    .slice()
-    .sort((a, b) => (b.initialPA ?? 0) - (a.initialPA ?? 0))
-    .slice(0, 5)
-    .map((discovery) => {
-      const player = state.players[discovery.playerId];
-      return {
-        name: player
-          ? `${player.firstName} ${player.lastName}`
-          : "Unknown Player",
-        pa: discovery.initialPA ?? player?.potentialAbility ?? 0,
-        nationality: player?.nationality ?? "Unknown",
-      };
-    });
-}
-
-function paToStars(pa: number): string {
-  const stars = Math.round((pa / 200) * 10) / 2;
-  return `${Math.max(0.5, Math.min(5, stars)).toFixed(1)}\u2605`;
+function formatProjectedPotential(range: [number, number] | undefined): string {
+  if (!range) return "No original projection";
+  return `${range[0].toFixed(1)}\u2013${range[1].toFixed(1)}\u2605 projected`;
 }
 
 function StatRow({
@@ -130,7 +114,7 @@ function LegacyBreakdown({ score }: { score: LegacyScore }) {
 }
 
 function TopDiscoveries({ state }: { state: GameState }) {
-  const discoveries = getTopDiscoveries(state);
+  const discoveries = getPlayerFacingDiscoverySummaries(state).slice(0, 5);
 
   if (discoveries.length === 0) {
     return (
@@ -146,12 +130,12 @@ function TopDiscoveries({ state }: { state: GameState }) {
   return (
     <div className="rounded-xl border border-[#222] bg-[#111] p-5">
       <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-zinc-400">
-        Top Discoveries by Potential
+        Top Discoveries by Career Impact
       </h3>
       <div className="space-y-2">
         {discoveries.map((discovery, index) => (
           <div
-            key={`${discovery.name}-${index}`}
+            key={discovery.playerId}
             className="flex items-center justify-between rounded-lg bg-[#0e0e0e] px-4 py-2.5"
           >
             <div className="flex items-center gap-3">
@@ -163,26 +147,18 @@ function TopDiscoveries({ state }: { state: GameState }) {
                 {index === 0 ? "\u2605" : `${index + 1}`}
               </span>
               <div>
-                <p className="text-sm font-medium text-zinc-200">{discovery.name}</p>
-                <p className="text-xs text-zinc-500">{discovery.nationality}</p>
+                <p className="text-sm font-medium text-zinc-200">{discovery.playerName}</p>
+                <p className="text-xs text-zinc-500">
+                  {discovery.nationality} &middot; {discoveryOutcomeLabel(discovery.careerOutcome)}
+                </p>
               </div>
             </div>
             <span className="text-sm font-semibold text-amber-400">
-              {paToStars(discovery.pa)}
+              {formatProjectedPotential(discovery.projectedPotentialRange)}
             </span>
           </div>
         ))}
       </div>
-
-      {state.legacyScore.bestDiscoveryName !== "" && (
-        <div className="mt-4 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
-          <p className="text-xs text-yellow-400">
-            Career-best discovery:{" "}
-            <span className="font-semibold">{state.legacyScore.bestDiscoveryName}</span>
-            {" "}({paToStars(state.legacyScore.bestDiscoveryPA)} potential)
-          </p>
-        </div>
-      )}
     </div>
   );
 }
@@ -198,14 +174,14 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
   const canRetire = canVoluntarilyRetire(gameState);
 
   const totalReports =
-    Object.values(gameState.reports).length +
+    selectLatestReportsByCase(Object.values(gameState.reports)).length +
     Object.values(gameState.placementReports).length;
   const totalObservations = Object.values(gameState.observations).length;
   const countriesScouted = Object.values(scout.countryReputations).filter(
     (country) => country.reportsSubmitted > 0,
   ).length;
-  const wonderkidsFound = gameState.discoveryRecords.filter(
-    (discovery) => discovery.wasWonderkid,
+  const highUpsideFinds = getPlayerFacingDiscoverySummaries(gameState).filter(
+    (discovery) => discovery.isHighUpsideProjection,
   ).length;
   const seasonsPlayed = legacyScore.totalSeasons > 0
     ? legacyScore.totalSeasons
@@ -279,8 +255,8 @@ export function HallOfFame({ legacyScore, scout, gameState }: HallOfFameProps) {
           <StatRow icon={Globe} label="Countries Scouted" value={countriesScouted} />
           <StatRow
             icon={Star}
-            label="Wonderkids Discovered"
-            value={wonderkidsFound}
+            label="High-Upside Projections"
+            value={highUpsideFinds}
             accent="text-yellow-400"
           />
           <StatRow icon={Users} label="Clubs Worked At" value={legacyScore.clubsWorkedAt} />

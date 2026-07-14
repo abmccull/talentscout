@@ -1,0 +1,564 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-13T23:30:22.988Z",
+  "profile": "browser-every-week-ten-season",
+  "reachedSeason": 11,
+  "targetSeason": 11,
+  "batchCount": 60,
+  "openBriefCount": 13,
+  "maximumOpenBriefs": 13,
+  "seasonTimings": [
+    {
+      "season": 1,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 5253.4,
+      "maxBatchMs": 1174.2
+    },
+    {
+      "season": 2,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 6410.8,
+      "maxBatchMs": 1316.5
+    },
+    {
+      "season": 3,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 7134.8,
+      "maxBatchMs": 1279
+    },
+    {
+      "season": 4,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 6699.6,
+      "maxBatchMs": 1295.8
+    },
+    {
+      "season": 5,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 7114.2,
+      "maxBatchMs": 1358.5
+    },
+    {
+      "season": 6,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 7264.8,
+      "maxBatchMs": 1493.4
+    },
+    {
+      "season": 7,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 7487.9,
+      "maxBatchMs": 1525.4
+    },
+    {
+      "season": 8,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 7348.5,
+      "maxBatchMs": 1332.5
+    },
+    {
+      "season": 9,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 7533.7,
+      "maxBatchMs": 1417.2
+    },
+    {
+      "season": 10,
+      "batches": 6,
+      "weeksAdvanced": 46,
+      "elapsedMs": 8448.6,
+      "maxBatchMs": 1832.3
+    }
+  ],
+  "batchTimings": [
+    {
+      "startSeason": 1,
+      "startWeek": 1,
+      "endSeason": 1,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 904.8
+    },
+    {
+      "startSeason": 1,
+      "startWeek": 9,
+      "endSeason": 1,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 674.5
+    },
+    {
+      "startSeason": 1,
+      "startWeek": 17,
+      "endSeason": 1,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 738.1
+    },
+    {
+      "startSeason": 1,
+      "startWeek": 25,
+      "endSeason": 1,
+      "endWeek": 31,
+      "weeksAdvanced": 6,
+      "elapsedMs": 721.8
+    },
+    {
+      "startSeason": 1,
+      "startWeek": 31,
+      "endSeason": 1,
+      "endWeek": 39,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1040
+    },
+    {
+      "startSeason": 1,
+      "startWeek": 39,
+      "endSeason": 2,
+      "endWeek": 1,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1174.2
+    },
+    {
+      "startSeason": 2,
+      "startWeek": 1,
+      "endSeason": 2,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1316.5
+    },
+    {
+      "startSeason": 2,
+      "startWeek": 9,
+      "endSeason": 2,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 997.1
+    },
+    {
+      "startSeason": 2,
+      "startWeek": 17,
+      "endSeason": 2,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1042.4
+    },
+    {
+      "startSeason": 2,
+      "startWeek": 25,
+      "endSeason": 2,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1041.7
+    },
+    {
+      "startSeason": 2,
+      "startWeek": 33,
+      "endSeason": 2,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 994.4
+    },
+    {
+      "startSeason": 2,
+      "startWeek": 41,
+      "endSeason": 3,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1018.7
+    },
+    {
+      "startSeason": 3,
+      "startWeek": 1,
+      "endSeason": 3,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1278.2
+    },
+    {
+      "startSeason": 3,
+      "startWeek": 9,
+      "endSeason": 3,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1070.2
+    },
+    {
+      "startSeason": 3,
+      "startWeek": 17,
+      "endSeason": 3,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1279
+    },
+    {
+      "startSeason": 3,
+      "startWeek": 25,
+      "endSeason": 3,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1143
+    },
+    {
+      "startSeason": 3,
+      "startWeek": 33,
+      "endSeason": 3,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1210.4
+    },
+    {
+      "startSeason": 3,
+      "startWeek": 41,
+      "endSeason": 4,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1154
+    },
+    {
+      "startSeason": 4,
+      "startWeek": 1,
+      "endSeason": 4,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1295.8
+    },
+    {
+      "startSeason": 4,
+      "startWeek": 9,
+      "endSeason": 4,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1079.7
+    },
+    {
+      "startSeason": 4,
+      "startWeek": 17,
+      "endSeason": 4,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1032.4
+    },
+    {
+      "startSeason": 4,
+      "startWeek": 25,
+      "endSeason": 4,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1094.7
+    },
+    {
+      "startSeason": 4,
+      "startWeek": 33,
+      "endSeason": 4,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1118.7
+    },
+    {
+      "startSeason": 4,
+      "startWeek": 41,
+      "endSeason": 5,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1078.3
+    },
+    {
+      "startSeason": 5,
+      "startWeek": 1,
+      "endSeason": 5,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1358.5
+    },
+    {
+      "startSeason": 5,
+      "startWeek": 9,
+      "endSeason": 5,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1032.1
+    },
+    {
+      "startSeason": 5,
+      "startWeek": 17,
+      "endSeason": 5,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1297.1
+    },
+    {
+      "startSeason": 5,
+      "startWeek": 25,
+      "endSeason": 5,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1098.8
+    },
+    {
+      "startSeason": 5,
+      "startWeek": 33,
+      "endSeason": 5,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1153.9
+    },
+    {
+      "startSeason": 5,
+      "startWeek": 41,
+      "endSeason": 6,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1173.8
+    },
+    {
+      "startSeason": 6,
+      "startWeek": 1,
+      "endSeason": 6,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1493.4
+    },
+    {
+      "startSeason": 6,
+      "startWeek": 9,
+      "endSeason": 6,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1092.7
+    },
+    {
+      "startSeason": 6,
+      "startWeek": 17,
+      "endSeason": 6,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1241.4
+    },
+    {
+      "startSeason": 6,
+      "startWeek": 25,
+      "endSeason": 6,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1060.6
+    },
+    {
+      "startSeason": 6,
+      "startWeek": 33,
+      "endSeason": 6,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1194.2
+    },
+    {
+      "startSeason": 6,
+      "startWeek": 41,
+      "endSeason": 7,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1182.5
+    },
+    {
+      "startSeason": 7,
+      "startWeek": 1,
+      "endSeason": 7,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1340.7
+    },
+    {
+      "startSeason": 7,
+      "startWeek": 9,
+      "endSeason": 7,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1176.6
+    },
+    {
+      "startSeason": 7,
+      "startWeek": 17,
+      "endSeason": 7,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1525.4
+    },
+    {
+      "startSeason": 7,
+      "startWeek": 25,
+      "endSeason": 7,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1100.4
+    },
+    {
+      "startSeason": 7,
+      "startWeek": 33,
+      "endSeason": 7,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1189.5
+    },
+    {
+      "startSeason": 7,
+      "startWeek": 41,
+      "endSeason": 8,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1155.3
+    },
+    {
+      "startSeason": 8,
+      "startWeek": 1,
+      "endSeason": 8,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1332.5
+    },
+    {
+      "startSeason": 8,
+      "startWeek": 9,
+      "endSeason": 8,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1306.3
+    },
+    {
+      "startSeason": 8,
+      "startWeek": 17,
+      "endSeason": 8,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1248.8
+    },
+    {
+      "startSeason": 8,
+      "startWeek": 25,
+      "endSeason": 8,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1218.6
+    },
+    {
+      "startSeason": 8,
+      "startWeek": 33,
+      "endSeason": 8,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1153.1
+    },
+    {
+      "startSeason": 8,
+      "startWeek": 41,
+      "endSeason": 9,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1089.2
+    },
+    {
+      "startSeason": 9,
+      "startWeek": 1,
+      "endSeason": 9,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1417.2
+    },
+    {
+      "startSeason": 9,
+      "startWeek": 9,
+      "endSeason": 9,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1204
+    },
+    {
+      "startSeason": 9,
+      "startWeek": 17,
+      "endSeason": 9,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1383.8
+    },
+    {
+      "startSeason": 9,
+      "startWeek": 25,
+      "endSeason": 9,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 994.2
+    },
+    {
+      "startSeason": 9,
+      "startWeek": 33,
+      "endSeason": 9,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1352.7
+    },
+    {
+      "startSeason": 9,
+      "startWeek": 41,
+      "endSeason": 10,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1181.8
+    },
+    {
+      "startSeason": 10,
+      "startWeek": 1,
+      "endSeason": 10,
+      "endWeek": 9,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1832.3
+    },
+    {
+      "startSeason": 10,
+      "startWeek": 9,
+      "endSeason": 10,
+      "endWeek": 17,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1070.5
+    },
+    {
+      "startSeason": 10,
+      "startWeek": 17,
+      "endSeason": 10,
+      "endWeek": 25,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1527.6
+    },
+    {
+      "startSeason": 10,
+      "startWeek": 25,
+      "endSeason": 10,
+      "endWeek": 33,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1486.7
+    },
+    {
+      "startSeason": 10,
+      "startWeek": 33,
+      "endSeason": 10,
+      "endWeek": 41,
+      "weeksAdvanced": 8,
+      "elapsedMs": 1221.2
+    },
+    {
+      "startSeason": 10,
+      "startWeek": 41,
+      "endSeason": 11,
+      "endWeek": 1,
+      "weeksAdvanced": 6,
+      "elapsedMs": 1310.3
+    }
+  ]
+}

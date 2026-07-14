@@ -9,12 +9,16 @@ import type {
   GameState,
   ScoutReport,
   Position,
-  Player,
   DiscoveryRecord,
   PerformanceReview,
-  ScoutPerformanceSnapshot,
 } from "./types";
 import { annualizeMonthlyAmount } from "./annualization";
+import { getPlayerFacingDiscoverySummaries } from "@/engine/career/playerFacingDiscovery";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
+import {
+  buildJudgmentCalibrationProfile,
+  type JudgmentCalibrationProfile,
+} from "@/engine/scout/judgmentCalibration";
 
 // =============================================================================
 // OUTPUT TYPES
@@ -39,13 +43,14 @@ export interface SeasonQualityTrend {
 }
 
 export interface DiscoveryStats {
-  totalWonderkids: number;
+  totalHighUpsideFinds: number;
   totalPlaced: number;
   placementSuccessRate: number;
   bestDiscovery: {
     playerId: string;
     playerName: string;
-    potentialAbility: number;
+    projectedPotentialRange?: [number, number];
+    careerOutcome?: DiscoveryRecord["careerOutcome"];
   } | null;
 }
 
@@ -92,6 +97,7 @@ export interface ScoutPerformanceData {
   accuracyByPosition: PositionAccuracy[];
   accuracyByAgeGroup: AgeGroupAccuracy[];
   qualityTrend: SeasonQualityTrend[];
+  judgmentCalibration: JudgmentCalibrationProfile;
 
   // C. Discovery Stats
   discoveryStats: DiscoveryStats;
@@ -114,9 +120,6 @@ const TIER_LABELS: Record<number, string> = {
   4: "Head of Scouting",
   5: "Director of Football",
 };
-
-/** PA threshold for a "wonderkid" discovery (4+ star equivalent). */
-const WONDERKID_PA_THRESHOLD = 150;
 
 /**
  * Hardcoded industry average benchmarks for comparative context.
@@ -165,8 +168,10 @@ function getPlayerAgeGroup(age: number): string {
 }
 
 function getScoutReports(state: GameState): ScoutReport[] {
-  return Object.values(state.reports).filter(
-    (r) => r.scoutId === state.scout.id,
+  return selectLatestReportsByCase(
+    Object.values(state.reports).filter(
+      (r) => r.scoutId === state.scout.id,
+    ),
   );
 }
 
@@ -182,7 +187,7 @@ function getScoutReports(state: GameState): ScoutReport[] {
  * comparative context from the game state.
  */
 export function computeScoutPerformance(state: GameState): ScoutPerformanceData {
-  const { scout, currentSeason, players, unsignedYouth, discoveryRecords, performanceReviews, finances } = state;
+  const { scout, currentSeason, players, discoveryRecords, performanceReviews, finances } = state;
   const reports = getScoutReports(state);
 
   // ─── A. Career Overview ──────────────────────────────────────────────────
@@ -262,62 +267,46 @@ export function computeScoutPerformance(state: GameState): ScoutPerformanceData 
       avgQuality: round1(average(scores)),
       reportCount: scores.length,
     }));
+  const judgmentCalibration = buildJudgmentCalibrationProfile(state);
 
   // ─── C. Discovery Stats ──────────────────────────────────────────────────
 
-  const wonderkidDiscoveries = discoveryRecords.filter((d) => d.wasWonderkid);
+  const playerFacingDiscoveries = getPlayerFacingDiscoverySummaries(state);
 
   // "Placed" = reports where the club signed the player
   const placedReports = reports.filter((r) => r.clubResponse === "signed");
   const placedPlayerIds = new Set(placedReports.map((r) => r.playerId));
 
-  // Placement success: of signed players, how many reached decent CA growth?
-  // We consider a placement "successful" if the player's CA grew or maintained
-  let successfulPlacements = 0;
-  for (const playerId of placedPlayerIds) {
-    const discovery = discoveryRecords.find((d) => d.playerId === playerId);
-    const player = players[playerId];
-    if (discovery && player) {
-      if (player.currentAbility >= discovery.initialCA) {
-        successfulPlacements++;
-      }
-    } else if (player) {
-      // Not tracked as discovery but was signed — count as success if still at club
-      successfulPlacements++;
-    }
-  }
+  // Placement success uses resolved public career outcomes; unresolved cases
+  // remain outside the denominator until the world produces enough evidence.
+  const resolvedPlacements = playerFacingDiscoveries.filter(
+    (discovery) => placedPlayerIds.has(discovery.playerId) && discovery.careerOutcome,
+  );
+  const successfulPlacements = resolvedPlacements.filter(
+    (discovery) =>
+      discovery.careerOutcome === "starPlayer"
+      || discovery.careerOutcome === "squadPlayer",
+  ).length;
   const placementSuccessRate =
-    placedPlayerIds.size > 0
-      ? round1((successfulPlacements / placedPlayerIds.size) * 100)
+    resolvedPlacements.length > 0
+      ? round1((successfulPlacements / resolvedPlacements.length) * 100)
       : 0;
 
-  // Best discovery — highest PA found
-  let bestDiscovery: DiscoveryStats["bestDiscovery"] = null;
-  if (discoveryRecords.length > 0) {
-    let bestRecord: DiscoveryRecord | null = null;
-    let bestPA = -1;
-    for (const record of discoveryRecords) {
-      const pa = record.initialPA ?? 0;
-      if (pa > bestPA) {
-        bestPA = pa;
-        bestRecord = record;
+  // Best discovery follows career impact, with the scout's original projection.
+  const topDiscovery = playerFacingDiscoveries[0];
+  const bestDiscovery: DiscoveryStats["bestDiscovery"] = topDiscovery
+    ? {
+        playerId: topDiscovery.playerId,
+        playerName: topDiscovery.playerName,
+        projectedPotentialRange: topDiscovery.projectedPotentialRange,
+        careerOutcome: topDiscovery.careerOutcome,
       }
-    }
-    if (bestRecord) {
-      const player = players[bestRecord.playerId]
-        ?? unsignedYouth?.[bestRecord.playerId]?.player;
-      bestDiscovery = {
-        playerId: bestRecord.playerId,
-        playerName: player
-          ? `${player.firstName} ${player.lastName}`
-          : "Unknown Player",
-        potentialAbility: bestPA,
-      };
-    }
-  }
+    : null;
 
   const discoveryStatsData: DiscoveryStats = {
-    totalWonderkids: wonderkidDiscoveries.length,
+    totalHighUpsideFinds: playerFacingDiscoveries.filter(
+      (discovery) => discovery.isHighUpsideProjection,
+    ).length,
     totalPlaced: placedPlayerIds.size,
     placementSuccessRate,
     bestDiscovery,
@@ -422,6 +411,7 @@ export function computeScoutPerformance(state: GameState): ScoutPerformanceData 
     accuracyByPosition,
     accuracyByAgeGroup,
     qualityTrend,
+    judgmentCalibration,
 
     discoveryStats: discoveryStatsData,
 

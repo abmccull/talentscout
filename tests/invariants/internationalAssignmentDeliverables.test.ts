@@ -180,7 +180,7 @@ describe("international assignment deliverables", () => {
     expect(progress(synchronized, "networkOutcome")).toBe(1);
     expect(synchronized.activeInternationalAssignment?.creditedEventIds).toEqual([
       "observation:valid",
-      "report:valid-report",
+      "report:scout:brazilPlayer:general",
       "network:local:s1:w2",
     ]);
 
@@ -192,6 +192,33 @@ describe("international assignment deliverables", () => {
       inbox: [],
     };
     expect(progress(synchronizeInternationalAssignmentProgress(atHome), "liveObservation")).toBe(0);
+  });
+
+  it("credits distinct scouting cases rather than repeated report revisions", () => {
+    const original = stateFor();
+    original.activeInternationalAssignment = {
+      ...original.activeInternationalAssignment!,
+      deliverables: original.activeInternationalAssignment!.deliverables!.map((deliverable) =>
+        deliverable.kind === "submittedReport"
+          ? { ...deliverable, target: 2 }
+          : deliverable,
+      ),
+    };
+    original.reports = {
+      first: { ...report("report-r1", "brazilPlayer"), caseId: "case-brazil", revision: 1 },
+      revision: {
+        ...report("report-r2", "brazilPlayer"),
+        caseId: "case-brazil",
+        revision: 2,
+        supersedesReportId: "report-r1",
+      },
+    };
+
+    const synchronized = synchronizeInternationalAssignmentProgress(original);
+    expect(progress(synchronized, "submittedReport")).toBe(1);
+    expect(synchronized.activeInternationalAssignment?.creditedEventIds).toEqual([
+      "report-case:case-brazil",
+    ]);
   });
 
   it("is exactly-once across retries and JSON save/reload", () => {
@@ -294,4 +321,3 @@ describe("international assignment deliverables", () => {
     expect(migrated.deliverables?.find((item) => item.kind === "networkOutcome")?.progress).toBe(0);
   });
 });
-

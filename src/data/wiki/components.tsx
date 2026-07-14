@@ -1,7 +1,7 @@
 "use client";
 
 // ─── Shared content helpers for wiki articles ────────────────────────────────
-// Extracted from HandbookScreen.tsx — same styling, reusable across all articles.
+// Shared article presentation components for the routed handbook.
 
 export function SectionBlock({ children }: { children: React.ReactNode }) {
   return <div className="space-y-3 text-sm text-zinc-300">{children}</div>;

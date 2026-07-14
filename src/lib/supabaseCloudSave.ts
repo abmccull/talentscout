@@ -108,7 +108,12 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
    * duplicate.  `saved_at` is set to Date.now() on every write so conflict
    * detection downstream always reflects the most recent upload time.
    */
-  async uploadSave(slot: number, state: GameState, name?: string): Promise<void> {
+  async uploadSave(
+    slot: number,
+    state: GameState,
+    name?: string,
+    savedAt = Date.now(),
+  ): Promise<void> {
     if (!supabase) throw new Error("Cloud features are not configured");
     const userId = await this.requireAuthenticatedUserId();
     const { error } = await supabase.from("save_slots").upsert(
@@ -121,8 +126,8 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
         week: state.currentWeek,
         specialization: state.scout.primarySpecialization,
         reputation: state.scout.reputation,
-        saved_at: Date.now(),
-        state: createSaveEnvelope(state) as unknown as Record<string, unknown>,
+        saved_at: savedAt,
+        state: createSaveEnvelope(state, savedAt) as unknown as Record<string, unknown>,
       },
       { onConflict: "user_id,slot" },
     );
@@ -224,7 +229,7 @@ export class SupabaseCloudSaveProvider implements CloudSaveProvider {
     const cloudTimestamp = Number(data.saved_at);
     const timestampDelta = Math.abs(cloudTimestamp - localTimestamp);
 
-    if (timestampDelta > 60_000) {
+    if (timestampDelta > 0) {
       return { hasConflict: true, cloudTimestamp, localTimestamp };
     }
 

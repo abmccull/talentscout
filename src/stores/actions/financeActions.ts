@@ -8,7 +8,7 @@
  * transfer negotiations, free agent negotiations, and player loan management.
  */
 import type { GetState, SetState } from "./types";
-import type { GameScreen } from "../gameStore";
+import type { GameScreen } from "../gameStoreTypes";
 import type {
   InboxMessage,
   RetainerContract,
@@ -52,6 +52,7 @@ import {
   resolveEmployeeEvent as resolveEmployeeEventEngine,
   openSatelliteOffice,
   closeSatelliteOffice,
+  relocateHomeBase,
   assignEmployeeToSatellite,
   enrollInTraining,
   purchaseDataSubscription,
@@ -88,6 +89,7 @@ import {
 } from "@/engine/freeAgents/negotiation";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { getSeasonLength } from "@/engine/core/gameDate";
+import { isTravelEligibleCountry } from "@/engine/world";
 import {
   getLifecycleWorld,
   resolvePlayerMovements,
@@ -596,6 +598,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
     openAgencySatelliteOffice: (region: string) => {
       const { gameState } = get();
       if (!gameState?.finances) return;
+      if (!isTravelEligibleCountry(gameState, region)) return;
       const actionSequence = (gameState.finances.actionSequence ?? 0) + 1;
       const updated = openSatelliteOffice(
         gameState.finances,
@@ -610,7 +613,69 @@ export function createFinanceActions(get: GetState, set: SetState) {
     closeAgencySatelliteOffice: (officeId: string) => {
       const { gameState } = get();
       if (!gameState?.finances) return;
-      set({ gameState: { ...gameState, finances: closeSatelliteOffice(gameState.finances, officeId) } });
+      const office = gameState.finances.satelliteOffices.find((candidate) => candidate.id === officeId);
+      if (!office) return;
+      const affectedEmployees = office.employeeIds.length;
+      const finances = closeSatelliteOffice(
+        gameState.finances,
+        officeId,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          finances,
+          inbox: [
+            ...gameState.inbox,
+            {
+              id: `satellite-closed:${office.id}:s${gameState.currentSeason}:w${gameState.currentWeek}`,
+              week: gameState.currentWeek,
+              season: gameState.currentSeason,
+              type: "financial",
+              title: `Office closed in ${office.region}`,
+              body: affectedEmployees > 0
+                ? `${affectedEmployees} employee${affectedEmployees === 1 ? " was" : "s were"} reassigned. The disruption reduced morale, the closure cost was recorded, and local presence fell immediately.`
+                : "The closure cost was recorded and local presence fell immediately.",
+              read: false,
+              actionRequired: false,
+            },
+          ],
+        },
+      });
+    },
+
+    relocateAgencyHomeBase: (country: string) => {
+      const { gameState } = get();
+      if (!gameState?.finances || !isTravelEligibleCountry(gameState, country)) return;
+      const result = relocateHomeBase(
+        gameState.finances,
+        gameState.scout,
+        country,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      if (!result) return;
+      set({
+        gameState: {
+          ...gameState,
+          scout: result.scout,
+          finances: result.finances,
+          inbox: [
+            ...gameState.inbox,
+            {
+              id: `home-base-relocated:${result.quote.destination}:s${gameState.currentSeason}:w${gameState.currentWeek}`,
+              week: gameState.currentWeek,
+              season: gameState.currentSeason,
+              type: "news",
+              title: "Agency headquarters relocated",
+              body: `The ${result.quote.destination} office is now your permanent base. Your former base remains as an unstaffed satellite, so preserving that market now requires a deliberate staffing choice.`,
+              read: false,
+              actionRequired: false,
+            },
+          ],
+        },
+      });
     },
 
     assignEmployeeToAgencySatellite: (employeeId: string, officeId: string) => {

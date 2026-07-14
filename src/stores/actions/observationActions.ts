@@ -6,7 +6,7 @@
  * reflection generation, insight spending, and session lifecycle.
  */
 import type { GetState, SetState } from "./types";
-import type { GameScreen } from "../gameStore";
+import type { GameScreen } from "../gameStoreTypes";
 import type { LensType, ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import type { InsightActionId, InsightState, InsightActionResult } from "@/engine/insight/types";
 import type {
@@ -47,6 +47,7 @@ import { ALL_PERKS } from "@/engine/specializations/perks";
 import { calculateSystemFit } from "@/engine/firstTeam";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { observePlayerLight } from "@/engine/scout/perception";
+import { applyRegionalPresenceToObservation } from "@/engine/world/regionalPresence";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 import {
@@ -334,11 +335,11 @@ function buildInteractiveObservationBatch(
         activityInstanceId: session.activityInstanceId,
       },
     );
-    const observation: Observation = {
+    const observation = applyRegionalPresenceToObservation(gameState, {
       ...generated,
       week: session.startedAtWeek,
       season: session.startedAtSeason,
-    };
+    } satisfies Observation);
 
     observations[observation.id] = observation;
     observationIds.push(observation.id);

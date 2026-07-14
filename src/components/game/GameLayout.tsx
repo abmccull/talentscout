@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
 import { useTutorialStore, type TutorialSequenceId } from "@/stores/tutorialStore";
 import { ScreenHelpButton } from "@/components/game/tutorial/ScreenHelpButton";
@@ -8,6 +9,11 @@ import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { useAudio } from "@/lib/audio/useAudio";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getCareerElapsedWeeks } from "@/engine/core/gameDate";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
+import {
+  getYouthEarlyAccessNavigationEntries,
+  getYouthEarlyAccessWorkspaceParent,
+} from "@/stores/gameScreenScope";
 import {
   LayoutDashboard,
   Calendar,
@@ -37,6 +43,7 @@ import {
   Activity,
   Menu,
   Bell,
+  Map,
 } from "lucide-react";
 
 // ─── Sectioned Navigation ────────────────────────────────────────────────────
@@ -46,58 +53,29 @@ interface NavSection {
   items: { screen: GameScreen; label: string; icon: React.ElementType }[];
 }
 
-const YOUTH_WORKSPACE_ITEMS: NavSection["items"] = [
-  { screen: "dashboard", label: "Desk", icon: LayoutDashboard },
-  { screen: "calendar", label: "Planner", icon: Calendar },
-  { screen: "youthScouting", label: "Prospects", icon: GraduationCap },
-  { screen: "reportHistory", label: "Reports", icon: FileText },
-  { screen: "internationalView", label: "World", icon: Globe },
-  { screen: "career", label: "Career", icon: Briefcase },
-];
+const YOUTH_NAV_ICONS: Partial<Record<GameScreen, React.ElementType>> = {
+  dashboard: LayoutDashboard,
+  calendar: Calendar,
+  youthScouting: GraduationCap,
+  reportHistory: FileText,
+  internationalView: Globe,
+  career: Briefcase,
+  handbook: Book,
+  futureRoadmap: Map,
+  settings: Settings,
+};
 
-const YOUTH_SUPPORT_ITEMS: NavSection["items"] = [
-  { screen: "handbook", label: "Handbook", icon: Book },
-  { screen: "settings", label: "Settings", icon: Settings },
-];
-
-function getYouthWorkspaceParent(screen: GameScreen): GameScreen {
-  switch (screen) {
-    case "calendar":
-    case "fixtureBrowser":
-    case "match":
-    case "observation":
-    case "matchSummary":
-      return "calendar";
-    case "youthScouting":
-    case "playerDatabase":
-    case "playerProfile":
-      return "youthScouting";
-    case "reportHistory":
-    case "reportWriter":
-    case "reportComparison":
-      return "reportHistory";
-    case "internationalView":
-      return "internationalView";
-    case "career":
-    case "discoveries":
-    case "finances":
-    case "performance":
-    case "equipment":
-    case "training":
-    case "achievements":
-    case "network":
-    case "rivals":
-      return "career";
-    case "handbook":
-      return "handbook";
-    case "settings":
-      return "settings";
-    case "inbox":
-      return "inbox";
-    default:
-      return "dashboard";
-  }
+function getYouthNavItems(
+  group: "workspace" | "support",
+): NavSection["items"] {
+  return getYouthEarlyAccessNavigationEntries(group).map((entry) => ({
+    ...entry,
+    icon: YOUTH_NAV_ICONS[entry.screen] ?? LayoutDashboard,
+  }));
 }
+
+const YOUTH_WORKSPACE_ITEMS = getYouthNavItems("workspace");
+const YOUTH_SUPPORT_ITEMS = getYouthNavItems("support");
 
 function getNavSections(specialization: string, youthEarlyAccess: boolean): NavSection[] {
   if (youthEarlyAccess) {
@@ -154,6 +132,7 @@ function getNavSections(specialization: string, youthEarlyAccess: boolean): NavS
         { screen: "inbox", label: "Inbox", icon: Mail },
         { screen: "achievements", label: "Achievements", icon: Medal },
         { screen: "handbook", label: "Handbook", icon: Book },
+        { screen: "futureRoadmap", label: "Roadmap", icon: Map },
         { screen: "settings", label: "Settings", icon: Settings },
       ],
     },
@@ -167,17 +146,7 @@ const ALWAYS_VISIBLE = new Set<GameScreen>([
   "playerDatabase",
   "achievements",
   "handbook",
-  "settings",
-]);
-
-const YOUTH_EARLY_ACCESS_NAV_SCREENS = new Set<GameScreen>([
-  "dashboard",
-  "calendar",
-  "youthScouting",
-  "reportHistory",
-  "career",
-  "internationalView",
-  "handbook",
+  "futureRoadmap",
   "settings",
 ]);
 
@@ -300,8 +269,64 @@ function getNavLockState(
 }
 
 export function GameLayout({ children }: { children: React.ReactNode }) {
-  const { currentScreen, setScreen, gameState } = useGameStore();
-  const autosaveError = useGameStore((s) => s.autosaveError);
+  const {
+    currentScreen,
+    setScreen,
+    autosaveError,
+    hasGame,
+    currentWeek,
+    currentSeason,
+    unreadCount,
+    unreviewedNpcReportCount,
+    tier,
+    countryCount,
+    careerPath,
+    specialization,
+    effectiveWeek,
+    observationCount,
+    reportCount,
+    hasScheduledActivity,
+    hasAttendedMatch,
+    scoutAvatarId,
+    scoutFirstName,
+    scoutLastName,
+    scoutReputation,
+  } = useGameStore(useShallow((state) => {
+    const gameState = state.gameState;
+    return {
+      currentScreen: state.currentScreen,
+      setScreen: state.setScreen,
+      autosaveError: state.autosaveError,
+      hasGame: gameState !== null,
+      currentWeek: gameState?.currentWeek ?? 0,
+      currentSeason: gameState?.currentSeason ?? 0,
+      unreadCount: gameState?.inbox.filter((message) => !message.read).length ?? 0,
+      unreviewedNpcReportCount: gameState
+        ? Object.values(gameState.npcReports).filter((report) => !report.reviewed).length
+        : 0,
+      tier: gameState?.scout.careerTier ?? 1,
+      countryCount: gameState?.countries.length ?? 0,
+      careerPath: gameState?.scout.careerPath ?? "club",
+      specialization: gameState?.scout.primarySpecialization ?? "",
+      effectiveWeek: gameState
+        ? getCareerElapsedWeeks(gameState.fixtures, {
+            season: gameState.currentSeason,
+            week: gameState.currentWeek,
+          })
+        : 0,
+      observationCount: gameState ? Object.keys(gameState.observations ?? {}).length : 0,
+      reportCount: gameState
+        ? selectLatestReportsByCase(Object.values(gameState.reports ?? {})).length
+        : 0,
+      hasScheduledActivity:
+        gameState?.schedule?.activities?.some((activity) => activity != null) ?? false,
+      hasAttendedMatch: (gameState?.playedFixtures?.length ?? 0) > 0,
+      scoutAvatarId: gameState?.scout.avatarId ?? 1,
+      scoutFirstName: gameState?.scout.firstName ?? "",
+      scoutLastName: gameState?.scout.lastName ?? "",
+      scoutReputation: gameState?.scout.reputation ?? 0,
+    };
+  }));
   const { playSFX } = useAudio();
 
   // All hooks must be called before any early return
@@ -343,41 +368,27 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     previousScreenRef.current = currentScreen;
   }, [currentScreen]);
 
-  if (!gameState) return null;
-
-  const unreadCount = gameState.inbox.filter((m) => !m.read).length;
-  const unreviewedNpcReportCount = Object.values(gameState.npcReports).filter(
-    (r) => !r.reviewed,
-  ).length;
-
-  const tier = gameState.scout.careerTier;
-  const countryCount = gameState.countries.length;
-  const careerPath = gameState.scout.careerPath ?? "club";
-  const specialization = gameState.scout.primarySpecialization ?? "";
-  // Week gates use the fixture-derived game calendar, not a real-world year.
-  const effectiveWeek = getCareerElapsedWeeks(gameState.fixtures, {
-    season: gameState.currentSeason,
-    week: gameState.currentWeek,
-  });
+  if (!hasGame) return null;
 
   const navCtx: NavGateContext = {
     tier,
     effectiveWeek,
-    currentSeason: gameState.currentSeason,
+    currentSeason,
     countryCount,
     careerPath,
     specialization,
-    observationCount: Object.keys(gameState.observations ?? {}).length,
-    reportCount: Object.keys(gameState.reports ?? {}).length,
-    hasScheduledActivity: gameState.schedule?.activities?.some((a: any) => a != null) ?? false,
-    hasAttendedMatch: (gameState.playedFixtures?.length ?? 0) > 0,
+    observationCount,
+    reportCount,
+    hasScheduledActivity,
+    hasAttendedMatch,
   };
   const useYouthEarlyAccessNav =
     IS_YOUTH_EARLY_ACCESS && specialization === "youth";
 
   const isNavScreenVisible = (screen: GameScreen): boolean => {
     if (useYouthEarlyAccessNav) {
-      return YOUTH_EARLY_ACCESS_NAV_SCREENS.has(screen);
+      return YOUTH_WORKSPACE_ITEMS.some((item) => item.screen === screen)
+        || YOUTH_SUPPORT_ITEMS.some((item) => item.screen === screen);
     }
     return getNavVisibility(screen, navCtx);
   };
@@ -392,7 +403,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
   })).filter((section) => section.visibleItems.length > 0);
   const showCareerShortcut = isNavScreenVisible("career");
   const activeNavScreen = useYouthEarlyAccessNav
-    ? getYouthWorkspaceParent(currentScreen)
+    ? getYouthEarlyAccessWorkspaceParent(currentScreen)
     : currentScreen;
   const activeWorkspaceLabel = useYouthEarlyAccessNav
     ? [
@@ -459,7 +470,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         <div className="min-w-0 text-center">
           <p className="truncate text-sm font-semibold text-white">{activeWorkspaceLabel}</p>
           <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
-            Week {gameState.currentWeek} · Season {gameState.currentSeason}
+            Week {currentWeek} · Season {currentSeason}
           </p>
         </div>
         <div className="flex items-center justify-end">
@@ -515,7 +526,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             </span>
           )}
           <p className="mt-2 text-xs text-zinc-400">
-            Week {gameState.currentWeek} — Season {gameState.currentSeason}
+            Week {currentWeek} — Season {currentSeason}
           </p>
           {useYouthEarlyAccessNav && (
             <button
@@ -612,24 +623,24 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             )}
           </div>
           <div className="flex items-center gap-2.5">
-            <ScoutAvatar avatarId={gameState.scout.avatarId ?? 1} size={32} />
+            <ScoutAvatar avatarId={scoutAvatarId} size={32} />
             <div className="min-w-0">
               <p className="text-sm font-medium truncate">
-                {gameState.scout.firstName} {gameState.scout.lastName}
+                {scoutFirstName} {scoutLastName}
               </p>
               <p className="text-xs text-zinc-400 capitalize">
-                {gameState.scout.primarySpecialization} Scout — Tier {gameState.scout.careerTier}
+                {specialization} Scout — Tier {tier}
               </p>
             </div>
           </div>
           <div className="mt-2 flex items-center justify-between text-xs">
             <span className="text-zinc-400">Reputation</span>
-            <span className="text-emerald-400">{Math.round(gameState.scout.reputation)}</span>
+            <span className="text-emerald-400">{Math.round(scoutReputation)}</span>
           </div>
           <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
             <div
               className="h-full rounded-full bg-emerald-500 transition-all"
-              style={{ width: `${gameState.scout.reputation}%` }}
+              style={{ width: `${scoutReputation}%` }}
             />
           </div>
         </div>
@@ -646,6 +657,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             return (
               <button
                 key={screen}
+                data-tutorial-id={`mobile-nav-${screen}`}
                 onClick={() => handleNavClick(screen)}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[9px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${

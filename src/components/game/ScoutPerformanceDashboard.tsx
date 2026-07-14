@@ -24,6 +24,7 @@ import {
   type ScoutPerformanceData,
   type SeasonQualityTrend,
 } from "@/engine/core/scoutPerformance";
+import { discoveryOutcomeLabel } from "@/engine/career/playerFacingDiscovery";
 
 // =============================================================================
 // HELPERS
@@ -217,15 +218,15 @@ export function ScoutPerformanceDashboard() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* ──────────────────────────────────────────────────────────────────
-              LEFT COLUMN: Accuracy Analytics (B)
+              LEFT COLUMN: Report craft and judgment calibration (B)
           ────────────────────────────────────────────────────────────────── */}
           <div className="space-y-4">
-            {/* Quality Score Summary */}
+            {/* Report craft summary */}
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <Target size={14} className="text-emerald-400" aria-hidden="true" />
-                  Accuracy Analytics
+                  Report Craft
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -259,11 +260,11 @@ export function ScoutPerformanceDashboard() {
                   </div>
                 </div>
 
-                {/* Accuracy by position */}
+                {/* Craft by position */}
                 {data.accuracyByPosition.length > 0 && (
                   <div>
                     <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-2">
-                      By Position
+                      Craft by Position
                     </p>
                     <div className="space-y-2">
                       {data.accuracyByPosition.map(({ position, avgQuality, reportCount }) => (
@@ -291,11 +292,11 @@ export function ScoutPerformanceDashboard() {
                   </div>
                 )}
 
-                {/* Accuracy by age group */}
+                {/* Craft by age group */}
                 {data.accuracyByAgeGroup.length > 0 && (
                   <div>
                     <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold mb-2">
-                      By Age Group
+                      Craft by Age Group
                     </p>
                     <div className="space-y-2">
                       {data.accuracyByAgeGroup.map(({ label, avgQuality, reportCount }) => (
@@ -365,6 +366,110 @@ export function ScoutPerformanceDashboard() {
                 )}
               </CardContent>
             </Card>
+
+            <Card data-tutorial-id="judgment-calibration" data-testid="judgment-calibration">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <Target size={14} className="text-cyan-400" aria-hidden="true" />
+                  Judgment Calibration
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {data.judgmentCalibration.maturity}% mature
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-3">
+                  <p className="text-sm font-semibold text-cyan-100">
+                    {data.judgmentCalibration.headline}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                    {data.judgmentCalibration.guidance}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-md border border-zinc-800 p-2">
+                    <p className="text-lg font-bold text-white">{data.judgmentCalibration.evaluatedCaseCount}</p>
+                    <p className="text-xs text-zinc-400">evaluated</p>
+                  </div>
+                  <div className="rounded-md border border-zinc-800 p-2">
+                    <p className="text-lg font-bold text-zinc-300">{data.judgmentCalibration.pendingCaseCount}</p>
+                    <p className="text-xs text-zinc-400">still live</p>
+                  </div>
+                  <div className="rounded-md border border-zinc-800 p-2">
+                    <p className={`text-lg font-bold ${
+                      data.judgmentCalibration.overallGap === undefined
+                        ? "text-zinc-500"
+                        : data.judgmentCalibration.overallGap > 9
+                          ? "text-amber-400"
+                          : data.judgmentCalibration.overallGap < -9
+                            ? "text-blue-400"
+                            : "text-emerald-400"
+                    }`}>
+                      {data.judgmentCalibration.overallGap === undefined
+                        ? "—"
+                        : `${data.judgmentCalibration.overallGap > 0 ? "+" : ""}${data.judgmentCalibration.overallGap}`}
+                    </p>
+                    <p className="text-xs text-zinc-400">conviction gap</p>
+                  </div>
+                </div>
+
+                {data.judgmentCalibration.signals.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Recurring patterns
+                    </p>
+                    <div className="space-y-2">
+                      {data.judgmentCalibration.signals.map((signal) => (
+                        <div key={`${signal.dimension}:${signal.label}`} className="rounded-md border border-zinc-800 p-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-zinc-200">{signal.label}</span>
+                            <span className={`text-xs font-semibold ${
+                              signal.tendency === "overconfident"
+                                ? "text-amber-400"
+                                : signal.tendency === "too-cautious"
+                                  ? "text-blue-400"
+                                  : "text-emerald-400"
+                            }`}>
+                              {signal.tendency === "overconfident"
+                                ? "Over-backed"
+                                : signal.tendency === "too-cautious"
+                                  ? "Under-backed"
+                                  : "Balanced"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-zinc-400">
+                            {signal.sampleSize} mature cases · conviction {signal.averageConviction} · outcome {signal.averageOutcome}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data.judgmentCalibration.convictionResults.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                      Outcomes by strength of call
+                    </p>
+                    <div className="space-y-1.5">
+                      {data.judgmentCalibration.convictionResults.map((result) => (
+                        <div key={result.label} className="flex items-center justify-between gap-3 text-xs">
+                          <span className="text-zinc-400">{result.label}</span>
+                          <span className="font-mono text-zinc-200">
+                            {result.averageOutcome}/100 <span className="text-zinc-600">({result.sampleSize})</span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-xs leading-relaxed text-zinc-400">
+                  Uses one latest judgment per scouting case. Revisions cannot inflate the sample, and unresolved careers remain pending.
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* ──────────────────────────────────────────────────────────────────
@@ -382,11 +487,11 @@ export function ScoutPerformanceDashboard() {
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-md border border-[#27272a] p-3 text-center">
-                    <p className="text-[10px] text-zinc-500 mb-1">Wonderkids Found</p>
+                    <p className="text-[10px] text-zinc-500 mb-1">High-Upside Finds</p>
                     <p className="text-xl font-bold text-amber-400">
-                      {data.discoveryStats.totalWonderkids}
+                      {data.discoveryStats.totalHighUpsideFinds}
                     </p>
-                    <p className="text-[9px] text-zinc-600">PA {"\u2265"} 150</p>
+                    <p className="text-[9px] text-zinc-600">based on original reports</p>
                   </div>
                   <div className="rounded-md border border-[#27272a] p-3 text-center">
                     <p className="text-[10px] text-zinc-500 mb-1">Players Placed</p>
@@ -431,13 +536,18 @@ export function ScoutPerformanceDashboard() {
                           {data.discoveryStats.bestDiscovery.playerName}
                         </p>
                         <p className="text-[10px] text-zinc-500">
-                          PA: {data.discoveryStats.bestDiscovery.potentialAbility}
+                          {data.discoveryStats.bestDiscovery.projectedPotentialRange
+                            ? `${data.discoveryStats.bestDiscovery.projectedPotentialRange[0].toFixed(1)}\u2013${data.discoveryStats.bestDiscovery.projectedPotentialRange[1].toFixed(1)}\u2605 original projection`
+                            : "No original potential projection"}
+                        </p>
+                        <p className="text-[10px] text-zinc-500">
+                          {discoveryOutcomeLabel(data.discoveryStats.bestDiscovery.careerOutcome)}
                         </p>
                       </div>
                       <div className="flex items-center gap-0.5">
                         {Array.from({ length: 5 }).map((_, i) => {
-                          const pa = data.discoveryStats.bestDiscovery!.potentialAbility;
-                          const stars = pa >= 180 ? 5 : pa >= 160 ? 4 : pa >= 140 ? 3 : pa >= 120 ? 2 : 1;
+                          const range = data.discoveryStats.bestDiscovery!.projectedPotentialRange;
+                          const stars = range ? Math.round((range[0] + range[1]) / 2) : 0;
                           return (
                             <Star
                               key={i}
@@ -792,9 +902,9 @@ function getMilestones(data: ScoutPerformanceData): Milestone[] {
       detail: data.totalDiscoveries >= 1 ? `${data.totalDiscoveries} found` : "0/1",
     },
     {
-      label: "Wonderkid Hunter",
-      achieved: data.discoveryStats.totalWonderkids >= 3,
-      detail: `${Math.min(data.discoveryStats.totalWonderkids, 3)}/3 wonderkids`,
+      label: "High-Upside Scout",
+      achieved: data.discoveryStats.totalHighUpsideFinds >= 3,
+      detail: `${Math.min(data.discoveryStats.totalHighUpsideFinds, 3)}/3 high-upside calls`,
     },
     {
       label: "Quality Expert",

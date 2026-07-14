@@ -21,9 +21,9 @@ export const matchSystemsArticles: WikiArticle[] = [
     category: "match-systems",
     order: 0,
     summary:
-      "Players receive a 1-10 rating each match based on current ability, position-weighted events, and discrete bonuses for goals, assists, and errors.",
+      "Players receive a 1-10 public match rating shaped by role-relevant contribution, decisive actions, errors, opposition, and form.",
     searchText:
-      "Every player receives a match rating on a 1-10 scale after each match. The rating is calculated from three components. First, a baseline derived from current ability (CA): 4.5 plus CA divided by 200 multiplied by 3.0. A player with CA 100 gets a baseline of roughly 6.0. Second, position-weighted event quality. Each match event (pass, tackle, shot, dribble, cross) has an importance weight that varies by position. A striker's rating is more affected by shooting events than tackling events, while a centre-back's rating is weighted toward defensive events. Third, discrete bonuses and penalties: each goal scored adds +0.5, each assist adds +0.3, and each defensive error subtracts -0.4. Form is calculated as a weighted average of a player's last 6 match ratings, mapped to a modifier range of -3 to +3. Recent matches are weighted more heavily. Good form improves a player's effective ability in future matches while poor form reduces it. When scouting, a player on good form may appear better than their true ability. Observing a player across multiple matches helps separate genuine ability from temporary form. A single outstanding performance does not guarantee consistent quality.",
+      "Every player receives a 1-10 public match rating. Position and tactical role change which actions matter: finishing and movement matter more to a striker, while prevention and buildup matter more to a centre-back. Goals, assists, mistakes, opposition, and match context can swing one performance. Recent matches shape visible form, so repeated observations across different opponents help separate a hot streak from repeatable quality.",
     content: (
       <SectionBlock>
         <Para>
@@ -35,9 +35,8 @@ export const matchSystemsArticles: WikiArticle[] = [
         <NumberedList
           items={[
             <>
-              <span className="font-medium text-zinc-200">CA Baseline</span> —
-              4.5 + (CA / 200) x 3.0. A player with CA 100 gets a baseline
-              around 6.0.
+              <span className="font-medium text-zinc-200">Overall influence</span> —
+              how consistently the player affected the match in observable ways.
             </>,
             <>
               <span className="font-medium text-zinc-200">
@@ -48,25 +47,25 @@ export const matchSystemsArticles: WikiArticle[] = [
             </>,
             <>
               <span className="font-medium text-zinc-200">
-                Discrete bonuses
+                Decisive moments
               </span>{" "}
-              — goal +0.5, assist +0.3, defensive error -0.4.
+              — goals, assists, saves, major chances, and costly errors can
+              move one rating sharply.
             </>,
           ]}
         />
         <Subheading>Form</Subheading>
         <Para>
-          Form is a weighted average of a player&apos;s last 6 match ratings,
-          mapped to a modifier range of <Tag color="rose">-3</Tag> to{" "}
-          <Tag color="emerald">+3</Tag>. Recent matches are weighted more
-          heavily. Good form improves effective ability in future matches; poor
-          form reduces it.
+          Form summarizes recent public performances, with newer matches
+          carrying more relevance. It affects confidence, attention, and how a
+          player may look in the next observation, but it is not proof that the
+          player&apos;s underlying level changed.
         </Para>
         <InfoCard title="Scouting Implication" color="amber">
-          A player on good form may appear better than their true ability.
-          Observe across multiple matches to separate genuine ability from
-          temporary form. A single outstanding performance does not guarantee
-          consistent quality.
+          A player on good form may look more decisive than usual. Observe
+          across opponents, roles, and pressure states to separate repeatable
+          quality from temporary performance. One great match is evidence, not
+          a verdict.
         </InfoCard>
       </SectionBlock>
     ),

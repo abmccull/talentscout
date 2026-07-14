@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "maximumStronglyConnectedComponents": 0,
+  "maximumModulesInCycles": 0,
+  "allowedCycleGroups": []
+}

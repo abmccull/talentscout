@@ -22,6 +22,14 @@ export type {
 } from "./reporting";
 
 export {
+  attachReportEvidence,
+  getFreshReportObservationIds,
+  getLatestReportInScope,
+  getReportCaseKey,
+  selectLatestReportsByCase,
+} from "./reportAccountability";
+
+export {
   attachListingToCase,
   ensureScoutingCaseForReport,
   getScoutingCaseId,

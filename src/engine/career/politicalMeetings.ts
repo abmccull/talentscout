@@ -20,8 +20,8 @@ import { RNG } from "@/engine/rng";
 import {
   evaluateStakeholderMemoryPolicy,
   recordStakeholderMemory,
-  type StakeholderMemory,
-} from "@/engine/consequences";
+} from "@/engine/consequences/stakeholderMemoryPolicy";
+import type { StakeholderMemory } from "@/engine/consequences/types";
 
 export const MANAGER_MEETING_FATIGUE_COST = 4;
 export const BOARD_MEETING_FATIGUE_COST = 8;

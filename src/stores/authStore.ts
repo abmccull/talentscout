@@ -14,7 +14,14 @@
 
 import { create } from "zustand";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import {
+  clearSupabaseAuthSessionStorage,
+  supabase,
+} from "@/lib/supabase";
+import {
+  BETA_CLOUD_SAVES_ENABLED,
+  BETA_CLOUD_SAVES_MESSAGE,
+} from "@/config/beta";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -177,7 +184,7 @@ let listenerRegistered = false;
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   // Initial state — loading, unauthenticated, cloud saves off
-  isLoading: true,
+  isLoading: BETA_CLOUD_SAVES_ENABLED,
   isAuthenticated: false,
   userId: null,
   displayName: null,
@@ -188,6 +195,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   _applySession: (session) => {
+    if (!BETA_CLOUD_SAVES_ENABLED) {
+      clearSupabaseAuthSessionStorage();
+      writeCloudSavePref(false);
+      set({
+        isLoading: false,
+        isAuthenticated: false,
+        userId: null,
+        displayName: null,
+        cloudSaveEnabled: false,
+      });
+      return;
+    }
     if (session?.user) {
       set({
         isAuthenticated: true,
@@ -210,6 +229,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   initialize: () => {
+    if (!BETA_CLOUD_SAVES_ENABLED) {
+      clearSupabaseAuthSessionStorage();
+      writeCloudSavePref(false);
+      set({
+        isLoading: false,
+        isAuthenticated: false,
+        userId: null,
+        displayName: null,
+        cloudSaveEnabled: false,
+      });
+      return;
+    }
+
     // Restore persisted cloud-save preference first (synchronous).
     set({ cloudSaveEnabled: readCloudSavePref() });
 
@@ -249,6 +281,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signInWithEmail: async (email, password) => {
+    if (!BETA_CLOUD_SAVES_ENABLED) throw new Error(BETA_CLOUD_SAVES_MESSAGE);
     if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -263,6 +296,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signUpWithEmail: async (email, password) => {
+    if (!BETA_CLOUD_SAVES_ENABLED) throw new Error(BETA_CLOUD_SAVES_MESSAGE);
     if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
@@ -273,6 +307,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signInWithOAuth: async (provider) => {
+    if (!BETA_CLOUD_SAVES_ENABLED) throw new Error(BETA_CLOUD_SAVES_MESSAGE);
     if (!supabase) throw new Error("Cloud features are not configured");
     const { error } = await supabase.auth.signInWithOAuth({ provider });
     if (error) throw new Error(error.message);
@@ -284,6 +319,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   signOut: async () => {
+    if (!BETA_CLOUD_SAVES_ENABLED) {
+      clearSupabaseAuthSessionStorage();
+      get()._applySession(null);
+      return;
+    }
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
     if (error) throw new Error(error.message);
@@ -299,7 +339,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // -------------------------------------------------------------------------
 
   toggleCloudSave: (enabled) => {
-    set({ cloudSaveEnabled: enabled });
-    writeCloudSavePref(enabled);
+    const permitted = BETA_CLOUD_SAVES_ENABLED && enabled;
+    set({ cloudSaveEnabled: permitted });
+    writeCloudSavePref(permitted);
   },
 }));

@@ -20,6 +20,7 @@ import type {
 } from "@/engine/core/types";
 import { discoverHiddenLeague } from "@/engine/world/hiddenLeagues";
 import { isScoutAbroad } from "@/engine/world/travel";
+import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
@@ -143,6 +144,9 @@ function resolveScoutHomeCountry(
   scout: Scout,
   regionalKnowledge?: Record<string, RegionalKnowledge>,
 ): string | undefined {
+  const pinnedHomeCountry = canonicalizeCountry(scout.homeCountry);
+  if (pinnedHomeCountry) return pinnedHomeCountry;
+
   for (const [key, reputation] of Object.entries(scout.countryReputations ?? {})) {
     const countryId =
       canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
@@ -395,6 +399,10 @@ export function processRegionalKnowledgeGrowth(
     if (countryId === currentCountry) {
       knowledgeGain += 2;
     }
+
+    // Maintained offices and delegated local coverage continue building a
+    // bounded institutional knowledge base even while the player is away.
+    knowledgeGain += deriveRegionalPresence(state, countryId).effects.passiveKnowledgeGain;
 
     // Passive contact knowledge (0.5 per contact, weekly drip)
     if (rep && rep.contactCount > 0) {

@@ -33,6 +33,55 @@ const CONFETTI_COLORS = [
 
 const MINOR_AUTO_DISMISS_MS = 3000;
 
+function useCelebrationDialogFocus(onDismiss: () => void) {
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const focusable = () => [...dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )];
+    focusable()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onDismiss();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = focusable();
+      if (controls.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus && document.contains(previousFocus)) {
+        window.requestAnimationFrame(() => previousFocus.focus());
+      }
+    };
+  }, [onDismiss]);
+
+  return dialogRef;
+}
+
 // =============================================================================
 // CONFETTI PARTICLE
 // =============================================================================
@@ -156,6 +205,7 @@ function MajorCelebration({
   description,
   onDismiss,
 }: Omit<CelebrationProps, "tier">) {
+  const dialogRef = useCelebrationDialogFocus(onDismiss);
   return (
     <>
       <ConfettiOverlay count={24} slowFall={false} />
@@ -166,6 +216,7 @@ function MajorCelebration({
         onClick={onDismiss}
       >
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label={`Achievement: ${title}`}
@@ -200,6 +251,7 @@ function EpicCelebration({
   description,
   onDismiss,
 }: Omit<CelebrationProps, "tier">) {
+  const dialogRef = useCelebrationDialogFocus(onDismiss);
   return (
     <>
       <ConfettiOverlay count={48} slowFall={true} />
@@ -210,6 +262,7 @@ function EpicCelebration({
         onClick={onDismiss}
       >
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label={`Epic achievement: ${title}`}

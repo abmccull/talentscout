@@ -26,6 +26,84 @@ import { checkPersonalityReveal } from "@/engine/players/personalityReveal";
 import { progressivePersonalityReveal } from "@/engine/players/personalityEffects";
 
 // ---------------------------------------------------------------------------
+// Transaction-local evidence index
+// ---------------------------------------------------------------------------
+
+/**
+ * Player-scoped observation evidence for a single simulation transaction.
+ *
+ * The index preserves the insertion order of the source observation record so
+ * callers can replace repeated whole-world scans without changing evidence or
+ * deterministic RNG consumption in the perception pipeline.
+ */
+export interface ObservationEvidenceIndex {
+  readonly byPlayerId: Map<string, Observation[]>;
+  readonly byObservationId: Map<string, Observation>;
+}
+
+export function createObservationEvidenceIndex(
+  observations: Iterable<Observation>,
+): ObservationEvidenceIndex {
+  const index: ObservationEvidenceIndex = {
+    byPlayerId: new Map<string, Observation[]>(),
+    byObservationId: new Map<string, Observation>(),
+  };
+
+  for (const observation of observations) {
+    upsertObservationEvidence(index, observation);
+  }
+  return index;
+}
+
+/** Return ordered evidence for one player without allocating a filtered copy. */
+export function getPlayerObservationEvidence(
+  index: ObservationEvidenceIndex,
+  playerId: string,
+): Observation[] {
+  return index.byPlayerId.get(playerId) ?? [];
+}
+
+/**
+ * Keep an evidence index synchronized with the observation record being built
+ * during a weekly transaction. Replacing an existing observation preserves its
+ * player-local position, matching assignment to an existing object key.
+ */
+export function upsertObservationEvidence(
+  index: ObservationEvidenceIndex,
+  observation: Observation,
+): void {
+  const existing = index.byObservationId.get(observation.id);
+  if (existing) {
+    const existingPlayerEvidence = index.byPlayerId.get(existing.playerId);
+    const existingIndex = existingPlayerEvidence?.findIndex(
+      (candidate) => candidate.id === observation.id,
+    ) ?? -1;
+
+    if (
+      existingPlayerEvidence
+      && existing.playerId === observation.playerId
+      && existingIndex >= 0
+    ) {
+      existingPlayerEvidence[existingIndex] = observation;
+      index.byObservationId.set(observation.id, observation);
+      return;
+    }
+
+    if (existingPlayerEvidence && existingIndex >= 0) {
+      existingPlayerEvidence.splice(existingIndex, 1);
+      if (existingPlayerEvidence.length === 0) {
+        index.byPlayerId.delete(existing.playerId);
+      }
+    }
+  }
+
+  const playerEvidence = index.byPlayerId.get(observation.playerId) ?? [];
+  playerEvidence.push(observation);
+  index.byPlayerId.set(observation.playerId, playerEvidence);
+  index.byObservationId.set(observation.id, observation);
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 

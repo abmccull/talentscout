@@ -82,7 +82,16 @@ test.describe("Calendar Screen", () => {
     await expect(itinerary.getByRole("button", { name: /mon open day/i })).toBeVisible();
 
     const plannerScrollRegion = gamePage.page.getByTestId("planner-scroll-region");
-    await plannerScrollRegion.evaluate((element) => { element.scrollTop = 600; });
+    await plannerScrollRegion.evaluate((element) => {
+      const itinerary = element.querySelector<HTMLElement>(
+        '[data-tutorial-id="calendar-grid"]',
+      );
+      if (!itinerary) throw new Error("Planner itinerary was not rendered");
+      const itineraryContentTop = itinerary.getBoundingClientRect().top
+        - element.getBoundingClientRect().top
+        + element.scrollTop;
+      element.scrollTop = itineraryContentTop + 100;
+    });
     const stickyTop = await itinerary.evaluate((element) => element.getBoundingClientRect().top);
     expect(stickyTop).toBeGreaterThanOrEqual(55);
     expect(stickyTop).toBeLessThanOrEqual(58);

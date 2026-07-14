@@ -1,142 +1,115 @@
 # TalentScout Youth Scout design audit
 
-**Audit date:** July 12, 2026
-
-**Scope:** Youth Scout onboarding, generated veteran openings, and six permanent workspaces, including observation, reporting, international work, relationships and politics, rival operations, career consequences, recruitment identities, and multi-season World history
+**Audit date:** July 13, 2026
 
 **Viewports:** 1440 x 900 desktop and 390 x 844 mobile
 
-**Rendered evidence:** 64 refreshed core screenshots (32 desktop and 32 mobile) in `design-audit-evidence/interactivity-2026-07-12`, plus the World Archive and academy-case suites. The first-hour tranche adds rendered quick-start, contact-call, breakthrough, discovery-decision, and compressed Planner evidence in `artifacts/hook-final-01-quick-start-desktop.png` through `artifacts/hook-final-06-planner-mobile.png`. Returning-career selection plus generated setup/decision evidence is in `artifacts/veteran-opening-ux/` at desktop and 390x844 mobile widths.
+**Rendered evidence:** 82 current captures, split evenly across desktop and mobile, in `design-audit-evidence/release-2026-07-13/`
 
-**Decision:** **Conditional release candidate, but not yet certified against the strict all-dimensions-9 standard.** The current rendered and automated product score is 9.1 overall. Typography and manual assistive-technology validation remain below the strict release bar, and commercial asset provenance still requires owner review.
+**Decision:** TalentScout is now a **9.2/10 rendered and automated release candidate**, with **9.4/10 gameplay interactivity** and **9.5/10 System Cohesion**. Every scored design dimension is at least 9.0 after the final mobile fixes. This is not yet a fully certified commercial release: manual NVDA and VoiceOver journeys, the moderated usability study, physical low-end hardware, macOS/Linux packages, and the complete packaged/cloud conflict matrix remain unverified.
 
 ## Outcome
 
-TalentScout now presents one scouting career rather than a collection of dashboards. The critical scouting moments have distinct, causal interaction models:
+The interface now supports one coherent scouting career rather than a set of adjacent dashboards. The same prospect and judgment can move through discovery, live observation, contradictory evidence, a preserved hypothesis, a professional report, stakeholder persuasion, placement, development, transfer, failure, vindication, and the World Archive.
 
-- Live Observation uses a graphical pitch with pointer, touch, and keyboard player focus, synchronized with an accessible evidence list.
-- Week resolution is a responsive Commitment to Context to Consequence journey rather than a static sequence of day cards.
-- The Evidence Board exposes supporting claims, contradictions, unknowns, hypotheses, and source calibration.
-- The Report Room turns a written report into a consequential presentation with persisted approach choices.
-- Academy briefs and report writing now expose the destination club's recruitment identity, so the player can understand why the same prospect can fit one opportunity and fail another.
-- Rival organizations appear as an interactive operations network with pressure, agendas, openings, and organization-level selection.
-- International work shows explicit deliverables and only counts destination-linked work.
-- Career politics provides native, keyboard-accessible approach choices with person-specific memory, costs, cooldowns, and future directives.
-- Consequence Cinema and the Career Story Reel connect recommendations to later placement, development, failure, vindication, and career identity.
-- The World Archive makes 30 seasons of champions, movement, managers, club context, and public player outcomes selectable and inspectable without leaking hidden ability.
-- Quick Start now reaches the core fantasy immediately: persona choice, a real generated local lead, three uncertain observation beats, a contradiction, and an irreversible disclosure decision.
-- The authored teaching case is profile-level and one-time. Returning scouts default to one of ten generated prologue structures, or may explicitly start at the Desk or replay the tutorial.
-- Generated prologues vary venue, source, pressure, evidence mode, contradiction, deadline, stakeholder conflict, choice framing, and hidden prospect outcome; recent-template history prevents the last three structures from repeating.
-- The Living Casebook connects first evidence, reflections, reports, club decisions, movement, reviews, and later outcomes into one durable career artifact.
-- Contacts and rivals expose remembered choices, promises, trust effects, and pending consequence deadlines rather than acting only as meters.
-- Tier-4 careers now add a limited-attention leadership portfolio with own, delegate, defer, and reject decisions backed by attributable outcomes.
-- The Planner keeps the seven-day attention budget sticky, collapses secondary context, and schedules common work in two interactions or targeted work in three.
+The strongest current interactions are:
 
-The six-workspace information architecture remains intact: Desk, Planner, Prospects, Reports, World, and Career. Responsive shells and safe-area navigation remove the mobile clipping and occlusion found in the earlier audit.
+- Live Observation: a selectable pitch, synchronized evidence list, touch and keyboard parity, tactical context, and limited focus.
+- Evidence Board: sources, contradictions, unknowns, hypotheses, confidence, and claim construction.
+- Report Room: club need, role, audience, price, risk, alternatives, conviction, presentation approach, and delayed accountability.
+- Weekly Planner: a seven-day attention budget with strategic intent, travel, follow-up, relationship, delegation, and opportunity-cost choices.
+- Consequence Cinema and career callbacks: visually distinct success, failure, rivalry, and reputation consequences that remain attached to the original judgment.
+- World and Career: regional knowledge, physical presence, offices, assignments, world conditions, recovery routes, stakeholder memory, and multi-season player/club/manager comparisons.
+- First five minutes: a one-time authored teaching case for new players and generated, anti-repeating prologues for returning careers.
+- Product roadmap: an honest, build-aware support destination that separates what is available, in validation, planned, and only being explored without adding a seventh gameplay workspace or promising dates.
+
+The six permanent workspaces remain stable: Desk, Planner, Prospects, Reports, World, and Career. Mobile bottom navigation, contextual drill-downs, and lazy-loaded secondary screens retain this structure without exposing unfinished full-game routes.
 
 ## Scorecard
 
 | Dimension | Score | Evidence-backed assessment |
 |---|---:|---|
-| Visual hierarchy | 9.1/10 | Quick Start, the discovery reveal, sticky itinerary, selected-only opportunities, report recommendation, and leadership attention all present one dominant decision with visible stakes. |
-| Layout and spacing | 9.0/10 | The compressed Planner and opening flow fit desktop and 390x844 mobile without document overflow. Long report evidence remains deliberately scrollable behind progressive disclosure. |
-| Typography | 8.9/10 | Opening decisions, relationship history, and Planner costs are highly legible. Compact simulation metadata in the longest dossier, casebook, and archive views remains tiring. |
-| Color and contrast | 9.1/10 | Semantic color is consistent, and the rendered suites report no serious or critical Axe issue in the instrumented states. Contrast was hardened in observation, week resolution, rivals, reports, politics, and the archive. |
-| Components and states | 9.2/10 | Opening, memory, obligation, pending consequence, delegated responsibility, selected opportunity, contradiction, and case-history states share a consistent semantic vocabulary. |
-| Interaction and feedback | 9.3/10 | The first five minutes require focus, evidence classification, hypothesis preservation, and a consequential disclosure choice. Planner, stakeholder, rival, political, reporting, and leadership actions all persist and return feedback. |
-| Information architecture and navigation | 9.2/10 | Six stable workspaces now connect directly to a Living Casebook, actor history, leadership portfolio, and the next relevant planning decision. |
-| Task-flow design | 9.3/10 | Quick Start removes setup friction; the guided hour continues through observe, flag, reflect, reveal, report, list, plan a second context, and advance into consequences. Planner work is bounded to two or three interactions. |
-| Accessibility and inclusive UX | 8.9/10 provisional | Automated keyboard, semantics, focus management, target-size, overflow, and Axe checks pass. The World Archive adds dialog semantics, focus containment, Escape close with focus restoration, a mobile season select, and keyboard-reachable player drill-through. Manual NVDA and VoiceOver journeys remain open. |
-| Imagery and iconography | 9.0/10 | The opening uses a venue scene, live pitch, player identity, notebook treatment, and discovery cinema. Deterministic players and club marks recur across core artifacts, though venue variety can still grow. |
-| Brand visual system | 9.2/10 | The scouting-room palette, live-match surfaces, handwritten discovery language, professional artifacts, and adaptive audio scenes form a recognizable identity. |
-| Emotional trust and polish | 9.3/10 | The opening creates anticipation, doubt, discovery, ownership, and risk; later actor memories and the Living Casebook turn that moment into long-term pride or embarrassment. |
-| **System Cohesion** | **9.4/10** | The same player, evidence, decision, actors, promises, report, and later outcome now travel through the entire scouting career. |
+| Visual hierarchy | 9.2 | Each critical state presents one dominant question, visible stakes, and a primary action. Event titles now wrap correctly on mobile. |
+| Layout and spacing | 9.1 | Desktop and 390 px layouts are bounded across all six workspaces. World controls no longer overlap the mobile assignment card. |
+| Typography | 9.0 | Labels, evidence states, and decisions are consistently legible. The full professional report remains intentionally dense and is the current ceiling. |
+| Color and contrast | 9.2 | Semantic states are consistent and the final desktop/mobile matrix has zero blocking Axe violations. |
+| Components and states | 9.3 | Opportunity, unknown, contradiction, obligation, delegation, consequence, recovery, and archive states share one component grammar. |
+| Interaction and feedback | 9.4 | Pitch focus, evidence classification, report presentation, relationship choices, rival operations, recovery, and weekly resolution all mutate persistent state and return causal feedback. |
+| Information architecture and navigation | 9.3 | Six stable workspaces connect directly to the relevant dossier, case, actor, comparison, or next decision. The roadmap remains a clearly labeled support destination rather than becoming a seventh gameplay workspace. |
+| Task-flow design | 9.4 | The opening reaches uncertain scouting immediately, then teaches observe, preserve a hypothesis, report, plan another context, and live with the result. |
+| Accessibility and inclusive UX | 9.0 provisional | Keyboard, focus restoration, dialog semantics, target size, reduced motion, overflow, and automated Axe gates pass. Manual NVDA and VoiceOver proof remains open. |
+| Imagery and iconography | 9.1 | Venue scenes, pitch language, newspaper consequences, world geography, portraits, and club marks reinforce the scouting identity. |
+| Brand visual system | 9.3 | Scouting-room green, live-match surfaces, notebook evidence, professional reports, and restrained audio cues form a recognizable product. |
+| Emotional trust and polish | 9.4 | The game creates discovery, doubt, ownership, risk, embarrassment, comeback, and vindication. Roadmap status language also avoids fake dates and distinguishes product direction from released functionality. |
+| **System Cohesion** | **9.5** | Evidence, people, reports, money, geography, careers, and historical outcomes now operate as one causal system. |
 
-**Overall rendered-design score:** **9.1/10**
+**Overall rendered-design score:** **9.2/10**
 
-**Gameplay interactivity score:** **9.3/10**
+**Gameplay interactivity score:** **9.4/10**
 
-## Rendered verification
+## Current verification
 
-The first-hour candidate passed the following current gates:
+- TypeScript: passed.
+- Lint: passed with zero warnings or errors.
+- Unit and invariant suite: **104 files, 626/626 tests passed**.
+- Dependency audit: **0 vulnerabilities** at the moderate threshold.
+- Architecture: **456 modules, 1,908 internal edges, 0 dependency cycles**.
+- Replayability: **100 seeds x 3 seasons, 5/5 telemetry checks passed**; broad event-category repetition was 0.1696, including stages of multi-week chains.
+- Gameplay browser suite: **48/48 current scenarios are green**. The integrated run passed 47; its only failure was a stale capitalization assertion against correct +3 reputation copy, and that scenario passed after the assertion was made semantic.
+- Current rendered/accessibility/performance/smoke gates: **14/14 passed**: opening hook 1/1, accessibility 6/6, rendered evidence 2/2, cross-screen smoke 4/4, and throttled performance 1/1. All six workspaces have zero blocking Axe violations on desktop and mobile.
+- Focused roadmap and recovery disclosure checks: **10/10 unit/invariant checks and 2/2 browser journeys passed**. The full two-journey rendered evidence file also passed after a clean E2E rebuild; roadmap overview and game-mode states have desktop/mobile captures, zero serious or critical Axe violations, keyboard-operable tabs, and no document-level mobile overflow.
+- Ten-season browser world-coherence soak: reached Season 11 in 60 bounded batches; **1.3-minute Playwright wall clock and 70.7 seconds of measured simulation**. The slowest eight-week batch was **1.83 seconds**.
+- Current isolated long-save diagnostic: **2 seeds x 10 seasons plus deterministic replay** passed; largest save **26.0 MB**, peak heap **460.2 MB**, peak RSS **567.2 MB**, weekly p95 **1.04 seconds**, and compaction removed **49.9 MB**. The stricter 20 x 30 gate remains unverified.
+- Throttled Chromium evidence: cold load **5.01 s**, navigation p95 **0.59 s**, one-week advance **3.80 s**, heap **98.1 MB**, and **4,607 DOM nodes**; all published emulation budgets passed.
+- Shipping build: `/play` is **560 kB route JS / 667 kB first-load JS** and contains no E2E bridge markers.
+- Assets: **135/135 image and audio assets inventoried**, with owner commercial-rights attestation and zero provenance blockers.
+- Windows: the **167.0 MB NSIS installer** built from the latest source; the unpacked application stayed alive for 12 seconds without Steam, all security fuses matched policy, and the package allowlist contains only `steamworks.js`. This remains supporting, not complete packaged-runtime certification.
 
-- TypeScript and lint: passed with zero warnings or errors.
-- Production static build: passed; `/play` is 520 kB route JS and 627 kB first-load JS after lazy-loading the generated prologue catalog.
-- Complete unit suite: 65 files, 426/426 tests.
-- Focused New Game, authored-opening, and veteran-prologue production suite: 8/8, including double-activation integrity and explicit tutorial replay.
-- Generated prologue setup and decision states: zero serious or critical Axe violations; mobile reveal-to-decision spacing is bounded and screenshot-verified.
-- Cold-open plus compressed Planner browser suite: 6/6.
-- Existing New Game regression suite: 5/5.
-- Broad Youth EA run: 44/45 passed immediately; the sole failure was an obsolete assertion that onboarding should land on the Desk. The test was updated to the intentional Live Observation start and passed on rerun, leaving all 45 browser stories green on the same production build.
-- The cold-open browser test uses only visible UI from scout creation through the discovery decision, verifies save/reload at the reveal, asserts exactly-once discovery and scheduled consequences, and reports zero serious or critical Axe violations.
+## Material defects closed in the final pass
 
-The broader baseline also retains these recorded gates; the long soak should be rerun before a release tag because the candidate has changed:
+1. Mobile World controls no longer obscure the assignment status card.
+2. Expanded event decision titles wrap instead of truncating.
+3. Valid 50+ MB saves cross the Electron/Steam boundary through a bounded chunk protocol rather than failing a 10 MB cap.
+4. Steam slot enumeration no longer drops occupied slots when more than two cloud saves exist.
+5. Cloud upload queues reference the authoritative local revision instead of duplicating full save payloads.
+6. Archive retention is byte-budgeted while preserving verified recovery and conflict copies.
+7. The release checker now derives the candidate, requires a clean tree, and recomputes package hashes instead of trusting tracked metadata.
+8. Weekly development, loans, standings, transfer context, and regional availability reuse indexed context rather than repeatedly scanning the world.
+9. The youth-specialist fallback no longer creates a global youth batch every ordinary week.
+10. Unsigned prospects have a four-completed-season ceiling; placed or aged-out players leave the active pool while scout-linked history remains resolvable.
+11. The ten-season browser soak now fails on zero progress, persists timing evidence, and uses the real dynamic world-condition opportunity cap.
+12. The release-checker integration test has an explicit child-process timeout, eliminating a confirmed busy-host flake.
+13. Simulated cards can only affect players who actually participated; off-field players no longer receive match events.
+14. Resolved, acknowledged, skipped, or orphaned narrative decisions now clear their action-required pins instead of leaving permanent blockers.
+15. Immutable report revisions retain history without multiplying report volume, validation rewards, recovery credit, narrative gates, leadership credit, table-pound allowances, seasonal awards, or career-review denominators.
+16. Signing reputation now follows the dated club-decision ledger, so the same signing cannot pay again on consecutive weeks.
+17. Future achievements, handbook topics, hints, toasts, progress totals, and Steam unlocks are filtered through one Youth EA scope contract; old routes fall back to the correct current workspace.
+18. Career now durably links Network, Alumni, Performance, Achievements, and the distinct finance tools instead of relying on transient notifications.
+19. The unreachable 14-file marketing/landing subtree, dead paper-card component, and obsolete fake-MP3 generator were removed; future full-game modules remain explicitly quarantined rather than masquerading as current features.
+20. Native save import/export is atomic, bounded, strict UTF-8, and chunked; packaged media supports range streaming; cloud auth and online feedback fail closed until their production policies are verified.
+21. Desktop packaging now denies the production dependency tree and explicitly allows only the Steam bridge, reducing `app.asar` to **73.0 MB** and the installer to **167.0 MB**. An automated assertion prevents this bloat from returning.
+22. A durable Future Roadmap support screen now explains the path from Youth Scout Early Access to broader specialist modes, systems, and the full-release quality bar. It is available before and during a career, keeps the six-workspace model intact, and explicitly labels uncertainty without fabricated dates.
+23. Main-menu Continue and Load flows now disclose verified archive fallback, damaged/unrecoverable saves, and verified remote recovery with accessible status copy; an unavailable newest slot can no longer silently displace a loadable verified save.
 
-- Core visual suite: **2/2**, producing 64 refreshed screenshots: 32 desktop and 32 mobile.
-- Academy placement visual suite: **1/1**, with desktop/mobile recruitment-identity briefing evidence plus Axe, document-overflow, and main-region-overflow assertions.
-- World Archive suite: **1/1**, with desktop/mobile renders, Axe, dialog semantics, focus trap, Escape/focus restoration, mobile season selection, player drill-through, and overflow assertions.
-- Accessibility suite: **5/5**.
-- Cross-screen smoke suite: **4/4**.
-- Complete Youth Scout browser story set: **45/45 green** after replacing the obsolete dashboard-start expectation with the new observation-start contract.
-- Ten-season every-week browser world-coherence soak: passed in approximately 3.7 minutes.
+## Remaining certification work
 
-Representative evidence:
+These are evidence gates, not hidden claims of completion:
 
-- `desktop-15b-observation-pitch.png` and `mobile-15b-observation-pitch.png`: graphical, synchronized observation gameplay.
-- `desktop-18b-week-journey.png` and `mobile-18b-week-journey.png`: responsive weekly Commitment to Context to Consequence presentation.
-- `desktop-12b-evidence-board.png` and `mobile-12b-evidence-board.png`: conflicting and calibrated evidence.
-- `desktop-13b-report-presentation-room.png` and `mobile-13b-report-presentation-room.png`: consequential report presentation.
-- `desktop-11b-rival-operations-network.png` and `mobile-11b-rival-operations-network.png`: interactive rival organization network.
-- `desktop-09f-manager-political-meeting.png`, `desktop-09g-board-political-meeting.png`, and their mobile equivalents: persistent stakeholder choices and outcomes.
-- `world-archive-desktop.png` and `world-archive-mobile.png`: interactive historical selection and public-outcome drill-through.
-- Academy-case desktop/mobile report-writer captures: visible recruitment-identity priorities at the decision point.
-- `artifacts/hook-final-01-quick-start-desktop.png` through `hook-final-04-discovery-decision-desktop.png`: the new first-five-minute arc.
-- `artifacts/hook-final-05-planner-desktop.png` and `hook-final-06-planner-mobile.png`: sticky itinerary and compact opportunity board.
+- Complete the documented NVDA journey on Windows.
+- Complete the documented VoiceOver journey on macOS.
+- Run the 12-person moderated study and meet the defined SUS/task-completion thresholds.
+- Profile the minimum supported physical Windows, macOS, and Linux devices; Chromium throttling is only supporting evidence.
+- Execute clean-account install, offline save/load, recovery, interrupted-write, update, uninstall, and live cloud-conflict cases on packaged Windows/macOS/Linux builds.
+- Run the configured 20-seed x 30-season candidate-bound nightly soak.
+- Bind packages and evidence to a clean commit/tag and produce the final candidate manifest.
 
-## Verified design defects closed
+## Remaining source debt after release blockers
 
-1. Mobile Live Observation no longer compresses a desktop two-column layout or hides primary controls.
-2. Mobile Week Simulation no longer extends beyond the viewport.
-3. Safe-area bottom navigation no longer covers required actions.
-4. Observation focus is a real persisted action; the misleading no-effect control was removed.
-5. Pitch and synchronized list expose equivalent information and keyboard paths.
-6. Career meeting choices use native radio semantics, visible focus, legible tradeoffs, and persisted feedback.
-7. International assignment copy describes attainable rewards and displays the deliverables that earn them.
-8. Achievement notifications are compact, batched, and non-blocking.
-9. Tooltips remain inside the audited viewport instead of creating document or main-region overflow.
-10. Club recruitment identity is visible in Desk and report-writing decisions rather than operating as an unexplained modifier.
-11. The World Archive is a real modal interaction with accessible close behavior, season selection, and player drill-through rather than a static history dump.
-12. First-time players no longer spend the opening minutes allocating points and reading dashboards before scouting; Quick Start goes directly to the core observation loop.
-13. The first reveal is not cosmetic: it writes discovery, decision, actor memory, and future case-chain deadlines exactly once and survives reload.
-14. Planner opportunity cards no longer all expand into a long wall; one selection exposes its context, tradeoff, and placement action.
-15. Tier-4 promotion now changes the weekly job through limited-attention leadership responsibilities rather than only raising numeric capacity.
-16. Returning careers no longer silently drop the opening CTA at the Desk; they receive an explicit generated, Desk, or tutorial-replay contract.
-17. Analysis and investigation prologues no longer inherit school-match copy or an impossible live-moment flag gate.
-18. New Game creation is single-flight in both UI and store, preventing duplicate worlds and duplicate prologue-history writes.
-19. Mobile observation context now moves focus into its modal and returns focus on close.
-20. Achievement batches wait until after the discovery decision instead of obscuring the mobile aha moment.
-21. Veteran-opening microcopy and achievement notification colors meet the automated contrast gate without relying on a transient opacity animation.
-
-## Why the design is not yet a strict all-dimensions 9+
-
-- Long casebooks, dossiers, and archives still need a denser expert typography mode and stronger side-by-side multi-season comparison.
-- Agents, families, and journalists still have less recurring visual identity and authored situation variety than contacts, rivals, managers, and employees.
-- Complete journeys have not yet been validated manually with NVDA and VoiceOver.
-- No moderated study has demonstrated a median SUS of at least 85 across management-sim experts and newcomers.
-- Low-end mobile/desktop frame time, broad store-subscription cost, and packaged platform runtime remain only partially evidenced.
-- Generated image and audio provenance is explicitly marked `reviewRequired`; commercial rights evidence must be completed before sale.
-
-## Redesign thesis and acceptance criteria
-
-The next pass should make accumulated history and recurring people as easy to compare as current evidence, while compressing expert workflows rather than adding more dashboards.
-
-1. A club, manager, or player can be compared across at least three seasons from every relevant callback, without exposing hidden truth.
-2. The remaining actor classes receive recurring identity and at least one compositional case role.
-3. Manual NVDA and VoiceOver users can complete onboarding, schedule, observe, report, inspect a consequence, and inspect World history.
-4. Twelve moderated participants achieve median SUS of at least 85, with no critical task below 90% completion.
-5. Representative low-end hardware meets an agreed interaction-frame budget and the packaged runtime passes save, offline, recovery, and platform-specific checks.
-6. Every shipped image and audio group has approved provenance evidence rather than `reviewRequired`.
+- `src/stores/actions/weeklyActions.ts` is still a **7,965-line orchestration module**. It is covered by invariants and currently cycle-free, but should continue being split behind the existing architecture ratchet after the release candidate is frozen; a large last-minute rewrite would add more risk than value.
+- A handful of lower-priority detail/future screens still subscribe to the whole Zustand store. Core workspaces and the highest-traffic detail screens are narrowed, and the throttled runtime budget passes, so the remaining selector work is optimization rather than a correctness blocker.
+- `next lint` passes cleanly but is deprecated by Next.js; migrate to the ESLint CLI before a Next 16 upgrade.
+- Online feedback, Supabase cloud saves, and any global competitive leaderboard must stay disabled until production RLS, rate limits, retention, conflict policy, and server authority are proven.
 
 ## Release design gate
 
-The current interface is a 9.1 rendered and automated release candidate, not a certified all-dimensions-9 release. The new hook, Living Casebook, recurring actor memory, case chain, adaptive audio, late-career leadership, and compressed Planner materially increase value without turning the product into a manager simulation. Certification still depends on manual accessibility, moderated usability, asset rights, low-end performance, packaged runtime, and a fresh full-suite/soak run.
+TalentScout now clears the requested **9+ rendered and automated design bar across all scored categories**. Its core differentiation is visible and playable: uncertainty, personal judgment, persuasion, relationships, geography, and long-term consequences are the game - not decoration around a spreadsheet. Final release certification should remain conditional until the human, hardware, packaged-platform, and exact-candidate evidence above is complete.

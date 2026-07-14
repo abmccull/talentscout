@@ -11,6 +11,7 @@ import {
   expireJobOffersAtWeekEnd,
 } from "@/engine/career/progression";
 import {
+  applyCareerPathTransition,
   transitionToClubEmployment,
   transitionToIndependentCareer,
 } from "@/engine/career/transitions";
@@ -208,6 +209,59 @@ describe("career state integrity", () => {
     expect(transitioned.finances.retainerContracts[0]?.status).toBe("cancelled");
     expect(transitioned.finances.consultingContracts[0]?.status).toBe("expired");
     expect(transitioned.finances.monthlyIncome).toBe(8_000);
+  });
+
+  it("does not carry an employer's leadership portfolio into unemployment", () => {
+    const created = createScout(CONFIG, new RNG("career-state-leadership-exit"));
+    const state = {
+      scout: {
+        ...created,
+        careerPath: "club",
+        careerTier: 4,
+        currentClubId: "club-a",
+        salary: 4_000,
+      },
+      finances: {
+        ...createFinances(),
+        careerPath: "club",
+        monthlyIncome: 16_000,
+      },
+      assistantScouts: [],
+      npcScouts: { "club-scout": { id: "club-scout" } },
+      npcReports: { "club-report": { id: "club-report" } },
+      npcDelegations: { "club-delegation": { id: "club-delegation" } },
+      leadershipPortfolio: {
+        version: 1,
+        attentionWeek: 1,
+        attentionSeason: 1,
+        attentionCapacity: 2,
+        attentionUsed: 1,
+        responsibilities: { "club-task": { id: "club-task" } },
+        trackRecord: {},
+      },
+      territories: {
+        home: {
+          id: "home",
+          name: "Home",
+          country: "England",
+          leagueIds: [],
+          maxScouts: 3,
+          assignedScoutIds: ["club-scout"],
+        },
+      },
+      managerDirectives: [{ id: "club-directive" }],
+      boardProfile: { personality: "patient" },
+    } as unknown as GameState;
+
+    const transitioned = applyCareerPathTransition(state, "independent");
+
+    expect(transitioned.npcScouts).toEqual({});
+    expect(transitioned.npcReports).toEqual({});
+    expect(transitioned.npcDelegations).toEqual({});
+    expect(transitioned.leadershipPortfolio).toBeUndefined();
+    expect(transitioned.territories.home.assignedScoutIds).toEqual([]);
+    expect(transitioned.managerDirectives).toEqual([]);
+    expect(transitioned.boardProfile).toBeUndefined();
   });
 
   it("rejects expired offers and partitions consumed deadlines", () => {

@@ -16,6 +16,8 @@ import {
   type AchievementRarity,
 } from "@/engine/core/achievementEngine";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
 
 // =============================================================================
 // CONSTANTS
@@ -30,7 +32,10 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: "scoutingExcellence", label: "Scouting" },
   { id: "specializationMastery", label: "Mastery" },
   { id: "worldExplorer", label: "World" },
-  { id: "matchAnalysis", label: "Match & Network" },
+  {
+    id: "matchAnalysis",
+    label: IS_YOUTH_EARLY_ACCESS ? "Observation & Network" : "Match & Network",
+  },
   { id: "financial", label: "Financial" },
   { id: "hidden", label: "Hidden" },
 ];
@@ -41,7 +46,9 @@ const CATEGORY_LABEL: Record<AchievementCategory, string> = {
   scoutingExcellence: "Scouting Excellence",
   specializationMastery: "Specialization Mastery",
   worldExplorer: "World Explorer",
-  matchAnalysis: "Match & Network",
+  matchAnalysis: IS_YOUTH_EARLY_ACCESS
+    ? "Observation & Network"
+    : "Match & Network",
   financial: "Financial",
   hidden: "Hidden",
 };
@@ -202,13 +209,18 @@ export function AchievementScreen() {
   const progressCache = useAchievementStore((s) => s.progressCache);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
 
-  const unlockedCount = unlockedAchievements.size;
+  const availableAchievements = ACHIEVEMENTS.filter((achievement) =>
+    isAchievementAvailableForBuild(achievement.id),
+  );
+  const unlockedCount = availableAchievements.filter((achievement) =>
+    unlockedAchievements.has(achievement.id),
+  ).length;
   const progressPct = Math.round((unlockedCount / TOTAL_ACHIEVEMENT_COUNT) * 100);
 
   const filteredAchievements =
     activeTab === "all"
-      ? ACHIEVEMENTS
-      : ACHIEVEMENTS.filter((a) => a.category === activeTab);
+      ? availableAchievements
+      : availableAchievements.filter((a) => a.category === activeTab);
 
   // Sort: unlocked first, then by progress percentage descending
   const sortedAchievements = [...filteredAchievements].sort((a, b) => {
@@ -224,7 +236,7 @@ export function AchievementScreen() {
   // Count unlocked per category for tab badges
   const categoryUnlockedCounts: Partial<Record<AchievementCategory, number>> = {};
   const categoryCounts: Partial<Record<AchievementCategory, number>> = {};
-  for (const a of ACHIEVEMENTS) {
+  for (const a of availableAchievements) {
     categoryCounts[a.category] = (categoryCounts[a.category] ?? 0) + 1;
     if (unlockedAchievements.has(a.id)) {
       categoryUnlockedCounts[a.category] = (categoryUnlockedCounts[a.category] ?? 0) + 1;

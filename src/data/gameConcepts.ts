@@ -297,7 +297,7 @@ export const GAME_CONCEPTS: GameConcept[] = [
     key: "report-quality",
     label: "Report Quality",
     definition:
-      "A composite score based on attributes assessed, average confidence, accuracy vs true values, conviction alignment, and equipment bonuses. Higher quality reports earn better responses from clubs.",
+      "An evidence-facing craft score based on observation depth, positional coverage, confidence, conviction calibration, professional detail, scout skill, equipment, and infrastructure. Hidden player truth is used only for delayed outcome review.",
     category: "report",
     related: ["conviction-level", "confidence", "accuracy"],
     handbookChapter: "scouting-reports",

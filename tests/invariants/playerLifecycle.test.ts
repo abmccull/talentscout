@@ -144,8 +144,21 @@ describe("authoritative player lifecycle", () => {
     expect(started.state.clubs.a.loanedOutPlayerIds).toEqual(["p1"]);
     expect(started.state.clubs.b.loanedInPlayerIds).toEqual(["p1"]);
 
-    const bought = resolvePlayerMovements(
+    const duplicateStart = resolvePlayerMovements(
       started.state,
+      [{ type: "loanStart", playerId: "p1", deal }],
+      1,
+      2,
+    );
+    expect(duplicateStart.applied).toEqual([]);
+    expect(duplicateStart.rejected).toHaveLength(1);
+    expect(duplicateStart.state.activeLoans).toHaveLength(1);
+    expect(duplicateStart.state.clubs.a.budget).toBe(106_000);
+    expect(duplicateStart.state.clubs.b.budget).toBe(94_000);
+    expect(duplicateStart.state.playerMovementHistory).toHaveLength(1);
+
+    const bought = resolvePlayerMovements(
+      duplicateStart.state,
       [{
         type: "loanEnd",
         playerId: "p1",

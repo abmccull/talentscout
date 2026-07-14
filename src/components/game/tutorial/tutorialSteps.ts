@@ -2,7 +2,7 @@
  * Tutorial step and sequence definitions.
  *
  * Each step references a `targetSelector` — the value of a `data-tutorial-id`
- * attribute on a DOM element in the game UI.  The TutorialOverlay component
+ * attribute on a DOM element in the game UI. The MentorOverlay component
  * queries `document.querySelector('[data-tutorial-id="<value>"]')` to find
  * the element and spotlight it.
  *

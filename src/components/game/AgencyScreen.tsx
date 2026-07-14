@@ -26,6 +26,8 @@ import { OfficeTab } from "./agency/OfficeTab";
 import { ClientsTab } from "./agency/ClientsTab";
 import { EventsTab } from "./agency/EventsTab";
 import { OfficesTab } from "./agency/OfficesTab";
+import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 import { LegacyTab } from "./agency/LegacyTab";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
@@ -76,6 +78,12 @@ export function AgencyScreen() {
   const infrastructure = gameState.scoutingInfrastructure;
   const infraEffects = calculateInfrastructureEffects(infrastructure);
   const assistantScouts = gameState.assistantScouts ?? [];
+  const satellitePresence = Object.fromEntries(
+    satelliteOffices.map((office) => [
+      office.id,
+      deriveRegionalPresence(gameState, office.region),
+    ]),
+  );
 
   // ── Tab definitions ────────────────────────────────────────────────────────
   const tabs: TabDef[] = [
@@ -338,6 +346,11 @@ export function AgencyScreen() {
               employees={finances.employees}
               countries={countries}
               balance={finances.balance}
+              presenceByOfficeId={satellitePresence}
+              homeCountry={getScoutHomeCountry(scout)}
+              scout={scout}
+              currentWeek={gameState.currentWeek}
+              currentSeason={gameState.currentSeason}
             />
           )}
 

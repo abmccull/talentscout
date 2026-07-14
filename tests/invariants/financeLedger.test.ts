@@ -6,7 +6,13 @@ import {
   initializeFinances,
   processWeeklyFinances,
   processStarterStipend,
+  sumOperatingExpenses,
 } from "@/engine/finance/expenses";
+import {
+  processLoanPayment,
+  repayLoanEarly,
+  takeLoan,
+} from "@/engine/finance/loans";
 import { RNG } from "@/engine/rng";
 import { createScout } from "@/engine/scout/creation";
 import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
@@ -14,7 +20,9 @@ import { hireEmployee } from "@/engine/finance/agency";
 import { hireAssistantScout } from "@/engine/finance/assistantScouts";
 import {
   closeSatelliteOffice,
+  getHomeBaseRelocationQuote,
   openSatelliteOffice,
+  relocateHomeBase,
 } from "@/engine/finance/internationalExpansion";
 
 const CONFIG: NewGameConfig = {
@@ -167,6 +175,82 @@ describe("financial ledger invariants", () => {
       .toBe(adjusted.balance);
   });
 
+  it("records loan proceeds and early repayment as auditable cash movements", () => {
+    const scout = createScout(CONFIG, new RNG("ledger-loan-lifecycle"));
+    const opened = initializeFinances(scout, "independent", "normal");
+    const borrowed = takeLoan(opened, "business", 1_000, 1, 1);
+
+    expect(borrowed).not.toBeNull();
+    expect(borrowed!.balance - opened.balance).toBe(1_000);
+    expect(borrowed!.transactions.at(-1)).toMatchObject({
+      week: 1,
+      season: 1,
+      amount: 1_000,
+      referenceId: `loan:${borrowed!.activeLoan!.id}:disbursement`,
+    });
+
+    const outstanding = borrowed!.activeLoan!.remainingBalance;
+    const repaid = repayLoanEarly(borrowed!, 2, 1);
+    expect(repaid).not.toBeNull();
+    expect(repaid!.activeLoan).toBeUndefined();
+    expect(repaid!.balance - borrowed!.balance).toBe(-outstanding);
+    expect(repaid!.transactions.at(-1)).toMatchObject({
+      week: 2,
+      season: 1,
+      amount: -outstanding,
+      referenceId: `loan:${borrowed!.activeLoan!.id}:early-repayment:s1w2`,
+    });
+    expect(repaid!.transactions.reduce((sum, transaction) => sum + transaction.amount, 0))
+      .toBe(repaid!.balance);
+  });
+
+  it("charges each scheduled loan instalment exactly once outside operating expenses", () => {
+    const scout = createScout(CONFIG, new RNG("ledger-loan-payment"));
+    const opened = initializeFinances(scout, "independent", "normal");
+    const borrowed = takeLoan(opened, "business", 5_000, 1, 1)!;
+    const outstandingBeforePayment = borrowed.activeLoan!.remainingBalance;
+
+    const monthly = processWeeklyFinances(borrowed, scout, 4, 1);
+    expect(monthly.activeLoan!.remainingBalance).toBe(outstandingBeforePayment);
+
+    const paid = processLoanPayment(monthly, 4, 1);
+    const payment = borrowed.activeLoan!.monthlyPayment;
+    const paymentReference = `loan:${borrowed.activeLoan!.id}:payment:s1w4`;
+    const operatingTransaction = paid.transactions.find(
+      (transaction) => transaction.referenceId === "monthly-finance:s1w4:operating-expenses",
+    );
+    const paymentTransactions = paid.transactions.filter(
+      (transaction) => transaction.referenceId === paymentReference,
+    );
+
+    expect(operatingTransaction?.amount).toBe(
+      -(sumOperatingExpenses(paid.expenses) - paid.expenses.employeeSalaries),
+    );
+    expect(paymentTransactions).toEqual([expect.objectContaining({
+      amount: -payment,
+      description: "Monthly loan payment",
+    })]);
+    expect(paid.activeLoan!.remainingBalance).toBe(outstandingBeforePayment - payment);
+
+    const displayedExpenseTotal = Object.values(paid.expenses)
+      .reduce((total, expense) => total + expense, 0);
+    const employeeTransactions = paid.transactions.filter(
+      (transaction) => transaction.referenceId?.startsWith("monthly-finance:s1w4:employee:"),
+    );
+    const chargedExpenseTotal = -(operatingTransaction?.amount ?? 0)
+      - employeeTransactions.reduce((total, transaction) => total + transaction.amount, 0)
+      - paymentTransactions.reduce((total, transaction) => total + transaction.amount, 0);
+    expect(chargedExpenseTotal).toBe(displayedExpenseTotal);
+
+    const replayed = processLoanPayment(paid, 4, 1);
+    expect(replayed).toBe(paid);
+    expect(replayed.transactions.filter(
+      (transaction) => transaction.referenceId === paymentReference,
+    )).toHaveLength(1);
+    expect(replayed.transactions.reduce((sum, transaction) => sum + transaction.amount, 0))
+      .toBe(replayed.balance);
+  });
+
   it("allocates unique deterministic IDs for repeated same-week hires", () => {
     const scout = createScout(CONFIG, new RNG("ledger-hires"));
     const finances = {
@@ -211,12 +295,42 @@ describe("financial ledger invariants", () => {
     };
     const first = openSatelliteOffice(finances, "Iberia", 12, 2, 1);
     expect(first).not.toBeNull();
-    const closed = closeSatelliteOffice(first!, first!.satelliteOffices[0].id);
-    const reopened = openSatelliteOffice(closed, "Iberia", 12, 2, 2);
+    const closed = closeSatelliteOffice(first!, first!.satelliteOffices[0].id, 12, 2);
+    const reopened = openSatelliteOffice(closed, "Iberia", 12, 2, 3);
 
     expect(first?.satelliteOffices[0].id).toBe("sat_Iberia_s2w12_a1");
-    expect(reopened?.satelliteOffices[0].id).toBe("sat_Iberia_s2w12_a2");
-    expect(reopened?.actionSequence).toBe(2);
+    expect(closed.balance).toBe(first!.balance - 1_000);
+    expect(closed.transactions.at(-1)?.referenceId).toContain("satellite-close:");
+    expect(reopened?.satelliteOffices[0].id).toBe("sat_Iberia_s2w12_a3");
+    expect(reopened?.actionSequence).toBe(3);
+  });
+
+  it("makes headquarters relocation a costly, persistent network decision", () => {
+    const scout = {
+      ...createScout(CONFIG, new RNG("ledger-relocation")),
+      homeCountry: "england",
+      careerPath: "independent" as const,
+    };
+    const finances = {
+      ...initializeFinances(scout, "independent", "normal"),
+      balance: 100_000,
+    };
+    const withBrazilOffice = openSatelliteOffice(finances, "brazil", 1, 2, 1)!;
+    const quote = getHomeBaseRelocationQuote(withBrazilOffice, scout, "brazil", 10, 2);
+
+    expect(quote.eligible).toBe(true);
+    const relocated = relocateHomeBase(withBrazilOffice, scout, "brazil", 10, 2)!;
+
+    expect(relocated.scout.homeCountry).toBe("brazil");
+    expect(relocated.scout.homeBaseRelocations).toHaveLength(1);
+    expect(relocated.finances.balance).toBe(withBrazilOffice.balance - quote.cost);
+    expect(relocated.finances.satelliteOffices.map((office) => office.region)).toEqual(["england"]);
+    expect(relocated.finances.transactions.at(-1)?.referenceId).toBe(
+      relocated.scout.homeBaseRelocations?.[0].id,
+    );
+
+    const anotherOffice = openSatelliteOffice(relocated.finances, "france", 11, 2, 3)!;
+    expect(getHomeBaseRelocationQuote(anotherOffice, relocated.scout, "france", 20, 2).eligible).toBe(false);
   });
 
   it("keeps assistant hire identity unique across a save/reload boundary", () => {

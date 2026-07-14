@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { useGameStore } from "@/stores/gameStore";
+import { useShallow } from "zustand/react/shallow";
+import { useGameStore, type GameScreen } from "@/stores/gameStore";
+import { resolveGameScreenForBuild } from "@/stores/gameScreenScope";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
 import { useKeyboardNav, setFeedbackOpenHandler } from "@/lib/useKeyboardNav";
 import { ScreenErrorBoundary } from "@/components/game/ScreenErrorBoundary";
@@ -128,6 +130,10 @@ const YouthScoutingScreen = dynamic(
 );
 const WikiScreen = dynamic(
   () => import("@/components/game/wiki/WikiScreen").then((module) => module.WikiScreen),
+  { ssr: false, loading: GameScreenLoading },
+);
+const FutureRoadmapScreen = dynamic(
+  () => import("@/components/game/FutureRoadmapScreen").then((module) => module.FutureRoadmapScreen),
   { ssr: false, loading: GameScreenLoading },
 );
 const WeekSimulationScreen = dynamic(
@@ -256,7 +262,7 @@ function HallOfFameWrapper() {
   );
 }
 
-function ScreenContent({ currentScreen }: { currentScreen: string }) {
+function ScreenContent({ currentScreen }: { currentScreen: GameScreen }) {
   switch (currentScreen) {
     case "mainMenu":
       return <MainMenu />;
@@ -310,6 +316,8 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
       return <FinancialDashboard />;
     case "handbook":
       return <WikiScreen />;
+    case "futureRoadmap":
+      return <FutureRoadmapScreen />;
     case "achievements":
       return <AchievementScreen />;
     case "scenarioSelect":
@@ -344,11 +352,26 @@ function ScreenContent({ currentScreen }: { currentScreen: string }) {
 }
 
 function ActiveScreen() {
-  const currentScreen = useGameStore((s) => s.currentScreen);
+  const { currentScreen, hasActiveCareer, setScreen } = useGameStore(useShallow((state) => ({
+    currentScreen: state.currentScreen,
+    hasActiveCareer: state.gameState !== null,
+    setScreen: state.setScreen,
+  })));
+  const resolvedScreen = resolveGameScreenForBuild(currentScreen, hasActiveCareer);
+
+  useEffect(() => {
+    if (resolvedScreen !== currentScreen) {
+      setScreen(resolvedScreen);
+    }
+  }, [currentScreen, resolvedScreen, setScreen]);
 
   return (
-    <div key={currentScreen} className="game-screen-enter">
-      <ScreenContent currentScreen={currentScreen} />
+    <div
+      key={resolvedScreen}
+      data-game-screen={resolvedScreen}
+      className="game-screen-enter"
+    >
+      <ScreenContent currentScreen={resolvedScreen} />
     </div>
   );
 }
@@ -357,6 +380,7 @@ export default function Home() {
   const activeCareerId = useGameStore((s) => s.gameState?.scout.id);
   const setScreen = useGameStore((s) => s.setScreen);
   const pendingCelebration = useGameStore((s) => s.pendingCelebration);
+  const hasWeekSummary = useGameStore((s) => s.lastWeekSummary !== null);
   const dismissCelebration = useGameStore((s) => s.dismissCelebration);
   const lastInsightResult = useGameStore((s) => s.lastInsightResult);
   const dismissInsightResult = useGameStore((s) => s.dismissInsightResult);
@@ -379,14 +403,19 @@ export default function Home() {
     setScreen("dashboard");
   }, [setScreen]);
 
-  // Keep the launch bundle lean, then warm the two most likely next
-  // workspaces once a career is active and the browser is idle.
+  // Warm the six permanent Youth Scout workspaces once a career is active.
+  // These are primary navigation, not speculative features: fetching their
+  // small split chunks while the player reads the Desk prevents first-visit
+  // stalls without inflating /play startup.
   useEffect(() => {
     if (!activeCareerId || typeof window === "undefined") return;
     const prefetch = () => {
       void Promise.all([
         import("@/components/game/CalendarScreen"),
         import("@/components/game/YouthScoutingScreen"),
+        import("@/components/game/ReportHistory"),
+        import("@/components/game/InternationalScreen"),
+        import("@/components/game/CareerScreen"),
       ]);
     };
     const timeoutId = window.setTimeout(prefetch, 500);
@@ -418,7 +447,11 @@ export default function Home() {
         </>
       )}
       {/* Celebration overlay — shows tier-appropriate animation on key milestones. */}
-      {pendingCelebration && (
+      {/* A completed week and its milestone are one sequence, not two stacked
+          modal layers. Keep the celebration queued until the player closes the
+          week summary so a late-loaded celebration cannot intercept that
+          summary's controls or expose two aria-modal dialogs at once. */}
+      {pendingCelebration && !hasWeekSummary && (
         <Celebration
           tier={pendingCelebration.tier}
           title={pendingCelebration.title}

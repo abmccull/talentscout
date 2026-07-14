@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Player, PlayerMovementEvent, UnsignedYouth } from "@/engine/core/types";
+import type { Club, Player, PlayerMovementEvent, UnsignedYouth } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { generatePlayer } from "@/engine/players/generation";
-import { reconcileYouthSigningPlacements } from "@/engine/youth/generation";
+import {
+  processYouthAging,
+  reconcileYouthSigningPlacements,
+  UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS,
+} from "@/engine/youth/generation";
 
 function generatedPlayer(namespace?: string): Player {
   return generatePlayer(createRNG("aligned-player-stream"), {
@@ -63,7 +67,7 @@ describe("long-career youth identity and placement integrity", () => {
     expect(reconciled[youth.id].placedClubId).toBeUndefined();
   });
 
-  it("preserves placement only when the matching youth-signing movement committed", () => {
+  it("removes a prospect from the active pool when the matching signing committed", () => {
     const prospect = generatedPlayer("unsigned_season-start_england_s11_w1");
     const youth = unsignedYouth(prospect);
     const movement: PlayerMovementEvent = {
@@ -81,10 +85,105 @@ describe("long-career youth identity and placement integrity", () => {
       [movement],
     );
 
-    expect(reconciled[youth.id]).toBe(youth);
-    expect(reconciled[youth.id]).toMatchObject({
-      placed: true,
-      placedClubId: "club-b",
-    });
+    expect(reconciled[youth.id]).toBeUndefined();
+  });
+
+  it("expires an unresolved cohort after four completed seasons, but not sooner", () => {
+    expect(UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS).toBe(4);
+    const prospect = {
+      ...generatedPlayer("unsigned-cohort"),
+      age: 13,
+    };
+    const youth: UnsignedYouth = {
+      ...unsignedYouth(prospect),
+      generatedSeason: 1,
+      placed: false,
+      placedClubId: undefined,
+    };
+    const clubs: Record<string, Club> = {};
+
+    const beforeCap = processYouthAging(
+      createRNG("cohort-cap"),
+      { [youth.id]: youth },
+      clubs,
+      3,
+    );
+    expect(beforeCap.retired).toEqual([]);
+    expect(beforeCap.updated[youth.id].retired).toBe(false);
+
+    const atCap = processYouthAging(
+      createRNG("cohort-cap"),
+      { [youth.id]: youth },
+      clubs,
+      4,
+    );
+    expect(atCap.retired).toEqual([youth.id]);
+    expect(atCap.updated[youth.id].retired).toBe(true);
+  });
+
+  it("still lets age rules resolve a prospect before the cohort cap", () => {
+    const prospect = {
+      ...generatedPlayer("unsigned-age-exit"),
+      age: 18,
+    };
+    const youth: UnsignedYouth = {
+      ...unsignedYouth(prospect),
+      generatedSeason: 1,
+      placed: false,
+      placedClubId: undefined,
+    };
+
+    const result = processYouthAging(
+      createRNG("age-exit"),
+      { [youth.id]: youth },
+      {},
+      1,
+    );
+
+    expect(result.retired).toEqual([youth.id]);
+    expect(result.updated[youth.id].retired).toBe(true);
+  });
+
+  it("keeps repeated seasonal cohorts bounded without retaining terminal records", () => {
+    let pool: Record<string, UnsignedYouth> = {};
+    const cohortSize = 6;
+
+    for (let season = 1; season <= 8; season++) {
+      for (let index = 0; index < cohortSize; index++) {
+        const player = {
+          ...generatedPlayer(`unsigned-cohort-s${season}-${index}`),
+          age: 13,
+        };
+        pool[player.id] = {
+          ...unsignedYouth(player),
+          generatedSeason: season,
+          placed: false,
+          placedClubId: undefined,
+        };
+      }
+
+      const result = processYouthAging(
+        createRNG(`bounded-cohorts-${season}`),
+        pool,
+        {},
+        season,
+      );
+      const retired = new Set(result.retired);
+      pool = Object.fromEntries(
+        Object.entries(result.updated)
+          .filter(([youthId, youth]) => !retired.has(youthId) && !youth.placed && !youth.retired)
+          .map(([youthId, youth]) => [
+            youthId,
+            { ...youth, player: { ...youth.player, age: youth.player.age + 1 } },
+          ]),
+      );
+
+      expect(Object.values(pool).every((youth) =>
+        season - youth.generatedSeason + 1 < UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS,
+      )).toBe(true);
+      expect(Object.keys(pool).length).toBeLessThanOrEqual(
+        cohortSize * (UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS - 1),
+      );
+    }
   });
 });

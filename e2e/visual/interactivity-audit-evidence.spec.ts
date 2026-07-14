@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
+import type { Locator } from "@playwright/test";
 import { test, expect } from "../fixtures";
 import type { GamePage } from "../fixtures";
 import { SELECTORS } from "../helpers/selectors";
@@ -8,7 +9,7 @@ import { SELECTORS } from "../helpers/selectors";
 const evidenceDir = path.join(
   process.cwd(),
   "design-audit-evidence",
-  "interactivity-2026-07-12",
+  "release-2026-07-13",
 );
 
 const viewports = [
@@ -75,6 +76,18 @@ async function captureBoth(
   }
 }
 
+async function captureIntroSplashBoth(gamePage: GamePage, name: string) {
+  for (const viewport of viewports) {
+    await gamePage.page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await gamePage.page.reload({ waitUntil: "domcontentloaded" });
+    const splash = gamePage.page.getByTestId("main-menu-splash");
+    await expect(splash).toBeVisible();
+    await gamePage.page.screenshot({
+      path: path.join(evidenceDir, `${viewport.name}-${name}.png`),
+    });
+  }
+}
+
 async function captureSurfaceBoth(
   gamePage: GamePage,
   name: string,
@@ -91,6 +104,35 @@ async function captureSurfaceBoth(
       path: path.join(evidenceDir, `${viewport.name}-${name}.png`),
     });
   }
+}
+
+async function expectNoVisualOverlap(
+  first: Locator,
+  second: Locator,
+  label: string,
+) {
+  const [firstBox, secondBox] = await Promise.all([
+    first.boundingBox(),
+    second.boundingBox(),
+  ]);
+  expect(firstBox, `${label}: first surface is not rendered`).not.toBeNull();
+  expect(secondBox, `${label}: second surface is not rendered`).not.toBeNull();
+  if (!firstBox || !secondBox) return;
+
+  const overlapWidth = Math.max(
+    0,
+    Math.min(firstBox.x + firstBox.width, secondBox.x + secondBox.width)
+      - Math.max(firstBox.x, secondBox.x),
+  );
+  const overlapHeight = Math.max(
+    0,
+    Math.min(firstBox.y + firstBox.height, secondBox.y + secondBox.height)
+      - Math.max(firstBox.y, secondBox.y),
+  );
+  expect(
+    overlapWidth * overlapHeight,
+    `${label}: controls overlap by ${overlapWidth * overlapHeight}px`,
+  ).toBe(0);
 }
 
 async function allocateYouthPoints(gamePage: GamePage) {
@@ -267,7 +309,27 @@ test.describe("Interactivity audit rendered evidence", () => {
     await mkdir(evidenceDir, { recursive: true });
     await gamePage.goto();
 
-    await captureBoth(gamePage, "01-main-menu");
+    await captureIntroSplashBoth(gamePage, "00-intro-splash");
+    await gamePage.page.getByRole("button", { name: "Skip intro" }).click();
+    await expect(gamePage.page.getByTestId("main-menu-actions")).toBeVisible();
+    await captureBoth(gamePage, "01-main-menu", { axe: true });
+    await gamePage.page.getByRole("button", { name: "Future roadmap" }).click();
+    await gamePage.waitForScreen("futureRoadmap");
+    await expect(gamePage.page.getByTestId("future-roadmap-screen")).toBeVisible();
+    await captureBoth(gamePage, "01b-future-roadmap-overview", {
+      fullPage: true,
+      axe: true,
+      assertResponsiveWidth: true,
+    });
+    await gamePage.page.getByRole("tab", { name: "Game modes" }).click();
+    await captureBoth(gamePage, "01c-future-roadmap-modes", {
+      fullPage: true,
+      axe: true,
+      assertResponsiveWidth: true,
+    });
+    await gamePage.page.getByRole("button", { name: "Back to main menu" }).click();
+    await gamePage.waitForScreen("mainMenu");
+    await expect(gamePage.page.getByTestId("main-menu-actions")).toBeVisible();
     await gamePage.page.locator(SELECTORS.newGameButton).first().click();
     await gamePage.page.locator(SELECTORS.firstNameInput).fill("Maya");
     await gamePage.page.locator(SELECTORS.lastNameInput).fill("Reed");
@@ -286,6 +348,9 @@ test.describe("Interactivity audit rendered evidence", () => {
 
     await gamePage.injectState({
       currentWeek: 12,
+      // Brazil is part of this rendered career so the later international
+      // assignment remains backed by generated world content after load/migration.
+      countries: ["england", "brazil"],
       scout: {
         firstName: "Maya",
         lastName: "Reed",
@@ -307,7 +372,61 @@ test.describe("Interactivity audit rendered evidence", () => {
     for (const [screen, name] of workspaces) {
       await gamePage.setScreen(screen);
       await captureBoth(gamePage, name, { fullPage: true });
+      if (screen === "internationalView") {
+        const assignmentPanel = gamePage.page.getByTestId("international-assignment-panel");
+        await expectNoVisualOverlap(
+          assignmentPanel,
+          gamePage.page.getByRole("button", { name: /World Archive/i }),
+          "mobile World Archive and assignment panel",
+        );
+        await expectNoVisualOverlap(
+          assignmentPanel,
+          gamePage.page.getByRole("button", { name: /Browse countries/i }),
+          "mobile country browser and assignment panel",
+        );
+      }
     }
+
+    await gamePage.setScreen("calendar");
+    await captureSurfaceBoth(gamePage, "05b-weekly-strategy", "weekly-strategy-panel");
+
+    await gamePage.setScreen("career");
+    await captureSurfaceBoth(gamePage, "09a-world-conditions", "world-condition-panel");
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      store.getState().loadGame({
+        ...state,
+        careerRecovery: {
+          version: 1,
+          history: [],
+          current: {
+            id: "audit-career-recovery",
+            decisionId: "audit-career-recovery-decision",
+            kind: "firing",
+            previousTier: Math.max(2, state.scout.careerTier),
+            previousClubId: state.scout.currentClubId,
+            triggeredWeek: state.currentWeek,
+            triggeredSeason: state.currentSeason,
+            choiceDueWeek: state.currentWeek + 1,
+            choiceDueSeason: state.currentSeason,
+            status: "awaitingChoice",
+            target: 0,
+            progress: 0,
+            progressSourceIds: [],
+            baselineReportIds: [],
+          },
+        },
+      });
+    });
+    // loadGame deliberately returns imported saves to their safe restore
+    // screen. Navigate back to the workspace whose injected state we are
+    // capturing instead of relying on the pre-load route to survive.
+    await gamePage.setScreen("career");
+    await captureSurfaceBoth(gamePage, "09aa-career-recovery", "career-recovery-panel");
+
+    await gamePage.setScreen("performance");
+    await captureSurfaceBoth(gamePage, "09ab-judgment-calibration", "judgment-calibration");
 
     await gamePage.setScreen("internationalView");
     await captureBoth(gamePage, "08a-international-assignment", {
@@ -403,6 +522,19 @@ test.describe("Interactivity audit rendered evidence", () => {
       fullPage: true,
       axe: true,
     });
+    const eventTitle = gamePage.page.getByTestId("narrative-event-title").first();
+    const titleLayout = await eventTitle.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      return {
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        textOverflow: style.textOverflow,
+        whiteSpace: style.whiteSpace,
+      };
+    });
+    expect(titleLayout.scrollWidth).toBeLessThanOrEqual(titleLayout.clientWidth + 1);
+    expect(titleLayout.textOverflow).not.toBe("ellipsis");
+    expect(titleLayout.whiteSpace).not.toBe("nowrap");
 
     await gamePage.setScreen("rivals");
     await captureBoth(gamePage, "11-rival-landscape", {
@@ -547,11 +679,14 @@ test.describe("Interactivity audit rendered evidence", () => {
       axe: true,
       assertResponsiveWidth: true,
     });
+    await captureSurfaceBoth(gamePage, "12a-development-environment", "development-environment");
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText("Morgan Vale");
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText(/conflict/i);
     await captureSurfaceBoth(gamePage, "12b-evidence-board", "evidence-board");
     await gamePage.setScreen("reportWriter");
     await gamePage.waitForScreen("reportWriter");
+    await gamePage.page.waitForTimeout(250);
+    gamePage.expectNoConsoleErrors();
     await captureBoth(gamePage, "13-report-writer", {
       fullPage: true,
       axe: true,

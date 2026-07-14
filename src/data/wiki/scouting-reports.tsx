@@ -143,25 +143,27 @@ export const scoutingReportsArticles: WikiArticle[] = [
     category: "scouting-reports",
     order: 2,
     summary:
-      "The five factors that determine report quality and how quality affects reputation and income.",
+      "The evidence-facing factors that determine report craft and how a case creates value.",
     searchText:
-      "Report quality is calculated from: Total number of attributes assessed. Average confidence across all readings. Accuracy of your attribute estimates vs the player's true values. Whether your conviction level matched the outcome (post-transfer). Equipment bonuses from your active loadout (notebook, video, analysis slots). High-quality reports increase your reputation more and are more likely to influence club decisions. You can also list reports on the marketplace as an independent scout to earn income directly.",
+      "Report craft is calculated from observation depth, positional coverage, evidence confidence, conviction calibration against your perceived evidence, professional detail, scouting skill, equipment, and infrastructure. The first filing opens a distinct case. Revisions require new observations and do not inflate report volume or submission reputation. Independent scouts can sell valuable cases on the marketplace; lasting reputation follows delivery and later outcomes.",
     content: (
       <SectionBlock>
         <Para>Report quality is calculated from:</Para>
         <BulletList
           items={[
-            "Total number of attributes assessed",
-            "Average confidence across all readings",
-            "Accuracy of your attribute estimates vs the player\u2019s true values",
-            "Whether your conviction level matched the outcome (post-transfer)",
-            "Equipment bonuses from your active loadout (notebook, video, analysis slots)",
+            "Observation depth and coverage of position-relevant attributes",
+            "Confidence across the evidence you actually gathered",
+            "How well conviction matches your perceived evidence",
+            "Evidence-backed strengths, concerns, and professional detail",
+            "Scouting skill plus equipment and infrastructure support",
           ]}
         />
         <Para>
-          High-quality reports increase your reputation more and are more likely
-          to influence club decisions. You can also list reports on the
-          marketplace as an independent scout to earn income directly.
+          The first filing opens a distinct scouting case and can earn modest
+          craft credit. A revision needs new observations and preserves your
+          changed judgment without inflating volume. Independent scouts can sell
+          valuable cases on the marketplace; lasting reputation follows delivery
+          and the recommendation&apos;s later consequences.
         </Para>
       </SectionBlock>
     ),

@@ -1,18 +1,129 @@
 import type {
   Fixture,
   GameState,
+  Player,
   PlayerMovementEvent,
 } from "@/engine/core/types";
-import type { PlayerSeasonHistory } from "@/engine/world/worldHistory";
+import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
+import type { PlayerSeasonHistory } from "@/engine/world/worldHistoryTypes";
 
-/** Keep detailed schedules for the active season and the one immediately prior. */
-export const FIXTURE_DETAIL_RETENTION_SEASONS = 2;
+/**
+ * Keep a complete fixture schedule only for the active season. Completed
+ * seasons are projected into WorldHistory before this retention boundary runs;
+ * individually referenced fixtures are retained separately below.
+ */
+export const FIXTURE_DETAIL_RETENTION_SEASONS = 1;
 /** Global public archive rows per season, plus every scout-causal player. */
 export const WORLD_HISTORY_PLAYER_LIMIT = 500;
+
+export const SAVE_RETENTION_COLLECTION_KEYS = [
+  "players",
+  "worldHistory",
+  "fixtures",
+  "matchRatings",
+  "playerMovementHistory",
+  "retiredPlayers",
+  "retiredPlayerIds",
+  "unsignedYouth",
+] as const;
+
+export type SaveRetentionCollectionKey =
+  (typeof SAVE_RETENTION_COLLECTION_KEYS)[number];
+
+export interface SaveRetentionFootprint {
+  totalBytes: number;
+  collections: Record<SaveRetentionCollectionKey, number>;
+}
+
+export interface SaveRetentionCompactionSample {
+  phase: "fixtureRetention" | "archiveCompaction";
+  season: number;
+  week: number;
+  removedBytes: number;
+  collectionDeltas: Record<SaveRetentionCollectionKey, number>;
+}
+
+type SaveRetentionObserver = (sample: SaveRetentionCompactionSample) => void;
+
+let saveRetentionObserver: SaveRetentionObserver | undefined;
+const utf8Encoder = new TextEncoder();
+
+function serializedByteLength(value: unknown): number {
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? 0 : utf8Encoder.encode(serialized).byteLength;
+}
+
+/** Exact UTF-8 attribution used by release-soak diagnostics, never persisted. */
+export function measureSaveRetentionFootprint(state: GameState): SaveRetentionFootprint {
+  const collections = Object.fromEntries(
+    SAVE_RETENTION_COLLECTION_KEYS.map((key) => [
+      key,
+      serializedByteLength(state[key]),
+    ]),
+  ) as Record<SaveRetentionCollectionKey, number>;
+
+  return {
+    totalBytes: serializedByteLength(state),
+    collections,
+  };
+}
+
+/**
+ * Install a process-local diagnostic observer. The observer never changes the
+ * save schema or simulation state and is intended for tests/release tooling.
+ */
+export function observeSaveRetentionCompaction(
+  observer: SaveRetentionObserver,
+): () => void {
+  const previous = saveRetentionObserver;
+  saveRetentionObserver = observer;
+  return () => {
+    if (saveRetentionObserver === observer) saveRetentionObserver = previous;
+  };
+}
+
+function publishCompactionSample(
+  phase: SaveRetentionCompactionSample["phase"],
+  beforeState: GameState,
+  afterState: GameState,
+): void {
+  if (!saveRetentionObserver) return;
+  const measuredKeys: readonly SaveRetentionCollectionKey[] = phase === "fixtureRetention"
+    ? ["fixtures"]
+    : SAVE_RETENTION_COLLECTION_KEYS;
+  const collectionDeltas = Object.fromEntries(
+    SAVE_RETENTION_COLLECTION_KEYS.map((key) => [key, 0]),
+  ) as Record<SaveRetentionCollectionKey, number>;
+  for (const key of measuredKeys) {
+    collectionDeltas[key] = serializedByteLength(beforeState[key])
+      - serializedByteLength(afterState[key]);
+  }
+  saveRetentionObserver({
+    phase,
+    season: beforeState.currentSeason,
+    week: beforeState.currentWeek,
+    removedBytes: Math.max(
+      0,
+      SAVE_RETENTION_COLLECTION_KEYS.reduce(
+        (sum, key) => sum + collectionDeltas[key],
+        0,
+      ),
+    ),
+    collectionDeltas,
+  });
+}
 
 /** Routine renewals are current contract state, not permanent narrative events. */
 export function isMaterialHistoricalMovement(movement: PlayerMovementEvent): boolean {
   return movement.type !== "contractRenewal";
+}
+
+function compactPlayerRecord(player: Player): Player {
+  if (!player.developmentHistory) return player;
+  return {
+    ...player,
+    developmentHistory: compactPlayerDevelopmentHistory(player.developmentHistory),
+  };
 }
 
 export function collectCausallyReferencedPlayerIds(state: GameState): Set<string> {
@@ -58,7 +169,7 @@ export function collectCausallyReferencedPlayerIds(state: GameState): Set<string
   });
   Object.values(state.youthRecruitmentBriefs ?? {}).forEach((brief) => add(brief.fulfilledByPlayerId));
   Object.values(state.placementReports ?? {}).forEach((report) => {
-    add(state.unsignedYouth?.[report.unsignedYouthId]?.player.id);
+    add(resolvePlacementPlayerId(state, report));
   });
   state.seasonAwardsData?.leagueAwards.forEach((award) => add(award.relatedPlayerId));
   (state.predictions ?? []).forEach((record) => add(record.playerId));
@@ -171,14 +282,73 @@ function publicHistoryScore(player: PlayerSeasonHistory): number {
   );
 }
 
+function stableHistoryPreferenceKey(player: PlayerSeasonHistory): string {
+  const performance = player.performance;
+  return JSON.stringify([
+    player.firstName ?? "",
+    player.lastName ?? "",
+    player.nationality ?? "",
+    player.age,
+    player.position,
+    player.currentAbility,
+    player.marketValue,
+    player.registeredClubId ?? "",
+    player.contractClubId ?? "",
+    player.loanParentClubId ?? "",
+    player.status,
+    performance?.appearances ?? -1,
+    performance?.starts ?? -1,
+    performance?.minutesPlayed ?? -1,
+    performance?.appearancesWithoutMinutes ?? -1,
+    performance?.averageRating ?? -1,
+    performance?.goals ?? -1,
+    performance?.assists ?? -1,
+    performance?.cleanSheets ?? -1,
+  ]);
+}
+
 export function selectWorldHistoryPlayers(
   players: readonly PlayerSeasonHistory[],
   causalPlayerIds: ReadonlySet<string>,
 ): PlayerSeasonHistory[] {
-  const causal = players
+  // Malformed or legacy saves may contain the same player twice. Coalesce
+  // those rows without adding performance totals (which would double-count a season).
+  const uniqueByPlayerId = new Map<string, PlayerSeasonHistory>();
+  for (const player of players) {
+    const prior = uniqueByPlayerId.get(player.playerId);
+    if (!prior) {
+      uniqueByPlayerId.set(player.playerId, {
+        ...player,
+        movementEventIds: [...new Set(player.movementEventIds)],
+      });
+      continue;
+    }
+    const playerScore = publicHistoryScore(player);
+    const priorScore = publicHistoryScore(prior);
+    const preferred = playerScore > priorScore
+      || (
+        playerScore === priorScore
+        && stableHistoryPreferenceKey(player).localeCompare(stableHistoryPreferenceKey(prior)) > 0
+      )
+        ? player
+        : prior;
+    const fallback = preferred === player ? prior : player;
+    uniqueByPlayerId.set(player.playerId, {
+      ...preferred,
+      firstName: preferred.firstName ?? fallback.firstName,
+      lastName: preferred.lastName ?? fallback.lastName,
+      nationality: preferred.nationality ?? fallback.nationality,
+      movementEventIds: [...new Set([
+        ...prior.movementEventIds,
+        ...player.movementEventIds,
+      ])].sort(),
+    });
+  }
+  const uniquePlayers = [...uniqueByPlayerId.values()];
+  const causal = uniquePlayers
     .filter((player) => causalPlayerIds.has(player.playerId))
     .sort((a, b) => a.playerId.localeCompare(b.playerId));
-  const publicPlayers = players
+  const publicPlayers = uniquePlayers
     .filter((player) => !causalPlayerIds.has(player.playerId))
     .sort(
       (a, b) =>
@@ -201,11 +371,9 @@ export function collectReferencedFixtureIds(state: GameState): Set<string> {
   for (const observation of Object.values(state.observations ?? {})) {
     if (observation.matchId) ids.add(observation.matchId);
   }
-  for (const player of [
-    ...Object.values(state.players ?? {}),
-  ]) {
-    for (const rating of player.recentMatchRatings ?? []) ids.add(rating.fixtureId);
-  }
+  // Player recentMatchRatings are bounded, self-contained form samples
+  // (season, week, rating). Their fixtureId remains a stable event key, but no
+  // consumer dereferences it, so it must not pin a completed fixture schedule.
   for (const rival of Object.values(state.rivalScouts ?? {})) {
     if (rival.lastSeenAtFixture) ids.add(rival.lastSeenAtFixture);
   }
@@ -222,9 +390,101 @@ export function collectReferencedFixtureIds(state: GameState): Set<string> {
   return ids;
 }
 
+/**
+ * Resolve a placement's durable player identity after its unsigned-youth
+ * opportunity has left the active pool. New saves use report/case/alumni IDs;
+ * the unsigned-youth ID fallback supports older saves where both IDs matched.
+ */
+export function resolvePlacementPlayerId(
+  state: GameState,
+  placement: GameState["placementReports"][string],
+): string | undefined {
+  const candidates = [
+    state.unsignedYouth?.[placement.unsignedYouthId]?.player.id,
+    placement.reportId ? state.reports?.[placement.reportId]?.playerId : undefined,
+    placement.caseId ? state.scoutingCases?.[placement.caseId]?.playerId : undefined,
+    (state.alumniRecords ?? []).find(
+      (record) => record.placementReportId === placement.id,
+    )?.playerId,
+    placement.unsignedYouthId,
+  ].filter((playerId): playerId is string => Boolean(playerId));
+
+  return candidates.find((playerId) =>
+    Boolean(state.players?.[playerId] || state.retiredPlayers?.[playerId]),
+  ) ?? candidates[0];
+}
+
+/**
+ * Validate every reference whose target this compactor is allowed to remove.
+ * This deliberately does not attempt to validate unrelated game-state graphs.
+ */
+export function findSaveRetentionReferenceViolations(state: GameState): string[] {
+  const failures: string[] = [];
+  const fixtureIds = new Set(Object.keys(state.fixtures ?? {}));
+  const movementIds = new Set(
+    (state.playerMovementHistory ?? []).map((movement) => movement.id),
+  );
+  const requireFixture = (fixtureId: string | undefined, source: string): void => {
+    if (fixtureId && !fixtureIds.has(fixtureId)) {
+      failures.push(`${source}:missing-fixture:${fixtureId}`);
+    }
+  };
+
+  (state.playedFixtures ?? []).forEach((fixtureId, index) =>
+    requireFixture(fixtureId, `playedFixtures[${index}]`));
+  Object.values(state.observations ?? {}).forEach((observation) =>
+    requireFixture(observation.matchId, `observation:${observation.id}`));
+  Object.values(state.rivalScouts ?? {}).forEach((rival) =>
+    requireFixture(rival.lastSeenAtFixture, `rival:${rival.id}`));
+  (state.rivalActivities ?? []).forEach((activity, index) =>
+    requireFixture(activity.fixtureId, `rivalActivity:${index}`));
+  Object.entries(state.disciplinaryRecords ?? {}).forEach(([playerId, record]) =>
+    record.cardHistory?.forEach((card, index) =>
+      requireFixture(card.fixtureId, `discipline:${playerId}:card[${index}]`)));
+  (state.schedule?.activities ?? []).forEach((activity, index) => {
+    if (activity?.type === "attendMatch") {
+      requireFixture(activity.targetId, `schedule:${index}`);
+    }
+  });
+
+  for (const season of state.worldHistory?.seasons ?? []) {
+    const seenPlayers = new Set<string>();
+    for (const player of season.players) {
+      if (seenPlayers.has(player.playerId)) {
+        failures.push(`worldHistory:${season.season}:duplicate-player:${player.playerId}`);
+      }
+      seenPlayers.add(player.playerId);
+      for (const movementId of player.movementEventIds) {
+        if (!movementIds.has(movementId)) {
+          failures.push(
+            `worldHistory:${season.season}:player:${player.playerId}:missing-movement:${movementId}`,
+          );
+        }
+      }
+    }
+  }
+  for (const playerId of state.retiredPlayerIds ?? []) {
+    if (!state.retiredPlayers?.[playerId]) {
+      failures.push(`retiredPlayerIds:missing-player:${playerId}`);
+    }
+  }
+  for (const placement of Object.values(state.placementReports ?? {})) {
+    if (state.unsignedYouth?.[placement.unsignedYouthId]) continue;
+    const playerId = resolvePlacementPlayerId(state, placement);
+    if (!playerId || (!state.players?.[playerId] && !state.retiredPlayers?.[playerId])) {
+      failures.push(
+        `placement:${placement.id}:unresolvable-player:${playerId ?? placement.unsignedYouthId}`,
+      );
+    }
+  }
+
+  return failures.sort();
+}
+
 export function retainRequiredFixtureHistory(
   state: GameState,
   activeSeason = state.currentSeason,
+  publishTelemetry = true,
 ): Record<string, Fixture> {
   const normalizedActiveSeason = Number.isFinite(activeSeason) ? activeSeason : 1;
   const earliestDetailedSeason = Math.max(
@@ -233,17 +493,25 @@ export function retainRequiredFixtureHistory(
   );
   const referenced = collectReferencedFixtureIds(state);
 
-  return Object.fromEntries(
+  const retained = Object.fromEntries(
     Object.entries(state.fixtures ?? {}).filter(([fixtureId, fixture]) => {
       const fixtureSeason = fixture.season ?? normalizedActiveSeason;
       return fixtureSeason >= earliestDetailedSeason || referenced.has(fixtureId);
     }),
   );
+  if (publishTelemetry && saveRetentionObserver) {
+    publishCompactionSample(
+      "fixtureRetention",
+      state,
+      { ...state, fixtures: retained },
+    );
+  }
+  return retained;
 }
 
 /** Mutating adapter for one-time backward-save migration. */
 export function migrateHistoricalFixtureRetention(state: GameState): void {
-  state.fixtures = retainRequiredFixtureHistory(state);
+  state.fixtures = retainRequiredFixtureHistory(state, state.currentSeason, false);
 
   const retainedIds = new Set(Object.keys(state.fixtures));
   state.matchRatings = Object.fromEntries(
@@ -258,30 +526,38 @@ export function migrateHistoricalFixtureRetention(state: GameState): void {
  * routine renewals retain only the active and previous season.
  */
 export function compactLongCareerHistory(state: GameState): GameState {
+  const publishTelemetry = saveRetentionObserver !== undefined;
   const earliestArchivedSeason = state.worldHistory?.seasons[0]?.season
     ?? Math.max(1, state.currentSeason - 1);
   const renewalDetailCutoff = Math.max(1, state.currentSeason - 1);
   const causalPlayerIds = collectCausallyReferencedPlayerIds(state);
   const referencedYouthIds = collectReferencedUnsignedYouthIds(state, causalPlayerIds);
-  const signingSeasonByPlayerId = new Map<string, number>();
-  for (const movement of state.playerMovementHistory ?? []) {
-    if (movement.type !== "youthSigning") continue;
-    signingSeasonByPlayerId.set(
-      movement.playerId,
-      Math.max(signingSeasonByPlayerId.get(movement.playerId) ?? 0, movement.season),
-    );
-  }
-  const youthHistoryCutoff = Math.max(1, state.currentSeason - 5);
   const unsignedYouth = Object.fromEntries(
-    Object.entries(state.unsignedYouth ?? {}).filter(([youthId, youth]) => {
-      if (!youth.placed && !youth.retired) return true;
-      if (referencedYouthIds.has(youthId) || causalPlayerIds.has(youth.player.id)) return true;
-      const signingSeason = signingSeasonByPlayerId.get(youth.player.id) ?? 0;
-      return (
-        signingSeason >= renewalDetailCutoff
-        || youth.generatedSeason >= youthHistoryCutoff
-      );
-    }),
+    Object.entries(state.unsignedYouth ?? {})
+      .filter(([youthId, youth]) => {
+        if (!youth.placed && !youth.retired) return true;
+        // Once an authoritative Player identity exists, reports and alumni
+        // resolve through that record and the duplicate opportunity must go.
+        if (state.players?.[youth.player.id] || state.retiredPlayers?.[youth.player.id]) {
+          return false;
+        }
+        // Drop untracked terminal prospects immediately. A malformed legacy
+        // save with a causal reference but no durable Player is retained so a
+        // later migration cannot silently erase the only remaining identity.
+        return referencedYouthIds.has(youthId) || causalPlayerIds.has(youth.player.id);
+      })
+      .map(([youthId, youth]) => [
+        youthId,
+        youth.player.developmentHistory
+          ? { ...youth, player: compactPlayerRecord(youth.player) }
+          : youth,
+      ]),
+  );
+  const players = Object.fromEntries(
+    Object.entries(state.players ?? {}).map(([playerId, player]) => [
+      playerId,
+      compactPlayerRecord(player),
+    ]),
   );
   const retainedYouthPlayerIds = new Set(
     Object.values(unsignedYouth).map((youth) => youth.player.id),
@@ -298,7 +574,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
           ...season,
           players: season.players
             .map((player) => {
-              const identity = state.players[player.playerId] ?? state.retiredPlayers[player.playerId];
+              const identity = players[player.playerId] ?? state.retiredPlayers[player.playerId];
               return {
                 ...player,
                 ...(identity
@@ -377,9 +653,9 @@ export function compactLongCareerHistory(state: GameState): GameState {
     }
   }
   const retiredPlayers = Object.fromEntries(
-    Object.entries(state.retiredPlayers ?? {}).filter(([playerId]) =>
-      retainedRetiredPlayerIds.has(playerId),
-    ),
+    Object.entries(state.retiredPlayers ?? {})
+      .filter(([playerId]) => retainedRetiredPlayerIds.has(playerId))
+      .map(([playerId, player]) => [playerId, compactPlayerRecord(player)]),
   );
   const retiredPlayerIds = (state.retiredPlayerIds ?? []).filter((playerId) =>
     retiredPlayers[playerId] !== undefined,
@@ -387,6 +663,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
 
   const compacted: GameState = {
     ...state,
+    players,
     playerMovementHistory,
     worldHistory,
     retiredPlayers,
@@ -394,5 +671,12 @@ export function compactLongCareerHistory(state: GameState): GameState {
     unsignedYouth,
   };
   migrateHistoricalFixtureRetention(compacted);
+  if (publishTelemetry && saveRetentionObserver) {
+    publishCompactionSample(
+      "archiveCompaction",
+      state,
+      compacted,
+    );
+  }
   return compacted;
 }

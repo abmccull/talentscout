@@ -102,9 +102,9 @@ export const worldTravelArticles: WikiArticle[] = [
     category: "world-travel",
     order: 1,
     summary:
-      "Travelling to other countries costs money, schedule slots, and time. Same-country travel is free; intercontinental trips cost up to 3,000 and take 2 slots.",
+      "Travelling costs money, schedule capacity, and time. Established regional presence can reduce the burden without making distant work free.",
     searchText:
-      "Travel costs vary based on the distance between your current location and your destination. Same country travel is free, costs 0 money, takes 0 extra schedule slots, and has no travel duration. Same continent travel costs 300-600, takes 1 schedule slot, and has a 1 week travel duration. Intercontinental travel to an adjacent continent costs 800-1500, takes 1 schedule slot, and has a 2 week travel duration. Intercontinental travel to a distant continent costs 1500-3000, takes 2 schedule slots, and has a 3 week travel duration. You must schedule travel before an away match. Travel occupies its own day slots the day before the match. Domestic travel within your home country is always free and instant. The slot cost represents how much of your weekly schedule the journey consumes. Two-slot international trips significantly reduce how much scouting you can do that week. Plan international scouting trips carefully by grouping multiple matches in the same region to maximise the value of expensive travel. Equipment upgrades in the Travel slot can reduce travel fatigue and costs.",
+      "Travel costs vary with the route from your permanent home base. Same-country travel is free and instant; distant international trips cost more money, schedule capacity, and time. Regional knowledge, trusted local contacts, and a staffed satellite office can reduce route cost and fatigue. A staffed office can also shorten a long journey and recover schedule capacity. Equipment reductions are applied alongside these regional effects, and the booking screen shows the final quote before you commit. Plan international work by grouping assignments and observations in countries where you are building a durable presence.",
     content: (
       <SectionBlock>
         <Para>
@@ -121,12 +121,20 @@ export const worldTravelArticles: WikiArticle[] = [
             ["Distant continent", "$1,500 – $3,000", "2 slots", "3 weeks"],
           ]}
         />
+        <InfoCard title="Regional Routes" color="blue">
+          Your home base remains fixed even when another country becomes more
+          familiar. Knowledge and trusted contacts reduce travel overhead, while
+          a staffed satellite office can also reduce journey time and recover a
+          schedule slot on long routes. The booking card always shows the final
+          cost and capacity before you confirm.
+        </InfoCard>
         <Subheading>Planning Tips</Subheading>
         <BulletList
           items={[
             "Domestic travel within your home country is always free and instant.",
             "Two-slot international trips significantly cut your scouting capacity for the week.",
             "Group multiple matches in the same region to maximise the value of expensive travel.",
+            "Build contacts and staff an office to make a recurring route more efficient.",
             "Equipment upgrades in the Travel slot can reduce travel fatigue and costs.",
           ]}
         />
@@ -145,31 +153,32 @@ export const worldTravelArticles: WikiArticle[] = [
   // ── Familiarity ─────────────────────────────────────────────────────────
   {
     slug: "familiarity",
-    title: "Familiarity",
+    title: "Regional Knowledge & Presence",
     category: "world-travel",
     order: 2,
     summary:
-      "Familiarity (0-100) with a country affects your scouting accuracy there. It starts at 50 for your home country and grows through activities.",
+      "Regional knowledge (0-100) combines with contacts, travel, and infrastructure to shape access and evidence confidence.",
     searchText:
-      "Familiarity is a 0-100 rating for each country that represents how well you know its football culture, players, and leagues. Your home country starts at 50 familiarity. All other countries start at 0. Familiarity increases through specific events: writing a report on a player from that country gives +2, a successful outcome from a report gives +5, and building a contact in that country gives +3. There are four expertise levels: Novice at 0-24 familiarity, Intermediate at 25-49, Expert at 50-79, and Master at 80-100. Higher familiarity improves your scouting accuracy in that country. The regional accuracy bonus formula is 0.5 plus familiarity divided by 200, clamped between 0.5 and 1.5. This means at 0 familiarity you operate at 50% accuracy, at 50 familiarity you operate at 75% accuracy, and at 100 familiarity you operate at 100% accuracy with a bonus. The foreign scouting penalty is calculated as 0.3 multiplied by (1 minus familiarity divided by 100). This penalty is further reduced by your adaptability scout attribute divided by 40. At high familiarity the penalty approaches zero. At low familiarity in a distant country the penalty can make observations significantly noisier and less reliable. Building familiarity is a long-term investment. Focus on one or two target countries at a time rather than spreading yourself thin across the entire world.",
+      "Regional knowledge is a 0-100 record of how well you understand a country's football environment. Visits, observations, reports, relationships, and maintained local infrastructure build it over time. Knowledge is one source of operational presence alongside your home base, current location, trusted contacts, satellite offices, and assigned staff. Stronger presence expands the prospect pool you can reach, improves the confidence of contextual evidence, creates more relevant local opportunities, and reduces travel friction. It never reveals a player's hidden true ability. The country dossier explains the current access tier and the sources producing it.",
     content: (
       <SectionBlock>
         <Para>
-          Familiarity is a <Tag color="emerald">0–100 rating</Tag> for each
-          country that represents how well you know its football culture,
-          players, and leagues. Your home country starts at 50; all others
-          start at 0.
+          Regional knowledge is a <Tag color="emerald">0–100 rating</Tag> for
+          each country. It records how well you understand its football
+          culture, players, and competitions. Your home country starts with an
+          advantage; foreign markets must be learned through work and
+          relationships.
         </Para>
-        <Subheading>Earning Familiarity</Subheading>
-        <Table
-          headers={["Event", "Familiarity Gained"]}
-          rows={[
-            ["Write a report on a player from that country", "+2"],
-            ["Successful outcome from a report", "+5"],
-            ["Build a contact in that country", "+3"],
+        <Subheading>Building Knowledge and Presence</Subheading>
+        <BulletList
+          items={[
+            "Observe players and complete assignments in the country.",
+            "Develop trusted local contacts who can provide access and context.",
+            "Open and staff a satellite office for durable weekly coverage.",
+            "Delegate employees or scouts when your own calendar is committed elsewhere.",
           ]}
         />
-        <Subheading>Expertise Levels</Subheading>
+        <Subheading>Knowledge Levels</Subheading>
         <Table
           headers={["Level", "Familiarity Range"]}
           rows={[
@@ -179,18 +188,17 @@ export const worldTravelArticles: WikiArticle[] = [
             ["Master", "80 – 100"],
           ]}
         />
-        <Subheading>Impact on Accuracy</Subheading>
+        <Subheading>Impact on Scouting</Subheading>
         <Para>
-          Higher familiarity improves scouting accuracy. At{" "}
-          <Tag color="rose">0 familiarity</Tag> you operate at 50% accuracy.
-          At <Tag color="amber">50 familiarity</Tag> you operate at 75%
-          accuracy. At <Tag color="emerald">100 familiarity</Tag> you reach
-          full accuracy with a bonus.
+          Stronger operational presence helps you reach more prospects, adds
+          confidence to local context and statistical evidence, and increases
+          the flow of relevant opportunities. Observation dossiers preserve the
+          country, access tier, and reason for that confidence.
         </Para>
         <Para>
-          The foreign scouting penalty is further reduced by your{" "}
-          <Tag color="zinc">adaptability</Tag> scout attribute. High
-          adaptability scouts suffer less from unfamiliar territory.
+          Presence improves the quality of evidence available to your scout; it
+          does not reveal hidden ratings or guarantee that your interpretation
+          is correct. Different contexts and repeated observations still matter.
         </Para>
         <InfoCard title="Strategy" color="blue">
           Building familiarity is a long-term investment. Focus on one or two
@@ -223,9 +231,9 @@ export const worldTravelArticles: WikiArticle[] = [
     category: "world-travel",
     order: 3,
     summary:
-      "Permanent overseas presence through satellite offices reduces travel overhead and accelerates familiarity growth in target countries.",
+      "A staffed satellite office creates durable overseas access, evidence, opportunity, travel, and knowledge advantages.",
     searchText:
-      "International offices (also called satellite offices) provide a permanent scouting presence in a foreign country. They cost 8000 to set up and 1200 per month to maintain. Benefits include a 10% quality bonus to all scouting in that country, faster familiarity growth for stationed employees, up to 3 employees can be stationed at each office, and reduced need for repeated expensive international travel. International offices are most valuable in countries with strong talent pipelines. Brazil produces world-class attackers and creative midfielders. Argentina is known for technical players and strikers. France develops athletic and versatile players across all positions. Portugal is a gateway for Brazilian and African talent entering European football. West African countries like Nigeria, Ghana, Ivory Coast, and Senegal produce raw athletic talent that is often undervalued by the market. Opening an international office requires at least a Professional Office tier at your main headquarters. The setup cost is significant so ensure your agency finances are stable before expanding internationally. Consider combining international offices with the Regional Expert specialization to maximise the benefits. The Territory Mastery insight action can provide a temporary familiarity boost while you build toward a permanent office.",
+      "International offices, also called satellite offices, provide a permanent scouting presence in a generated country. They cost 8000 to establish and 1200 per month to maintain, and can hold up to three employees. An empty office establishes a foothold, but assigned staff unlock its strongest route-planning and evidence benefits. Offices and staff add passive regional knowledge, expand discovery access, improve contextual and data confidence, increase the flow of local leads, and reduce travel cost and fatigue. A staffed office can also shorten a long route and recover a planning slot. Opening an office requires at least a Professional Office tier, and the game prevents duplicate or unsupported country offices.",
     content: (
       <SectionBlock>
         <Para>
@@ -236,13 +244,10 @@ export const worldTravelArticles: WikiArticle[] = [
         <Subheading>Benefits</Subheading>
         <BulletList
           items={[
-            <>
-              <Tag color="emerald">+10%</Tag> quality bonus to all scouting in
-              that country.
-            </>,
-            "Faster familiarity growth for stationed employees.",
+            "Broader local discovery and stronger contextual evidence.",
+            "More local leads and passive regional knowledge each week.",
             "Up to 3 employees stationed at each office.",
-            "Eliminates repeated expensive international travel costs.",
+            "Lower route cost and fatigue, with stronger planning benefits once staffed.",
           ]}
         />
         <Subheading>High-Value Targets</Subheading>

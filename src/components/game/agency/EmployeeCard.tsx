@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,8 @@ import {
   getEmployeeSalaryBand,
 } from "@/engine/finance";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
+import { buildStakeholderEcologyProfile } from "@/engine/consequences";
+import { StakeholderEcologyPanel } from "../StakeholderEcologyPanel";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -123,8 +125,11 @@ export function EmployeeCard({
   const adjustEmployeeSalary = useGameStore((s) => s.adjustEmployeeSalary);
   const employerReputation = useGameStore((s) => s.gameState?.scout.reputation ?? 50);
   const fixtures = useGameStore((s) => s.gameState?.fixtures ?? {});
+  const consequenceState = useGameStore((s) => s.gameState?.consequenceState);
+  const scoutId = useGameStore((s) => s.gameState?.scout.id);
 
   const [logsOpen, setLogsOpen] = useState(false);
+  const [relationshipOpen, setRelationshipOpen] = useState(false);
   const [editingSalary, setEditingSalary] = useState(false);
   const [salaryInput, setSalaryInput] = useState(String(emp.salary));
   const [salaryError, setSalaryError] = useState<string | null>(null);
@@ -179,6 +184,17 @@ export function EmployeeCard({
 
   const recentLogs = (emp.weeklyLog ?? []).slice(-4).reverse();
   const isConfirmFire = confirmFireId === emp.id;
+  const relationshipProfile = useMemo(() => consequenceState && scoutId
+    ? buildStakeholderEcologyProfile({
+        state: consequenceState,
+        stakeholder: { kind: "employee", id: emp.id },
+        now: { week: currentWeek, season: currentSeason },
+        scoutId,
+        baseTrust: emp.morale,
+        baseInfluence: Math.min(100, emp.quality * 5),
+      })
+    : undefined,
+  [consequenceState, scoutId, emp.id, emp.morale, emp.quality, currentWeek, currentSeason]);
 
   return (
     <div className="rounded-lg border border-zinc-800 p-3 space-y-2">
@@ -477,6 +493,36 @@ export function EmployeeCard({
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+      )}
+
+      {relationshipProfile && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setRelationshipOpen((open) => !open)}
+            className="flex min-h-11 items-center gap-1 text-xs text-sky-300 transition hover:text-sky-200"
+            aria-expanded={relationshipOpen}
+            aria-controls={`employee-relationship-${emp.id}`}
+          >
+            {relationshipOpen
+              ? <ChevronUp size={12} aria-hidden="true" />
+              : <ChevronDown size={12} aria-hidden="true" />}
+            History, promises and trust
+            {relationshipProfile.influence.activeObligations > 0 && (
+              <Badge className="ml-1 border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-200">
+                {relationshipProfile.influence.activeObligations} active
+              </Badge>
+            )}
+          </button>
+          {relationshipOpen && (
+            <div id={`employee-relationship-${emp.id}`} className="mt-2">
+              <StakeholderEcologyPanel
+                profile={relationshipProfile}
+                title="Employment relationship"
+              />
+            </div>
           )}
         </div>
       )}

@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-13T23:34:20.000Z",
+  "sourceHeadAtVerification": "1b3e9273283113d100bf6ee517eb79d384059cb1",
+  "candidateBound": false,
+  "status": "supporting_pass",
+  "platform": {
+    "os": "Windows",
+    "arch": "x64",
+    "electron": "40.10.6",
+    "electronBuilder": "26.8.1"
+  },
+  "build": {
+    "command": "CSC_IDENTITY_AUTO_DISCOVERY=false npm run electron:dist",
+    "result": "passed",
+    "target": "nsis",
+    "signingIdentityDiscoveryDisabled": true,
+    "playRouteJsKb": 560,
+    "firstLoadJsKb": 667
+  },
+  "artifacts": [
+    {
+      "kind": "windows-installer",
+      "path": "dist/TalentScout-Setup-1.0.0.exe",
+      "bytes": 167021896,
+      "sha256": "322A1E7FFA3A42D6751F94C066792ED60B14D8A61A78919A14ACEA10C8BFF6C6"
+    },
+    {
+      "kind": "windows-unpacked-executable",
+      "path": "dist/win-unpacked/TalentScout.exe",
+      "bytes": 214224896,
+      "sha256": "58B1F4391B378C87D197904197C71ADDFCF1FCD7C2BE3E104AFEF21DD5C5DF8D"
+    },
+    {
+      "kind": "windows-app-asar",
+      "path": "dist/win-unpacked/resources/app.asar",
+      "bytes": 73009371,
+      "sha256": "94FECAD2F77785BBF8BC9EEF312774A8859E7922F8E9567DA4B77E233C9E4890"
+    }
+  ],
+  "runtimeDependencyBoundary": {
+    "result": "passed",
+    "packagedNodeModules": ["steamworks.js"],
+    "unpackedNodeModules": ["steamworks.js"],
+    "appAsarBytes": 73009371,
+    "unpackedBytes": 8842418
+  },
+  "electronFuses": {
+    "runAsNode": false,
+    "cookieEncryption": true,
+    "nodeOptions": false,
+    "nodeCliInspect": false,
+    "embeddedAsarIntegrity": true,
+    "onlyLoadFromAsar": true,
+    "fileProtocolExtraPrivileges": false
+  },
+  "startupSmoke": {
+    "result": "passed",
+    "aliveAfterSeconds": 12,
+    "electronProcessCount": 5,
+    "hiddenWindowLaunch": true,
+    "isolatedUserDataDirectory": "artifacts/release/win-smoke-final-20260713-173408",
+    "steamClientRequiredForStartup": false,
+    "processesTerminatedAfterEvidence": true
+  },
+  "packagedSteamFilesPresent": [
+    "resources/steam_appid.txt",
+    "resources/app.asar.unpacked/node_modules/steamworks.js/dist/win64/steam_api64.dll",
+    "resources/app.asar.unpacked/node_modules/steamworks.js/dist/win64/steamworksjs.win32-x64-msvc.node"
+  ],
+  "limitations": [
+    "The working tree is dirty and the package is not bound to a release commit or tag.",
+    "This supporting smoke does not cover a clean Windows account, installer elevation, offline save/recovery, interrupted writes, live Steam Cloud, or cross-device conflicts.",
+    "macOS and Linux packages were not built or executed on this Windows host."
+  ]
+}

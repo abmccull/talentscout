@@ -4,12 +4,9 @@
  * Design notes:
  *  - Pure functional: no mutations, no side effects.
  *  - All functions take plain data in and return plain data out.
- *  - "Home country" is derived from the scout's countryReputations: whichever
- *    country has the highest familiarity is treated as home. At game start the
- *    starting country receives familiarity 50 and all others start at 0, so this
- *    is unambiguous from the beginning. If multiple countries share the max
- *    familiarity, the first one found in Object.entries iteration order is used
- *    (stable across V8 for string-keyed objects).
+ *  - New saves pin a permanent home base on the scout. Legacy saves fall back
+ *    to the highest country familiarity until migration pins that result, so
+ *    learning a foreign market can never silently relocate the scout.
  */
 
 import type { Scout, TravelBooking, CountryReputation, Fixture, Territory } from "@/engine/core/types";
@@ -137,13 +134,15 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Derive the scout's home country from their country reputations.
+ * Resolve the scout's permanent home country.
  *
- * The starting country is initialised with familiarity 50 (all others begin at
- * 0), so the highest-familiarity entry reliably identifies home. If familiarity
- * is somehow equal across all entries the function falls back to the first key.
+ * Current saves persist this value directly. The familiarity fallback only
+ * exists for pre-migration data and is immediately pinned when a save loads.
  */
 export function getScoutHomeCountry(scout: Scout): string {
+  const pinnedHomeCountry = scout.homeCountry ? normalise(scout.homeCountry) : undefined;
+  if (pinnedHomeCountry) return pinnedHomeCountry;
+
   const entries = Object.entries(scout.countryReputations);
   if (entries.length === 0) return "england"; // safe fallback
 
@@ -340,7 +339,7 @@ export function getTravelSlots(fromCountry: string, toCountry: string): number {
 /**
  * Create an international travel booking on the scout.
  *
- * The scout's home country is derived via getScoutHomeCountry(). The returned
+ * The scout's home country is resolved via getScoutHomeCountry(). The returned
  * scout copy has a travelBooking set with isAbroad = false (the scout departs
  * at the start of departureWeek, so they are not yet abroad at booking time).
  *
@@ -356,6 +355,7 @@ export function bookTravel(
   departureWeek: number,
   duration: number,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+  quotedCost?: number,
 ): Scout {
   const homeCountry = getScoutHomeCountry(scout);
   const normalisedDepartureWeek = normalizeGameWeek(departureWeek, seasonLength);
@@ -368,7 +368,9 @@ export function bookTravel(
     destinationCountry,
     departureWeek: normalisedDepartureWeek,
     returnWeek: normalisedReturnWeek,
-    cost: getTravelCost(homeCountry, destinationCountry),
+    cost: quotedCost === undefined
+      ? getTravelCost(homeCountry, destinationCountry)
+      : Math.max(0, Math.round(quotedCost)),
     isAbroad: false,
   };
 

@@ -109,3 +109,18 @@ export {
 } from './legacy';
 
 export type { LegacyPerkApplicationResult } from './legacy';
+
+export {
+  chooseCareerRecoveryPlan,
+  createCareerRecoveryState,
+  getCareerRecoveryPlanOptions,
+  isCareerRecoveryBlockingOffers,
+  openCareerSetback,
+  processCareerRecoveryWeek,
+} from './recovery';
+export type {
+  CareerRecoveryEpisode,
+  CareerRecoveryPlanId,
+  CareerRecoveryState,
+  CareerSetbackKind,
+} from './recovery';

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,9 +35,11 @@ import {
 import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
 import { TargetPicker } from "./calendar/TargetPicker";
+import { WeeklyStrategyPanel } from "./calendar/WeeklyStrategyPanel";
 import { useTranslations } from "next-intl";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isScoutAbroad } from "@/engine/world/travel";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import { generateWeekPreview } from "@/engine/core/weekPreview";
 import type { WeekPreview } from "@/engine/core/weekPreview";
 import { BatchSummary } from "./BatchSummary";
@@ -44,6 +47,7 @@ import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
 import { getSeasonLength } from "@/engine/core/gameDate";
+import { normalizeWeeklyStrategyState } from "@/engine/core/weeklyStrategy";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -73,14 +77,34 @@ export function CalendarScreen() {
     requestWeekAdvance,
     getClub,
     lastWeekSummary,
+    pendingCelebrationTitle,
     dismissWeekSummary,
     getAvailableCalendarActivities,
     pendingCalendarActivity,
     setPendingCalendarActivity,
     autoSchedule,
+    setWeeklyIntent,
+    setDelegationPolicy,
     batchSummary,
     dismissBatchSummary,
-  } = useGameStore();
+  } = useGameStore(useShallow((state) => ({
+    gameState: state.gameState,
+    scheduleActivity: state.scheduleActivity,
+    unscheduleActivity: state.unscheduleActivity,
+    requestWeekAdvance: state.requestWeekAdvance,
+    getClub: state.getClub,
+    lastWeekSummary: state.lastWeekSummary,
+    pendingCelebrationTitle: state.pendingCelebration?.title ?? null,
+    dismissWeekSummary: state.dismissWeekSummary,
+    getAvailableCalendarActivities: state.getAvailableCalendarActivities,
+    pendingCalendarActivity: state.pendingCalendarActivity,
+    setPendingCalendarActivity: state.setPendingCalendarActivity,
+    autoSchedule: state.autoSchedule,
+    setWeeklyIntent: state.setWeeklyIntent,
+    setDelegationPolicy: state.setDelegationPolicy,
+    batchSummary: state.batchSummary,
+    dismissBatchSummary: state.dismissBatchSummary,
+  })));
 
   const t = useTranslations("calendar");
   const { playSFX } = useAudio();
@@ -112,15 +136,85 @@ export function CalendarScreen() {
 
   // Empty-day warning dialog
   const [showEmptyDayWarning, setShowEmptyDayWarning] = useState(false);
+  const weekSummaryDialogRef = useRef<HTMLDivElement>(null);
+  const weekSummaryDismissRef = useRef<HTMLButtonElement>(null);
+  const emptyDayDialogRef = useRef<HTMLDivElement>(null);
+  const emptyDayCancelRef = useRef<HTMLButtonElement>(null);
+  const advanceWeekButtonRef = useRef<HTMLButtonElement>(null);
+
+  const closeEmptyDayWarning = useCallback(() => {
+    setShowEmptyDayWarning(false);
+    window.requestAnimationFrame(() => advanceWeekButtonRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    if (!lastWeekSummary) return;
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    weekSummaryDismissRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        dismissWeekSummary();
+        return;
+      }
+      if (event.key !== "Tab" || !weekSummaryDialogRef.current) return;
+      const focusable = [...weekSummaryDialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )];
+      if (focusable.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (!pendingCelebrationTitle && previousFocus && document.contains(previousFocus)) {
+        window.requestAnimationFrame(() => previousFocus.focus());
+      }
+    };
+  }, [dismissWeekSummary, lastWeekSummary, pendingCelebrationTitle]);
 
   useEffect(() => {
     if (!showEmptyDayWarning) return;
+    emptyDayCancelRef.current?.focus();
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowEmptyDayWarning(false);
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeEmptyDayWarning();
+        return;
+      }
+      if (e.key !== "Tab" || !emptyDayDialogRef.current) return;
+      const focusable = [...emptyDayDialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )];
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [showEmptyDayWarning]);
+  }, [closeEmptyDayWarning, showEmptyDayWarning]);
 
   // Escape to deselect click-to-place activity
   useEffect(() => {
@@ -157,6 +251,11 @@ export function CalendarScreen() {
   if (!gameState) return null;
 
   const { schedule, currentWeek, currentSeason, scout } = gameState;
+  const weeklyStrategy = normalizeWeeklyStrategyState(
+    gameState.weeklyStrategy,
+    currentWeek,
+    currentSeason,
+  );
   const seasonLength = getSeasonLength(gameState.fixtures, currentSeason);
   const activities = schedule.activities ?? [];
   const slotsUsed = activities.filter(Boolean).length;
@@ -190,16 +289,17 @@ export function CalendarScreen() {
       )
     : undefined;
   const placementSourceReport = selectedPlacementYouth
-    ? Object.values(gameState.reports)
-        .filter((report) =>
+    ? selectLatestReportsByCase(
+        Object.values(gameState.reports).filter((report) =>
           report.playerId === selectedPlacementYouth.player.id
           && report.scoutId === gameState.scout.id
-        )
-        .sort((left, right) =>
-          right.submittedSeason - left.submittedSeason
-          || right.submittedWeek - left.submittedWeek
-          || right.id.localeCompare(left.id)
-        )[0]
+        ),
+      ).sort((left, right) =>
+        right.submittedSeason - left.submittedSeason
+        || right.submittedWeek - left.submittedWeek
+        || (right.revision ?? 1) - (left.revision ?? 1)
+        || right.id.localeCompare(left.id)
+      )[0]
     : undefined;
   const placementClubTargets = selectedPlacementYouth
     ? getEligibleClubsForPlacement(
@@ -291,10 +391,16 @@ export function CalendarScreen() {
         <div className="relative z-10">
         {/* Week Summary Overlay */}
         {lastWeekSummary && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div
+            ref={weekSummaryDialogRef}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="week-summary-title"
+          >
             <Card className="w-full max-w-md max-h-[85vh] overflow-y-auto">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm">Week Summary</CardTitle>
+                <CardTitle id="week-summary-title" className="text-sm">Week Summary</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {/* Activity Results */}
@@ -423,8 +529,16 @@ export function CalendarScreen() {
                     </p>
                   </div>
                 )}
-                <Button className="w-full" onClick={dismissWeekSummary}>
-                  Continue
+                <Button
+                  ref={weekSummaryDismissRef}
+                  className="w-full"
+                  onClick={dismissWeekSummary}
+                >
+                  {pendingCelebrationTitle === "Career Promotion!"
+                    ? "Continue to promotion"
+                    : pendingCelebrationTitle
+                      ? "Continue to milestone"
+                      : "Close week summary"}
                 </Button>
               </CardContent>
             </Card>
@@ -485,6 +599,7 @@ export function CalendarScreen() {
             </div>
             <Tooltip content="Process all scheduled activities and advance to the next week." side="bottom">
               <Button
+                ref={advanceWeekButtonRef}
                 onClick={() => {
                   const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
                   if (emptyCount > 0) {
@@ -543,6 +658,12 @@ export function CalendarScreen() {
           </div>
         )}
 
+        <WeeklyStrategyPanel
+          strategy={weeklyStrategy}
+          onSelectIntent={setWeeklyIntent}
+          onSelectPolicy={setDelegationPolicy}
+        />
+
         {/* The itinerary is the Planner's persistent attention budget. It stays
             available while the player compares opportunities below. */}
         <section
@@ -591,7 +712,20 @@ export function CalendarScreen() {
             )}
           </div>
 
-          <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] md:grid md:grid-cols-7 md:overflow-visible md:pb-0">
+          <div
+            className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:thin] md:grid md:grid-cols-7 md:overflow-visible md:pb-0"
+            tabIndex={0}
+            role="region"
+            aria-label="Weekly itinerary days. Use left and right arrow keys to scroll."
+            onKeyDown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              event.currentTarget.scrollBy({
+                left: event.key === "ArrowLeft" ? -160 : 160,
+                behavior: "smooth",
+              });
+            }}
+          >
             {DAY_KEYS.map((dayKey, dayIndex) => {
               const activity = activities[dayIndex];
               const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
@@ -1130,12 +1264,19 @@ export function CalendarScreen() {
       {/* Empty-day warning dialog */}
       {showEmptyDayWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" className="mx-4 w-full max-w-sm rounded-lg border border-amber-500/30 bg-zinc-900 p-6 shadow-xl">
+          <div
+            ref={emptyDayDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="empty-day-warning-title"
+            aria-describedby="empty-day-warning-description"
+            className="mx-4 w-full max-w-sm rounded-lg border border-amber-500/30 bg-zinc-900 p-6 shadow-xl"
+          >
             <div className="mb-3 flex items-center gap-2 text-amber-400">
-              <AlertTriangle size={18} />
-              <h3 className="text-lg font-semibold">Unplanned Days</h3>
+              <AlertTriangle size={18} aria-hidden="true" />
+              <h3 id="empty-day-warning-title" className="text-lg font-semibold">Unplanned Days</h3>
             </div>
-            <p className="mb-5 text-sm text-zinc-300">
+            <p id="empty-day-warning-description" className="mb-5 text-sm text-zinc-300">
               You have{" "}
               <span className="font-semibold text-amber-400">
                 {(gameState.schedule.activities ?? []).filter((a) => a === null).length}
@@ -1145,8 +1286,9 @@ export function CalendarScreen() {
             </p>
             <div className="flex justify-end gap-3">
               <Button
+                ref={emptyDayCancelRef}
                 variant="outline"
-                onClick={() => setShowEmptyDayWarning(false)}
+                onClick={closeEmptyDayWarning}
               >
                 Go Back
               </Button>

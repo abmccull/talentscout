@@ -6,6 +6,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { createWeekSchedule } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameDate";
+import {
+  findSaveRetentionReferenceViolations,
+  measureSaveRetentionFootprint,
+  observeSaveRetentionCompaction,
+  resolvePlacementPlayerId,
+  SAVE_RETENTION_COLLECTION_KEYS,
+} from "@/engine/world/saveRetention";
+import type {
+  SaveRetentionCollectionKey,
+  SaveRetentionCompactionSample,
+  SaveRetentionFootprint,
+} from "@/engine/world/saveRetention";
 import { WORLD_HISTORY_MAX_SEASONS } from "@/engine/world/worldHistory";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
@@ -34,10 +46,11 @@ const RELEASE_SEED_COUNT = Number.parseInt(process.env.SOAK_SEEDS ?? "20", 10);
 const RELEASE_SEED_START = Number.parseInt(process.env.SOAK_SEED_START ?? "1", 10);
 const RELEASE_SEASON_COUNT = Number.parseInt(process.env.SOAK_SEASONS ?? "30", 10);
 const OUTPUT_PATH = resolve(
-  process.env.SOAK_OUTPUT ?? "artifacts/soak/long-career-release-summary.json",
+  process.env.SOAK_OUTPUT
+    ?? "artifacts/release/generated/long-career-release-summary.json",
 );
 const MAX_SERIALIZED_BYTES = Number.parseInt(
-  process.env.SOAK_MAX_SERIALIZED_BYTES ?? String(96 * 1024 * 1024),
+  process.env.SOAK_MAX_SERIALIZED_BYTES ?? String(80 * 1024 * 1024),
   10,
 );
 const MAX_GROWTH_MULTIPLIER = 64;
@@ -47,6 +60,16 @@ const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
 const MAX_RSS_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_POST_GC_HEAP_GROWTH_BYTES = 1024 * 1024 * 1024;
+const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
+  players: 32 * 1024 * 1024,
+  worldHistory: 16 * 1024 * 1024,
+  fixtures: 8 * 1024 * 1024,
+  matchRatings: 8 * 1024 * 1024,
+  playerMovementHistory: 8 * 1024 * 1024,
+  retiredPlayers: 6 * 1024 * 1024,
+  retiredPlayerIds: 512 * 1024,
+  unsignedYouth: 12 * 1024 * 1024,
+};
 
 interface MemorySample {
   season: number;
@@ -68,6 +91,21 @@ interface RunEvidence {
   worldHistorySeasons: number;
   worldHistoryBytes: number;
   largestCollections: Array<{ key: string; bytes: number }>;
+  seasonGrowth: Array<{
+    season: number;
+    serializedBytes: number;
+    growthBytes: number;
+    compactionRemovedBytes: number;
+    compactionEvents: number;
+    collectionBytes: Record<SaveRetentionCollectionKey, number>;
+    collectionCompactionDeltas: Record<SaveRetentionCollectionKey, number>;
+  }>;
+  compaction: {
+    events: number;
+    seasonsWithReduction: number;
+    totalRemovedBytes: number;
+    collectionDeltas: Record<SaveRetentionCollectionKey, number>;
+  };
   memory: {
     initial: MemorySample;
     final: MemorySample;
@@ -140,6 +178,24 @@ function largestCollections(state: GameState): Array<{ key: string; bytes: numbe
     })
     .sort((a, b) => b.bytes - a.bytes)
     .slice(0, 12);
+}
+
+function emptyCollectionBytes(): Record<SaveRetentionCollectionKey, number> {
+  return Object.fromEntries(
+    SAVE_RETENTION_COLLECTION_KEYS.map((key) => [key, 0]),
+  ) as Record<SaveRetentionCollectionKey, number>;
+}
+
+function sumCompactionDeltas(
+  samples: readonly SaveRetentionCompactionSample[],
+): Record<SaveRetentionCollectionKey, number> {
+  const totals = emptyCollectionBytes();
+  for (const sample of samples) {
+    for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
+      totals[key] += sample.collectionDeltas[key];
+    }
+  }
+  return totals;
 }
 
 function collectNonFiniteNumbers(value: unknown): string[] {
@@ -271,13 +327,26 @@ function validateReferences(state: GameState): string[] {
       .map((movement) => movement.playerId),
   );
   for (const youth of Object.values(state.unsignedYouth ?? {})) {
+    if (youth.placed || youth.retired) {
+      failures.push(`resolved-youth-in-active-pool:${youth.id}`);
+    }
+    const completedSeasons = Math.max(0, state.currentSeason - youth.generatedSeason);
+    if (completedSeasons >= 4) {
+      failures.push(
+        `expired-youth-in-active-pool:${youth.id}:completed-seasons:${completedSeasons}`,
+      );
+    }
     if (youth.placed && !youthSigningPlayerIds.has(youth.player.id)) {
       failures.push(`placed-youth-without-movement:${youth.id}`);
     }
   }
   for (const placement of Object.values(state.placementReports ?? {})) {
-    if (!state.unsignedYouth?.[placement.unsignedYouthId]) {
-      failures.push(`placement:${placement.id}:missing-youth:${placement.unsignedYouthId}`);
+    if (state.unsignedYouth?.[placement.unsignedYouthId]) continue;
+    const playerId = resolvePlacementPlayerId(state, placement);
+    if (!playerId || (!state.players?.[playerId] && !state.retiredPlayers?.[playerId])) {
+      failures.push(
+        `placement:${placement.id}:unresolvable-player:${playerId ?? placement.unsignedYouthId}`,
+      );
     }
   }
 
@@ -381,10 +450,15 @@ function validateEconomy(state: GameState): string[] {
   return failures;
 }
 
-function assertReleaseInvariants(state: GameState, initialBytes: number): number {
-  const bytes = serializedBytes(state);
+function assertReleaseInvariants(
+  state: GameState,
+  initialBytes: number,
+): SaveRetentionFootprint {
+  const retentionFootprint = measureSaveRetentionFootprint(state);
+  const bytes = retentionFootprint.totalBytes;
   const nonFinite = collectNonFiniteNumbers(state);
   const references = validateReferences(state);
+  const retentionReferences = findSaveRetentionReferenceViolations(state);
   const economy = validateEconomy(state);
   const placedYouthFailures = describePlacedYouthFailures(state, references);
   if (placedYouthFailures.length > 0) {
@@ -394,13 +468,19 @@ function assertReleaseInvariants(state: GameState, initialBytes: number): number
     );
   }
   if (DIAGNOSTIC_ONLY) {
-    if (nonFinite.length + references.length + economy.length > 0) {
-      console.info("LONG_CAREER_DIAGNOSTIC_FAILURES", { nonFinite, references, economy });
+    if (nonFinite.length + references.length + retentionReferences.length + economy.length > 0) {
+      console.info("LONG_CAREER_DIAGNOSTIC_FAILURES", {
+        nonFinite,
+        references,
+        retentionReferences,
+        economy,
+      });
     }
-    return bytes;
+    return retentionFootprint;
   }
   expect(nonFinite, "non-finite numeric state").toEqual([]);
   expect(references, "invalid entity references").toEqual([]);
+  expect(retentionReferences, "invalid retained archive references").toEqual([]);
   expect(economy, "invalid economy state").toEqual([]);
   expect(bytes, "serialized save exceeds absolute release budget").toBeLessThanOrEqual(
     MAX_SERIALIZED_BYTES,
@@ -408,7 +488,13 @@ function assertReleaseInvariants(state: GameState, initialBytes: number): number
   expect(bytes, "serialized save growth exceeds release multiplier").toBeLessThanOrEqual(
     initialBytes * MAX_GROWTH_MULTIPLIER,
   );
-  return bytes;
+  for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
+    expect(
+      retentionFootprint.collections[key],
+      `${key} exceeds its long-save collection budget`,
+    ).toBeLessThanOrEqual(COLLECTION_BYTE_BUDGETS[key]);
+  }
+  return retentionFootprint;
 }
 
 async function simulateCareer(
@@ -449,7 +535,15 @@ async function simulateCareer(
   let canonicalTicks = 0;
   let calendarWeeksSpanned = 0;
   let lastCheckedSeason = initial.currentSeason;
+  let lastBoundaryBytes = initialBytes;
   const weeklyLatency: number[] = [];
+  const compactionSamples: SaveRetentionCompactionSample[] = [];
+  const pendingCompactionSamples: SaveRetentionCompactionSample[] = [];
+  const seasonGrowth: RunEvidence["seasonGrowth"] = [];
+  const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
+    compactionSamples.push(sample);
+    pendingCompactionSamples.push(sample);
+  });
 
   while ((useGameStore.getState().gameState?.currentSeason ?? 0) <= seasonCount) {
     let before = useGameStore.getState().gameState;
@@ -510,7 +604,25 @@ async function simulateCareer(
     expect(elapsed, `seed ${seed} batch latency indicates a hang`).toBeLessThan(MAX_SINGLE_BATCH_MS);
 
     if (after.currentSeason !== lastCheckedSeason) {
-      const bytes = assertReleaseInvariants(after, initialBytes);
+      const footprint = assertReleaseInvariants(after, initialBytes);
+      const bytes = footprint.totalBytes;
+      const boundaryCompactions = pendingCompactionSamples.splice(
+        0,
+        pendingCompactionSamples.length,
+      );
+      seasonGrowth.push({
+        season: after.currentSeason,
+        serializedBytes: bytes,
+        growthBytes: bytes - lastBoundaryBytes,
+        compactionRemovedBytes: boundaryCompactions.reduce(
+          (sum, sample) => sum + sample.removedBytes,
+          0,
+        ),
+        compactionEvents: boundaryCompactions.length,
+        collectionBytes: footprint.collections,
+        collectionCompactionDeltas: sumCompactionDeltas(boundaryCompactions),
+      });
+      lastBoundaryBytes = bytes;
       peakBytes = Math.max(peakBytes, bytes);
       lastCheckedSeason = after.currentSeason;
       const beforeCollection = collectMemorySample(after.currentSeason);
@@ -524,10 +636,11 @@ async function simulateCareer(
 
     }
   }
+  stopObservingCompaction();
 
   const finalState = useGameStore.getState().gameState;
   if (!finalState) throw new Error(`Seed ${seed} lost its final state`);
-  const finalBytes = assertReleaseInvariants(finalState, initialBytes);
+  const finalBytes = assertReleaseInvariants(finalState, initialBytes).totalBytes;
   peakBytes = Math.max(peakBytes, finalBytes);
   const history = finalState.worldHistory;
   expect(history, `seed ${seed} has no world history after ${seasonCount} seasons`).toBeDefined();
@@ -576,6 +689,20 @@ async function simulateCareer(
     worldHistorySeasons: history?.seasons.length ?? 0,
     worldHistoryBytes: Buffer.byteLength(JSON.stringify(history), "utf8"),
     largestCollections: largestCollections(finalState),
+    seasonGrowth,
+    compaction: {
+      events: compactionSamples.length,
+      seasonsWithReduction: new Set(
+        compactionSamples
+          .filter((sample) => sample.removedBytes > 0)
+          .map((sample) => sample.season),
+      ).size,
+      totalRemovedBytes: compactionSamples.reduce(
+        (sum, sample) => sum + sample.removedBytes,
+        0,
+      ),
+      collectionDeltas: sumCompactionDeltas(compactionSamples),
+    },
     memory: {
       initial: initialMemory,
       final: finalMemory,
@@ -612,7 +739,7 @@ describe("accelerated season-boundary release soak", () => {
     }
 
     const summary = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       profile: {
         kind: "accelerated-season-boundary",
@@ -626,6 +753,7 @@ describe("accelerated season-boundary release soak", () => {
         maxHeapUsedBytes: MAX_HEAP_USED_BYTES,
         maxRssBytes: MAX_RSS_BYTES,
         maxPostGcHeapGrowthBytes: MAX_POST_GC_HEAP_GROWTH_BYTES,
+        collectionByteBudgets: COLLECTION_BYTE_BUDGETS,
       },
       aggregate: {
         totalCanonicalTicks: runs.reduce((sum, run) => sum + run.canonicalTicks, 0),
@@ -634,6 +762,19 @@ describe("accelerated season-boundary release soak", () => {
         largestFinalToInitialRatio: Math.max(...runs.map((run) => run.finalToInitialRatio)),
         peakHeapUsedBytes: Math.max(...runs.map((run) => run.memory.peakHeapUsedBytes)),
         peakRssBytes: Math.max(...runs.map((run) => run.memory.peakRssBytes)),
+        largestSingleSeasonGrowthBytes: Math.max(
+          ...runs.flatMap((run) => run.seasonGrowth.map((sample) => sample.growthBytes)),
+        ),
+        totalCompactionRemovedBytes: runs.reduce(
+          (sum, run) => sum + run.compaction.totalRemovedBytes,
+          0,
+        ),
+        compactionCollectionDeltas: Object.fromEntries(
+          SAVE_RETENTION_COLLECTION_KEYS.map((key) => [
+            key,
+            runs.reduce((sum, run) => sum + run.compaction.collectionDeltas[key], 0),
+          ]),
+        ),
         weeklyLatencyMs: {
           p50: round(percentile(runs.map((run) => run.weeklyLatencyMs.p50), 0.5)),
           p95: round(percentile(runs.map((run) => run.weeklyLatencyMs.p95), 0.95)),

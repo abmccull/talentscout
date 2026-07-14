@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 const script = join(process.cwd(), "scripts", "provision-steam-sdk.mjs");
+const packagePreflight = join(process.cwd(), "scripts", "prepare-electron-package.mjs");
 const tempDirs: string[] = [];
 
 function runProvision(
@@ -37,6 +38,18 @@ afterEach(() => {
 });
 
 describe("Steam SDK provisioning", () => {
+  it("prepares the deterministic app id in a fresh package workspace without claiming an SDK", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "talentscout-electron-package-"));
+    tempDirs.push(cwd);
+    const result = spawnSync(process.execPath, [packagePreflight], {
+      cwd,
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(0);
+    expect(readFileSync(join(cwd, "steam_appid.txt"), "utf8")).toBe("4455570\n");
+    expect(result.stdout).toContain("does not claim they are available");
+  });
+
   it("creates the app id and labels an optional non-Steam build", () => {
     const { cwd, result } = runProvision(false);
 

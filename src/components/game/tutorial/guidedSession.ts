@@ -254,7 +254,7 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
     target: "report-submit",
     title: "Submit the scouting write-up",
     mentorText:
-      "Submit the report once the summary reflects the school match properly. Clean reporting is how you turn raw observation into reputation.",
+      "Submit once the summary reflects the school match properly. This opens an accountable case whose delivery and outcome can shape your reputation.",
     mentorTextFreelance:
       "Send it when the notes are tight. A disciplined youth report is worth more than hype.",
     position: "top",

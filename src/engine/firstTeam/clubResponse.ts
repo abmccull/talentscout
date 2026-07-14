@@ -218,6 +218,7 @@ export function generateClubResponse(
   directive: ManagerDirective | undefined,
   scout: Scout,
   systemFitScore?: number,
+  recruitmentClimateAdjustment = 0,
 ): ClubResponse {
   const week = report.submittedWeek;
   const season = report.submittedSeason;
@@ -336,6 +337,26 @@ export function generateClubResponse(
     }
   }
 
+  if (recruitmentClimateAdjustment !== 0) {
+    const climateMultiplier = clamp(
+      1 + recruitmentClimateAdjustment / 20,
+      0.6,
+      1.4,
+    );
+    for (const outcome of ["signed", "trial", "interested", "loanSigned"] as const) {
+      weights[outcome] = clamp(
+        Math.round(weights[outcome] * climateMultiplier),
+        0,
+        100,
+      );
+    }
+    weights.doesNotFit = clamp(
+      Math.round(weights.doesNotFit / climateMultiplier),
+      0,
+      100,
+    );
+  }
+
   // Build only the live outcomes (filter zero-weight items)
   const liveOutcomes: ClubResponseType[] = ["interested", "trial", "signed", "doesNotFit", "loanSigned"];
   const weightedItems = liveOutcomes
@@ -354,6 +375,11 @@ export function generateClubResponse(
     } else if (systemFitScore < 40) {
       feedback += " There are concerns about the player's tactical fit in the current system.";
     }
+  }
+  if (recruitmentClimateAdjustment > 0) {
+    feedback += " This season's recruitment climate has made the club more willing to act.";
+  } else if (recruitmentClimateAdjustment < 0) {
+    feedback += " This season's recruitment climate has made the club more cautious.";
   }
 
   return {

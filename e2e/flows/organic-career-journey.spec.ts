@@ -85,7 +85,8 @@ async function advanceCanonicalEmptyWeek(page: Page) {
     const before = store.getState().gameState;
     store.getState().startWeekSimulation();
     store.getState().fastForwardWeek();
-    const after = store.getState().gameState;
+    const postSimulationStore = store.getState();
+    const after = postSimulationStore.gameState;
     return {
       before: { week: before.currentWeek, season: before.currentSeason },
       after: {
@@ -93,41 +94,62 @@ async function advanceCanonicalEmptyWeek(page: Page) {
         season: after.currentSeason,
         tier: after.scout.careerTier,
       },
+      celebration: postSimulationStore.pendingCelebration
+        ? {
+            tier: postSimulationStore.pendingCelebration.tier,
+            title: postSimulationStore.pendingCelebration.title,
+          }
+        : null,
     };
   });
 
-  // Canonical completion can surface a week summary and a tier celebration.
-  // Close both through their real controls before the next player action.
-  for (let attempt = 0; attempt < 4; attempt++) {
-    // The promotion celebration is mounted by a React effect after the week
-    // summary closes, so give each potential layer one render turn before
-    // deciding that there is nothing left to dismiss.
-    await page.waitForTimeout(100);
-    const candidates = page.getByRole("button", {
-      name: /^(Continue|Incredible!)$/,
-    });
-    let clicked = false;
-    for (let index = (await candidates.count()) - 1; index >= 0; index--) {
-      const candidate = candidates.nth(index);
-      if (await candidate.isVisible().catch(() => false)) {
-        await candidate.click();
-        clicked = true;
-        break;
-      }
-    }
-    if (!clicked) {
-      await page.waitForTimeout(150);
-      for (let index = (await candidates.count()) - 1; index >= 0; index--) {
-        const candidate = candidates.nth(index);
-        if (await candidate.isVisible().catch(() => false)) {
-          await candidate.click();
-          clicked = true;
-          break;
-        }
-      }
-    }
-    if (!clicked) break;
-    await page.waitForTimeout(50);
+  // Canonical completion deliberately presents one blocking layer at a time:
+  // the week summary first, then any earned milestone. Scope every action to
+  // the named dialog so a late React render cannot retarget a positional
+  // locator to a covered control.
+  const weekSummary = page.getByRole("dialog", { name: "Week Summary" });
+  await expect(weekSummary).toBeVisible({ timeout: 5_000 });
+  await weekSummary.getByRole("button", {
+    name: result.celebration?.title === "Career Promotion!"
+      ? "Continue to promotion"
+      : result.celebration
+        ? "Continue to milestone"
+        : "Close week summary",
+  }).click();
+  await expect(weekSummary).toBeHidden();
+
+  if (result.celebration?.tier === "major" || result.celebration?.tier === "epic") {
+    const accessibleName = result.celebration.tier === "epic"
+      ? `Epic achievement: ${result.celebration.title}`
+      : `Achievement: ${result.celebration.title}`;
+    const celebration = page.getByRole("dialog", { name: accessibleName });
+    await expect(celebration).toBeVisible({ timeout: 5_000 });
+    await celebration.getByRole("button", {
+      name: result.celebration.tier === "epic" ? "Incredible!" : "Continue",
+    }).click();
+    await expect(celebration).toBeHidden();
+  }
+
+  if (result.after.season > result.before.season) {
+    // Season Awards is a deliberately lazy late-career workspace. The store
+    // route changes synchronously after the summary, while the production
+    // chunk can still be committing on a cold browser. Wait for that real
+    // destination instead of treating the route-level loading fallback as a
+    // missing season review.
+    await page.waitForFunction(
+      () => (window as any).__GAME_STORE__?.getState()?.currentScreen === "seasonAwards",
+      undefined,
+      { timeout: 20_000 },
+    );
+    await page
+      .getByText(/^Loading workspace/)
+      .waitFor({ state: "hidden", timeout: 20_000 });
+    await expect(
+      page.getByRole("heading", {
+        name: `Season ${result.before.season} Complete`,
+      }),
+    ).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: "Continue to Next Season" }).click();
   }
 
   return result;
@@ -135,7 +157,11 @@ async function advanceCanonicalEmptyWeek(page: Page) {
 
 test.describe("Organic career journey", () => {
   test("fresh Youth work earns a path choice, leadership, retirement, and inherited legacy", async ({ gamePage }) => {
-    test.setTimeout(240_000);
+    // This story advances a full season with canonical world processing and
+    // closes every player-facing summary/milestone through the rendered UI.
+    // Keep a release-machine budget that covers the complete 38-week journey;
+    // the assertions and per-action timeouts remain strict.
+    test.setTimeout(600_000);
 
     await gamePage.goto();
     await gamePage.startNewGame({

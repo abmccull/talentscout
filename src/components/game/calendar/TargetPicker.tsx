@@ -52,10 +52,17 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
     mode === "player" ? "Search players..." :
     mode === "contact" ? "Search contacts..." :
     "Search options...";
+  const dialogLabel =
+    mode === "player" ? "Select a player" :
+    mode === "contact" ? "Select a contact" :
+    "Select an option";
 
   return (
     <div
       ref={overlayRef}
+      role="dialog"
+      aria-modal={inline ? "true" : "false"}
+      aria-label={dialogLabel}
       className={`${inline ? "relative" : "absolute left-0 right-0 top-full mt-1"} z-50 rounded-lg border border-[#27272a] bg-[#0a0a0a] shadow-xl shadow-black/50`}
     >
       {/* Search bar */}
@@ -64,6 +71,7 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
         <input
           ref={inputRef}
           type="text"
+          aria-label={placeholder.replace("...", "")}
           placeholder={placeholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -71,6 +79,7 @@ export function TargetPicker({ targets, mode, onSelect, onClose, inline }: Targe
         />
         <button
           onClick={onClose}
+          aria-label={`Close ${dialogLabel.toLowerCase()}`}
           className="shrink-0 rounded p-0.5 text-zinc-500 hover:bg-[#27272a] hover:text-zinc-300"
         >
           <X size={12} />

@@ -13,6 +13,13 @@ test.describe("Canonical weekly advancement", () => {
         fatigue: 10,
       },
     });
+    await gamePage.navigateTo("calendar");
+    const speculativeIntent = gamePage.page.getByRole("radio", { name: /Chase an edge/i });
+    const relationshipPolicy = gamePage.page.getByRole("radio", { name: /Protect relationships/i });
+    await speculativeIntent.click();
+    await relationshipPolicy.click();
+    await expect(speculativeIntent).toHaveAttribute("aria-checked", "true");
+    await expect(relationshipPolicy).toHaveAttribute("aria-checked", "true");
 
     const result = await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
@@ -40,6 +47,8 @@ test.describe("Canonical weekly advancement", () => {
         repeatedBytes: repeatedJson.length,
         batchDate: [batchState.currentSeason, batchState.currentWeek],
         repeatedDate: [repeatedState.currentSeason, repeatedState.currentWeek],
+        batchStrategyHistory: batchState.weeklyStrategy?.history?.length,
+        repeatedStrategyHistory: repeatedState.weeklyStrategy?.history?.length,
       };
     });
 
@@ -47,6 +56,8 @@ test.describe("Canonical weekly advancement", () => {
       equivalent: true,
       batchBytes: result.repeatedBytes,
       batchDate: result.repeatedDate,
+      batchStrategyHistory: 4,
+      repeatedStrategyHistory: 4,
     });
     gamePage.expectNoConsoleErrors();
   });

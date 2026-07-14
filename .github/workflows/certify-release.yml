@@ -1,0 +1,267 @@
+name: Certify and Promote Existing Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: "Build Desktop App run that produced the exact candidate artifacts"
+        required: true
+        type: string
+      candidate_tag:
+        description: "Existing candidate tag, for example v1.0.0-rc.1 or v1.0.0"
+        required: true
+        type: string
+      certification_ref:
+        description: "Branch or commit containing release-certifications/<candidate-tag>/"
+        required: true
+        type: string
+      publish_github:
+        description: "Create or update a draft GitHub release after certification"
+        required: true
+        default: false
+        type: boolean
+      publish_steam:
+        description: "Upload exact depots to Steam (final non-prerelease tags only)"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: certify-${{ inputs.candidate_tag }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  certify:
+    name: Certify immutable candidate artifacts
+    runs-on: ubuntu-latest
+    environment: release-certification
+    outputs:
+      candidate_sha: ${{ steps.candidate.outputs.sha }}
+      prerelease: ${{ steps.candidate.outputs.prerelease }}
+    steps:
+      - name: Validate dispatch inputs
+        env:
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          PUBLISH_STEAM: ${{ inputs.publish_steam }}
+        run: |
+          if ! printf '%s' "$CANDIDATE_RUN_ID" | grep -Eq '^[0-9]+$'; then
+            echo "::error::candidate_run_id must be numeric"
+            exit 1
+          fi
+          if ! printf '%s' "$CANDIDATE_TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$'; then
+            echo "::error::candidate_tag is not a supported release tag"
+            exit 1
+          fi
+          if [ "$PUBLISH_STEAM" = "true" ] && printf '%s' "$CANDIDATE_TAG" | grep -q -- '-'; then
+            echo "::error::Prerelease/RC tags can never be uploaded to Steam"
+            exit 1
+          fi
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.candidate_tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Resolve immutable candidate
+        id: candidate
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          sha="$(git rev-parse HEAD)"
+          tagged_sha="$(git rev-parse "${CANDIDATE_TAG}^{commit}")"
+          if [ "$sha" != "$tagged_sha" ]; then
+            echo "::error::Checked-out candidate does not match its tag"
+            exit 1
+          fi
+          if printf '%s' "$CANDIDATE_TAG" | grep -q -- '-'; then prerelease=true; else prerelease=false; fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "RELEASE_CANDIDATE_SHA=$sha" >> "$GITHUB_ENV"
+          echo "RELEASE_CANDIDATE_TAG=$CANDIDATE_TAG" >> "$GITHUB_ENV"
+
+      - run: npm ci
+
+      - name: Download candidate package and soak/core evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: candidate-build-evidence
+          path: .
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download exact native distributables
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: "*-build"
+          path: release-artifacts
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout independent certification evidence
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.certification_ref }}
+          path: certification-source
+          fetch-depth: 1
+
+      - name: Install candidate-bound certification bundle
+        env:
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+        run: |
+          source_dir="certification-source/release-certifications/$CANDIDATE_TAG"
+          if [ ! -d "$source_dir" ]; then
+            echo "::error::Certification directory is missing: $source_dir"
+            exit 1
+          fi
+          if find "$source_dir" -type l -print -quit | grep -q .; then
+            echo "::error::Certification bundles may not contain symbolic links"
+            exit 1
+          fi
+          mkdir -p artifacts/release/generated/certifications
+          cp -R "$source_dir/." artifacts/release/generated/certifications/
+          rm -rf certification-source
+
+      - name: Enforce exact package, core, soak, human, hardware, and platform evidence
+        env:
+          RELEASE_WORKFLOW_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: npm run test:release-evidence
+
+      - name: Upload certification decision
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: certified-candidate-${{ inputs.candidate_tag }}
+          path: artifacts/release/release-evidence-check.json
+          if-no-files-found: ignore
+          retention-days: 90
+
+  github-release:
+    name: Draft GitHub release from certified bytes
+    needs: certify
+    if: inputs.publish_github == true
+    runs-on: ubuntu-latest
+    environment: production-release
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.candidate_tag }}
+
+      - name: Download exact certified distributables
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: "*-build"
+          path: release-artifacts
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate promotion provenance and checksums
+        env:
+          CANDIDATE_SHA: ${{ needs.certify.outputs.candidate_sha }}
+          CANDIDATE_TAG: ${{ inputs.candidate_tag }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+        run: |
+          node -e 'const fs=require("fs"); fs.writeFileSync("release-artifacts/build-manifest.json", JSON.stringify({product:"TalentScout",tag:process.env.CANDIDATE_TAG,commit:process.env.CANDIDATE_SHA,candidateWorkflowRun:process.env.CANDIDATE_RUN_ID,certificationWorkflowRun:process.env.GITHUB_RUN_ID,promotedAt:new Date().toISOString()}, null, 2)+"\n")'
+          find release-artifacts/windows-build release-artifacts/macos-build release-artifacts/linux-build release-artifacts/build-manifest.json -type f -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > release-artifacts/SHA256SUMS.txt
+
+      - name: Create or update draft GitHub release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          tag_name: ${{ inputs.candidate_tag }}
+          draft: true
+          prerelease: ${{ needs.certify.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/windows-build/*
+            release-artifacts/macos-build/*
+            release-artifacts/linux-build/*
+            release-artifacts/build-manifest.json
+            release-artifacts/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  steam-upload:
+    name: Upload certified final depots to Steam
+    needs: certify
+    if: inputs.publish_steam == true && needs.certify.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    environment: production-release
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.candidate_tag }}
+
+      - name: Download exact Windows depot
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: steam-windows
+          path: dist/win-unpacked
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download exact macOS depot
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: steam-macos
+          path: steam-stage/macos
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download exact Linux depot
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: steam-linux
+          path: dist/linux-unpacked
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install SteamCmd
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y steamcmd
+
+      - name: Configure Steam authentication
+        env:
+          STEAM_CONFIG_VDF: ${{ secrets.STEAM_CONFIG_VDF }}
+        run: |
+          if [ -z "$STEAM_CONFIG_VDF" ]; then
+            echo "::error::STEAM_CONFIG_VDF is required"
+            exit 1
+          fi
+          mkdir -p "$HOME/.steam/config"
+          printf '%s' "$STEAM_CONFIG_VDF" | base64 -d > "$HOME/.steam/config/config.vdf"
+
+      - name: Upload unchanged certified depots
+        env:
+          STEAM_USERNAME: ${{ secrets.STEAM_USERNAME }}
+        run: |
+          if [ -z "$STEAM_USERNAME" ]; then
+            echo "::error::STEAM_USERNAME is required"
+            exit 1
+          fi
+          steamcmd +login "$STEAM_USERNAME" \
+            +run_app_build "$GITHUB_WORKSPACE/steamcmd/app_build_4455570.vdf" \
+            +quit

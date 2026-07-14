@@ -13,6 +13,7 @@ import { INTERACTIVE_ACTIVITIES } from "@/engine/observation/types";
 import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useAudio } from "@/lib/audio/useAudio";
+import { DELEGATION_POLICIES } from "@/engine/core/weeklyStrategy";
 import {
   WeekJourney,
   WeekJourneyBeat,
@@ -426,6 +427,9 @@ function DayCard({
   const selectedInteraction = dayResult.interaction?.options.find(
     (option) => option.id === dayResult.interaction?.selectedOptionId,
   );
+  const delegatedPolicy = DELEGATION_POLICIES.find(
+    (policy) => policy.id === dayResult.interaction?.delegationPolicyId,
+  );
   const hasRecordedOutcome =
     dayResult.playersDiscovered > 0
     || dayResult.observations.length > 0
@@ -515,6 +519,11 @@ function DayCard({
                       <p className="text-xs font-semibold text-emerald-200">
                         Approach locked: {selectedInteraction?.label ?? dayResult.interaction.selectedOptionId}
                       </p>
+                      {dayResult.interaction.resolutionMode === "delegated" && (
+                        <p className="mt-1 text-xs font-medium text-amber-200">
+                          Delegated by standing order: {delegatedPolicy?.label ?? "Desk policy"}
+                        </p>
+                      )}
                       {selectedInteraction?.description && (
                         <p className="mt-1 text-xs leading-relaxed text-zinc-300">{selectedInteraction.description}</p>
                       )}
@@ -620,7 +629,7 @@ function DayCard({
                         ))}
                       </div>
                       <p className="text-xs text-amber-200" role="status">
-                        Choose an approach to continue. Skip to Results uses the activity&apos;s default approach.
+                        Choose an approach to continue. Skip to Results applies your persisted delegation policy and records the opportunity cost.
                       </p>
                     </div>
                   )}

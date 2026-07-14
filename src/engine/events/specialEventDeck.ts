@@ -5,6 +5,7 @@ import type {
 } from "@/engine/core/types";
 import { addGameWeeks } from "@/engine/core/gameDate";
 import type { RNG } from "@/engine/rng";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import {
   createDeterministicRunId,
   createNamedRNG,
@@ -12,6 +13,8 @@ import {
 import type {
   ConsequenceEffect,
   DecisionOption,
+  Obligation,
+  ObligationStatus,
   ScheduledConsequenceTemplate,
 } from "@/engine/consequences/types";
 
@@ -37,6 +40,12 @@ interface SpecialEventContext {
   playerName: string;
   contactId?: string;
   contactName: string;
+  agentId?: string;
+  agentName: string;
+  journalistId?: string;
+  journalistName: string;
+  employeeId?: string;
+  employeeName: string;
   clubId?: string;
   clubName: string;
   rivalId?: string;
@@ -52,7 +61,33 @@ interface DelayedBranchDefinition {
   outcomeLabel: string;
 }
 
-type SpecialEventActorKind = "contact" | "board" | "family" | "rival";
+type SpecialEventActorKind =
+  | "contact"
+  | "agent"
+  | "journalist"
+  | "employee"
+  | "board"
+  | "family"
+  | "rival";
+
+type RelationshipMetric = "relationship" | "trust" | "morale" | "aggressiveness";
+
+interface SpecialEventImmediateRelationship {
+  actor: SpecialEventActorKind;
+  valence: number;
+  tags: readonly string[];
+  halfLifeWeeks?: number;
+  metric?: RelationshipMetric;
+  metricDelta?: number;
+}
+
+interface SpecialEventObligationStake {
+  key: string;
+  actor: SpecialEventActorKind;
+  kind: string;
+  terms: string;
+  dueWeeks: number;
+}
 
 interface SpecialEventMemoryProfile {
   actor: SpecialEventActorKind;
@@ -76,6 +111,10 @@ export interface ScoutingSpecialEventOptionDefinition {
     terms: string;
     dueWeeks: number;
   };
+  /** Immediate, actor-specific reactions. Multiple parties may remember one choice differently. */
+  immediateRelationships?: readonly SpecialEventImmediateRelationship[];
+  /** Resolves obligations created when the conflicting requests were offered. */
+  obligationResolutions?: Readonly<Record<string, Exclude<ObligationStatus, "active">>>;
 }
 
 export interface ScoutingSpecialEventDefinition {
@@ -88,13 +127,17 @@ export interface ScoutingSpecialEventDefinition {
   defaultChoiceIndex: number;
   baseWeight: number;
   traitWeights: Readonly<Record<string, number>>;
-  requires?: "player" | "contact" | "club" | "rival";
+  requires?: "player" | "contact" | "club" | "rival" | "employee";
+  /** All named recurring actors must exist before the story can be selected. */
+  requiresAll?: readonly SpecialEventActorKind[];
   related: (context: SpecialEventContext) => string[];
+  /** Simultaneous requests materialized as real, mutually visible promises before selection. */
+  obligationStakes?: readonly SpecialEventObligationStake[];
   options: readonly ScoutingSpecialEventOptionDefinition[];
 }
 
 /**
- * Eight scouting-centred turning points. Their choices deliberately reuse the
+ * Scouting-centred turning points. Their choices deliberately reuse the
  * existing narrative effect vocabulary so the immediate UI response and the
  * durable consequence ledger describe the same action.
  */
@@ -702,6 +745,460 @@ export const SCOUTING_SPECIAL_EVENT_DECK: readonly ScoutingSpecialEventDefinitio
       },
     ],
   },
+  {
+    id: "relationships-family-media-embargo",
+    category: "media",
+    type: "journalistExpose",
+    title: "Two Promises, One Story",
+    description: ({ playerName, journalistName }) =>
+      `${playerName}'s family has asked you to keep the prospect out of the spotlight. ` +
+      `${journalistName}, a potentially valuable long-term source, needs an answer before publication. ` +
+      "Either relationship can open doors later, and both will remember whose request mattered.",
+    deadlineWeeks: 1,
+    defaultChoiceIndex: 2,
+    baseWeight: 1.05,
+    traitWeights: {
+      "golden-generation": 1.7,
+      "trusted-circuit": 1.6,
+      "scout-wars": 1.2,
+    },
+    requires: "player",
+    requiresAll: ["family", "journalist"],
+    related: ({ playerId, journalistId }) =>
+      [playerId, journalistId].filter(Boolean) as string[],
+    obligationStakes: [
+      {
+        key: "family-privacy",
+        actor: "family",
+        kind: "familyPrivacy",
+        terms: "Keep the prospect's identity and family circumstances out of public coverage.",
+        dueWeeks: 1,
+      },
+      {
+        key: "journalist-answer",
+        actor: "journalist",
+        kind: "mediaAccess",
+        terms: "Give a clear, timely answer before the journalist's publication deadline.",
+        dueWeeks: 1,
+      },
+    ],
+    options: [
+      {
+        label: "Protect the family and refuse",
+        effect: "journalistRefuse",
+        knownTradeoffs: [
+          "Keeps a vulnerable prospect out of the public market",
+          "Breaks your commitment to a journalist who may stop bringing exclusive leads",
+        ],
+        delayed: {
+          weeks: 5,
+          successChance: 0.78,
+          metric: "specializationReputation",
+          successDelta: 5,
+          failureDelta: -2,
+          outcomeLabel: "the private handling is judged by the football network",
+        },
+        immediateRelationships: [
+          {
+            actor: "family",
+            valence: 72,
+            tags: ["familyPrivacy", "protectedFamily", "trustedUnderPressure"],
+            halfLifeWeeks: 156,
+          },
+          {
+            actor: "journalist",
+            valence: -48,
+            tags: ["mediaAccess", "promiseBroken", "sourceRelationship"],
+            halfLifeWeeks: 78,
+            metric: "trust",
+            metricDelta: -7,
+          },
+        ],
+        obligationResolutions: {
+          "family-privacy": "fulfilled",
+          "journalist-answer": "breached",
+        },
+      },
+      {
+        label: "Help shape the article",
+        effect: "journalistCooperate",
+        knownTradeoffs: [
+          "Preserves a valuable media relationship and lets you correct the story",
+          "Breaks the family's privacy request and accelerates attention on the prospect",
+        ],
+        delayed: {
+          weeks: 5,
+          successChance: 0.6,
+          metric: "reputation",
+          successDelta: 8,
+          failureDelta: -7,
+          outcomeLabel: "the player's public profile settles",
+        },
+        immediateRelationships: [
+          {
+            actor: "family",
+            valence: -84,
+            tags: ["familyPrivacy", "exposedFamily", "promiseBroken"],
+            halfLifeWeeks: 208,
+          },
+          {
+            actor: "journalist",
+            valence: 66,
+            tags: ["mediaAccess", "reciprocity", "exclusiveAccess"],
+            halfLifeWeeks: 104,
+            metric: "trust",
+            metricDelta: 8,
+          },
+        ],
+        obligationResolutions: {
+          "family-privacy": "breached",
+          "journalist-answer": "fulfilled",
+        },
+      },
+      {
+        label: "Negotiate a seven-day embargo",
+        effect: "journalistDelay",
+        knownTradeoffs: [
+          "Can respect the family while preserving a future exclusive",
+          "Costs influence now and succeeds only if both parties accept the boundary",
+        ],
+        delayed: {
+          weeks: 4,
+          successChance: 0.72,
+          metric: "clubTrust",
+          successDelta: 3,
+          failureDelta: -3,
+          outcomeLabel: "the negotiated embargo holds or unravels",
+        },
+        immediateRelationships: [
+          {
+            actor: "family",
+            valence: 34,
+            tags: ["familyPrivacy", "negotiatedBoundary", "goodFaithAdvice"],
+            halfLifeWeeks: 104,
+          },
+          {
+            actor: "journalist",
+            valence: 28,
+            tags: ["mediaAccess", "negotiatedBoundary", "reciprocity"],
+            halfLifeWeeks: 78,
+            metric: "trust",
+            metricDelta: 3,
+          },
+        ],
+        obligationResolutions: {
+          "family-privacy": "fulfilled",
+          "journalist-answer": "fulfilled",
+        },
+      },
+    ],
+  },
+  {
+    id: "relationships-employee-agent-credit",
+    category: "careerPolitics",
+    type: "agentDoubleDealing",
+    title: "Who Owns The Discovery?",
+    description: ({ playerName, employeeName, agentName }) =>
+      `${employeeName} found ${playerName} through weeks of work, but ${agentName} claims the introduction ` +
+      "made the opportunity possible. Your employee expects public credit; the agent expects discretion and attribution.",
+    deadlineWeeks: 2,
+    defaultChoiceIndex: 2,
+    baseWeight: 0.95,
+    traitWeights: {
+      "trusted-circuit": 1.45,
+      "scout-wars": 1.35,
+      "boom-bust-market": 1.15,
+    },
+    requires: "employee",
+    requiresAll: ["employee", "agent"],
+    related: ({ playerId, employeeId, agentId }) =>
+      [playerId, employeeId, agentId].filter(Boolean) as string[],
+    obligationStakes: [
+      {
+        key: "employee-credit",
+        actor: "employee",
+        kind: "employeeCredit",
+        terms: "Recognize the employee's work and protect their ownership of the discovery.",
+        dueWeeks: 2,
+      },
+      {
+        key: "agent-attribution",
+        actor: "agent",
+        kind: "sourceAttribution",
+        terms: "Respect the agent's claim that their introduction remains part of the opportunity.",
+        dueWeeks: 2,
+      },
+    ],
+    options: [
+      {
+        label: "Give your employee full credit",
+        effect: "employeeCredit",
+        knownTradeoffs: [
+          "Builds staff loyalty and makes delegated work feel consequential",
+          "The agent may withhold client access and negotiation information",
+        ],
+        delayed: {
+          weeks: 6,
+          successChance: 0.7,
+          metric: "specializationReputation",
+          successDelta: 6,
+          failureDelta: -2,
+          outcomeLabel: "the discovery-credit dispute travels through the industry",
+        },
+        immediateRelationships: [
+          {
+            actor: "employee",
+            valence: 78,
+            tags: ["employeeCredit", "creditedWork", "leadership"],
+            halfLifeWeeks: 156,
+            metric: "morale",
+            metricDelta: 10,
+          },
+          {
+            actor: "agent",
+            valence: -58,
+            tags: ["sourceAttribution", "creditDispute", "promiseBroken"],
+            halfLifeWeeks: 104,
+            metric: "trust",
+            metricDelta: -8,
+          },
+        ],
+        obligationResolutions: {
+          "employee-credit": "fulfilled",
+          "agent-attribution": "breached",
+        },
+      },
+      {
+        label: "Recognize the agent's introduction",
+        effect: "agentCredit",
+        knownTradeoffs: [
+          "Protects a source who can bring future clients and private market context",
+          "Your employee may stop taking initiative or become vulnerable to poaching",
+        ],
+        delayed: {
+          weeks: 5,
+          successChance: 0.66,
+          metric: "clubTrust",
+          successDelta: 5,
+          failureDelta: -3,
+          outcomeLabel: "the agent network decides whether to reciprocate",
+        },
+        immediateRelationships: [
+          {
+            actor: "employee",
+            valence: -72,
+            tags: ["employeeCredit", "creditDenied", "leadership"],
+            halfLifeWeeks: 156,
+            metric: "morale",
+            metricDelta: -12,
+          },
+          {
+            actor: "agent",
+            valence: 62,
+            tags: ["sourceAttribution", "reciprocity", "promiseKept"],
+            halfLifeWeeks: 104,
+            metric: "trust",
+            metricDelta: 8,
+          },
+        ],
+        obligationResolutions: {
+          "employee-credit": "breached",
+          "agent-attribution": "fulfilled",
+        },
+      },
+      {
+        label: "Document shared credit",
+        effect: "sharedCredit",
+        knownTradeoffs: [
+          "Creates a transparent record that recognizes both contributions",
+          "Neither party receives exclusive ownership and both may see it as political compromise",
+        ],
+        delayed: {
+          weeks: 5,
+          successChance: 0.82,
+          metric: "reputation",
+          successDelta: 3,
+          failureDelta: -2,
+          outcomeLabel: "the shared-attribution agreement is tested",
+        },
+        immediateRelationships: [
+          {
+            actor: "employee",
+            valence: 30,
+            tags: ["employeeCredit", "sharedCredit", "leadership"],
+            halfLifeWeeks: 104,
+            metric: "morale",
+            metricDelta: 4,
+          },
+          {
+            actor: "agent",
+            valence: 24,
+            tags: ["sourceAttribution", "sharedCredit", "negotiatedBoundary"],
+            halfLifeWeeks: 78,
+            metric: "trust",
+            metricDelta: 3,
+          },
+        ],
+        obligationResolutions: {
+          "employee-credit": "fulfilled",
+          "agent-attribution": "fulfilled",
+        },
+      },
+    ],
+  },
+  {
+    id: "relationships-rival-agent-ceasefire",
+    category: "rivalConflict",
+    type: "rivalPoach",
+    title: "The Ceasefire Has A Price",
+    description: ({ playerName, rivalName, agentName }) =>
+      `${rivalName} will stop contesting two of your regional leads if you step away from ${playerName}. ` +
+      `${agentName} brought you the player in confidence and expects you to act. A quiet deal with one closes trust with the other.`,
+    deadlineWeeks: 1,
+    defaultChoiceIndex: 2,
+    baseWeight: 1,
+    traitWeights: {
+      "scout-wars": 2.3,
+      "trusted-circuit": 1.25,
+      "thin-crop": 1.35,
+    },
+    requires: "rival",
+    requiresAll: ["rival", "agent"],
+    related: ({ playerId, rivalId, agentId }) =>
+      [playerId, rivalId, agentId].filter(Boolean) as string[],
+    obligationStakes: [
+      {
+        key: "rival-ceasefire",
+        actor: "rival",
+        kind: "rivalNonCompete",
+        terms: "Honor the proposed ceasefire and step away from the named prospect.",
+        dueWeeks: 1,
+      },
+      {
+        key: "agent-exclusive",
+        actor: "agent",
+        kind: "agentExclusivity",
+        terms: "Act on the agent's confidential introduction before the market moves.",
+        dueWeeks: 1,
+      },
+    ],
+    options: [
+      {
+        label: "Accept the rival's ceasefire",
+        effect: "rivalCeasefire",
+        knownTradeoffs: [
+          "Reduces immediate competitive pressure across several regional leads",
+          "Breaks faith with the agent and abandons the named prospect",
+        ],
+        delayed: {
+          weeks: 6,
+          successChance: 0.62,
+          metric: "specializationReputation",
+          successDelta: 4,
+          failureDelta: -5,
+          outcomeLabel: "the rival tests the ceasefire",
+        },
+        immediateRelationships: [
+          {
+            actor: "rival",
+            valence: 48,
+            tags: ["rivalry", "ceasefire", "promiseKept"],
+            halfLifeWeeks: 104,
+            metric: "aggressiveness",
+            metricDelta: -15,
+          },
+          {
+            actor: "agent",
+            valence: -78,
+            tags: ["agentExclusivity", "promiseBroken", "abandonedLead"],
+            halfLifeWeeks: 156,
+            metric: "trust",
+            metricDelta: -10,
+          },
+        ],
+        obligationResolutions: {
+          "rival-ceasefire": "fulfilled",
+          "agent-exclusive": "breached",
+        },
+      },
+      {
+        label: "Back the agent and contest the player",
+        effect: "agentContest",
+        knownTradeoffs: [
+          "Protects confidential access and keeps the prospect in play",
+          "Turns one rival into a more aggressive long-term opponent",
+        ],
+        delayed: {
+          weeks: 6,
+          successChance: 0.56,
+          metric: "reputation",
+          successDelta: 9,
+          failureDelta: -6,
+          outcomeLabel: "the contested recruitment race resolves",
+        },
+        immediateRelationships: [
+          {
+            actor: "rival",
+            valence: -72,
+            tags: ["rivalry", "ceasefireRejected", "directCompetition"],
+            halfLifeWeeks: 156,
+            metric: "aggressiveness",
+            metricDelta: 15,
+          },
+          {
+            actor: "agent",
+            valence: 70,
+            tags: ["agentExclusivity", "trustedUnderPressure", "promiseKept"],
+            halfLifeWeeks: 156,
+            metric: "trust",
+            metricDelta: 9,
+          },
+        ],
+        obligationResolutions: {
+          "rival-ceasefire": "breached",
+          "agent-exclusive": "fulfilled",
+        },
+      },
+      {
+        label: "Trade a different lead for a narrow boundary",
+        effect: "boundaryTrade",
+        knownTradeoffs: [
+          "Attempts to preserve the agent relationship without opening a wider scout war",
+          "Reveals part of your pipeline and gives away a separate opportunity",
+        ],
+        delayed: {
+          weeks: 5,
+          successChance: 0.7,
+          metric: "clubTrust",
+          successDelta: 3,
+          failureDelta: -4,
+          outcomeLabel: "the negotiated competitive boundary holds or collapses",
+        },
+        immediateRelationships: [
+          {
+            actor: "rival",
+            valence: 18,
+            tags: ["rivalry", "negotiatedBoundary", "reciprocity"],
+            halfLifeWeeks: 78,
+            metric: "aggressiveness",
+            metricDelta: -4,
+          },
+          {
+            actor: "agent",
+            valence: 20,
+            tags: ["agentExclusivity", "negotiatedBoundary", "goodFaithAdvice"],
+            halfLifeWeeks: 78,
+            metric: "trust",
+            metricDelta: 2,
+          },
+        ],
+        obligationResolutions: {
+          "rival-ceasefire": "fulfilled",
+          "agent-exclusive": "fulfilled",
+        },
+      },
+    ],
+  },
 ];
 
 const SPECIAL_EVENTS_BY_ID = new Map(
@@ -724,6 +1221,7 @@ function playerName(state: GameState, id: string | undefined): string | undefine
 function contactForDefinition(
   state: GameState,
   definition: ScoutingSpecialEventDefinition,
+  occurrence: number,
 ) {
   const contacts = Object.values(state.contacts).sort((left, right) =>
     right.relationship - left.relationship || left.id.localeCompare(right.id),
@@ -736,18 +1234,23 @@ function contactForDefinition(
         ? new Set(["schoolCoach", "grassrootsOrganizer", "academyCoach"])
         : undefined;
   if (!preferredTypes) return contacts[0];
-  const preferred = contacts.find((contact) => preferredTypes.has(contact.type));
+  const preferred = contacts.filter((contact) => preferredTypes.has(contact.type));
   // Agent and journalist stories must fail closed when the named profession
   // does not exist. Discovery tips can still come from another local source.
-  if (definition.requires === "contact") return preferred;
-  return preferred ?? contacts[0];
+  if (definition.requires === "contact") {
+    return preferred.length > 0 ? preferred[occurrence % preferred.length] : undefined;
+  }
+  return preferred.length > 0
+    ? preferred[occurrence % preferred.length]
+    : contacts[occurrence % Math.max(1, contacts.length)];
 }
 
 function buildContext(
   state: GameState,
   definition: ScoutingSpecialEventDefinition,
+  occurrence = 0,
 ): SpecialEventContext {
-  const recentReport = Object.values(state.reports).sort((left, right) =>
+  const recentReport = selectLatestReportsByCase(Object.values(state.reports)).sort((left, right) =>
     right.submittedSeason - left.submittedSeason
     || right.submittedWeek - left.submittedWeek
     || left.id.localeCompare(right.id),
@@ -758,17 +1261,37 @@ function buildContext(
     ?? Object.values(state.unsignedYouth)
       .map((candidate) => candidate.player.id)
       .sort()[0];
-  const contact = contactForDefinition(state, definition);
+  const contact = contactForDefinition(state, definition, occurrence);
+  const agents = Object.values(state.contacts)
+    .filter((candidate) => candidate.type === "agent" || candidate.type === "youthAgent")
+    .sort((left, right) => right.relationship - left.relationship || left.id.localeCompare(right.id));
+  const journalists = Object.values(state.contacts)
+    .filter((candidate) => candidate.type === "journalist")
+    .sort((left, right) => right.relationship - left.relationship || left.id.localeCompare(right.id));
+  const employees = [...(state.finances?.employees ?? [])]
+    .sort((left, right) => right.morale - left.morale || left.id.localeCompare(right.id));
+  const agent = agents[occurrence % Math.max(1, agents.length)];
+  const journalist = journalists[occurrence % Math.max(1, journalists.length)];
+  const employee = employees[occurrence % Math.max(1, employees.length)];
   const clubId = state.scout.currentClubId ?? Object.keys(state.clubs).sort()[0];
   const club = clubId ? state.clubs[clubId] : undefined;
-  const rival = Object.values(state.rivalScouts).sort((left, right) =>
-    left.id.localeCompare(right.id),
-  )[0];
+  const rivals = Object.values(state.rivalScouts).sort((left, right) =>
+    Number(right.isNemesis) - Number(left.isNemesis)
+    || right.winsAgainstPlayer - left.winsAgainstPlayer
+    || left.id.localeCompare(right.id),
+  );
+  const rival = rivals[occurrence % Math.max(1, rivals.length)];
   return {
     playerId,
     playerName: playerName(state, playerId) ?? "an overlooked prospect",
     contactId: contact?.id,
     contactName: contact?.name ?? "a well-placed intermediary",
+    agentId: agent?.id,
+    agentName: agent?.name ?? "a well-connected agent",
+    journalistId: journalist?.id,
+    journalistName: journalist?.name ?? "a trusted football journalist",
+    employeeId: employee?.id,
+    employeeName: employee?.name ?? "a member of your staff",
     clubId,
     clubName: club?.name ?? "a recruitment client",
     rivalId: rival?.id,
@@ -776,15 +1299,31 @@ function buildContext(
   };
 }
 
+function actorAvailable(
+  actor: SpecialEventActorKind,
+  context: SpecialEventContext,
+): boolean {
+  if (actor === "family") return Boolean(context.playerId);
+  if (actor === "contact") return Boolean(context.contactId);
+  if (actor === "agent") return Boolean(context.agentId);
+  if (actor === "journalist") return Boolean(context.journalistId);
+  if (actor === "employee") return Boolean(context.employeeId);
+  if (actor === "board") return Boolean(context.clubId);
+  return Boolean(context.rivalId);
+}
+
 function isEligible(
   definition: ScoutingSpecialEventDefinition,
   context: SpecialEventContext,
 ): boolean {
-  if (!definition.requires) return true;
-  if (definition.requires === "player") return Boolean(context.playerId);
-  if (definition.requires === "contact") return Boolean(context.contactId);
-  if (definition.requires === "club") return Boolean(context.clubId);
-  return Boolean(context.rivalId);
+  const primaryEligible = !definition.requires
+    || definition.requires === "player" && Boolean(context.playerId)
+    || definition.requires === "contact" && Boolean(context.contactId)
+    || definition.requires === "club" && Boolean(context.clubId)
+    || definition.requires === "rival" && Boolean(context.rivalId)
+    || definition.requires === "employee" && Boolean(context.employeeId);
+  return primaryEligible
+    && (definition.requiresAll ?? []).every((actor) => actorAvailable(actor, context));
 }
 
 /** Exposed for tuning tests and a future event-director diagnostics panel. */
@@ -795,7 +1334,7 @@ export function getSpecialEventSelectionWeights(
   const recent = [...(history.recentSpecialEventIds ?? [])].slice(-4);
   const counts = history.specialEventCounts ?? {};
   return Object.fromEntries(SCOUTING_SPECIAL_EVENT_DECK.map((definition) => {
-    const context = buildContext(state, definition);
+    const context = buildContext(state, definition, counts[definition.id] ?? 0);
     if (!isEligible(definition, context) || recent.includes(definition.id)) {
       return [definition.id, 0];
     }
@@ -834,9 +1373,9 @@ export function createScoutingSpecialEvent(
 ): NarrativeEvent | null {
   const definition = getScoutingSpecialEventDefinition(definitionId);
   if (!definition) return null;
-  const context = buildContext(state, definition);
-  if (!isEligible(definition, context)) return null;
   const occurrence = history.specialEventCounts?.[definition.id] ?? 0;
+  const context = buildContext(state, definition, occurrence);
+  if (!isEligible(definition, context)) return null;
   return {
     id: createDeterministicRunId(
       "evt_special",
@@ -886,12 +1425,13 @@ export function getScoutingSpecialEventDefinition(
 function metricKey(
   metric: OutcomeMetric,
   event: NarrativeEvent,
+  state: GameState,
 ): string {
   if (metric === "reputation") return "scout:reputation";
   if (metric === "fatigue") return "scout:fatigue";
   if (metric === "clubTrust") return "scout:clubTrust";
   if (metric === "specializationReputation") return "scout:specializationReputation";
-  const contactId = event.relatedIds[0];
+  const contactId = event.relatedIds.find((id) => Boolean(state.contacts[id]));
   return contactId ? `contact:${contactId}:trust` : "scout:clubTrust";
 }
 
@@ -904,9 +1444,20 @@ function relatedActor(
   event: NarrativeEvent,
   actor: SpecialEventActorKind,
 ): { kind: string; id: string } | undefined {
-  if (actor === "contact") {
-    const id = event.relatedIds.find((relatedId) => Boolean(state.contacts[relatedId]));
+  if (actor === "contact" || actor === "agent" || actor === "journalist") {
+    const id = event.relatedIds.find((relatedId) => {
+      const contact = state.contacts[relatedId];
+      if (!contact) return false;
+      if (actor === "agent") return contact.type === "agent" || contact.type === "youthAgent";
+      if (actor === "journalist") return contact.type === "journalist";
+      return true;
+    });
     return id ? { kind: "contact", id } : undefined;
+  }
+  if (actor === "employee") {
+    const employeeIds = new Set((state.finances?.employees ?? []).map((employee) => employee.id));
+    const id = event.relatedIds.find((relatedId) => employeeIds.has(relatedId));
+    return id ? { kind: "employee", id } : undefined;
   }
   if (actor === "board") {
     const id = event.relatedIds.find((relatedId) => Boolean(state.clubs[relatedId]))
@@ -923,6 +1474,127 @@ function relatedActor(
     || Object.values(state.unsignedYouth).some((candidate) => candidate.player.id === relatedId),
   );
   return id ? { kind: "family", id } : undefined;
+}
+
+function relationshipMetricKey(
+  stakeholder: { kind: string; id: string },
+  metric: RelationshipMetric,
+): string | undefined {
+  if (stakeholder.kind === "contact" && (metric === "relationship" || metric === "trust")) {
+    return `contact:${stakeholder.id}:${metric}`;
+  }
+  if (stakeholder.kind === "employee" && metric === "morale") {
+    return `employee:${stakeholder.id}:morale`;
+  }
+  if (stakeholder.kind === "rival" && metric === "aggressiveness") {
+    return `rival:${stakeholder.id}:aggressiveness`;
+  }
+  return undefined;
+}
+
+function immediateRelationshipEffects(input: {
+  state: GameState;
+  event: NarrativeEvent;
+  decisionId: string;
+  effect: string;
+  baseId: string;
+  relationships: readonly SpecialEventImmediateRelationship[];
+}): ConsequenceEffect[] {
+  return input.relationships.flatMap((relationship, index) => {
+    const stakeholder = relatedActor(input.state, input.event, relationship.actor);
+    if (!stakeholder) return [];
+    const relationshipId = `${input.baseId}:relationship:${relationship.actor}:${index}`;
+    const effects: ConsequenceEffect[] = [{
+      id: `effect:${relationshipId}:memory`,
+      type: "addMemory",
+      memory: {
+        id: `memory:${relationshipId}:${stakeholder.kind}:${stakeholder.id}`,
+        stakeholder,
+        subject: { kind: "scout", id: input.state.scout.id },
+        tags: [
+          "specialEvent",
+          "relationshipConflict",
+          input.event.specialEventId ?? input.event.type,
+          input.effect,
+          ...relationship.tags,
+        ],
+        valence: relationship.valence,
+        intensity: Math.round(clamp(48 + Math.abs(relationship.valence) * 0.42, 42, 94)),
+        salience: Math.round(clamp(56 + Math.abs(relationship.valence) * 0.4, 50, 96)),
+        visibility: "stakeholders",
+        createdAt: { week: input.event.week, season: input.event.season },
+        sourceDecisionId: input.decisionId,
+        halfLifeWeeks: relationship.halfLifeWeeks ?? 78,
+        metadata: {
+          narrativeEventId: input.event.id,
+          effect: input.effect,
+          actor: relationship.actor,
+        },
+      },
+    }];
+    const metricKey = relationship.metric
+      ? relationshipMetricKey(stakeholder, relationship.metric)
+      : undefined;
+    if (metricKey && relationship.metricDelta) {
+      effects.push({
+        id: `effect:${relationshipId}:metric`,
+        type: "adjustMetric",
+        metricKey,
+        delta: relationship.metricDelta,
+        min: 0,
+        max: 100,
+      });
+    }
+    return effects;
+  });
+}
+
+function obligationStakeId(
+  decisionId: string,
+  stake: SpecialEventObligationStake,
+  stakeholder: { kind: string; id: string },
+): string {
+  return `obligation:${decisionId}:${stake.key}:${stakeholder.kind}:${stakeholder.id}`;
+}
+
+/**
+ * Materialize the simultaneous requests attached to a relationship conflict.
+ * They exist while the choice is open, so timing out is an accountable action
+ * rather than a way to avoid either stakeholder.
+ */
+export function buildSpecialEventOfferObligations(
+  state: GameState,
+  event: NarrativeEvent,
+  decisionId: string,
+): Record<string, Obligation> {
+  const definition = getScoutingSpecialEventDefinition(event.specialEventId);
+  if (!definition?.obligationStakes?.length) return {};
+  return Object.fromEntries(definition.obligationStakes.flatMap((stake) => {
+    const creditor = relatedActor(state, event, stake.actor);
+    if (!creditor) return [];
+    const id = obligationStakeId(decisionId, stake, creditor);
+    return [[id, {
+      id,
+      debtor: { kind: "scout", id: state.scout.id },
+      creditor,
+      kind: stake.kind,
+      terms: stake.terms,
+      status: "active" as const,
+      createdAt: { week: event.week, season: event.season },
+      dueAt: addGameWeeks(
+        state.fixtures,
+        { week: event.week, season: event.season },
+        stake.dueWeeks,
+      ),
+      sourceDecisionId: decisionId,
+      metadata: {
+        narrativeEventId: event.id,
+        specialEventId: event.specialEventId ?? "",
+        stakeKey: stake.key,
+        conflict: true,
+      },
+    } satisfies Obligation]];
+  }));
 }
 
 function memoryEffect(input: {
@@ -1043,7 +1715,7 @@ export function buildSpecialEventDecisionOption(
     {
       id: `effect:${baseId}:metric`,
       type: "adjustMetric",
-      metricKey: metricKey(option.delayed.metric, event),
+      metricKey: metricKey(option.delayed.metric, event, state),
       delta,
       min: 0,
       max: 100,
@@ -1087,7 +1759,28 @@ export function buildSpecialEventDecisionOption(
       visibility: "stakeholders",
       sourceDecisionId: decisionId,
     },
-  }];
+  }, ...immediateRelationshipEffects({
+    state,
+    event,
+    decisionId,
+    effect,
+    baseId,
+    relationships: option.immediateRelationships ?? [],
+  })];
+  const offeredObligations = buildSpecialEventOfferObligations(state, event, decisionId);
+  for (const [stakeKey, status] of Object.entries(option.obligationResolutions ?? {})) {
+    const obligation = Object.values(offeredObligations).find(
+      (candidate) => candidate.metadata?.stakeKey === stakeKey,
+    );
+    if (!obligation) continue;
+    immediateEffects.push({
+      id: `effect:${baseId}:resolve-obligation:${stakeKey}`,
+      type: "transitionObligation",
+      obligationId: obligation.id,
+      status,
+      note: `Resolved by ${event.title}: ${option.label}`,
+    });
+  }
   if (
     option.obligation
     && stakeholder

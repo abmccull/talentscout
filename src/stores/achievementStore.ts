@@ -13,6 +13,7 @@ import { getSteam } from "@/lib/steam/steamInterface";
 import { getSteamAchievementName } from "@/lib/steam/achievementMap";
 import type { AchievementProgress, AchievementUnlock } from "@/engine/core/achievementEngine";
 import { getAchievementProgress, createUnlockRecord } from "@/engine/core/achievementEngine";
+import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
 
 // =============================================================================
 // CONSTANTS
@@ -126,7 +127,9 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
     const { unlockedAchievements, unlockRecords } = get();
 
     // Determine which achievements are currently satisfied.
-    const satisfied = checkAchievements(state);
+    const satisfied = checkAchievements(state).filter(
+      isAchievementAvailableForBuild,
+    );
 
     // Filter to only those not yet unlocked.
     const newlyUnlocked = satisfied.filter(
@@ -136,6 +139,7 @@ export const useAchievementStore = create<AchievementState>((set, get) => ({
     // Update progress cache for all achievements with progress tracking.
     const newProgressCache: Record<string, AchievementProgress> = {};
     for (const achievement of ACHIEVEMENTS) {
+      if (!isAchievementAvailableForBuild(achievement.id)) continue;
       if (unlockedAchievements.has(achievement.id) && !newlyUnlocked.includes(achievement.id)) {
         continue; // Skip already-unlocked achievements
       }
@@ -224,4 +228,6 @@ export function selectUnlockedCount(state: AchievementState): number {
 }
 
 /** Returns the total achievement count. */
-export const TOTAL_ACHIEVEMENT_COUNT = ACHIEVEMENTS.length;
+export const TOTAL_ACHIEVEMENT_COUNT = ACHIEVEMENTS.filter((achievement) =>
+  isAchievementAvailableForBuild(achievement.id),
+).length;

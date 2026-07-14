@@ -59,6 +59,7 @@ export function applyBalanceTransaction(
   week: number,
   season: number,
   description: string,
+  referenceId?: string,
 ): FinancialRecord {
   if (!Number.isFinite(amount) || amount === 0) return finances;
 
@@ -67,7 +68,13 @@ export function applyBalanceTransaction(
     balance: finances.balance + amount,
     transactions: [
       ...finances.transactions,
-      { week, season, amount, description },
+      {
+        week,
+        season,
+        amount,
+        description,
+        ...(referenceId ? { referenceId } : {}),
+      },
     ],
   };
 }
@@ -467,8 +474,12 @@ export function processWeeklyFinances(
 
   // Recalculate expenses to capture any changes (new NPC scouts, travel, etc.).
   const currentExpenses = calculateMonthlyExpenses(scout, normalizedFinances);
-  const totalExpenses = sumExpenses(currentExpenses);
-  const operatingExpenses = totalExpenses - currentExpenses.employeeSalaries;
+  // Debt service is displayed in the monthly expense breakdown, but it is
+  // charged only by processLoanPayment(), which also reduces the outstanding
+  // principal. Keeping it out of this operating-cost pass prevents one loan
+  // instalment from being deducted twice.
+  const totalOperatingExpenses = sumOperatingExpenses(currentExpenses);
+  const operatingExpenses = totalOperatingExpenses - currentExpenses.employeeSalaries;
   const monthlyIncome = scout.salary * 4;
 
   // Specialization income bonus/penalty (B9: lock income sources by spec)
@@ -518,7 +529,7 @@ export function processWeeklyFinances(
 
   let result: FinancialRecord = {
     ...normalizedFinances,
-    balance: normalizedFinances.balance + monthlyIncome + totalSpecIncome - totalExpenses,
+    balance: normalizedFinances.balance + monthlyIncome + totalSpecIncome - totalOperatingExpenses,
     monthlyIncome,
     expenses: currentExpenses,
     specBonusApplied: specBonus,
@@ -916,4 +927,16 @@ function sumExpenses(expenses: Record<ExpenseType, number>): number {
     total += expenses[key];
   }
   return total;
+}
+
+/**
+ * Expenses charged by the monthly operating-cost pass.
+ *
+ * Loan instalments are deliberately excluded: processLoanPayment is the one
+ * authoritative cash-and-liability mutation for active loans.
+ */
+export function sumOperatingExpenses(
+  expenses: Record<ExpenseType, number>,
+): number {
+  return sumExpenses(expenses) - expenses.loanPayment;
 }

@@ -11,12 +11,14 @@ import {
   comparePerformancePeriods,
 } from "@/engine/career/index";
 import {
-  generateScatterData,
   generateCoverageHeatMap,
-  generateDevelopmentTrends,
-  generateLeagueComparison,
-  generatePlayerRadar,
 } from "@/engine/data";
+import {
+  buildObservedDevelopmentTrends,
+  buildObservedLeagueComparison,
+  buildObservedMarketScatter,
+  buildObservedPlayerRadar,
+} from "@/engine/scout/playerFacingIntel";
 import {
   ScatterPlot,
   BarChart,
@@ -117,8 +119,9 @@ export function AnalyticsScreen() {
 
   const scatterData = useMemo(() => {
     if (!gameState) return null;
-    return generateScatterData(
+    return buildObservedMarketScatter(
       gameState.players,
+      Object.values(gameState.observations),
       gameState.anomalyFlags,
     );
   }, [gameState]);
@@ -134,12 +137,17 @@ export function AnalyticsScreen() {
 
   const leagueComparisonData = useMemo(() => {
     if (!gameState) return null;
-    return generateLeagueComparison(gameState.players, gameState.leagues);
+    return buildObservedLeagueComparison(
+      gameState.players,
+      gameState.leagues,
+      Object.values(gameState.observations),
+    );
   }, [gameState]);
 
   const trendLineData = useMemo(() => {
     if (!gameState) return null;
-    // Pick up to 4 players from the watchlist, or top-CA players if watchlist is empty
+    const observations = Object.values(gameState.observations);
+    // Pick up to four watchlist players, then fill from the most recently observed.
     const watchlistPlayers: Player[] = [];
     if (gameState.watchlist.length > 0) {
       for (const pid of gameState.watchlist.slice(0, 4)) {
@@ -147,39 +155,47 @@ export function AnalyticsScreen() {
         if (p) watchlistPlayers.push(p);
       }
     }
-    if (watchlistPlayers.length === 0) {
-      // Fallback: top 4 CA players
-      const sorted = Object.values(gameState.players)
-        .sort((a, b) => b.currentAbility - a.currentAbility)
-        .slice(0, 4);
-      watchlistPlayers.push(...sorted);
+    const selectedIds = new Set(watchlistPlayers.map((player) => player.id));
+    const recentObservations = [...observations].sort(
+      (left, right) => right.season - left.season || right.week - left.week,
+    );
+    for (const observation of recentObservations) {
+      if (watchlistPlayers.length >= 4) break;
+      if (selectedIds.has(observation.playerId)) continue;
+      const player = gameState.players[observation.playerId];
+      if (!player) continue;
+      selectedIds.add(player.id);
+      watchlistPlayers.push(player);
     }
-    return generateDevelopmentTrends(watchlistPlayers, gameState.currentSeason);
+    return buildObservedDevelopmentTrends(
+      watchlistPlayers,
+      observations,
+      gameState.currentSeason,
+    );
   }, [gameState]);
 
   // Radar chart for the first anomaly player or first watchlist player
   const radarData = useMemo(() => {
     if (!gameState) return null;
-    let targetPlayer: Player | undefined;
-    // Prefer first anomaly player
-    if (gameState.anomalyFlags.length > 0) {
-      targetPlayer = gameState.players[gameState.anomalyFlags[0].playerId];
-    }
-    // Fallback to first watchlist player
-    if (!targetPlayer && gameState.watchlist.length > 0) {
-      targetPlayer = gameState.players[gameState.watchlist[0]];
-    }
-    // Fallback to highest-CA player
-    if (!targetPlayer) {
-      const sorted = Object.values(gameState.players).sort(
-        (a, b) => b.currentAbility - a.currentAbility,
+    const observations = Object.values(gameState.observations);
+    const candidateIds = [
+      ...gameState.anomalyFlags.map((flag) => flag.playerId),
+      ...gameState.watchlist,
+      ...[...observations]
+        .sort((left, right) => right.season - left.season || right.week - left.week)
+        .map((observation) => observation.playerId),
+    ];
+    for (const playerId of new Set(candidateIds)) {
+      const player = gameState.players[playerId];
+      if (!player) continue;
+      const radar = buildObservedPlayerRadar(
+        player,
+        observations,
+        gameState.statisticalProfiles[player.id],
       );
-      targetPlayer = sorted[0];
+      if (radar) return radar;
     }
-    if (!targetPlayer) return null;
-
-    const profile = gameState.statisticalProfiles[targetPlayer.id];
-    return generatePlayerRadar(targetPlayer, profile);
+    return null;
   }, [gameState]);
 
   if (!gameState) return null;
@@ -492,7 +508,7 @@ export function AnalyticsScreen() {
                   <PositionLegend />
                 </div>
                 <p className="text-[10px] text-zinc-500">
-                  Current Ability vs Market Value — anomalies highlighted
+                  Observed ability estimate vs market value — anomalies highlighted
                 </p>
               </CardHeader>
               <CardContent>
@@ -511,7 +527,7 @@ export function AnalyticsScreen() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">League Comparison</CardTitle>
                 <p className="text-[10px] text-zinc-500">
-                  Average Current Ability by league
+                  Average observed CA and PA estimates by league
                 </p>
               </CardHeader>
               <CardContent>
@@ -549,7 +565,7 @@ export function AnalyticsScreen() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Development Tracker</CardTitle>
                 <p className="text-[10px] text-zinc-500">
-                  CA trajectory for watchlist players (or top players)
+                  Your recorded CA estimates over time
                 </p>
               </CardHeader>
               <CardContent>

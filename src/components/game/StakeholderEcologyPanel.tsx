@@ -41,7 +41,7 @@ export function StakeholderEcologyPanel({
 
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md border border-white/10 bg-black/20 p-2">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">Trust signal</p>
+          <p className="text-[10px] uppercase tracking-wide text-zinc-400">Trust signal</p>
           <p className="mt-0.5 font-medium text-white">{profile.trust.label}</p>
           {profile.trust.effective !== undefined && (
             <p className="mt-0.5 text-[10px] text-zinc-400">
@@ -50,7 +50,7 @@ export function StakeholderEcologyPanel({
           )}
         </div>
         <div className="rounded-md border border-white/10 bg-black/20 p-2">
-          <p className="text-[10px] uppercase tracking-wide text-zinc-500">Influence</p>
+          <p className="text-[10px] uppercase tracking-wide text-zinc-400">Influence</p>
           <p className="mt-0.5 font-medium text-white">{profile.influence.label}</p>
           <p className="mt-0.5 text-[10px] text-zinc-400">
             {profile.influence.score}/100 · {profile.influence.activeObligations} active promise{profile.influence.activeObligations === 1 ? "" : "s"}

@@ -10,36 +10,9 @@
  */
 
 import { ElectronSteamInterface } from "./electronSteamInterface";
+import type { SteamInterface } from "./steamContract";
 
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
-
-export interface SteamInterface {
-  /** Returns true if the Steam client is available and initialized. */
-  isAvailable(): boolean;
-
-  /** Unlock a Steam achievement by its API name. */
-  unlockAchievement(apiName: string): void;
-
-  /** Save data to a Steam Cloud save slot. */
-  setCloudSave(slot: number, data: string): Promise<void>;
-
-  /** Load data from a Steam Cloud save slot. Returns null if no data. */
-  getCloudSave(slot: number): Promise<string | null>;
-
-  /** Delete data from a Steam Cloud save slot. Missing slots are a no-op. */
-  deleteCloudSave(slot: number): Promise<void>;
-
-  /** Returns the Steam player's display name, or null if unavailable. */
-  getPlayerName(): string | null;
-
-  /** Set Steam Rich Presence key/value pair. */
-  setRichPresence(key: string, value: string): void;
-
-  /** Reset all Steam achievements (development only). */
-  resetAllAchievements(): void;
-}
+export type { SteamInterface } from "./steamContract";
 
 // ---------------------------------------------------------------------------
 // No-op implementation (web/dev builds)
@@ -86,6 +59,20 @@ class NoopSteamInterface implements SteamInterface {
 let instance: SteamInterface | null = null;
 
 /**
+ * True when this renderer is running inside the packaged Electron bridge.
+ * This is deliberately distinct from Steam client availability: the client
+ * can be offline or still initializing while the durable cloud target remains
+ * configured and therefore must receive a queued write.
+ */
+export function isSteamRuntimeConfigured(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    (window as { electronAPI?: { steam?: unknown } }).electronAPI?.steam !==
+      undefined
+  );
+}
+
+/**
  * Returns the active Steam interface instance.
  *
  * Selection priority:
@@ -94,10 +81,7 @@ let instance: SteamInterface | null = null;
  */
 export function getSteam(): SteamInterface {
   if (!instance) {
-    const isElectron =
-      typeof window !== "undefined" &&
-      (window as { electronAPI?: { steam?: unknown } }).electronAPI?.steam !==
-        undefined;
+    const isElectron = isSteamRuntimeConfigured();
 
     if (isElectron) {
       instance = new ElectronSteamInterface();

@@ -16,7 +16,12 @@ import type {
 } from "@/engine/core/types";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
-import { getAvailableCountries } from "@/data/index";
+import {
+  getWorldCountryAvailability,
+  isInternationalAssignmentEligibleCountry,
+  type WorldCountryAvailabilitySource,
+} from "@/engine/world/countryAvailability";
+import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
 
 // =============================================================================
 // CONSTANTS
@@ -39,6 +44,12 @@ const MAX_ACTIVE_ASSIGNMENTS = 3;
 
 /** Duration of a youth tournament in weeks. */
 const TOURNAMENT_DURATION_WEEKS = 2;
+
+const ALL_ASSIGNMENT_TYPES: InternationalAssignment["type"][] = [
+  "youthTournament",
+  "seniorFriendly",
+  "scoutingMission",
+];
 
 // =============================================================================
 // INTERNAL HELPERS
@@ -139,11 +150,19 @@ function generateAssignmentId(rng: RNG): string {
  * Return countries the scout has NOT yet maxed out reputation in, excluding
  * the scout's home country (home country has separate mechanics).
  */
-function getCandidateCountries(scout: Scout, allCountries: string[]): string[] {
+function getCandidateCountries(
+  scout: Scout,
+  allCountries: string[],
+  assignmentTypesByCountry?: ReadonlyMap<string, readonly InternationalAssignment["type"][]>,
+): string[] {
   const homeCountry = getScoutHomeCountry(scout);
 
-  return allCountries.filter((country) => {
+  return [...new Set(allCountries)].filter((country) => {
     if (country === homeCountry) return false;
+
+    if ((assignmentTypesByCountry?.get(country)?.length ?? 1) === 0) {
+      return false;
+    }
 
     const rep = scout.countryReputations[country];
     if (!rep) return true; // Unknown country = unfamiliar = candidate
@@ -217,6 +236,8 @@ export function generateInternationalAssignment(
   scout: Scout,
   countries: string[],
   currentWeek: number,
+  assignmentTypesByCountry?: ReadonlyMap<string, readonly InternationalAssignment["type"][]>,
+  opportunityWeights?: ReadonlyMap<string, number>,
 ): InternationalAssignment | null {
   // Tier gate
   if (scout.careerTier < MIN_TIER_FOR_INTERNATIONAL) {
@@ -224,20 +245,23 @@ export function generateInternationalAssignment(
   }
 
   // Find countries the scout can still grow reputation in
-  const candidates = getCandidateCountries(scout, countries);
+  const candidates = getCandidateCountries(scout, countries, assignmentTypesByCountry);
   if (candidates.length === 0) {
     return null;
   }
 
   // Pick a destination country
-  const country = rng.pick(candidates);
+  const country = opportunityWeights
+    ? rng.pickWeighted(candidates.map((candidate) => ({
+        item: candidate,
+        weight: Math.max(0.1, opportunityWeights.get(candidate) ?? 1),
+      })))
+    : rng.pick(candidates);
 
   // Pick assignment type
-  const type = rng.pick<InternationalAssignment["type"]>([
-    "youthTournament",
-    "seniorFriendly",
-    "scoutingMission",
-  ]);
+  const type = rng.pick<InternationalAssignment["type"]>(
+    [...(assignmentTypesByCountry?.get(country) ?? ALL_ASSIGNMENT_TYPES)],
+  );
 
   const duration = assignmentDuration(rng, type);
 
@@ -276,6 +300,7 @@ export function getAvailableAssignments(
   scout: Scout,
   assignments: InternationalAssignment[],
   currentWeek: number,
+  availabilityState?: WorldCountryAvailabilitySource,
 ): InternationalAssignment[] {
   // Tier gate
   if (scout.careerTier < MIN_TIER_FOR_INTERNATIONAL) {
@@ -289,7 +314,10 @@ export function getAvailableAssignments(
 
   // Filter to assignments available this week or carried over from last week.
   return assignments.filter(
-    (a) => a.weekAvailable >= currentWeek - 1 && a.weekAvailable <= currentWeek,
+    (a) =>
+      a.weekAvailable >= currentWeek - 1
+      && a.weekAvailable <= currentWeek
+      && (!availabilityState || isInternationalAssignmentEligibleCountry(availabilityState, a.country)),
   );
 }
 
@@ -333,14 +361,32 @@ export function processInternationalWeek(
   existingAssignments: InternationalAssignment[] = [],
 ): InternationalWeekResult {
   const currentWeek = gameState.currentWeek;
-  const countries: string[] = gameState.countries.length > 0
-    ? gameState.countries
-    : getAvailableCountries();
-
-  // Only tier 3+ scouts participate in the international system
+  // Ineligible scouts neither generate nor expire international assignments.
+  // Return before deriving the world surface: that derivation scans every
+  // player, fixture, and youth record and was previously paid every week even
+  // throughout long early-career saves.
   if (scout.careerTier < MIN_TIER_FOR_INTERNATIONAL) {
     return { newAssignments: [], expiredAssignmentIds: [] };
   }
+  // Static country catalogues and legacy `state.countries` arrays are not an
+  // authority for travel. Only countries backed by generated world records may
+  // receive offers. This intentionally retains secondary talent pools, which
+  // have club/youth content but no fixture schedule.
+  const countryAvailability = getWorldCountryAvailability(gameState)
+    .filter((availability) => availability.travelEligible);
+  const countries = countryAvailability.map((availability) => availability.countryKey);
+  const assignmentTypesByCountry = new Map(
+    countryAvailability.map((availability) => [
+      availability.countryKey,
+      availability.assignmentTypes,
+    ] as const),
+  );
+  const opportunityWeights = new Map(
+    countries.map((country) => [
+      country,
+      deriveRegionalPresence(gameState, country).effects.opportunityMultiplier,
+    ] as const),
+  );
 
   // --- Generate new assignments on refresh weeks ---
   const newAssignments: InternationalAssignment[] = [];
@@ -356,6 +402,8 @@ export function processInternationalWeek(
         scout,
         countries,
         currentWeek,
+        assignmentTypesByCountry,
+        opportunityWeights,
       );
       if (assignment) {
         newAssignments.push(assignment);
@@ -367,8 +415,11 @@ export function processInternationalWeek(
   // An assignment is expired when its weekAvailable is more than one week old:
   // weekAvailable < currentWeek - 1 (the scout had exactly one week to accept).
   const expiredAssignmentIds = existingAssignments
-    .filter((a) => a.weekAvailable < currentWeek - 1)
-    .map((a) => a.id);
+    .filter((assignment) =>
+      assignment.weekAvailable < currentWeek - 1
+      || !isInternationalAssignmentEligibleCountry(gameState, assignment.country),
+    )
+    .map((assignment) => assignment.id);
 
   return {
     newAssignments,

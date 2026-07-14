@@ -14,9 +14,16 @@ import {
   MessageSquare,
 } from "lucide-react";
 import {
+  FEEDBACK_DESCRIPTION_MAX_LENGTH,
+  FEEDBACK_EMAIL_MAX_LENGTH,
+  FEEDBACK_TITLE_MAX_LENGTH,
+  FEEDBACK_UNAVAILABLE_MESSAGE,
+  isFeedbackSubmissionAvailable,
   submitFeedback,
   type FeedbackCategory,
 } from "@/lib/feedbackService";
+
+const FEEDBACK_EMAIL = "dev@talentscout.game";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,6 +80,7 @@ const CATEGORIES: CategoryConfig[] = [
 
 export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
   const gameState = useGameStore((s) => s.gameState);
+  const onlineSubmissionAvailable = isFeedbackSubmissionAvailable();
 
   const [category, setCategory] = useState<FeedbackCategory>("bug");
   const [title, setTitle] = useState("");
@@ -80,6 +88,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [emailDraftOpened, setEmailDraftOpened] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -94,6 +103,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
       setEmail("");
       setError(null);
       setShowSuccess(false);
+      setEmailDraftOpened(false);
     }
   }, [isOpen]);
 
@@ -116,6 +126,33 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
     setIsSubmitting(true);
     setError(null);
 
+    if (!onlineSubmissionAvailable) {
+      const context = gameState
+        ? [
+            `Week ${gameState.currentWeek}`,
+            `Season ${gameState.currentSeason}`,
+            gameState.difficulty ?? "Normal",
+            gameState.scout.primarySpecialization,
+          ].join(", ")
+        : "No active career";
+      const params = new URLSearchParams({
+        subject: `[TalentScout ${category}] ${title.trim()}`,
+        body: [
+          description.trim(),
+          "",
+          `Game context: ${context}`,
+          email.trim() ? `Reply address: ${email.trim()}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      });
+
+      window.location.href = `mailto:${FEEDBACK_EMAIL}?${params.toString()}`;
+      setIsSubmitting(false);
+      setEmailDraftOpened(true);
+      return;
+    }
+
     const result = await submitFeedback({
       category,
       title: title.trim(),
@@ -134,7 +171,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
     } else {
       setError(result.error ?? "Something went wrong");
     }
-  }, [category, title, description, email, onClose]);
+  }, [category, title, description, email, gameState, onClose, onlineSubmissionAvailable]);
 
   if (!isOpen) return null;
 
@@ -191,6 +228,14 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
             </div>
           ) : (
             <>
+              {!onlineSubmissionAvailable && (
+                <div className="rounded-lg border border-blue-500/25 bg-blue-500/10 px-3 py-2.5">
+                  <p className="text-xs leading-relaxed text-blue-100">
+                    {FEEDBACK_UNAVAILABLE_MESSAGE} Submit will open a pre-filled
+                    email draft to {FEEDBACK_EMAIL} instead.
+                  </p>
+                </div>
+              )}
               {/* ── Category tabs ───────────────────────────────────── */}
               <div
                 className="flex gap-1 rounded-md bg-[#0c0c0c] p-1"
@@ -232,7 +277,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={activeCfg.titlePlaceholder}
                   className="w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                  maxLength={200}
+                  maxLength={FEEDBACK_TITLE_MAX_LENGTH}
                 />
               </div>
 
@@ -251,7 +296,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                   placeholder={activeCfg.descPlaceholder}
                   rows={4}
                   className="w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                  maxLength={2000}
+                  maxLength={FEEDBACK_DESCRIPTION_MAX_LENGTH}
                 />
               </div>
 
@@ -271,6 +316,7 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   className="w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                  maxLength={FEEDBACK_EMAIL_MAX_LENGTH}
                 />
               </div>
 
@@ -283,7 +329,13 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
 
               {/* ── Error ───────────────────────────────────────────── */}
               {error && (
-                <p className="text-xs text-red-400">{error}</p>
+                <p className="text-xs text-red-400" role="alert">{error}</p>
+              )}
+
+              {emailDraftOpened && (
+                <p className="text-xs text-emerald-300" role="status" aria-live="polite">
+                  Email draft opened. Send it from your mail app to finish.
+                </p>
               )}
 
               {/* ── Submit button ───────────────────────────────────── */}
@@ -301,7 +353,11 @@ export function FeedbackModal({ isOpen, onClose }: FeedbackModalProps) {
                     aria-hidden="true"
                   />
                 ) : null}
-                {isSubmitting ? "Submitting..." : "Submit Feedback"}
+                {isSubmitting
+                  ? "Preparing..."
+                  : onlineSubmissionAvailable
+                    ? "Submit Feedback"
+                    : "Open Email Draft"}
               </Button>
             </>
           )}

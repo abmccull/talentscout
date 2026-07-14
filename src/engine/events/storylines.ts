@@ -22,6 +22,7 @@
 import type { GameState, NarrativeEvent, NarrativeEventType, StorylineState } from "../core/types";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
 import { getSeasonLength } from "@/engine/core/gameLoop";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // =============================================================================
 // RE-EXPORT StorylineState as Storyline for external consumers
@@ -664,10 +665,11 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
       ? contacts[Math.floor(rng.next() * contacts.length)]
       : null;
 
-    const foreignCountries = state.countries.slice(1);
+    const homeCountry = getScoutHomeCountry(state.scout);
+    const foreignCountries = state.countries.filter((country) => country !== homeCountry);
     const rawCountry = foreignCountries.length > 0
       ? foreignCountries[Math.floor(rng.next() * foreignCountries.length)]
-      : state.countries[0];
+      : homeCountry;
     const country = rawCountry.charAt(0).toUpperCase() + rawCountry.slice(1);
 
     const youngPlayers = Object.values(state.players).filter(

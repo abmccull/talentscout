@@ -20,10 +20,14 @@ export function AchievementRuntime() {
     }
   }, [checkAndUnlock, gameState]);
 
-  // Preserve the opening discovery reveal as a single emotional beat. Newly
-  // earned achievements stay queued and appear once the player reaches the
-  // report desk instead of covering the prospect or decision on mobile.
-  if (currentScreen === "observation" || currentScreen === "openingDiscovery") {
+  // Preserve critical scouting decisions as a single emotional beat. Newly
+  // earned achievements stay queued instead of covering observation, opening
+  // discovery, or a travel dossier on smaller screens.
+  if (
+    currentScreen === "observation"
+    || currentScreen === "openingDiscovery"
+    || currentScreen === "internationalView"
+  ) {
     return null;
   }
 

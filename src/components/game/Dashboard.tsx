@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,6 +39,7 @@ import { ClubCrest } from "@/components/game/ClubCrest";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { Tooltip } from "@/components/ui/tooltip";
 import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS, getSpecIncomeLabel, getSpecTier3Label } from "@/engine/finance";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
@@ -160,7 +162,17 @@ export function Dashboard() {
     markMessageRead,
     selectPlayer,
     submitLoanMonitoringReport,
-  } = useGameStore();
+  } = useGameStore(useShallow((state) => ({
+    gameState: state.gameState,
+    setScreen: state.setScreen,
+    getUpcomingFixtures: state.getUpcomingFixtures,
+    getLeagueStandings: state.getLeagueStandings,
+    requestWeekAdvance: state.requestWeekAdvance,
+    scheduleMatch: state.scheduleMatch,
+    markMessageRead: state.markMessageRead,
+    selectPlayer: state.selectPlayer,
+    submitLoanMonitoringReport: state.submitLoanMonitoringReport,
+  })));
   const [expandedExpenses, setExpandedExpenses] = useState(false);
   const [showSatisfactionHistory, setShowSatisfactionHistory] = useState(false);
   const t = useTranslations("dashboard");
@@ -171,8 +183,13 @@ export function Dashboard() {
   const recentReports = useMemo(
     () =>
       gameState
-        ? Object.values(gameState.reports)
-            .sort((a, b) => b.submittedWeek - a.submittedWeek)
+        ? selectLatestReportsByCase(Object.values(gameState.reports))
+            .sort((a, b) =>
+              b.submittedSeason - a.submittedSeason
+              || b.submittedWeek - a.submittedWeek
+              || (b.revision ?? 1) - (a.revision ?? 1)
+              || b.id.localeCompare(a.id)
+            )
             .slice(0, 5)
         : [],
     [gameState],
@@ -357,7 +374,9 @@ export function Dashboard() {
     .filter((entry) => !entry.reported && !entry.youth.placed)
     .sort(sortYouthByEvidence);
   const nextProspect = decisionReadyYouth[0] ?? evidenceQueue[0];
-  const placedYouthCount = youthList.filter((youth) => youth.placed).length;
+  const placedYouthCount = Object.values(gameState.placementReports ?? {}).filter(
+    (report) => report.scoutId === scout.id && report.clubResponse === "accepted",
+  ).length;
   const pendingPlacementCount = Object.values(gameState.placementReports ?? {}).filter(
     (report) => report.scoutId === scout.id && (!report.clubResponse || report.clubResponse === "pending"),
   ).length;
@@ -1398,7 +1417,7 @@ export function Dashboard() {
                     { label: "New", count: youthList.length - youthDiscoveredCount, color: "text-zinc-400", bg: "bg-zinc-800" },
                     { label: "Observed", count: youthDiscoveredCount, color: "text-emerald-400", bg: "bg-emerald-500/10" },
                     { label: "Reported", count: youthReportedCount, color: "text-blue-400", bg: "bg-blue-500/10" },
-                    { label: "Placed", count: youthList.filter((y) => y.placed).length, color: "text-amber-400", bg: "bg-amber-500/10" },
+                    { label: "Placed", count: placedYouthCount, color: "text-amber-400", bg: "bg-amber-500/10" },
                   ] as const).map((stage) => (
                     <button
                       key={stage.label}
@@ -1739,7 +1758,7 @@ export function Dashboard() {
                     <div>
                       <p className="text-zinc-400">Placed</p>
                       <p className="text-lg font-medium">
-                        {Object.values(gameState.unsignedYouth).filter((y) => y.placed).length}
+                        {placedYouthCount}
                       </p>
                     </div>
                     <div>
@@ -1813,13 +1832,23 @@ export function Dashboard() {
                   <CardContent className="space-y-2">
                     {reports.map((r) => {
                       const youth = gameState.unsignedYouth[r.unsignedYouthId];
+                      const playerId = youth?.player.id
+                        ?? (r.reportId ? gameState.reports[r.reportId]?.playerId : undefined)
+                        ?? (r.caseId ? gameState.scoutingCases[r.caseId]?.playerId : undefined)
+                        ?? gameState.alumniRecords.find(
+                          (record) => record.placementReportId === r.id,
+                        )?.playerId
+                        ?? r.unsignedYouthId;
+                      const player = youth?.player
+                        ?? (playerId ? gameState.players[playerId] : undefined)
+                        ?? (playerId ? gameState.retiredPlayers?.[playerId] : undefined);
                       const club = gameState.clubs[r.targetClubId];
                       const status = r.clubResponse ?? "pending";
                       return (
                         <div key={r.id} className="rounded-md border border-[#27272a] p-2.5">
                           <div className="flex items-center justify-between gap-2">
                             <p className="text-sm font-medium text-white truncate">
-                              {youth?.player.firstName ?? "?"} {youth?.player.lastName ?? "?"}
+                              {player?.firstName ?? "Archived"} {player?.lastName ?? "prospect"}
                             </p>
                             <Badge className={`shrink-0 text-[10px] capitalize ${statusColors[status] ?? statusColors.pending}`}>
                               {status}

@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Shown when the player reaches the demo season limit.
- * Promotes the full game and provides navigation options.
+ * Describes the currently purchasable Early Access scope without promising
+ * preserved full-game systems that are not available yet.
  */
 export function DemoEndScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
@@ -30,23 +31,24 @@ export function DemoEndScreen() {
         </div>
 
         <h1 className="mb-3 text-3xl font-bold text-white">
-          Thanks for playing the demo!
+          You&apos;ve completed the demo
         </h1>
         <p className="mb-8 text-zinc-400">
-          You&apos;ve completed 2 seasons as a Youth Scout. The full game
-          has much more to offer:
+          You&apos;ve reached the two-season demo limit. Continue in Youth Scout
+          Early Access with unlimited seasons and the scouting systems
+          available today.
         </p>
 
         <div className="mb-8 grid grid-cols-2 gap-3 text-left">
           {[
-            "4 specializations (Youth, First Team, Regional, Data)",
-            "10 unique scenarios with custom objectives",
+            "A Youth Scout career from local observer to recruitment leader",
             "Unlimited seasons of career progression",
-            "5-tier career ladder from amateur to elite",
-            "45 achievements to unlock",
-            "Multi-season storylines and rivalries",
-            "Full economics system with agency management",
-            "Moddable game data for custom leagues",
+            "Live, video, training, and tournament observation contexts",
+            "Evidence-led reports, club pitches, and youth placements",
+            "Rival scouts competing for prospects and influence",
+            "Regional knowledge, travel, and international assignments",
+            "Career setbacks, recovery, and leadership responsibilities",
+            "Alumni tracking and long-term recommendation accountability",
           ].map((feature) => (
             <div
               key={feature}
@@ -66,10 +68,11 @@ export function DemoEndScreen() {
               window.open(
                 "https://store.steampowered.com/app/4455570",
                 "_blank",
+                "noopener,noreferrer",
               );
             }}
           >
-            Buy on Steam
+            Get Youth Scout Early Access
           </Button>
           <Button
             variant="outline"

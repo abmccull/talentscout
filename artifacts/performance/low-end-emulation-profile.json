@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-14T03:51:04.447Z",
+  "evidenceClass": "chromium-emulation-not-physical-low-end-hardware",
+  "emulation": {
+    "cpuSlowdown": 4,
+    "networkLatencyMs": 80,
+    "downloadBitsPerSecond": 1500000,
+    "uploadBitsPerSecond": 750000
+  },
+  "transport": {
+    "contentEncoding": "gzip for text assets",
+    "staticAssetCaching": "immutable hashed chunks; one-day image/audio cache",
+    "audioDelivery": "HTML5 streaming with metadata-only preload for music and ambience",
+    "navigationMeasurement": "in-browser DOM click through two stable rendered frames; excludes Playwright driver/actionability latency",
+    "weekAdvanceMeasurement": "in-browser batchAdvance(1) through two stable rendered frames; excludes Playwright protocol latency and fixed helper waits"
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "logicalCpuCount": 16,
+    "cpuModel": "12th Gen Intel(R) Core(TM) i5-12500H",
+    "totalMemoryBytes": 16869548032
+  },
+  "budgets": {
+    "coldLoadMs": 15000,
+    "navigationP95Ms": 2500,
+    "oneWeekAdvanceMs": 6000,
+    "jsHeapUsedBytes": 536870912,
+    "domNodes": 18000
+  },
+  "measured": {
+    "coldLoadMs": 4694.31,
+    "navigationDurationsMs": [
+      441.5,
+      434.8,
+      437.3,
+      378,
+      145.6
+    ],
+    "navigationP95Ms": 441.5,
+    "oneWeekAdvanceMs": 2466.1,
+    "jsHeapUsedBytes": 25219924,
+    "jsHeapTotalBytes": 28250112,
+    "domNodes": 4653,
+    "documents": 2,
+    "layoutCount": 93
+  },
+  "checks": {
+    "coldLoad": true,
+    "navigationP95": true,
+    "oneWeekAdvance": true,
+    "heap": true,
+    "domNodes": true
+  },
+  "status": "pass",
+  "limitation": "This automated profile detects regressions under throttling but does not replace profiling on the minimum supported physical Windows, macOS, and Linux devices."
+}

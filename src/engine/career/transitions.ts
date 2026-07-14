@@ -199,6 +199,7 @@ export function applyCareerPathTransition(
     npcScouts: {},
     npcReports: {},
     npcDelegations: {},
+    leadershipPortfolio: undefined,
     territories: clearedTerritories,
     managerDirectives: [],
     boardProfile: undefined,
@@ -230,6 +231,7 @@ export function applyClubEmploymentTransition(
     npcScouts: {},
     npcReports: {},
     npcDelegations: {},
+    leadershipPortfolio: undefined,
     territories: Object.fromEntries(
       Object.entries(state.territories).map(([id, territory]) => [
         id,

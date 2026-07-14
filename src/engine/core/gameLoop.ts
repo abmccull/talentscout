@@ -53,8 +53,8 @@ import { getDifficultyModifiers } from "./difficulty";
 import {
   processNPCScoutingWeek,
   restNPCScout,
-  evaluateBoardDirectives,
-} from "../career/index";
+} from "../career/npcScouts";
+import { evaluateBoardDirectives } from "../career/management";
 import {
   processYouthAging,
   processPlayerRetirement,
@@ -119,11 +119,26 @@ import {
   normalizeFixtureSeasons,
 } from "../world/fixtures";
 import { getSeasonLength, isGameDateAtOrAfter } from "./gameDate";
+import { selectLatestReportsByCaseOpenedInRange } from "../reports/reportAccountability";
 import { recordCompletedSeasonWorldHistory } from "../world/worldHistory";
 import {
   collectCausallyReferencedPlayerIds,
   retainRequiredFixtureHistory,
 } from "../world/saveRetention";
+import {
+  appendPlayerDevelopmentHistory,
+  createDevelopmentEnvironmentIndex,
+  createPlayerDevelopmentHistoryEntry,
+  evaluatePlayerDevelopmentEnvironment,
+  type DevelopmentEnvironmentIndex,
+  type DevelopmentEnvironmentMechanics,
+  type PlayerDevelopmentEnvironmentProjection,
+} from "../world/developmentEnvironment";
+import { applyWorldConditionSeasonStart } from "../world/worldConditions";
+import {
+  buildStandingsByLeague,
+  type StandingsByLeague,
+} from "./standings";
 
 export { getSeasonLength } from "./gameDate";
 
@@ -144,6 +159,8 @@ export interface PlayerDevelopmentResult {
   playerId: string;
   changes: AttributeDeltas;
   abilityChange: number; // change to currentAbility
+  /** Observable environment explanation; does not expose hidden truth or rolls. */
+  environment?: PlayerDevelopmentEnvironmentProjection;
 }
 
 export interface InjuryResult {
@@ -159,11 +176,15 @@ export interface BreakthroughResult {
   abilityChange: number;
   /** The attribute names that improved, used for the notification message. */
   improvedAttributes: PlayerAttribute[];
+  /** Observable environment explanation; does not expose hidden truth or rolls. */
+  environment?: PlayerDevelopmentEnvironmentProjection;
 }
 
 export interface InjurySetbackResult {
   playerId: string;
   changes: AttributeDeltas;
+  /** Observable environment explanation; does not expose hidden truth or rolls. */
+  environment?: PlayerDevelopmentEnvironmentProjection;
 }
 
 export interface SimulatedFixture extends Fixture {
@@ -344,12 +365,6 @@ const AI_TRANSFER_PROBABILITY = 0.04;
 
 /** Weekly probability of a breakthrough event for an eligible young player. */
 const BREAKTHROUGH_CHANCE = 0.015;
-
-/** Minimum club reputation to grant the coaching environment bonus. */
-const HIGH_REPUTATION_THRESHOLD = 70;
-
-/** Development chance multiplier for players at high-reputation clubs. */
-const COACHING_BONUS_MULTIPLIER = 1.15;
 
 /** Minimum injury duration (weeks) to trigger a physical setback on recovery. */
 const SERIOUS_INJURY_THRESHOLD = 4;
@@ -647,6 +662,33 @@ function simulateWeekFixtures(
   return results;
 }
 
+/**
+ * Resolve the players who actually participated in a simulated fixture.
+ * Match ratings are generated only for the selected starting XIs, making them
+ * the authoritative participation record for card and suspension processing.
+ * Filtering each club roster preserves the historical home/away squad order.
+ */
+export function getSimulatedCardParticipants(
+  fixture: Pick<SimulatedFixture, "homeClubId" | "awayClubId" | "playerRatings">,
+  clubs: Record<string, Club>,
+  players: Record<string, Player>,
+): { homePlayers: Player[]; awayPlayers: Player[] } {
+  const participantIds = new Set(Object.keys(fixture.playerRatings ?? {}));
+  const playersForClub = (clubId: string): Player[] => {
+    const club = clubs[clubId];
+    if (!club) return [];
+    return club.playerIds
+      .filter((playerId) => participantIds.has(playerId))
+      .map((playerId) => players[playerId])
+      .filter((player): player is Player => !!player);
+  };
+
+  return {
+    homePlayers: playersForClub(fixture.homeClubId),
+    awayPlayers: playersForClub(fixture.awayClubId),
+  };
+}
+
 // =============================================================================
 // STANDINGS UPDATE
 // =============================================================================
@@ -674,7 +716,7 @@ export { buildStandings } from "./standings";
  *    "locked" for 2 extra weeks — it cannot swing in the opposite direction.
  *  - formLockWeeks decrements each week; while > 0 form is held steady.
  */
-interface FormMomentumUpdate {
+export interface FormMomentumUpdate {
   playerId: string;
   formMomentum: number;
   formTrend: "rising" | "stable" | "falling";
@@ -685,17 +727,11 @@ interface FormMomentumUpdate {
 
 function computeFormMomentum(
   player: Player,
-  weekFixtures: SimulatedFixture[],
-  allPlayers: Record<string, Player>,
-  rng: RNG,
+  currentRating: number | undefined,
 ): FormMomentumUpdate {
   const currentMomentum = player.formMomentum ?? 0;
   const currentTrend = player.formTrend ?? "stable";
   const currentLock = player.formLockWeeks ?? 0;
-
-  // Find if this player's club played this week and determine match quality
-  const clubFixture = weekFixtures.find((fixture) => fixture.playerRatings?.[player.id]);
-  const currentRating = clubFixture?.playerRatings?.[player.id]?.rating;
 
   if (currentRating === undefined || player.injured) {
     // No match this week — momentum decays, lock ticks down
@@ -798,9 +834,6 @@ function computeFormMomentum(
     newForm = Math.min(3, Math.max(-3, newForm));
   }
 
-  void allPlayers; // reserved for future cross-team comparisons
-  void rng; // ratings are generated once on the fixture and reused here
-
   return {
     playerId: player.id,
     formMomentum: newMomentum,
@@ -811,19 +844,58 @@ function computeFormMomentum(
 }
 
 /**
+ * True only when applying an update would preserve both values and the
+ * serialized presence of all momentum fields. Legacy players with undefined
+ * optional fields must still receive an update so save shape is normalized.
+ */
+export function isFormMomentumUpdateNoOp(
+  player: Player,
+  update: FormMomentumUpdate,
+): boolean {
+  const appliedForm = clamp(Math.round(update.form * 10) / 10, -3, 3);
+  return player.form === appliedForm
+    && player.formMomentum === update.formMomentum
+    && player.formTrend === update.formTrend
+    && player.formLockWeeks === update.formLockWeeks;
+}
+
+/**
+ * Index the first rating recorded for each player this week. This preserves the
+ * previous Array.find semantics if malformed fixture data contains a player in
+ * more than one fixture, while replacing an O(players * fixtures) scan.
+ */
+export function createWeeklyPlayerRatingIndex(
+  weekFixtures: SimulatedFixture[],
+): ReadonlyMap<string, number> {
+  const ratingsByPlayerId = new Map<string, number>();
+  for (const fixture of weekFixtures) {
+    for (const [playerId, rating] of Object.entries(fixture.playerRatings ?? {})) {
+      if (!ratingsByPlayerId.has(playerId)) {
+        ratingsByPlayerId.set(playerId, rating.rating);
+      }
+    }
+  }
+  return ratingsByPlayerId;
+}
+
+/**
  * Process form momentum updates for all players in the world.
  */
 function processFormMomentum(
   state: GameState,
   weekFixtures: SimulatedFixture[],
-  rng: RNG,
 ): FormMomentumUpdate[] {
   const results: FormMomentumUpdate[] = [];
+  const ratingsByPlayerId = createWeeklyPlayerRatingIndex(weekFixtures);
 
   for (const player of Object.values(state.players)) {
-    results.push(
-      computeFormMomentum(player, weekFixtures, state.players, rng),
+    const update = computeFormMomentum(
+      player,
+      ratingsByPlayerId.get(player.id),
     );
+    if (!isFormMomentumUpdateNoOp(player, update)) {
+      results.push(update);
+    }
   }
 
   return results;
@@ -890,21 +962,20 @@ function developmentMultiplier(
  */
 function computePlayerDevelopment(
   player: Player,
-  club: Club | undefined,
   rng: RNG,
   developmentRateModifier: number = 1.0,
+  environment?: DevelopmentEnvironmentMechanics,
 ): PlayerDevelopmentResult {
   const baseMult = developmentMultiplier(player.age, player.developmentProfile, rng);
-  // Apply difficulty development rate modifier (only to growth, not decline)
-  const mult = baseMult > 0 ? baseMult * developmentRateModifier : baseMult;
+  // Difficulty and visible environment quality affect growth. A strong
+  // environment can soften age-driven decline, but it cannot erase it.
+  const mult = baseMult > 0
+    ? baseMult * developmentRateModifier * (environment?.growthQualityMultiplier ?? 1)
+    : baseMult * (environment?.declineRiskMultiplier ?? 1);
 
   // Weekly development chance — form bonus: +3 → 20%, baseline 15%, -3 → 10%
   const formBonus = player.form * 0.017;
   let developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
-  // B6: Coaching environment bonus: players at high-reputation clubs develop 15% faster.
-  if (club && club.reputation > HIGH_REPUTATION_THRESHOLD) {
-    developmentChance *= COACHING_BONUS_MULTIPLIER;
-  }
   // B7: Form momentum modifies development chance
   const momentum = player.formMomentum ?? 0;
   const trend = player.formTrend ?? "stable";
@@ -913,7 +984,10 @@ function computePlayerDevelopment(
   } else if (trend === "falling" && momentum > 0) {
     developmentChance -= momentum * 0.02;
   }
-  developmentChance = Math.max(0.01, developmentChance); // floor at 1%
+  developmentChance *= baseMult > 0
+    ? (environment?.growthChanceMultiplier ?? 1)
+    : (environment?.declineRiskMultiplier ?? 1);
+  developmentChance = clamp(developmentChance, 0.01, 0.4);
   if (!rng.chance(developmentChance)) {
     return { playerId: player.id, changes: {}, abilityChange: 0 };
   }
@@ -973,11 +1047,12 @@ function computePlayerDevelopment(
 function computeBreakthroughDevelopment(
   player: Player,
   rng: RNG,
+  environmentMultiplier = 1,
 ): BreakthroughResult | null {
   // Eligibility gates
   if (player.age < 17 || player.age > 25) return null;
   if (player.form < 1) return null;
-  if (!rng.chance(BREAKTHROUGH_CHANCE)) return null;
+  if (!rng.chance(clamp(BREAKTHROUGH_CHANCE * environmentMultiplier, 0, 0.04))) return null;
 
   const changes: AttributeDeltas = {};
   const improvedAttributes: PlayerAttribute[] = [];
@@ -1069,6 +1144,7 @@ function generateBreakthroughMessage(
 function processPlayerDevelopment(
   state: GameState,
   rng: RNG,
+  environmentIndex: DevelopmentEnvironmentIndex,
 ): {
   development: PlayerDevelopmentResult[];
   unsignedYouthDevelopment: PlayerDevelopmentResult[];
@@ -1087,8 +1163,16 @@ function processPlayerDevelopment(
     // Skip players past their useful development window
     if (player.age > 35) continue;
 
-    const club = state.clubs[player.clubId];
-    const result = computePlayerDevelopment(player, club, rng, devRateMod);
+    const environment = evaluatePlayerDevelopmentEnvironment(state, player, {
+      index: environmentIndex,
+    });
+    const result = computePlayerDevelopment(
+      player,
+      rng,
+      devRateMod,
+      environment.mechanics,
+    );
+    result.environment = environment.projection;
 
     // Only include results that actually have changes
     const hasChanges =
@@ -1100,8 +1184,13 @@ function processPlayerDevelopment(
 
     // Breakthrough check — after normal development, young in-form players
     // have a rare chance to exceed their ceiling.
-    const breakthrough = computeBreakthroughDevelopment(player, rng);
+    const breakthrough = computeBreakthroughDevelopment(
+      player,
+      rng,
+      environment.mechanics.breakthroughMultiplier,
+    );
     if (breakthrough) {
+      breakthrough.environment = environment.projection;
       breakthroughs.push(breakthrough);
       breakthroughMessages.push(
         generateBreakthroughMessage(player, breakthrough, state, rng),
@@ -1112,12 +1201,16 @@ function processPlayerDevelopment(
   for (const youth of Object.values(state.unsignedYouth)) {
     if (youth.placed || youth.retired) continue;
     if (youth.player.injuryWeeksRemaining > 6) continue;
+    const environment = evaluatePlayerDevelopmentEnvironment(state, youth.player, {
+      index: environmentIndex,
+    });
     const result = computePlayerDevelopment(
       youth.player,
-      undefined,
       rng,
       devRateMod * 0.75,
+      environment.mechanics,
     );
+    result.environment = environment.projection;
     if (Object.keys(result.changes).length > 0 || result.abilityChange !== 0) {
       unsignedYouthDevelopment.push(result);
     }
@@ -1379,17 +1472,39 @@ function isTransferEligible(player: Player, currentSeason: number): boolean {
  * Simple heuristic: club with closest reputation to player's market value tier,
  * sufficient budget, and a different league (for variety).
  */
-function findTransferDestination(
+export interface TransferDestinationIndex {
+  clubs: readonly Club[];
+  primaryPositionCountByClub: ReadonlyMap<string, ReadonlyMap<Position, number>>;
+}
+
+/** Immutable club facts reused by every transfer candidate in one tick. */
+export function createTransferDestinationIndex(state: GameState): TransferDestinationIndex {
+  const clubs = Object.values(state.clubs);
+  const primaryPositionCountByClub = new Map<string, ReadonlyMap<Position, number>>();
+  for (const club of clubs) {
+    const positionCounts = new Map<Position, number>();
+    for (const playerId of club.playerIds) {
+      const position = state.players[playerId]?.position;
+      if (!position) continue;
+      positionCounts.set(position, (positionCounts.get(position) ?? 0) + 1);
+    }
+    primaryPositionCountByClub.set(club.id, positionCounts);
+  }
+  return { clubs, primaryPositionCountByClub };
+}
+
+export function findTransferDestination(
   player: Player,
   fromClub: Club,
   state: GameState,
   rng: RNG,
+  index?: TransferDestinationIndex,
 ): Club | null {
   // Target market value tier: reputation roughly proportional to player quality
   const targetReputation = Math.round((player.currentAbility / 200) * 100);
   const fromCountry = state.leagues[fromClub.leagueId]?.country ?? "";
 
-  const candidates = Object.values(state.clubs).filter((club) => {
+  const candidates = (index?.clubs ?? Object.values(state.clubs)).filter((club) => {
     if (club.id === fromClub.id) return false;
     if (club.budget < player.marketValue * 0.5) return false;
     if (club.playerIds.length >= 30) return false;
@@ -1406,9 +1521,11 @@ function findTransferDestination(
       0.2,
       1 - Math.abs(club.reputation - targetReputation) / 25,
     );
-    const samePositionCount = club.playerIds.reduce((count, playerId) => (
-      state.players[playerId]?.position === player.position ? count + 1 : count
-    ), 0);
+    const samePositionCount = index
+      ? index.primaryPositionCountByClub.get(club.id)?.get(player.position) ?? 0
+      : club.playerIds.reduce((count, playerId) => (
+          state.players[playerId]?.position === player.position ? count + 1 : count
+        ), 0);
     const squadNeed = samePositionCount === 0 ? 2.2 : samePositionCount === 1 ? 1.5 : 0.75;
     const philosophyFit =
       club.scoutingPhilosophy === "globalRecruiter" && country !== fromCountry
@@ -1437,6 +1554,8 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
   const transfers: Transfer[] = [];
   // Track cumulative spending per club to prevent budget overspending
   const spentBudget = new Map<string, number>();
+  let standingsByLeague: StandingsByLeague | undefined;
+  let destinationIndex: TransferDestinationIndex | undefined;
 
   for (const player of Object.values(state.players)) {
     if (!isTransferEligible(player, state.currentSeason)) continue;
@@ -1446,18 +1565,29 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     const fromClub = state.clubs[ownerClubId];
     if (!fromClub) continue;
 
+    destinationIndex ??= createTransferDestinationIndex(state);
     const destination = findTransferDestination(
       player,
       fromClub,
       state,
       rng,
+      destinationIndex,
     );
     if (!destination) continue;
 
     // Transfer fee: market value with ±20% variance, adjusted by standings position.
     // Bottom 5 clubs sell at -10%, top 3 clubs sell at +10%.
     const feeVariance = rng.nextFloat(0.8, 1.2);
-    const standingsModifier = getStandingsPriceModifier(ownerClubId, state);
+    standingsByLeague ??= buildStandingsByLeague(
+      state.fixtures,
+      state.clubs,
+      state.currentSeason,
+    );
+    const standingsModifier = getStandingsPriceModifier(
+      ownerClubId,
+      state,
+      standingsByLeague,
+    );
     const contractYearsRemaining = Math.max(0, player.contractExpiry - state.currentSeason);
     const contractModifier = contractYearsRemaining === 0 ? 0.35 : contractYearsRemaining === 1 ? 0.7 : 1;
     const fee = Math.max(
@@ -1888,6 +2018,17 @@ function generateEndOfSeasonMessage(
  * This is a lightweight heuristic — full reputation calculation happens
  * at the end of season performance review. Weekly changes are small.
  */
+export function hasSuccessfulSigningResponseThisWeek(
+  state: Pick<GameState, "clubResponses" | "currentWeek" | "currentSeason">,
+): boolean {
+  return state.clubResponses.some(
+    (response) =>
+      response.response === "signed"
+      && response.week === state.currentWeek
+      && response.season === state.currentSeason,
+  );
+}
+
 function computeReputationChangeDetailed(
   state: GameState,
 ): { total: number; deltas: BoardSatisfactionDelta[] } {
@@ -1896,10 +2037,16 @@ function computeReputationChangeDetailed(
   const season = state.currentSeason;
 
   // ── Reports submitted last week ─────────────────────────────────────────
-  const recentReports = Object.values(state.reports).filter(
-    (r) =>
-      r.submittedWeek === state.currentWeek - 1 &&
-      r.submittedSeason === state.currentSeason,
+  const recentReports = selectLatestReportsByCaseOpenedInRange(
+    Object.values(state.reports),
+    {
+      submittedWeek: state.currentWeek - 1,
+      submittedSeason: state.currentSeason,
+    },
+    {
+      submittedWeek: state.currentWeek - 1,
+      submittedSeason: state.currentSeason,
+    },
   );
 
   if (recentReports.length > 0) {
@@ -1938,13 +2085,10 @@ function computeReputationChangeDetailed(
   }
 
   // ── Successful signing: a report led to a "signed" club response ────────
-  const recentSignings = Object.values(state.reports).filter(
-    (r) =>
-      r.clubResponse === "signed" &&
-      r.submittedWeek >= state.currentWeek - 2 &&
-      r.submittedSeason === state.currentSeason,
-  );
-  if (recentSignings.length > 0) {
+  // Report dates describe when the opinion was filed, not when the club made
+  // its decision. Reward the dated decision event so a sliding report window
+  // cannot pay the same signing on consecutive weekly ticks.
+  if (hasSuccessfulSigningResponseThisWeek(state)) {
     deltas.push({
       reason: `Successful signing recommendation`,
       delta: 2,
@@ -2179,14 +2323,11 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 2b. Generate card events for simulated fixtures
   const allCardEvents: CardEvent[] = [];
   for (const played of fixturesPlayed) {
-    const homeClub = state.clubs[played.homeClubId];
-    const awayClub = state.clubs[played.awayClubId];
-    const homePlayers = homeClub
-      ? homeClub.playerIds.map((id) => state.players[id]).filter((p): p is Player => !!p)
-      : [];
-    const awayPlayers = awayClub
-      ? awayClub.playerIds.map((id) => state.players[id]).filter((p): p is Player => !!p)
-      : [];
+    const { homePlayers, awayPlayers } = getSimulatedCardParticipants(
+      played,
+      state.clubs,
+      state.players,
+    );
     const fixtureCards = generateSimulatedCards(
       rng, played.id, homePlayers, awayPlayers, currentDisciplinary,
     );
@@ -2199,12 +2340,13 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   );
 
   // 3. Player development (normal growth + rare breakthroughs)
+  const developmentEnvironmentIndex = createDevelopmentEnvironmentIndex(state);
   const {
     development: playerDevelopment,
     unsignedYouthDevelopment,
     breakthroughs,
     breakthroughMessages,
-  } = processPlayerDevelopment(state, rng);
+  } = processPlayerDevelopment(state, rng, developmentEnvironmentIndex);
 
   // 4. AI transfers only occur inside an active registration window.
   const transferWindowOpen = state.transferWindow
@@ -2261,6 +2403,9 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       if (player) {
         const setback = computeInjurySetback(player, injury.weeksOut, rng);
         if (setback) {
+          setback.environment = evaluatePlayerDevelopmentEnvironment(state, player, {
+            index: developmentEnvironmentIndex,
+          }).projection;
           injurySetbacks.push(setback);
         }
       }
@@ -2499,7 +2644,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
         season: state.currentSeason,
         type: "news",
         title: `Cultural Insight: ${ins.insight.type.replace(/([A-Z])/g, " $1").trim()}`,
-        body: `${ins.insight.description} — ${ins.insight.gameplayEffect}`,
+        body: `${ins.insight.description} This context now contributes to the country-level access and evidence confidence recorded in your regional dossier.`,
         read: false,
         actionRequired: false,
       });
@@ -2553,7 +2698,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const f3UpdatedContacts = exclusiveResult.updatedContacts;
 
   // 19. Form momentum updates for all players.
-  const formMomentumUpdates = processFormMomentum(state, fixturesPlayed, rng);
+  const formMomentumUpdates = processFormMomentum(state, fixturesPlayed);
 
   // 20. Relegation/promotion processing (season-end only).
   let relegationResult: RelegationResult | undefined;
@@ -2791,6 +2936,20 @@ export function advanceWeek(
         1,
         200,
       ),
+      developmentHistory: dev.environment
+        ? appendPlayerDevelopmentHistory(
+            player.developmentHistory,
+            createPlayerDevelopmentHistoryEntry(
+              player.id,
+              state.currentSeason,
+              state.currentWeek,
+              dev.abilityChange > 0 || Object.values(dev.changes).some((delta) => (delta ?? 0) > 0)
+                ? "routine-growth"
+                : "decline",
+              dev.environment,
+            ),
+          )
+        : player.developmentHistory,
     };
   }
 
@@ -2819,6 +2978,18 @@ export function advanceWeek(
         1,
         200,
       ),
+      developmentHistory: bt.environment
+        ? appendPlayerDevelopmentHistory(
+            player.developmentHistory,
+            createPlayerDevelopmentHistoryEntry(
+              player.id,
+              state.currentSeason,
+              state.currentWeek,
+              "breakthrough",
+              bt.environment,
+            ),
+          )
+        : player.developmentHistory,
     };
   }
 
@@ -2842,6 +3013,18 @@ export function advanceWeek(
     updatedPlayers[setback.playerId] = {
       ...player,
       attributes: updatedAttributes,
+      developmentHistory: setback.environment
+        ? appendPlayerDevelopmentHistory(
+            player.developmentHistory,
+            createPlayerDevelopmentHistoryEntry(
+              player.id,
+              state.currentSeason,
+              state.currentWeek,
+              "injury-setback",
+              setback.environment,
+            ),
+          )
+        : player.developmentHistory,
     };
   }
 
@@ -2955,7 +3138,9 @@ export function advanceWeek(
 
   // ---- Youth aging: auto-signed youth become regular players ----
   const youthSigningIdentityCollisions = new Set<string>();
+  const causallyLinkedYouthExitPlayerIds = new Set<string>();
   if (tickResult.youthAgingResult) {
+    const causallyReferencedPlayerIds = collectCausallyReferencedPlayerIds(state);
     for (const { youthId, clubId } of tickResult.youthAgingResult.autoSigned) {
       const youth = state.unsignedYouth[youthId] ?? tickResult.youthAgingResult.updatedUnsignedYouth[youthId];
       if (youth) {
@@ -2976,6 +3161,30 @@ export function advanceWeek(
         updatedPlayers[player.id] = player;
         void clubId;
       }
+    }
+    for (const youthId of tickResult.youthAgingResult.retired) {
+      const youth = tickResult.youthAgingResult.updatedUnsignedYouth[youthId]
+        ?? state.unsignedYouth[youthId];
+      if (
+        !youth
+        || !causallyReferencedPlayerIds.has(youth.player.id)
+        || updatedPlayers[youth.player.id]
+        || state.retiredPlayers?.[youth.player.id]
+      ) {
+        continue;
+      }
+      // Untracked prospects may disappear from the simulation, but a player
+      // the scout has written about must remain resolvable from that report.
+      // Insert a detached identity so the lifecycle can archive it and record
+      // the terminal football-exit event atomically below.
+      updatedPlayers[youth.player.id] = {
+        ...youth.player,
+        clubId: "",
+        contractClubId: undefined,
+        contractExpiry: 0,
+        wage: 0,
+      };
+      causallyLinkedYouthExitPlayerIds.add(youth.player.id);
     }
   }
 
@@ -3038,6 +3247,21 @@ export function advanceWeek(
           1,
           youth.player.potentialAbility,
         ),
+        developmentHistory: development.environment
+          ? appendPlayerDevelopmentHistory(
+              youth.player.developmentHistory,
+              createPlayerDevelopmentHistoryEntry(
+                youth.player.id,
+                state.currentSeason,
+                state.currentWeek,
+                development.abilityChange > 0
+                  || Object.values(development.changes).some((delta) => (delta ?? 0) > 0)
+                  ? "routine-growth"
+                  : "decline",
+                development.environment,
+              ),
+            )
+          : youth.player.developmentHistory,
       },
     };
   }
@@ -3050,6 +3274,14 @@ export function advanceWeek(
       type: "retirement",
       playerId,
       reason: "End-of-career retirement decision",
+    });
+  }
+
+  for (const playerId of causallyLinkedYouthExitPlayerIds) {
+    movementIntents.push({
+      type: "footballExit",
+      playerId,
+      reason: "Unsigned prospect left football after the opportunity window closed",
     });
   }
 
@@ -3466,7 +3698,7 @@ export function advanceWeek(
       nextSeason,
     );
 
-    return {
+    const seasonStartState: GameState = {
       ...state,
       fixtures: retainedFixtures,
       players: updatedPlayers,
@@ -3515,6 +3747,7 @@ export function advanceWeek(
       satisfactionHistory: updatedSatisfactionHistory,
       freeAgentPool: lifecycleFreeAgentPool,
     };
+    return applyWorldConditionSeasonStart(seasonStartState);
   }
 
   const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);

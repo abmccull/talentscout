@@ -123,6 +123,30 @@ function memorySummary(
   if (tags.has("caseFollowThrough")) {
     return `Your handling of the follow-up remains part of their assessment${subject}.`;
   }
+  if (tags.has("protectedFamily")) {
+    return `They remember that you protected the family's privacy when publicity offered an easier reward${subject}.`;
+  }
+  if (tags.has("exposedFamily")) {
+    return `They remember that you put media access ahead of the family's privacy request${subject}.`;
+  }
+  if (tags.has("creditedWork")) {
+    return `They remember that you put their name on work they genuinely owned${subject}.`;
+  }
+  if (tags.has("creditDenied")) {
+    return `They remember that someone outside the agency received credit for their work${subject}.`;
+  }
+  if (tags.has("sourceAttribution") && tags.has("promiseKept")) {
+    return `They remember that you honored their role in opening the opportunity${subject}.`;
+  }
+  if (tags.has("ceasefire")) {
+    return `They remember the competitive boundary you agreed and will judge whether you keep it${subject}.`;
+  }
+  if (tags.has("ceasefireRejected")) {
+    return `They remember that you rejected a quiet settlement and chose direct competition${subject}.`;
+  }
+  if (tags.has("negotiatedBoundary")) {
+    return `They remember the boundary you negotiated when two loyalties collided${subject}.`;
+  }
   if (tags.has("breach") || tags.has("betrayal") || tags.has("confidentialityBreach")) {
     return `They remember a broken promise${subject}.`;
   }
@@ -137,8 +161,12 @@ function memorySummary(
 }
 
 function decisionSummary(decision: DecisionRecord): string {
-  const caseId = typeof decision.metadata?.caseId === "string";
-  if (caseId) return "Opening prospect handling";
+  const hasCaseId = typeof decision.metadata?.caseId === "string";
+  if (hasCaseId) return "Opening prospect handling";
+  const title = typeof decision.metadata?.title === "string"
+    ? decision.metadata.title
+    : undefined;
+  if (title) return title;
   return decision.source.kind
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/^./, (character) => character.toUpperCase());

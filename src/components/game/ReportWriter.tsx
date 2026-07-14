@@ -47,6 +47,10 @@ import { useTutorialStore } from "@/stores/tutorialStore";
 import { ROLE_DEFINITIONS } from "@/engine/players/roles";
 import { validateStructuredReportInput } from "@/engine/reports/structuredYouthReport";
 import { getRemainingTablePounds } from "@/engine/reports/conviction";
+import {
+  getFreshReportObservationIds,
+  getLatestReportInScope,
+} from "@/engine/reports/reportAccountability";
 import { EvidenceBoard } from "@/components/game/evidence";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
@@ -323,6 +327,21 @@ export function ReportWriter() {
   const activeRecruitmentIdentity = activeBrief && activeBriefClub
     ? deriveBriefRecruitmentIdentity(activeBriefClub, activeBrief)
     : undefined;
+  const previousReport = useMemo(
+    () => gameState && canonicalPlayerId
+      ? getLatestReportInScope(
+          Object.values(gameState.reports),
+          gameState.scout.id,
+          canonicalPlayerId,
+          isYouthCase ? activeBrief?.id : undefined,
+        )
+      : undefined,
+    [activeBrief?.id, canonicalPlayerId, gameState, isYouthCase],
+  );
+  const freshObservationIds = useMemo(
+    () => getFreshReportObservationIds(observations, previousReport),
+    [observations, previousReport],
+  );
   const compatibleRoles = useMemo(
     () => player
       ? ROLE_DEFINITIONS.filter((definition) => definition.positions.includes(player.position))
@@ -748,6 +767,7 @@ export function ReportWriter() {
   const isTablePound = conviction === "tablePound";
   const canSubmit = summary.trim().length > 0
     && observations.length > 0
+    && freshObservationIds.length > 0
     && (!isYouthCase || structuredValidation.valid);
 
   return (
@@ -1211,6 +1231,16 @@ export function ReportWriter() {
             </p>
           </div>
         )}
+        {observations.length > 0 && previousReport && freshObservationIds.length === 0 && (
+          <div role="status" className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4">
+            <p className="flex items-start gap-2 text-sm leading-5 text-amber-200">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              This case already uses every available observation. Gather evidence in another match,
+              training visit, video review, or meaningful context before filing revision {(previousReport.revision ?? 1) + 1}.
+              Rewriting the same evidence does not earn reputation or performance credit.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-6">
           <Card data-tutorial-id="report-conviction" className={`border ${qualityScoreBorder(qualityPreview.score)} bg-[#10151b]/98 shadow-2xl shadow-black/25 lg:sticky lg:top-4 lg:z-20`}>
@@ -1316,7 +1346,9 @@ export function ReportWriter() {
                     disabled={!canSubmit}
                   >
                     <FileText size={14} className="mr-2" aria-hidden="true" />
-                    {t("submitReport")}
+                    {previousReport
+                      ? `File revision ${(previousReport.revision ?? 1) + 1}`
+                      : t("submitReport")}
                   </Button>
                 </div>
               </div>

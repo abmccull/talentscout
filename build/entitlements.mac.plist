@@ -8,10 +8,7 @@
     <!-- Chromium renderer requires writable + executable memory pages. -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
-    <!-- steamworks.js native module loads via DYLD_INSERT_LIBRARIES. -->
-    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
-    <true/>
-    <!-- Outbound network: Supabase cloud saves, leaderboard API. -->
+    <!-- Outbound network: feedback and opt-in error telemetry. -->
     <key>com.apple.security.network.client</key>
     <true/>
     <!-- Save / load file dialogs initiated by the user. -->

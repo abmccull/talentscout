@@ -22,6 +22,7 @@ import type {
 import type { RNG } from "@/engine/rng";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
 import { getSeasonLength } from "@/engine/core/gameLoop";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 // =============================================================================
 // Constants
@@ -784,7 +785,7 @@ const scoutingScandal: ChainTemplate = {
   name: "Scouting Scandal",
   canTrigger: (state) =>
     state.scout.reputation >= 25 &&
-    Object.keys(state.reports).length >= 3,
+    selectLatestReportsByCase(Object.values(state.reports)).length >= 3,
   initContext: (state, rng) => {
     const names = ["The Athletic", "The Guardian", "Sky Sports", "BBC Sport", "L'Equipe"];
     const outlet = names[rng.nextInt(0, names.length - 1)];

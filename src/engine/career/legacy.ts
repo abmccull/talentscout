@@ -19,6 +19,7 @@ import type {
   Specialization,
 } from "../core/types";
 import { SCENARIOS } from "../scenarios";
+import { selectLatestReportsByCase } from "../reports/reportAccountability";
 
 // =============================================================================
 // CONSTANTS
@@ -285,7 +286,7 @@ export function generateCompletedCareer(state: GameState): CompletedCareer {
   const { scout, legacyScore, discoveryRecords } = state;
 
   const totalReports =
-    Object.values(state.reports).length +
+    selectLatestReportsByCase(Object.values(state.reports)).length +
     Object.values(state.placementReports).length;
 
   const hitRate =

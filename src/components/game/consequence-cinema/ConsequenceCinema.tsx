@@ -12,19 +12,23 @@ import {
   BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   FileSearch,
   History,
   Newspaper,
   PhoneCall,
+  Quote,
   UserRoundSearch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAudio } from "@/lib/audio/useAudio";
 import {
   buildCareerStoryReel,
   type CareerStory,
   type CareerStoryContext,
   type CareerStoryMemory,
   type CareerStoryObligation,
+  type CareerStorySecondaryEvent,
   type CareerStoryTemplate,
   type ConsequenceCinemaSource,
 } from "./consequenceCinemaModel";
@@ -56,6 +60,56 @@ function toneDot(story: CareerStory): string {
     case "mixed": return "bg-amber-400";
     default: return "bg-sky-400";
   }
+}
+
+function toneAccent(tone: CareerStory["tone"]): string {
+  switch (tone) {
+    case "positive": return "border-emerald-300/30 bg-emerald-300/[0.06] text-emerald-100";
+    case "negative": return "border-red-300/30 bg-red-300/[0.06] text-red-100";
+    case "mixed": return "border-amber-300/30 bg-amber-300/[0.06] text-amber-100";
+    default: return "border-sky-300/30 bg-sky-300/[0.06] text-sky-100";
+  }
+}
+
+function secondaryToneDot(tone: CareerStorySecondaryEvent["tone"]): string {
+  switch (tone) {
+    case "positive": return "bg-emerald-400";
+    case "negative": return "bg-red-400";
+    case "mixed": return "bg-amber-400";
+    default: return "bg-sky-400";
+  }
+}
+
+function CareerCallback({ story }: { story: CareerStory }) {
+  return (
+    <aside className={`mt-3 overflow-hidden rounded-xl border ${toneAccent(story.tone)}`} aria-label="Career callback and later events">
+      <blockquote className="relative px-4 py-4 sm:px-5">
+        <Quote size={22} className="absolute right-4 top-3 opacity-25" aria-hidden="true" />
+        <p className="pr-7 font-serif text-base font-semibold italic leading-6">{story.callbackLine}</p>
+        <footer className="mt-2 text-[10px] font-bold uppercase tracking-[0.14em] opacity-65">
+          From the career archive
+        </footer>
+      </blockquote>
+      {story.secondaryEvents.length > 0 && (
+        <div className="border-t border-current/15 bg-black/20 px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2">
+            <Clock3 size={14} aria-hidden="true" />
+            <h4 className="text-[10px] font-bold uppercase tracking-[0.15em]">What happened next</h4>
+          </div>
+          <ol className="mt-3 grid gap-2 sm:grid-cols-3">
+            {story.secondaryEvents.map((event) => (
+              <li key={event.id} className="relative rounded-lg border border-white/10 bg-black/20 p-3 pl-5 text-zinc-100">
+                <span className={`absolute left-2 top-4 h-2 w-2 rounded-full ${secondaryToneDot(event.tone)}`} aria-hidden="true" />
+                <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-zinc-400">{event.dateLabel}</p>
+                <p className="mt-1 text-xs font-semibold">{event.label}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-300">{event.summary}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
+    </aside>
+  );
 }
 
 function ContextDetails({
@@ -257,6 +311,7 @@ export function ConsequenceCinema({
   onOpenPlayer,
   onOpenReport,
 }: ConsequenceCinemaProps) {
+  const { playSFX } = useAudio();
   const stories = useMemo(() => buildCareerStoryReel(source), [source]);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(stories[0]?.id ?? null);
   const selectorRef = useRef<HTMLUListElement>(null);
@@ -273,6 +328,20 @@ export function ConsequenceCinema({
 
   const selectedStory = stories.find((story) => story.id === selectedStoryId) ?? stories[0];
 
+  const selectStory = (story: CareerStory) => {
+    if (story.id === selectedStoryId) return;
+    setSelectedStoryId(story.id);
+    playSFX(
+      story.tone === "positive"
+        ? "discovery"
+        : story.tone === "negative"
+          ? "error"
+          : story.tone === "mixed"
+            ? "notification"
+            : "page-turn",
+    );
+  };
+
   const handleSelectorKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
     index: number,
@@ -287,7 +356,7 @@ export function ConsequenceCinema({
           ? (index - 1 + stories.length) % stories.length
           : (index + 1) % stories.length;
     const nextStory = stories[nextIndex];
-    setSelectedStoryId(nextStory.id);
+    selectStory(nextStory);
     const buttons = selectorRef.current?.querySelectorAll<HTMLButtonElement>("[data-story-selector]");
     buttons?.[nextIndex]?.focus({ preventScroll: true });
     buttons?.[nextIndex]?.scrollIntoView({ block: "nearest", inline: "center" });
@@ -344,7 +413,7 @@ export function ConsequenceCinema({
                     <button
                       type="button"
                       data-story-selector
-                      onClick={() => setSelectedStoryId(story.id)}
+                      onClick={() => selectStory(story)}
                       onKeyDown={(event) => handleSelectorKeyDown(event, index)}
                       aria-pressed={selected}
                       aria-controls="career-story-stage"
@@ -376,6 +445,7 @@ export function ConsequenceCinema({
           </p>
           <div id="career-story-stage" role="region" aria-label={`Selected career story: ${selectedStory.title}`} className="p-3 sm:p-5">
             <StoryFrame key={selectedStory.id} story={selectedStory} />
+            <CareerCallback story={selectedStory} />
             {(selectedStory.playerId || selectedStory.reportId) && (
               <div className="mt-3 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-zinc-400">Continue from the preserved story into the underlying game record.</p>

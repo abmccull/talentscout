@@ -1,0 +1,106 @@
+# Release evidence workflow
+
+`release-evidence-status.json` is tracked policy and gate-status data. It does not embed its own commit SHA or package hashes: either value would change the commit it claims to identify and make a clean, exact-candidate audit impossible.
+
+## Candidate binding
+
+The checker derives the candidate commit from `RELEASE_CANDIDATE_SHA`, then `GITHUB_SHA`, then the current Git `HEAD`. An environment-provided SHA must exactly match `HEAD`, any configured tag must resolve to that commit, and the working tree must be clean.
+
+Release tags must match the application version (`v1.0.0`) or identify a
+prerelease of that version (`v1.0.0-rc.1`). The package manifest records the
+exact tag, commit, product version, workflow run, byte length, and SHA-256 of
+every distributable.
+
+Generated candidate evidence is intentionally ignored by Git:
+
+- `artifacts/release/candidate-package-manifest.json`
+- `artifacts/release/release-evidence-check.json`
+- `artifacts/release/generated/long-career-release-summary.json`
+- `artifacts/release/generated/long-career-workers/`
+
+The generated check report records the resolved commit, its source, tag, dirty state, package verification, gate evidence, and every blocker.
+
+`npm run build` is also candidate-aware. The cross-platform Node wrapper derives
+the full Git `HEAD` when CI has not supplied `NEXT_PUBLIC_BUILD_VERSION`, rejects
+short, `development`, or mismatched values, injects the package version into the
+UI, and scans the exported shipping JavaScript to prove the exact SHA reached
+save-envelope code. Its generated result is written to
+`artifacts/release/generated/build-provenance.json`.
+
+## Package integrity
+
+After committing the exact source candidate and building every supported package, generate the manifest from the real distributables:
+
+```powershell
+npm run release:package-manifest -- `
+  windows-installer=dist/TalentScout-Setup-1.0.0.exe `
+  macos-dmg=release-artifacts/TalentScout-1.0.0-arm64.dmg `
+  macos-zip=release-artifacts/TalentScout-1.0.0-arm64.zip `
+  linux-appimage=release-artifacts/TalentScout-1.0.0-x86_64.AppImage `
+  linux-deb=release-artifacts/TalentScout-1.0.0-amd64.deb
+```
+
+The generator refuses a dirty tree. The checker then streams every package, recomputes SHA-256 and byte length, rejects missing, empty, duplicate-kind, absolute, repository-escaping, or incorrectly suffixed packages, checks the manifest's candidate SHA, tag, and product version, and requires every package kind declared in the tracked status file.
+
+## Exact-candidate long-save evidence
+
+Run the release profile from a clean candidate:
+
+```powershell
+$env:SOAK_CANDIDATE_SHA = (git rev-parse HEAD)
+$env:SOAK_REQUIRE_CLEAN_CANDIDATE = "true"
+$env:SOAK_SEEDS = "20"
+$env:SOAK_SEASONS = "30"
+$env:SOAK_CONCURRENCY = "3"
+npm run test:release-soak
+```
+
+Each seed still runs in its own process. The bounded worker pool only overlaps
+independent processes and writes results back in seed order. The generated
+summary is accepted only when it names the exact commit, came from a clean
+tree, contains at least 20 unique 30-season runs, crosses every final season
+boundary, and reproduces seed one deterministically. The tracked gate remains
+`Unverified`; the checker computes an effective `Passed` status from this
+generated evidence, avoiding any post-commit policy edit.
+
+Run the strict gate with:
+
+```powershell
+npm run test:release-evidence
+```
+
+Use `npm run audit:release-evidence` only for a non-blocking report. It still writes an honest `Failed` report when the candidate, package, human, hardware, or platform evidence is incomplete.
+
+## Windows packaged runtime evidence
+
+Build the exact Windows candidate, create its package manifest, and run the
+non-destructive supporting harness:
+
+```powershell
+npm run electron:test-windows-runtime -- --strict
+```
+
+For the installer/install/run/restart/uninstall path, use an elevated
+PowerShell only after the tree is clean, the manifest is present, and the
+installer has its release Authenticode signature:
+
+```powershell
+$env:WINDOWS_INSTALL_JOURNEY = "true"
+npm run electron:test-windows-runtime -- --strict
+```
+
+The harness leaves physical power interruption, ACL/disk-full behavior, live
+Steam conflict/reconnection, clean-account observation, and non-Windows
+platform rows Unverified unless those environments are actually exercised.
+
+Tagged desktop builds enforce the same process in `.github/workflows/build.yml`.
+The tag-only `release-soak` job runs the exact profile in parallel with the
+three native package jobs. `candidate-bundle` creates the exact manifest and
+uploads candidate evidence, but never publishes or uploads to Steam.
+
+Human and native-platform evidence is supplied later without changing the
+candidate through the explicit two-stage process in
+`docs/release/release-certification.md`. The certification workflow downloads
+the original run's artifacts, never rebuilds them, validates every attestation
+and hash, and only then enables an explicitly requested draft GitHub release or
+final-tag Steam upload.

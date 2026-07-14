@@ -209,7 +209,7 @@ function ScoutAwardsSection({ awards }: { awards: SeasonAward[] }) {
             Keep pushing — awards await next season
           </p>
           <p className="mt-1 text-xs text-zinc-600">
-            Write more reports, discover wonderkids, and build your reputation
+            Open more distinct scouting cases, discover prospects, and build your reputation
           </p>
         </div>
       )}

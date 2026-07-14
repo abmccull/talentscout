@@ -40,6 +40,7 @@ const ESCAPE_TO_DASHBOARD_SCREENS = new Set<GameScreen>([
   "alumniDashboard",
   "finances",
   "handbook",
+  "futureRoadmap",
   "equipment",
   "agency",
   "training",

@@ -5,8 +5,21 @@ directories:
   output: dist
   buildResources: build
 
-# Bundle the app into an asar archive for faster startup and tamper resistance.
+# Bundle the app into an asar archive for compact distribution and startup I/O.
+# ASAR is packaging, not a security or code-signing boundary.
 asar: true
+
+# Disable Electron runtime escape hatches unused by TalentScout. ASAR integrity
+# is supported by the shipped Electron version on Windows/macOS; Linux still
+# benefits from refusing the unpacked app/default-app fallback.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  grantFileProtocolExtraPrivileges: false
 
 # Runtime files are either static JS or vendor-provided prebuilt Steam
 # binaries. Rebuilding the full development dependency graph pulls in
@@ -23,6 +36,11 @@ afterSign: scripts/notarize.js
 files:
   - electron/**/*
   - out/**/*
+  # Electron Builder otherwise pulls the entire production dependency graph
+  # into app.asar. TalentScout's static desktop shell only needs the Steam
+  # bridge package at runtime.
+  - "!node_modules/**/*"
+  - "!**/node_modules/**/*"
   # Keep the Steam bridge available when the native SDK redistributable is
   # provisioned. The app still starts cleanly when Steam is unavailable.
   - node_modules/steamworks.js/**/*
@@ -39,8 +57,9 @@ extraResources:
       - steam_appid.txt
 
 # ---------------------------------------------------------------------------
-# Publish — generic provider wired for electron-updater auto-update support.
-# Replace the placeholder URL with the real CDN / S3 bucket before shipping.
+# Release repository metadata used by electron-builder when publication is
+# explicitly requested. The current client has no in-app updater; Steam owns
+# updates for the Early Access channel and GitHub releases are manual installs.
 # ---------------------------------------------------------------------------
 publish:
   provider: github
@@ -76,8 +95,7 @@ nsis:
 mac:
   icon: build/icon.icns
   category: public.app-category.games
-  # Both dmg (primary distribution) and zip (required by electron-updater for
-  # auto-update delta support on macOS).
+  # Both DMG and ZIP are retained as independently hashed release artifacts.
   target:
     - target: dmg
     - target: zip

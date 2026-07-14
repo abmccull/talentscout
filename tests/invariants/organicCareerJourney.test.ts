@@ -24,6 +24,7 @@ import {
 } from "@/engine/career";
 import {
   applyLegacyPerks,
+  generateCompletedCareer,
   generateLegacyProfile,
   markCareerVoluntarilyRetired,
   VOLUNTARY_RETIREMENT_MARKER,
@@ -443,5 +444,39 @@ describe("organic career journey", () => {
       budgetBonusPercent: 20,
     });
     expect(inheritance.config.worldSeed).toBe("organic-career-new-game-plus");
+  });
+
+  it("archives report-case hit rate without counting revisions as new judgments", () => {
+    const scout = {
+      ...createScout(CONFIG, new RNG("organic-legacy-report-cases")),
+      successfulFinds: 1,
+    };
+    const state = careerState(
+      scout,
+      initializeFinances(scout, "independent", "normal"),
+    );
+    state.reports = {
+      first: {
+        id: "first",
+        caseId: "case-player-1",
+        scoutId: scout.id,
+        playerId: PLAYER.id,
+        submittedWeek: 3,
+        submittedSeason: 1,
+        revision: 1,
+      },
+      revision: {
+        id: "revision",
+        caseId: "case-player-1",
+        scoutId: scout.id,
+        playerId: PLAYER.id,
+        submittedWeek: 7,
+        submittedSeason: 1,
+        revision: 2,
+        supersedesReportId: "first",
+      },
+    } as unknown as GameState["reports"];
+
+    expect(generateCompletedCareer(state).hitRate).toBe(1);
   });
 });

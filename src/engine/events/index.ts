@@ -42,6 +42,7 @@ export type {
 export {
   SCOUTING_SPECIAL_EVENT_DECK,
   buildSpecialEventDecisionOption,
+  buildSpecialEventOfferObligations,
   createScoutingSpecialEvent,
   getScoutingSpecialEventDefinition,
   getSpecialEventSelectionWeights,

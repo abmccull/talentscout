@@ -14,9 +14,16 @@ import type { GameState, Position } from "@/engine/core/types";
 import {
   countCareerWeeksPlayed,
   countCountriesScouted,
+  countDistinctReportCases,
+  countReportedPositions,
+  countWonderkidDiscoveries,
 } from "@/engine/core/achievementEngine";
 import { ALL_PERKS } from "@/engine/specializations/perks";
 import { getScenarioById, checkScenarioObjectives } from "@/engine/scenarios";
+import { getContinentId, getScoutHomeCountry } from "@/engine/world/travel";
+import { countryKeyFromNationality } from "@/lib/country";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 // =============================================================================
 // TYPES
@@ -108,18 +115,6 @@ function hasCompletedTree(
   spec: "youth" | "firstTeam" | "regional" | "data",
 ): boolean {
   return countUnlockedPerksForSpec(state, spec) >= totalPerksForSpec(spec);
-}
-
-/**
- * Count distinct positions covered by the scout's reports.
- */
-function countPositionsCovered(state: GameState): number {
-  const positions = new Set<string>();
-  for (const report of Object.values(state.reports)) {
-    const player = state.players[report.playerId];
-    if (player) positions.add(player.position);
-  }
-  return positions.size;
 }
 
 /**
@@ -307,38 +302,38 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: "reports-10",
     name: "Prolific Reporter",
-    description: "Submit 10 scouting reports.",
-    hint: "File 10 reports over your career.",
+    description: "Build 10 distinct scouting cases.",
+    hint: "File evidence-backed reports on 10 distinct player briefs.",
     category: "scoutingExcellence",
     icon: "📄",
-    check: (state) => Object.keys(state.reports).length >= 10,
+    check: (state) => countDistinctReportCases(state) >= 10,
   },
   {
     id: "reports-25",
     name: "Seasoned Analyst",
-    description: "Submit 25 scouting reports.",
+    description: "Build 25 distinct scouting cases.",
     hint: "Keep filing reports — 25 total.",
     category: "scoutingExcellence",
     icon: "📊",
-    check: (state) => Object.keys(state.reports).length >= 25,
+    check: (state) => countDistinctReportCases(state) >= 25,
   },
   {
     id: "reports-50",
     name: "Report Machine",
-    description: "Submit 50 scouting reports.",
-    hint: "Reach 50 submitted reports.",
+    description: "Build 50 distinct scouting cases.",
+    hint: "Reach 50 distinct player-and-brief cases.",
     category: "scoutingExcellence",
     icon: "🖨️",
-    check: (state) => Object.keys(state.reports).length >= 50,
+    check: (state) => countDistinctReportCases(state) >= 50,
   },
   {
     id: "reports-100",
     name: "The Archive",
-    description: "Submit 100 scouting reports.",
-    hint: "Build a library of 100 reports.",
+    description: "Build 100 distinct scouting cases.",
+    hint: "Build an archive of 100 distinct player-and-brief cases.",
     category: "scoutingExcellence",
     icon: "📚",
-    check: (state) => Object.keys(state.reports).length >= 100,
+    check: (state) => countDistinctReportCases(state) >= 100,
   },
   {
     id: "table-pound",
@@ -357,7 +352,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Be the first to identify a standout talent.",
     category: "scoutingExcellence",
     icon: "💎",
-    check: (state) => state.discoveryRecords.length >= 1,
+    check: (state) => countWonderkidDiscoveries(state) >= 1,
   },
   {
     id: "discoveries-5",
@@ -366,7 +361,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Identify 5 outstanding young talents before anyone else.",
     category: "scoutingExcellence",
     icon: "👁️‍🗨️",
-    check: (state) => state.discoveryRecords.length >= 5,
+    check: (state) => countWonderkidDiscoveries(state) >= 5,
   },
   {
     id: "discoveries-15",
@@ -375,7 +370,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Build a legendary track record of 15 discoveries.",
     category: "scoutingExcellence",
     icon: "🏭",
-    check: (state) => state.discoveryRecords.length >= 15,
+    check: (state) => countWonderkidDiscoveries(state) >= 15,
   },
   {
     id: "high-accuracy",
@@ -396,7 +391,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     icon: "🌠",
     check: (state) =>
       state.discoveryRecords.some((record) => {
-        const player = state.players[record.playerId];
+        const player = resolvePlayerEntity(state, record.playerId)?.player;
         return player?.wonderkidTier === "generational";
       }),
   },
@@ -407,7 +402,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     hint: "Cover all 10 positions with at least one scouting report each.",
     category: "scoutingExcellence",
     icon: "🃏",
-    check: (state) => countPositionsCovered(state) >= ALL_POS.length,
+    check: (state) => countReportedPositions(state) >= ALL_POS.length,
   },
   {
     id: "perfect-record",
@@ -417,7 +412,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "scoutingExcellence",
     icon: "💯",
     check: (state) => {
-      const reports = Object.values(state.reports).filter(
+      const reports = selectLatestReportsByCase(Object.values(state.reports)).filter(
         (r) => r.clubResponse !== undefined,
       );
       if (reports.length < 10) return false;
@@ -470,7 +465,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     check: (state) => {
       let highPerformers = 0;
       for (const record of state.alumniRecords) {
-        const player = state.players[record.playerId];
+        const player = resolvePlayerEntity(state, record.playerId)?.player;
         if (!player) continue;
         const ratings = player.recentMatchRatings ?? [];
         if (ratings.length === 0) continue;
@@ -563,22 +558,16 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   {
     id: "all-activities",
-    name: "Jack of All Trades",
-    description: "Perform every activity type at least once.",
-    hint: "Try every type of activity available to a scout.",
+    name: "Context Switcher",
+    description: "Record observations in five different scouting contexts.",
+    hint: "Test players across five distinct live, video, training, tournament, or grassroots contexts.",
     category: "specializationMastery",
     icon: "🎭",
     check: (state) => {
-      const performed = new Set<string>();
-      if (state.schedule.completed) {
-        for (const activity of state.schedule.activities) {
-          if (activity) performed.add(activity.type);
-        }
-      }
-      for (const obs of Object.values(state.observations)) {
-        performed.add(obs.context);
-      }
-      return performed.size >= 5;
+      const contexts = new Set(
+        Object.values(state.observations).map((observation) => observation.context),
+      );
+      return contexts.size >= 5;
     },
   },
   {
@@ -638,8 +627,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "worldExplorer",
     icon: "🏠",
     check: (state) => {
-      if (state.countries.length === 0) return false;
-      const homeCountry = state.countries[0];
+      const homeCountry = getScoutHomeCountry(state.scout);
       const rep = state.scout.countryReputations[homeCountry];
       return rep !== undefined && rep.familiarity >= 100;
     },
@@ -652,12 +640,22 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     category: "worldExplorer",
     icon: "🌍",
     check: (state) => {
-      const nationalities = new Set<string>();
+      const continents = new Set<string>();
       for (const report of Object.values(state.reports)) {
-        const player = state.players[report.playerId];
-        if (player) nationalities.add(player.nationality);
+        const player = resolvePlayerEntity(state, report.playerId)?.player;
+        const countryKey = countryKeyFromNationality(player?.nationality);
+        if (!countryKey) continue;
+        const continent = getContinentId(countryKey);
+        if (continent !== "unknown") continents.add(continent);
       }
-      return nationalities.size >= 5;
+      return [
+        "europe",
+        "southamerica",
+        "northamerica",
+        "africa",
+        "asia",
+        "oceania",
+      ].every((continent) => continents.has(continent));
     },
   },
 

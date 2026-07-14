@@ -131,7 +131,7 @@ export const careerProgressionArticles: WikiArticle[] = [
     summary:
       "End-of-season reviews on the club path: what is measured and the consequences of strong or poor performance.",
     searchText:
-      "At the end of each season (club path) your manager evaluates your performance against set directives. Reviews measure: Number of reports submitted vs target. Report accuracy and quality scores. How many directives were fulfilled. Whether any Table Pounds were justified. A strong review accelerates reputation growth and can fast-track a tier promotion. A poor review may lead to a contract review or job loss.",
+      "At the end of each season (club path) your manager evaluates performance against set directives. Reviews measure distinct scouting cases rather than repeat revisions, report craft and validated outcomes, fulfilled directives, and whether Table Pounds were justified. A strong review accelerates reputation growth; a poor review may lead to a warning or job loss.",
     content: (
       <SectionBlock>
         <Para>
@@ -140,8 +140,8 @@ export const careerProgressionArticles: WikiArticle[] = [
         </Para>
         <BulletList
           items={[
-            "Number of reports submitted vs target",
-            "Report accuracy and quality scores",
+            "Number of distinct scouting cases delivered vs target",
+            "Report craft and validated outcome quality",
             "How many directives were fulfilled",
             "Whether any Table Pounds were justified",
           ]}

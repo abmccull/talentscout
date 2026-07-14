@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   GameState,
+  InboxMessage,
   NarrativeEvent,
   StorylineState,
 } from "@/engine/core/types";
@@ -41,6 +42,25 @@ function narrativeEvent(
       { label: "Attend the session", effect: "accessAttend" },
       { label: "Pass this time", effect: "accessPass" },
     ],
+    ...overrides,
+  };
+}
+
+function narrativeActionMessage(
+  eventId: string,
+  overrides: Partial<InboxMessage> = {},
+): InboxMessage {
+  return {
+    id: `message-${eventId}`,
+    week: 6,
+    season: 1,
+    type: "event",
+    title: "Decision required",
+    body: "Choose how to respond.",
+    read: false,
+    actionRequired: true,
+    relatedId: eventId,
+    relatedEntityType: "narrative",
     ...overrides,
   };
 }
@@ -230,6 +250,48 @@ describe("narrative decision integration", () => {
     expect(harness.state()).toBe(resolved);
   });
 
+  it("clears the source action pin immediately after a manual choice", () => {
+    const event = narrativeEvent({ id: "event-manual-inbox-cleanup" });
+    const sourceMessage = narrativeActionMessage(event.id);
+    const unrelatedMessage = narrativeActionMessage("other-event", {
+      id: "unrelated-player-action",
+      relatedEntityType: "player",
+    });
+    const harness = progressionHarness(gameState({
+      narrativeEvents: [event],
+      inbox: [sourceMessage, unrelatedMessage],
+    }));
+
+    harness.actions.resolveNarrativeEventChoice(event.id, 0);
+    const resolved = harness.state();
+
+    expect(resolved.inbox.find((message) => message.id === sourceMessage.id))
+      .toMatchObject({ actionRequired: false, read: false });
+    expect(resolved.inbox.find((message) => message.id === unrelatedMessage.id))
+      .toMatchObject({ actionRequired: true, read: false });
+  });
+
+  it("clears the source action pin immediately when an event is acknowledged", () => {
+    const event = narrativeEvent({
+      id: "event-acknowledge-inbox-cleanup",
+      choices: undefined,
+    });
+    const sourceMessage = narrativeActionMessage(event.id);
+    const harness = progressionHarness(gameState({
+      narrativeEvents: [event],
+      inbox: [sourceMessage],
+    }));
+
+    harness.actions.acknowledgeNarrativeEvent(event.id);
+    const resolved = harness.state();
+
+    expect(resolved.narrativeEvents[0]?.acknowledged).toBe(true);
+    expect(resolved.inbox[0]).toMatchObject({
+      actionRequired: false,
+      read: false,
+    });
+  });
+
   it("does not duplicate the canonical promise for a deck-backed access event", () => {
     const event = narrativeEvent({
       id: "event-special-access",
@@ -357,9 +419,11 @@ describe("narrative decision integration", () => {
         { label: "Share the information", effect: "confidentialityLeak" },
       ],
     });
+    const timeoutMessage = narrativeActionMessage(dilemma.id);
     const registered = ensureNarrativeDecision({
       ...afterAccess,
       narrativeEvents: [...afterAccess.narrativeEvents, dilemma],
+      inbox: [...afterAccess.inbox, timeoutMessage],
     }, dilemma);
     const expired = expireDueDecisions(
       registered.consequenceState,
@@ -385,6 +449,8 @@ describe("narrative decision integration", () => {
       loyalty: 65,
     });
     expect(projected.scout.reputation).toBe(43);
+    expect(projected.inbox.find((message) => message.id === timeoutMessage.id))
+      .toMatchObject({ actionRequired: false, read: false });
     expect(projectExpiredNarrativeDefaults(projected, expired.expiredDecisionIds)).toBe(projected);
 
     // Compatibility path: older saves can contain the generic default

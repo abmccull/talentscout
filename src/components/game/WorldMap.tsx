@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { getContinentId } from "@/engine/world/travel";
+import {
+  getCountryMapDefinition,
+  getCountryMapPosition,
+  isCompactCountryMapMarker,
+} from "@/engine/world/mapCountryRegistry";
 
 // =============================================================================
 // TYPES
@@ -24,117 +28,6 @@ export interface WorldMapProps {
   onCountryClick?: (country: string, svgX: number, svgY: number) => void;
   /** Forwarded ref for the SVG element (used for coordinate conversion). */
   svgRef?: React.RefObject<SVGSVGElement | null>;
-}
-
-// =============================================================================
-// GEOGRAPHIC DATA
-// =============================================================================
-
-// Coordinates use population centers (not geographic centers) for large countries
-// so markers land on recognizable city-light clusters in the night-view background.
-const COUNTRY_COORDS: Record<string, { lat: number; lon: number; label: string; abbr: string }> = {
-  // Europe — small countries, coords are fine as-is
-  england:     { lat: 52.5,  lon: -1.5,   label: "England",      abbr: "ENG" },
-  scotland:    { lat: 56.5,  lon: -4.0,   label: "Scotland",     abbr: "SCO" },
-  france:      { lat: 46.6,  lon: 2.3,    label: "France",       abbr: "FRA" },
-  spain:       { lat: 40.4,  lon: -3.7,   label: "Spain",        abbr: "ESP" },
-  portugal:    { lat: 39.4,  lon: -8.2,   label: "Portugal",     abbr: "POR" },
-  germany:     { lat: 51.2,  lon: 10.4,   label: "Germany",      abbr: "GER" },
-  netherlands: { lat: 52.1,  lon: 5.3,    label: "Netherlands",  abbr: "NED" },
-  belgium:     { lat: 50.8,  lon: 4.4,    label: "Belgium",      abbr: "BEL" },
-  switzerland: { lat: 46.8,  lon: 8.2,    label: "Switzerland",  abbr: "SWI" },
-  italy:       { lat: 41.9,  lon: 12.5,   label: "Italy",        abbr: "ITA" },
-  turkey:      { lat: 39.9,  lon: 32.9,   label: "Turkey",       abbr: "TUR" },
-  // Africa — capitals/population centers
-  nigeria:     { lat: 9.1,   lon: 7.5,    label: "Nigeria",      abbr: "NGA" },
-  ghana:       { lat: 7.9,   lon: -1.0,   label: "Ghana",        abbr: "GHA" },
-  ivorycoast:  { lat: 7.5,   lon: -5.5,   label: "Ivory Coast",  abbr: "CIV" },
-  senegal:     { lat: 14.7,  lon: -17.4,  label: "Senegal",      abbr: "SEN" },
-  cameroon:    { lat: 7.4,   lon: 12.4,   label: "Cameroon",     abbr: "CMR" },
-  egypt:       { lat: 30.0,  lon: 31.2,   label: "Egypt",        abbr: "EGY" },
-  southafrica: { lat: -26.2, lon: 28.0,   label: "South Africa", abbr: "RSA" }, // Johannesburg
-  // Americas — population centers (geographic centers fall on dark/ocean areas)
-  usa:         { lat: 38.9,  lon: -77.0,  label: "USA",          abbr: "USA" }, // Washington DC
-  canada:      { lat: 43.7,  lon: -79.4,  label: "Canada",       abbr: "CAN" }, // Toronto
-  mexico:      { lat: 19.4,  lon: -99.1,  label: "Mexico",       abbr: "MEX" }, // Mexico City
-  brazil:      { lat: -15.8, lon: -47.9,  label: "Brazil",       abbr: "BRA" }, // Brasília
-  argentina:   { lat: -34.6, lon: -58.4,  label: "Argentina",    abbr: "ARG" }, // Buenos Aires
-  colombia:    { lat: 4.7,   lon: -74.1,  label: "Colombia",     abbr: "COL" }, // Bogotá
-  // Asia — population centers for large countries
-  japan:       { lat: 36.2,  lon: 138.3,  label: "Japan",        abbr: "JPN" },
-  southkorea:  { lat: 35.9,  lon: 127.8,  label: "S. Korea",     abbr: "KOR" },
-  china:       { lat: 39.9,  lon: 116.4,  label: "China",        abbr: "CHN" }, // Beijing
-  saudiarabia: { lat: 24.7,  lon: 46.7,   label: "Saudi Arabia", abbr: "KSA" }, // Riyadh
-  // Oceania — population centers
-  australia:   { lat: -33.9, lon: 151.2,  label: "Australia",    abbr: "AUS" }, // Sydney
-  newzealand:  { lat: -41.3, lon: 174.8,  label: "New Zealand",  abbr: "NZL" }, // Wellington
-};
-
-/** European countries — smaller markers by default to avoid crowding. */
-const EUROPE_KEYS = new Set([
-  "england", "scotland", "france", "spain", "portugal",
-  "germany", "netherlands", "belgium", "switzerland", "italy", "turkey",
-]);
-
-// =============================================================================
-// SVG POSITIONS — hand-calibrated against the AI-generated background image
-// =============================================================================
-
-// The background image (1376×768) is rendered into viewBox 800×450 with
-// preserveAspectRatio="xMidYMid slice". Positions are traced from visible
-// landmasses and city-light clusters on the actual image.
-const COUNTRY_SVG_POS: Record<string, { x: number; y: number }> = {
-  // Europe — calibrated via /calibrate tool against actual background
-  england:      { x: 393, y: 120 },
-  scotland:     { x: 388, y: 109 },
-  france:       { x: 399, y: 132 },
-  spain:        { x: 387, y: 146 },
-  portugal:     { x: 379, y: 145 },
-  germany:      { x: 411, y: 123 },
-  netherlands:  { x: 407, y: 119 },
-  belgium:      { x: 403, y: 122 },
-  switzerland:  { x: 408, y: 128 },
-  italy:        { x: 422, y: 138 },
-  turkey:       { x: 457, y: 147 },
-  // Africa
-  nigeria:      { x: 405, y: 205 },
-  ghana:        { x: 396, y: 209 },
-  ivorycoast:   { x: 387, y: 210 },
-  senegal:      { x: 366, y: 195 },
-  cameroon:     { x: 417, y: 214 },
-  egypt:        { x: 448, y: 167 },
-  southafrica:  { x: 444, y: 282 },
-  // Americas
-  usa:          { x: 219, y: 153 },
-  canada:       { x: 188, y: 129 },
-  mexico:       { x: 199, y: 187 },
-  brazil:       { x: 306, y: 258 },
-  argentina:    { x: 265, y: 308 },
-  colombia:     { x: 250, y: 214 },
-  // Asia
-  japan:        { x: 676, y: 153 },
-  southkorea:   { x: 655, y: 151 },
-  china:        { x: 620, y: 166 },
-  saudiarabia:  { x: 480, y: 175 },
-  // Oceania
-  australia:    { x: 678, y: 275 },
-  newzealand:   { x: 749, y: 309 },
-};
-
-// Fallback projection for countries without hand-calibrated positions
-function lonLatToSvg(lon: number, lat: number): { x: number; y: number } {
-  const x = -2 + ((lon + 180) / 360) * 770;
-  const y = 8 + ((80 - lat) / 148) * 400;
-  return { x, y };
-}
-
-/** Get SVG coords for a country (hand-calibrated, or projection fallback). */
-function getCountryPos(key: string): { x: number; y: number } | null {
-  const direct = COUNTRY_SVG_POS[key];
-  if (direct) return direct;
-  const coords = COUNTRY_COORDS[key];
-  if (!coords) return null;
-  return lonLatToSvg(coords.lon, coords.lat);
 }
 
 // =============================================================================
@@ -245,8 +138,8 @@ function FlightPath({
   fromKey: string;
   toKey: string;
 }) {
-  const from = getCountryPos(fromKey);
-  const to = getCountryPos(toKey);
+  const from = getCountryMapPosition(fromKey);
+  const to = getCountryMapPosition(toKey);
   if (!from || !to) return null;
 
   // Quadratic bezier control point — arc above midpoint
@@ -313,30 +206,30 @@ function CountryMarker({
     return () => clearTimeout(timer);
   }, [delay]);
 
-  const coords = COUNTRY_COORDS[countryKey];
-  const pos = getCountryPos(countryKey);
-  if (!coords || !pos) return null;
+  const country = getCountryMapDefinition(countryKey);
+  const pos = getCountryMapPosition(countryKey);
+  if (!country || !pos) return null;
 
   const { x, y } = pos;
   const tier = getTierColors(familiarity);
-  const isEurope = EUROPE_KEYS.has(countryKey);
+  const isCompact = isCompactCountryMapMarker(countryKey);
 
-  // Europe markers are smaller to reduce crowding
-  const baseCore = isEurope ? 4 : 6;
-  const baseRing = isEurope ? 8 : 14;
-  const baseArc = isEurope ? 6.5 : 11;
+  // Dense regional clusters use smaller default markers to reduce crowding.
+  const baseCore = isCompact ? 4 : 6;
+  const baseRing = isCompact ? 8 : 14;
+  const baseArc = isCompact ? 6.5 : 11;
 
-  // Hover expands European markers to full size
-  const coreR = hovered && isEurope ? 6 : baseCore;
-  const ringR = hovered && isEurope ? 14 : baseRing;
-  const arcR = hovered && isEurope ? 11 : baseArc;
+  // Hover expands compact markers to the standard interaction target.
+  const coreR = hovered && isCompact ? 6 : baseCore;
+  const ringR = hovered && isCompact ? 14 : baseRing;
+  const arcR = hovered && isCompact ? 11 : baseArc;
 
   const scale = hovered ? 1.3 : 1;
 
   return (
     <g
       role="button"
-      aria-label={`${coords.label}${isCurrent ? " (current location)" : ""}${hasActiveAssignment ? ", active assignment" : ""}, familiarity ${familiarity}%`}
+      aria-label={`${country.label}${isCurrent ? " (current location)" : ""}${hasActiveAssignment ? ", active assignment" : ""}, familiarity ${familiarity}%`}
       tabIndex={onClick ? 0 : -1}
       style={{
         cursor: onClick ? "pointer" : "default",
@@ -403,7 +296,7 @@ function CountryMarker({
         y={y + 1}
         textAnchor="middle"
         dominantBaseline="central"
-        fontSize={isEurope && !hovered ? 3 : 4.5}
+        fontSize={isCompact && !hovered ? 3 : 4.5}
         fontWeight="700"
         fontFamily="system-ui, sans-serif"
         fill="#fff"
@@ -414,7 +307,7 @@ function CountryMarker({
           textShadow: "0 0 2px rgba(0,0,0,0.8)",
         }}
       >
-        {coords.abbr}
+        {country.abbreviation}
       </text>
 
       {/* Full country name on hover — appears above marker */}
@@ -434,15 +327,15 @@ function CountryMarker({
             textShadow: "0 1px 4px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.7)",
           }}
         >
-          {coords.label}
+          {country.label}
         </text>
       )}
 
       {/* Pulsing emerald dot for active assignments */}
       {hasActiveAssignment && (
         <circle
-          cx={x + (isEurope && !hovered ? 4 : 6)}
-          cy={y - (isEurope && !hovered ? 4 : 6)}
+          cx={x + (isCompact && !hovered ? 4 : 6)}
+          cy={y - (isCompact && !hovered ? 4 : 6)}
           r={3}
           fill="#10b981"
           aria-hidden="true"
@@ -456,8 +349,8 @@ function CountryMarker({
       {knowledgeLevel > 0 && (
         <g aria-hidden="true">
           <rect
-            x={x + (isEurope && !hovered ? 3 : 5) - 3.5}
-            y={y + (isEurope && !hovered ? 3 : 5) - 3.5}
+            x={x + (isCompact && !hovered ? 3 : 5) - 3.5}
+            y={y + (isCompact && !hovered ? 3 : 5) - 3.5}
             width={7}
             height={7}
             rx={1.5}
@@ -472,8 +365,8 @@ function CountryMarker({
             opacity={hovered ? 1 : 0.8}
           />
           <text
-            x={x + (isEurope && !hovered ? 3 : 5)}
-            y={y + (isEurope && !hovered ? 3 : 5) + 0.5}
+            x={x + (isCompact && !hovered ? 3 : 5)}
+            y={y + (isCompact && !hovered ? 3 : 5) + 0.5}
             textAnchor="middle"
             dominantBaseline="central"
             fontSize={4}
@@ -518,9 +411,10 @@ function CountryMarker({
 /**
  * WorldMap — immersive full-bleed world map with beacon-style country markers.
  *
- * Uses a background image with interactive beacon markers at real geographic
- * positions. 5-tier color coding for familiarity, sonar pulse on current
- * location, animated flight path for active bookings.
+ * Uses an illustrated background with canonical, image-calibrated beacon
+ * markers. 5-tier color coding for familiarity, sonar pulse on current
+ * location, and an animated flight path for active bookings all share the
+ * same country-position resolver.
  */
 export function WorldMap({
   countries,
@@ -567,7 +461,7 @@ export function WorldMap({
 
       {/* Render all country markers */}
       {countries.map((key, idx) => {
-        if (!COUNTRY_COORDS[key]) return null;
+        if (!getCountryMapDefinition(key)) return null;
         return (
           <CountryMarker
             key={key}
@@ -580,7 +474,7 @@ export function WorldMap({
             onClick={
               onCountryClick
                 ? () => {
-                    const pos = getCountryPos(key);
+                    const pos = getCountryMapPosition(key);
                     if (pos) onCountryClick(key, pos.x, pos.y);
                   }
                 : undefined
@@ -592,6 +486,9 @@ export function WorldMap({
   );
 }
 
-// Re-export coords lookup for external popup positioning
-export { COUNTRY_COORDS, lonLatToSvg, getCountryPos, getTierColors, EUROPE_KEYS };
+export {
+  getCountryMapDefinition,
+  getCountryMapPosition,
+  getTierColors,
+};
 export type { TierColors };

@@ -9,6 +9,7 @@ import type {
   InboxMessage,
   GameState,
 } from "../core/types";
+import { selectLatestReportsByCaseOpenedInRange } from "@/engine/reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -55,12 +56,18 @@ export function generatePerformancePulse(
 ): PerformancePulse {
   const period = Math.ceil(state.currentWeek / PULSE_INTERVAL_WEEKS);
 
-  // Count reports submitted in the last 4 weeks
-  const recentReports = Object.values(state.reports).filter(
-    (r) =>
-      r.submittedSeason === state.currentSeason &&
-      r.submittedWeek !== undefined &&
-      r.submittedWeek > state.currentWeek - PULSE_INTERVAL_WEEKS,
+  // Count cases first opened in the last 4 weeks. Revisions retain their value
+  // as improved judgments, but cannot be recycled into monthly volume rewards.
+  const recentReports = selectLatestReportsByCaseOpenedInRange(
+    Object.values(state.reports),
+    {
+      submittedSeason: state.currentSeason,
+      submittedWeek: Math.max(1, state.currentWeek - PULSE_INTERVAL_WEEKS + 1),
+    },
+    {
+      submittedSeason: state.currentSeason,
+      submittedWeek: state.currentWeek,
+    },
   );
   const reportsSubmitted = recentReports.length;
 

@@ -8,6 +8,7 @@ import type {
   ScoutReport,
   UnsignedYouth,
 } from "../core/types";
+import { getScoutHomeCountry } from "../world/travel";
 
 export interface SeasonReviewMetrics {
   countriesScoutedThisSeason: string[];
@@ -16,23 +17,6 @@ export interface SeasonReviewMetrics {
   unsignedYouthDiscovered: number;
   successfulPlacements: number;
   alumniMilestonesThisSeason: number;
-}
-
-function deriveHomeCountry(scout: Scout): string {
-  const entries = Object.entries(scout.countryReputations ?? {});
-  if (entries.length === 0) return "";
-
-  let bestCountry = entries[0][0];
-  let bestFamiliarity = entries[0][1].familiarity;
-
-  for (const [country, reputation] of entries.slice(1)) {
-    if (reputation.familiarity > bestFamiliarity) {
-      bestCountry = country;
-      bestFamiliarity = reputation.familiarity;
-    }
-  }
-
-  return bestCountry;
 }
 
 function addYouthCoverage(
@@ -118,11 +102,11 @@ function buildYouthIndexes(unsignedYouth: Record<string, UnsignedYouth>): {
 function countSeasonYouthDiscoveries(
   state: GameState,
   season: number,
-  youthByPlayerId: Map<string, UnsignedYouth>,
+  durableYouthPlayerIds: ReadonlySet<string>,
 ): number {
   return state.discoveryRecords.filter(
     (record) =>
-      record.discoveredSeason === season && youthByPlayerId.has(record.playerId),
+      record.discoveredSeason === season && durableYouthPlayerIds.has(record.playerId),
   ).length;
 }
 
@@ -178,6 +162,14 @@ export function deriveSeasonReviewMetrics(
   const countries = new Set<string>();
   const regions = new Set<string>();
   const { youthById, youthByPlayerId } = buildYouthIndexes(state.unsignedYouth);
+  const durableYouthPlayerIds = new Set(youthByPlayerId.keys());
+  for (const alumni of state.alumniRecords) durableYouthPlayerIds.add(alumni.playerId);
+  for (const placement of Object.values(state.placementReports)) {
+    const playerId = youthById.get(placement.unsignedYouthId)?.player.id
+      ?? (placement.reportId ? state.reports[placement.reportId]?.playerId : undefined)
+      ?? (placement.caseId ? state.scoutingCases[placement.caseId]?.playerId : undefined);
+    if (playerId) durableYouthPlayerIds.add(playerId);
+  }
 
   for (const report of Object.values(state.reports)) {
     if (report.scoutId !== state.scout.id || report.submittedSeason !== season) continue;
@@ -199,11 +191,11 @@ export function deriveSeasonReviewMetrics(
   return {
     countriesScoutedThisSeason: [...countries],
     regionsScoutedThisSeason: [...regions],
-    homeCountry: deriveHomeCountry(state.scout),
+    homeCountry: getScoutHomeCountry(state.scout),
     unsignedYouthDiscovered: countSeasonYouthDiscoveries(
       state,
       season,
-      youthByPlayerId,
+      durableYouthPlayerIds,
     ),
     successfulPlacements: countSuccessfulPlacements(state, season, youthById),
     alumniMilestonesThisSeason: countSeasonAlumniMilestones(

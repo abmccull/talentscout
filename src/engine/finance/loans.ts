@@ -8,7 +8,8 @@ import type {
   Loan,
   LoanType,
 } from "../core/types";
-import { getCreditScore, checkLoanEligibility } from "./creditScore";
+import { getCreditScore } from "./creditScore";
+import { applyBalanceTransaction } from "./expenses";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -98,8 +99,9 @@ export function takeLoan(
   const totalRepayment = amount + totalInterest;
   const monthlyPayment = Math.round(totalRepayment / config.termMonths);
 
+  const actionSequence = (finances.actionSequence ?? 0) + 1;
   const loan: Loan = {
-    id: `loan_${type}_${week}_${season}`,
+    id: `loan_${type}_s${season}w${week}_a${actionSequence}`,
     type,
     principal: amount,
     monthlyInterestRate: effectiveRate,
@@ -109,19 +111,19 @@ export function takeLoan(
     startSeason: season,
   };
 
+  const funded = applyBalanceTransaction(
+    finances,
+    amount,
+    week,
+    season,
+    `${type.charAt(0).toUpperCase() + type.slice(1)} loan received (${Math.round(effectiveRate * 100)}% interest)`,
+    `loan:${loan.id}:disbursement`,
+  );
+
   return {
-    ...finances,
-    balance: finances.balance + amount,
+    ...funded,
     activeLoan: loan,
-    transactions: [
-      ...finances.transactions,
-      {
-        week,
-        season,
-        amount,
-        description: `${type.charAt(0).toUpperCase() + type.slice(1)} loan received (${Math.round(effectiveRate * 100)}% interest)`,
-      },
-    ],
+    actionSequence,
   };
 }
 
@@ -138,39 +140,44 @@ export function processLoanPayment(
 
   const loan = finances.activeLoan;
   const payment = Math.min(loan.monthlyPayment, loan.remainingBalance);
+  const paymentReference = `loan:${loan.id}:payment:s${season}w${week}`;
+  const alreadyProcessed = finances.transactions.some((transaction) =>
+    transaction.referenceId === paymentReference
+    || (
+      transaction.referenceId === undefined
+      && transaction.week === week
+      && transaction.season === season
+      && transaction.amount === -payment
+      && (
+        transaction.description === "Monthly loan payment"
+        || transaction.description.startsWith("Final loan payment")
+      )
+    ),
+  );
+  if (alreadyProcessed) return finances;
+
   const newBalance = loan.remainingBalance - payment;
+  const finalPayment = newBalance <= 0;
+  const paid = applyBalanceTransaction(
+    finances,
+    -payment,
+    week,
+    season,
+    finalPayment ? "Final loan payment — loan repaid" : "Monthly loan payment",
+    paymentReference,
+  );
 
   // Loan fully repaid
-  if (newBalance <= 0) {
+  if (finalPayment) {
     return {
-      ...finances,
-      balance: finances.balance - payment,
+      ...paid,
       activeLoan: undefined,
-      transactions: [
-        ...finances.transactions,
-        {
-          week,
-          season,
-          amount: -payment,
-          description: "Final loan payment — loan repaid",
-        },
-      ],
     };
   }
 
   return {
-    ...finances,
-    balance: finances.balance - payment,
+    ...paid,
     activeLoan: { ...loan, remainingBalance: newBalance },
-    transactions: [
-      ...finances.transactions,
-      {
-        week,
-        season,
-        amount: -payment,
-        description: "Monthly loan payment",
-      },
-    ],
   };
 }
 
@@ -186,19 +193,18 @@ export function repayLoanEarly(
 
   const remaining = finances.activeLoan.remainingBalance;
   if (finances.balance < remaining) return null;
+  const loanId = finances.activeLoan.id;
+  const paid = applyBalanceTransaction(
+    finances,
+    -remaining,
+    week,
+    season,
+    "Loan repaid early",
+    `loan:${loanId}:early-repayment:s${season}w${week}`,
+  );
 
   return {
-    ...finances,
-    balance: finances.balance - remaining,
+    ...paid,
     activeLoan: undefined,
-    transactions: [
-      ...finances.transactions,
-      {
-        week,
-        season,
-        amount: -remaining,
-        description: "Loan repaid early",
-      },
-    ],
   };
 }

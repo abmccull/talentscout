@@ -418,92 +418,75 @@ export const playersArticles: WikiArticle[] = [
     category: "players",
     order: 4,
     summary:
-      "Players grow based on development profiles, age curves, and the gap between current and potential ability. Wonderkid tiers classify young talent by ceiling.",
+      "Player careers develop through age, opportunity, environment, personality, form, and setbacks. Their ceiling remains uncertain until the career provides evidence.",
     searchText:
-      "Player development is governed by current ability (CA, 1-200 scale), potential ability (PA, 1-200 scale), age, and development profile. Development profiles are: Steady Grower (50% of players, linear reliable growth), Early Bloomer (20%, fast initial development), Late Bloomer (20%, slow start then rapid improvement), Volatile (10%, unpredictable surges and plateaus). Potential ability is generated relative to current ability and age. Under 21: PA is CA plus 15-60 points. Age 21-23: PA is CA plus 5-35. Age 24-28: PA is CA plus 0-20. Age 29 plus: PA is only CA plus or minus a few points. Wonderkid tiers classify youth potential: Generational (PA 180 plus, under 21), World Class (PA 150-179, under 21), Quality Pro (PA 100-149, under 21), Journeyman (PA under 100 or age 21 plus). Market value uses a 5th power curve on CA divided by 200, multiplied by age factor, position multiplier, potential premium, and club reputation. Age factors: under 18 at 0.35x, 24-29 at 1.0x peak, over 33 at 0.12x. Strikers command 1.3x premium. GKs are valued at 0.75x. Form ranges from -3 to +3 and modifies value by -10% to +10%. Preferred foot distribution: 72% right, 20% left, 8% both footed.",
+      "Development is uncertain. Young players usually have more room to grow, but playing time, coaching, club environment, personality, injuries, adaptation, and form shape what actually happens. Scouts should revisit prospects in different contexts, preserve projections, and compare those calls with observable career outcomes. Market value reflects age, role, contract, club context, demand, reputation, and recent performance rather than exposing hidden ability.",
     content: (
       <SectionBlock>
         <Para>
-          Every player has two hidden ability ratings: Current Ability (
-          <Tag color="amber">CA, 1-200</Tag>) and Potential Ability (
-          <Tag color="amber">PA, 1-200</Tag>). The gap between them represents
-          room to grow. How quickly that gap closes depends on the player&apos;s
-          age and development profile.
+          Development is a career story, not a number the scout is entitled to
+          see. Your reports preserve an estimated current level, a potential
+          range, confidence, risks, and the environment in which that projection
+          might succeed. Later evidence can validate, complicate, or overturn it.
         </Para>
 
         <Subheading>Development Profiles</Subheading>
         <Table
-          headers={["Profile", "Frequency", "Description"]}
+          headers={["Observed pattern", "What it can mean", "Scouting response"]}
           rows={[
-            ["Steady Grower", "50%", "Linear, reliable progression over time"],
-            [
-              "Early Bloomer",
-              "20%",
-              "Rapid early development, may plateau sooner",
-            ],
-            [
-              "Late Bloomer",
-              "20%",
-              "Slow start, then rapid improvement in mid-20s",
-            ],
-            [
-              "Volatile",
-              "10%",
-              "Unpredictable surges and plateaus, high risk/reward",
-            ],
+            ["Steady progress", "The environment and workload may be working", "Keep a longitudinal baseline"],
+            ["Fast early rise", "Real growth or temporary physical advantage", "Test against older and stronger opposition"],
+            ["Late acceleration", "Opportunity, role, or maturity changed", "Revisit old dismissals"],
+            ["Surges and plateaus", "Form, confidence, minutes, or adaptation may be interacting", "Change context before changing conviction"],
           ]}
         />
 
-        <Subheading>Potential Ability by Age</Subheading>
+        <Subheading>Evidence by Career Stage</Subheading>
         <Table
-          headers={["Age", "PA Range (above CA)"]}
+          headers={["Stage", "Useful evidence", "Main uncertainty"]}
           rows={[
-            ["Under 21", "+15 to +60"],
-            ["21-23", "+5 to +35"],
-            ["24-28", "+0 to +20"],
-            ["29+", "-5 to +10 (minimal growth)"],
+            ["Academy", "Learning speed, movement, character, physical trajectory", "Competition quality and maturity"],
+            ["Emerging senior", "Role fit, minutes, adaptation, repeat performance", "Whether opportunity becomes consistency"],
+            ["Prime years", "Reliability, tactical value, availability, price", "Fit and decline risk"],
+            ["Veteran", "Role change, leadership, physical trend, workload", "How quickly the floor may fall"],
           ]}
         />
 
-        <Subheading>Wonderkid Tiers</Subheading>
-        <Table
-          headers={["Tier", "Requirement", "Significance"]}
-          rows={[
-            ["Generational", "PA 180+, age < 21", "Future world star"],
-            ["World Class", "PA 150-179, age < 21", "International quality ceiling"],
-            ["Quality Pro", "PA 100-149, age < 21", "Reliable top-flight regular"],
-            ["Journeyman", "PA < 100 or age 21+", "Lower division / squad filler"],
-          ]}
-        />
+        <Subheading>Labels Are Claims, Not Truth</Subheading>
+        <Para>
+          Terms such as <Tag color="amber">high upside</Tag>, wonderkid, or
+          future international describe a projection or later public status.
+          They never reveal an engine rating. Record who made the claim, what
+          evidence supported it, and how confident you were.
+        </Para>
 
         <Subheading>Market Value</Subheading>
         <Para>
-          Market value follows a steep 5th-power curve: CA 50 is worth around
-          195k, CA 100 around 6.25M, CA 150 around 47M, and CA 180 around
-          118M. Age, position, potential premium, club reputation, and current
-          form all modify the base figure. Strikers command a{" "}
-          <Tag color="emerald">1.3x</Tag> premium while goalkeepers are valued
-          at <Tag color="zinc">0.75x</Tag>.
+          Market value is public context, not proof of quality. Age, contract,
+          position, club leverage, demand, reputation, recent form, and perceived
+          potential all move the price. Look for disagreements between your
+          evidence and the market, then ask why the gap exists.
         </Para>
 
         <GridCards>
-          <InfoCard title="Age Curve" color="amber">
-            Under 18: 0.35x value. 21-23: 0.8x. 24-29: full 1.0x. 30-31:
-            drops to 0.6x. Over 33: just 0.12x of base value.
+          <InfoCard title="Environment Matters" color="amber">
+            Coaching quality, playing time, tactical role, competition level,
+            adaptation, and injuries can turn the same projection into very
+            different careers.
           </InfoCard>
           <InfoCard title="Form Effect" color="blue">
-            Form ranges from -3 to +3 and modifies market value by -10% to
-            +10%. Hot streaks inflate value; poor runs deflate it.
+            Hot streaks attract attention and poor runs suppress confidence.
+            Observe across time and contexts before treating either as ability.
           </InfoCard>
         </GridCards>
 
-        <Subheading>Other Generation Details</Subheading>
+        <Subheading>Questions Worth Preserving</Subheading>
         <BulletList
           items={[
-            "Preferred foot: 72% right, 20% left, 8% both",
-            "Starting morale: random 5-8",
-            "Form starts at 0 (neutral)",
-            "Squad sizes: 22-28 players per club",
+            "Is progress coming from the player, the role, or weaker opposition?",
+            "Does the current club provide the minutes and coaching this player needs?",
+            "Which risk would most change this projection?",
+            "When should the case be revisited, and in what context?",
           ]}
         />
       </SectionBlock>

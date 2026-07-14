@@ -62,7 +62,17 @@ export interface CloudSaveProvider {
    * Implementations should update an internal "savedAt" timestamp as part of
    * the write so subsequent conflict checks reflect the latest upload time.
    */
-  uploadSave(slot: number, state: GameState, name?: string): Promise<void>;
+  uploadSave(
+    slot: number,
+    state: GameState,
+    name?: string,
+    /**
+     * Canonical timestamp from the local journal. Remote mirrors must keep
+     * this value or a successful upload immediately looks like a divergent
+     * save on the next conflict check.
+     */
+    savedAt?: number,
+  ): Promise<void>;
 
   /**
    * Retrieve a previously uploaded save from the given slot.

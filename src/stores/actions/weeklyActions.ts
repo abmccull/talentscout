@@ -7,7 +7,12 @@
  * delegation, fast-forward, and related helpers.
  */
 import type { GetState, SetState } from "./types";
-import type { GameScreen, WeekSummary } from "../gameStore";
+import type { GameScreen, WeekSummary } from "../gameStoreTypes";
+import { createWeekSimulationActions } from "./weekSimulationActions";
+import { createMatchActions } from "./matchActions";
+import { processWeeklyEconomy } from "./weeklyEconomy";
+import { clearTerminalNarrativeInboxActions } from "./narrativeInboxState";
+import { createAutosaveQueue, scheduleAfterPaint } from "./autosaveQueue";
 import type {
   GameState,
   Activity,
@@ -37,7 +42,6 @@ import type {
   AnomalyFlag,
   ManagerDirective,
   DayResult,
-  WeekSimulationState,
   LeaderboardEntry,
   PlayerMatchRating,
   BatchAdvanceResult,
@@ -45,22 +49,18 @@ import type {
   QuickScoutPriorities,
   GutFeeling,
   CareerTier,
-  MatchEventType,
-  CardEvent,
   LegacyProfile,
   TransferRecord,
   ConvictionLevel,
   Scout,
   ClubDecision,
 } from "@/engine/core/types";
-import type { LensType } from "@/engine/observation/types";
 import type { ActivityQualityResult, ActivityQualityTier } from "@/engine/core/activityQuality";
 import type { ScenarioProgress } from "@/engine/scenarios";
 import { type TierReviewContext } from "@/engine/career/progression";
 import {
   type ActivityChoiceId,
   buildActivityInteractionState,
-  getActivityDefaultChoice,
   getActivityInteractionEffect,
 } from "@/engine/core/activityInteractions";
 import { createRNG } from "@/engine/rng";
@@ -94,7 +94,6 @@ import {
   processWeeklyTick,
   advanceWeek as advanceWeekEngine,
   getSeasonLength,
-  selectStartingXI,
 } from "@/engine/core/gameLoop";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
 import {
@@ -103,12 +102,23 @@ import {
   buildDefaultPriorities,
   processNPCDelegations,
 } from "@/engine/core/quickScout";
-import { generateMatchPhases, simulateMatchResult } from "@/engine/match/phases";
-import { calculateAttendedMatchRatings, computeFormFromRatings } from "@/engine/match/ratings";
-import { generateCardEvents, processCardAccumulation } from "@/engine/match/discipline";
-import { processFocusedObservations } from "@/engine/match/focus";
-import { computeScoutingBreakthroughBonus } from "@/engine/scout/perception";
-import { observePlayerLight } from "@/engine/scout/perception";
+import {
+  getDelegationPolicyModifier,
+  getWeeklyIntentActivityModifier,
+  normalizeWeeklyStrategyState,
+  recordWeeklyStrategyOutcome,
+  selectDelegationPolicy,
+  selectWeeklyIntent,
+  type DelegationPolicyId,
+  type WeeklyIntentId,
+  type WeeklyStrategyModifier,
+} from "@/engine/core/weeklyStrategy";
+import {
+  createObservationEvidenceIndex,
+  getPlayerObservationEvidence,
+  observePlayerLight,
+  upsertObservationEvidence,
+} from "@/engine/scout/perception";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import {
   calculatePerformanceReview,
@@ -134,17 +144,19 @@ import {
   ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
   ACTIVITY_FATIGUE_COSTS as ACTIVITY_FATIGUE_COSTS_MAP,
-  EMPTY_DAY_FATIGUE_RECOVERY,
 } from "@/engine/core/calendar";
 import {
   generateBoardDirectives,
   processSeasonDiscoveries,
   processMonthlySnapshot,
-  checkIndependentTierAdvancement,
-  advanceIndependentTier,
-  endClubEmployment,
   ensureLeadershipDelegationTeam,
 } from "@/engine/career/index";
+import { applyCareerPathTransition } from "@/engine/career/transitions";
+import {
+  isCareerRecoveryBlockingOffers,
+  openCareerSetback,
+  processCareerRecoveryWeek,
+} from "@/engine/career/recovery";
 import {
   chooseLeadershipResponsibility,
   processLeadershipPortfolioWeek,
@@ -160,9 +172,7 @@ import {
 } from "@/engine/career/legacy";
 import { isBankruptcyRecoveryActive } from "@/engine/finance/distress";
 import {
-  processWeeklyCourseProgress,
   hasRequiredCoursesForTier,
-  COURSE_CATALOG,
 } from "@/engine/career/courses";
 import {
   createLeaderboardEntry,
@@ -175,6 +185,11 @@ import {
   isScoutAbroad,
   processInternationalWeek,
   classifyStandingZone,
+  deriveRegionalPresence,
+  getActiveWorldConditionNames,
+  getWorldConditionModifiers,
+  applyRegionalPresenceToObservation,
+  getPlayerScoutingCountry,
 } from "@/engine/world/index";
 import {
   resolveInternationalAssignment,
@@ -191,23 +206,11 @@ import {
 import {
   initializeFinances,
   processWeeklyFinances,
+  sumOperatingExpenses,
   applyDifficultyFinancialAdjustments,
   getActiveEquipmentBonuses,
   migrateEquipmentLevel,
-  processMarketplaceBids,
-  expireOldListings,
-  processRetainerDeliveries,
-  processLoanPayment,
-  processConsultingDeadline,
-  processEmployeeWeek,
-  generateRetainerOffers,
-  generateConsultingOffers,
-  processEmployeeWork,
-  processClientRelationshipWeek,
   negotiateRetainerTerms,
-  checkEmployeeEvents,
-  expireEmployeeEvents,
-  processRetainerRenewals,
   processAnnualAwards,
   calculatePerformanceBonusAmount,
   calculateSigningBonus,
@@ -219,7 +222,6 @@ import {
   checkPlacementFeeEligibility,
   calculatePlacementFee,
   calculateSellOnPercentage,
-  getLifestyleReputationPenalty,
   getLifestyleNetworkingBonus,
   processAssistantScoutWeek,
   processWeeklyInfrastructureCosts,
@@ -236,10 +238,6 @@ import {
   directWeeklyNarrativeEvent,
   resolveEventChoice,
   acknowledgeEvent,
-  updateMarketTemperature,
-  generateEconomicEvent,
-  applyEconomicEvent,
-  expireEconomicEvents,
   checkStorylineTriggers,
   processActiveStorylines,
   advanceChain,
@@ -266,7 +264,6 @@ import {
 } from "@/engine/rivals";
 import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
-import { checkTraitReveal } from "@/engine/players/traitReveal";
 import { generateManagerProfiles } from "@/engine/analytics";
 import { generateRegionalYouth, generateAcademyIntake } from "@/engine/youth/generation";
 import {
@@ -328,12 +325,24 @@ const YOUTH_SUMMARY_ACTIVITY_TYPES = new Set<Activity["type"]>([
   "trainingVisit",
 ]);
 
+/** The loan hint lives in the Prospects workspace in the Youth EA build. */
+export function hasBrowsedYouthLoanWorkspace(
+  visitedScreens: ReadonlySet<string>,
+): boolean {
+  return visitedScreens.has("youthScouting");
+}
+
 function synchronizeDiscoveryAccuracyWithReports(
   discoveries: DiscoveryRecord[],
   reports: Record<string, ScoutReport>,
 ): DiscoveryRecord[] {
   const ratingsByPlayerId = new Map<string, number[]>();
-  for (const report of Object.values(reports)) {
+  const latestValidatedReports = selectLatestReportsByCase(
+    Object.values(reports).filter(
+      (report) => report.postTransferRating !== undefined,
+    ),
+  );
+  for (const report of latestValidatedReports) {
     if (report.postTransferRating === undefined) continue;
     const ratings = ratingsByPlayerId.get(report.playerId) ?? [];
     ratings.push(report.postTransferRating);
@@ -349,13 +358,26 @@ function synchronizeDiscoveryAccuracyWithReports(
   });
 }
 
-function toAbsoluteNarrativeWeek(state: GameState, season: number, week: number): number {
-  return gameWeeksBetween(
-    state.fixtures,
-    { season: 1, week: 1 },
-    { season, week },
-  );
+/**
+ * Return narrative age for the bounded retention window without walking every
+ * prior season. The calendar guarantees at least 38 weeks per season, so an
+ * event older than the immediately previous season is necessarily outside the
+ * ten-week archive window. Future-dated records retain the legacy negative-age
+ * behavior and are not pruned as stale.
+ */
+export function getNarrativeRetentionAge(
+  event: Pick<NarrativeEvent, "season" | "week">,
+  current: { season: number; week: number },
+  previousSeasonLength: number,
+): number {
+  if (event.season > current.season) return Number.NEGATIVE_INFINITY;
+  if (event.season === current.season) return current.week - event.week;
+  if (event.season === current.season - 1) {
+    return previousSeasonLength - event.week + current.week;
+  }
+  return Number.POSITIVE_INFINITY;
 }
+
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import {
   generateDirectives,
@@ -371,7 +393,6 @@ import {
   executeDatabaseQuery,
   executeDeepVideoAnalysis,
   generateStatsBriefing,
-  validateAnomalyFromObservation,
   resolvePredictions,
   generateAnalystReport,
   updateAnalystMorale,
@@ -392,6 +413,13 @@ import {
   trackPostTransfer,
 } from "@/engine/reports/reporting";
 import {
+  attachReportEvidence,
+  getFreshReportObservationIds,
+  getLatestReportInScope,
+  groupReportRevisionsByCase,
+  selectLatestReportsByCase,
+} from "@/engine/reports/reportAccountability";
+import {
   ensureScoutingCaseForReport,
   isGameDateDue,
   nextGameWeek,
@@ -403,9 +431,6 @@ import { compactLongCareerHistory } from "@/engine/world/saveRetention";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 
 // ── Module-level state ─────────────────────────────────────────────────────
-// Flag to prevent autosave race condition (Fix #24)
-let _autosavePending = false;
-let _queuedAutosave: { state: GameState; set: SetState } | null = null;
 // A batch is one player command even though it commits multiple canonical
 // weeks. Persist it once instead of serializing the full growing state twice
 // for every simulated week.
@@ -586,29 +611,30 @@ function derivePendingCelebration(
   return null;
 }
 
-function queueAutosave(newState: GameState, set: SetState): void {
-  set({ autosaveError: null });
-  if (_autosavePending) {
-    // Coalesce rapid canonical ticks to the newest committed state instead of
-    // dropping every autosave requested while IndexedDB is busy.
-    _queuedAutosave = { state: newState, set };
-    return;
-  }
+interface AutosaveRequest {
+  state: GameState;
+  set: SetState;
+}
 
-  _autosavePending = true;
-  getActiveSaveProvider()
-    .then((provider) => provider.save("autosave", JSON.stringify(newState), "Autosave"))
-    .catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      console.warn("Autosave failed:", err);
-      set({ autosaveError: message });
-    })
-    .finally(() => {
-      _autosavePending = false;
-      const queued = _queuedAutosave;
-      _queuedAutosave = null;
-      if (queued) queueAutosave(queued.state, queued.set);
-    });
+const autosaveQueue = createAutosaveQueue<AutosaveRequest>({
+  schedule: scheduleAfterPaint,
+  onRequest: ({ set }) => set({ autosaveError: null }),
+  persist: async ({ state }) => {
+    const provider = await getActiveSaveProvider();
+    await provider.save("autosave", JSON.stringify(state), "Autosave");
+  },
+  onError: (error, { set }) => {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("Autosave failed:", error);
+    set({ autosaveError: message });
+  },
+});
+
+function queueAutosave(newState: GameState, set: SetState): void {
+  // A single player command can request both a checkpoint and a final save.
+  // Coalesce those synchronous requests before JSON migration starts, then
+  // serialize off the interaction task so the committed week can paint first.
+  autosaveQueue.request({ state: newState, set });
 }
 
 function registerNarrativeDecisions(
@@ -812,7 +838,13 @@ export function projectExpiredNarrativeDefaults(
     updated = applyRivalPoachBidConcession(updated, event, choiceIndex);
   }
 
-  return updated;
+  const repairedInbox = clearTerminalNarrativeInboxActions(
+    updated.inbox,
+    updated.narrativeEvents,
+  );
+  return repairedInbox === updated.inbox
+    ? updated
+    : { ...updated, inbox: repairedInbox };
 }
 
 function humanizeIdentifier(value: string): string {
@@ -935,6 +967,9 @@ function resolveScoutHomeCountry(
   scout: Scout,
   regionalKnowledge: GameState["regionalKnowledge"],
 ): string {
+  const pinnedHomeCountry = canonicalizeCountry(scout.homeCountry);
+  if (pinnedHomeCountry) return pinnedHomeCountry;
+
   for (const [key, reputation] of Object.entries(scout.countryReputations ?? {})) {
     const countryId = canonicalizeCountry(reputation.country) ?? canonicalizeCountry(key);
     if (countryId && reputation.familiarity >= 50) {
@@ -978,6 +1013,7 @@ export function buildScoutQualityData(
   scout: Scout,
   regionalKnowledge: GameState["regionalKnowledge"],
   countryKey?: string,
+  presenceDiscoveryMultiplier = 1,
 ): ScoutQualityData {
   const knowledgeLevel = canonicalizeCountry(countryKey)
     ? (regionalKnowledge[canonicalizeCountry(countryKey)!]?.knowledgeLevel ?? 0)
@@ -987,7 +1023,23 @@ export function buildScoutQualityData(
     regionalKnowledge: knowledgeLevel,
     specializationLevel: scout.specializationLevel ?? 0,
     isYouthSpecialist: scout.primarySpecialization === 'youth',
+    presenceDiscoveryMultiplier,
   };
+}
+
+function buildScoutQualityDataForState(
+  state: GameState,
+  countryKey?: string,
+): ScoutQualityData {
+  const presenceMultiplier = countryKey
+    ? deriveRegionalPresence(state, countryKey).effects.discoveryMultiplier
+    : 1;
+  return buildScoutQualityData(
+    state.scout,
+    state.regionalKnowledge,
+    countryKey,
+    presenceMultiplier || 1,
+  );
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────
@@ -1067,6 +1119,40 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     const schedule = removeActivity(gameState.schedule, dayIndex);
     set({
       gameState: { ...gameState, schedule },
+      weekSimulation: null,
+    });
+  },
+
+  setWeeklyIntent: (intentId: WeeklyIntentId) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    set({
+      gameState: {
+        ...gameState,
+        weeklyStrategy: selectWeeklyIntent(
+          gameState.weeklyStrategy,
+          intentId,
+          gameState.currentWeek,
+          gameState.currentSeason,
+        ),
+      },
+      weekSimulation: null,
+    });
+  },
+
+  setDelegationPolicy: (policyId: DelegationPolicyId) => {
+    const { gameState } = get();
+    if (!gameState) return;
+    set({
+      gameState: {
+        ...gameState,
+        weeklyStrategy: selectDelegationPolicy(
+          gameState.weeklyStrategy,
+          policyId,
+          gameState.currentWeek,
+          gameState.currentSeason,
+        ),
+      },
       weekSimulation: null,
     });
   },
@@ -1254,6 +1340,59 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       }
     }
 
+    const strategy = normalizeWeeklyStrategyState(
+      gameState.weeklyStrategy,
+      gameState.currentWeek,
+      gameState.currentSeason,
+    );
+    const accumulateStrategyModifier = (
+      activityType: Activity["type"],
+      modifier: WeeklyStrategyModifier,
+    ) => {
+      choiceDiscoveryModifiers.set(
+        activityType,
+        (choiceDiscoveryModifiers.get(activityType) ?? 0) + (modifier.discoveryModifier ?? 0),
+      );
+      choiceProfileModifiers.set(
+        activityType,
+        (choiceProfileModifiers.get(activityType) ?? 0) + (modifier.profileModifier ?? 0),
+      );
+      choiceAnomalyModifiers.set(
+        activityType,
+        (choiceAnomalyModifiers.get(activityType) ?? 0) + (modifier.anomalyModifier ?? 0),
+      );
+      choiceRelationshipModifiers.set(
+        activityType,
+        (choiceRelationshipModifiers.get(activityType) ?? 0) + (modifier.relationshipModifier ?? 0),
+      );
+      choiceReportQualityModifiers.set(
+        activityType,
+        (choiceReportQualityModifiers.get(activityType) ?? 0) + (modifier.reportQualityModifier ?? 0),
+      );
+    };
+
+    // Strategy is applied once per scheduled activity instance. This keeps
+    // manual and auto-scheduled weeks equivalent while making the selected
+    // weekly intent a real edge with an explicit opposing cost.
+    for (const instance of getScheduledActivityInstances(gameState.schedule)) {
+      accumulateStrategyModifier(
+        instance.activity.type,
+        getWeeklyIntentActivityModifier(strategy.intentId, instance.activity),
+      );
+    }
+
+    // A skipped live call is not silently converted into a generic choice.
+    // The persisted standing order resolves it and adds its own tradeoff.
+    for (const day of simChoices?.dayResults ?? []) {
+      if (day.interaction?.resolutionMode !== "delegated" || !day.activity) continue;
+      accumulateStrategyModifier(
+        day.activity.type,
+        getDelegationPolicyModifier(
+          day.interaction.delegationPolicyId ?? strategy.delegationPolicyId,
+        ),
+      );
+    }
+
     // Interactive observation sessions should have concrete gameplay impact.
     // Each completed scheduled instance adds a mode-specific bonus.
     const completedInteractiveIds = new Set(gameState.completedInteractiveSessions ?? []);
@@ -1359,6 +1498,28 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     const fatigueReduction = weekToolBonuses.fatigueReduction ?? 0;
     const travelFatigueReduction = weekToolBonuses.travelFatigueReduction ?? 0;
 
+    const scheduledTravelActivity = gameState.schedule.activities.find(
+      (activity) => activity?.type === "internationalTravel" || activity?.type === "travel",
+    );
+    const travelDestination = scheduledTravelActivity?.targetId
+      ?? gameState.scout.travelBooking?.destinationCountry;
+    const infrastructureTravelMultiplier = calculateInfrastructureEffects(
+      gameState.scoutingInfrastructure,
+    ).travelFatigueMultiplier;
+    const presenceTravelMultiplier = travelDestination
+      ? deriveRegionalPresence(gameState, travelDestination).effects.travelFatigueMultiplier
+      : 1;
+    const baseTravelFatigue = scheduledTravelActivity
+      ? ACTIVITY_FATIGUE_COSTS_MAP[scheduledTravelActivity.type]
+      : 0;
+    const regionalAndInfrastructureTravelReduction = Math.max(
+      0,
+      Math.round(
+        baseTravelFatigue
+          * (1 - infrastructureTravelMultiplier * presenceTravelMultiplier),
+      ),
+    );
+
     // Equipment fatigueReduction: per-activity-type reductions from equipped items
     let equipFatigueReduction = 0;
     if (weekEquipBonuses?.fatigueReduction) {
@@ -1372,12 +1533,20 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       }
     }
 
-    if (fatigueReduction > 0 || travelFatigueReduction > 0 || equipFatigueReduction > 0) {
+    if (
+      fatigueReduction > 0
+      || travelFatigueReduction > 0
+      || equipFatigueReduction > 0
+      || regionalAndInfrastructureTravelReduction > 0
+    ) {
       // Check if any travel activities were scheduled this week
       const hasTravelActivity = gameState.schedule.activities.some(
         (a) => a?.type === "internationalTravel" || a?.type === "travel",
       );
-      const totalReduction = fatigueReduction + (hasTravelActivity ? travelFatigueReduction : 0) + equipFatigueReduction;
+      const totalReduction = fatigueReduction
+        + (hasTravelActivity ? travelFatigueReduction : 0)
+        + equipFatigueReduction
+        + (hasTravelActivity ? regionalAndInfrastructureTravelReduction : 0);
       if (totalReduction > 0) {
         updatedScout = {
           ...updatedScout,
@@ -1753,6 +1922,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     // e) Write Reports — process scheduled writeReport activities into actual reports
     if (weekResult.reportsWritten.length > 0) {
       const updatedReports = { ...stateWithScheduleApplied.reports };
+      let updatedScoutingCases = { ...(stateWithScheduleApplied.scoutingCases ?? {}) };
       let reportScout = { ...stateWithScheduleApplied.scout };
       let reportDiscoveries = [...(stateWithScheduleApplied.discoveryRecords ?? [])];
       const reportMessages: InboxMessage[] = [];
@@ -1762,7 +1932,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         if (!player) continue;
 
         const playerObs = Object.values(stateWithScheduleApplied.observations).filter(
-          (o) => o.playerId === playerId,
+          (o) => o.playerId === playerId && o.scoutId === reportScout.id,
         );
         if (playerObs.length === 0) {
           reportMessages.push({
@@ -1780,8 +1950,29 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           continue;
         }
 
+        const previousReport = getLatestReportInScope(
+          Object.values(updatedReports),
+          reportScout.id,
+          playerId,
+        );
+        if (getFreshReportObservationIds(playerObs, previousReport).length === 0) {
+          reportMessages.push({
+            id: `report-no-new-evidence-${playerId}-w${stateWithScheduleApplied.currentWeek}-s${stateWithScheduleApplied.currentSeason}`,
+            week: stateWithScheduleApplied.currentWeek,
+            season: stateWithScheduleApplied.currentSeason,
+            type: "feedback" as const,
+            title: `Report Deferred: ${player.firstName} ${player.lastName}`,
+            body: `Your existing case already contains all available observations on ${player.firstName} ${player.lastName}. Gather new evidence before scheduling another revision; repeat paperwork does not create reputation or performance credit.`,
+            read: false,
+            actionRequired: false,
+            relatedId: playerId,
+            relatedEntityType: "player" as const,
+          });
+          continue;
+        }
+
         const draft = generateReportContent(player, playerObs, reportScout);
-        const report = finalizeReport(
+        const report = attachReportEvidence(finalizeReport(
           draft,
           "recommend",
           `Scouting report on ${player.firstName} ${player.lastName} based on ${playerObs.length} observation${playerObs.length !== 1 ? "s" : ""}.`,
@@ -1791,7 +1982,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           stateWithScheduleApplied.currentWeek,
           stateWithScheduleApplied.currentSeason,
           playerId,
-        );
+        ), playerObs, previousReport);
         const qualityMod = choiceReportQualityModifiers.get("writeReport") ?? 0;
         // F14: Include infrastructure report quality bonus + equipment reportQuality bonus
         const infraReportBonus = calculateInfrastructureEffects(stateWithScheduleApplied.scoutingInfrastructure).reportQualityBonus;
@@ -1804,9 +1995,17 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           infraReportBonus + equipReportBonus,
         );
         const quality = Math.max(0, Math.min(100, craftQuality.score + qualityMod));
-        const scoredReport = {
+        const isNewCase = previousReport === undefined;
+        const repBefore = reportScout.reputation;
+        if (isNewCase) {
+          reportScout = updateReputation(reportScout, { type: "reportSubmitted", quality });
+          reportScout = { ...reportScout, reportsSubmitted: reportScout.reportsSubmitted + 1 };
+        }
+        const repDelta = +(reportScout.reputation - repBefore).toFixed(1);
+        let scoredReport: ScoutReport = {
           ...report,
           qualityScore: quality,
+          reputationDelta: repDelta,
           craftBreakdown: craftQuality.breakdown,
           validationSnapshot: Object.fromEntries(
             report.attributeAssessments.map((assessment) => [
@@ -1815,12 +2014,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             ]),
           ),
         };
+        const caseLink = ensureScoutingCaseForReport(updatedScoutingCases, scoredReport);
+        updatedScoutingCases = caseLink.scoutingCases;
+        scoredReport = caseLink.report;
         updatedReports[scoredReport.id] = scoredReport;
-
-        const repBefore = reportScout.reputation;
-        reportScout = updateReputation(reportScout, { type: "reportSubmitted", quality });
-        reportScout = { ...reportScout, reportsSubmitted: reportScout.reportsSubmitted + 1 };
-        const repDelta = +(reportScout.reputation - repBefore).toFixed(1);
 
         // Record discovery
         const alreadyDiscovered = reportDiscoveries.some((r) => r.playerId === playerId);
@@ -1834,8 +2031,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           week: stateWithScheduleApplied.currentWeek,
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
-          title: `Report Filed: ${player.firstName} ${player.lastName}`,
-          body: `Your scouting report on ${player.firstName} ${player.lastName} has been filed.\nQuality: ${quality}/100 | Reputation ${repDelta >= 0 ? "+" : ""}${repDelta}`,
+          title: `${isNewCase ? "Report Filed" : `Revision ${scoredReport.revision ?? 1} Filed`}: ${player.firstName} ${player.lastName}`,
+          body: isNewCase
+            ? `Your scouting report on ${player.firstName} ${player.lastName} has been filed.\nQuality: ${quality}/100 | Reputation ${repDelta >= 0 ? "+" : ""}${repDelta}`
+            : `New evidence has been preserved as revision ${scoredReport.revision ?? 1} of this case.\nQuality: ${quality}/100 | Case revisions improve accountability but do not inflate report volume or submission reputation.`,
           read: false,
           actionRequired: false,
           relatedId: playerId,
@@ -1846,6 +2045,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       stateWithScheduleApplied = {
         ...stateWithScheduleApplied,
         reports: updatedReports,
+        scoutingCases: updatedScoutingCases,
         scout: reportScout,
         discoveryRecords: reportDiscoveries,
         inbox: [...stateWithScheduleApplied.inbox, ...reportMessages],
@@ -1936,10 +2136,18 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         `${gameState.seed}-actobs-${gameState.currentWeek}-${gameState.currentSeason}`,
       );
       const updatedObservations = { ...stateWithScheduleApplied.observations };
+      const preexistingObservationIds = new Set(Object.keys(updatedObservations));
       let actDiscoveries = [...(stateWithScheduleApplied.discoveryRecords ?? [])];
       const actObsMessages: InboxMessage[] = [];
       const allPlayers = Object.values(stateWithScheduleApplied.players);
       const existingObs = Object.values(updatedObservations);
+      const observationEvidenceIndex = createObservationEvidenceIndex(existingObs);
+      const playerEvidence = (playerId: string): Observation[] =>
+        getPlayerObservationEvidence(observationEvidenceIndex, playerId);
+      const recordObservation = (observation: Observation): void => {
+        updatedObservations[observation.id] = observation;
+        upsertObservationEvidence(observationEvidenceIndex, observation);
+      };
       const observedPlayerIds = new Set(existingObs.map((o) => o.playerId));
       const currentScout = stateWithScheduleApplied.scout;
       const effectiveScoutCountry = resolveScoutEffectiveCountry(
@@ -2072,9 +2280,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             undefined,
             stateWithScheduleApplied.currentWeek,
             undefined,
-            buildScoutQualityData(
-              currentScout,
-              stateWithScheduleApplied.regionalKnowledge,
+            buildScoutQualityDataForState(
+              stateWithScheduleApplied,
               effectiveScoutCountry,
             ),
           );
@@ -2082,14 +2289,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           const count = Math.min(prioritizedPool.length, actObsRng.nextInt(rangeMin, rangeMax));
           for (let i = 0; i < count; i++) {
             const youth = prioritizedPool[i];
-            const existingObsForYouth = Object.values(updatedObservations).filter(
-              (o) => o.playerId === youth.player.id,
-            );
+            const existingObsForYouth = playerEvidence(youth.player.id);
             const result = processVenueObservation(
               actObsRng, currentScout, youth, "academyVisit",
               existingObsForYouth, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason,
             );
-            updatedObservations[result.observation.id] = result.observation;
+            recordObservation(result.observation);
             weekObservationsGenerated++;
             const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === youth.player.id);
             if (!alreadyDiscovered) {
@@ -2129,9 +2334,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             if (focusedYouthList.length > 0) {
               for (let repeat = 0; repeat < focusRepeats; repeat++) {
                 const focusedYouth = focusedYouthList[repeat % focusedYouthList.length];
-                const focusObsForYouth = Object.values(updatedObservations).filter(
-                  (o) => o.playerId === focusedYouth.player.id,
-                );
+                const focusObsForYouth = playerEvidence(focusedYouth.player.id);
                 const focusResult = processVenueObservation(
                   actObsRng,
                   currentScout,
@@ -2141,7 +2344,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                   stateWithScheduleApplied.currentWeek,
                   stateWithScheduleApplied.currentSeason,
                 );
-                updatedObservations[focusResult.observation.id] = focusResult.observation;
+                recordObservation(focusResult.observation);
                 weekObservationsGenerated++;
               }
             }
@@ -2160,10 +2363,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           for (let i = 0; i < count; i++) {
             const player = prioritizedPlayers[i];
 
-            const obs = observePlayerLight(actObsRng, player, currentScout, "academyVisit", Object.values(updatedObservations), extraAttrsPerSession);
+            const obs = observePlayerLight(actObsRng, player, currentScout, "academyVisit", playerEvidence(player.id), extraAttrsPerSession);
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[obs.id] = obs;
+            recordObservation(obs);
             observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
 
@@ -2208,12 +2411,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                 focusedPlayer,
                 currentScout,
                 "academyVisit",
-                Object.values(updatedObservations),
+                playerEvidence(focusedPlayer.id),
                 extraAttrsPerSession,
               );
               focusObs.week = stateWithScheduleApplied.currentWeek;
               focusObs.season = stateWithScheduleApplied.currentSeason;
-              updatedObservations[focusObs.id] = focusObs;
+              recordObservation(focusObs);
               observedPlayerIds.add(focusedPlayer.id);
               weekObservationsGenerated++;
             }
@@ -2241,9 +2444,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             undefined,
             stateWithScheduleApplied.currentWeek,
             undefined,
-            buildScoutQualityData(
-              currentScout,
-              stateWithScheduleApplied.regionalKnowledge,
+            buildScoutQualityDataForState(
+              stateWithScheduleApplied,
               effectiveScoutCountry,
             ),
           );
@@ -2251,14 +2453,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           const count = Math.min(prioritizedPool.length, actObsRng.nextInt(rangeMin, rangeMax));
           for (let i = 0; i < count; i++) {
             const youth = prioritizedPool[i];
-            const existingObsForYouth = Object.values(updatedObservations).filter(
-              (o) => o.playerId === youth.player.id,
-            );
+            const existingObsForYouth = playerEvidence(youth.player.id);
             const result = processVenueObservation(
               actObsRng, currentScout, youth, "youthTournament",
               existingObsForYouth, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason,
             );
-            updatedObservations[result.observation.id] = result.observation;
+            recordObservation(result.observation);
             weekObservationsGenerated++;
             const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === youth.player.id);
             if (!alreadyDiscovered) {
@@ -2298,9 +2498,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             if (focusedYouthList.length > 0) {
               for (let repeat = 0; repeat < focusRepeats; repeat++) {
                 const focusedYouth = focusedYouthList[repeat % focusedYouthList.length];
-                const focusObsForYouth = Object.values(updatedObservations).filter(
-                  (o) => o.playerId === focusedYouth.player.id,
-                );
+                const focusObsForYouth = playerEvidence(focusedYouth.player.id);
                 const focusResult = processVenueObservation(
                   actObsRng,
                   currentScout,
@@ -2310,7 +2508,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                   stateWithScheduleApplied.currentWeek,
                   stateWithScheduleApplied.currentSeason,
                 );
-                updatedObservations[focusResult.observation.id] = focusResult.observation;
+                recordObservation(focusResult.observation);
                 weekObservationsGenerated++;
               }
             }
@@ -2329,10 +2527,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           for (let i = 0; i < count; i++) {
             const player = prioritizedPlayers[i];
 
-            const obs = observePlayerLight(actObsRng, player, currentScout, "youthTournament", Object.values(updatedObservations), extraAttrsPerSession);
+            const obs = observePlayerLight(actObsRng, player, currentScout, "youthTournament", playerEvidence(player.id), extraAttrsPerSession);
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[obs.id] = obs;
+            recordObservation(obs);
             observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
 
@@ -2377,12 +2575,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                 focusedPlayer,
                 currentScout,
                 "youthTournament",
-                Object.values(updatedObservations),
+                playerEvidence(focusedPlayer.id),
                 extraAttrsPerSession,
               );
               focusObs.week = stateWithScheduleApplied.currentWeek;
               focusObs.season = stateWithScheduleApplied.currentSeason;
-              updatedObservations[focusObs.id] = focusObs;
+              recordObservation(focusObs);
               observedPlayerIds.add(focusedPlayer.id);
               weekObservationsGenerated++;
             }
@@ -2410,10 +2608,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "trainingGround", Object.values(updatedObservations), extraAttrsPerSession);
+          const obs = observePlayerLight(actObsRng, player, currentScout, "trainingGround", playerEvidence(player.id), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
+          recordObservation(obs);
           observedPlayerIds.add(player.id);
           weekObservationsGenerated++;
 
@@ -2458,12 +2656,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               focusedPlayer,
               currentScout,
               "trainingGround",
-              Object.values(updatedObservations),
+              playerEvidence(focusedPlayer.id),
               extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[focusObs.id] = focusObs;
+            recordObservation(focusObs);
             observedPlayerIds.add(focusedPlayer.id);
             weekObservationsGenerated++;
           }
@@ -2503,9 +2701,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               undefined,
               stateWithScheduleApplied.currentWeek,
               undefined,
-              buildScoutQualityData(
-                currentScout,
-                stateWithScheduleApplied.regionalKnowledge,
+              buildScoutQualityDataForState(
+                stateWithScheduleApplied,
                 effectiveScoutCountry,
               ),
             );
@@ -2514,9 +2711,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
             for (let i = 0; i < count; i++) {
               const youth = prioritizedPool[i];
-              const existingObsForYouth = Object.values(updatedObservations).filter(
-                (o) => o.playerId === youth.player.id,
-              );
+              const existingObsForYouth = playerEvidence(youth.player.id);
               const result = processVenueObservation(
                 actObsRng, currentScout, youth, "videoAnalysis",
                 existingObsForYouth, stateWithScheduleApplied.currentWeek, stateWithScheduleApplied.currentSeason,
@@ -2528,7 +2723,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                   confidence: Math.min(1, r.confidence + videoConfBoost),
                 }));
               }
-              updatedObservations[result.observation.id] = result.observation;
+              recordObservation(result.observation);
               weekObservationsGenerated++;
               const alreadyDiscovered = actDiscoveries.some((r) => r.playerId === youth.player.id);
               if (!alreadyDiscovered) {
@@ -2581,9 +2776,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             if (focusedYouthList.length > 0) {
               for (let repeat = 0; repeat < focusRepeats; repeat++) {
                 const focusedYouth = focusedYouthList[repeat % focusedYouthList.length];
-                const focusObsForYouth = Object.values(updatedObservations).filter(
-                  (o) => o.playerId === focusedYouth.player.id,
-                );
+                const focusObsForYouth = playerEvidence(focusedYouth.player.id);
                 const focusResult = processVenueObservation(
                   actObsRng,
                   currentScout,
@@ -2593,7 +2786,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                   stateWithScheduleApplied.currentWeek,
                   stateWithScheduleApplied.currentSeason,
                 );
-                updatedObservations[focusResult.observation.id] = focusResult.observation;
+                recordObservation(focusResult.observation);
                 weekObservationsGenerated++;
               }
             }
@@ -2615,7 +2808,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           for (let i = 0; i < count; i++) {
             const player = prioritizedPlayers[i];
 
-            const obs = observePlayerLight(actObsRng, player, currentScout, "videoAnalysis", Object.values(updatedObservations), extraAttrsPerSession);
+            const obs = observePlayerLight(actObsRng, player, currentScout, "videoAnalysis", playerEvidence(player.id), extraAttrsPerSession);
             obs.week = stateWithScheduleApplied.currentWeek;
             obs.season = stateWithScheduleApplied.currentSeason;
             // Apply equipment videoConfidence boost
@@ -2625,7 +2818,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                 confidence: Math.min(1, r.confidence + videoConfBoost),
               }));
             }
-            updatedObservations[obs.id] = obs;
+            recordObservation(obs);
             observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
 
@@ -2663,12 +2856,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                 focusedPlayer,
                 currentScout,
                 "videoAnalysis",
-                Object.values(updatedObservations),
+                playerEvidence(focusedPlayer.id),
                 extraAttrsPerSession,
               );
               focusObs.week = stateWithScheduleApplied.currentWeek;
               focusObs.season = stateWithScheduleApplied.currentSeason;
-              updatedObservations[focusObs.id] = focusObs;
+              recordObservation(focusObs);
               observedPlayerIds.add(focusedPlayer.id);
               weekObservationsGenerated++;
             }
@@ -2696,10 +2889,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "reserveMatch", Object.values(updatedObservations), extraAttrsPerSession);
+          const obs = observePlayerLight(actObsRng, player, currentScout, "reserveMatch", playerEvidence(player.id), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
+          recordObservation(obs);
           observedPlayerIds.add(player.id);
           weekObservationsGenerated++;
 
@@ -2743,12 +2936,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               focusedPlayer,
               currentScout,
               "reserveMatch",
-              Object.values(updatedObservations),
+              playerEvidence(focusedPlayer.id),
               extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[focusObs.id] = focusObs;
+            recordObservation(focusObs);
             observedPlayerIds.add(focusedPlayer.id);
             weekObservationsGenerated++;
           }
@@ -2781,10 +2974,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "liveMatch", Object.values(updatedObservations), extraAttrsPerSession);
+          const obs = observePlayerLight(actObsRng, player, currentScout, "liveMatch", playerEvidence(player.id), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
+          recordObservation(obs);
           observedPlayerIds.add(player.id);
           weekObservationsGenerated++;
 
@@ -2828,12 +3021,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               focusedPlayer,
               currentScout,
               "liveMatch",
-              Object.values(updatedObservations),
+              playerEvidence(focusedPlayer.id),
               extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[focusObs.id] = focusObs;
+            recordObservation(focusObs);
             observedPlayerIds.add(focusedPlayer.id);
             weekObservationsGenerated++;
           }
@@ -2866,10 +3059,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "oppositionAnalysis", Object.values(updatedObservations), extraAttrsPerSession);
+          const obs = observePlayerLight(actObsRng, player, currentScout, "oppositionAnalysis", playerEvidence(player.id), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
+          recordObservation(obs);
           observedPlayerIds.add(player.id);
           weekObservationsGenerated++;
 
@@ -2913,12 +3106,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               focusedPlayer,
               currentScout,
               "oppositionAnalysis",
-              Object.values(updatedObservations),
+              playerEvidence(focusedPlayer.id),
               extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[focusObs.id] = focusObs;
+            recordObservation(focusObs);
             observedPlayerIds.add(focusedPlayer.id);
             weekObservationsGenerated++;
           }
@@ -2941,10 +3134,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "agentShowcase", Object.values(updatedObservations), extraAttrsPerSession);
+          const obs = observePlayerLight(actObsRng, player, currentScout, "agentShowcase", playerEvidence(player.id), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
+          recordObservation(obs);
           observedPlayerIds.add(player.id);
           weekObservationsGenerated++;
 
@@ -2988,12 +3181,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               focusedPlayer,
               currentScout,
               "agentShowcase",
-              Object.values(updatedObservations),
+              playerEvidence(focusedPlayer.id),
               extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[focusObs.id] = focusObs;
+            recordObservation(focusObs);
             observedPlayerIds.add(focusedPlayer.id);
             weekObservationsGenerated++;
           }
@@ -3016,10 +3209,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < count; i++) {
           const player = prioritizedPlayers[i];
 
-          const obs = observePlayerLight(actObsRng, player, currentScout, "trialMatch", Object.values(updatedObservations), extraAttrsPerSession);
+          const obs = observePlayerLight(actObsRng, player, currentScout, "trialMatch", playerEvidence(player.id), extraAttrsPerSession);
           obs.week = stateWithScheduleApplied.currentWeek;
           obs.season = stateWithScheduleApplied.currentSeason;
-          updatedObservations[obs.id] = obs;
+          recordObservation(obs);
           observedPlayerIds.add(player.id);
           weekObservationsGenerated++;
 
@@ -3089,12 +3282,12 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               focusedPlayer,
               currentScout,
               "trialMatch",
-              Object.values(updatedObservations),
+              playerEvidence(focusedPlayer.id),
               extraAttrsPerSession,
             );
             focusObs.week = stateWithScheduleApplied.currentWeek;
             focusObs.season = stateWithScheduleApplied.currentSeason;
-            updatedObservations[focusObs.id] = focusObs;
+            recordObservation(focusObs);
             observedPlayerIds.add(focusedPlayer.id);
             weekObservationsGenerated++;
           }
@@ -3124,13 +3317,26 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         const dbRng = createRNG(
           `${gameState.seed}-dbquery-${gameState.currentWeek}-${gameState.currentSeason}`,
         );
-        const queryProfileMod = choiceProfileMod("databaseQuery") + (dbDataAccBonus > 0 ? Math.round(dbDataAccBonus * 5) : 0);
+        let queryProfileMod = choiceProfileMod("databaseQuery") + (dbDataAccBonus > 0 ? Math.round(dbDataAccBonus * 5) : 0);
         const queryAnomalyMod = choiceAnomalyMod("databaseQuery");
         const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
         if (leagueIds.length > 0) {
-          const targetLeagueId = leagueIds[dbRng.nextInt(0, leagueIds.length - 1)];
+          const targetLeagueId = dbRng.pickWeighted(
+            leagueIds.map((leagueId) => ({
+              item: leagueId,
+              weight: deriveRegionalPresence(
+                stateWithScheduleApplied,
+                stateWithScheduleApplied.leagues[leagueId]?.country ?? "",
+              ).effects.opportunityMultiplier || 0.25,
+            })),
+          );
           const targetLeague = stateWithScheduleApplied.leagues[targetLeagueId];
           if (targetLeague) {
+            const dataPresence = deriveRegionalPresence(
+              stateWithScheduleApplied,
+              targetLeague.country,
+            );
+            queryProfileMod += Math.round(dataPresence.effects.dataConfidenceBonus * 10);
             const queryResult = executeDatabaseQuery(
               dbRng,
               currentScout,
@@ -3174,7 +3380,18 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
             const updatedProfiles = { ...stateWithScheduleApplied.statisticalProfiles };
             for (const profile of effectiveProfiles) {
-              updatedProfiles[profile.playerId] = profile;
+              updatedProfiles[profile.playerId] = {
+                ...profile,
+                evidenceContext: {
+                  countryId: dataPresence.countryId,
+                  confidence: Math.min(
+                    1,
+                    0.5 + dataPresence.effects.dataConfidenceBonus + dbDataAccBonus,
+                  ),
+                  accessTier: dataPresence.accessTier,
+                  explanation: dataPresence.summary,
+                },
+              };
             }
 
             let nextAnomalyFlags = stateWithScheduleApplied.anomalyFlags;
@@ -3258,14 +3475,34 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               stateWithScheduleApplied.currentWeek,
               existingProfile,
             );
-            updatedProfiles[player.id] = deepProfile;
+            const playerCountry = getPlayerScoutingCountry(
+              stateWithScheduleApplied,
+              player,
+            );
+            const dataPresence = playerCountry
+              ? deriveRegionalPresence(stateWithScheduleApplied, playerCountry)
+              : undefined;
+            updatedProfiles[player.id] = dataPresence
+              ? {
+                  ...deepProfile,
+                  evidenceContext: {
+                    countryId: dataPresence.countryId,
+                    confidence: Math.min(
+                      1,
+                      0.55 + dataPresence.effects.dataConfidenceBonus + deepDataAccBoost,
+                    ),
+                    accessTier: dataPresence.accessTier,
+                    explanation: dataPresence.summary,
+                  },
+                }
+              : deepProfile;
 
             const obs = observePlayerLight(
               deepVideoRng,
               player,
               currentScout,
               "videoAnalysis",
-              Object.values(updatedObservations),
+              playerEvidence(player.id),
               extraAttrsPerSession,
             );
             obs.week = stateWithScheduleApplied.currentWeek;
@@ -3277,7 +3514,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                 confidence: Math.min(1, r.confidence + deepVideoConfBoost + deepDataAccBoost),
               }));
             }
-            updatedObservations[obs.id] = obs;
+            recordObservation(obs);
             observedPlayerIds.add(player.id);
             weekObservationsGenerated++;
 
@@ -3715,7 +3952,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             || !completedInteractiveIds.has(observation.activityInstanceId),
         );
         for (const observation of applicableSimObservations) {
-          updatedObservations[observation.id] = observation;
+          recordObservation(observation);
         }
         const dedupedNewDiscoveries = simYouthResults.newDiscoveries.filter(
           (nd) => !actDiscoveries.some((d) => d.playerId === nd.playerId),
@@ -3752,17 +3989,14 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               undefined,
               stateWithScheduleApplied.currentWeek,
               undefined,
-              buildScoutQualityData(
-                currentScout,
-                stateWithScheduleApplied.regionalKnowledge,
+              buildScoutQualityDataForState(
+                stateWithScheduleApplied,
                 effectiveScoutCountry,
               ),
             );
             if (pool.length === 0) continue;
             const youth = pool[0];
-            const existingObsForYouth = Object.values(updatedObservations).filter(
-              (o) => o.playerId === youth.player.id,
-            );
+            const existingObsForYouth = playerEvidence(youth.player.id);
             const result = processVenueObservation(
               actObsRng,
               currentScout,
@@ -3773,7 +4007,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               stateWithScheduleApplied.currentSeason,
             );
 
-            updatedObservations[result.observation.id] = result.observation;
+            recordObservation(result.observation);
             updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
             weekObservationsGenerated++;
 
@@ -3850,9 +4084,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
           for (let repeat = 0; repeat < focusRepeats && focusedYouthList.length > 0; repeat++) {
             const focusedYouth = focusedYouthList[repeat % focusedYouthList.length];
-            const focusObsForYouth = Object.values(updatedObservations).filter(
-              (o) => o.playerId === focusedYouth.player.id,
-            );
+            const focusObsForYouth = playerEvidence(focusedYouth.player.id);
             const focusResult = processVenueObservation(
               actObsRng,
               currentScout,
@@ -3863,7 +4095,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               stateWithScheduleApplied.currentSeason,
               2, // extraAttributes — focus reveals more per pass
             );
-            updatedObservations[focusResult.observation.id] = focusResult.observation;
+            recordObservation(focusResult.observation);
             updatedUnsignedYouthObs[focusedYouth.id] = focusResult.updatedYouth;
             weekObservationsGenerated++;
           }
@@ -3877,36 +4109,11 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           inbox: [...stateWithScheduleApplied.inbox, ...actObsMessages],
         };
       } else {
-      // Fallback: process youth venues (for old saves without youthVenueResults)
+      // Fallback: process youth venues for old/incomplete live-session saves.
+      // Missing results are also normal on weeks without a youth venue, so
+      // prospect supply must remain a season-boundary responsibility.
 
       let updatedUnsignedYouthObs = { ...stateWithScheduleApplied.unsignedYouth };
-
-      // Weekly youth generation (fallback path) — replenish pool before observation
-      if (currentScout.primarySpecialization === "youth") {
-        const youthGenRng = createRNG(
-          `${gameState.seed}-youthgen-${gameState.currentWeek}-${gameState.currentSeason}`,
-        );
-        for (const countryKey of stateWithScheduleApplied.countries) {
-          const countryData = getCountryDataSync(countryKey);
-          if (!countryData) continue;
-          const countrySubRegions = Object.values(stateWithScheduleApplied.subRegions).filter(
-            (sr) => sr.country.toLowerCase() === countryData.name.toLowerCase(),
-          );
-          const batch = generateRegionalYouth(
-            youthGenRng,
-            countryData,
-            stateWithScheduleApplied.currentSeason,
-            stateWithScheduleApplied.currentWeek,
-            countrySubRegions,
-            getDifficultyModifiers(stateWithScheduleApplied.difficulty).wonderkidRateMultiplier
-              * getRunSimulationModifiers(stateWithScheduleApplied.runManifest).youthTalentMultiplier,
-            "weekly",
-          );
-          for (const y of batch) {
-            updatedUnsignedYouthObs[y.id] = y;
-          }
-        }
-      }
 
       // ── Passive tournament discovery ─────────────────────────────────────
       {
@@ -4002,9 +4209,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           youthBonus,
           stateWithScheduleApplied.currentWeek,
           tournament,
-          buildScoutQualityData(
-            currentScout,
-            stateWithScheduleApplied.regionalKnowledge,
+          buildScoutQualityDataForState(
+            stateWithScheduleApplied,
             tournament?.country ?? effectiveScoutCountry,
           ),
         );
@@ -4013,7 +4219,15 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         // Equipment travelCostReduction bonus reduces the cost
         if (tournament?.travelCost && stateWithScheduleApplied.finances) {
           const travelCostReductionRate = weekEquipBonuses?.travelCostReduction ?? 0;
-          const reducedTravelCost = Math.round(tournament.travelCost * (1 - travelCostReductionRate));
+          const tournamentPresence = deriveRegionalPresence(
+            stateWithScheduleApplied,
+            tournament.country,
+          );
+          const reducedTravelCost = Math.round(
+            tournament.travelCost
+              * tournamentPresence.effects.travelCostMultiplier
+              * (1 - travelCostReductionRate),
+          );
           stateWithScheduleApplied = {
             ...stateWithScheduleApplied,
             finances: {
@@ -4025,7 +4239,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                   week: stateWithScheduleApplied.currentWeek,
                   season: stateWithScheduleApplied.currentSeason,
                   amount: -reducedTravelCost,
-                  description: `Travel + accommodation: ${tournament.name}`,
+                  description: `Travel + accommodation: ${tournament.name} (${tournamentPresence.accessTier} regional route)`,
                 },
               ],
             },
@@ -4059,9 +4273,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         for (let i = 0; i < finalPool.length; i++) {
           const youth = finalPool[i];
           const context = mapVenueTypeToContext(effectiveVenueType);
-          const existingObsForYouth = Object.values(updatedObservations).filter(
-            (o) => o.playerId === youth.player.id,
-          );
+          const existingObsForYouth = playerEvidence(youth.player.id);
           const result = processVenueObservation(
             actObsRng,
             currentScout,
@@ -4074,7 +4286,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             tournament,
           );
 
-          updatedObservations[result.observation.id] = result.observation;
+          recordObservation(result.observation);
           updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
           weekObservationsGenerated++;
 
@@ -4114,7 +4326,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
           // The perk surfaces an evidence-based signal, not hidden PA truth.
           const perceivedAbility = getPerceivedAbility(
-            Object.values(updatedObservations),
+            playerEvidence(youth.player.id),
             youth.player.id,
           );
           if (
@@ -4172,9 +4384,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
           for (let repeat = 0; repeat < focusRepeats && focusedYouthList.length > 0; repeat++) {
             const focusedYouth = focusedYouthList[repeat % focusedYouthList.length];
-            const focusObsForYouth = Object.values(updatedObservations).filter(
-              (o) => o.playerId === focusedYouth.player.id,
-            );
+            const focusObsForYouth = playerEvidence(focusedYouth.player.id);
             const focusResult = processVenueObservation(
               actObsRng,
               currentScout,
@@ -4184,7 +4394,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
               stateWithScheduleApplied.currentWeek,
               stateWithScheduleApplied.currentSeason,
             );
-            updatedObservations[focusResult.observation.id] = focusResult.observation;
+            recordObservation(focusResult.observation);
             updatedUnsignedYouthObs[focusedYouth.id] = focusResult.updatedYouth;
             weekObservationsGenerated++;
 
@@ -4286,17 +4496,14 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             undefined,
             stateWithScheduleApplied.currentWeek,
             undefined,
-            buildScoutQualityData(
-              currentScout,
-              stateWithScheduleApplied.regionalKnowledge,
+            buildScoutQualityDataForState(
+              stateWithScheduleApplied,
               effectiveScoutCountry,
             ),
           );
           if (pool.length === 0) continue;
           const youth = pool[0];
-          const existingObsForYouth = Object.values(updatedObservations).filter(
-            (o) => o.playerId === youth.player.id,
-          );
+          const existingObsForYouth = playerEvidence(youth.player.id);
           const result = processVenueObservation(
             actObsRng,
             currentScout,
@@ -4307,7 +4514,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             stateWithScheduleApplied.currentSeason,
           );
 
-          updatedObservations[result.observation.id] = result.observation;
+          recordObservation(result.observation);
           updatedUnsignedYouthObs[youth.id] = result.updatedYouth;
           weekObservationsGenerated++;
 
@@ -4413,6 +4620,23 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         };
       }
       } // end else (fallback for old saves)
+
+      // Apply regional context once, after every manual/week-simulation path
+      // has converged on the same authoritative observation collection.
+      const presenceAdjustedObservations = {
+        ...stateWithScheduleApplied.observations,
+      };
+      for (const [observationId, observation] of Object.entries(presenceAdjustedObservations)) {
+        if (preexistingObservationIds.has(observationId)) continue;
+        presenceAdjustedObservations[observationId] = applyRegionalPresenceToObservation(
+          stateWithScheduleApplied,
+          observation,
+        );
+      }
+      stateWithScheduleApplied = {
+        ...stateWithScheduleApplied,
+        observations: presenceAdjustedObservations,
+      };
     }
 
     // ── Youth placement resolution ────────────────────────────────────────
@@ -4598,6 +4822,16 @@ export function createWeeklyActions(get: GetState, set: SetState) {
                     stateWithScheduleApplied.currentSeason,
                   ),
                 },
+                worldConditionContext: {
+                  scoreAdjustment: getWorldConditionModifiers(
+                    stateWithScheduleApplied,
+                    stateWithScheduleApplied.leagues[club.leagueId]?.country,
+                  ).recruitmentScoreAdjustment,
+                  label: getActiveWorldConditionNames(
+                    stateWithScheduleApplied,
+                    stateWithScheduleApplied.leagues[club.leagueId]?.country,
+                  ).join(" and ") || "The seasonal recruitment climate",
+                },
               })
             : undefined;
           const legacyDecisionScore = Math.round(
@@ -4680,8 +4914,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
             };
             updatedPlacementReports[report.id] = acceptedPlacement;
 
-            // Mark youth as placed
-            updatedUnsignedYouth[report.unsignedYouthId] = outcome.updatedYouth;
+            // The authoritative Player, movement, report, case, and alumni
+            // record now own this history. Keep the unsigned pool limited to
+            // live opportunities instead of retaining a duplicate dossier.
+            delete updatedUnsignedYouth[report.unsignedYouthId];
 
             // Create alumni record
             const alumniRecord = createAlumniRecord(
@@ -4890,7 +5126,13 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       academyBriefDate.week,
       academyBriefDate.season,
       briefCycle.briefs,
-      12,
+      Math.max(
+        6,
+        Math.round(
+          12 * getWorldConditionModifiers(stateWithScheduleApplied)
+            .opportunityMultiplier,
+        ),
+      ),
       academyBriefSeasonLength,
       stateWithScheduleApplied.seed,
     );
@@ -5137,7 +5379,9 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       const diffMods = getDifficultyModifiers(stateWithPhase2.difficulty);
       if (stateWithPhase2.currentWeek % 4 === 0) {
         const baseIncome = updatedFinances.monthlyIncome;
-        const baseExpenseTotal = Object.values(updatedFinances.expenses).reduce((s, v) => s + v, 0);
+        // Contractual debt service is not an operating expense and must not be
+        // charged again through the difficulty expense multiplier.
+        const baseExpenseTotal = sumOperatingExpenses(updatedFinances.expenses);
         // Compute the difference caused by difficulty multipliers
         const incomeAdjustment = Math.round(baseIncome * (diffMods.incomeMultiplier - 1));
         const expenseAdjustment = Math.round(baseExpenseTotal * (diffMods.expenseMultiplier - 1));
@@ -5154,330 +5398,8 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       }
     }
 
-    // 1a. Economics revamp: process marketplace, retainers, loans, consulting, courses, agency, economic events
-    if (stateWithPhase2.finances) {
-      const econRng = createRNG(
-        `${gameState.seed}-econ-${gameState.currentWeek}-${gameState.currentSeason}`,
-      );
-
-      let econFinances = stateWithPhase2.finances;
-      const economicSeasonLength = getSeasonLength(
-        stateWithPhase2.fixtures,
-        stateWithPhase2.currentSeason,
-      );
-
-      // Market temperature update
-      const newTemp = updateMarketTemperature(
-        stateWithPhase2.transferWindow,
-        stateWithPhase2.currentWeek,
-      );
-      econFinances = { ...econFinances, marketTemperature: newTemp };
-
-      // Economic events: generate and expire
-      econFinances = expireEconomicEvents(
-        econFinances,
-        stateWithPhase2.currentWeek,
-        stateWithPhase2.currentSeason,
-        economicSeasonLength,
-      );
-      const runModifiers = getRunSimulationModifiers(stateWithPhase2.runManifest);
-      const newEvent = generateEconomicEvent(
-        econRng,
-        econFinances,
-        stateWithPhase2.currentWeek,
-        stateWithPhase2.currentSeason,
-        {
-          chanceMultiplier: runModifiers.economicEventChanceMultiplier,
-          impactMultiplier: runModifiers.economicImpactMultiplier,
-        },
-      );
-      if (newEvent) {
-        econFinances = applyEconomicEvent(econFinances, newEvent);
-      }
-
-      // Report marketplace: process bids for independent scouts
-      if (stateWithPhase2.scout.careerPath === "independent") {
-        const bidResult = processMarketplaceBids(
-          econRng,
-          econFinances,
-          stateWithPhase2.clubs,
-          stateWithPhase2.reports,
-          stateWithPhase2.players,
-          stateWithPhase2.scout,
-          stateWithPhase2.currentWeek,
-          stateWithPhase2.currentSeason,
-          stateWithPhase2.unsignedYouth,
-          economicSeasonLength,
-        );
-        econFinances = bidResult.finances;
-        if (bidResult.inboxMessages.length > 0) {
-          stateWithPhase2 = {
-            ...stateWithPhase2,
-            inbox: [...bidResult.inboxMessages, ...stateWithPhase2.inbox],
-          };
-        }
-        econFinances = expireOldListings(
-          econFinances,
-          stateWithPhase2.currentWeek,
-          stateWithPhase2.currentSeason,
-          economicSeasonLength,
-        );
-      }
-
-      // Retainer deliveries (monthly)
-      econFinances = processRetainerDeliveries(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
-
-      // Loan payments (monthly)
-      econFinances = processLoanPayment(econFinances, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason);
-
-      // Consulting deadlines
-      econFinances = processConsultingDeadline(
-        econFinances,
-        stateWithPhase2.currentWeek,
-        stateWithPhase2.currentSeason,
-        economicSeasonLength,
-      );
-
-      // Course progress
-      const prevCompletedCourses = econFinances.completedCourses;
-      econFinances = processWeeklyCourseProgress(
-        econFinances,
-        stateWithPhase2.currentWeek,
-        stateWithPhase2.currentSeason,
-        economicSeasonLength,
-      );
-
-      // Apply course effects if a new course just completed
-      if (econFinances.completedCourses.length > prevCompletedCourses.length) {
-        const newCourseId = econFinances.completedCourses[econFinances.completedCourses.length - 1];
-        const completedCourse = COURSE_CATALOG.find((c) => c.id === newCourseId);
-        if (completedCourse) {
-          // Apply only the newly completed course's effects (delta, not cumulative)
-          let updatedScout = { ...stateWithPhase2.scout };
-          for (const effect of completedCourse.effects) {
-            switch (effect.type) {
-              case "reputationBonus":
-                updatedScout = {
-                  ...updatedScout,
-                  reputation: Math.min(100, updatedScout.reputation + effect.value),
-                };
-                break;
-              case "skillBonus":
-                if (effect.target && effect.target in updatedScout.skills) {
-                  updatedScout = {
-                    ...updatedScout,
-                    skills: {
-                      ...updatedScout.skills,
-                      [effect.target]: Math.min(
-                        20,
-                        updatedScout.skills[effect.target as keyof typeof updatedScout.skills] + effect.value,
-                      ),
-                    },
-                  };
-                }
-                break;
-              case "attributeBonus":
-                if (effect.target && effect.target in updatedScout.attributes) {
-                  updatedScout = {
-                    ...updatedScout,
-                    attributes: {
-                      ...updatedScout.attributes,
-                      [effect.target]: Math.min(
-                        20,
-                        updatedScout.attributes[effect.target as keyof typeof updatedScout.attributes] + effect.value,
-                      ),
-                    },
-                  };
-                }
-                break;
-            }
-          }
-          stateWithPhase2 = { ...stateWithPhase2, scout: updatedScout };
-
-          // Build a summary of applied bonuses
-          const bonusParts: string[] = [];
-          for (const effect of completedCourse.effects) {
-            if (effect.type === "reputationBonus") {
-              bonusParts.push(`Reputation +${effect.value}`);
-            } else if (effect.type === "skillBonus" && effect.target) {
-              bonusParts.push(`${effect.target} +${effect.value}`);
-            } else if (effect.type === "attributeBonus" && effect.target) {
-              bonusParts.push(`${effect.target} +${effect.value}`);
-            }
-          }
-          const bonusSummary = bonusParts.length > 0 ? ` Bonuses applied: ${bonusParts.join(", ")}.` : "";
-
-          stateWithPhase2 = {
-            ...stateWithPhase2,
-            inbox: [
-              {
-                id: `course_complete_${stateWithPhase2.currentWeek}_${newCourseId}`,
-                week: stateWithPhase2.currentWeek,
-                season: stateWithPhase2.currentSeason,
-                type: "event" as const,
-                title: "Course Completed",
-                body: `Course completed: ${completedCourse.name}.${bonusSummary}`,
-                read: false,
-                actionRequired: false,
-              },
-              ...stateWithPhase2.inbox,
-            ],
-          };
-        }
-      }
-
-      // Agency employee processing
-      if (econFinances.employees.length > 0) {
-        econFinances = processEmployeeWeek(
-          econRng,
-          econFinances,
-          stateWithPhase2.scout.reputation,
-          stateWithPhase2.currentWeek,
-          stateWithPhase2.currentSeason,
-        );
-      }
-
-      // Process employee work output (reports, analysis, admin, leads)
-      if (econFinances.employees.length > 0) {
-        const workResult = processEmployeeWork(
-          econRng, econFinances, stateWithPhase2.players, stateWithPhase2.clubs,
-          stateWithPhase2.scout, stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
-        );
-        econFinances = workResult.finances;
-
-        // Store generated reports
-        if (workResult.generatedReports.length > 0) {
-          const newReports = { ...stateWithPhase2.reports };
-          for (const report of workResult.generatedReports) {
-            newReports[report.id] = report;
-          }
-          stateWithPhase2 = { ...stateWithPhase2, reports: newReports };
-        }
-
-        // Add inbox messages from employee work
-        if (workResult.inboxMessages.length > 0) {
-          const msgs = workResult.inboxMessages.map((m, i) => ({
-            id: `emp_work_${stateWithPhase2.currentWeek}_${i}`,
-            week: stateWithPhase2.currentWeek,
-            season: stateWithPhase2.currentSeason,
-            type: "event" as const,
-            title: m.title,
-            body: m.body,
-            read: false,
-            actionRequired: false,
-          }));
-          stateWithPhase2 = { ...stateWithPhase2, inbox: [...msgs, ...stateWithPhase2.inbox] };
-        }
-      }
-
-      // Check for employee events (poaching, training, personal, breakthrough)
-      econFinances = expireEmployeeEvents(
-        econFinances,
-        stateWithPhase2.currentWeek,
-        stateWithPhase2.currentSeason,
-        economicSeasonLength,
-      );
-      if (econFinances.employees.length > 0) {
-        for (const emp of econFinances.employees) {
-          const event = checkEmployeeEvents(
-            econRng, emp, econFinances, stateWithPhase2.scout,
-            stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
-            economicSeasonLength,
-          );
-          if (event) {
-            econFinances = {
-              ...econFinances,
-              pendingEmployeeEvents: [...(econFinances.pendingEmployeeEvents ?? []), event],
-            };
-            // Add inbox notification
-            stateWithPhase2 = {
-              ...stateWithPhase2,
-              inbox: [{
-                id: `emp_evt_${event.id}`,
-                week: stateWithPhase2.currentWeek,
-                season: stateWithPhase2.currentSeason,
-                type: "event" as const,
-                title: `Employee Event: ${event.type}`,
-                body: event.description,
-                read: false,
-                actionRequired: true,
-                relatedId: "agency",
-                relatedEntityType: "tool" as const,
-              }, ...stateWithPhase2.inbox],
-            };
-          }
-        }
-      }
-
-      // Client relationship weekly tick
-      if (stateWithPhase2.scout.careerPath === "independent") {
-        econFinances = processClientRelationshipWeek(
-          econRng, econFinances,
-          stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
-          economicSeasonLength,
-        );
-
-        // Retainer renewals (quarterly)
-        econFinances = processRetainerRenewals(
-          econRng, econFinances,
-          stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
-        );
-      }
-
-      // Generate pending retainer/consulting offers for independent scouts
-      if (stateWithPhase2.scout.careerPath === "independent") {
-        const retainerOffers = generateRetainerOffers(
-          econRng, stateWithPhase2.scout, econFinances, stateWithPhase2.clubs,
-        );
-        if (retainerOffers.length > 0) {
-          econFinances = {
-            ...econFinances,
-            pendingRetainerOffers: [...(econFinances.pendingRetainerOffers ?? []), ...retainerOffers],
-          };
-        }
-        const consultingOffers = generateConsultingOffers(
-          econRng, stateWithPhase2.scout, econFinances, stateWithPhase2.clubs,
-          stateWithPhase2.currentWeek, stateWithPhase2.currentSeason,
-          economicSeasonLength,
-        );
-        if (consultingOffers.length > 0) {
-          econFinances = {
-            ...econFinances,
-            pendingConsultingOffers: [...(econFinances.pendingConsultingOffers ?? []), ...consultingOffers],
-          };
-        }
-      }
-
-      // Independent tier advancement check
-      if (stateWithPhase2.scout.careerPath === "independent") {
-        const nextTier = checkIndependentTierAdvancement(stateWithPhase2.scout, econFinances);
-        if (nextTier) {
-          const { scout: advancedScout, finances: advancedFinances } = advanceIndependentTier(
-            stateWithPhase2.scout, econFinances, nextTier,
-          );
-          stateWithPhase2 = { ...stateWithPhase2, scout: advancedScout };
-          econFinances = advancedFinances;
-        }
-      }
-
-      // W3f: Apply lifestyle reputation penalty for living below station (weekly)
-      const lifestyleRepPenalty = getLifestyleReputationPenalty(
-        econFinances.lifestyle.level,
-        stateWithPhase2.scout.careerTier,
-      );
-      if (lifestyleRepPenalty !== 0) {
-        const newRep = Math.max(
-          0,
-          Math.min(100, stateWithPhase2.scout.reputation + lifestyleRepPenalty),
-        );
-        stateWithPhase2 = {
-          ...stateWithPhase2,
-          scout: { ...stateWithPhase2.scout, reputation: newRep },
-        };
-      }
-
-      stateWithPhase2 = { ...stateWithPhase2, finances: econFinances };
-    }
+    // 1a. Economics, marketplace, agency, and career-business processing
+    stateWithPhase2 = processWeeklyEconomy(stateWithPhase2, gameState);
 
     // 1aa. F14: Process weekly infrastructure costs and assistant scout work
     {
@@ -5577,6 +5499,22 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       `${gameState.seed}-rivals-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
     const rivalModifiers = getRunSimulationModifiers(stateWithPhase2.runManifest);
+    const getRivalConditionPressure = (
+      rival: (typeof stateWithPhase2.rivalScouts)[string],
+      playerId?: string,
+    ): number => {
+      const playerCountry = playerId
+        ? getPlayerScoutingCountry(stateWithPhase2, playerId)
+        : undefined;
+      const rivalClub = rival.clubId ? stateWithPhase2.clubs[rival.clubId] : undefined;
+      const rivalCountry = rivalClub
+        ? stateWithPhase2.leagues[rivalClub.leagueId]?.country
+        : undefined;
+      return getWorldConditionModifiers(
+        stateWithPhase2,
+        playerCountry ?? rivalCountry,
+      ).rivalPressureMultiplier;
+    };
     const rivalResult = processRivalScoutWeek(rivalRng, stateWithPhase2, {
       discoveryChanceMultiplier:
         rivalModifiers.rivalDiscoveryChanceMultiplier
@@ -5587,6 +5525,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       signingChanceMultiplier:
         rivalModifiers.rivalSigningChanceMultiplier
         * organizationResult.pressure.signingChanceMultiplier,
+      contextualPressureMultiplier: getRivalConditionPressure,
     });
     let rivalInboxMessages: InboxMessage[] = [...rivalResult.newMessages];
     if (rivalResult.poachWarnings.length > 0) {
@@ -6171,6 +6110,15 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     let newState = advanceWeekEngine(stateWithPhase2, tickResult);
     newState = processNPCDelegations(newState, rng).state;
     newState = processInternationalTravelLifecycle(newState);
+    newState = {
+      ...newState,
+      weeklyStrategy: recordWeeklyStrategyOutcome(
+        newState.weeklyStrategy,
+        gameState.currentWeek,
+        gameState.currentSeason,
+        simChoices?.dayResults ?? [],
+      ),
+    };
 
     const consequenceDate = {
       week: newState.currentWeek,
@@ -6575,6 +6523,9 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       }
 
       // Financial distress processing (every week)
+      const preDistressLevel = updatedFinances.distressLevel ?? "healthy";
+      const preDistressTier = updatedScout.careerTier;
+      const preDistressClubId = updatedScout.currentClubId;
       const distressResult = processDistress(
         updatedFinances,
         updatedScout,
@@ -6641,6 +6592,20 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         scout: updatedScout,
         inbox: [...newState.inbox, ...dsMessages],
       };
+      if (
+        preDistressLevel !== "bankruptcy"
+        && updatedFinances.distressLevel === "bankruptcy"
+      ) {
+        // Bankruptcy owns the whole employment/agency transition. Do not leave
+        // a former club's staff, territories, or leadership obligations alive
+        // after the financial engine has moved the scout to Tier 1.
+        newState = applyCareerPathTransition(newState, "independent");
+        newState = openCareerSetback(newState, {
+          kind: "bankruptcy",
+          previousTier: preDistressTier,
+          previousClubId: preDistressClubId,
+        });
+      }
     }
 
     // ── Season transition: regenerate events, fixtures, and transfer windows ─
@@ -6741,9 +6706,28 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         performanceReviews: [...newState.performanceReviews, review],
       };
 
+      // An independent scout cannot be "fired" by a non-existent employer.
+      // The same score becomes a formal career warning and opens a recovery
+      // plan; bankruptcy remains the independent path's true terminal crisis.
+      const hasActiveEmployer = Boolean(
+        newState.scout.careerPath === "club" && newState.scout.currentClubId,
+      );
+      let effectiveReview = review.outcome === "fired" && !hasActiveEmployer
+        ? { ...review, outcome: "warning" as const }
+        : review;
+      if (effectiveReview !== review) {
+        newState = {
+          ...newState,
+          performanceReviews: [
+            ...newState.performanceReviews.slice(0, -1),
+            effectiveReview,
+          ],
+        };
+      }
+
       // Ironman permadeath: if fired at end-of-season, trigger game over
       if (
-        review.outcome === "fired" &&
+        effectiveReview.outcome === "fired" &&
         getDifficultyModifiers(newState.difficulty).permadeath
       ) {
         set({
@@ -6755,7 +6739,6 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       }
 
       // Enforce tier gate: block promotion if required courses not completed
-      let effectiveReview = review;
       if (review.outcome === "promoted" && newState.scout.careerTier < 5) {
         const targetTier = (newState.scout.careerTier + 1) as CareerTier;
         if (!hasRequiredCoursesForTier(newState.finances?.completedCourses ?? [], targetTier)) {
@@ -6915,20 +6898,19 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       // A normal-mode firing is an atomic employment transition, not only a
       // narrative outcome. Preserve lifetime career statistics while clearing
       // every field that would otherwise leave the scout employed on paper.
-      if (effectiveReview.outcome === "fired") {
-        newState = {
-          ...newState,
-          scout: endClubEmployment(newState.scout),
-          finances: newState.finances
-            ? {
-                ...newState.finances,
-                careerPath: "independent",
-                independentTier: 1,
-                monthlyIncome: 0,
-              }
-            : newState.finances,
-          boardProfile: undefined,
-        };
+      if (
+        effectiveReview.outcome === "fired"
+        && newState.scout.careerPath === "club"
+        && newState.scout.currentClubId
+      ) {
+        const previousTier = newState.scout.careerTier;
+        const previousClubId = newState.scout.currentClubId;
+        newState = applyCareerPathTransition(newState, "independent");
+        newState = openCareerSetback(newState, {
+          kind: "firing",
+          previousTier,
+          previousClubId,
+        });
         seasonEndMessages.push({
           id: `employment-ended-s${completedSeason}`,
           week: newState.currentWeek,
@@ -6939,16 +6921,31 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           read: false,
           actionRequired: false,
         });
+      } else if (
+        effectiveReview.outcome === "warning"
+        && (
+          !newState.careerRecovery?.current
+          || newState.careerRecovery.current.status === "completed"
+          || newState.careerRecovery.current.status === "failed"
+        )
+      ) {
+        newState = openCareerSetback(newState, {
+          kind: "warning",
+          previousTier: newState.scout.careerTier,
+          previousClubId: newState.scout.currentClubId,
+        });
       }
 
       const seasonEndRng = createRNG(`${gameState.seed}-seasonend-${completedSeason}`);
-      const offers = generateJobOffers(
-        seasonEndRng,
-        newState.scout,
-        newState.clubs,
-        newState.currentSeason,
-        getSeasonLength(newState.fixtures, newState.currentSeason),
-      );
+      const offers = isCareerRecoveryBlockingOffers(newState)
+        ? []
+        : generateJobOffers(
+            seasonEndRng,
+            newState.scout,
+            newState.clubs,
+            newState.currentSeason,
+            getSeasonLength(newState.fixtures, newState.currentSeason),
+          );
       if (offers.length > 0) {
         newState = { ...newState, jobOffers: [...newState.jobOffers, ...offers] };
         for (const offer of offers) {
@@ -6975,58 +6972,92 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       const transferredReportIds = new Set(
         newState.transferRecords.map((record) => record.reportId),
       );
-      const reportsReadyForValidation = Object.values(newState.reports).filter(
-        (report) => report.postTransferRating === undefined
-          && completedSeason - report.submittedSeason >= 2
-          && (
-            report.clubResponse === "signed"
-            || alumniPlayerIds.has(report.playerId)
-            || transferredReportIds.has(report.id)
-          ),
+      const reportCases = groupReportRevisionsByCase(
+        Object.values(newState.reports),
       );
-      if (reportsReadyForValidation.length > 0) {
+      const casesReadyForValidation = reportCases.filter((reportCase) =>
+        reportCase.latestReport.postTransferRating === undefined
+        && completedSeason - reportCase.latestReport.submittedSeason >= 2
+        && (
+          alumniPlayerIds.has(reportCase.latestReport.playerId)
+          || reportCase.revisions.some((report) =>
+            report.clubResponse === "signed"
+            || transferredReportIds.has(report.id)
+          )
+        )
+      );
+      if (casesReadyForValidation.length > 0) {
         const updatedReports = { ...newState.reports };
         let validationScout = newState.scout;
         const accuracyHistory = [...(validationScout.accuracyHistory ?? [])];
-        for (const report of reportsReadyForValidation) {
-          const player = resolvePlayerEntity(newState, report.playerId)?.player;
+        for (const reportCase of casesReadyForValidation) {
+          const accountableReport = reportCase.latestReport;
+          const player = resolvePlayerEntity(
+            newState,
+            accountableReport.playerId,
+          )?.player;
           if (!player) continue;
-          const seasonsSinceSigning = completedSeason - report.submittedSeason;
-          const accuracy = trackPostTransfer(report, player, seasonsSinceSigning);
+          const seasonsSinceSigning = completedSeason - accountableReport.submittedSeason;
+          const accountableAccuracy = trackPostTransfer(
+            accountableReport,
+            player,
+            seasonsSinceSigning,
+          );
           const reputationBefore = validationScout.reputation;
-          validationScout = updateReputation(validationScout, {
-            type: "reportValidated",
-            accuracy,
-          });
-          const accuracyReputationDelta = +(
-            validationScout.reputation - reputationBefore
-          ).toFixed(1);
-          const assessmentAverage = report.attributeAssessments.length > 0
-            ? report.attributeAssessments.reduce(
+          if (!reportCase.wasPreviouslyValidated) {
+            validationScout = updateReputation(validationScout, {
+              type: "reportValidated",
+              accuracy: accountableAccuracy,
+            });
+          }
+          const accuracyReputationDelta = reportCase.wasPreviouslyValidated
+            ? 0
+            : +(
+              validationScout.reputation - reputationBefore
+            ).toFixed(1);
+          const assessmentAverage = accountableReport.attributeAssessments.length > 0
+            ? accountableReport.attributeAssessments.reduce(
                 (sum, assessment) => sum + assessment.estimatedValue,
                 0,
-              ) / report.attributeAssessments.length
+              ) / accountableReport.attributeAssessments.length
             : 10;
-          const predictedCA = report.perceivedCAStars !== undefined
-            ? starsToAbility(report.perceivedCAStars)
+          const predictedCA = accountableReport.perceivedCAStars !== undefined
+            ? starsToAbility(accountableReport.perceivedCAStars)
             : Math.round((assessmentAverage / 20) * 200);
-          accuracyHistory.push({
-            week: newState.currentWeek,
-            season: newState.currentSeason,
-            predictedCA,
-            actualCA: player.currentAbility,
-          });
-          updatedReports[report.id] = {
-            ...report,
-            postTransferRating: accuracy,
-            accuracyReputationDelta,
-          };
+          if (!reportCase.wasPreviouslyValidated) {
+            accuracyHistory.push({
+              week: newState.currentWeek,
+              season: newState.currentSeason,
+              predictedCA,
+              actualCA: player.currentAbility,
+            });
+          }
+          for (const report of reportCase.revisions) {
+            if (
+              report.postTransferRating !== undefined
+              || completedSeason - report.submittedSeason < 2
+            ) {
+              continue;
+            }
+            updatedReports[report.id] = {
+              ...report,
+              postTransferRating: trackPostTransfer(
+                report,
+                player,
+                completedSeason - report.submittedSeason,
+              ),
+              accuracyReputationDelta:
+                report.id === accountableReport.id
+                  ? accuracyReputationDelta
+                  : 0,
+            };
+          }
           seasonEndMessages.push({
-            id: `retro-${report.id}-s${completedSeason}`,
+            id: `retro-${accountableReport.id}-s${completedSeason}`,
             week: newState.currentWeek,
             season: newState.currentSeason,
             title: `Report Validated: ${player.firstName} ${player.lastName}`,
-            body: `Your report on ${player.firstName} ${player.lastName} from season ${report.submittedSeason} has been validated after ${seasonsSinceSigning} seasons. Accuracy: ${accuracy}/100. Reputation ${accuracyReputationDelta >= 0 ? "+" : ""}${accuracyReputationDelta}.`,
+            body: `Your active judgment on ${player.firstName} ${player.lastName} from season ${accountableReport.submittedSeason} has been validated after ${seasonsSinceSigning} seasons. Accuracy: ${accountableAccuracy}/100. This scouting case changed reputation ${accuracyReputationDelta >= 0 ? "+" : ""}${accuracyReputationDelta}; earlier revisions were reviewed without multiplying the reward.`,
             type: "feedback" as const,
             read: false,
             actionRequired: false,
@@ -7189,6 +7220,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           getDifficultyModifiers(newState.difficulty).wonderkidRateMultiplier
             * getRunSimulationModifiers(newState.runManifest).youthTalentMultiplier,
           "season-start",
+          getWorldConditionModifiers(newState, countryKey).discoveryMultiplier,
         );
         newYouth.push(...batch);
 
@@ -7383,6 +7415,16 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       newState = { ...newState, transferWindow: updatedTransferWindow };
     }
 
+    // Resolved or orphaned narrative prompts must not remain permanently pinned
+    // as action-required messages in long-running saves.
+    const repairedNarrativeInbox = clearTerminalNarrativeInboxActions(
+      newState.inbox,
+      newState.narrativeEvents,
+    );
+    if (repairedNarrativeInbox !== newState.inbox) {
+      newState = { ...newState, inbox: repairedNarrativeInbox };
+    }
+
     // Prune inbox to keep most recent messages, but never drop unread action-required ones (Fix #57)
     if (newState.inbox.length > 200) {
       const priority = newState.inbox.filter((m) => m.actionRequired && !m.read);
@@ -7393,15 +7435,21 @@ export function createWeeklyActions(get: GetState, set: SetState) {
 
     // Issue 17: Prune old acknowledged narrative events (keep last 10 weeks)
     if (newState.narrativeEvents.length > 0) {
-      const currentNarrativeWeek = toAbsoluteNarrativeWeek(
-        newState,
-        newState.currentSeason,
-        newState.currentWeek,
+      const previousSeasonLength = getSeasonLength(
+        newState.fixtures,
+        Math.max(1, newState.currentSeason - 1),
       );
       const prunedNarratives = newState.narrativeEvents.filter(
         (e) =>
           !e.acknowledged
-          || currentNarrativeWeek - toAbsoluteNarrativeWeek(newState, e.season, e.week) < 10,
+          || getNarrativeRetentionAge(
+            e,
+            {
+              season: newState.currentSeason,
+              week: newState.currentWeek,
+            },
+            previousSeasonLength,
+          ) < 10,
       );
       newState = { ...newState, narrativeEvents: prunedNarratives };
     }
@@ -7425,15 +7473,19 @@ export function createWeeklyActions(get: GetState, set: SetState) {
       },
     };
 
+    newState = processCareerRecoveryWeek(newState, gameState.schedule);
+
     // Leadership is a real responsibility unlock, not merely a navigation
     // gate. Bootstrap a small, assigned team exactly once when Tier 4 is first
     // reached, regardless of the path that produced the promotion.
-    const leadershipBootstrap = ensureLeadershipDelegationTeam(
-      newState,
-      createRNG(
-        `${newState.seed}-leadership-bootstrap-${newState.scout.id}-tier${newState.scout.careerTier}`,
-      ),
-    );
+    const leadershipBootstrap = isCareerRecoveryBlockingOffers(newState)
+      ? { state: newState, addedScoutIds: [] }
+      : ensureLeadershipDelegationTeam(
+          newState,
+          createRNG(
+            `${newState.seed}-leadership-bootstrap-${newState.scout.id}-tier${newState.scout.careerTier}`,
+          ),
+        );
     if (leadershipBootstrap.addedScoutIds.length > 0) {
       newState = {
         ...leadershipBootstrap.state,
@@ -7472,6 +7524,10 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     void weekPlayersDiscovered;
     void weekObservationsGenerated;
     const weekSummary: WeekSummary = {
+      continueScreen:
+        tickResult.endOfSeasonTriggered && newState.seasonAwardsData
+          ? "seasonAwards"
+          : undefined,
       fatigueChange: actualFatigueChange,
       reputationChange: actualReputationChange,
       skillXpGained: weekResult.skillXpGained as Record<string, number>,
@@ -7646,7 +7702,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
         : {}),
       ...(pendingCelebration !== null ? { pendingCelebration } : {}),
       ...(tickResult.endOfSeasonTriggered && newState.seasonAwardsData
-        ? { currentScreen: "seasonAwards" as GameScreen }
+        ? { currentScreen: "calendar" as GameScreen }
         : {}),
     });
     // ── Evaluate contextual hints ────────────────────────────────────────────
@@ -7705,7 +7761,9 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           savings: newState.finances?.balance ?? 0,
           hasClub: !!newState.scout.currentClubId,
           observationCount: Object.keys(newState.observations).length,
-          reportCount: Object.keys(newState.reports).length,
+          reportCount: selectLatestReportsByCase(
+            Object.values(newState.reports),
+          ).length,
           comparisonCount: 0,
           networkMeetingsHeld: Object.values(newState.contacts).filter(c => c.relationship > 0).length,
           unfulfilledDirectiveWeeks: newState.managerDirectives
@@ -7720,7 +7778,9 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           unsubmittedReportCount: 0,
           specialization: newState.scout.primarySpecialization,
           // Phase 4B expanded fields
-          unclaimedPerks: 0, // TODO: wire to perk system when unclaimed perk tracking is added
+          // Specialization perks are granted automatically by applyWeekResults;
+          // there is intentionally no separate claimable-perk state.
+          unclaimedPerks: 0,
           emptyEquipmentSlots: emptySlots,
           discoveryCount: newState.discoveryRecords.length,
           alumniCount: newState.alumniRecords.length,
@@ -7731,7 +7791,7 @@ export function createWeeklyActions(get: GetState, set: SetState) {
           freeAgentCount: freeAgents.length,
           hasBrowsedFreeAgents: tutState.visitedScreens.has("freeAgents"),
           loanMarketActive: loanWindowOpen,
-          hasBrowsedLoans: tutState.visitedScreens.has("loans"),
+          hasBrowsedLoans: hasBrowsedYouthLoanWorkspace(tutState.visitedScreens),
           careerTier: newState.scout.careerTier,
         },
         tutState.dismissedHints,
@@ -7762,8 +7822,6 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     let totalPlayersDiscovered = 0;
     let totalObservationsGenerated = 0;
     let seasonTransitionOccurred = false;
-
-    queueAutosave(initialState, set);
 
     _batchAdvanceDepth++;
     try {
@@ -7891,1171 +7949,16 @@ export function createWeeklyActions(get: GetState, set: SetState) {
     });
   },
 
-  // ── Day-by-day simulation actions ──────────────────────────────────────────
-
-  startWeekSimulation: () => {
-    const { gameState } = get();
-    if (!gameState) return;
-    if (hasRepresentedCareerCompletionState(gameState)) return;
-
-    // Advancing the deadline week consumes pending offers. Bankruptcy recovery
-    // still advances time, but its schedule is forced empty so no work resolves.
-    const offerExpiry = expireJobOffersAtWeekEnd(
-      gameState.jobOffers,
-      gameState.currentWeek,
-      gameState.currentSeason,
-    );
-    const recoveryActive = isBankruptcyRecoveryActive(gameState.finances);
-    const hasScheduledWork = getScheduledActivityInstances(gameState.schedule).length > 0;
-    if (offerExpiry.expired.length > 0 || (recoveryActive && hasScheduledWork)) {
-      const expiredIds = new Set(offerExpiry.expired.map((offer) => offer.id));
-      const expiryMessages: InboxMessage[] = offerExpiry.expired.map((offer) => ({
-        id: `job-expired-${offer.id}`,
-        week: gameState.currentWeek,
-        season: gameState.currentSeason,
-        type: "feedback",
-        title: "Job Offer Expired",
-        body: `${gameState.clubs[offer.clubId]?.name ?? "The club"} has filled the role. The offer is no longer available.`,
-        read: false,
-        actionRequired: false,
-        relatedId: offer.id,
-      }));
-      set({
-        gameState: {
-          ...gameState,
-          jobOffers: offerExpiry.active,
-          schedule:
-            recoveryActive && hasScheduledWork
-              ? createWeekSchedule(gameState.currentWeek, gameState.currentSeason)
-              : gameState.schedule,
-          inbox: [
-            ...gameState.inbox.map((message) =>
-              message.relatedId && expiredIds.has(message.relatedId)
-                ? { ...message, read: true, actionRequired: false }
-                : message,
-            ),
-            ...expiryMessages,
-          ],
-        },
-        weekSimulation: null,
-      });
-      get().startWeekSimulation();
-      return;
-    }
-
-    // Demo limit gate
-    if (isDemoLimitReached(gameState.currentSeason)) {
-      set({ currentScreen: "demoEnd" as GameScreen });
-      return;
-    }
-
-    // Gate: play all scheduled attendMatch fixtures interactively first
-    // Youth scouts skip — they cannot attend first-team matches.
-    if (gameState.scout.primarySpecialization !== "youth") {
-      const pendingFixtureIds = get().getPendingMatches();
-      if (pendingFixtureIds.length > 0) {
-        get().startMatch(pendingFixtureIds[0]);
-        return;
-      }
-    }
-
-    // Build day-by-day results
-    const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-    const rng = createRNG(`${gameState.seed}-daysim-${gameState.currentWeek}-${gameState.currentSeason}`);
-    const spanInfoByDay = buildDaySpanInfo(gameState.schedule);
-    const qualityByDay = new Map<number, ActivityQualityResult>();
-    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-      const activity = gameState.schedule.activities[dayIndex];
-      if (!isQualityRelevantActivity(activity)) continue;
-      qualityByDay.set(dayIndex, rollDayActivityQuality(gameState, activity, dayIndex));
-    }
-
-    const dayResults: DayResult[] = [];
-
-    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-      const activity = gameState.schedule.activities[dayIndex];
-
-      if (!activity) {
-        dayResults.push({
-          dayIndex,
-          dayName: DAY_NAMES[dayIndex],
-          activity: null,
-          observations: [],
-          playersDiscovered: 0,
-          reportsWritten: [],
-          profilesGenerated: 0,
-          anomaliesFound: 0,
-          xpGained: {},
-          fatigueChange: EMPTY_DAY_FATIGUE_RECOVERY,
-          narrative: "A quiet day off. You recover a little energy.",
-          inboxMessages: [],
-          interaction: undefined,
-        });
-        continue;
-      }
-
-      const spanInfo = spanInfoByDay.get(dayIndex) ?? { totalDays: 1, occurrenceIndex: 0 };
-      const totalDays = spanInfo.totalDays;
-      const occurrenceIndex = spanInfo.occurrenceIndex;
-      const quality = qualityByDay.get(dayIndex);
-      let narrative = quality?.narrative ?? "";
-      if (!narrative && activity.type === "rest") {
-        narrative = "You take a well-deserved rest day to recover your energy.";
-      } else if (!narrative) {
-        narrative = `You complete your scheduled ${activity.type} activity.`;
-      }
-      if (totalDays > 1) {
-        narrative = `${narrative} (Day ${occurrenceIndex + 1} of ${totalDays})`;
-      }
-
-      // Get total XP from the activity type, then split across days
-      const skillXp = ACTIVITY_SKILL_XP_MAP[activity.type];
-      let xpGained: Partial<Record<string, number>> = {};
-      if (skillXp && totalDays > 1) {
-        // Split XP exactly across days so day totals match weekly totals.
-        const split: Partial<Record<string, number>> = {};
-        for (const [skill, xp] of Object.entries(skillXp)) {
-          const base = Math.floor(xp / totalDays);
-          const remainder = xp % totalDays;
-          split[skill] = base + (occurrenceIndex < remainder ? 1 : 0);
-        }
-        xpGained = split;
-      } else if (skillXp) {
-        xpGained = { ...skillXp };
-      }
-
-      // Get fatigue from the activity type, split across days
-      const rawFatigue = ACTIVITY_FATIGUE_COSTS_MAP[activity.type] ?? 0;
-      const endurance = gameState.scout.attributes.endurance;
-      const totalFatigue = rawFatigue < 0
-        ? rawFatigue
-        : Math.round(rawFatigue * (1 - Math.min(0.75, endurance / 40)));
-      let fatigueCost = totalFatigue;
-      if (totalDays > 1) {
-        // Signed distribution that preserves exact total across all days.
-        const abs = Math.abs(totalFatigue);
-        const base = Math.floor(abs / totalDays);
-        const remainder = abs % totalDays;
-        const piece = base + (occurrenceIndex < remainder ? 1 : 0);
-        fatigueCost = totalFatigue < 0 ? -piece : piece;
-      }
-
-      let profilesGenerated = 0;
-      let anomaliesFound = 0;
-      const inboxMessages: InboxMessage[] = [];
-      if (activity.type === "databaseQuery") {
-        profilesGenerated = rng.nextInt(2, 5);
-      } else if (activity.type === "deepVideoAnalysis") {
-        profilesGenerated = rng.nextInt(1, 3);
-        anomaliesFound = rng.nextInt(0, 2);
-      } else if (activity.type === "statsBriefing") {
-        anomaliesFound = rng.nextInt(1, 3);
-      } else if (activity.type === "marketInefficiency") {
-        anomaliesFound = rng.nextInt(1, 4);
-      } else if (activity.type === "analyticsTeamMeeting") {
-        inboxMessages.push({
-          id: `sim-analytics-${dayIndex}`,
-          week: gameState.currentWeek,
-          season: gameState.currentSeason,
-          type: "feedback",
-          title: "Analyst Standup Notes",
-          body: "Your analysts highlighted a few leagues to prioritize this month.",
-          read: false,
-          actionRequired: false,
-        });
-      }
-
-      dayResults.push({
-        dayIndex,
-        dayName: DAY_NAMES[dayIndex],
-        activity,
-        observations: [], // Populated by youth discovery pre-computation below
-        playersDiscovered: 0,
-        reportsWritten: activity.type === "writeReport" && activity.targetId ? [activity.targetId] : [],
-        profilesGenerated,
-        anomaliesFound,
-        xpGained: xpGained as Partial<Record<import("@/engine/core/types").ScoutSkill, number>>,
-        fatigueChange: fatigueCost,
-        narrative,
-        inboxMessages,
-        interaction: buildDayInteraction(activity, gameState.scout.careerPath),
-      });
-    }
-
-    // ── Youth venue discovery pre-computation ───────────────────────────
-    // Process youth venues now so players see discoveries during the simulation.
-    const YOUTH_VENUE_TYPES = ["schoolMatch", "grassrootsTournament", "streetFootball", "academyTrialDay", "youthFestival"] as const;
-    type YouthVenueType = typeof YOUTH_VENUE_TYPES[number];
-    const YOUTH_VENUE_DAILY_RANGE: Record<YouthVenueType, [number, number]> = {
-      schoolMatch: [1, 2],
-      grassrootsTournament: [1, 3],
-      streetFootball: [1, 2],
-      academyTrialDay: [1, 2],
-      youthFestival: [1, 3],
-    };
-
-    const currentScout = gameState.scout;
-    const effectiveScoutCountry = resolveScoutEffectiveCountry(
-      currentScout,
-      gameState.regionalKnowledge,
-      gameState.currentWeek,
-    );
-    let youthVenueResults: WeekSimulationState["youthVenueResults"] | undefined;
-
-    if (currentScout.primarySpecialization === "youth") {
-      const obsRng = createRNG(`${gameState.seed}-simobs-${gameState.currentWeek}-${gameState.currentSeason}`);
-      const updatedUnsignedYouth = { ...gameState.unsignedYouth };
-
-      // ── Weekly youth generation ─────────────────────────────────────
-      // Replenish the unsigned youth pool each week so scouting venues
-      // always have fresh prospects to discover.
-      const youthGenRng = createRNG(
-        `${gameState.seed}-youthgen-${gameState.currentWeek}-${gameState.currentSeason}`,
-      );
-      for (const countryKey of gameState.countries) {
-        const countryData = getCountryDataSync(countryKey);
-        if (!countryData) continue;
-        const countrySubRegions = Object.values(gameState.subRegions).filter(
-          (sr) => sr.country.toLowerCase() === countryData.name.toLowerCase(),
-        );
-        const batch = generateRegionalYouth(
-          youthGenRng,
-          countryData,
-          gameState.currentSeason,
-          gameState.currentWeek,
-          countrySubRegions,
-          getDifficultyModifiers(gameState.difficulty).wonderkidRateMultiplier
-            * getRunSimulationModifiers(gameState.runManifest).youthTalentMultiplier,
-          "weekly",
-        );
-        for (const y of batch) {
-          updatedUnsignedYouth[y.id] = y;
-        }
-      }
-      const newObservations: Record<string, Observation> = {};
-      const newDiscoveries: DiscoveryRecord[] = [];
-      let totalObservations = 0;
-      let totalDiscoveries = 0;
-
-      for (const instance of getScheduledActivityInstances(gameState.schedule)) {
-        if (!(YOUTH_VENUE_TYPES as readonly string[]).includes(instance.activity.type)) continue;
-        const venueType = instance.activity.type as YouthVenueType;
-        const equipBonuses = gameState.finances?.equipment
-          ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-          : { youthDiscoveryBonus: 0 };
-        const youthBonus = equipBonuses.youthDiscoveryBonus ?? 0;
-        const [dailyMin, dailyMax] = YOUTH_VENUE_DAILY_RANGE[venueType];
-        const slotDays = [...instance.slotIndexes].sort((a, b) => a - b);
-
-        for (const daySlot of slotDays) {
-          const pool = getYouthVenuePool(
-            obsRng,
-            venueType,
-            updatedUnsignedYouth,
-            currentScout,
-            undefined,
-            undefined,
-            youthBonus,
-            gameState.currentWeek,
-            undefined,
-            buildScoutQualityData(
-              currentScout,
-              gameState.regionalKnowledge,
-              effectiveScoutCountry,
-            ),
-          );
-          const quality = qualityByDay.get(daySlot);
-          const discoveryMod = quality?.discoveryModifier ?? 0;
-          const dayRoll = obsRng.nextInt(dailyMin, dailyMax) + discoveryMod;
-          const adjustedCount = Math.max(0, Math.min(pool.length, dayRoll));
-          const effectivePool = pool.slice(0, adjustedCount);
-          const observations: DayResult["observations"] = [];
-
-          for (const youth of effectivePool) {
-            const existingObs = [
-              ...Object.values(newObservations),
-              ...Object.values(gameState.observations),
-            ].filter((o) => o.playerId === youth.player.id);
-
-            const result = processVenueObservation(
-              obsRng,
-              currentScout,
-              youth,
-              mapVenueTypeToContext(venueType),
-              existingObs,
-              gameState.currentWeek,
-              gameState.currentSeason,
-            );
-            const observation = {
-              ...result.observation,
-              activityInstanceId: getInteractiveActivityCompletionKey(
-                instance.activity,
-                daySlot,
-              ),
-            };
-
-            newObservations[observation.id] = observation;
-            updatedUnsignedYouth[youth.id] = result.updatedYouth;
-            totalObservations++;
-
-            const alreadyDiscovered = newDiscoveries.some((r) => r.playerId === youth.player.id)
-              || (gameState.discoveryRecords ?? []).some((r: DiscoveryRecord) => r.playerId === youth.player.id);
-            if (!alreadyDiscovered) {
-              newDiscoveries.push(recordDiscovery(
-                youth.player,
-                currentScout,
-                gameState.currentWeek,
-                gameState.currentSeason,
-              ));
-              totalDiscoveries++;
-            }
-
-            const topAttrs = observation.attributeReadings
-              .sort((a: { perceivedValue: number }, b: { perceivedValue: number }) => b.perceivedValue - a.perceivedValue)
-              .slice(0, 3)
-              .map((r: { attribute: string; perceivedValue: number }) => `${r.attribute} ${r.perceivedValue}`)
-              .join(", ");
-
-            observations.push({
-              playerId: youth.player.id,
-              playerName: `${youth.player.firstName} ${youth.player.lastName}`,
-              topAttributes: topAttrs,
-              age: youth.player.age,
-              position: youth.player.position,
-            });
-          }
-
-          const dayResult = dayResults[daySlot];
-          if (!dayResult) continue;
-          dayResult.observations = observations;
-          dayResult.playersDiscovered = observations.filter((obs) =>
-            newDiscoveries.some((d) => d.playerId === obs.playerId),
-          ).length;
-          if (observations.length === 0) {
-            dayResult.narrative = `${dayResult.narrative} No clear standouts emerged today.`;
-          } else if (dayResult.playersDiscovered >= 2) {
-            dayResult.narrative = `${dayResult.narrative} A strong day produced multiple promising leads.`;
-          } else {
-            dayResult.narrative = `${dayResult.narrative} You leave with a few actionable notes.`;
-          }
-        }
-      }
-
-      if (totalObservations > 0) {
-        youthVenueResults = {
-          updatedUnsignedYouth,
-          newObservations,
-          newDiscoveries,
-          totalObservations,
-          totalDiscoveries,
-        };
-      }
-    }
-
-    // ── Preview observations for youth-focused core scouting activities ──────
-    // These previews drive day-by-day interactivity (focus target selection),
-    // while authoritative world-state changes still happen in advanceWeek().
-    if (currentScout.primarySpecialization === "youth") {
-      type PreviewVenueType = "academyTrialDay" | "youthFestival" | "schoolMatch" | "grassrootsTournament";
-      type PreviewContext = "academyVisit" | "youthTournament" | "videoAnalysis";
-      interface PreviewConfig {
-        venueType: PreviewVenueType;
-        context: PreviewContext;
-        min: number;
-        max: number;
-      }
-
-      const previewRng = createRNG(`${gameState.seed}-simpreview-${gameState.currentWeek}-${gameState.currentSeason}`);
-      const equipBonuses = gameState.finances?.equipment
-        ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-        : { youthDiscoveryBonus: 0 };
-      const youthBonus = equipBonuses.youthDiscoveryBonus ?? 0;
-
-      const previewUnsignedYouth = {
-        ...(youthVenueResults?.updatedUnsignedYouth ?? gameState.unsignedYouth),
-      };
-      const previewDiscovered = new Set<string>();
-      for (const day of dayResults) {
-        for (const obs of day.observations) {
-          previewDiscovered.add(obs.playerId);
-        }
-      }
-
-      const getPreviewConfig = (activity: Activity): PreviewConfig | null => {
-        if (activity.type === "academyVisit") {
-          return { venueType: "academyTrialDay", context: "academyVisit", min: 1, max: 2 };
-        }
-        if (activity.type === "youthTournament") {
-          return { venueType: "youthFestival", context: "youthTournament", min: 1, max: 3 };
-        }
-        if (activity.type === "watchVideo") {
-          const venueType: PreviewVenueType =
-            activity.targetId === "video-academy"
-              ? "academyTrialDay"
-              : activity.targetId === "video-grassroots"
-                ? "grassrootsTournament"
-                : activity.targetId === "video-school"
-                  ? "schoolMatch"
-                  : "youthFestival";
-          return { venueType, context: "videoAnalysis", min: 1, max: 2 };
-        }
-        return null;
-      };
-
-      for (const dayResult of dayResults) {
-        if (!dayResult.activity || dayResult.observations.length > 0) continue;
-        const cfg = getPreviewConfig(dayResult.activity);
-        if (!cfg) continue;
-
-        const pool = getYouthVenuePool(
-          previewRng,
-          cfg.venueType,
-          previewUnsignedYouth,
-          currentScout,
-          undefined,
-          undefined,
-          youthBonus,
-          gameState.currentWeek,
-          undefined,
-          buildScoutQualityData(
-            currentScout,
-            gameState.regionalKnowledge,
-            effectiveScoutCountry,
-          ),
-        );
-        const count = Math.min(pool.length, previewRng.nextInt(cfg.min, cfg.max));
-        if (count === 0) continue;
-
-        const dayObservations: DayResult["observations"] = [];
-        let dayDiscoveries = 0;
-
-        for (let i = 0; i < count; i++) {
-          const youth = pool[i];
-          const existingObsForYouth = Object.values(gameState.observations).filter(
-            (o) => o.playerId === youth.player.id,
-          );
-          const previewObs = processVenueObservation(
-            previewRng,
-            currentScout,
-            youth,
-            cfg.context,
-            existingObsForYouth,
-            gameState.currentWeek,
-            gameState.currentSeason,
-          );
-          previewUnsignedYouth[youth.id] = previewObs.updatedYouth;
-
-          const topAttrs = previewObs.observation.attributeReadings
-            .sort((a, b) => b.perceivedValue - a.perceivedValue)
-            .slice(0, 3)
-            .map((r) => `${r.attribute} ${r.perceivedValue}`)
-            .join(", ");
-
-          dayObservations.push({
-            playerId: youth.player.id,
-            playerName: `${youth.player.firstName} ${youth.player.lastName}`,
-            topAttributes: topAttrs,
-            age: youth.player.age,
-            position: youth.player.position,
-          });
-
-          if (!previewDiscovered.has(youth.player.id)) {
-            previewDiscovered.add(youth.player.id);
-            dayDiscoveries++;
-          }
-        }
-
-        dayResult.observations = dayObservations;
-        dayResult.playersDiscovered = dayDiscoveries;
-      }
-    }
-
-    set({
-      weekSimulation: {
-        dayResults,
-        currentDay: 0,
-        pendingWorldTick: false,
-        focusedYouthPlayerId: undefined,
-        focusedYouthPlayerIds: undefined,
-        youthVenueResults,
-      },
-      currentScreen: "weekSimulation",
-    });
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // Week Simulation — Interaction & Day Advancement
-  // ══════════════════════════════════════════════════════════════════════════
-
-  chooseSimulationInteraction: (optionId: string, focusedPlayerIds?: string[]) => {
-    const { weekSimulation, gameState } = get();
-    if (!weekSimulation || !gameState) return;
-    const currentDay = weekSimulation.currentDay;
-    const current = weekSimulation.dayResults[currentDay];
-    if (!current?.interaction) return;
-    if (optionId !== "scan" && optionId !== "focus" && optionId !== "network") return;
-
-    const choice = optionId as SimulationChoiceId;
-    let focusedPlayerId = current.interaction.focusedPlayerId ?? weekSimulation.focusedYouthPlayerId;
-    let selectedFocusIds = [...(current.interaction.focusedPlayerIds ?? weekSimulation.focusedYouthPlayerIds ?? [])];
-
-    if (choice === "focus") {
-      const validProvidedIds = Array.from(new Set((focusedPlayerIds ?? []).filter(Boolean))).slice(0, 3);
-      if (validProvidedIds.length > 0) {
-        selectedFocusIds = validProvidedIds;
-      }
-      if (selectedFocusIds.length === 0 && !focusedPlayerId && current.observations.length > 0) {
-        selectedFocusIds = [current.observations[0].playerId];
-      }
-      if (selectedFocusIds.length === 0 && !focusedPlayerId) {
-        const priorObservedIds = weekSimulation.dayResults
-          .slice(0, currentDay + 1)
-          .flatMap((day) => day.observations.map((obs) => obs.playerId));
-        if (priorObservedIds.length > 0) {
-          const uniquePrior = Array.from(new Set(priorObservedIds));
-          selectedFocusIds = uniquePrior.slice(0, current.interaction.maxFocusPlayers ?? 3);
-          focusedPlayerId = selectedFocusIds[0];
-        }
-      }
-      if (!focusedPlayerId) {
-        const obsCounts = new Map<string, number>();
-        for (const obs of Object.values(gameState.observations)) {
-          obsCounts.set(obs.playerId, (obsCounts.get(obs.playerId) ?? 0) + 1);
-        }
-        if (gameState.scout.primarySpecialization === "youth") {
-          const target = Object.values(gameState.unsignedYouth)
-            .filter((y) => !y.placed && !y.retired)
-            .sort((a, b) => {
-              const aScore = (obsCounts.get(a.player.id) ?? 0) * 10 + a.buzzLevel;
-              const bScore = (obsCounts.get(b.player.id) ?? 0) * 10 + b.buzzLevel;
-              return bScore - aScore;
-            })[0];
-          focusedPlayerId = target?.player.id;
-        } else {
-          const topObserved = [...obsCounts.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .map(([playerId]) => playerId);
-          if (topObserved.length > 0) {
-            selectedFocusIds = topObserved.slice(0, current.interaction.maxFocusPlayers ?? 3);
-            focusedPlayerId = selectedFocusIds[0];
-          }
-        }
-      }
-      if (selectedFocusIds.length === 0 && focusedPlayerId) {
-        selectedFocusIds = [focusedPlayerId];
-      }
-      focusedPlayerId = selectedFocusIds[0] ?? focusedPlayerId;
-    } else {
-      selectedFocusIds = [];
-    }
-
-    let focusNarrative = "";
-    if (choice === "focus") {
-      const focusCount = Math.max(1, selectedFocusIds.length);
-      if (focusCount === 1) {
-        focusNarrative = "You lock onto one prospect for maximum depth and repeated reads.";
-      } else if (focusCount === 2) {
-        focusNarrative = "You split attention across two prospects, balancing breadth and depth.";
-      } else {
-        focusNarrative = "You track three prospects at once, accepting shallower depth per player.";
-      }
-    }
-
-    const narrativeSuffix: Record<SimulationChoiceId, string> = {
-      scan: "You decide to scan broadly and maximize exposure to different players.",
-      focus: focusNarrative || "You narrow your focus to build deeper confidence on standout prospects.",
-      network: "You spend more time gathering context from people around the match environment.",
-    };
-
-    const updatedDayResult: DayResult = {
-      ...current,
-      narrative: `${current.narrative}\n\n${narrativeSuffix[choice]}`,
-      interaction: {
-        ...current.interaction,
-        selectedOptionId: choice,
-        focusedPlayerId,
-        focusedPlayerIds: selectedFocusIds,
-      },
-    };
-
-    const updatedDayResults = [...weekSimulation.dayResults];
-    updatedDayResults[currentDay] = updatedDayResult;
-
-    set({
-      weekSimulation: {
-        ...weekSimulation,
-        dayResults: updatedDayResults,
-        focusedYouthPlayerId: focusedPlayerId ?? weekSimulation.focusedYouthPlayerId,
-        focusedYouthPlayerIds: selectedFocusIds.length > 0
-          ? selectedFocusIds
-          : weekSimulation.focusedYouthPlayerIds,
-      },
-    });
-  },
-
-  advanceDay: () => {
-    const sim = get().weekSimulation;
-    if (!sim || sim.currentDay >= 7) return;
-    let current = sim.dayResults[sim.currentDay];
-
-    // Auto-resolve unselected interaction with activity-specific default
-    if (isDayInteractionPending(current) && current?.interaction) {
-      const defaultChoice = current.activity ? getActivityDefaultChoice(current.activity.type) : "scan";
-      let defaultFocusIds = [...(current.interaction.focusedPlayerIds ?? [])];
-      if (defaultChoice === "focus" && defaultFocusIds.length === 0) {
-        defaultFocusIds = current.observations
-          .slice(0, current.interaction.maxFocusPlayers ?? 3)
-          .map((obs) => obs.playerId);
-      }
-      const defaultFocusId = defaultFocusIds[0] ?? current.interaction.focusedPlayerId;
-      const narrativeSuffix: Record<SimulationChoiceId, string> = {
-        scan: "You keep a balanced broad scan approach.",
-        focus: defaultFocusIds.length > 1
-          ? "You split focus across known leads to build deeper reads."
-          : "You lock onto your top lead for a deeper read.",
-        network: "You prioritize relationship and context-building this day.",
-      };
-      current = {
-        ...current,
-        narrative: `${current.narrative}\n\n${narrativeSuffix[defaultChoice]}`,
-        interaction: {
-          ...current.interaction,
-          selectedOptionId: defaultChoice,
-          focusedPlayerId: defaultFocusId,
-          focusedPlayerIds: defaultFocusIds,
-        },
-      };
-      const updatedDayResults = [...sim.dayResults];
-      updatedDayResults[sim.currentDay] = current;
-      set({ weekSimulation: { ...sim, dayResults: updatedDayResults } });
-    }
-
-    // Re-read sim after possible auto-resolve update
-    const updatedSim = get().weekSimulation;
-    if (!updatedSim) return;
-
-    const nextDay = updatedSim.currentDay + 1;
-    const isDone = nextDay >= updatedSim.dayResults.length;
-
-    if (isDone) {
-      // All days shown — run the full advanceWeek to process everything
-      set({
-        weekSimulation: {
-          ...updatedSim,
-          currentDay: 7,
-          pendingWorldTick: true,
-        },
-      });
-      // Trigger the actual week advancement
-      get().advanceWeek();
-      const { currentScreen } = get();
-      if (currentScreen === "weekSimulation") {
-        set({ weekSimulation: null, currentScreen: "calendar" });
-      } else {
-        set({ weekSimulation: null });
-      }
-    } else {
-      set({
-        weekSimulation: {
-          ...updatedSim,
-          currentDay: nextDay,
-        },
-      });
-    }
-  },
-
-  fastForwardWeek: () => {
-    const sim = get().weekSimulation;
-    if (!sim) return;
-
-    // Auto-resolve unresolved interactions with activity-specific defaults.
-    const resolvedDayResults = sim.dayResults.map((day) => {
-      if (!isDayInteractionPending(day) || !day.interaction) return day;
-      const defaultChoice = day.activity ? getActivityDefaultChoice(day.activity.type) : "scan";
-      let defaultFocusIds = [...(day.interaction.focusedPlayerIds ?? [])];
-      if (defaultChoice === "focus" && defaultFocusIds.length === 0) {
-        defaultFocusIds = day.observations
-          .slice(0, day.interaction.maxFocusPlayers ?? 3)
-          .map((obs) => obs.playerId);
-      }
-      const defaultFocusId = defaultFocusIds[0] ?? day.interaction.focusedPlayerId;
-      const narrativeSuffix: Record<SimulationChoiceId, string> = {
-        scan: "You keep a balanced broad scan approach.",
-        focus: defaultFocusIds.length > 1
-          ? "You split focus across known leads to build deeper reads."
-          : "You lock onto your top lead for a deeper read.",
-        network: "You prioritize relationship and context-building this day.",
-      };
-      return {
-        ...day,
-        narrative: `${day.narrative}\n\n${narrativeSuffix[defaultChoice]}`,
-        interaction: {
-          ...day.interaction,
-          selectedOptionId: defaultChoice,
-          focusedPlayerId: defaultFocusId,
-          focusedPlayerIds: defaultFocusIds,
-        },
-      };
-    });
-
-    set({
-      weekSimulation: {
-        ...sim,
-        dayResults: resolvedDayResults,
-        currentDay: 7,
-        pendingWorldTick: true,
-      },
-    });
-
-    // Skip to end and run the full advanceWeek
-    get().advanceWeek();
-    const { currentScreen } = get();
-    if (currentScreen === "weekSimulation") {
-      set({ weekSimulation: null, currentScreen: "calendar" });
-    } else {
-      set({ weekSimulation: null });
-    }
-  },
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // Match Lifecycle (scheduleMatch, startMatch, advancePhase, setFocus, endMatch)
-  // ══════════════════════════════════════════════════════════════════════════
-
-  scheduleMatch: (fixtureId: string) => {
-    const { gameState } = get();
-    if (!gameState) return false;
-    // Youth scouts cannot attend first-team matches
-    if (gameState.scout.primarySpecialization === "youth") return false;
-
-    const fixture = gameState.fixtures[fixtureId];
-    if (!fixture) return false;
-
-    // Guard: already scheduled
-    const alreadyScheduled = gameState.schedule.activities.some(
-      (a) => a !== null && a.type === "attendMatch" && a.targetId === fixtureId,
-    );
-    if (alreadyScheduled) return false;
-
-    const slotCost = ACTIVITY_SLOT_COSTS.attendMatch;
-    const homeClub = gameState.clubs[fixture.homeClubId];
-    const awayClub = gameState.clubs[fixture.awayClubId];
-    const activity: Activity = {
-      type: "attendMatch",
-      slots: slotCost,
-      targetId: fixture.id,
-      description: `Scout: ${homeClub?.shortName ?? "?"} vs ${awayClub?.shortName ?? "?"}`,
-    };
-
-    // Find first available consecutive slot window
-    for (let dayIndex = 0; dayIndex <= 7 - slotCost; dayIndex++) {
-      if (canAddActivity(gameState.schedule, activity, dayIndex)) {
-        get().scheduleActivity(activity, dayIndex);
-        return true;
-      }
-    }
-
-    return false; // no room
-  },
-
-  // Match
-  startMatch: (fixtureId: string) => {
-    const { gameState } = get();
-    if (!gameState) return;
-    // Youth scouts cannot attend first-team league matches
-    if (gameState.scout.primarySpecialization === "youth") return;
-    const fixture = gameState.fixtures[fixtureId];
-    if (!fixture) return;
-
-    const homeClub = gameState.clubs[fixture.homeClubId];
-    const awayClub = gameState.clubs[fixture.awayClubId];
-    if (!homeClub || !awayClub) return;
-
-    const homePlayers = selectStartingXI(
-      homeClub,
-      gameState.players,
-      gameState.disciplinaryRecords,
-    );
-    const awayPlayers = selectStartingXI(
-      awayClub,
-      gameState.players,
-      gameState.disciplinaryRecords,
-    );
-
-    const rng = createRNG(`${gameState.seed}-match-${fixtureId}`);
-    const phases = generateMatchPhases(rng, {
-      fixture,
-      homePlayers,
-      awayPlayers,
-      weather: fixture.weather || "clear",
-    });
-
-    set({
-      activeMatch: {
-        fixtureId,
-        phases,
-        currentPhase: 0,
-        focusSelections: [],
-      },
-      currentScreen: "match",
-    });
-
-    // Trigger first-match tutorial if the scout has never attended a match
-    if (gameState.playedFixtures.length === 0) {
-      useTutorialStore.getState().startSequence("firstMatch");
-    }
-    useTutorialStore.getState().completeMilestone("attendedMatch");
-  },
-
-  advancePhase: () => {
-    const { activeMatch } = get();
-    if (!activeMatch) return;
-    if (activeMatch.currentPhase >= activeMatch.phases.length - 1) return;
-    set({
-      activeMatch: {
-        ...activeMatch,
-        currentPhase: activeMatch.currentPhase + 1,
-      },
-    });
-  },
-
-  setFocus: (playerId: string, lens: LensType) => {
-    const { activeMatch } = get();
-    if (!activeMatch) return;
-    const existing = activeMatch.focusSelections.find((f) => f.playerId === playerId);
-    if (existing) {
-      set({
-        activeMatch: {
-          ...activeMatch,
-          focusSelections: activeMatch.focusSelections.map((f) =>
-            f.playerId === playerId
-              ? {
-                  ...f,
-                  lens,
-                  // Guard against duplicate phase indices (Fix #59)
-                  phases: f.phases.includes(activeMatch.currentPhase)
-                    ? f.phases
-                    : [...f.phases, activeMatch.currentPhase],
-                }
-              : f
-          ),
-        },
-      });
-    } else {
-      if (activeMatch.focusSelections.length >= 3) return; // Max 3 focus players
-      set({
-        activeMatch: {
-          ...activeMatch,
-          focusSelections: [
-            ...activeMatch.focusSelections,
-            { playerId, phases: [activeMatch.currentPhase], lens },
-          ],
-        },
-      });
-    }
-    // Tutorial auto-advance: step expects "playerFocused"
-    useTutorialStore.getState().checkAutoAdvance("playerFocused");
-    useTutorialStore.getState().completeMilestone("focusedPlayer");
-  },
-
-  endMatch: () => {
-    const { activeMatch, gameState } = get();
-    if (!activeMatch || !gameState) return;
-
-    const rng = createRNG(`${gameState.seed}-observe-${activeMatch.fixtureId}`);
-    const newObservations = { ...gameState.observations };
-    const breakthroughMessages: InboxMessage[] = [];
-    const updatedPlayers = { ...gameState.players };
-    const traitDiscoveries: Array<{ playerName: string; trait: string }> = [];
-
-    // Issue 5a+6: Compute tool and equipment bonuses for observation confidence
-    const toolBonuses = getActiveToolBonuses(gameState.unlockedTools);
-    const equipBonuses = gameState.finances?.equipment
-      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-      : undefined;
-    const equipBonus = equipBonuses?.observationConfidence ?? 0;
-
-    for (const focus of activeMatch.focusSelections) {
-      const player = updatedPlayers[focus.playerId];
-      if (!player) continue;
-      const existingObs = Object.values(gameState.observations).filter(
-        (o) => o.playerId === focus.playerId
-      );
-
-      // Check for breakthrough BEFORE creating the observation
-      const { isBreakthrough } = computeScoutingBreakthroughBonus(
-        existingObs,
-        focus.playerId,
-        "liveMatch",
-        focus.lens,
-      );
-
-      const observation = processFocusedObservations(
-        rng,
-        player,
-        gameState.scout,
-        activeMatch.phases,
-        focus,
-        "liveMatch",
-        existingObs
-      );
-      observation.week = gameState.currentWeek;
-      observation.season = gameState.currentSeason;
-      observation.matchId = activeMatch.fixtureId;
-
-      // Generate breakthrough inbox message
-      if (isBreakthrough) {
-        breakthroughMessages.push({
-          id: `breakthrough_${player.id}_s${gameState.currentSeason}w${gameState.currentWeek}`,
-          week: gameState.currentWeek,
-          season: gameState.currentSeason,
-          type: "feedback",
-          title: `Breakthrough: ${player.firstName} ${player.lastName}`,
-          body: `By observing ${player.firstName} ${player.lastName} across multiple settings, you've gained deeper insight into their true ability. Your confidence in this player's assessment has broken through to a new level.`,
-          read: false,
-          actionRequired: false,
-          relatedId: player.id,
-        });
-      }
-
-      // Apply tool confidence bonus + equipment observation bonus to readings
-      const confBoost = (toolBonuses.confidenceBonus ?? 0) + equipBonus;
-      if (confBoost > 0) {
-        observation.attributeReadings = observation.attributeReadings.map((r) => ({
-          ...r,
-          confidence: Math.min(1, r.confidence + confBoost),
-        }));
-      }
-
-      // Behavioral trait reveal: check each event type in the phase for trait discovery
-      const playerTraits = player.playerTraits ?? [];
-      const revealed = new Set(player.playerTraitsRevealed ?? []);
-      const unrevealed = playerTraits.filter((t) => !revealed.has(t));
-      if (unrevealed.length > 0) {
-        const eventTypes = new Set(
-          activeMatch.phases.flatMap((ph) =>
-            ph.events
-              .filter((e) => e.playerId === player.id)
-              .map((e) => e.type)
-          )
-        );
-        for (const eventType of eventTypes) {
-          const traitResult = checkTraitReveal(rng, player, eventType as MatchEventType, gameState.scout);
-          if (traitResult) {
-            observation.revealedPlayerTrait = traitResult;
-            revealed.add(traitResult);
-            updatedPlayers[player.id] = {
-              ...player,
-              playerTraitsRevealed: [...revealed],
-            };
-            traitDiscoveries.push({
-              playerName: `${player.firstName} ${player.lastName}`,
-              trait: traitResult.replace(/([A-Z])/g, " $1").trim(),
-            });
-            break; // max one trait per observation
-          }
-        }
-      }
-
-      newObservations[observation.id] = observation;
-    }
-
-    // Simulate match result
-    const fixture = gameState.fixtures[activeMatch.fixtureId];
-    if (!fixture) {
-      set({ activeMatch: null, lastMatchResult: null, currentScreen: "dashboard" });
-      return;
-    }
-    const homeClub = gameState.clubs[fixture.homeClubId];
-    const awayClub = gameState.clubs[fixture.awayClubId];
-    if (!homeClub || !awayClub) {
-      set({ activeMatch: null, lastMatchResult: null, currentScreen: "dashboard" });
-      return;
-    }
-    const homePlayers = selectStartingXI(
-      homeClub,
-      gameState.players,
-      gameState.disciplinaryRecords,
-    );
-    const awayPlayers = selectStartingXI(
-      awayClub,
-      gameState.players,
-      gameState.disciplinaryRecords,
-    );
-    const resultRng = createRNG(`${gameState.seed}-result-${activeMatch.fixtureId}`);
-    const result = simulateMatchResult(resultRng, homeClub, awayClub, homePlayers, awayPlayers);
-
-    const updatedFixture: Fixture = {
-      ...fixture,
-      played: true,
-      homeGoals: result.homeGoals,
-      awayGoals: result.awayGoals,
-    };
-
-    // Mark this fixture as interactively played so advanceWeek() won't re-queue it
-    const alreadyPlayed = gameState.playedFixtures.includes(activeMatch.fixtureId);
-    const updatedPlayedFixtures = alreadyPlayed
-      ? gameState.playedFixtures
-      : [...gameState.playedFixtures, activeMatch.fixtureId];
-
-    let updatedGameState: GameState = {
-      ...gameState,
-      players: updatedPlayers,
-      observations: newObservations,
-      fixtures: { ...gameState.fixtures, [fixture.id]: updatedFixture },
-      playedFixtures: updatedPlayedFixtures,
-      inbox: [...gameState.inbox, ...breakthroughMessages],
-    };
-
-    // --- Data anomaly validation ---
-    // When a data scout attends a match where a flagged player is observed,
-    // validate/refute the anomaly using the live observations.
-    let anyAnomalyValidated = false;
-    if (
-      gameState.scout.primarySpecialization === "data" &&
-      gameState.anomalyFlags.length > 0
-    ) {
-      const uninvestigated = gameState.anomalyFlags.filter((a) => !a.investigated);
-      const observedPlayerIds = new Set(
-        activeMatch.focusSelections.map((f) => f.playerId),
-      );
-
-      let updatedAnomalyFlags = [...gameState.anomalyFlags];
-
-      for (const anomaly of uninvestigated) {
-        if (!observedPlayerIds.has(anomaly.playerId)) continue;
-
-        const playerObs = Object.values(newObservations).filter(
-          (o) => o.playerId === anomaly.playerId,
-        );
-        const player = gameState.players[anomaly.playerId];
-        if (!player) continue;
-
-        const result = validateAnomalyFromObservation(anomaly, player, playerObs);
-
-        updatedAnomalyFlags = updatedAnomalyFlags.map((a) =>
-          a.id === anomaly.id ? result.updatedAnomaly : a,
-        );
-
-        if (result.validated) anyAnomalyValidated = true;
-      }
-
-      updatedGameState = { ...updatedGameState, anomalyFlags: updatedAnomalyFlags };
-    }
-
-    // Determine where to navigate when the user dismisses the summary screen.
-    // If this match was launched from the advanceWeek() gate (i.e., it was a
-    // scheduled attendMatch activity), return to the calendar so the user can
-    // click "Advance Week" again and either play the next pending match or
-    // proceed with the week. Otherwise go to the dashboard as before.
-    const wasScheduled = gameState.schedule.activities.some(
-      (a) => a?.type === "attendMatch" && a.targetId === activeMatch.fixtureId,
-    );
-    const continueScreen: GameScreen = wasScheduled ? "calendar" : "dashboard";
-
-    // --- Match ratings: calculate attended ratings for all players ---
-    const attendedRatings = calculateAttendedMatchRatings(
-      activeMatch.phases,
-      homePlayers,
-      awayPlayers,
-      result.homeGoals,
-      result.awayGoals,
-      activeMatch.fixtureId,
-    );
-
-    // Store ratings in gameState.matchRatings and update player form
-    const ratingPlayers = { ...updatedGameState.players };
-    for (const [playerId, rating] of Object.entries(attendedRatings)) {
-      const player = ratingPlayers[playerId];
-      if (!player) continue;
-      const newEntry = {
-        fixtureId: activeMatch.fixtureId,
-        week: gameState.currentWeek,
-        season: gameState.currentSeason,
-        rating: rating.rating,
-      };
-      const recent = [...(player.recentMatchRatings ?? []), newEntry].slice(-6);
-      const form = computeFormFromRatings(recent);
-      ratingPlayers[playerId] = { ...player, recentMatchRatings: recent, form };
-    }
-
-    updatedGameState = {
-      ...updatedGameState,
-      players: ratingPlayers,
-      matchRatings: {
-        ...updatedGameState.matchRatings,
-        [activeMatch.fixtureId]: attendedRatings,
-      },
-    };
-
-    // --- Discipline: generate card events from attended match phases ---
-    const allMatchPlayers = new Map<string, Player>();
-    for (const p of [...homePlayers, ...awayPlayers]) {
-      allMatchPlayers.set(p.id, p);
-    }
-    const cardRng = createRNG(`${gameState.seed}-cards-${activeMatch.fixtureId}`);
-    const { cards: matchCards, updatedPhases: phasesWithCards } = generateCardEvents(
-      cardRng,
-      activeMatch.phases,
-      allMatchPlayers,
-      activeMatch.fixtureId,
-    );
-
-    // Process card accumulation
-    const currentDisciplinary = gameState.disciplinaryRecords ?? {};
-    const { updatedRecords: newDisciplinary } =
-      processCardAccumulation(matchCards, currentDisciplinary, gameState.currentSeason);
-
-    // Apply disciplinary records to game state
-    updatedGameState = {
-      ...updatedGameState,
-      disciplinaryRecords: newDisciplinary,
-    };
-
-    // Suppress unused variable warnings
-    void phasesWithCards;
-
-    set({
-      gameState: updatedGameState,
-      activeMatch: null,
-      lastMatchResult: {
-        fixtureId: activeMatch.fixtureId,
-        focusedPlayerIds: activeMatch.focusSelections.map((f) => f.playerId),
-        homeGoals: result.homeGoals,
-        awayGoals: result.awayGoals,
-        continueScreen,
-        traitDiscoveries: traitDiscoveries.length > 0 ? traitDiscoveries : undefined,
-        playerRatings: attendedRatings,
-        cardEvents: matchCards.length > 0 ? matchCards : undefined,
-      },
-      currentScreen: "matchSummary",
-    });
-
-    useTutorialStore.getState().completeMilestone("completedMatch");
-
-    // Regional aha moment: first match in a region where the scout has familiarity >= 20
-    if (
-      gameState.scout.primarySpecialization === "regional" &&
-      !useTutorialStore.getState().completedSequences.has("ahaMoment:regional")
-    ) {
-      const fixtureLeague = gameState.leagues[fixture.leagueId];
-      if (fixtureLeague) {
-        const matchCountry = fixtureLeague.country;
-        const hasRegionalFamiliarity = Object.values(gameState.subRegions).some(
-          (sr) => sr.country === matchCountry && sr.familiarity >= 20,
-        );
-        if (hasRegionalFamiliarity) {
-          useTutorialStore.getState().queueSequence("ahaMoment:regional");
-        }
-      }
-    }
-
-    // Data aha: first anomaly validated via live observation
-    if (
-      anyAnomalyValidated &&
-      !useTutorialStore.getState().completedSequences.has("ahaMoment:data")
-    ) {
-      useTutorialStore.getState().queueSequence("ahaMoment:data");
-    }
-  },
+  ...createWeekSimulationActions(get, set, {
+    buildDaySpanInfo,
+    buildDayInteraction,
+    isQualityRelevantActivity,
+    rollDayActivityQuality,
+    resolveScoutEffectiveCountry,
+    buildScoutQualityDataForState,
+    isDayInteractionPending,
+  }),
+
+  ...createMatchActions(get, set),
   };
 }

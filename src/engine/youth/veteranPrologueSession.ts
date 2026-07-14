@@ -8,7 +8,7 @@ import type {
 import type {
   VeteranPrologueCase,
   VeteranPrologueEvidenceBeat,
-} from "./veteranPrologue";
+} from "./veteranPrologueTypes";
 
 function openingMoment(input: {
   id: string;
@@ -151,24 +151,13 @@ function shapeAnalysis(
 /** Reframe a normally-created session without bypassing its state machine. */
 export function shapeVeteranPrologueSession(
   session: ObservationSession,
-  prologue: VeteranPrologueCase,
-): ObservationSession;
-export function shapeVeteranPrologueSession(
-  session: ObservationSession,
   lead: Player,
   prologue: VeteranPrologueCase,
-): ObservationSession;
-export function shapeVeteranPrologueSession(
-  session: ObservationSession,
-  leadOrPrologue: Player | VeteranPrologueCase,
-  suppliedPrologue?: VeteranPrologueCase,
 ): ObservationSession {
-  const prologue = suppliedPrologue ?? leadOrPrologue as VeteranPrologueCase;
-  const suppliedLead = suppliedPrologue ? leadOrPrologue as Player : undefined;
   if (session.state !== "setup") return session;
   if (session.activityInstanceId !== prologue.activityInstanceId) return session;
   if (session.activityType !== prologue.activityType) return session;
-  if (suppliedLead && suppliedLead.id !== prologue.player.id) return session;
+  if (lead.id !== prologue.player.id) return session;
   if (!session.players.some((player) => player.playerId === prologue.player.id)) return session;
 
   const phases = session.mode === "fullObservation"

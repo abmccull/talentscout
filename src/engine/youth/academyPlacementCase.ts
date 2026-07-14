@@ -251,6 +251,10 @@ export function scoreAcademyClubDecision(input: {
     now: GameDate;
     seasonLength?: number;
   };
+  worldConditionContext?: {
+    scoreAdjustment: number;
+    label: string;
+  };
 }): AcademyDecisionScore {
   const { report, brief, player, observations } = input;
   const verdictEntries = Object.entries(report.categoryVerdicts ?? {}) as Array<[
@@ -347,6 +351,10 @@ export function scoreAcademyClubDecision(input: {
     ? 1
     : -0.45;
   const competition = clamp(50 + (brief.competitionPressure - 50) * pressureDirection);
+  const seasonalRecruitmentAdjustment = Math.max(
+    -12,
+    Math.min(12, Math.round(input.worldConditionContext?.scoreAdjustment ?? 0)),
+  );
   const total = clamp(
     evidence * 0.25
     + briefFit * 0.25
@@ -356,6 +364,7 @@ export function scoreAcademyClubDecision(input: {
     + relationship * 0.05
     + competition * 0.05
     + presentationImpact.alignmentAdjustment
+    + seasonalRecruitmentAdjustment
     + (input.rng.next() - 0.5) * 8,
   );
   const breakdown = {
@@ -404,6 +413,9 @@ export function scoreAcademyClubDecision(input: {
       : []),
     ...(stakeholderMemory?.reason
       ? [`${stakeholderMemory.reason} Relationship ${stakeholderMemory.scoreAdjustment >= 0 ? "+" : ""}${stakeholderMemory.scoreAdjustment}; process-risk ${Math.round(stakeholderMemory.scoreAdjustment * 0.5) >= 0 ? "+" : ""}${Math.round(stakeholderMemory.scoreAdjustment * 0.5)}.`]
+      : []),
+    ...(seasonalRecruitmentAdjustment !== 0
+      ? [`${input.worldConditionContext?.label ?? "The seasonal recruitment climate"} ${seasonalRecruitmentAdjustment > 0 ? "increases" : "reduces"} the club's appetite to act (${seasonalRecruitmentAdjustment > 0 ? "+" : ""}${seasonalRecruitmentAdjustment}).`]
       : []),
   ];
 

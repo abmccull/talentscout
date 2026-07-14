@@ -5,10 +5,7 @@
  * which avoids circular imports while keeping full type-safety.
  */
 
-// Re-export GameStore under a name that makes intent clear.
-// The `GameStore` interface lives in gameStore.ts; we reference it here
-// via a type-only import so there is no runtime circular dependency.
-import type { GameStoreState } from "../gameStore";
+import type { GameStoreState } from "../gameStoreTypes";
 
 export type { GameStoreState };
 

@@ -3,13 +3,36 @@
 const { app, BrowserWindow, ipcMain, dialog, session, protocol, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
+const {
+  assertTrustedIpcSender,
+  determineDevelopmentMode,
+  isTrustedNavigationTarget,
+  normalizeSafeExternalUrl,
+} = require("./security");
+const {
+  MAX_ACTIVE_SAVE_TRANSFERS,
+  MAX_SAVE_PAYLOAD_BYTES,
+  SAVE_TRANSFER_TTL_MS,
+  SaveDownloadTransferRegistry,
+  SaveTransferBudget,
+  SaveUploadTransferRegistry,
+  decodeUtf8SavePayload,
+} = require("./save-transfer");
+const {
+  atomicWriteUtf8File,
+  readBoundedUtf8Buffer,
+} = require("./file-io");
+const { createStaticFileResponse } = require("./static-response");
 
 // ---------------------------------------------------------------------------
 // Dev mode detection
 // ---------------------------------------------------------------------------
 
-const isDev =
-  process.argv.includes("--dev") || process.env.ELECTRON_DEV === "1";
+const isDev = determineDevelopmentMode({
+  isPackaged: app.isPackaged,
+  argv: process.argv,
+  electronDev: process.env.ELECTRON_DEV,
+});
 
 // ---------------------------------------------------------------------------
 // Single-instance lock
@@ -148,6 +171,34 @@ const RICH_PRESENCE_KEYS = new Set([
 
 let steamClient = null;
 let steamAvailable = false;
+const saveTransferBudget = new SaveTransferBudget({
+  maxBytes: MAX_SAVE_PAYLOAD_BYTES,
+  maxTransfers: MAX_ACTIVE_SAVE_TRANSFERS,
+});
+const steamSaveUploads = new SaveUploadTransferRegistry({
+  budget: saveTransferBudget,
+});
+const steamSaveDownloads = new SaveDownloadTransferRegistry({
+  budget: saveTransferBudget,
+});
+const dialogSaveUploads = new SaveUploadTransferRegistry({
+  budget: saveTransferBudget,
+});
+const dialogSaveDownloads = new SaveDownloadTransferRegistry({
+  budget: saveTransferBudget,
+});
+const dialogSaveUploadPaths = new Map();
+const saveTransferCleanupTimer = setInterval(() => {
+  steamSaveUploads.purgeExpired();
+  steamSaveDownloads.purgeExpired();
+  dialogSaveUploads.purgeExpired();
+  dialogSaveDownloads.purgeExpired();
+  const cutoff = Date.now() - SAVE_TRANSFER_TTL_MS;
+  for (const [transferId, entry] of dialogSaveUploadPaths) {
+    if (entry.updatedAt <= cutoff) dialogSaveUploadPaths.delete(transferId);
+  }
+}, Math.min(30_000, SAVE_TRANSFER_TTL_MS));
+saveTransferCleanupTimer.unref?.();
 
 function initSteam() {
   try {
@@ -210,7 +261,7 @@ const DEV_CSP =
   "font-src 'self' http://localhost:3000 data:; " +
   "connect-src 'self' http://localhost:3000 https://*.supabase.co https: ws: wss:; " +
   "media-src 'self' http://localhost:3000 data: blob:; " +
-  "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';";
+  "object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';";
 
 const PROD_CSP =
   "default-src 'self' app: data: blob:; " +
@@ -218,9 +269,9 @@ const PROD_CSP =
   "style-src 'self' 'unsafe-inline' app:; " +
   "img-src 'self' app: data: blob:; " +
   "font-src 'self' app: data:; " +
-  "connect-src 'self' app: https://*.supabase.co https: wss:; " +
+  "connect-src 'self' app: https://*.supabase.co wss://*.supabase.co https://*.ingest.sentry.io https://*.ingest.us.sentry.io; " +
   "media-src 'self' app: data: blob:; " +
-  "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';";
+  "object-src 'none'; frame-src 'none'; child-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';";
 
 let cspInstalled = false;
 
@@ -251,12 +302,26 @@ function installContentSecurityPolicy() {
   });
 }
 
+function installRendererPermissionGuards() {
+  // TalentScout does not need camera, microphone, geolocation, notifications,
+  // screen capture, MIDI, USB, serial, HID, or clipboard-read permissions.
+  // New web features therefore remain denied until deliberately reviewed.
+  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, _permission, callback) => callback(false),
+  );
+
+  app.on("web-contents-created", (_event, contents) => {
+    contents.on("will-attach-webview", (event) => event.preventDefault());
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Shell state for dialog defaults across relaunches
 // ---------------------------------------------------------------------------
 
 const DEFAULT_SAVE_FILENAME = "talentscout-save.json";
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = MAX_SAVE_PAYLOAD_BYTES;
 
 let shellState = {
   lastDialogDirectory: null,
@@ -382,31 +447,6 @@ function assertRichPresenceKey(key) {
   return normalized;
 }
 
-function assertFilePayload(data) {
-  const normalized = assertString(data, "file data", MAX_FILE_BYTES);
-  if (Buffer.byteLength(normalized, "utf8") > MAX_FILE_BYTES) {
-    throw new TypeError(`file data exceeds ${MAX_FILE_BYTES} bytes`);
-  }
-  return normalized;
-}
-
-function isTrustedNavigationTarget(url) {
-  if (!url) return false;
-  if (isDev) {
-    return url === "http://localhost:3000" || url.startsWith("http://localhost:3000/");
-  }
-  return url === "app://host" || url.startsWith("app://host/");
-}
-
-function isSafeExternalUrl(url) {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "mailto:";
-  } catch {
-    return false;
-  }
-}
-
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -467,6 +507,24 @@ function renderLoadFailurePage(errorCode, errorDescription) {
 
 let mainWindow = null;
 
+function openExternalIfSafe(rawUrl) {
+  const externalUrl = normalizeSafeExternalUrl(rawUrl);
+  if (!externalUrl) return false;
+
+  shell.openExternal(externalUrl).catch((err) => {
+    console.warn("[Shell] Failed to open external URL:", err.message);
+  });
+  return true;
+}
+
+function handleTrustedIpc(channel, listener) {
+  ipcMain.handle(channel, (event, ...args) => {
+    const expectedWebContents = mainWindow ? mainWindow.webContents : null;
+    assertTrustedIpcSender(event, expectedWebContents, { isDev });
+    return listener(event, ...args);
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     title: "TalentScout",
@@ -478,28 +536,27 @@ function createWindow() {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       devTools: isDev,
     },
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeExternalUrl(url)) {
-      shell.openExternal(url).catch(() => {});
-    }
+    openExternalIfSafe(url);
     return { action: "deny" };
   });
 
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (isTrustedNavigationTarget(url)) {
+  const guardNavigation = (event, url) => {
+    if (isTrustedNavigationTarget(url, { isDev })) {
       return;
     }
 
     event.preventDefault();
-    if (isSafeExternalUrl(url)) {
-      shell.openExternal(url).catch(() => {});
-    }
-  });
+    openExternalIfSafe(url);
+  };
+
+  mainWindow.webContents.on("will-navigate", guardNavigation);
+  mainWindow.webContents.on("will-redirect", guardNavigation);
 
   if (isDev) {
     mainWindow.loadURL("http://localhost:3000/play");
@@ -533,7 +590,21 @@ function createWindow() {
     mainWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`);
   });
 
+  const rendererOwnerId = mainWindow.webContents.id;
+  const discardRendererTransfers = () => {
+    steamSaveUploads.discardOwner(rendererOwnerId);
+    steamSaveDownloads.discardOwner(rendererOwnerId);
+    dialogSaveUploads.discardOwner(rendererOwnerId);
+    dialogSaveDownloads.discardOwner(rendererOwnerId);
+    for (const [transferId, entry] of dialogSaveUploadPaths) {
+      if (entry.ownerId === rendererOwnerId) {
+        dialogSaveUploadPaths.delete(transferId);
+      }
+    }
+  };
+  mainWindow.webContents.on("render-process-gone", discardRendererTransfers);
   mainWindow.on("closed", () => {
+    discardRendererTransfers();
     mainWindow = null;
   });
 }
@@ -542,11 +613,11 @@ function createWindow() {
 // IPC - Steam API (real SDK when available, graceful fallbacks otherwise)
 // ---------------------------------------------------------------------------
 
-ipcMain.handle("steam:isAvailable", () => {
+handleTrustedIpc("steam:isAvailable", () => {
   return steamAvailable && Boolean(steamClient);
 });
 
-ipcMain.handle("steam:unlockAchievement", (_event, name) => {
+handleTrustedIpc("steam:unlockAchievement", (_event, name) => {
   const achievementName = assertAchievementName(name);
   if (!steamClient) return;
 
@@ -558,43 +629,97 @@ ipcMain.handle("steam:unlockAchievement", (_event, name) => {
   }
 });
 
-ipcMain.handle("steam:setCloudSave", (_event, slot, data) => {
+handleTrustedIpc("steam:beginCloudSaveTransfer", (event, slot, totalBytes, chunkCount) => {
   const normalizedSlot = assertSteamSlot(slot);
-  const payload = assertFilePayload(data);
-  if (!steamClient) return;
-
-  try {
-    const filename = `talentscout_${normalizedSlot}.json`;
-    const written = steamClient.cloud.writeFile(filename, payload);
-    if (!written) {
-      throw new Error(`Steam Cloud refused to write ${filename}`);
-    }
-    console.log("[Steam] Cloud save written: %s (%d bytes)", filename, payload.length);
-  } catch (err) {
-    console.warn("[Steam] Cloud save write failed:", err.message);
-    throw err;
-  }
+  if (!steamClient) throw new Error("Steam Cloud is unavailable");
+  return steamSaveUploads.begin({
+    ownerId: event.sender.id,
+    slot: normalizedSlot,
+    totalBytes,
+    chunkCount,
+  });
 });
 
-ipcMain.handle("steam:getCloudSave", (_event, slot) => {
+handleTrustedIpc("steam:appendCloudSaveChunk", (event, transferId, index, chunk) =>
+  steamSaveUploads.append({
+    ownerId: event.sender.id,
+    transferId,
+    index,
+    chunk,
+  }),
+);
+
+handleTrustedIpc("steam:commitCloudSaveTransfer", (event, transferId) => {
+  if (!steamClient) throw new Error("Steam Cloud is unavailable");
+  const { slot, payload: binaryPayload } = steamSaveUploads.commit({
+    ownerId: event.sender.id,
+    transferId,
+  });
+  const payload = decodeUtf8SavePayload(binaryPayload);
+  const filename = `talentscout_${slot}.json`;
+  const written = steamClient.cloud.writeFile(filename, payload);
+  if (!written) throw new Error(`Steam Cloud refused to write ${filename}`);
+  console.log(
+    "[Steam] Cloud save written: %s (%d bytes)",
+    filename,
+    binaryPayload.byteLength,
+  );
+});
+
+handleTrustedIpc("steam:abortCloudSaveTransfer", (event, transferId) =>
+  steamSaveUploads.abort(event.sender.id, transferId),
+);
+
+handleTrustedIpc("steam:beginCloudLoadTransfer", (event, slot) => {
   const normalizedSlot = assertSteamSlot(slot);
   if (!steamClient) return null;
 
-  try {
-    const filename = `talentscout_${normalizedSlot}.json`;
-    if (!steamClient.cloud.fileExists(filename)) {
-      return null;
-    }
-    const data = steamClient.cloud.readFile(filename);
-    console.log("[Steam] Cloud save read: %s (%d bytes)", filename, data.length);
-    return typeof data === "string" ? data : String(data);
-  } catch (err) {
-    console.warn("[Steam] Cloud save read failed:", err.message);
-    return null;
+  const filename = `talentscout_${normalizedSlot}.json`;
+  const fileInfo = steamClient.cloud
+    .listFiles()
+    .find((candidate) => candidate.name === filename);
+  if (!fileInfo) return null;
+  const listedBytes = Number(fileInfo.size);
+  if (
+    !Number.isSafeInteger(listedBytes) ||
+    listedBytes <= 0 ||
+    listedBytes > MAX_SAVE_PAYLOAD_BYTES
+  ) {
+    throw new RangeError(`Steam Cloud file ${filename} has an invalid byte length`);
   }
+  // Check the shared budget before Steam materializes the complete file in the
+  // privileged process. Registry.begin reserves the actual bytes synchronously.
+  saveTransferBudget.assertCanReserve(listedBytes);
+  const data = steamClient.cloud.readFile(filename);
+  let payload;
+  if (typeof data === "string") payload = Buffer.from(data, "utf8");
+  else if (Buffer.isBuffer(data)) payload = data;
+  else payload = Buffer.from(data);
+  const transfer = steamSaveDownloads.begin({
+    ownerId: event.sender.id,
+    slot: normalizedSlot,
+    payload,
+  });
+  console.log("[Steam] Cloud save read: %s (%d bytes)", filename, payload.byteLength);
+  return transfer;
 });
 
-ipcMain.handle("steam:deleteCloudSave", (_event, slot) => {
+handleTrustedIpc("steam:readCloudLoadChunk", (event, transferId, index) =>
+  steamSaveDownloads.read({
+    ownerId: event.sender.id,
+    transferId,
+    index,
+  }),
+);
+
+handleTrustedIpc("steam:finishCloudLoadTransfer", (event, transferId) =>
+  steamSaveDownloads.finish({
+    ownerId: event.sender.id,
+    transferId,
+  }),
+);
+
+handleTrustedIpc("steam:deleteCloudSave", (_event, slot) => {
   const normalizedSlot = assertSteamSlot(slot);
   if (!steamClient) return;
 
@@ -608,7 +733,7 @@ ipcMain.handle("steam:deleteCloudSave", (_event, slot) => {
   console.log("[Steam] Cloud save deleted:", filename);
 });
 
-ipcMain.handle("steam:getPlayerName", () => {
+handleTrustedIpc("steam:getPlayerName", () => {
   if (!steamClient) return "Player";
 
   try {
@@ -619,7 +744,7 @@ ipcMain.handle("steam:getPlayerName", () => {
   }
 });
 
-ipcMain.handle("steam:setRichPresence", (_event, key, value) => {
+handleTrustedIpc("steam:setRichPresence", (_event, key, value) => {
   const normalizedKey = assertRichPresenceKey(key);
   const normalizedValue = assertString(value, "rich presence value", 256);
   if (!steamClient) return;
@@ -631,7 +756,7 @@ ipcMain.handle("steam:setRichPresence", (_event, key, value) => {
   }
 });
 
-ipcMain.handle("steam:resetAllAchievements", () => {
+handleTrustedIpc("steam:resetAllAchievements", () => {
   if (!steamClient) return;
   if (!isDev) {
     console.warn("[Steam] resetAllAchievements blocked - not in dev mode");
@@ -652,10 +777,9 @@ ipcMain.handle("steam:resetAllAchievements", () => {
 // IPC - Native file dialogs
 // ---------------------------------------------------------------------------
 
-ipcMain.handle("dialog:saveFile", async (_event, data, filename) => {
-  if (!mainWindow) return false;
+handleTrustedIpc("dialog:beginSaveFileTransfer", async (event, filename, totalBytes, chunkCount) => {
+  if (!mainWindow) return null;
 
-  const payload = assertFilePayload(data);
   const suggestedFilename = sanitizeSuggestedFilename(filename);
   const result = await dialog.showSaveDialog(mainWindow, {
     defaultPath: path.join(getDialogBaseDirectory(), suggestedFilename),
@@ -665,20 +789,70 @@ ipcMain.handle("dialog:saveFile", async (_event, data, filename) => {
     ],
   });
 
-  if (result.canceled || !result.filePath) return false;
+  if (result.canceled || !result.filePath) return null;
+
+  for (const [activeId, entry] of dialogSaveUploadPaths) {
+    if (entry.ownerId === event.sender.id) dialogSaveUploadPaths.delete(activeId);
+  }
+  const transferId = dialogSaveUploads.begin({
+    ownerId: event.sender.id,
+    slot: "dialog-export",
+    totalBytes,
+    chunkCount,
+  });
+  dialogSaveUploadPaths.set(transferId, {
+    ownerId: event.sender.id,
+    filePath: result.filePath,
+    updatedAt: Date.now(),
+  });
+  return transferId;
+});
+
+handleTrustedIpc("dialog:appendSaveFileChunk", (event, transferId, index, chunk) => {
+  const written = dialogSaveUploads.append({
+    ownerId: event.sender.id,
+    transferId,
+    index,
+    chunk,
+  });
+  const destination = dialogSaveUploadPaths.get(transferId);
+  if (destination?.ownerId === event.sender.id) destination.updatedAt = Date.now();
+  return written;
+});
+
+handleTrustedIpc("dialog:commitSaveFileTransfer", async (event, transferId) => {
+  const destination = dialogSaveUploadPaths.get(transferId);
+  if (!destination || destination.ownerId !== event.sender.id) {
+    throw new Error("save export destination is unavailable");
+  }
 
   try {
-    fs.writeFileSync(result.filePath, payload, "utf8");
-    rememberDialogDirectory(result.filePath);
-    console.log("[IPC] dialog:saveFile wrote:", result.filePath);
+    const { payload: binaryPayload } = dialogSaveUploads.commit({
+      ownerId: event.sender.id,
+      transferId,
+    });
+    const payload = decodeUtf8SavePayload(binaryPayload);
+    await atomicWriteUtf8File(destination.filePath, payload, MAX_FILE_BYTES);
+    rememberDialogDirectory(destination.filePath);
+    console.log("[IPC] dialog save export wrote:", destination.filePath);
     return true;
   } catch (err) {
-    console.error("[IPC] dialog:saveFile error:", err);
+    console.error("[IPC] dialog save export error:", err);
     return false;
+  } finally {
+    dialogSaveUploadPaths.delete(transferId);
   }
 });
 
-ipcMain.handle("dialog:openFile", async () => {
+handleTrustedIpc("dialog:abortSaveFileTransfer", (event, transferId) => {
+  const destination = dialogSaveUploadPaths.get(transferId);
+  if (destination?.ownerId === event.sender.id) {
+    dialogSaveUploadPaths.delete(transferId);
+  }
+  return dialogSaveUploads.abort(event.sender.id, transferId);
+});
+
+handleTrustedIpc("dialog:beginOpenFileTransfer", async (event) => {
   if (!mainWindow) return null;
 
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -694,23 +868,35 @@ ipcMain.handle("dialog:openFile", async () => {
 
   try {
     const selectedPath = result.filePaths[0];
-    const stats = fs.statSync(selectedPath);
-    if (!stats.isFile()) {
-      throw new Error("Selected path is not a file");
-    }
-    if (stats.size > MAX_FILE_BYTES) {
-      throw new Error(`Selected file exceeds ${MAX_FILE_BYTES} bytes`);
-    }
-
-    const content = fs.readFileSync(selectedPath, "utf8");
+    const payload = await readBoundedUtf8Buffer(selectedPath, MAX_FILE_BYTES);
+    const transfer = dialogSaveDownloads.begin({
+      ownerId: event.sender.id,
+      slot: "dialog-import",
+      payload,
+    });
     rememberDialogDirectory(selectedPath);
-    console.log("[IPC] dialog:openFile read:", selectedPath);
-    return content;
+    console.log("[IPC] dialog save import opened:", selectedPath);
+    return transfer;
   } catch (err) {
-    console.error("[IPC] dialog:openFile error:", err);
+    console.error("[IPC] dialog save import error:", err);
     return null;
   }
 });
+
+handleTrustedIpc("dialog:readOpenFileChunk", (event, transferId, index) =>
+  dialogSaveDownloads.read({
+    ownerId: event.sender.id,
+    transferId,
+    index,
+  }),
+);
+
+handleTrustedIpc("dialog:finishOpenFileTransfer", (event, transferId) =>
+  dialogSaveDownloads.finish({
+    ownerId: event.sender.id,
+    transferId,
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // App lifecycle
@@ -734,10 +920,11 @@ app.whenReady().then(() => {
   }
 
   installContentSecurityPolicy();
+  installRendererPermissionGuards();
   loadShellState();
 
   if (!isDev) {
-    protocol.handle("app", (request) => {
+    protocol.handle("app", async (request) => {
       const url = new URL(request.url);
       const filePath = resolveStaticFile(url.pathname);
 
@@ -749,10 +936,11 @@ app.whenReady().then(() => {
       }
 
       try {
-        const data = fs.readFileSync(filePath);
-        return new Response(data, {
-          status: 200,
-          headers: { "Content-Type": getMimeType(filePath) },
+        return await createStaticFileResponse({
+          filePath,
+          contentType: getMimeType(filePath),
+          method: request.method,
+          rangeHeader: request.headers.get("range"),
         });
       } catch {
         return new Response("Not Found", {
@@ -777,4 +965,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.once("before-quit", () => {
+  clearInterval(saveTransferCleanupTimer);
 });

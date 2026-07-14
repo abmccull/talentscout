@@ -20,6 +20,7 @@ import type {
   InboxMessage,
 } from "@/engine/core/types";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // =============================================================================
 // CONSTANTS
@@ -69,7 +70,7 @@ function resolveFreeAgentCountryKey(
     normalizeCountryKey(state.leagues[releasedFromClub.leagueId]?.country)
     ?? countryKeyFromNationality(player.nationality)
     ?? normalizeCountryKey(player.nationality)
-    ?? state.countries[0]
+    ?? getScoutHomeCountry(state.scout)
     ?? "england"
   );
 }

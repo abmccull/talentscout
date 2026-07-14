@@ -29,6 +29,8 @@ export function ScreenBackground({
         className="absolute inset-0 h-full w-full object-cover"
         style={{ objectPosition: position }}
         loading="eager"
+        decoding="async"
+        fetchPriority="low"
       />
       <div
         className="absolute inset-0 bg-[#090b0e]"

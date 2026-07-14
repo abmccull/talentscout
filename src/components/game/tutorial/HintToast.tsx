@@ -4,7 +4,6 @@ import { useEffect, useCallback, useRef, useState } from "react";
 import { X, ArrowRight, BookOpen } from "lucide-react";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { useGameStore } from "@/stores/gameStore";
-import type { GameScreen } from "@/stores/gameStore";
 import { parseConceptText } from "@/components/ui/GameTerm";
 
 // ---------------------------------------------------------------------------
@@ -79,7 +78,7 @@ export function HintToast() {
 
   function handleCta() {
     if (!activeHint?.cta) return;
-    setScreen(activeHint.cta.screen as GameScreen);
+    setScreen(activeHint.cta.screen);
     handleDismiss();
   }
 

@@ -474,6 +474,12 @@ export interface Player {
   seasonRatings: SeasonRatingRecord[];
 
   /**
+   * Bounded, player-facing explanations for recent development turns. The
+   * entries deliberately exclude hidden ability, potential, and random rolls.
+   */
+  developmentHistory?: import("../world/developmentEnvironment").PlayerDevelopmentHistoryEntry[];
+
+  /**
    * Full personality profile including archetype, transfer willingness,
    * dressing room impact, form volatility, and big-match modifier.
    * Generated at player creation; progressively revealed through scouting.
@@ -731,6 +737,17 @@ export interface InsightUseRecord {
   narrative: string;
 }
 
+export interface HomeBaseRelocationRecord {
+  id: string;
+  fromCountry: string;
+  toCountry: string;
+  week: number;
+  season: number;
+  cost: number;
+  /** Satellite office converted into the new permanent base. */
+  convertedOfficeId: string;
+}
+
 export interface Scout {
   id: string;
   firstName: string;
@@ -738,6 +755,13 @@ export interface Scout {
   age: number;
   /** Scout's nationality (flavour / display field, not mechanically enforced). */
   nationality?: string;
+  /**
+   * Permanent operating base. Unlike familiarity, this does not silently move
+   * when the scout becomes more knowledgeable in another country.
+   */
+  homeCountry?: string;
+  /** Bounded history of deliberate, costly agency-base moves. */
+  homeBaseRelocations?: HomeBaseRelocationRecord[];
   /** Selected portrait avatar (1-6). */
   avatarId?: number;
 
@@ -897,6 +921,8 @@ export interface Observation {
   flaggedMoments: FlaggedMoment[];
   /** The focus lens used during this observation, if any. Omitted for general/unfocused. */
   focusLens?: "technical" | "physical" | "mental" | "tactical";
+  /** Explainable, idempotent regional context applied when evidence was filed. */
+  regionalContext?: import("../world/regionalPresence").RegionalObservationContext;
   abilityReading?: AbilityReading;
   /**
    * A personality trait uncovered during this observation session.
@@ -972,6 +998,8 @@ export interface ScoutReport {
   scoutId: string;
   submittedWeek: number;
   submittedSeason: number;
+  /** Observation records consumed by this immutable report revision. */
+  evidenceObservationIds?: string[];
 
   attributeAssessments: AttributeAssessment[];
   strengths: string[];
@@ -1963,6 +1991,8 @@ export interface GameState {
 
   /** The active week schedule. Replaced each time the week advances. */
   schedule: WeekSchedule;
+  /** Persisted weekly intent, delegation policy, and accountable strategy history. */
+  weeklyStrategy?: import("./weeklyStrategy").WeeklyStrategyState;
 
   jobOffers: JobOffer[];
   performanceReviews: PerformanceReview[];
@@ -1979,9 +2009,15 @@ export interface GameState {
   npcDelegations: Record<string, NPCDelegation>;
   /** Bounded Tier 4+ responsibility portfolio and its attributable track record. */
   leadershipPortfolio?: import("../career/leadership").LeadershipPortfolioState;
+  /** Persisted warning, firing, and bankruptcy recovery choices and outcomes. */
+  careerRecovery?: import("../career/recovery").CareerRecoveryState;
   /** Scouting territories assigned to NPC scouts, keyed by ID. */
   territories: Record<string, Territory>;
-  /** Countries active in the game world. */
+  /**
+   * Canonical, generated countries with a usable travel/scouting surface.
+   * This is a persisted presentation/index list, not a static data catalogue;
+   * world eligibility is derived from territories, pools, and fixtures.
+   */
   countries: string[];
 
   // --- Phase 2 extensions (stubbed for forward-compatibility) ---
@@ -2080,6 +2116,8 @@ export interface GameState {
   playerMovementHistory: PlayerMovementEvent[];
   /** Bounded, authoritative cross-entity archive written at season rollover. */
   worldHistory?: import("../world/worldHistory").WorldHistoryState;
+  /** Seeded seasonal and regional conditions that alter the live football world. */
+  worldConditionState?: import("../world/worldConditions").WorldConditionState;
 
   // --- First-Team Scouting System ---
 
@@ -3981,6 +4019,13 @@ export interface StatisticalProfile {
   season: number;
   /** Week this profile was last updated. */
   lastUpdated: number;
+  /** Player-facing source confidence earned from regional access and data presence. */
+  evidenceContext?: {
+    countryId: string;
+    confidence: number;
+    accessTier: import("../world/regionalPresence").RegionalAccessTier;
+    explanation: string;
+  };
 }
 
 /**
@@ -4045,6 +4090,10 @@ export interface DayInteractionState {
   focusedPlayerIds?: string[];
   /** Maximum number of players that can be selected for focus. */
   maxFocusPlayers?: number;
+  /** Whether the player made this call or a standing order resolved it. */
+  resolutionMode?: "player" | "delegated";
+  /** Standing order used when resolutionMode is delegated. */
+  delegationPolicyId?: import("./weeklyStrategy").DelegationPolicyId;
 }
 
 export interface DayResult {

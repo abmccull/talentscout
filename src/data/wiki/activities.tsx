@@ -22,14 +22,15 @@ export const activitiesArticles: WikiArticle[] = [
     category: "activities",
     order: 0,
     summary:
-      "Full table of all scouting activities with context and noise multipliers, including specialization exclusives.",
+      "Youth Scout observation contexts and the different questions each one can answer.",
     searchText:
       "These activities generate observations of players. Each has a slot cost (days used) and a noise multiplier that affects reading accuracy. Attend Match: Live match. Primary scouting activity. 12-18 phases, each revealing attributes. Watch Video: Video analysis. Lower accuracy than live. Noise x1.5. Good for repeat views. Training Visit: Training ground. Best accuracy (x0.7). Requires access to a club's facilities. Academy Visit: Academy. Good accuracy (x0.8). Unlocked by Youth specialization. Youth Tournament: Youth tournament. Slightly noisy (x1.1). Multiple young players per event. School Match: School match. Noisy (x1.2). For very young unsigned prospects. Grassroots Tournament: Grassroots. Noisy (x1.3). Unlocked by Youth perk Grassroots Access. Street Football: Street. Very noisy (x1.4). Hidden gems only Youth scouts can access. Academy Trial Day: Trial. Good accuracy (x0.9). Formal trial setting for unsigned youth. Youth Festival: Festival. Noisy (x1.2). Multi-team youth tournament event. Follow-Up Session: Follow-up. High accuracy (x0.85). Deepens existing observation. First-Team Exclusive: Reserve Match: Reserve match. Good accuracy (x0.9). Controlled environment. Scouting Mission: Live match. Targeted assignment from a club directive. Opposition Analysis: Live/video. Study upcoming opponents. Slightly noisy (x1.1). Agent Showcase: Showcase. Agents present players. Noisy (x1.2) — players performing under pressure. Trial Match: Trial. Best first-team context (x0.75). Close, controlled observation. Data Scout Exclusive: Database Query: Stats. Pure statistics. Very noisy (x1.8). Supplements live reads. Deep Video Analysis: Video + data. Enhanced video with stats overlay (x1.1). Best video context. Stats Briefing: Data summary. Summary data (x1.6). Limited direct reads. Data Conference: Conference. Networking + data insights. Builds data scout contacts. Algorithm Calibration: Analysis. Improves model accuracy over time. Market Inefficiency: Analysis. Identify undervalued players via statistical anomalies. Analytics Team Meeting: Meeting. Collaborative session with your analyst team.",
     content: (
       <SectionBlock>
         <Para>
-          These activities generate observations of players. Each has a slot
-          cost (days used) and a noise multiplier that affects reading accuracy.
+          Every context answers different scouting questions. Use follow-ups to
+          test a hypothesis in a changed role, opponent, venue, or pressure
+          level; repeating the same easy context produces diminishing returns.
         </Para>
         <Table
           headers={["Activity", "Context", "Notes"]}
@@ -37,129 +38,57 @@ export const activitiesArticles: WikiArticle[] = [
             [
               "Attend Match",
               "Live match",
-              "Primary scouting activity. 12\u201318 phases, each revealing attributes.",
+              "Role-rich evidence under pressure, but a single performance can mislead.",
             ],
             [
               "Watch Video",
               "Video analysis",
-              "Lower accuracy than live. Noise \u00d71.5. Good for repeat views.",
+              "Efficient breadth with weaker access to off-ball and personal context.",
             ],
             [
               "Training Visit",
               "Training ground",
-              "Best accuracy (\u00d70.7). Requires access to a club\u2019s facilities.",
+              "Reveals habits and coachability. Requires access to club facilities.",
             ],
             [
               "Academy Visit",
               "Academy",
-              "Good accuracy (\u00d70.8). Unlocked by Youth specialization.",
+              "Tests the prospect inside a structured development environment.",
             ],
             [
               "Youth Tournament",
               "Youth tournament",
-              "Slightly noisy (\u00d71.1). Multiple young players per event.",
+              "Broad prospect coverage across uneven opponents and short samples.",
             ],
             [
               "School Match",
               "School match",
-              "Noisy (\u00d71.2). For very young unsigned prospects.",
+              "Early access to unsigned players with high uncertainty.",
             ],
             [
               "Grassroots Tournament",
               "Grassroots",
-              "Noisy (\u00d71.3). Unlocked by Youth perk \u2018Grassroots Access\u2019.",
+              "Hidden local talent; access and competition quality vary.",
             ],
             [
               "Street Football",
               "Street",
-              "Very noisy (\u00d71.4). Hidden gems only Youth scouts can access.",
+              "Shows improvisation and adaptability in an unstructured setting.",
             ],
             [
               "Academy Trial Day",
               "Trial",
-              "Good accuracy (\u00d70.9). Formal trial setting for unsigned youth.",
+              "Tests adaptation and decision-making while the player is under scrutiny.",
             ],
             [
               "Youth Festival",
               "Festival",
-              "Noisy (\u00d71.2). Multi-team youth tournament event.",
+              "Multiple teams and prospects, trading depth for discovery breadth.",
             ],
             [
               "Follow-Up Session",
               "Follow-up",
-              "High accuracy (\u00d70.85). Deepens existing observation.",
-            ],
-          ]}
-        />
-        <Subheading>First-Team Exclusive</Subheading>
-        <Table
-          headers={["Activity", "Context", "Notes"]}
-          rows={[
-            [
-              "Reserve Match",
-              "Reserve match",
-              "Good accuracy (\u00d70.9). Controlled environment.",
-            ],
-            [
-              "Scouting Mission",
-              "Live match",
-              "Targeted assignment from a club directive.",
-            ],
-            [
-              "Opposition Analysis",
-              "Live/video",
-              "Study upcoming opponents. Slightly noisy (\u00d71.1).",
-            ],
-            [
-              "Agent Showcase",
-              "Showcase",
-              "Agents present players. Noisy (\u00d71.2) \u2014 players performing under pressure.",
-            ],
-            [
-              "Trial Match",
-              "Trial",
-              "Best first-team context (\u00d70.75). Close, controlled observation.",
-            ],
-          ]}
-        />
-        <Subheading>Data Scout Exclusive</Subheading>
-        <Table
-          headers={["Activity", "Context", "Notes"]}
-          rows={[
-            [
-              "Database Query",
-              "Stats",
-              "Pure statistics. Very noisy (\u00d71.8). Supplements live reads.",
-            ],
-            [
-              "Deep Video Analysis",
-              "Video + data",
-              "Enhanced video with stats overlay (\u00d71.1). Best video context.",
-            ],
-            [
-              "Stats Briefing",
-              "Data summary",
-              "Summary data (\u00d71.6). Limited direct reads.",
-            ],
-            [
-              "Data Conference",
-              "Conference",
-              "Networking + data insights. Builds data scout contacts.",
-            ],
-            [
-              "Algorithm Calibration",
-              "Analysis",
-              "Improves model accuracy over time.",
-            ],
-            [
-              "Market Inefficiency",
-              "Analysis",
-              "Identify undervalued players via statistical anomalies.",
-            ],
-            [
-              "Analytics Team Meeting",
-              "Meeting",
-              "Collaborative session with your analyst team.",
+              "Most valuable when it challenges an open question in a new context.",
             ],
           ]}
         />
@@ -168,8 +97,6 @@ export const activitiesArticles: WikiArticle[] = [
     related: [
       "networking-admin-activities",
       "activity-quality",
-      "specialization-exclusive-activities",
-      "match-phases",
       "focus-lenses",
     ],
     tags: [

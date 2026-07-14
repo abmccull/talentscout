@@ -2,6 +2,7 @@ import type { GameState, NPCScout, Territory } from "../core/types";
 import type { RNG } from "../rng";
 import { addGameWeeks } from "../core/gameDate";
 import { delegateScoutingTask } from "../core/quickScout";
+import { selectLatestReportsByCase } from "../reports/reportAccountability";
 import {
   assignTerritory,
   generateNPCScoutRoster,
@@ -754,15 +755,22 @@ export function processLeadershipPortfolioWeek(state: GameState): GameState {
     }
 
     if (live.status === "owned") {
-      const authoredReport = Object.values(nextState.reports).find((report) =>
-        report.playerId === live.playerId
-        && dateAtOrAfter(
-          report.submittedWeek,
-          report.submittedSeason,
-          live.choiceWeek ?? live.createdWeek,
-          live.choiceSeason ?? live.createdSeason,
+      const authoredReport = selectLatestReportsByCase(
+        Object.values(nextState.reports).filter((report) =>
+          report.playerId === live.playerId
+          && dateAtOrAfter(
+            report.submittedWeek,
+            report.submittedSeason,
+            live.choiceWeek ?? live.createdWeek,
+            live.choiceSeason ?? live.createdSeason,
+          )
         ),
-      );
+      ).sort((left, right) =>
+        right.submittedSeason - left.submittedSeason
+        || right.submittedWeek - left.submittedWeek
+        || (right.revision ?? 1) - (left.revision ?? 1)
+        || right.id.localeCompare(left.id)
+      )[0];
       if (authoredReport) {
         const succeeded = authoredReport.qualityScore >= 60;
         nextState = applyLeadershipOutcome(

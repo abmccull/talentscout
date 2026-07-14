@@ -269,7 +269,11 @@ export function synchronizeInternationalAssignmentProgress(state: GameState): Ga
     .sort((left, right) => left.id.localeCompare(right.id));
   for (const report of reports) {
     assignment = recordInternationalAssignmentProgress(assignment, {
-      id: `report:${report.id}`,
+      // A revised opinion is still one scouting case. Assignment credit is
+      // earned for distinct player/brief judgments, not repeated paperwork.
+      id: report.caseId
+        ? `report-case:${report.caseId}`
+        : `report:${report.scoutId}:${report.playerId}:${report.briefId ?? "general"}`,
       kind: "submittedReport",
     });
   }
@@ -422,4 +426,3 @@ export function resolveInternationalAssignment(
       : [completionMessage, ...state.inbox],
   };
 }
-

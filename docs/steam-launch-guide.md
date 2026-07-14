@@ -286,15 +286,15 @@ Go to **Store Page** → **Tags** and add:
 Set in **Store Page** → **Basic Info** → **System Requirements**:
 
 **Windows:**
-- Minimum: Windows 10, 4 GB RAM, 500 MB disk
-- Recommended: Windows 10/11, 8 GB RAM, 1 GB disk
+- Minimum: Windows 10, 4 GB RAM, 1 GB disk
+- Recommended: Windows 10/11, 8 GB RAM, 2 GB disk
 
 **macOS:**
-- Minimum: macOS 11 Big Sur, 4 GB RAM, 500 MB disk
-- Recommended: macOS 13+, 8 GB RAM, 1 GB disk
+- Minimum: macOS 12 Monterey, 4 GB RAM, 1 GB disk
+- Recommended: macOS 14+, 8 GB RAM, 2 GB disk
 
 **Linux:**
-- Minimum: Ubuntu 20.04+, 4 GB RAM, 500 MB disk
+- Minimum: Ubuntu 20.04+, 4 GB RAM, 1 GB disk
 
 ---
 

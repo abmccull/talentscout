@@ -14,9 +14,13 @@ export type ScoutConsequenceMetricKey =
 export type ContactConsequenceMetricName = "relationship" | "trust" | "loyalty";
 export type ContactConsequenceMetricKey =
   `contact:${string}:${ContactConsequenceMetricName}`;
+export type EmployeeConsequenceMetricKey = `employee:${string}:morale`;
+export type RivalConsequenceMetricKey = `rival:${string}:aggressiveness`;
 export type KnownConsequenceMetricKey =
   | ScoutConsequenceMetricKey
-  | ContactConsequenceMetricKey;
+  | ContactConsequenceMetricKey
+  | EmployeeConsequenceMetricKey
+  | RivalConsequenceMetricKey;
 
 const SCOUT_METRICS: Record<
   ScoutConsequenceMetricKey,
@@ -31,6 +35,14 @@ const SCOUT_METRICS: Record<
 interface ContactMetricTarget {
   contactId: string;
   metric: ContactConsequenceMetricName;
+}
+
+function employeeMetricTarget(metricKey: string): string | undefined {
+  return /^employee:(.+):morale$/.exec(metricKey)?.[1];
+}
+
+function rivalMetricTarget(metricKey: string): string | undefined {
+  return /^rival:(.+):aggressiveness$/.exec(metricKey)?.[1];
 }
 
 function contactMetricTarget(metricKey: string): ContactMetricTarget | undefined {
@@ -81,6 +93,19 @@ function metricKeysInCondition(condition: ConsequenceCondition): string[] {
  */
 function referencedMetricKeys(state: ConsequenceEngineState): Set<string> {
   const keys = new Set(Object.keys(state.metrics));
+  for (const decision of Object.values(state.decisions)) {
+    if (decision.status !== "offered") continue;
+    for (const option of decision.options) {
+      for (const effect of option.immediateEffects) {
+        for (const key of metricKeysInEffect(effect)) keys.add(key);
+      }
+      for (const consequence of option.scheduledConsequences) {
+        for (const effect of consequence.effects) {
+          for (const key of metricKeysInEffect(effect)) keys.add(key);
+        }
+      }
+    }
+  }
   for (const consequence of Object.values(state.consequences)) {
     if (consequence.status !== "pending") continue;
     for (const effect of consequence.effects) {
@@ -113,6 +138,15 @@ export function synchronizeConsequenceMetrics(
       const contact = target ? gameState.contacts[target.contactId] : undefined;
       if (target && contact) {
         authoritativeValue = authoritativeContactMetric(contact, target.metric);
+      } else {
+        const employeeId = employeeMetricTarget(metricKey);
+        const employee = employeeId
+          ? gameState.finances?.employees.find((candidate) => candidate.id === employeeId)
+          : undefined;
+        const rivalId = rivalMetricTarget(metricKey);
+        const rival = rivalId ? gameState.rivalScouts[rivalId] : undefined;
+        if (employee) authoritativeValue = employee.morale;
+        if (rival) authoritativeValue = rival.aggressiveness * 100;
       }
     }
     if (authoritativeValue === undefined || metrics[metricKey] === authoritativeValue) {
@@ -135,6 +169,8 @@ export function projectConsequenceMetrics(
 ): GameState {
   let scout = gameState.scout;
   let contacts = gameState.contacts;
+  let finances = gameState.finances;
+  let rivalScouts = gameState.rivalScouts;
 
   for (const [metricKey, rawValue] of Object.entries(consequenceState.metrics)) {
     if (!Number.isFinite(rawValue)) continue;
@@ -148,27 +184,50 @@ export function projectConsequenceMetrics(
     }
 
     const target = contactMetricTarget(metricKey);
-    if (!target) continue;
-    const contact = contacts[target.contactId];
-    if (!contact) continue;
-    const field: "relationship" | "trustLevel" | "loyalty" = target.metric === "trust"
-      ? "trustLevel"
-      : target.metric;
-    const relationship = target.metric === "relationship" ? value : contact.relationship;
-    if (contact[field] === value && contact.dormant === (relationship <= 20)) continue;
-    const updatedContact: Contact = {
-      ...contact,
-      [field]: value,
-      dormant: relationship <= 20,
-    };
-    if (contacts === gameState.contacts) contacts = { ...contacts };
-    contacts[target.contactId] = updatedContact;
+    if (target) {
+      const contact = contacts[target.contactId];
+      if (!contact) continue;
+      const field: "relationship" | "trustLevel" | "loyalty" = target.metric === "trust"
+        ? "trustLevel"
+        : target.metric;
+      const relationship = target.metric === "relationship" ? value : contact.relationship;
+      if (contact[field] === value && contact.dormant === (relationship <= 20)) continue;
+      const updatedContact: Contact = {
+        ...contact,
+        [field]: value,
+        dormant: relationship <= 20,
+      };
+      if (contacts === gameState.contacts) contacts = { ...contacts };
+      contacts[target.contactId] = updatedContact;
+      continue;
+    }
+
+    const employeeId = employeeMetricTarget(metricKey);
+    if (employeeId && finances) {
+      const employeeIndex = finances.employees.findIndex((employee) => employee.id === employeeId);
+      if (employeeIndex < 0 || finances.employees[employeeIndex]?.morale === value) continue;
+      const employees = [...finances.employees];
+      employees[employeeIndex] = { ...employees[employeeIndex], morale: value };
+      finances = { ...finances, employees };
+      continue;
+    }
+
+    const rivalId = rivalMetricTarget(metricKey);
+    const rival = rivalId ? rivalScouts[rivalId] : undefined;
+    if (rivalId && rival) {
+      const aggressiveness = value / 100;
+      if (rival.aggressiveness === aggressiveness) continue;
+      if (rivalScouts === gameState.rivalScouts) rivalScouts = { ...rivalScouts };
+      rivalScouts[rivalId] = { ...rival, aggressiveness };
+    }
   }
 
   if (
     consequenceState === gameState.consequenceState
     && scout === gameState.scout
     && contacts === gameState.contacts
+    && finances === gameState.finances
+    && rivalScouts === gameState.rivalScouts
   ) return gameState;
 
   return {
@@ -176,5 +235,7 @@ export function projectConsequenceMetrics(
     consequenceState,
     scout,
     contacts,
+    finances,
+    rivalScouts,
   };
 }

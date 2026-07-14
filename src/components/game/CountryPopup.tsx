@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { X, Plane, MapPin, FileText, Star, TrendingUp, Building2, Trophy, Check, BookOpen, Eye, Users } from "lucide-react";
+import { X, Plane, MapPin, FileText, Star, Building2, Trophy, Check, BookOpen, Eye, Users, Globe2 } from "lucide-react";
 import { getTierColors } from "@/components/game/WorldMap";
-import { getContinentId, getTravelDuration } from "@/engine/world/travel";
-import type { CountryReputation, TravelBooking, RegionalKnowledge, HiddenLeague, CulturalInsight } from "@/engine/core/types";
+import type { CountryReputation, TravelBooking, RegionalKnowledge, HiddenLeague } from "@/engine/core/types";
+import type { RegionalPresenceSnapshot } from "@/engine/world/regionalPresence";
 import { Tooltip } from "@/components/ui/tooltip";
 
 // =============================================================================
@@ -36,8 +36,16 @@ export interface CountryPopupProps {
   justBooked: boolean;
   bookingActionLabel?: string;
   bookingDetail?: string;
+  /** What has actually been generated for this country in this save. */
+  contentTier?: "fullWorld" | "talentPool";
+  /** Short, player-facing summary of the generated world coverage. */
+  worldActivitySummary?: string;
+  /** Explicit fixture count avoids implying a simulated calendar where none exists. */
+  fixtureCount?: number;
   /** Regional knowledge for this country (F13). */
   regionalKnowledge?: RegionalKnowledge;
+  /** Derived operational access and its real downstream effects. */
+  regionalPresence?: RegionalPresenceSnapshot;
   /** Hidden leagues discovered in this country (F13). */
   discoveredHiddenLeagues?: HiddenLeague[];
   onBookTravel: () => void;
@@ -79,6 +87,16 @@ function familiarityBarGradient(familiarity: number): string {
   return tier.core;
 }
 
+function contentTierLabel(contentTier: CountryPopupProps["contentTier"]): string {
+  return contentTier === "fullWorld" ? "Full world" : "Talent pool";
+}
+
+function contentTierDetail(contentTier: CountryPopupProps["contentTier"]): string {
+  return contentTier === "fullWorld"
+    ? "Clubs and fixtures are actively simulated here."
+    : "This is a youth and local-talent pool; it does not have a simulated fixture calendar.";
+}
+
 // =============================================================================
 // COMPONENT
 // =============================================================================
@@ -105,7 +123,11 @@ export function CountryPopup({
   justBooked,
   bookingActionLabel,
   bookingDetail,
+  contentTier,
+  worldActivitySummary,
+  fixtureCount,
   regionalKnowledge,
+  regionalPresence,
   discoveredHiddenLeagues,
   onBookTravel,
   onClose,
@@ -150,8 +172,10 @@ export function CountryPopup({
   left = Math.max(8, Math.min(left, containerRect.width - popupWidth - 8));
   top = Math.max(8, top);
 
-  // Clamp bottom edge (estimate popup height ~380px)
-  const estimatedHeight = 380;
+  // The dossier grows with earned regional intelligence. Keep it inside the
+  // viewport and make the details scroll rather than clipping a booking CTA.
+  const maxPopupHeight = Math.max(220, containerRect.height - 16);
+  const estimatedHeight = Math.min(620, maxPopupHeight);
   if (top + estimatedHeight > containerRect.height - 8) {
     top = containerRect.height - estimatedHeight - 8;
     if (top < 8) top = 8;
@@ -173,6 +197,9 @@ export function CountryPopup({
   const continentLabel = CONTINENT_LABELS[continent] ?? continent;
   const reports = reputation?.reportsSubmitted ?? 0;
   const finds = reputation?.successfulFinds ?? 0;
+  const knowledgeLevel = regionalKnowledge?.knowledgeLevel ?? 0;
+  const culturalInsights = regionalKnowledge?.culturalInsights ?? [];
+  const localContacts = regionalKnowledge?.localContacts ?? [];
 
   return (
     <div
@@ -191,7 +218,10 @@ export function CountryPopup({
       aria-labelledby={titleId}
       tabIndex={-1}
     >
-      <div className="rounded-xl border border-zinc-700/60 bg-zinc-950/92 shadow-2xl backdrop-blur-xl overflow-hidden">
+      <div
+        className="overflow-y-auto rounded-xl border border-zinc-700/60 bg-zinc-950/92 shadow-2xl backdrop-blur-xl"
+        style={{ maxHeight: maxPopupHeight }}
+      >
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="flex items-start justify-between gap-2 px-4 pt-4 pb-2">
           <div>
@@ -212,7 +242,7 @@ export function CountryPopup({
         </div>
 
         {/* ── Status badges ──────────────────────────────────────── */}
-        <div className="flex gap-1.5 px-4 pb-2">
+        <div className="flex flex-wrap gap-1.5 px-4 pb-2">
           {isHome && (
             <span className="inline-flex items-center gap-1 rounded-full border border-zinc-600/40 bg-zinc-800/60 px-2 py-0.5 text-[10px] font-medium text-zinc-300">
               <MapPin size={10} /> Home
@@ -226,6 +256,16 @@ export function CountryPopup({
           {bookingIsForThisCountry && (
             <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
               <Plane size={10} /> Booking Active
+            </span>
+          )}
+          {contentTier && (
+            <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              contentTier === "fullWorld"
+                ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-200"
+                : "border-indigo-500/35 bg-indigo-500/10 text-indigo-200"
+            }`}>
+              <Globe2 size={10} aria-hidden="true" />
+              {contentTierLabel(contentTier)}
             </span>
           )}
         </div>
@@ -259,44 +299,65 @@ export function CountryPopup({
           <div className="flex items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2">
             <Trophy size={12} className="text-zinc-500" />
             <div>
-              <p className="text-[10px] text-zinc-500">Leagues</p>
+              <p className="text-[10px] text-zinc-300">Leagues</p>
               <p className="text-xs font-semibold text-white">{leagueCount}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2">
             <Building2 size={12} className="text-zinc-500" />
             <div>
-              <p className="text-[10px] text-zinc-500">Clubs</p>
+              <p className="text-[10px] text-zinc-300">Clubs</p>
               <p className="text-xs font-semibold text-white">{clubCount}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2">
             <FileText size={12} className="text-zinc-500" />
             <div>
-              <p className="text-[10px] text-zinc-500">Reports</p>
+              <p className="text-[10px] text-zinc-300">Reports</p>
               <p className="text-xs font-semibold text-white">{reports}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 rounded-lg bg-zinc-800/50 px-3 py-2">
             <Star size={12} className="text-zinc-500" />
             <div>
-              <p className="text-[10px] text-zinc-500">Finds</p>
+              <p className="text-[10px] text-zinc-300">Finds</p>
               <p className="text-xs font-semibold text-white">{finds}</p>
             </div>
           </div>
         </div>
 
+        {contentTier && (
+          <div className="mx-4 mb-3 rounded-lg border border-zinc-800 bg-zinc-900/55 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-400">
+                World coverage
+              </p>
+              <span className={contentTier === "fullWorld" ? "text-[10px] font-medium text-emerald-200" : "text-[10px] font-medium text-indigo-200"}>
+                {contentTierLabel(contentTier)}
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">
+              {worldActivitySummary ?? contentTierDetail(contentTier)}
+            </p>
+            {contentTier === "fullWorld" && fixtureCount !== undefined && (
+              <p className="mt-1 text-[10px] text-zinc-500">
+                {fixtureCount.toLocaleString()} generated fixture{fixtureCount === 1 ? "" : "s"} in this save.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* ── Regional Knowledge (F13) ─────────────────────────── */}
-        {regionalKnowledge && regionalKnowledge.knowledgeLevel > 0 && (
+        {regionalKnowledge && (
           <div className="px-4 pb-3">
-            <Tooltip content="Regional knowledge grows from scouting activity in this country. Higher knowledge unlocks hidden leagues, cultural insights, and local contacts." side="bottom">
+            <Tooltip content="Regional knowledge grows from scouting activity in this country. It records the local access and context you have actually earned." side="bottom">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] text-zinc-500 flex items-center gap-1">
                 <BookOpen size={10} className="text-purple-400" />
                 Knowledge
               </span>
               <span className="text-[11px] text-purple-300">
-                {regionalKnowledge.knowledgeLevel}/100
+                {knowledgeLevel}/100
               </span>
             </div>
             </Tooltip>
@@ -304,20 +365,26 @@ export function CountryPopup({
               <div
                 className="h-full rounded-full transition-all duration-500 ease-out"
                 style={{
-                  width: `${regionalKnowledge.knowledgeLevel}%`,
-                  backgroundColor: regionalKnowledge.knowledgeLevel >= 75 ? "#a855f7"
-                    : regionalKnowledge.knowledgeLevel >= 50 ? "#6366f1"
-                    : regionalKnowledge.knowledgeLevel >= 25 ? "#8b5cf6"
+                  width: `${knowledgeLevel}%`,
+                  backgroundColor: knowledgeLevel >= 75 ? "#a855f7"
+                    : knowledgeLevel >= 50 ? "#6366f1"
+                    : knowledgeLevel >= 25 ? "#8b5cf6"
                     : "#64748b",
                 }}
               />
             </div>
 
+            {knowledgeLevel === 0 && (
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+                No local intelligence logged yet. Work this country to build a more useful regional dossier.
+              </p>
+            )}
+
             {/* Cultural insights */}
-            {regionalKnowledge.culturalInsights.length > 0 && (
+            {culturalInsights.length > 0 && (
               <div className="mt-2 space-y-1">
-                {regionalKnowledge.culturalInsights.map((insight, i) => (
-                  <Tooltip key={i} content={insight.gameplayEffect} side="bottom">
+                {culturalInsights.map((insight) => (
+                  <Tooltip key={`${insight.type}:${insight.description}`} content="Recorded regional context contributes to the country-level evidence confidence shown below." side="bottom">
                   <div className="flex items-start gap-1.5 rounded bg-purple-500/5 border border-purple-500/10 px-2 py-1">
                     <Eye size={9} className="text-purple-400 mt-0.5 flex-shrink-0" />
                     <p className="text-[9px] text-purple-300 leading-tight">{insight.description}</p>
@@ -328,13 +395,57 @@ export function CountryPopup({
             )}
 
             {/* Local contacts count */}
-            {regionalKnowledge.localContacts.length > 0 && (
+            {localContacts.length > 0 && (
               <div className="mt-1.5 flex items-center gap-1">
                 <Users size={9} className="text-purple-400" />
                 <span className="text-[9px] text-purple-300">
-                  {regionalKnowledge.localContacts.length} local contact{regionalKnowledge.localContacts.length !== 1 ? "s" : ""}
+                  {localContacts.length} local contact{localContacts.length !== 1 ? "s" : ""}
                 </span>
               </div>
+            )}
+          </div>
+        )}
+
+        {regionalPresence && regionalPresence.generatedWorldEligible && (
+          <div className="mx-4 mb-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-200">
+                Operational presence
+              </p>
+              <span className="text-[10px] font-medium capitalize text-cyan-300">
+                {regionalPresence.accessTier} · {regionalPresence.accessScore}/100
+              </span>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">
+              {regionalPresence.summary}
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[9px]">
+              <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
+                Discovery <span className="font-medium text-cyan-200">×{regionalPresence.effects.discoveryMultiplier.toFixed(2)}</span>
+              </div>
+              <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
+                Evidence <span className="font-medium text-cyan-200">+{Math.round(regionalPresence.effects.observationConfidenceBonus * 100)}%</span>
+              </div>
+              <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
+                Opportunities <span className="font-medium text-cyan-200">×{regionalPresence.effects.opportunityMultiplier.toFixed(2)}</span>
+              </div>
+              <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
+                Travel fatigue <span className="font-medium text-cyan-200">×{regionalPresence.effects.travelFatigueMultiplier.toFixed(2)}</span>
+              </div>
+            </div>
+            {regionalPresence.sources.length > 0 && (
+              <ul className="mt-2 space-y-1" aria-label="Regional presence sources">
+                {regionalPresence.sources
+                  .slice()
+                  .sort((left, right) => right.score - left.score)
+                  .slice(0, 4)
+                  .map((source) => (
+                    <li key={source.kind} className="flex items-center justify-between gap-2 text-[9px] text-zinc-500">
+                      <span>{source.label}</span>
+                      <span className="font-mono text-cyan-300">+{Math.round(source.score)}</span>
+                    </li>
+                  ))}
+              </ul>
             )}
           </div>
         )}
@@ -345,7 +456,7 @@ export function CountryPopup({
             <p className="text-[10px] text-zinc-500 mb-1">Hidden Leagues</p>
             <div className="space-y-1">
               {discoveredHiddenLeagues.map((league) => (
-                <Tooltip key={league.id} content={`Tier ${league.tier} — talent density ${Math.round(league.talentDensity * 100)}%`} side="bottom">
+                <Tooltip key={league.id} content={`Tier ${league.tier} local competition newly accessible through your regional network.`} side="bottom">
                 <div className="flex items-center justify-between rounded bg-indigo-500/5 border border-indigo-500/10 px-2 py-1">
                   <span className="text-[9px] text-indigo-300">{league.name}</span>
                   <span className="text-[8px] text-indigo-400 font-mono">T{league.tier}</span>
@@ -365,7 +476,7 @@ export function CountryPopup({
         {!isCurrentLocation && !justBooked && (
           <div className="px-4 pt-3 pb-4" data-tutorial-id="travel-booking-section">
             <div className="grid grid-cols-3 gap-2 mb-3 text-center">
-              <Tooltip content="Travel cost based on distance from home. Deducted from your balance when you book." side="bottom">
+              <Tooltip content="Travel cost after earned local-office, staff, contact, knowledge, and equipment reductions. Deducted when you book." side="bottom">
               <div>
                 <p className="text-[10px] text-zinc-500">Cost</p>
                 <p className="text-xs font-semibold text-white">

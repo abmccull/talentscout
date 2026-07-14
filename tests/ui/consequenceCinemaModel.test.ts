@@ -10,6 +10,7 @@ import type {
 } from "@/engine/consequences/types";
 import {
   buildCareerStoryReel,
+  selectCareerStoryCallback,
   selectCareerStoryTemplate,
   type ConsequenceCinemaSource,
 } from "@/components/game/consequence-cinema/consequenceCinemaModel";
@@ -156,6 +157,76 @@ describe("career consequence cinema model", () => {
     expect(story.outcome.details.join(" ")).toContain("£2,500,000");
   });
 
+  it("preserves authored callbacks and later public career movements as deterministic secondary events", () => {
+    const original = report();
+    const input = source({
+      reports: { [original.id]: original },
+      discoveryRecords: [discovery()],
+      recommendationReviews: {
+        "review-1": {
+          id: "review-1",
+          caseId: "case-1",
+          reportId: original.id,
+          playerId: "player-1",
+          clubId: "club-a",
+          checkpoint: "oneSeason",
+          dueWeek: 5,
+          dueSeason: 2,
+          status: "complete",
+          completedWeek: 6,
+          completedSeason: 2,
+          overallScore: 80,
+        },
+      },
+      playerMovementHistory: [{
+        id: "later-loan",
+        playerId: "player-1",
+        type: "loanStart",
+        week: 12,
+        season: 2,
+        fromClubId: "club-a",
+        toClubId: "club-b",
+        reason: "A senior-minutes pathway opened.",
+      }],
+    });
+
+    const first = buildCareerStoryReel(input).find((story) => story.id === "review:review-1");
+    const second = buildCareerStoryReel(input).find((story) => story.id === "review:review-1");
+
+    expect(first?.callbackLine).toBe(second?.callbackLine);
+    expect(first?.secondaryEvents).toEqual([expect.objectContaining({
+      id: "secondary-movement:later-loan",
+      dateLabel: "Season 2, week 12",
+      summary: "A senior-minutes pathway opened.",
+    })]);
+    expect(JSON.stringify(first)).not.toMatch(/initialPA|validationSnapshot|wasWonderkid/);
+  });
+
+  it("does not turn the engine-only wonderkid flag into discovery copy", () => {
+    const movement: ConsequenceCinemaSource["playerMovementHistory"][number] = {
+      id: "move-truth-boundary",
+      playerId: "player-1",
+      type: "permanentTransfer",
+      week: 8,
+      season: 2,
+      fromClubId: "club-a",
+      toClubId: "club-b",
+      fee: 2_500_000,
+    };
+    const storyWithLowTruth = buildCareerStoryReel(source({
+      discoveryRecords: [discovery({ initialPA: 1, wasWonderkid: false })],
+      playerMovementHistory: [movement],
+    }))[0];
+    const storyWithHighTruth = buildCareerStoryReel(source({
+      discoveryRecords: [discovery({ initialPA: 200, wasWonderkid: true })],
+      playerMovementHistory: [movement],
+    }))[0];
+
+    expect(storyWithLowTruth.original).toEqual(storyWithHighTruth.original);
+    expect(storyWithHighTruth.original.headline).toBe("Added to the scouting record");
+    expect(JSON.stringify(storyWithHighTruth.original)).not.toMatch(/wonderkid|exceptional prospect/i);
+  });
+
   it("reveals a resolved choice, recognized outcome, stakeholder memory, and obligation", () => {
     const resolvedDecision: DecisionRecord = {
       id: "decision-1",
@@ -263,6 +334,8 @@ describe("career consequence cinema model", () => {
       ),
     );
     expect(seededVariety.size).toBeGreaterThan(1);
+    expect(selectCareerStoryCallback("seed", "story", "resolvedDecision", "mixed"))
+      .toBe(selectCareerStoryCallback("seed", "story", "resolvedDecision", "mixed"));
     expect(buildCareerStoryReel(source())).toEqual([]);
   });
 });

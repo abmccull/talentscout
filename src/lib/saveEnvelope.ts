@@ -160,6 +160,36 @@ function migratedDifficulty(value: unknown): "casual" | "normal" | "hard" | "iro
     : "normal";
 }
 
+/**
+ * Build the stable run identity assigned to every pre-manifest save.
+ *
+ * Both versionless records and direct raw-state imports must use this exact
+ * historical contract. Using the current content version in either path would
+ * make identical legacy careers acquire different run IDs and world rules.
+ */
+export function createLegacySaveRunManifest(state: Record<string, unknown>) {
+  const scout = isRecord(state.scout) ? state.scout : {};
+  const selectedCountries = Array.isArray(state.countries)
+    ? state.countries.filter((entry): entry is string =>
+        typeof entry === "string" && entry.trim().length > 0)
+    : [];
+  if (selectedCountries.length === 0) selectedCountries.push("england");
+  const rootSeed = typeof state.seed === "string" && state.seed.trim().length > 0
+    ? state.seed
+    : "legacy-import";
+
+  return createRunManifest({
+    rootSeed,
+    specialization: migratedSpecialization(scout.primarySpecialization),
+    difficulty: migratedDifficulty(state.difficulty),
+    selectedCountries,
+    startingCountry: selectedCountries[0],
+    integrity: "legacy-import",
+    creationRulesVersion: "legacy-pre-run-manifest",
+    contentVersion: V2_TO_V3_CONTENT_VERSION,
+  });
+}
+
 /** Pins run identity and initializes the causal decision projection. */
 const migrateV2ToV3: SaveMigration = (legacy) => {
   if (!isRecord(legacy.state)) {
@@ -171,27 +201,9 @@ const migrateV2ToV3: SaveMigration = (legacy) => {
   }
 
   const state = legacy.state;
-  const scout = isRecord(state.scout) ? state.scout : {};
-  const selectedCountries = Array.isArray(state.countries)
-    ? state.countries.filter((entry): entry is string =>
-        typeof entry === "string" && entry.trim().length > 0)
-    : [];
-  if (selectedCountries.length === 0) selectedCountries.push("england");
-  const rootSeed = typeof state.seed === "string" && state.seed.trim().length > 0
-    ? state.seed
-    : "legacy-import";
   const runManifest = isRecord(state.runManifest)
     ? state.runManifest
-    : createRunManifest({
-        rootSeed,
-        specialization: migratedSpecialization(scout.primarySpecialization),
-        difficulty: migratedDifficulty(state.difficulty),
-        selectedCountries,
-        startingCountry: selectedCountries[0],
-        integrity: "legacy-import",
-        creationRulesVersion: "legacy-pre-run-manifest",
-        contentVersion: V2_TO_V3_CONTENT_VERSION,
-      });
+    : createLegacySaveRunManifest(state);
 
   return {
     ...legacy,

@@ -150,6 +150,30 @@ test.describe("Youth Early Access accessibility", () => {
     await expectNoBlockingViolations(gamePage.page, "mobile calendar");
   });
 
+  test("planner warning dialog has a name, traps focus, closes by keyboard, and restores context", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectLateGameState("youth");
+    await gamePage.injectState({
+      schedule: { activities: Array(7).fill(null) },
+    });
+    await gamePage.setScreen("calendar");
+
+    const advanceWeek = gamePage.page.getByRole("button", { name: "Advance Week" });
+    await advanceWeek.click();
+    const dialog = gamePage.page.getByRole("dialog", { name: "Unplanned Days" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Go Back" })).toBeFocused();
+    await expectNoBlockingViolations(gamePage.page, "planner unplanned-days dialog");
+
+    await gamePage.page.keyboard.press("Shift+Tab");
+    await expect(dialog.getByRole("button", { name: "Advance" })).toBeFocused();
+    await gamePage.page.keyboard.press("Tab");
+    await expect(dialog.getByRole("button", { name: "Go Back" })).toBeFocused();
+    await gamePage.page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(advanceWeek).toBeFocused();
+  });
+
   test("the six core workspaces have no blocking axe violations on desktop or mobile", async ({ gamePage }) => {
     const workspaces = [
       ["dashboard", "Scouting Desk"],

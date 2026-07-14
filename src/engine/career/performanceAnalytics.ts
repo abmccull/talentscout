@@ -12,6 +12,7 @@ import type {
   ScoutPerformanceSnapshot,
   GameState,
 } from "@/engine/core/types";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -32,8 +33,10 @@ function clamp(value: number, min: number, max: number): number {
  * Extract all scout reports from state that belong to the given scout.
  */
 function scoutReports(state: GameState): ScoutReport[] {
-  return Object.values(state.reports).filter(
-    (r) => r.scoutId === state.scout.id,
+  return selectLatestReportsByCase(
+    Object.values(state.reports).filter(
+      (r) => r.scoutId === state.scout.id,
+    ),
   );
 }
 

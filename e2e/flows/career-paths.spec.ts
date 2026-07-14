@@ -41,6 +41,18 @@ test.describe("Career Paths", () => {
     await expect(gamePage.page.getByText("talent", { exact: true })).toBeVisible();
     await expect(gamePage.page.getByText("competition", { exact: true })).toBeVisible();
     await expect(gamePage.page.getByText("economy", { exact: true })).toBeVisible();
+    const seasonal = gamePage.page.getByTestId("world-condition-panel");
+    await expect(seasonal).toBeVisible();
+    await expect(seasonal.getByRole("heading", { name: /Season 1 live conditions/i }))
+      .toBeVisible();
+    await expect(seasonal.locator(
+      '[data-testid^="world-condition-"]:not([data-testid="world-condition-panel"])',
+    ))
+      .toHaveCount(
+        await gamePage.getGameStateValue("worldConditionState.active.length") as number,
+      );
+    await expect(seasonal.getByText(/part of the simulation, not flavour text/i))
+      .toBeVisible();
     gamePage.expectNoConsoleErrors();
   });
 

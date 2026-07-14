@@ -15,6 +15,8 @@
 
 import type { GameState, Position } from "./types";
 import { getCareerElapsedWeeks } from "./gameDate";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
+import { resolvePlayerEntity } from "@/lib/playerResolution";
 
 /**
  * Count countries where the scout has generated real career evidence.
@@ -29,6 +31,26 @@ export function countCountriesScouted(state: GameState): number {
       || reputation.successfulFinds > 0
       || reputation.contactCount > 0,
   ).length;
+}
+
+/** Count only discoveries that were actually classified as wonderkids. */
+export function countWonderkidDiscoveries(state: GameState): number {
+  return state.discoveryRecords.filter((record) => record.wasWonderkid).length;
+}
+
+/** Count durable report cases rather than immutable revisions of one case. */
+export function countDistinctReportCases(state: GameState): number {
+  return selectLatestReportsByCase(Object.values(state.reports)).length;
+}
+
+/** Count positions represented by report cases across every player pool. */
+export function countReportedPositions(state: GameState): number {
+  const positions = new Set<Position>();
+  for (const report of selectLatestReportsByCase(Object.values(state.reports))) {
+    const player = resolvePlayerEntity(state, report.playerId)?.player;
+    if (player) positions.add(player.position);
+  }
+  return positions.size;
 }
 
 /** Career weeks played on the fixture-derived competition calendar. */
@@ -101,10 +123,10 @@ const PROGRESS_CALCULATORS: Record<
   (state: GameState) => AchievementProgress
 > = {
   // Reports
-  "reports-10": (s) => numericProgress(Object.keys(s.reports).length, 10),
-  "reports-25": (s) => numericProgress(Object.keys(s.reports).length, 25),
-  "reports-50": (s) => numericProgress(Object.keys(s.reports).length, 50),
-  "reports-100": (s) => numericProgress(Object.keys(s.reports).length, 100),
+  "reports-10": (s) => numericProgress(countDistinctReportCases(s), 10),
+  "reports-25": (s) => numericProgress(countDistinctReportCases(s), 25),
+  "reports-50": (s) => numericProgress(countDistinctReportCases(s), 50),
+  "reports-100": (s) => numericProgress(countDistinctReportCases(s), 100),
 
   // Seasons
   "season-1": (s) => numericProgress(s.currentSeason - 1, 1),
@@ -157,8 +179,10 @@ const PROGRESS_CALCULATORS: Record<
   ),
 
   // Discovery
-  "discoveries-5": (s) => numericProgress(s.discoveryRecords.length, 5),
-  "discoveries-15": (s) => numericProgress(s.discoveryRecords.length, 15),
+  "discoveries-5": (s) =>
+    numericProgress(countWonderkidDiscoveries(s), 5),
+  "discoveries-15": (s) =>
+    numericProgress(countWonderkidDiscoveries(s), 15),
 
   // Reputation
   "rep-50": (s) => numericProgress(s.scout.reputation, 50),
@@ -180,12 +204,7 @@ const PROGRESS_CALCULATORS: Record<
   // Position coverage
   "full-house": (s) => {
     const ALL_POS: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
-    const coveredPositions = new Set<string>();
-    for (const report of Object.values(s.reports)) {
-      const player = s.players[report.playerId];
-      if (player) coveredPositions.add(player.position);
-    }
-    return numericProgress(coveredPositions.size, ALL_POS.length);
+    return numericProgress(countReportedPositions(s), ALL_POS.length);
   },
 };
 

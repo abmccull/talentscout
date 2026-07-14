@@ -44,6 +44,10 @@ import {
   buildNPCRecommendationEvidenceClaim,
   deriveNPCScoutPerspective,
 } from "@/engine/scout/sourcePerspectives";
+import {
+  getWeeklyIntentActivityPriority,
+  normalizeWeeklyStrategyState,
+} from "./weeklyStrategy";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -167,6 +171,11 @@ function buildCandidateQueue(
   available: Activity[],
 ): Activity[] {
   const candidates: Array<Activity & { _priority: number }> = [];
+  const strategy = normalizeWeeklyStrategyState(
+    state.weeklyStrategy,
+    state.currentWeek,
+    state.currentSeason,
+  );
 
   // Expand pooled activities into one candidate per target
   const resolved: Activity[] = [];
@@ -245,6 +254,11 @@ function buildCandidateQueue(
     if (act.type === "watchVideo") {
       priority = 20;
     }
+
+    // A standing weekly intent turns auto-scheduling into a strategic input,
+    // not a generic best-card filler. Manual schedules receive the same intent
+    // effects later in the authoritative week transaction.
+    priority += getWeeklyIntentActivityPriority(strategy.intentId, act);
 
     candidates.push({ ...act, _priority: priority });
   }

@@ -73,14 +73,14 @@ export function ScatterPlot({
   );
   // X-axis tick values (5 ticks)
   const xTicks = Array.from({ length: 5 }, (_, i) =>
-    Math.round((data.xMax / 4) * i),
+    (data.xMax / 4) * i,
   );
 
   /** Format large numbers for axis labels. */
   function formatValue(v: number): string {
     if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
     if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
-    return String(v);
+    return Number.isInteger(v) ? String(v) : v.toFixed(1);
   }
 
   return (
@@ -223,14 +223,14 @@ export function BarChart({
                   <div
                     className="w-2 rounded-t bg-zinc-600 transition-all"
                     style={{ height: `${secondaryHeight}%` }}
-                    title={`${bar.label} PA: ${bar.secondaryValue}`}
+                    title={`${bar.label} PA estimate: ${bar.secondaryValue}`}
                   />
                 )}
                 {/* Primary bar (CA) */}
                 <div
                   className="w-3 rounded-t bg-emerald-500 transition-all"
                   style={{ height: `${primaryHeight}%` }}
-                  title={`${bar.label}: ${bar.value}`}
+                  title={`${bar.label} CA estimate: ${bar.value}`}
                 />
               </div>
               <span className="mt-0.5 max-w-[48px] truncate text-center text-[7px] text-zinc-500">

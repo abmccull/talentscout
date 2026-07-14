@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 2,
+  "candidate": {
+    "tag": null,
+    "requireVersionTag": true,
+    "packageManifest": "artifacts/release/candidate-package-manifest.json",
+    "requiredPackageKinds": [
+      "windows-installer",
+      "macos-dmg",
+      "macos-zip",
+      "linux-appimage",
+      "linux-deb"
+    ]
+  },
+  "gates": {
+    "automatedCoreSuites": {
+      "status": "Unverified",
+      "evidence": [],
+      "supportingAutomation": [
+        "artifacts/release/automated-core-suites.json",
+        "artifacts/replayability/release-summary.json",
+        "artifacts/architecture/module-graph.json",
+        "artifacts/performance/low-end-emulation-profile.json"
+      ],
+      "generatedEvidence": {
+        "kind": "candidate-core-suites",
+        "path": "artifacts/release/generated/candidate-core-suites.json"
+      }
+    },
+    "manualNvda": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/manual-assistive-technology.md",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/manual-nvda.json",
+        "requiredPackageKinds": ["windows-installer"],
+        "requiredControls": [
+          "tutorialChoiceUnderstood",
+          "openingDiscoveryCompleted",
+          "sixWorkspacesNavigated",
+          "weeklyStrategyKeyboardScheduled",
+          "liveObservationCompleted",
+          "dossierEvidenceUnderstood",
+          "evidenceBackedReportFiled",
+          "relationshipConflictResolved",
+          "delayedConsequenceReviewed",
+          "worldArchiveCompared",
+          "travelPresenceUnderstood",
+          "saveRecoveryConflictCompleted",
+          "careerRecoveryUnderstood",
+          "accessibilitySettingsConfirmed",
+          "noSeriousAccessibilityBlocker"
+        ]
+      }
+    },
+    "manualVoiceOver": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/manual-assistive-technology.md",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/manual-voiceover.json",
+        "requiredPackageKinds": ["macos-dmg"],
+        "requiredControls": [
+          "tutorialChoiceUnderstood",
+          "openingDiscoveryCompleted",
+          "sixWorkspacesNavigated",
+          "weeklyStrategyKeyboardScheduled",
+          "liveObservationCompleted",
+          "dossierEvidenceUnderstood",
+          "evidenceBackedReportFiled",
+          "relationshipConflictResolved",
+          "delayedConsequenceReviewed",
+          "worldArchiveCompared",
+          "travelPresenceUnderstood",
+          "saveRecoveryConflictCompleted",
+          "careerRecoveryUnderstood",
+          "accessibilitySettingsConfirmed",
+          "noSeriousAccessibilityBlocker"
+        ]
+      }
+    },
+    "moderatedUsability": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/moderated-usability-study.md",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/moderated-usability.json",
+        "requiredPackageKinds": ["windows-installer"],
+        "requiredControls": [
+          "minimumParticipantSample",
+          "balancedParticipantSegments",
+          "fiveSecondExpectationTest",
+          "firstFiveMinutesUnassisted",
+          "openingDiscoveryAndFirstReport",
+          "contradictoryEvidenceRevision",
+          "weeklyOpportunityConflict",
+          "relationshipObligationConflict",
+          "delayedConsequenceExplanation",
+          "archiveComparisonRecommendation",
+          "careerRecoveryChoice",
+          "saveLoadReturnToTask",
+          "susAndEmotionSurvey",
+          "evidenceToReportThreshold",
+          "clubResponseExplanationThreshold",
+          "delayedConsequenceExplanationThreshold",
+          "foundSomeoneMomentThreshold",
+          "medianSusThreshold",
+          "zeroRepeatedP0",
+          "zeroRepeatedP1AfterRetest",
+          "anonymizedEvidenceComplete"
+        ]
+      }
+    },
+    "physicalLowEndHardware": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/minimum-hardware-validation.md",
+      "supportingAutomation": "artifacts/performance/low-end-emulation-profile.json",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/physical-minimum-hardware.json",
+        "requiredPackageKinds": ["windows-installer", "macos-dmg", "linux-appimage"],
+        "requiredControls": [
+          "allDeclaredPlatformsAndArchitectures",
+          "exactManifestPackages",
+          "controlledStandardUserSetup",
+          "coldStartJourney",
+          "firstHourCoreLoop",
+          "normalCareerJourney",
+          "thirtySeasonArchiveJourney",
+          "offlineRecoveryJourney",
+          "requiredSampleCounts",
+          "latencyThresholds",
+          "memoryThresholds",
+          "stabilityThresholds",
+          "warmedLeakThresholds",
+          "ledgerDigestContinuity",
+          "thermalEvidenceRetained",
+          "evidenceBundleComplete"
+        ]
+      }
+    },
+    "packagedWindows": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/packaged-runtime-matrix.md",
+      "supportingAutomation": "artifacts/release/windows-package-supporting-evidence.json",
+      "supportingAutomationCommand": "npm run electron:test-windows-runtime",
+      "generatedEvidence": {
+        "kind": "windows-packaged-runtime",
+        "path": "artifacts/release/generated/certifications/windows-runtime.json",
+        "requiredControls": [
+          "packageArchiveIntegrity",
+          "windowsAuthenticodeSignature",
+          "packageManifestCandidateBinding",
+          "packagedStartupWithoutDevelopmentServer",
+          "offlineFirstLaunchAndNewCareer",
+          "packagedAudioRangeStreaming",
+          "steamClientUnavailableFallback",
+          "offlineRemoteQueueCoalescing",
+          "transactionalPreviousGeneration",
+          "saveBuildVersionCandidateBinding",
+          "offlineSaveQuitReopenContinue",
+          "corruptNewestGenerationRecovery",
+          "recoveryDisclosureAtEntry",
+          "steamSdkAbsentFallback",
+          "installerInstalledAppOfflineSaveRestartUninstall",
+          "cleanStandardUserInstalledRuntime",
+          "networkLossDuringSave",
+          "interruptedWriteAtConfirmedTransactionBoundary",
+          "legacyGoldenSaveMigration",
+          "liveSteamCloudConflictAndReconnect",
+          "offlineReconnectNoDuplicateEffects",
+          "permissionDeniedAndDiskFull",
+          "suspendRebootDuringRollover"
+        ]
+      }
+    },
+    "packagedMacos": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/packaged-runtime-matrix.md",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/macos-runtime.json",
+        "requiredPackageKinds": ["macos-dmg", "macos-zip"],
+        "requiredControls": [
+          "exactManifestPackages",
+          "codeSignatureAndNotarization",
+          "shippingPackageInstallAndLaunch",
+          "packageUninstallCleanup",
+          "cleanStandardUserRuntime",
+          "noDevelopmentServiceDependency",
+          "firstLaunchOfflineNewCareer",
+          "saveQuitReopenContinue",
+          "networkLossDuringSave",
+          "interruptedWriteRecovery",
+          "corruptNewestRecoveryDisclosure",
+          "legacyGoldenSaveMigration",
+          "explicitCloudConflictResolution",
+          "offlineReconnectNoDuplicateEffects",
+          "steamSdkUnavailableFallback",
+          "permissionDeniedAndDiskFull",
+          "suspendRebootExactOnce"
+        ]
+      }
+    },
+    "packagedLinux": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/packaged-runtime-matrix.md",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/linux-runtime.json",
+        "requiredPackageKinds": ["linux-appimage", "linux-deb"],
+        "requiredControls": [
+          "exactManifestPackages",
+          "packageFormatsVerified",
+          "shippingPackageInstallAndLaunch",
+          "packageUninstallCleanup",
+          "cleanStandardUserRuntime",
+          "noDevelopmentServiceDependency",
+          "firstLaunchOfflineNewCareer",
+          "saveQuitReopenContinue",
+          "networkLossDuringSave",
+          "interruptedWriteRecovery",
+          "corruptNewestRecoveryDisclosure",
+          "legacyGoldenSaveMigration",
+          "explicitCloudConflictResolution",
+          "offlineReconnectNoDuplicateEffects",
+          "steamSdkUnavailableFallback",
+          "permissionDeniedAndDiskFull",
+          "suspendRebootExactOnce"
+        ]
+      }
+    },
+    "assetCommercialRights": {
+      "status": "Passed",
+      "evidence": [
+        "docs/release/asset-rights-attestation.md",
+        "artifacts/release/asset-provenance-audit.json"
+      ],
+      "supportingInventory": "artifacts/release/asset-provenance-audit.json"
+    },
+    "onlineFeedbackBackend": {
+      "status": "N/A",
+      "evidence": [],
+      "reason": "Online submission is compiled off; the email-draft fallback remains available."
+    },
+    "longSaveGrowthAndCompaction": {
+      "status": "Unverified",
+      "evidence": [],
+      "requiredReleaseProfile": "20 isolated seeds x 30 seasons on the exact committed candidate",
+      "generatedEvidence": {
+        "kind": "long-career-release-soak",
+        "path": "artifacts/release/generated/long-career-release-summary.json",
+        "minimumSeedCount": 20,
+        "minimumSeasonCount": 30,
+        "requireProcessIsolation": true,
+        "requireDeterministicReplay": true
+      }
+    }
+  }
+}

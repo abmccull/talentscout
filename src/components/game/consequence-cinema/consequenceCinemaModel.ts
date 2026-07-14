@@ -56,6 +56,14 @@ export interface CareerStoryObligation {
   resolution?: string;
 }
 
+export interface CareerStorySecondaryEvent {
+  id: string;
+  label: string;
+  dateLabel: string;
+  summary: string;
+  tone: CareerStoryTone;
+}
+
 export interface CareerStory {
   id: string;
   kind: CareerStoryKind;
@@ -72,6 +80,8 @@ export interface CareerStory {
   outcome: CareerStoryContext;
   memories: CareerStoryMemory[];
   obligations: CareerStoryObligation[];
+  callbackLine: string;
+  secondaryEvents: CareerStorySecondaryEvent[];
 }
 
 type NamedPlayer = Pick<Player, "id" | "firstName" | "lastName">;
@@ -99,6 +109,33 @@ const TEMPLATE_OPTIONS: Record<CareerStoryKind, CareerStoryTemplate[]> = {
   resolvedDecision: ["boardroom", "phoneCall", "pressClipping"],
 };
 
+const CALLBACK_LINES: Record<CareerStoryTone, readonly string[]> = {
+  positive: [
+    "The first notebook entry reads differently now.",
+    "A hunch became a line in the career record.",
+    "Someone kept the original report. Today, it feels prophetic.",
+    "The risk in that recommendation is easy to forget now.",
+  ],
+  mixed: [
+    "The right conclusion arrived by a messier route than expected.",
+    "The old report was neither vindicated nor disproved cleanly.",
+    "There is pride here, but also a margin note worth revisiting.",
+    "Football answered the question without making it simple.",
+  ],
+  negative: [
+    "The warning in the margin is harder to ignore in hindsight.",
+    "This is the page every scout would rather leave unturned.",
+    "The conviction remains in ink, even after the outcome changed.",
+    "A failed call becomes useful only when the lesson survives it.",
+  ],
+  neutral: [
+    "The archive remembers the choice even when the verdict stays open.",
+    "Another line was added to a career still being written.",
+    "The record preserves what was known, and what was not.",
+    "Time changed the context more than the original judgment.",
+  ],
+};
+
 function stableHash(value: string): number {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index++) {
@@ -115,6 +152,17 @@ export function selectCareerStoryTemplate(
 ): CareerStoryTemplate {
   const options = TEMPLATE_OPTIONS[kind];
   const index = stableHash(`career-story-reel:v1:${rootSeed}:${storyId}`) % options.length;
+  return options[index];
+}
+
+export function selectCareerStoryCallback(
+  rootSeed: string,
+  storyId: string,
+  kind: CareerStoryKind,
+  tone: CareerStoryTone,
+): string {
+  const options = CALLBACK_LINES[tone];
+  const index = stableHash(`career-story-callback:v1:${rootSeed}:${storyId}:${kind}:${tone}`) % options.length;
   return options[index];
 }
 
@@ -234,9 +282,9 @@ function discoveryContext(record: DiscoveryRecord): CareerStoryContext {
   return {
     label: "Original discovery",
     dateLabel: dateLabel(record.discoveredSeason, record.discoveredWeek),
-    headline: record.wasWonderkid ? "Marked as an exceptional prospect" : "Added to the scouting record",
+    headline: "Added to the scouting record",
     body: "No authored report predating this movement is linked in the current save.",
-    details: ["The reel is using the persisted discovery record only."],
+    details: ["No evidence-backed potential projection was preserved for this discovery."],
   };
 }
 
@@ -417,6 +465,17 @@ function recommendationStories(source: ConsequenceCinemaSource): CareerStory[] {
             ...(review.evidence ?? []).slice(0, 4).map((evidence) => evidence.description),
           ].filter((detail): detail is string => Boolean(detail)),
         },
+        callbackLine: selectCareerStoryCallback(
+          source.rootSeed,
+          `review:${review.id}`,
+          "recommendationReview",
+          tone,
+        ),
+        secondaryEvents: movementSecondaryEvents(
+          source,
+          review.playerId,
+          reportDate(report),
+        ),
         ...stakeholder,
       }];
     });
@@ -435,6 +494,75 @@ function movementLabel(type: PlayerMovementEvent["type"]): string {
     case "footballExit": return "football exit";
     default: return humanize(type).toLowerCase();
   }
+}
+
+function movementTone(type: PlayerMovementEvent["type"]): CareerStoryTone {
+  if (type === "release" || type === "footballExit") return "negative";
+  if (type === "youthSigning" || type === "freeAgentSigning") return "positive";
+  return "neutral";
+}
+
+function movementSecondaryEvents(
+  source: ConsequenceCinemaSource,
+  playerId: string,
+  after: { season: number; week: number },
+  excludeMovementId?: string,
+): CareerStorySecondaryEvent[] {
+  return source.playerMovementHistory
+    .filter((movement) =>
+      movement.playerId === playerId
+      && movement.id !== excludeMovementId
+      && compareDate(movement, after) > 0,
+    )
+    .sort((left, right) => compareDate(left, right) || left.id.localeCompare(right.id))
+    .slice(0, 3)
+    .map((movement) => {
+      const fromClub = clubName(source, movement.fromClubId)
+        ?? (movement.fromClubId ? "an archived club" : "free agency");
+      const toClub = clubName(source, movement.toClubId)
+        ?? (movement.toClubId ? "an archived club" : "outside football");
+      return {
+        id: `secondary-movement:${movement.id}`,
+        label: humanize(movementLabel(movement.type)),
+        dateLabel: dateLabel(movement.season, movement.week),
+        summary: movement.reason ?? `${fromClub} to ${toClub}`,
+        tone: movementTone(movement.type),
+      };
+    });
+}
+
+function decisionSecondaryEvents(
+  source: ConsequenceCinemaSource,
+  decision: DecisionRecord,
+): CareerStorySecondaryEvent[] {
+  return decision.consequenceIds
+    .map((id) => source.consequenceState.consequences[id])
+    .filter(Boolean)
+    .sort((left, right) =>
+      compareDate(left.resolvedAt ?? left.dueAt, right.resolvedAt ?? right.dueAt)
+      || left.id.localeCompare(right.id),
+    )
+    .slice(0, 3)
+    .map((consequence) => ({
+      id: `secondary-consequence:${consequence.id}`,
+      label: consequence.status === "pending" ? "Still unfolding" : humanize(consequence.status),
+      dateLabel: dateLabel(
+        (consequence.resolvedAt ?? consequence.dueAt).season,
+        (consequence.resolvedAt ?? consequence.dueAt).week,
+      ),
+      summary: consequence.status === "applied"
+        ? "A promised consequence entered the permanent career record."
+        : consequence.status === "pending"
+          ? "The decision still has a scheduled consequence ahead."
+          : `The consequence record closed as ${humanize(consequence.status).toLowerCase()}.`,
+      tone: consequence.status === "applied"
+        ? "positive" as const
+        : consequence.status === "failed" || consequence.status === "cancelled"
+          ? "negative" as const
+          : consequence.status === "skipped"
+            ? "mixed" as const
+            : "neutral" as const,
+    }));
 }
 
 function movementStories(source: ConsequenceCinemaSource): CareerStory[] {
@@ -456,11 +584,7 @@ function movementStories(source: ConsequenceCinemaSource): CareerStory[] {
       movement.fee === undefined ? undefined : `Recorded fee: ${formatMoney(movement.fee)}`,
       movement.reason ? `Recorded reason: ${movement.reason}` : undefined,
     ].filter((detail): detail is string => Boolean(detail));
-    const tone: CareerStoryTone = movement.type === "release" || movement.type === "footballExit"
-      ? "negative"
-      : movement.type === "youthSigning" || movement.type === "freeAgentSigning"
-        ? "positive"
-        : "neutral";
+    const tone = movementTone(movement.type);
 
     return [{
       id: `movement:${movement.id}`,
@@ -484,6 +608,13 @@ function movementStories(source: ConsequenceCinemaSource): CareerStory[] {
           : `The canonical movement ledger records this player moving from ${fromClub} to ${toClub}.`,
         details,
       },
+      callbackLine: selectCareerStoryCallback(
+        source.rootSeed,
+        `movement:${movement.id}`,
+        "playerMovement",
+        tone,
+      ),
+      secondaryEvents: movementSecondaryEvents(source, movement.playerId, date, movement.id),
       ...stakeholder,
     }];
   });
@@ -548,12 +679,13 @@ function decisionStories(source: ConsequenceCinemaSource): CareerStory[] {
         statusCounts.cancelled ? `${statusCounts.cancelled} cancelled` : undefined,
       ].filter(Boolean).join("; ");
       const presentation = presentedFact?.presentation;
+      const tone = presentation?.tone ?? "neutral";
 
       return [{
         id: `decision:${decision.id}`,
         kind: "resolvedDecision" as const,
         template: selectCareerStoryTemplate(source.rootSeed, `decision:${decision.id}`, "resolvedDecision"),
-        tone: presentation?.tone ?? "neutral",
+        tone,
         season: decision.resolvedAt.season,
         week: decision.resolvedAt.week,
         eyebrow: decision.selectionKind === "default" ? "Deadline decision" : "Career decision",
@@ -583,6 +715,13 @@ function decisionStories(source: ConsequenceCinemaSource): CareerStory[] {
             ?? (fallbackBody || "The decision is marked resolved with no player-facing outcome fact preserved."),
           details: presentation?.details ?? [],
         },
+        callbackLine: selectCareerStoryCallback(
+          source.rootSeed,
+          `decision:${decision.id}`,
+          "resolvedDecision",
+          tone,
+        ),
+        secondaryEvents: decisionSecondaryEvents(source, decision),
         ...stakeholder,
       }];
     });

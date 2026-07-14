@@ -151,6 +151,8 @@ export interface ScoutQualityData {
   specializationLevel: number;
   /** Whether the scout is a youth specialist. */
   isYouthSpecialist: boolean;
+  /** Access-driven breadth. This changes who can be reached, not player truth. */
+  presenceDiscoveryMultiplier?: number;
 }
 
 /**
@@ -317,7 +319,16 @@ export function getYouthVenuePool(
   const config = VENUE_POOL_SIZES[venueType];
   const bonusMultiplier = 1 + (youthDiscoveryBonus ?? 0);
   const tournamentMultiplier = tournament?.poolSizeMultiplier ?? 1.0;
-  const poolSize = Math.round(rng.nextInt(config.minPoolSize, config.maxPoolSize) * bonusMultiplier * tournamentMultiplier);
+  const presenceMultiplier = Math.max(
+    0.75,
+    Math.min(1.35, scoutQualityData?.presenceDiscoveryMultiplier ?? 1),
+  );
+  const poolSize = Math.round(
+    rng.nextInt(config.minPoolSize, config.maxPoolSize)
+      * bonusMultiplier
+      * tournamentMultiplier
+      * presenceMultiplier,
+  );
 
   // If scout quality data is provided, use weighted shuffle to bias toward higher-PA youth.
   // Otherwise, fall back to pure random shuffle (backwards compatible).

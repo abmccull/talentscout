@@ -432,13 +432,28 @@ export function resolveEventChoice(
     // -------------------------------------------------------------------------
 
     case "rivalPoach":
-      reputationChange = resolveRivalPoachChoice(effect);
+      if (effect === "rivalCeasefire") {
+        reputationChange = 1;
+      } else if (effect === "agentContest") {
+        reputationChange = 2;
+        fatigueChange = 5;
+      } else if (effect === "boundaryTrade") {
+        fatigueChange = 3;
+      } else {
+        reputationChange = resolveRivalPoachChoice(effect);
+      }
       messages.push(
         buildFollowUpMessage(
           rng,
           state,
           event,
-          rivalPoachOutcomeBody(effect),
+          effect === "rivalCeasefire"
+            ? "You accepted a narrow ceasefire. The rival has eased off two regional leads, but the agent now knows you abandoned an introduction made in confidence. Both reactions are part of the relationship record."
+            : effect === "agentContest"
+              ? "You backed the agent and stayed in the race. The confidential source feels protected; the rival now treats this as a personal competitive line and will move faster against you."
+              : effect === "boundaryTrade"
+                ? "You traded a different lead to draw a smaller competitive boundary. Neither party got everything, but both promises were honored and your pipeline is now less private."
+                : rivalPoachOutcomeBody(effect),
         ),
       );
       break;
@@ -870,7 +885,30 @@ export function resolveEventChoice(
       break;
 
     case "agentDoubleDealing":
-      if (effect === "doubleDealExpose") {
+      if (effect === "employeeCredit") {
+        reputationChange = 1;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You put your employee's name on the discovery record. Their morale rose immediately; the agent made clear that future introductions will be harder to earn.",
+        ));
+      } else if (effect === "agentCredit") {
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You honored the agent's claim to the introduction. Private market access remains open, but your employee heard the decision as a warning about who receives credit inside the agency.",
+        ));
+      } else if (effect === "sharedCredit") {
+        reputationChange = 1;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You documented exactly what the employee discovered and what the agent unlocked. Both accepted the record, though neither received the exclusive ownership they wanted.",
+        ));
+      } else if (effect === "doubleDealExpose") {
         reputationChange = 2;
         messages.push(
           buildFollowUpMessage(
@@ -943,6 +981,14 @@ export function resolveEventChoice(
           state,
           event,
           "You assembled a small coalition around the recommendation. The evidence is stronger and the political risk is shared, but no single scout will own the full credit if it succeeds.",
+        ));
+      } else if (effect === "journalistDelay") {
+        reputationChange = 1;
+        messages.push(buildFollowUpMessage(
+          rng,
+          state,
+          event,
+          "You negotiated a short embargo with the journalist and the family. The story can still run, but the prospect gets time to prepare and both parties saw you enforce a clear boundary.",
         ));
       } else {
         reputationChange = -1;

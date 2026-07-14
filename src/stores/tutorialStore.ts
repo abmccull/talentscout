@@ -9,6 +9,7 @@
 import { create } from "zustand";
 import { getSequenceById } from "@/components/game/tutorial/tutorialSteps";
 import type { Specialization } from "@/engine/core/types";
+import type { GameScreen } from "@/stores/gameStoreTypes";
 import {
   mergePersistedPlayerExperience,
   readPlayerExperience,
@@ -95,7 +96,7 @@ export interface GuidedSessionStartOptions {
 export interface ContextualHint {
   id: string;
   message: string;
-  cta?: { label: string; screen: string };
+  cta?: { label: string; screen: GameScreen };
   wikiArticle?: string;
   /** @deprecated Use wikiArticle instead */
   handbookChapter?: string;

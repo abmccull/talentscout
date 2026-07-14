@@ -1,0 +1,1117 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-14T03:39:35.356Z",
+  "manifestPath": "docs/asset-provenance.json",
+  "manifestStatus": "owner-attested-approved",
+  "status": "pass",
+  "summary": {
+    "assetCount": 135,
+    "trackedCount": 135,
+    "untrackedCount": 0,
+    "blockerCount": 0,
+    "totalBytes": 66815785
+  },
+  "groups": [
+    {
+      "id": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1,
+      "assetCount": 39
+    },
+    {
+      "id": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1,
+      "assetCount": 96
+    },
+    {
+      "id": "procedural-svg-identity",
+      "rightsStatus": "projectSource",
+      "evidenceCount": 1,
+      "assetCount": 0
+    }
+  ],
+  "blockers": [],
+  "assets": [
+    {
+      "path": "public/audio/ambience/office_1.mp3",
+      "bytes": 321036,
+      "sha256": "fc49665c1ba374de5855530a21e2b58ac4b34adc93e1778fa023ed17b2e4e1a5",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/office_2.mp3",
+      "bytes": 321036,
+      "sha256": "4b5d780dd4bf50cf93e882d3be94268703cd93059e38b780416e13084c80bb6c",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/office_3.mp3",
+      "bytes": 321036,
+      "sha256": "a56ee497650236ef7ed3159168b4bad3790f67f50f521bc79320008cef0237a7",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/office_4.mp3",
+      "bytes": 321036,
+      "sha256": "07edcd1234e475066846d43f56eae19644e71f288a8db60a34c469345dbdca9d",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain-stadium_1.mp3",
+      "bytes": 401284,
+      "sha256": "5f4014167c36cbeff12d05632c7f757468260b6e9e54c506e730a10111c82361",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain-stadium_2.mp3",
+      "bytes": 401284,
+      "sha256": "95e2b2459e32a4c46cbcbd5c363378ecbbde27ef7de9843ef5ad345c91d95b7b",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain-stadium_3.mp3",
+      "bytes": 401284,
+      "sha256": "9bbc25fa13662a84ecd3bfe746a06bbdd3819617407e8c7e8b0a244b4e08ffc3",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain-stadium_4.mp3",
+      "bytes": 401284,
+      "sha256": "ec7c2b858b6921d57722e7fdcfadc35a43283f54b156009795a978432e1b4916",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain_1.mp3",
+      "bytes": 321036,
+      "sha256": "0554aa637abfe77e985136c67972477d3d878392861211772f0b1a7f905dafcc",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain_2.mp3",
+      "bytes": 321036,
+      "sha256": "dc5d8edac246ac7d56653200d5eb6018cb5403416be3fecd8356e7a781d84145",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/rain_3.mp3",
+      "bytes": 321036,
+      "sha256": "0201e2eb7193d3b8ea61c088b8119abd3876417eac5f3504b2a57a5095f1c587",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/stadium-crowd_1.mp3",
+      "bytes": 401284,
+      "sha256": "c7ec7e33c1287d6e1ea0355698df844126c94b1bb314ba04ac6971ca80b830f7",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/stadium-crowd_2.mp3",
+      "bytes": 401284,
+      "sha256": "37c447bb7a2c9ec3a4cfee158d962b5ef4f4745c1119d88f06994a1191c80dda",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/stadium-crowd_3.mp3",
+      "bytes": 401284,
+      "sha256": "0292dbf52b91f8dc3d067e28c38d0aefcf9c35e56d4ce612d75bba418a7ce3c3",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/stadium-crowd_4.mp3",
+      "bytes": 401284,
+      "sha256": "61749950c68538e7ce79dd2d64fec0c5a92e5b02e277eddbd98eef8847a65a06",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/stadium-crowd_5.mp3",
+      "bytes": 401284,
+      "sha256": "fc17481c4140b4e348422e6592206d1d1786cc5e904daa54a84348b7fb9e3312",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/ambience/stadium-crowd_6.mp3",
+      "bytes": 401284,
+      "sha256": "b53fb3ad270c29a83d88008f2a1cefdce5ac573205c925141f08c528583af2b7",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/agency-theme_1.mp3",
+      "bytes": 3232123,
+      "sha256": "f781b28ca0dc7c8903c4bdc85bb4578fe27d22ecddd1add69fb20f0847370240",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/career-hub_1.mp3",
+      "bytes": 3201612,
+      "sha256": "f52a89606dc207b8f838df8bac1083f5daf233bf9b33d5e9502e3aad80507d9b",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/network-groove_1.mp3",
+      "bytes": 3232123,
+      "sha256": "4e5c3701eefd522d91c0987bb33426209c339bca1e285af67dcfcd3718553109",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/observation_1.mp3",
+      "bytes": 3423966,
+      "sha256": "252b40bfcc85a179c6efa44f4460c9a202d63f0a2db0811e2b3035fc3045004d",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/report-writing_1.mp3",
+      "bytes": 2960867,
+      "sha256": "5d936706ebcd84727506ebd5d059279580efb235c9ed4e9853b0a3ae928e2b52",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/season-review_1.mp3",
+      "bytes": 3327836,
+      "sha256": "a48a17aca37556ab076ed274191d71c4f8bad0c1443f02c38c3fd06e84518d2b",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/title-anthem_1.mp3",
+      "bytes": 3360018,
+      "sha256": "7031708eb6817cd1738d17bd35c73c6543391f68ba5dc351245150d9351573ff",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/transfer-pressure_1.mp3",
+      "bytes": 3263888,
+      "sha256": "2d21af1d2f7296dc7736c1701569798dd48f51357450281b817cad5c539b2ab0",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/wonderkid_1.mp3",
+      "bytes": 3169847,
+      "sha256": "c6e894b4a8a0e9b9341ee92b511be7dc3a324dcc8da258b21207889e3b7adf67",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/music/youth-scouting_1.mp3",
+      "bytes": 3456567,
+      "sha256": "6972652f80b1cb2f1d45e825d517c2941dd7426a4d2e0b0106ea78c58fd243b8",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/achievement_1.mp3",
+      "bytes": 20106,
+      "sha256": "e1c9767a5580d00c7e2dbcc62b8a32323c99dccff360d5f20046bc866a270ef8",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/achievement_2.mp3",
+      "bytes": 20106,
+      "sha256": "ff0005211dc300d3b15e2a1c6e46d27440bf0096215f67e0e174760810506e33",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/achievement_3.mp3",
+      "bytes": 20106,
+      "sha256": "89449541574adf7af3416cc32af624d2891e3ae2de307045bc55400b212c151c",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/calendar-slide_1.mp3",
+      "bytes": 8821,
+      "sha256": "971b4a3813dcbfa8b90f6ee269d0dc995d7ef8f9a12e3c799d0d004e992c9e49",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/calendar-slide_2.mp3",
+      "bytes": 8821,
+      "sha256": "d65cec178ca809e409f5ae903e12593d98efee258e4daaa4f724024b0d7f6012",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/calendar-slide_3.mp3",
+      "bytes": 8821,
+      "sha256": "ebb9f24c37e6ed2f66a15f71655d712665abdbb4d3986c2fa7cd02b258ccc4e9",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/camera-shutter_1.mp3",
+      "bytes": 8821,
+      "sha256": "5871e960a08a2f400f76d7d92ad9772305ca7440cfdd65846995ef9f09a5d524",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/camera-shutter_2.mp3",
+      "bytes": 8821,
+      "sha256": "b2bc302f67efb7100026a3398c402b2974aa6de173c448b92261bf2b5558d068",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/camera-shutter_3.mp3",
+      "bytes": 8821,
+      "sha256": "e7790ba8961d16f3c411e11a9005dee90cb8895f4ed1891ffde752e48c525311",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/click_1.mp3",
+      "bytes": 8821,
+      "sha256": "f916383e4b65101d5065e626512fc4a6f460b248955d18c4d5635d3cbb39862c",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/click_2.mp3",
+      "bytes": 8821,
+      "sha256": "1500435334b793ccd3e4b5c9ff2dd71c944441fb34b10eef02ae8d29e11d4d44",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/click_3.mp3",
+      "bytes": 8821,
+      "sha256": "c89b11e2f36a37ff5966827486feb999c42f00f427846c6e98e5486f7f434d31",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-chant_1.mp3",
+      "bytes": 81128,
+      "sha256": "c06c947b0c1c8d4be3273e8587c1d548383c592cee240b86f76540a9e8940bac",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-chant_2.mp3",
+      "bytes": 81128,
+      "sha256": "8432d4cdadb612e50ca196dc142a113ff57339dc15ba192b1e1515fcbd3d6e6f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-chant_3.mp3",
+      "bytes": 81128,
+      "sha256": "57f80b3ba528fd72a5a2a5d54451cc47f51451bd60dab4d0157a58557cf51815",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-chant_4.mp3",
+      "bytes": 81128,
+      "sha256": "b7578de6c5d4ba81611720900e35b5b837bfa67b25e1ef9e20257c84e8bfeb56",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-chant_5.mp3",
+      "bytes": 81128,
+      "sha256": "8252dcd4ccc782e40f6c6f2e27306f5b9a31015afdf92ae0b0caf46fc388f08a",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_1.mp3",
+      "bytes": 65245,
+      "sha256": "f3673f0d5f720e61cca97c44f8cd12f7b8bfc9024e3128329fa0871e635f7e53",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_2.mp3",
+      "bytes": 65245,
+      "sha256": "a04d6bd8bf98fff9809f960112a8c300b3b0ad3d65b18ec945ce172b3aebd1fe",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_3.mp3",
+      "bytes": 65245,
+      "sha256": "8a10eb0921dca6afe0fed4754fc134fdf8a0b5e24f7a9087eed2636c2ae97e46",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_4.mp3",
+      "bytes": 65245,
+      "sha256": "6cd7c3a84d8ac2ddd2105e0c67fc34c32d833daa06c162a83efbd5d53c1681f5",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_5.mp3",
+      "bytes": 65245,
+      "sha256": "971124c06840c71d115c20a2279239f11107b89e3acfc082b7c5fd0a5d114916",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_6.mp3",
+      "bytes": 65245,
+      "sha256": "353e26c9e8662e6190814bb5813a286ce82969d8982260ca96ac0b0e2c132955",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_7.mp3",
+      "bytes": 65245,
+      "sha256": "480b9b0f5ac7cbcd5ba5b4d7fe1cb3f2473fa312813d79c5bd7bdb91d109b635",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-goal_8.mp3",
+      "bytes": 65245,
+      "sha256": "440d94e0cdaf42d47ee3aff6ef6529acb62356bb29d8bdbf83ca097e8001637f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-miss_1.mp3",
+      "bytes": 48945,
+      "sha256": "3ee01160a4fd6c0f25a356728ccd6d1d27eaff4c4033a42d10201f45d858805c",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-miss_2.mp3",
+      "bytes": 48945,
+      "sha256": "f8a3f7d5f4791f3e7716278179abf10781ca717b5288e83e78b281f2e46d38e3",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-miss_3.mp3",
+      "bytes": 48945,
+      "sha256": "6963d17362848a242fe6b6424ab0f7943eb326e89b687907becee6a6457843f9",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-miss_4.mp3",
+      "bytes": 48945,
+      "sha256": "14bcf72277e24bea6aabcf5c1fd5b20526f443f4961c7fc9de30cc2cf9cb7eab",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/crowd-miss_5.mp3",
+      "bytes": 48945,
+      "sha256": "3a188c118946ff23103e9876360e51127468965071cef2cd5eb1f85b8a621878",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/discovery_1.mp3",
+      "bytes": 24703,
+      "sha256": "c489860a9b5a0d47be2083d0de9b202eef09aa0103ebd26e6727481b8fd3343e",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/discovery_2.mp3",
+      "bytes": 24703,
+      "sha256": "65c5dc9fa25a82f7a0dab20d48b70a12ef5cf3eb944dd47665169c4c11c46c44",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/discovery_3.mp3",
+      "bytes": 24703,
+      "sha256": "fcc1d72cd8567711bfbe861293059dd60e5299c7429de466c89558aa94c8c0a5",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/error_1.mp3",
+      "bytes": 8821,
+      "sha256": "de0f5ea04c1fab8599d1665fa447adc30e5d24fc1396c7cf6a0c54f5437808df",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/error_2.mp3",
+      "bytes": 8821,
+      "sha256": "7acf1ab4abbafa55f8941a24dd69c5dbc336719010e1a86b814a5dff625f2478",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/job-offer_1.mp3",
+      "bytes": 24703,
+      "sha256": "99758412522746a899b140514e196708f8e8cbc7a0d1e92a51c83a1468c75865",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/job-offer_2.mp3",
+      "bytes": 24703,
+      "sha256": "50d3863db4abeb46c05f604e62c4c875f0d7b834ec47ef4364499be3805be2e4",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/level-up_1.mp3",
+      "bytes": 24703,
+      "sha256": "23eb4ff3f0954da3e66c4606791db9ab7e3b1df0469558dd61f726990c255bc3",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/level-up_2.mp3",
+      "bytes": 24703,
+      "sha256": "36d8a770124d4130cd847480ba51bc9b4f2aeb0f867277f0f996a3e774b9f823",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/level-up_3.mp3",
+      "bytes": 24703,
+      "sha256": "08675af0d232ef1f6ca017c9db96f1c6cd98ea6220efeecf2f1675a6fd2ecab1",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/notification_1.mp3",
+      "bytes": 10493,
+      "sha256": "4a0feaece584b06351daf54353cd0ad0947beb7d7f5600d154e83deb28e1652f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/notification_2.mp3",
+      "bytes": 10493,
+      "sha256": "74b6c14b18a03ac31cfcd02d10def97ed929e662e21feb4e9b865b88b43e72d7",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/notification_3.mp3",
+      "bytes": 10493,
+      "sha256": "9ec5b9512397ca9d16504fc49c482299de2c13418d796961f82588bcf0ab2467",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/page-turn_1.mp3",
+      "bytes": 8821,
+      "sha256": "5a6820026a73462ee302f54df2595c60f92505990cd15441dc1cc743dc319bee",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/page-turn_2.mp3",
+      "bytes": 8821,
+      "sha256": "d55ad5fcf2732418f6e0cc5f60643ec344c65aef1681db14ab828554dd4a7e4f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/page-turn_3.mp3",
+      "bytes": 8821,
+      "sha256": "8f997c7d0d74cfea3211bcbb2bebcd3c050d5cb945f7efe97a8a1dfe0d405a98",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/page-turn_4.mp3",
+      "bytes": 8821,
+      "sha256": "7b4aff0b095ba74f1f6e5da98ec9b96ab95d05d509449620f528e6f02cdf5ba2",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/page-turn_5.mp3",
+      "bytes": 8821,
+      "sha256": "daa1d410c099fe4ab3cbb704419b2e4d0427cff04f2aedc76b9106eecf8385c5",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/pen-scribble_1.mp3",
+      "bytes": 8821,
+      "sha256": "1c230d139787a56a8c73104a7f849ae63e3ded8f86fc3e3212e78c25dee157be",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/pen-scribble_2.mp3",
+      "bytes": 8821,
+      "sha256": "f5e593e5ef681c80c5ce18a53dca3fef359517fbdcfb4484ee3d5e79d03049fd",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/pen-scribble_3.mp3",
+      "bytes": 8821,
+      "sha256": "800fcbce351210b9af38ebf7831384fbbc6bc8e05dad1bafef2858905c21a56d",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/pen-scribble_4.mp3",
+      "bytes": 8821,
+      "sha256": "23967fc7232c7aa7b2f9b2e2c77be5dabcf1060927500b51d65ee9914cd66eaa",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/pen-scribble_5.mp3",
+      "bytes": 8821,
+      "sha256": "38bc77a54555e98c6c4cb7d7322d7ccf0d5b8640957e1649841bc3fdc89d67fc",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/promotion_1.mp3",
+      "bytes": 56886,
+      "sha256": "bc53a7e0d3a2ac96fccb77ba92e8f1c27e1fb565db5924473c195969ef9d2362",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/promotion_2.mp3",
+      "bytes": 56886,
+      "sha256": "40caa615ef9e0ab5b445e6fb8758d31aabf9fc85b578a9c06d8bba2c3cecd1ce",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/promotion_3.mp3",
+      "bytes": 56886,
+      "sha256": "7d9f8d622b1684e530f5318137a1ced49b42eba06d7791ec2bd020712b86bc76",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/report-submit_1.mp3",
+      "bytes": 8821,
+      "sha256": "e2d5c6f8d4f23eb1fd7a2b8afa61eb4fd4ba44ee4461d42f311fe3e08e281791",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/report-submit_2.mp3",
+      "bytes": 8821,
+      "sha256": "f78385a56e20e643a3591dc8c483ae451a7117ee0ed7cd940ef5564e1a6bfeb6",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/report-submit_3.mp3",
+      "bytes": 8821,
+      "sha256": "884e839b70724247d420e312c6fa94c2c5f8d110bb9fd5eca45a52f3c39570dc",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/save_1.mp3",
+      "bytes": 8821,
+      "sha256": "05e0147202bc882c0e640d66d0f28554efc019cdf8619c0a6e68af079407cdaa",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/save_2.mp3",
+      "bytes": 8821,
+      "sha256": "dc48c720d27981cbe46f3b43861fd00f13ab3ec0596d4c39d0f07a7c3fe628fc",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/season-end-whistle_1.mp3",
+      "bytes": 33062,
+      "sha256": "e2de84dc80e3ffe7da3b3f4779ffcc4822191d53ecd12d9d730bb6b0858a7b29",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/season-end-whistle_2.mp3",
+      "bytes": 33062,
+      "sha256": "36ff55d2378984416c60c40b66e49568d7d26229354472936591425b3de2502f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/travel_1.mp3",
+      "bytes": 24703,
+      "sha256": "a1e8f4ec53907c7962cbf9b90bb1df9ac1d5e4f6a3792856bf9f45147fc601a8",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/travel_2.mp3",
+      "bytes": 24703,
+      "sha256": "cadf0d167de9d48c8fd3e0d4c905a162978873bb85d3477dbb38adce6395104f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/travel_3.mp3",
+      "bytes": 24703,
+      "sha256": "9cd2ed59fb7c808a2846a119e028b5a0b3e05aecca60d9d68cb155de4ffcbd6f",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/whistle_1.mp3",
+      "bytes": 17180,
+      "sha256": "54aba57c85a05acf7acd56b10069215e4c1aa7035acf2b7604ffebd00738dc73",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/whistle_2.mp3",
+      "bytes": 17180,
+      "sha256": "5ed7c23e615d992e4ca03b383b107be53eb74fd54bb2331c5d3dd3ad1df48f5d",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/audio/sfx/whistle_3.mp3",
+      "bytes": 17180,
+      "sha256": "e89a5f0fb7a40361bc032292996e641cb116387e8451a94ea26e84730070f387",
+      "groupId": "elevenlabs-generated-audio",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/scout-1.png",
+      "bytes": 460933,
+      "sha256": "9a98e23fe3d1f10d1f486f16e9baa131d5e5dbfe6c5999410f34699937a30d2e",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/scout-2.png",
+      "bytes": 533406,
+      "sha256": "eb03d2238ce960ea7434c61b048ea006fc5ec93387794e1f20abbff2a0f961bb",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/scout-3.png",
+      "bytes": 504770,
+      "sha256": "d5c0495cd7521e6a86c14eba92067105721f7830ed16b04cbb2ab9e2aace6375",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/scout-4.png",
+      "bytes": 556039,
+      "sha256": "5c282cd7733e16b625a68c0022ccd518b1230ec21547588383b05cf20275fef2",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/scout-5.png",
+      "bytes": 397541,
+      "sha256": "513d675568a1d96f2e3142716b12119be1786faa11be5bcefcc5465914413393",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/avatars/scout-6.png",
+      "bytes": 653001,
+      "sha256": "7cb7e4932bc18d6c5bf337a53d020b3838c102f7663bd63729f176c95ba4a1a3",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/academy.png",
+      "bytes": 732167,
+      "sha256": "dc12aa08e31a0d1249e731fa4d29815f4f71383dd6b7e593846b652ee6e58846",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/conference.png",
+      "bytes": 646621,
+      "sha256": "2affbd3f6cf54494ef6c660b963d1f68a4b91a1a439d8a84f644cbc85c5df44a",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/data-room.png",
+      "bytes": 652963,
+      "sha256": "d13ff0a5a3665d41cb830cafc448c2674211c82368b2fc39f49314447c217d72",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/free-day.png",
+      "bytes": 722170,
+      "sha256": "2e6ab0b04df432e342471853e3783e6c1472029b2dd9720e33d3b05bf9ffaa2d",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/grassroots.png",
+      "bytes": 633091,
+      "sha256": "3dc2a0fce90a3f5daf465fefe575d818156b3022dcfbc58f293e87a039635059",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/meeting.png",
+      "bytes": 643897,
+      "sha256": "f96ac15869046f2a36e174d1ed599f769cddd4773337a9cd1534d221a2811a13",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/rest.png",
+      "bytes": 709344,
+      "sha256": "5b53d4f8ab488b1f9f7477d15466b96940bb889e6a7574522fde2e0597afed2b",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/school-match.png",
+      "bytes": 759610,
+      "sha256": "ae591e107d78b15137535dc65b81e5d9646b83c4a562e4f07b0d716d84585d2a",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/street-football.png",
+      "bytes": 912284,
+      "sha256": "86315f842b17fefe454eacbf0af7a7dabd55438170e5989a93d54b9a37cb395c",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/training.png",
+      "bytes": 584182,
+      "sha256": "88a4f32d6fe9902c8df947b1099af6adf847c39bf2584706d3042f92a56351fa",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/video-room.png",
+      "bytes": 561309,
+      "sha256": "e9656ec4a84bf53e28f845a22f55238a29d8638e301397a36f86a792d4f59e63",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/activities/youth-festival.png",
+      "bytes": 647795,
+      "sha256": "462610e69c13eb518cc577b597e134bdbb185e3aac631411b46af64be7227a36",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/agency-office.png",
+      "bytes": 622444,
+      "sha256": "4a25136729c7c68e8ed5dca33d8083d363e114466fad6ead5d9ace5366d182a3",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/career-journey.png",
+      "bytes": 705323,
+      "sha256": "a3c9ec2bdd3fc597f7c380182fa60a3a515ac2ea15abc1aaadcef0e47f359869",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/dashboard-office.png",
+      "bytes": 595249,
+      "sha256": "2db147d51f9eebf715bf40ef4a7319797ddb8ec8a238f373d8c5125de99524b3",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/discoveries-trophy.png",
+      "bytes": 666252,
+      "sha256": "5033bb33879cb4c5c3d523e5c4c5ce01a927c131dc2cd1a4534c5cffc4e7bffa",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/international.png",
+      "bytes": 676702,
+      "sha256": "bc7cbf8efcb8e64497a5ed6cf4e6cfabe6fd89cac9dc4a4463c15b42e10ded9b",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/loading.png",
+      "bytes": 524283,
+      "sha256": "b1fd0c37d271bbe791c44d488be8f2e0963fbb6940272b196049e9ed3ecb5a44",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/match-atmosphere.png",
+      "bytes": 865380,
+      "sha256": "d34a940bba7bc44504d9bfb3404839a6a6832d137c41a71c4676baf865efde31",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/menu-bg-1.png",
+      "bytes": 763763,
+      "sha256": "a6fec81b0e898b8ec6f32ea2f32d0da03224b89528213504015e4edce6ca0baf",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/menu-bg-2.png",
+      "bytes": 711922,
+      "sha256": "b1ef730d6fef8ba780f9cebd99f41347f76fd680ad6205e99dbc00efc3ebc1e0",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/negotiation-boardroom.png",
+      "bytes": 630875,
+      "sha256": "dbf22c5eee5b72ba7058889e5bb655dd54ac31fdc0f57ecdaef98cf8ef892a28",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/network-lounge.png",
+      "bytes": 650332,
+      "sha256": "2ac0ba5b34abd714895fa6374ac4aeeabe5b4a14012d0ad1856ce2b76bb22aa3",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/reports-desk.png",
+      "bytes": 770992,
+      "sha256": "2fec92bc9a3b72a93ce2e1ed87c4dc4c4e3eb0c8526263771da6f7bdedd06d8f",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/rivals-binoculars.png",
+      "bytes": 756014,
+      "sha256": "572391aed4bf39c5217552bd784e1cc5be99a8fb3fe8702edb52f507ae2537a7",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/season-end.png",
+      "bytes": 801626,
+      "sha256": "ad72413f85200616e8f511916e6693c4cd24a785e66780955deeb98a402b4cd8",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/training-classroom.png",
+      "bytes": 633793,
+      "sha256": "868751dcbf1b84ccbe6b2a1426794dd2b91aa0103d274f8eb86a9366bbce5758",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/backgrounds/world-map.png",
+      "bytes": 589934,
+      "sha256": "1b80094b11c604af4c0fbb1e099a813ca47711456b9e71782b500c5e9f2be8be",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/branding/icon-binoculars.png",
+      "bytes": 563636,
+      "sha256": "645b3a2867bd8f46477613983ce74ddf465928c39a10b3de40eaa12a8becc2c8",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/branding/icon-notebook.png",
+      "bytes": 699719,
+      "sha256": "ede8059fb7cbc642b7544019db8c0b16f765d2fd371dd19e760811e484860f69",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/branding/icon-whistle-badge.png",
+      "bytes": 744504,
+      "sha256": "09625ba8c89914670449ae5a57ba7d5f6e545618a7410c17b19d8f44f0aeeb45",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-capsule.png",
+      "bytes": 858624,
+      "sha256": "ba55e1c0816c83b66e0a999ae8002dca740a43ab4f3895ee672df620ef487c2e",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    },
+    {
+      "path": "public/images/steam/steam-hero.png",
+      "bytes": 730833,
+      "sha256": "94dd1814a4355c1cd6330fd6ecf4ff4eb90f82ae18c8010beaa6c6a86a13f2bd",
+      "groupId": "meshy-generated-images",
+      "rightsStatus": "approved",
+      "evidenceCount": 1
+    }
+  ]
+}

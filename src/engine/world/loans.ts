@@ -25,6 +25,7 @@ import type {
 import { normalizeCountryKey } from "@/lib/country";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
+import { getWorldConditionModifiers } from "@/engine/world/worldConditions";
 import {
   addGameWeeksWithSeasonLength,
   gameWeeksBetweenWithSeasonLength,
@@ -419,6 +420,11 @@ export function processAILoanDeals(
       acceptanceChance += 0.08;
     }
     acceptanceChance += isForeignLoan ? (routeProbability - 0.5) * 0.2 : 0.08;
+    const seasonalRecruitmentAdjustment = getWorldConditionModifiers(
+      state,
+      targetCountry,
+    ).recruitmentScoreAdjustment;
+    acceptanceChance += seasonalRecruitmentAdjustment / 100;
     acceptanceChance = Math.max(0.1, Math.min(0.9, acceptanceChance));
     if (!rng.chance(acceptanceChance)) {
       return rejectRecommendation("The club could not guarantee a suitable role or financial package.");
@@ -597,6 +603,14 @@ export function processLoanPerformance(
 ): LoanDeal[] {
   const activeLoans = state.activeLoans ?? [];
   const updatedLoans: LoanDeal[] = [];
+  // Fixture availability is shared by every active loan. Index it once rather
+  // than scanning the complete world schedule separately for every deal.
+  const clubsWithFixture = new Set<string>();
+  for (const fixture of Object.values(state.fixtures)) {
+    if (!isFixtureInSeason(fixture, season) || fixture.week !== week) continue;
+    clubsWithFixture.add(fixture.homeClubId);
+    clubsWithFixture.add(fixture.awayClubId);
+  }
 
   for (const deal of activeLoans) {
     if (deal.status !== "active") {
@@ -622,14 +636,7 @@ export function processLoanPerformance(
 
     // Check if loan club has a fixture this week
     const loanClub = state.clubs[deal.loanClubId];
-    const hasFixture = loanClub
-      ? Object.values(state.fixtures).some(
-          (f) =>
-            isFixtureInSeason(f, season) &&
-            f.week === week &&
-            (f.homeClubId === loanClub.id || f.awayClubId === loanClub.id),
-        )
-      : false;
+    const hasFixture = loanClub ? clubsWithFixture.has(loanClub.id) : false;
 
     const playingTimeChance = {
       key: 0.92,

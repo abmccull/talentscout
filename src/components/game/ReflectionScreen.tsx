@@ -135,7 +135,7 @@ function HypothesisCard({ hypothesis, playerName, onAccept, onDismiss }: Hypothe
 }
 
 // =============================================================================
-// FLAGGED MOMENT TIMELINE (inline — no external MomentTimeline component exists yet)
+// FLAGGED MOMENT TIMELINE
 // =============================================================================
 
 function MomentTimeline({ flaggedMoments }: { flaggedMoments: SessionFlaggedMoment[] }) {

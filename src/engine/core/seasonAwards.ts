@@ -17,6 +17,7 @@ import type {
 } from "./types";
 import { deriveSeasonReviewMetrics } from "../career/seasonReviewContext";
 import { annualizeMonthlyAmount } from "./annualization";
+import { selectLatestReportsByCaseOpenedInRange } from "../reports/reportAccountability";
 
 // =============================================================================
 // CONSTANTS
@@ -32,8 +33,10 @@ const YOUTH_MAX_AGE = 21;
  * Get all reports submitted in the given season.
  */
 function getSeasonReports(state: GameState, season: number): ScoutReport[] {
-  return Object.values(state.reports).filter(
-    (r) => r.submittedSeason === season,
+  return selectLatestReportsByCaseOpenedInRange(
+    Object.values(state.reports),
+    { submittedSeason: season, submittedWeek: Number.MIN_SAFE_INTEGER },
+    { submittedSeason: season, submittedWeek: Number.MAX_SAFE_INTEGER },
   );
 }
 

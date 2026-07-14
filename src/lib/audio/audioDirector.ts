@@ -86,7 +86,7 @@ const TRAVEL_SCREENS = new Set<GameScreen>([
 ]);
 
 const READING_SCREENS = new Set<GameScreen>([
-  "reportHistory", "reportComparison", "playerProfile", "handbook",
+  "reportHistory", "reportComparison", "playerProfile", "handbook", "futureRoadmap",
   "analytics", "performance",
 ]);
 

@@ -29,6 +29,7 @@ import {
   Shield,
   Swords,
   Trophy,
+  Building2,
 } from "lucide-react";
 import { HelpTooltip } from "@/components/ui/HelpTooltip";
 import type {
@@ -68,6 +69,19 @@ import {
 } from "@/engine/run";
 import { ConsequenceCinema } from "./consequence-cinema/ConsequenceCinema";
 import { LeadershipPortfolioPanel } from "./career/LeadershipPortfolioPanel";
+import { CareerRecoveryPanel } from "./career/CareerRecoveryPanel";
+import { WorldConditionPanel } from "./career/WorldConditionPanel";
+import { getPlayerFacingDiscoverySummaries } from "@/engine/career/playerFacingDiscovery";
+import {
+  TOTAL_ACHIEVEMENT_COUNT,
+  useAchievementStore,
+} from "@/stores/achievementStore";
+import { ACHIEVEMENTS } from "@/lib/achievements";
+import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
+import {
+  CAREER_FINANCE_DRILLDOWN,
+  CAREER_RECORD_DRILLDOWNS,
+} from "./career/careerDrilldowns";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -610,6 +624,10 @@ export function CareerScreen() {
   const resolveLeadershipResponsibility = useGameStore(
     (state) => state.resolveLeadershipResponsibility,
   );
+  const chooseCareerRecovery = useGameStore((state) => state.chooseCareerRecovery);
+  const unlockedAchievements = useAchievementStore(
+    (state) => state.unlockedAchievements,
+  );
 
   const { scout, currentSeason, jobOffers, performanceReviews } = gameState ?? {
     scout: undefined,
@@ -746,6 +764,9 @@ export function CareerScreen() {
     (report) => !report.clubResponse || report.clubResponse === "pending",
   ).length;
   const youthDiscoveryRecords: DiscoveryRecord[] = gameState.discoveryRecords ?? [];
+  const playerFacingDiscoveryById = new Map(
+    getPlayerFacingDiscoverySummaries(gameState).map((summary) => [summary.playerId, summary]),
+  );
   const discoveredPlayerIds = new Set(youthDiscoveryRecords.map((record) => record.playerId));
   const averageSkill = skillEntries.length > 0
     ? skillEntries.reduce((sum, [, value]) => sum + value, 0) / skillEntries.length
@@ -754,19 +775,26 @@ export function CareerScreen() {
   const monthlyExpenses = finances
     ? Object.values(finances.expenses).reduce((sum, amount) => sum + amount, 0)
     : 0;
+  const currentBuildAchievementCount = ACHIEVEMENTS.filter(
+    (achievement) =>
+      isAchievementAvailableForBuild(achievement.id) &&
+      unlockedAchievements.has(achievement.id),
+  ).length;
+  const latestPerformanceReview = performanceReviews.at(-1);
   const careerTimeline: CareerTimelineEntry[] = [
     ...youthDiscoveryRecords.map((record) => {
       const player = gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
+      const summary = playerFacingDiscoveryById.get(record.playerId);
       return {
         id: `discovery-${record.playerId}`,
         season: record.discoveredSeason,
         week: record.discoveredWeek,
         label: "Discovery",
         title: player ? `${player.firstName} ${player.lastName}` : "Youth prospect",
-        description: record.wasWonderkid
-          ? "First identified as an exceptional youth prospect."
+        description: summary?.isHighUpsideProjection
+          ? "Your original report projected high upside."
           : "Added to your professional scouting record.",
-        tone: record.wasWonderkid ? "amber" as const : "emerald" as const,
+        tone: summary?.isHighUpsideProjection ? "amber" as const : "emerald" as const,
       };
     }),
     ...youthDiscoveryRecords
@@ -873,6 +901,7 @@ export function CareerScreen() {
 
               <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
                 <h2 className="sr-only">Career overview</h2>
+                <CareerRecoveryPanel state={gameState} onChoose={chooseCareerRecovery} />
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <CareerMetricTile label="Reputation" value={`${Math.round(scout.reputation)}/100`} helper="Trust earned through decisions" tone="emerald" />
                   <CareerMetricTile label="Placements" value={`${acceptedPlacements}`} helper={`${pendingPlacements} awaiting response`} tone="blue" />
@@ -919,6 +948,7 @@ export function CareerScreen() {
                         </ul>
                       </div>
                     ))}
+                    <WorldConditionPanel state={gameState} />
                     {rivalOrganizationCount > 0 && (
                       <div className="flex flex-col gap-3 rounded-xl border border-fuchsia-400/15 bg-fuchsia-400/[0.04] p-4 md:col-span-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -1156,6 +1186,20 @@ export function CareerScreen() {
                       <span><span className="block font-semibold text-white">Equipment loadout</span><span className="mt-1 block text-xs text-zinc-400">Tools that change real activity outcomes</span></span>
                       <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
                     </button>
+                    <button onClick={() => setScreen("agency")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-sky-400/25 hover:bg-sky-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <Building2 size={18} className="shrink-0 text-sky-300" aria-hidden="true" />
+                        <span>
+                          <span className="block font-semibold text-white">Agency &amp; regional presence</span>
+                          <span className="mt-1 block text-xs text-zinc-400">
+                            {finances?.satelliteOffices.length
+                              ? `${finances.satelliteOffices.length} regional office${finances.satelliteOffices.length === 1 ? "" : "s"} active`
+                              : "Infrastructure, assistants, clients, and offices"}
+                          </span>
+                        </span>
+                      </span>
+                      <ChevronRight size={18} className="shrink-0 text-zinc-400" aria-hidden="true" />
+                    </button>
                   </div>
                 </div>
               </TabsContent>
@@ -1168,6 +1212,63 @@ export function CareerScreen() {
                   <CareerMetricTile label="Tracked Players" value={`${discoveredPlayerIds.size}`} helper="Across full careers" tone="blue" />
                   <CareerMetricTile label="Legacy" value={`${gameState.legacyScore.totalScore}`} helper="Outcome-weighted impact" tone="amber" />
                 </div>
+                <section
+                  aria-labelledby="career-records-relationships-title"
+                  className="rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5"
+                  data-testid="career-record-drilldowns"
+                >
+                  <div className="mb-4">
+                    <h3 id="career-records-relationships-title" className="font-semibold text-white">
+                      Records &amp; relationships
+                    </h3>
+                    <p className="mt-1 text-sm text-zinc-400">
+                      Reopen the people and evidence behind your reputation at any time.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {CAREER_RECORD_DRILLDOWNS.map((item) => {
+                      const status = item.screen === "network"
+                        ? `${Object.keys(gameState.contacts).length} known contacts`
+                        : item.screen === "alumniDashboard"
+                          ? `${gameState.alumniRecords.length} placed prospects`
+                          : item.screen === "performance"
+                            ? latestPerformanceReview
+                              ? `Latest review: ${latestPerformanceReview.outcome}`
+                              : `${scout.reportsSubmitted} reports on record`
+                            : `${currentBuildAchievementCount}/${TOTAL_ACHIEVEMENT_COUNT} unlocked`;
+                      const Icon = item.screen === "network"
+                        ? Users
+                        : item.screen === "alumniDashboard"
+                          ? Trophy
+                          : item.screen === "performance"
+                            ? BarChart3
+                            : Star;
+
+                      return (
+                        <button
+                          key={item.screen}
+                          type="button"
+                          onClick={() => setScreen(item.screen)}
+                          className="flex min-h-28 w-full items-start justify-between gap-3 rounded-xl border border-white/10 bg-black/20 p-4 text-left transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                        >
+                          <span className="min-w-0">
+                            <span className="flex items-center gap-2 font-semibold text-white">
+                              <Icon size={17} className="shrink-0 text-emerald-300" aria-hidden="true" />
+                              {item.label}
+                            </span>
+                            <span className="mt-2 block text-xs leading-5 text-zinc-400">
+                              {item.description}
+                            </span>
+                            <span className="mt-2 block text-[11px] font-medium text-emerald-200">
+                              {status}
+                            </span>
+                          </span>
+                          <ChevronRight size={17} className="mt-0.5 shrink-0 text-zinc-400" aria-hidden="true" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
                 <ConsequenceCinema
                   source={consequenceCinemaSource}
                   onOpenPlayer={(playerId) => {
@@ -1281,6 +1382,22 @@ export function CareerScreen() {
                       <CareerMetricTile label="Monthly Costs" value={formatBalance(monthlyExpenses)} helper="Lifestyle, travel, and tools" tone="red" />
                       <CareerMetricTile label="Personal Savings" value={formatSavings(scout.savings)} helper={formatSalary(scout.salary)} />
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setScreen(CAREER_FINANCE_DRILLDOWN.screen)}
+                      className="flex min-h-20 w-full items-center justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4 text-left transition hover:border-emerald-400/40 hover:bg-emerald-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                      data-testid="career-finance-drilldown"
+                    >
+                      <span>
+                        <span className="block font-semibold text-emerald-100">
+                          {CAREER_FINANCE_DRILLDOWN.label}
+                        </span>
+                        <span className="mt-1 block text-sm text-zinc-400">
+                          {CAREER_FINANCE_DRILLDOWN.description}
+                        </span>
+                      </span>
+                      <ChevronRight size={18} className="shrink-0 text-emerald-300" aria-hidden="true" />
+                    </button>
                     <div className="grid gap-5 lg:grid-cols-2">
                       <Card className="border-white/10 bg-[#11161c]/95">
                         <CardHeader className="pb-3"><CardTitle className="text-base">Monthly commitments</CardTitle></CardHeader>
@@ -1334,6 +1451,12 @@ export function CareerScreen() {
           <h1 className="text-2xl font-bold">Career</h1>
           <p className="text-sm text-zinc-400">Season {currentSeason}</p>
         </div>
+
+        {gameState.careerRecovery?.current && (
+          <div className="mb-6">
+            <CareerRecoveryPanel state={gameState} onChoose={chooseCareerRecovery} />
+          </div>
+        )}
 
         {/* ── Career path choice (tier 2+, club default, eligible) ──────── */}
         {showPathChoice && (

@@ -11,7 +11,7 @@ import type {
   WorldFact,
 } from "@/engine/consequences";
 import { createRNG } from "@/engine/rng";
-import type { OpeningCaseChoiceId, OpeningCaseState } from "./openingCase";
+import type { OpeningCaseChoiceId, OpeningCaseState } from "./openingCaseTypes";
 
 export interface OpeningCaseDirectorCast {
   scout: EntityRef;

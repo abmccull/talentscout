@@ -2,7 +2,11 @@
 
 const { contextBridge, ipcRenderer } = require("electron");
 
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+// Keep these values synchronized with electron/save-transfer.js. Sandboxed
+// preloads cannot import arbitrary local CommonJS modules, so the source test
+// guards this explicit trust-boundary duplication.
+const MAX_FILE_BYTES = 96 * 1024 * 1024;
+const SAVE_TRANSFER_CHUNK_BYTES = 1024 * 1024;
 const MAX_FILENAME_LENGTH = 255;
 const MAX_STEAM_STRING_LENGTH = 256;
 const STEAM_SLOT_PATTERN = /^[0-5]$/;
@@ -79,6 +83,44 @@ function assertFilePayload(data) {
   return normalized;
 }
 
+function expectedSaveChunkCount(totalBytes) {
+  return Math.ceil(totalBytes / SAVE_TRANSFER_CHUNK_BYTES);
+}
+
+function assertTransferId(value) {
+  if (typeof value !== "string" || value.length === 0 || value.length > 128) {
+    throw new TypeError("Save transfer returned an invalid identifier");
+  }
+  return value;
+}
+
+function assertTransferMetadata(value) {
+  if (!value || typeof value !== "object") {
+    throw new TypeError("Save transfer returned invalid metadata");
+  }
+  const { transferId, totalBytes, chunkCount } = value;
+  assertTransferId(transferId);
+  if (
+    !Number.isSafeInteger(totalBytes) ||
+    totalBytes <= 0 ||
+    totalBytes > MAX_FILE_BYTES
+  ) {
+    throw new RangeError("Save transfer returned an invalid byte length");
+  }
+  if (chunkCount !== expectedSaveChunkCount(totalBytes)) {
+    throw new RangeError("Save transfer returned an invalid chunk count");
+  }
+  return { transferId, totalBytes, chunkCount };
+}
+
+function normalizeTransferChunk(value) {
+  if (Buffer.isBuffer(value)) return Buffer.from(value);
+  if (value instanceof Uint8Array) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+  }
+  throw new TypeError("Save transfer returned a non-binary chunk");
+}
+
 function assertFilename(filename) {
   const normalized = assertString(filename, "filename", MAX_FILENAME_LENGTH).trim();
   return normalized || "talentscout-save.json";
@@ -88,15 +130,141 @@ function invoke(channel, ...args) {
   return ipcRenderer.invoke(channel, ...args);
 }
 
+async function uploadSaveTransfer({
+  data,
+  beginChannel,
+  beginArgs,
+  appendChannel,
+  commitChannel,
+  abortChannel,
+  allowCancel = false,
+}) {
+  const text = assertFilePayload(data);
+  const payload = Buffer.from(text, "utf8");
+  const chunkCount = expectedSaveChunkCount(payload.byteLength);
+  const rawTransferId = await invoke(
+    beginChannel,
+    ...beginArgs,
+    payload.byteLength,
+    chunkCount,
+  );
+  if (rawTransferId === null && allowCancel) return false;
+  const transferId = assertTransferId(rawTransferId);
+
+  try {
+    for (let index = 0; index < chunkCount; index += 1) {
+      const start = index * SAVE_TRANSFER_CHUNK_BYTES;
+      const end = Math.min(start + SAVE_TRANSFER_CHUNK_BYTES, payload.byteLength);
+      await invoke(
+        appendChannel,
+        transferId,
+        index,
+        payload.subarray(start, end),
+      );
+    }
+    return await invoke(commitChannel, transferId);
+  } catch (error) {
+    await invoke(abortChannel, transferId).catch(() => {});
+    throw error;
+  }
+}
+
+async function downloadSaveTransfer(rawMetadata, readChannel, finishChannel) {
+  if (rawMetadata === null) return null;
+
+  let transferId = rawMetadata && typeof rawMetadata === "object"
+    && typeof rawMetadata.transferId === "string"
+    ? rawMetadata.transferId
+    : null;
+  let finished = false;
+  try {
+    const metadata = assertTransferMetadata(rawMetadata);
+    transferId = metadata.transferId;
+    const chunks = [];
+    let receivedBytes = 0;
+
+    for (let index = 0; index < metadata.chunkCount; index += 1) {
+      const chunk = normalizeTransferChunk(
+        await invoke(readChannel, transferId, index),
+      );
+      const isLast = index === metadata.chunkCount - 1;
+      const expectedBytes = isLast
+        ? metadata.totalBytes - SAVE_TRANSFER_CHUNK_BYTES * (metadata.chunkCount - 1)
+        : SAVE_TRANSFER_CHUNK_BYTES;
+      if (chunk.byteLength !== expectedBytes) {
+        throw new RangeError(
+          `Steam save chunk ${index} contained ${chunk.byteLength} bytes instead of ${expectedBytes}`,
+        );
+      }
+      chunks.push(chunk);
+      receivedBytes += chunk.byteLength;
+    }
+
+    if (receivedBytes !== metadata.totalBytes) {
+      throw new RangeError("Save transfer ended at the wrong byte length");
+    }
+    const payload = Buffer.concat(chunks, metadata.totalBytes);
+    const decoded = payload.toString("utf8");
+    if (!Buffer.from(decoded, "utf8").equals(payload)) {
+      throw new TypeError("Save payload is not valid UTF-8");
+    }
+
+    await invoke(finishChannel, transferId);
+    finished = true;
+    return decoded;
+  } finally {
+    if (transferId && !finished) {
+      await invoke(finishChannel, transferId).catch(() => {});
+    }
+  }
+}
+
+async function setSteamCloudSave(slot, data) {
+  await uploadSaveTransfer({
+    data,
+    beginChannel: "steam:beginCloudSaveTransfer",
+    beginArgs: [assertSteamSlot(slot)],
+    appendChannel: "steam:appendCloudSaveChunk",
+    commitChannel: "steam:commitCloudSaveTransfer",
+    abortChannel: "steam:abortCloudSaveTransfer",
+  });
+}
+
+async function getSteamCloudSave(slot) {
+  return downloadSaveTransfer(
+    await invoke("steam:beginCloudLoadTransfer", assertSteamSlot(slot)),
+    "steam:readCloudLoadChunk",
+    "steam:finishCloudLoadTransfer",
+  );
+}
+
+async function saveFile(data, filename) {
+  return uploadSaveTransfer({
+    data,
+    beginChannel: "dialog:beginSaveFileTransfer",
+    beginArgs: [assertFilename(filename)],
+    appendChannel: "dialog:appendSaveFileChunk",
+    commitChannel: "dialog:commitSaveFileTransfer",
+    abortChannel: "dialog:abortSaveFileTransfer",
+    allowCancel: true,
+  });
+}
+
+async function openFile() {
+  return downloadSaveTransfer(
+    await invoke("dialog:beginOpenFileTransfer"),
+    "dialog:readOpenFileChunk",
+    "dialog:finishOpenFileTransfer",
+  );
+}
+
 const electronAPI = Object.freeze({
   steam: Object.freeze({
     isAvailable: () => invoke("steam:isAvailable"),
     unlockAchievement: (name) =>
       invoke("steam:unlockAchievement", assertAchievementName(name)),
-    setCloudSave: (slot, data) =>
-      invoke("steam:setCloudSave", assertSteamSlot(slot), assertFilePayload(data)),
-    getCloudSave: (slot) =>
-      invoke("steam:getCloudSave", assertSteamSlot(slot)),
+    setCloudSave: (slot, data) => setSteamCloudSave(slot, data),
+    getCloudSave: (slot) => getSteamCloudSave(slot),
     deleteCloudSave: (slot) =>
       invoke("steam:deleteCloudSave", assertSteamSlot(slot)),
     getPlayerName: () => invoke("steam:getPlayerName"),
@@ -110,9 +278,8 @@ const electronAPI = Object.freeze({
   }),
 
   dialog: Object.freeze({
-    saveFile: (data, filename) =>
-      invoke("dialog:saveFile", assertFilePayload(data), assertFilename(filename)),
-    openFile: () => invoke("dialog:openFile"),
+    saveFile,
+    openFile,
   }),
 });
 

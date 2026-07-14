@@ -5,7 +5,7 @@
  * dismiss actions, and other lightweight UI-only actions.
  */
 import type { GetState, SetState } from "./types";
-import type { GameScreen } from "../gameStore";
+import type { GameScreen } from "../gameStoreTypes";
 import type { InboxMessage, Contact, HiddenIntel } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { getHiddenAttributeIntel } from "@/engine/network/contacts";
@@ -15,15 +15,17 @@ import {
   resolvePlayerEntity,
 } from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
+import { resolveGameScreenForBuild } from "../gameScreenScope";
 
 export function createNavigationActions(get: GetState, set: SetState) {
   return {
     setScreen: (screen: GameScreen) => {
-      set({ currentScreen: screen });
       const gs = get().gameState;
+      const resolvedScreen = resolveGameScreenForBuild(screen, Boolean(gs));
+      set({ currentScreen: resolvedScreen });
       const activeMatch = get().activeMatch;
       let matchFixture: string | undefined;
-      if (screen === "match" && activeMatch && gs) {
+      if (resolvedScreen === "match" && activeMatch && gs) {
         const fixture = gs.fixtures[activeMatch.fixtureId];
         if (fixture) {
           const home = gs.clubs[fixture.homeClubId]?.name ?? fixture.homeClubId;
@@ -31,7 +33,7 @@ export function createNavigationActions(get: GetState, set: SetState) {
           matchFixture = `${home} vs ${away}`;
         }
       }
-      updateRichPresence(screen, {
+      updateRichPresence(resolvedScreen, {
         currentCountry: gs?.countries?.[0],
         currentSeason: gs?.currentSeason,
         currentWeek: gs?.currentWeek,
@@ -42,13 +44,19 @@ export function createNavigationActions(get: GetState, set: SetState) {
       // Tutorial: record screen visit and fire navigation-based milestones
       if (gs) {
         const tut = useTutorialStore.getState();
-        tut.recordScreenVisit(screen);
-        if (screen === "dashboard") tut.completeMilestone("viewedDashboard");
-        if (screen === "calendar") tut.completeMilestone("openedCalendar");
+        tut.recordScreenVisit(resolvedScreen);
+        if (resolvedScreen === "dashboard") tut.completeMilestone("viewedDashboard");
+        if (resolvedScreen === "calendar") tut.completeMilestone("openedCalendar");
       }
     },
 
-    dismissWeekSummary: () => set({ lastWeekSummary: null }),
+    dismissWeekSummary: () => {
+      const continueScreen = get().lastWeekSummary?.continueScreen;
+      set({ lastWeekSummary: null });
+      if (continueScreen) {
+        get().setScreen(continueScreen);
+      }
+    },
     dismissBatchSummary: () => set({ batchSummary: null }),
 
     setSelectedScenario: (id: string | null) => set({ selectedScenarioId: id }),

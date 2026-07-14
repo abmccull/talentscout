@@ -10,7 +10,7 @@
  * (e.g. plain web builds that somehow import this module).
  */
 
-import type { SteamInterface } from "./steamInterface";
+import type { SteamInterface } from "./steamContract";
 
 // ---------------------------------------------------------------------------
 // Type guard

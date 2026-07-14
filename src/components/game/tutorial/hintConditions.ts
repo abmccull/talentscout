@@ -8,6 +8,8 @@
  */
 
 import type { ContextualHint } from "@/stores/tutorialStore";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { isGameScreenAllowedForBuild } from "@/stores/gameScreenScope";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -110,7 +112,7 @@ export const HINT_DEFINITIONS: HintDefinition[] = [
     hint: {
       id: "unwritten-reports",
       message:
-        "You've observed several players but haven't written a report yet. Reports are how you build [[reputation]] and earn income.",
+        "You've observed several players but haven't written a report yet. File an evidence-backed case, then earn through marketplace delivery, placement, and the quality of its outcome.",
       cta: { label: "Write a Report", screen: "reportWriter" },
       wikiArticle: "conviction-levels",
     },
@@ -184,8 +186,8 @@ export const HINT_DEFINITIONS: HintDefinition[] = [
     hint: {
       id: "never-compared",
       message:
-        "You've been observing players but haven't compared any yet. Comparisons help clubs see relative strengths.",
-      cta: { label: "View Players", screen: "playerDatabase" },
+        "You've built several observations but haven't compared your cases yet. Put completed reports side by side to test whether your conviction is consistent.",
+      cta: { label: "Compare Reports", screen: "reportHistory" },
     },
   },
 
@@ -316,8 +318,8 @@ export const HINT_DEFINITIONS: HintDefinition[] = [
     hint: {
       id: "never-used-comparison",
       message:
-        "Try comparing two players side-by-side in the Player Database. [[shortlist]] comparisons help clubs decide.",
-      cta: { label: "Players", screen: "playerDatabase" },
+        "Your notebook is growing. Compare completed reports side by side to spot inconsistent standards before a club does.",
+      cta: { label: "Compare Reports", screen: "reportHistory" },
     },
   },
 
@@ -328,11 +330,31 @@ export const HINT_DEFINITIONS: HintDefinition[] = [
     hint: {
       id: "loan-market-active",
       message:
-        "The [[loan-deal]] market has opened. Check for temporary deals that could benefit your clients.",
-      cta: { label: "Players", screen: "playerDatabase" },
+        "The [[loan-deal]] window is open. Review tracked prospects and decide whose development would benefit from a temporary move.",
+      cta: { label: "Review Prospects", screen: "youthScouting" },
     },
   },
 ];
+
+/** Hints whose underlying feature is deliberately outside Youth Early Access. */
+export const YOUTH_EARLY_ACCESS_UNAVAILABLE_HINT_IDS: ReadonlySet<string> =
+  new Set(["season-over-leaderboard", "free-agents-unbrowsed"]);
+
+export function isHintDefinitionAvailableForBuild(
+  definition: HintDefinition,
+): boolean {
+  if (
+    IS_YOUTH_EARLY_ACCESS &&
+    YOUTH_EARLY_ACCESS_UNAVAILABLE_HINT_IDS.has(definition.id)
+  ) {
+    return false;
+  }
+
+  return (
+    definition.hint.cta === undefined ||
+    isGameScreenAllowedForBuild(definition.hint.cta.screen)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Evaluator
@@ -351,7 +373,10 @@ export function evaluateHints(
   dismissedHints: Set<string>,
 ): ContextualHint | null {
   const candidates = HINT_DEFINITIONS.filter(
-    (def) => !dismissedHints.has(def.id) && def.condition(ctx),
+    (def) =>
+      isHintDefinitionAvailableForBuild(def) &&
+      !dismissedHints.has(def.id) &&
+      def.condition(ctx),
   );
 
   if (candidates.length === 0) return null;

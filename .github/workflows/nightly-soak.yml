@@ -30,10 +30,17 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - name: Run isolated 20-seed x 30-season profile
+        env:
+          SOAK_SEEDS: "20"
+          SOAK_SEASONS: "30"
+          SOAK_CONCURRENCY: "3"
+          SOAK_CANDIDATE_SHA: ${{ github.sha }}
+          SOAK_REQUIRE_CLEAN_CANDIDATE: "true"
+        run: npm run test:release-soak
       - run: npx playwright install --with-deps chromium
       - run: npm run build:e2e
       - run: npm run test:e2e:soak
-      - run: npm run test:release-soak
       - run: npm run test:replayability:nightly
 
       - name: Upload soak evidence
@@ -45,6 +52,7 @@ jobs:
             playwright-report/
             test-results/
             artifacts/soak/
+            artifacts/release/generated/long-career-release-summary.json
             artifacts/replayability/nightly-summary.json
           if-no-files-found: ignore
           retention-days: 30

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAchievementStore } from "@/stores/achievementStore";
 import { ACHIEVEMENTS } from "@/lib/achievements";
 import { useAudio } from "@/lib/audio/useAudio";
+import { isAchievementAvailableForBuild } from "@/stores/gameScreenScope";
 
 const AUTO_DISMISS_MS = 3600;
 
@@ -125,7 +126,10 @@ export function AchievementToast() {
   const pendingToasts = useAchievementStore((s) => s.pendingToasts);
   const dismissAllToasts = useAchievementStore((s) => s.dismissAllToasts);
 
-  const currentId = pendingToasts[0] ?? null;
+  const availablePendingToasts = pendingToasts.filter(
+    isAchievementAvailableForBuild,
+  );
+  const currentId = availablePendingToasts[0] ?? null;
 
   if (!currentId) return null;
 
@@ -144,8 +148,8 @@ export function AchievementToast() {
         aria-atomic="true"
       >
         <ToastCard
-          key={pendingToasts.join("|")}
-          achievementIds={pendingToasts}
+          key={availablePendingToasts.join("|")}
+          achievementIds={availablePendingToasts}
           onDismiss={dismissAllToasts}
         />
       </div>

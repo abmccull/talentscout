@@ -107,7 +107,16 @@ import {
   isTransferWindowOpen,
   getCurrentTransferWindow,
 } from "@/engine/core/transferWindow";
-import { initializeWorld } from "@/engine/world";
+import {
+  applyWorldConditionSeasonStart,
+  createWorldConditionState,
+  getTravelEligibleCountryKeys,
+  getWorldConditionContentDefinitionIds,
+  getWorldConditionModifiers,
+  initializeWorld,
+  isInternationalAssignmentEligibleCountry,
+  isTravelEligibleCountry,
+} from "@/engine/world";
 import { createScout } from "@/engine/scout/creation";
 import {
   generateStartingContacts,
@@ -115,6 +124,11 @@ import {
   getContactCoverageCountry,
 } from "@/engine/network/contacts";
 import { createWeekSchedule, getAvailableActivities } from "@/engine/core/calendar";
+import {
+  createWeeklyStrategyState,
+  type DelegationPolicyId,
+  type WeeklyIntentId,
+} from "@/engine/core/weeklyStrategy";
 import {
   initializeRegionalKnowledge,
   synchronizeRegionalFamiliarity,
@@ -188,59 +202,21 @@ import {
   recordVeteranPrologueTemplate,
 } from "@/lib/playerExperience";
 
-export type GameScreen =
-  | "mainMenu"
-  | "newGame"
-  | "dashboard"
-  | "calendar"
-  | "match"
-  | "observation"
-  | "openingDiscovery"
-  | "matchSummary"
-  | "playerProfile"
-  | "playerDatabase"
-  | "reportWriter"
-  | "reportHistory"
-  | "career"
-  | "network"
-  | "settings"
-  | "inbox"
-  | "npcManagement"
-  | "internationalView"
-  | "discoveries"
-  | "leaderboard"
-  | "analytics"
-  | "performance"
-  | "fixtureBrowser"
-  | "youthScouting"
-  | "alumniDashboard"
-  | "finances"
-  | "handbook"
-  | "achievements"
-  | "scenarioSelect"
-  | "hallOfFame"
-  | "demoEnd"
-  | "equipment"
-  | "agency"
-  | "weekSimulation"
-  | "training"
-  | "rivals"
-  | "reportComparison"
-  | "negotiation"
-  | "seasonAwards"
-  | "freeAgents";
+import type {
+  ClubStanding,
+  GameStoreState,
+  SaveSlotSummary,
+} from "./gameStoreTypes";
+import { resolveGameScreenForBuild } from "./gameScreenScope";
 
-export type SaveSlotSummary = Omit<
-  SaveRecord,
-  "state" | "schemaVersion" | "rulesVersion" | "buildVersion"
-> & {
-  source: SaveSource;
-};
-
-export interface SaveConflictState {
-  slot: number;
-  conflict: SaveConflict;
-}
+export type {
+  ClubStanding,
+  GameScreen,
+  GameStoreState,
+  SaveConflictState,
+  SaveSlotSummary,
+  WeekSummary,
+} from "./gameStoreTypes";
 
 function slotNumberToSaveName(slot: number): string {
   return slot === AUTOSAVE_SLOT ? "autosave" : `slot_${slot}`;
@@ -322,368 +298,6 @@ function seedContactKnownPlayerIds(
     count,
   );
 }
-
-export interface GameStoreState {
-  // Navigation
-  currentScreen: GameScreen;
-  setScreen: (screen: GameScreen) => void;
-
-  // Game state
-  gameState: GameState | null;
-  isLoaded: boolean;
-
-  // Active match state
-  activeMatch: {
-    fixtureId: string;
-    phases: MatchPhase[];
-    currentPhase: number;
-    focusSelections: FocusSelection[];
-  } | null;
-
-  // Last week summary — shown after advanceWeek() completes
-  lastWeekSummary: WeekSummary | null;
-  dismissWeekSummary: () => void;
-
-  // Last match result — persisted so MatchSummaryScreen can read it after activeMatch is cleared
-  lastMatchResult: {
-    fixtureId: string;
-    focusedPlayerIds: string[];
-    homeGoals: number;
-    awayGoals: number;
-    /** Screen to navigate to when the user clicks "Continue" */
-    continueScreen: GameScreen;
-    /** Behavioral traits discovered during the match */
-    traitDiscoveries?: Array<{ playerName: string; trait: string }>;
-    /** Per-player match ratings (1-10 scale) */
-    playerRatings?: Record<string, PlayerMatchRating>;
-    /** Card events that occurred during the match. */
-    cardEvents?: CardEvent[];
-  } | null;
-
-  // Selected entities
-  selectedPlayerId: string | null;
-  selectedFixtureId: string | null;
-  // Save/Load state
-  saveSlots: SaveSlotSummary[];
-  isSaving: boolean;
-  isLoadingSave: boolean;
-  saveConflict: SaveConflictState | null;
-  isResolvingSaveConflict: boolean;
-
-  // Autosave error state
-  autosaveError: string | null;
-
-  // Scenario transient state
-  selectedScenarioId: string | null;
-  setSelectedScenario: (id: string | null) => void;
-  scenarioProgress: ScenarioProgress | null;
-  scenarioOutcome: "victory" | "failure" | null;
-  scenarioOutcomeScenarioId: string | null;
-  dismissScenarioOutcome: () => void;
-
-  // Celebration transient state
-  pendingCelebration: { tier: "minor" | "major" | "epic"; title: string; description: string } | null;
-  dismissCelebration: () => void;
-  dismissSeasonAwards: () => void;
-
-  // Actions
-  startNewGame: (config: NewGameConfig) => Promise<void>;
-  loadGame: (state: GameState) => void;
-  saveGame: () => GameState | null;
-
-  // Persistence actions (IndexedDB)
-  saveToSlot: (slot: number, name: string) => Promise<void>;
-  loadFromSlot: (slot: number) => Promise<void>;
-  deleteSlot: (slot: number) => Promise<void>;
-  refreshSaveSlots: () => Promise<void>;
-  dismissSaveConflict: () => void;
-  resolveSaveConflict: (slot: number, preferredSource: SaveSource) => Promise<void>;
-
-  // Calendar actions
-  scheduleActivity: (activity: Activity, dayIndex: number) => void;
-  unscheduleActivity: (dayIndex: number) => void;
-  requestWeekAdvance: () => void;
-  advanceWeek: () => void;
-
-  // Quick Scout Mode (F17)
-  autoSchedule: (priorities?: QuickScoutPriorities) => void;
-  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => void;
-  delegateScouting: (npcScoutId: string, playerId: string) => void;
-  resolveLeadershipResponsibility: (
-    responsibilityId: string,
-    choice: import("@/engine/career/leadership").LeadershipResponsibilityChoice,
-    npcScoutId?: string,
-  ) => void;
-  batchSummary: BatchAdvanceResult | null;
-  dismissBatchSummary: () => void;
-
-  // Season event actions
-  resolveSeasonEvent: (eventId: string, choiceIndex: number) => void;
-
-  // Day-by-day simulation
-  weekSimulation: WeekSimulationState | null;
-  startWeekSimulation: () => void;
-  chooseSimulationInteraction: (optionId: string, focusedPlayerIds?: string[]) => void;
-  advanceDay: () => void;
-  fastForwardWeek: () => void;
-
-  // Match actions
-  scheduleMatch: (fixtureId: string) => boolean;
-  startMatch: (fixtureId: string) => void;
-  advancePhase: () => void;
-  setFocus: (playerId: string, lens: FocusSelection["lens"]) => void;
-  endMatch: () => void;
-
-  // Observation session actions
-  activeSession: ObservationSession | null;
-  sessionReturnScreen: GameScreen | null;
-  lastReflectionResult: any | null;
-  startObservationSession: (
-    activityType: string,
-    playerPool: Array<{ playerId: string; name: string; position: string }>,
-    targetPlayerId?: string,
-    options?: {
-      activityInstanceId?: string;
-      returnScreen?: GameScreen;
-      contactId?: string;
-    },
-  ) => void;
-  beginSession: () => void;
-  advanceSessionPhase: () => void;
-  allocateSessionFocus: (playerId: string, lens: LensType) => void;
-  removeSessionFocus: (playerId: string) => void;
-  flagSessionMoment: (momentId: string, reaction: SessionFlaggedMoment['reaction']) => void;
-  selectDialogueOption: (nodeId: string, optionId: string) => void;
-  selectDataPoint: (pointId: string) => void;
-  selectStrategicChoice: (choiceId: string) => void;
-  addSessionNote: (note: string) => void;
-  addSessionHypothesis: (playerId: string, text: string, domain: string) => void;
-  endObservationSession: () => void;
-  resolveOpeningDiscoveryChoice: (choiceId: OpeningCaseChoiceId) => void;
-
-  // Insight actions
-  useInsight: (actionId: InsightActionId) => boolean;
-  lastInsightResult: InsightActionResult | null;
-  dismissInsightResult: () => void;
-
-  // Report actions
-  startReport: (playerId: string) => void;
-  submitReport: (
-    conviction: ConvictionLevel,
-    summary: string,
-    strengths: string[],
-    weaknesses: string[],
-    structured?: StructuredReportInput,
-  ) => void;
-
-  // Career actions
-  acceptJob: (offerId: string) => void;
-  declineJob: (offerId: string) => void;
-
-  // Inbox
-  markMessageRead: (messageId: string) => void;
-  markAllRead: () => void;
-
-  // Gossip actions (A3)
-  handleGossipAction: (gossipId: string, action: GossipAction) => void;
-  getActiveGossip: () => ActionableGossipItem[];
-
-  // Entity selection
-  selectPlayer: (playerId: string | null) => void;
-  selectFixture: (fixtureId: string | null) => void;
-
-  // NPC Scout Management
-  assignNPCScoutTerritory: (npcScoutId: string, territoryId: string) => void;
-  reviewNPCReport: (reportId: string) => void;
-
-  // Career Management
-  meetManager: (approach: ManagerMeetingApproach) => void;
-  meetBoard: (approach: BoardMeetingApproach) => void;
-  unlockSecondarySpecialization: (spec: Specialization) => void;
-
-  // Travel
-  bookInternationalTravel: (
-    country: string,
-    options?: { duration?: number; assignmentId?: string },
-  ) => boolean;
-
-  // Phase 2 actions
-  acknowledgeNarrativeEvent: (eventId: string) => void;
-  resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
-  resolveRivalOrganizationOpportunity: (
-    opportunityId: string,
-    response: "exploit" | "decline",
-  ) => void;
-
-  // Equipment loadout actions
-  purchaseEquipItem: (itemId: EquipmentItemId) => void;
-  sellEquipItem: (itemId: EquipmentItemId) => void;
-  equipEquipItem: (itemId: EquipmentItemId) => void;
-
-  // Economics actions
-  chooseCareerPath: (path: CareerPath) => void;
-  changeLifestyle: (level: LifestyleLevel) => void;
-  listReportForSale: (reportId: string, price: number, isExclusive: boolean, targetClubId?: string) => void;
-  withdrawReportListing: (listingId: string) => void;
-  acceptMarketplaceBid: (bidId: string) => void;
-  declineMarketplaceBid: (bidId: string) => void;
-  acceptExclusiveUpgradeBid: (bidId: string) => void;
-  acceptRetainerContract: (contract: RetainerContract) => void;
-  cancelRetainerContract: (contractId: string) => void;
-  enrollInCourse: (courseId: string) => void;
-  upgradeAgencyOffice: (tier: OfficeTier) => void;
-  hireAgencyEmployee: (role: AgencyEmployeeRole) => void;
-  fireAgencyEmployee: (employeeId: string) => void;
-
-  // Phase 2: Employee assignment
-  assignAgencyEmployee: (employeeId: string, assignment: EmployeeAssignment) => void;
-
-  // Phase 3: Business development
-  pitchToClient: (clubId: string, pitchType: "coldCall" | "referral" | "showcase") => void;
-
-  // Phase 4: Employee event resolution
-  resolveAgencyEmployeeEvent: (eventId: string, optionIndex: number) => void;
-  adjustEmployeeSalary: (employeeId: string, newSalary: number) => void;
-
-  // Phase 5: International expansion
-  openAgencySatelliteOffice: (region: string) => void;
-  closeAgencySatelliteOffice: (officeId: string) => void;
-  assignEmployeeToAgencySatellite: (employeeId: string, officeId: string) => void;
-
-  // Phase 5: Employee skills training (implementation provided by backend)
-  trainAgencyEmployee: (employeeId: string, skillIndex: 1 | 2 | 3) => void;
-
-  takeLoanAction: (type: LoanType, amount: number) => void;
-  repayLoanAction: () => void;
-  sellEquipmentForCashAction: (itemValue: number) => void;
-  acceptConsultingContract: (contract: ConsultingContract) => void;
-  declineRetainerOffer: (contractId: string) => void;
-  declineConsultingOffer: (contractId: string) => void;
-  completeConsultingContract: (contractId: string) => void;
-
-  // F14: Financial Strategy Layer — infrastructure investments
-  purchaseDataSubscriptionAction: (tier: DataSubscriptionTier) => void;
-  upgradeTravelBudgetAction: (tier: TravelBudgetTier) => void;
-  upgradeOfficeEquipmentAction: (tier: OfficeEquipmentTier) => void;
-
-  // F14: Financial Strategy Layer — assistant scouts
-  hireAssistantScoutAction: () => void;
-  fireAssistantScoutAction: (scoutId: string) => void;
-  assignAssistantScoutAction: (scoutId: string, task: { playerId?: string; region?: string }) => void;
-  unassignAssistantScoutAction: (scoutId: string) => void;
-
-  // Transfer Negotiation actions (F4)
-  activeNegotiationId: string | null;
-  initiateTransferNegotiation: (playerId: string) => void;
-  submitTransferOffer: (negotiationId: string, amount: number, addOns?: import("@/engine/core/types").TransferAddOn[]) => void;
-  acceptNegotiation: (negotiationId: string) => void;
-  walkAway: (negotiationId: string) => void;
-
-  // Free Agent actions
-  initiateFreeAgentNegotiation: (playerId: string, wage: number, bonus: number, contractLength: number) => void;
-  submitFreeAgentOffer: (playerId: string, wage: number, bonus: number, contractLength: number) => void;
-
-  // Player Loan actions
-  recommendPlayerForLoan: (playerId: string, targetClubId: string, rationale: "development" | "playing-time" | "experience" | "squad-depth", duration: number) => void;
-  submitLoanMonitoringReport: (loanDealId: string) => void;
-  recallLoanPlayer: (loanDealId: string) => void;
-
-  // Cross-screen fixture filter (set from PlayerProfile → consumed by FixtureBrowser)
-  pendingFixtureClubFilter: string | null;
-  setPendingFixtureClubFilter: (filter: string | null) => void;
-
-  // Cross-screen calendar pre-fill (set from PlayerProfile → consumed by CalendarScreen)
-  pendingCalendarActivity: { type: string; targetId: string; label: string } | null;
-  setPendingCalendarActivity: (pending: { type: string; targetId: string; label: string } | null) => void;
-
-  // Cross-screen international pre-fill (set from PlayerProfile → consumed by InternationalScreen)
-  pendingInternationalCountry: string | null;
-  setPendingInternationalCountry: (country: string | null) => void;
-
-  // Post-submit listing prompt (transient — not persisted in save)
-  pendingListingReportId: string | null;
-  dismissPendingListing: () => void;
-
-  // Tap network for hidden attribute intel on a player
-  tapNetworkForPlayer: (playerId: string) => { title: string; body: string; contactName?: string } | null;
-
-  // Watchlist
-  toggleWatchlist: (playerId: string) => void;
-
-  // Report comparison (F11)
-  comparisonReportIds: string[];
-  addToComparison: (reportId: string) => void;
-  removeFromComparison: (reportId: string) => void;
-  clearComparison: () => void;
-
-  // Leaderboard
-  submitToLeaderboard: () => Promise<LeaderboardEntry | null>;
-
-  // New Game+ / Legacy Mode (F19)
-  completeLegacyCareer: () => LegacyProfile | null;
-  retireLegacyCareer: () => LegacyProfile | null;
-  startNewGamePlus: (config: NewGameConfig, selectedPerkIds: string[]) => Promise<void>;
-
-  // Helpers
-  getPendingMatches: () => string[];
-  getPlayer: (id: string) => Player | undefined;
-  getClub: (id: string) => Club | undefined;
-  getLeague: (id: string) => League | undefined;
-  getFixture: (id: string) => Fixture | undefined;
-  getUpcomingFixtures: (week: number, count: number) => Fixture[];
-  getPlayerObservations: (playerId: string) => Observation[];
-  getPlayerReports: (playerId: string) => ScoutReport[];
-  getScoutedPlayers: () => Player[];
-  getLeagueStandings: (leagueId: string) => ClubStanding[];
-  getNPCScout: (id: string) => NPCScout | undefined;
-  getNPCReports: () => NPCScoutReport[];
-  getTerritory: (id: string) => Territory | undefined;
-  getActiveNarrativeEvents: () => NarrativeEvent[];
-  getRivalScouts: () => RivalScout[];
-  getActiveSeasonEvents: () => SeasonEvent[];
-  getDiscoveryRecords: () => DiscoveryRecord[];
-  getPerformanceHistory: () => ScoutPerformanceSnapshot[];
-  getAvailableCalendarActivities: () => Activity[];
-}
-
-export interface WeekSummary {
-  fatigueChange: number;
-  reputationChange: number;
-  skillXpGained: Record<string, number>;
-  attributeXpGained: Record<string, number>;
-  matchesAttended: number;
-  reportsWritten: number;
-  meetingsHeld: number;
-  newMessages: number;
-  rivalAlerts: number;
-  financeSummary?: { income: number; expenses: number } | null;
-  /** Activity quality outcomes for this week */
-  activityQualities: Array<{
-    activityType: string;
-    tier: string;
-    narrative: string;
-  }>;
-  /** Players discovered this week through scouting activities */
-  playersDiscovered: number;
-  /** Total observations generated this week (all activities) */
-  observationsGenerated: number;
-}
-
-export interface ClubStanding {
-  clubId: string;
-  clubName: string;
-  played: number;
-  won: number;
-  drawn: number;
-  lost: number;
-  goalsFor: number;
-  goalsAgainst: number;
-  goalDifference: number;
-  points: number;
-  /** Relegation/promotion zone classification for UI coloring. */
-  zone: "promotion" | "relegation" | "normal";
-}
-
 
 // ---------------------------------------------------------------------------
 // Migration: Player roles, traits & tactical depth expansion
@@ -1004,6 +618,102 @@ function migrateRegionalKnowledge(state: GameState): void {
 }
 
 /**
+ * Pin the operating base and reconcile legacy satellite-office geography.
+ * Presence itself remains derived, so no additional mutable meter can drift.
+ */
+function migrateRegionalPresence(state: GameState): void {
+  const eligibleCountries = new Set(getTravelEligibleCountryKeys(state));
+  const manifestHome = normalizeCountryKey(state.runManifest?.startingCountry);
+  const inferredHome = normalizeCountryKey(getScoutHomeCountry(state.scout));
+  const fallbackHome = normalizeCountryKey(state.countries[0]);
+  const homeCountry = [
+    normalizeCountryKey(state.scout.homeCountry),
+    manifestHome,
+    inferredHome,
+    fallbackHome,
+  ].find((country): country is string => !!country && (
+    eligibleCountries.size === 0 || eligibleCountries.has(country)
+  ));
+  if (homeCountry) {
+    state.scout = { ...state.scout, homeCountry };
+  }
+
+  if (!state.finances) return;
+  const employeeIds = new Set(state.finances.employees.map((employee) => employee.id));
+  const claimedEmployees = new Set<string>();
+  const claimedCountries = new Set<string>();
+  const satelliteOffices = state.finances.satelliteOffices.flatMap((office) => {
+    const country = normalizeCountryKey(office.region);
+    if (!country || claimedCountries.has(country)) return [];
+    if (eligibleCountries.size > 0 && !eligibleCountries.has(country)) return [];
+    claimedCountries.add(country);
+    const validEmployeeIds = [...new Set(office.employeeIds)].filter((employeeId) => {
+      if (!employeeIds.has(employeeId) || claimedEmployees.has(employeeId)) return false;
+      claimedEmployees.add(employeeId);
+      return true;
+    });
+    return [{ ...office, region: country, employeeIds: validEmployeeIds }];
+  });
+  state.finances = { ...state.finances, satelliteOffices };
+}
+
+/**
+ * A legacy save may carry a broad/static `countries` list that includes core
+ * countries never generated for that career. Keep presentation state aligned
+ * with the persisted simulation surface before any map or travel UI reads it.
+ */
+function migrateWorldCountryEligibility(state: GameState): void {
+  const generatedCountries = getTravelEligibleCountryKeys(state);
+
+  // Do not erase a legacy save's presentation list when it predates the
+  // persisted world records required to prove eligibility. The UI and travel
+  // action still require generated evidence, so this fallback cannot revive a
+  // ghost destination; it simply avoids turning a recoverable old save into
+  // an empty-world save during migration.
+  if (generatedCountries.length > 0) {
+    state.countries = generatedCountries;
+  }
+}
+
+/**
+ * Remove pending/in-progress travel work that points at a no-longer-generated
+ * destination. Historical assignments are intentionally retained as records.
+ */
+function migrateInternationalDestinationEligibility(state: GameState): void {
+  state.internationalAssignments = (state.internationalAssignments ?? []).filter(
+    (assignment) => isInternationalAssignmentEligibleCountry(state, assignment.country),
+  );
+
+  const activeAssignment = state.activeInternationalAssignment;
+  if (
+    activeAssignment
+    && !isInternationalAssignmentEligibleCountry(state, activeAssignment.country)
+  ) {
+    state.activeInternationalAssignment = null;
+  }
+
+  const booking = state.scout.travelBooking;
+  if (booking && !isTravelEligibleCountry(state, booking.destinationCountry)) {
+    const destinationKey = normalizeCountryKey(booking.destinationCountry);
+    state.scout = {
+      ...state.scout,
+      travelBooking: undefined,
+    };
+    if (state.schedule?.activities) {
+      state.schedule = {
+        ...state.schedule,
+        activities: state.schedule.activities.map((activity) =>
+          activity?.type === "internationalTravel"
+          && normalizeCountryKey(activity.targetId) === destinationKey
+            ? null
+            : activity,
+        ),
+      };
+    }
+  }
+}
+
+/**
  * Migration: F12 Youth Pipeline Tracking.
  * Ensures alumni records have careerUpdates, currentStatus, seasonStats,
  * becameContact fields for existing saves.
@@ -1095,6 +805,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   selectedPlayerId: null,
   selectedFixtureId: null,
   saveSlots: [],
+  saveRecoveryCopies: [],
+  saveSyncStatus: {
+    pendingCount: 0,
+    failedCount: 0,
+    lastError: null,
+    oldestQueuedAt: null,
+  },
   isSaving: false,
   isLoadingSave: false,
   saveConflict: null,
@@ -1185,6 +902,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       doctrineIds: effectiveConfig.doctrineIds,
       contentDefinitionIds: [
         ...getWorldTraitContentDefinitionIds(),
+        ...getWorldConditionContentDefinitionIds(),
         ...getScoutIdentityContentDefinitionIds(),
         ...getRivalOrganizationContentDefinitionIds(),
         "narrative-catalog:youth-ea.3",
@@ -1199,18 +917,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
       selectedCountries,
     );
     let scout = createScout(effectiveConfig, rng);
-    const worldCountries = [
-      ...new Set([
-        ...selectedCountries,
-        ...getSecondaryCountries(),
-        "england",
-        "spain",
-        "germany",
-        "france",
-        "brazil",
-        "argentina",
-      ]),
-    ];
+    // `countries` is the map/travel surface, not a static data catalogue. It
+    // must only contain countries actually generated into this world. All
+    // secondary talent pools remain present because initializeWorld creates
+    // their clubs, players and youth regions even though they have no fixtures.
+    const worldCountries = getTravelEligibleCountryKeys({
+      countries: [...new Set([...selectedCountries, ...getSecondaryCountries()])],
+      territories,
+      leagues,
+      clubs,
+      players,
+      fixtures,
+      subRegions,
+      unsignedYouth: {},
+      youthTournaments: {},
+    });
+    const worldConditionState = createWorldConditionState(
+      runManifest,
+      worldCountries,
+      1,
+    );
     const initialRegionalKnowledge = initializeRegionalKnowledge(
       worldCountries,
       effectiveConfig.startingCountry ?? effectiveConfig.region ?? selectedCountries[0] ?? "england",
@@ -1232,12 +958,19 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const initialUnsignedYouth: Record<string, UnsignedYouth> = {};
     if (effectiveConfig.specialization === "youth") {
       const youthRng = createRNG(`${effectiveConfig.worldSeed}-youth-s1`);
-      const allCountryKeys = [...selectedCountries, ...getSecondaryCountries()];
-      for (const countryKey of allCountryKeys) {
+      for (const countryKey of worldCountries) {
         const countryData = getCountryDataSync(countryKey);
         if (!countryData) continue;
         // Call multiple times per country to overcome 30% chance gate
-        for (let attempt = 0; attempt < 10; attempt++) {
+        const conditionModifiers = getWorldConditionModifiers(
+          { worldConditionState },
+          countryKey,
+        );
+        const initialGenerationAttempts = Math.max(
+          5,
+          Math.round(10 * conditionModifiers.discoveryMultiplier),
+        );
+        for (let attempt = 0; attempt < initialGenerationAttempts; attempt++) {
           const countrySubRegions = Object.values(synchronizedGeography.subRegions).filter(
             (subRegion) =>
               (subRegion.countryKey ?? normalizeCountryKey(subRegion.country)) === countryData.key,
@@ -1292,7 +1025,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         1,
         1,
         {},
-        12,
+        Math.max(
+          8,
+          Math.round(
+            12 * getWorldConditionModifiers({ worldConditionState })
+              .opportunityMultiplier,
+          ),
+        ),
         getSeasonLength(fixtures, 1),
         effectiveConfig.worldSeed,
       ).map((brief) => [brief.id, brief]),
@@ -1319,6 +1058,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       recommendationReviews: {},
       contacts,
       schedule: createWeekSchedule(1, 1),
+      weeklyStrategy: createWeeklyStrategyState(1, 1),
       jobOffers: [],
       performanceReviews: [],
       inbox: [],
@@ -1327,6 +1067,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       npcDelegations: {},
       territories,
       countries: worldCountries,
+      worldConditionState,
       narrativeEvents: [],
       activeStorylines: [],
       eventDirector: createEventDirectorState(),
@@ -1464,13 +1205,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     const employmentIntro = scout.currentClubId
       ? `You are employed as a club scout with a weekly salary of £${scout.salary}. Your club expects reports aligned with their scouting priorities. Build trust with your employer to earn more influence over signings.`
-      : `You are a freelance scout. You earn fees for every report you submit. Build your reputation to attract club offers and secure a full-time contract.`;
+      : `You are a freelance scout. Turn distinct evidence-backed cases into marketplace sales, placements, and trusted client work. Build your reputation through delivery and the consequences of your judgment.`;
 
     // Generate initial youth tournaments for season 1
     const tournamentRng = createRNG(`${effectiveConfig.worldSeed}-tournaments-s1`);
     const initialTournaments = generateSeasonTournaments(tournamentRng, 1, tempState.countries, scout);
 
-    const gameState: GameState = {
+    const rawGameState: GameState = {
       ...tempState,
       youthTournaments: initialTournaments,
       inbox: [
@@ -1501,7 +1242,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             "Schedule networking meetings to develop contacts — agents, academy coaches, club staff, and journalists. High-quality contacts share tips about players you have not yet spotted yourself.",
             "",
             "REPUTATION AND CAREER PROGRESSION",
-            "Every report you submit affects your reputation. Accurate reports on players who go on to succeed will build your standing. As your reputation grows, clubs will offer you contracts with better salaries and wider territories. Your long-term goal is to rise from the starting tier all the way to Head of Scouting.",
+            "Your first filing opens an accountable scouting case; revisions require new evidence and do not inflate output. Delivery, calibrated conviction, and later player outcomes build or damage your standing. As your reputation grows, clubs offer better roles and wider territories.",
             "",
             "Good luck, scout. The pitch is waiting.",
           ].join("\n"),
@@ -1547,6 +1288,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       unlockedTools: startingTools,
       managerDirectives: initialDirectives,
     };
+    const gameState = applyWorldConditionSeasonStart(rawGameState);
 
     // Apply scenario GameState overrides (week, season, reputation, tier, activeScenarioId)
     const scenarioState = scenario ? applyScenarioOverrides(gameState, scenario) : gameState;
@@ -1656,8 +1398,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }
   },
 
-  loadGame: (state) => {
-    // Deep-spread to avoid mutating the caller's object (Fix #23)
+  loadGame: (rawState) => {
+    // Every runtime entrypoint, including direct test/import loads, passes
+    // through the same pure and idempotent migration used by save providers.
+    const state = migrateSaveState(rawState);
     const migrated: GameState = {
       ...state,
       scout: { ...state.scout, skills: { ...state.scout.skills } },
@@ -1710,6 +1454,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     migrated.eventDirector = createEventDirectorState(migrated.eventDirector);
     migrateFreeAgentGeography(migrated);
+    migrateWorldCountryEligibility(migrated);
     // Migration: add new scout skills if loading an older save
     if (migrated.scout.skills.playerJudgment === undefined) {
       migrated.scout.skills.playerJudgment = 5;
@@ -1780,6 +1525,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     migrateFinancialStrategy(migrated);
     // Migration: F13 Regional Scouting Depth
     migrateRegionalKnowledge(migrated);
+    // Migration: pin home base and reconcile office/staff presence.
+    migrateRegionalPresence(migrated);
     // Migration: discipline/card system
     // eslint-disable-next-line
     if ((migrated as any).disciplinaryRecords === undefined) {
@@ -1829,6 +1576,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     migrated.internationalAssignmentHistory = (
       migrated.internationalAssignmentHistory ?? []
     ).map(migrateInternationalAssignment);
+    migrateInternationalDestinationEligibility(migrated);
     // Migration: F10 Dynamic Board Expectations
     // eslint-disable-next-line
     (migrated as any).boardReactions ??= [];
@@ -1903,21 +1651,24 @@ export const useGameStore = create<GameStore>((set, get) => ({
         : null;
     scenarioSafeState.activeObservationSession = resumableSession;
     const awaitingOpeningDecision = scenarioSafeState.openingCase?.stage === "decision";
+    const restoreScreen = resumableSession
+      ? "observation"
+      : awaitingOpeningDecision
+        ? "openingDiscovery"
+        : "dashboard";
     set({
       gameState: scenarioSafeState,
       isLoaded: true,
-      currentScreen: resumableSession
-        ? "observation"
-        : awaitingOpeningDecision
-          ? "openingDiscovery"
-          : "dashboard",
+      currentScreen: resolveGameScreenForBuild(restoreScreen, true),
       selectedPlayerId: scenarioSafeState.openingCase?.playerId ?? null,
       scenarioProgress: null,
       scenarioOutcome: null,
       scenarioOutcomeScenarioId: null,
       pendingCelebration: null,
       activeSession: resumableSession,
-      sessionReturnScreen: resumableSession ? "dashboard" : null,
+      sessionReturnScreen: resumableSession
+        ? resolveGameScreenForBuild("dashboard", true)
+        : null,
       weekSimulation: null,
       lastWeekSummary: null,
       batchSummary: null,
@@ -2014,12 +1765,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   refreshSaveSlots: async () => {
     const provider = await getActiveSaveProvider();
     const entries = await provider.listSaves();
-    const seen = new Set<string>();
     const slots: SaveSlotSummary[] = [];
-
+    const bySlot = new Map<string, typeof entries>();
     for (const entry of entries) {
-      if (seen.has(entry.slotName)) continue;
-      seen.add(entry.slotName);
+      const group = bySlot.get(entry.slotName) ?? [];
+      group.push(entry);
+      bySlot.set(entry.slotName, group);
+    }
+
+    for (const group of bySlot.values()) {
+      const entry = group.find((candidate) => !candidate.unavailable) ?? group[0];
+      if (!entry) continue;
+      const damagedLocal = group.find(
+        (candidate) => candidate.source === "local" && candidate.unavailable,
+      );
       slots.push({
         slot: entry.slot,
         name: entry.name,
@@ -2030,10 +1789,44 @@ export const useGameStore = create<GameStore>((set, get) => ({
         specialization: entry.specialization,
         reputation: entry.reputation,
         source: entry.source,
+        recovery: entry.recovery,
+        unavailable: entry.unavailable,
+        localUnavailable: entry.unavailable ? undefined : damagedLocal?.unavailable,
       });
     }
+    slots.sort((a, b) => b.savedAt - a.savedAt);
 
-    set({ saveSlots: slots });
+    const [saveRecoveryCopies, saveSyncStatus] = await Promise.all([
+      provider.listRecoveryCopies(),
+      provider.getSyncStatus(),
+    ]);
+    set({ saveSlots: slots, saveRecoveryCopies, saveSyncStatus });
+  },
+
+  restoreSaveRecoveryCopy: async (archiveId) => {
+    set({ isLoadingSave: true });
+    try {
+      const provider = await getActiveSaveProvider();
+      const restored = await provider.restoreRecoveryCopy(archiveId);
+      const state = migrateSaveState(JSON.parse(restored.data) as unknown);
+      assertEarlyAccessSaveCompatibility(state);
+      get().loadGame(state);
+      await get().refreshSaveSlots();
+    } finally {
+      set({ isLoadingSave: false });
+    }
+  },
+
+  refreshSaveSyncStatus: async () => {
+    const provider = await getActiveSaveProvider();
+    const saveSyncStatus = await provider.getSyncStatus();
+    set({ saveSyncStatus });
+  },
+
+  retryPendingSaveSync: async () => {
+    const provider = await getActiveSaveProvider();
+    const saveSyncStatus = await provider.retryPendingSync();
+    set({ saveSyncStatus });
   },
 
   dismissSaveConflict: () => {
@@ -2045,12 +1838,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       const provider = await getActiveSaveProvider();
       const slotName = slotNumberToSaveName(slot);
-      const resolved = await provider.loadFromSource(slotName, preferredSource);
-      if (!resolved) return;
-
-      await provider.save(slotName, resolved.data, resolved.name, {
-        waitForCloud: true,
-      });
+      const resolved = await provider.resolveConflict(slotName, preferredSource);
 
       const state = migrateSaveState(JSON.parse(resolved.data) as unknown);
       assertEarlyAccessSaveCompatibility(state);

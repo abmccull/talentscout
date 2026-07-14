@@ -1641,7 +1641,7 @@ export function NewGameScreen() {
                         <h3 className="font-semibold text-white">Freelance Scout</h3>
                       </div>
                       <p className="text-sm text-zinc-400">
-                        Start independent. Earn per-report fees. Build your reputation from scratch and
+                        Start independent. Sell trusted intelligence and successful placements. Build your reputation from accountable outcomes and
                         wait for club offers to arrive.
                       </p>
                       <div className="mt-2 flex flex-wrap gap-1.5">

@@ -7,6 +7,7 @@ test("deriveSeasonReviewMetrics uses season activity instead of global country s
   const state = {
     scout: {
       id: "scout-1",
+      homeCountry: "england",
       countryReputations: {
         england: {
           country: "england",
@@ -17,7 +18,7 @@ test("deriveSeasonReviewMetrics uses season activity instead of global country s
         },
         spain: {
           country: "spain",
-          familiarity: 15,
+          familiarity: 95,
           reportsSubmitted: 0,
           successfulFinds: 0,
           contactCount: 0,
@@ -146,4 +147,54 @@ test("deriveSeasonReviewMetrics uses season activity instead of global country s
   expect(metrics.unsignedYouthDiscovered).toBe(2);
   expect(metrics.successfulPlacements).toBe(1);
   expect(metrics.alumniMilestonesThisSeason).toBe(1);
+});
+
+test("deriveSeasonReviewMetrics still counts a placed discovery after the active youth duplicate is removed", () => {
+  const state = {
+    scout: { id: "scout-1", homeCountry: "england" },
+    reports: {
+      placed: {
+        id: "report-placed",
+        scoutId: "scout-1",
+        playerId: "placed-player",
+        submittedSeason: 2,
+      },
+    },
+    scoutingCases: {},
+    observations: {},
+    players: {
+      "placed-player": { id: "placed-player", clubId: "club-england" },
+    },
+    retiredPlayers: {},
+    clubs: {
+      "club-england": { id: "club-england", leagueId: "league-england" },
+    },
+    leagues: {
+      "league-england": { id: "league-england", country: "england" },
+    },
+    unsignedYouth: {},
+    subRegions: {},
+    discoveryRecords: [{ playerId: "placed-player", discoveredSeason: 2 }],
+    placementReports: {
+      accepted: {
+        id: "placement-1",
+        reportId: "report-placed",
+        unsignedYouthId: "removed-youth-id",
+        scoutId: "scout-1",
+        clubResponse: "accepted",
+        season: 2,
+      },
+    },
+    alumniRecords: [{
+      id: "alumni-1",
+      playerId: "placed-player",
+      placedSeason: 2,
+      milestones: [],
+    }],
+  } as unknown as GameState;
+
+  const metrics = deriveSeasonReviewMetrics(state, 2);
+
+  expect(metrics.unsignedYouthDiscovered).toBe(1);
+  expect(metrics.successfulPlacements).toBe(1);
 });

@@ -115,12 +115,36 @@ function withoutPlayer(ids: string[] | undefined, playerId: string): string[] {
   return (ids ?? []).filter((id) => id !== playerId);
 }
 
+function buildClubMembershipIndex(
+  clubs: Record<string, Club>,
+): Map<string, Set<string>> {
+  const memberships = new Map<string, Set<string>>();
+  for (const [clubId, club] of Object.entries(clubs)) {
+    for (const playerId of [
+      ...club.playerIds,
+      ...(club.academyPlayerIds ?? []),
+      ...(club.loanedOutPlayerIds ?? []),
+      ...(club.loanedInPlayerIds ?? []),
+    ]) {
+      const existing = memberships.get(playerId);
+      if (existing) existing.add(clubId);
+      else memberships.set(playerId, new Set([clubId]));
+    }
+  }
+  return memberships;
+}
+
 function cleanClubMembership(
   clubs: Record<string, Club>,
   playerId: string,
+  memberships: ReadonlyMap<string, ReadonlySet<string>>,
 ): Record<string, Club> {
-  const updated = { ...clubs };
-  for (const [clubId, club] of Object.entries(updated)) {
+  // `clubs` is already a transaction-local clone. Replace only the club
+  // objects known to contain this player instead of cloning and scanning all
+  // 360 clubs for every weekly movement intent.
+  for (const clubId of memberships.get(playerId) ?? []) {
+    const club = clubs[clubId];
+    if (!club) continue;
     const playerIds = withoutPlayer(club.playerIds, playerId);
     const academyPlayerIds = withoutPlayer(club.academyPlayerIds, playerId);
     const loanedOutPlayerIds = withoutPlayer(club.loanedOutPlayerIds, playerId);
@@ -131,7 +155,7 @@ function cleanClubMembership(
       loanedOutPlayerIds.length !== (club.loanedOutPlayerIds ?? []).length ||
       loanedInPlayerIds.length !== (club.loanedInPlayerIds ?? []).length
     ) {
-      updated[clubId] = {
+      clubs[clubId] = {
         ...club,
         playerIds,
         academyPlayerIds,
@@ -140,7 +164,7 @@ function cleanClubMembership(
       };
     }
   }
-  return updated;
+  return clubs;
 }
 
 function registerAtClub(
@@ -150,18 +174,16 @@ function registerAtClub(
 ): Record<string, Club> {
   const club = clubs[clubId];
   if (!club) return clubs;
-  return {
-    ...clubs,
-    [clubId]: player.age < 18
-      ? {
-          ...club,
-          academyPlayerIds: [...new Set([...(club.academyPlayerIds ?? []), player.id])],
-        }
-      : {
-          ...club,
-          playerIds: [...new Set([...club.playerIds, player.id])],
-        },
-  };
+  clubs[clubId] = player.age < 18
+    ? {
+        ...club,
+        academyPlayerIds: [...new Set([...(club.academyPlayerIds ?? []), player.id])],
+      }
+    : {
+        ...club,
+        playerIds: [...new Set([...club.playerIds, player.id])],
+      };
+  return clubs;
 }
 
 function defaultContractLength(player: Player): number {
@@ -274,6 +296,7 @@ export function resolvePlayerMovements(
   const applied: PlayerMovementEvent[] = [];
   const rejected: RejectedPlayerMovement[] = [];
   const reserved = new Set<string>();
+  const clubMemberships = buildClubMembershipIndex(state.clubs);
   const ordered = intents
     .map((intent, index) => ({ intent, index }))
     .sort((a, b) => PRIORITY[b.intent.type] - PRIORITY[a.intent.type] || a.index - b.index);
@@ -297,7 +320,7 @@ export function resolvePlayerMovements(
       const activeLoan = state.activeLoans.find(
         (deal) => deal.playerId === player.id && deal.status === "active",
       );
-      state.clubs = cleanClubMembership(state.clubs, player.id);
+      state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       if (activeLoan) {
         state.activeLoans = state.activeLoans.filter((deal) => deal.id !== activeLoan.id);
         state.loanHistory.push({
@@ -359,7 +382,7 @@ export function resolvePlayerMovements(
           outcome: "terminated",
         });
       }
-      state.clubs = cleanClubMembership(state.clubs, player.id);
+      state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.players[player.id] = {
         ...clearLoanFields(player),
         clubId: "",
@@ -384,7 +407,7 @@ export function resolvePlayerMovements(
         reject(rejected, intent, "destination cannot afford the signing bonus");
         continue;
       }
-      state.clubs = cleanClubMembership(state.clubs, player.id);
+      state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.clubs[intent.toClubId] = {
         ...state.clubs[intent.toClubId],
         budget: state.clubs[intent.toClubId].budget - signingBonus,
@@ -434,7 +457,7 @@ export function resolvePlayerMovements(
         reject(rejected, intent, "invalid destination or unaffordable transfer fee");
         continue;
       }
-      state.clubs = cleanClubMembership(state.clubs, player.id);
+      state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.clubs[intent.fromClubId] = {
         ...state.clubs[intent.fromClubId],
         budget: state.clubs[intent.fromClubId].budget + intent.fee,
@@ -488,7 +511,7 @@ export function resolvePlayerMovements(
         reject(rejected, intent, "loan club cannot afford the fee and wage contribution");
         continue;
       }
-      state.clubs = cleanClubMembership(state.clubs, player.id);
+      state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.clubs[deal.parentClubId] = {
         ...state.clubs[deal.parentClubId],
         budget: state.clubs[deal.parentClubId].budget + totalLoanCost,
@@ -547,7 +570,7 @@ export function resolvePlayerMovements(
         reject(rejected, intent, "buy option is unavailable or unaffordable");
         continue;
       }
-      state.clubs = cleanClubMembership(state.clubs, player.id);
+      state.clubs = cleanClubMembership(state.clubs, player.id, clubMemberships);
       state.activeLoans = state.activeLoans.filter((active) => active.id !== deal.id);
 
       if (intent.resolution === "buyOption") {

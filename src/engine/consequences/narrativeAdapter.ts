@@ -1,14 +1,17 @@
 import type { GameState, NarrativeEvent } from "@/engine/core/types";
-import { getSeasonLength } from "@/engine/core/gameLoop";
-import { addGameWeeks } from "@/engine/core/gameDate";
+import { addGameWeeks, getSeasonLength } from "@/engine/core/gameDate";
 import { createNamedRNG } from "@/engine/run";
-import { buildSpecialEventDecisionOption } from "@/engine/events/specialEventDeck";
+import {
+  buildSpecialEventDecisionOption,
+  buildSpecialEventOfferObligations,
+} from "@/engine/events/specialEventDeck";
 import {
   createDecisionRecord,
   registerDecision,
   selectDecisionOption,
 } from "./decisionLedger";
 import { processDueConsequences } from "./processor";
+import { synchronizeConsequenceMetrics } from "./projection";
 import type {
   ConsequenceEngineState,
   DecisionOption,
@@ -32,7 +35,32 @@ function relatedEntity(state: GameState, id: string): EntityRef {
   if (state.players[id] || state.retiredPlayers[id]) return { kind: "player", id };
   if (state.unsignedYouth[id]) return { kind: "unsignedYouth", id };
   if (state.rivalScouts[id]) return { kind: "rivalScout", id };
+  if (state.finances?.employees.some((employee) => employee.id === id)) {
+    return { kind: "employee", id };
+  }
   return { kind: "entity", id };
+}
+
+function ensureSpecialEventOfferObligations(
+  state: GameState,
+  event: NarrativeEvent,
+  decisionId: string,
+): GameState {
+  const offered = buildSpecialEventOfferObligations(state, event, decisionId);
+  const missing = Object.fromEntries(
+    Object.entries(offered).filter(([id]) => !state.consequenceState.obligations[id]),
+  );
+  if (Object.keys(missing).length === 0) return state;
+  return {
+    ...state,
+    consequenceState: {
+      ...state.consequenceState,
+      obligations: {
+        ...state.consequenceState.obligations,
+        ...missing,
+      },
+    },
+  };
 }
 
 export function narrativeDecisionId(eventId: string): string {
@@ -204,7 +232,9 @@ export function ensureNarrativeDecision(
   if (!event.choices || event.choices.length < 2) return state;
 
   const decisionId = narrativeDecisionId(event.id);
-  if (state.consequenceState.decisions[decisionId]) return state;
+  if (state.consequenceState.decisions[decisionId]) {
+    return ensureSpecialEventOfferObligations(state, event, decisionId);
+  }
 
   const seasonLength = getSeasonLength(state.fixtures, event.season);
   const policy = getNarrativeDecisionPolicy(event);
@@ -279,7 +309,7 @@ export function ensureNarrativeDecision(
   const registered = registerDecision(state.consequenceState, decision);
   if (registered.error) return state;
 
-  return {
+  return ensureSpecialEventOfferObligations({
     ...state,
     consequenceState: {
       ...registered.state,
@@ -288,7 +318,7 @@ export function ensureNarrativeDecision(
         ...locks,
       },
     },
-  };
+  }, event, decisionId);
 }
 
 export interface NarrativeDecisionSelection {
@@ -318,8 +348,12 @@ export function selectNarrativeDecision(
 
   const now = { week: prepared.currentWeek, season: prepared.currentSeason };
   const seasonLength = getSeasonLength(prepared.fixtures, prepared.currentSeason);
-  const selection = selectDecisionOption(
+  const synchronized = synchronizeConsequenceMetrics(
+    prepared,
     prepared.consequenceState,
+  );
+  const selection = selectDecisionOption(
+    synchronized,
     decisionId,
     selected.id,
     now,

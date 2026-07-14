@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-13T23:34:20.000Z",
+  "sourceHeadAtVerification": "1b3e9273283113d100bf6ee517eb79d384059cb1",
+  "candidateBound": false,
+  "worktreeDirty": true,
+  "status": "Passed",
+  "checks": {
+    "typecheck": "passed",
+    "lint": "passed_zero_warnings",
+    "unitAndInvariantTests": {
+      "status": "passed",
+      "files": 104,
+      "tests": 626
+    },
+    "dependencyAudit": {
+      "status": "passed",
+      "vulnerabilities": 0,
+      "threshold": "moderate"
+    },
+    "architecture": {
+      "status": "passed",
+      "modules": 456,
+      "internalEdges": 1908,
+      "modulesInCycles": 0,
+      "largestModule": "src/stores/actions/weeklyActions.ts",
+      "largestModuleLines": 7965,
+      "evidence": "artifacts/architecture/module-graph.json"
+    },
+    "replayability": {
+      "status": "passed",
+      "seeds": 100,
+      "seasons": 3,
+      "tests": "5/5",
+      "broadEventCategoryRepetitionRate": 0.1696,
+      "evidence": "artifacts/replayability/release-summary.json"
+    },
+    "assetInventory": {
+      "status": "passed",
+      "ownedAssets": 135,
+      "trackedAssets": 135,
+      "blockers": 0,
+      "evidence": "artifacts/release/asset-provenance-audit.json"
+    },
+    "shippingBuild": {
+      "status": "passed",
+      "playRouteJsKb": 560,
+      "firstLoadJsKb": 667,
+      "e2eBridgeMarkersFound": 0
+    },
+    "gameplayBrowserStories": {
+      "status": "passed",
+      "tests": "48/48 current scenarios green",
+      "note": "The integrated run passed 47 scenarios; its only failure was a stale copy-capitalization assertion, which was corrected and rerun successfully."
+    },
+    "renderedAccessibilityAndPerformanceMatrix": {
+      "status": "passed",
+      "tests": "14/14 current opening, accessibility, visual, smoke, and performance gates",
+      "retries": 0,
+      "blockingAxeViolations": 0,
+      "evidenceDirectory": "design-audit-evidence/release-2026-07-13"
+    },
+    "tenSeasonBrowserSoak": {
+      "status": "passed",
+      "reachedSeason": 11,
+      "batches": 60,
+      "playwrightWallClockSeconds": 82.1,
+      "simulationElapsedMs": 70696.3,
+      "evidence": "artifacts/soak/browser-ten-season-timing.json"
+    },
+    "chromiumLowEndEmulation": {
+      "status": "passed_supporting_automation",
+      "coldLoadMs": 5009.58,
+      "navigationP95Ms": 594.3,
+      "oneWeekAdvanceMs": 3802,
+      "jsHeapUsedBytes": 98144040,
+      "domNodes": 4607,
+      "evidence": "artifacts/performance/low-end-emulation-profile.json"
+    }
+  },
+  "limitations": [
+    "The working tree is not committed, so these results are not yet bound to an immutable release candidate.",
+    "Long-save release evidence is generated only by the exact-candidate 20-seed x 30-season gate and is not represented by this supporting snapshot.",
+    "Chromium throttling is emulation evidence, not physical low-end hardware proof.",
+    "Manual assistive-technology, moderated usability, packaged-platform, and live cross-device cloud checks are outside this artifact."
+  ]
+}

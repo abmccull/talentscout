@@ -28,26 +28,27 @@ test.describe("Smoke Test", () => {
     const weekAfter = await gamePage.getCurrentWeek();
     expect(weekAfter).toBeGreaterThan(weekBefore);
 
-    // 3. Navigate to 10 key screens
-    const keyScreens = [
-      "dashboard",
-      "calendar",
-      "fixtureBrowser",
-      "finances",
-      "achievements",
-      "handbook",
-      "settings",
-      "agency",
-      "career",    // visible after week 3
-      "equipment", // visible after week 3
-    ];
+    // 3. Exercise key Early Access destinations and the intentional fallback
+    // for a legacy link whose standalone screen is reserved for the full game.
+    const navigationCases = [
+      { requested: "dashboard", expected: "dashboard" },
+      { requested: "calendar", expected: "calendar" },
+      { requested: "fixtureBrowser", expected: "calendar" },
+      { requested: "finances", expected: "finances" },
+      { requested: "achievements", expected: "achievements" },
+      { requested: "handbook", expected: "handbook" },
+      { requested: "settings", expected: "settings" },
+      { requested: "agency", expected: "agency" },
+      { requested: "career", expected: "career" }, // visible after week 3
+      { requested: "equipment", expected: "equipment" }, // visible after week 3
+    ] as const;
 
-    for (const screen of keyScreens) {
-      await gamePage.setScreen(screen);
+    for (const { requested, expected } of navigationCases) {
+      await gamePage.setScreen(requested);
       await gamePage.page.waitForTimeout(200);
 
       const current = await gamePage.getCurrentScreen();
-      expect(current).toBe(screen);
+      expect(current).toBe(expected);
 
       // Verify screen has content
       const content = await gamePage.page.innerText("body");
@@ -92,22 +93,23 @@ test.describe("Smoke Test", () => {
     const tier = await gamePage.getScoutTier();
     expect(tier).toBe(4);
 
-    // Visit tier-gated screens
-    const lateGameScreens = [
-      "npcManagement",
-      "discoveries",
-      "analytics",
-      "alumniDashboard",
-      "network",
-      "rivals",
-    ];
+    // Visit tier-gated detail screens and verify the retired standalone
+    // analytics route resolves to its supported Career workspace.
+    const lateGameNavigationCases = [
+      { requested: "npcManagement", expected: "npcManagement" },
+      { requested: "discoveries", expected: "discoveries" },
+      { requested: "analytics", expected: "career" },
+      { requested: "alumniDashboard", expected: "alumniDashboard" },
+      { requested: "network", expected: "network" },
+      { requested: "rivals", expected: "rivals" },
+    ] as const;
 
-    for (const screen of lateGameScreens) {
-      await gamePage.setScreen(screen);
+    for (const { requested, expected } of lateGameNavigationCases) {
+      await gamePage.setScreen(requested);
       await gamePage.page.waitForTimeout(300);
 
       const current = await gamePage.getCurrentScreen();
-      expect(current).toBe(screen);
+      expect(current).toBe(expected);
     }
 
     gamePage.expectNoConsoleErrors();

@@ -76,10 +76,28 @@ export interface RivalSimulationModifiers {
   discoveryChanceMultiplier?: number;
   poachChanceMultiplier?: number;
   signingChanceMultiplier?: number;
+  /**
+   * Optional contextual pressure supplied by the world simulation. This keeps
+   * regional conditions attached to the rival or player they actually affect
+   * instead of flattening every market into one global multiplier.
+   */
+  contextualPressureMultiplier?: (
+    rival: RivalScout,
+    playerId?: string,
+  ) => number;
 }
 
 function modifiedChance(base: number, multiplier = 1): number {
   return Math.min(0.95, Math.max(0, base * multiplier));
+}
+
+function contextualPressure(
+  modifiers: RivalSimulationModifiers,
+  rival: RivalScout,
+  playerId?: string,
+): number {
+  const value = modifiers.contextualPressureMultiplier?.(rival, playerId) ?? 1;
+  return Number.isFinite(value) ? Math.min(1.5, Math.max(0.7, value)) : 1;
 }
 
 export interface RivalSigningResult {
@@ -608,7 +626,8 @@ export function processRivalScoutWeek(
         const signingChance = computeSigningChance(updatedRival, progress);
         if (rng.chance(modifiedChance(
           signingChance,
-          modifiers.signingChanceMultiplier,
+          (modifiers.signingChanceMultiplier ?? 1)
+            * contextualPressure(modifiers, updatedRival, updatedRival.currentTarget),
         ))) {
           if (
             reportedPlayerIds.has(updatedRival.currentTarget) &&
@@ -634,7 +653,8 @@ export function processRivalScoutWeek(
     // --- 6. Discovery (same as legacy) ---
     if (rng.chance(modifiedChance(
       DISCOVERY_CHANCE,
-      modifiers.discoveryChanceMultiplier,
+      (modifiers.discoveryChanceMultiplier ?? 1)
+        * contextualPressure(modifiers, updatedRival, updatedRival.currentTarget),
     ))) {
       const newTarget = discoverNewTarget(rng, updatedRival, state);
       if (newTarget !== null) {
@@ -661,7 +681,8 @@ export function processRivalScoutWeek(
     // --- 8. Poach warning check ---
     if (rng.chance(modifiedChance(
       POACH_CHANCE,
-      modifiers.poachChanceMultiplier,
+      (modifiers.poachChanceMultiplier ?? 1)
+        * contextualPressure(modifiers, updatedRival, competingForPlayers[0]),
     ))) {
       if (competingForPlayers.length > 0) {
         const targetId = rng.pick(competingForPlayers);
@@ -678,7 +699,12 @@ export function processRivalScoutWeek(
       : POACH_SIGNING_CHANCE;
     if (rng.chance(modifiedChance(
       signingChancePoach,
-      modifiers.signingChanceMultiplier,
+      (modifiers.signingChanceMultiplier ?? 1)
+        * contextualPressure(
+          modifiers,
+          updatedRival,
+          updatedRival.targetPlayerIds.find((playerId) => reportedPlayerIds.has(playerId)),
+        ),
     ))) {
       const reportedSharedIds = updatedRival.targetPlayerIds.filter((pid) =>
         reportedPlayerIds.has(pid),

@@ -58,6 +58,36 @@ export {
 } from './regions';
 
 export {
+  getWorldCountryAvailability,
+  getTravelEligibleCountryKeys,
+  getCountryAvailability,
+  isTravelEligibleCountry,
+  getInternationalAssignmentTypesForCountry,
+  isInternationalAssignmentEligibleCountry,
+} from './countryAvailability';
+export type {
+  WorldCountryContentTier,
+  WorldCountryAvailability,
+  WorldCountryAvailabilitySource,
+} from './countryAvailability';
+
+export {
+  deriveRegionalPresence,
+  deriveRegionalPresenceIndex,
+  getPlayerScoutingCountry,
+  getRegionalTravelQuote,
+  applyRegionalPresenceToObservation,
+} from './regionalPresence';
+export type {
+  RegionalAccessTier,
+  RegionalPresenceEffects,
+  RegionalPresenceSnapshot,
+  RegionalPresenceSource,
+  RegionalTravelQuote,
+  RegionalObservationContext,
+} from './regionalPresence';
+
+export {
   HIDDEN_LEAGUE_DEFINITIONS,
   getHiddenLeaguesForCountry,
   discoverHiddenLeague,
@@ -76,6 +106,30 @@ export type {
   InternationalWeekResult,
 } from './international';
 export type { InternationalAssignment } from '@/engine/core/types';
+
+export {
+  WORLD_CONDITION_DECK,
+  WORLD_CONDITION_HISTORY_LIMIT,
+  createWorldConditionState,
+  migrateWorldConditionState,
+  generateWorldConditionSeason,
+  advanceWorldConditionSeason,
+  getWorldConditionModifiers,
+  getWorldConditionDefinition,
+  getActiveWorldConditionNames,
+  getWorldConditionContentDefinitionIds,
+  formatWorldConditionCountry,
+  buildWorldConditionSeasonMessage,
+  applyWorldConditionSeasonStart,
+} from './worldConditions';
+export type {
+  WorldConditionScope,
+  WorldConditionModifiers,
+  WorldConditionDefinition,
+  WorldConditionInstance,
+  WorldConditionSeasonRecord,
+  WorldConditionState,
+} from './worldConditions';
 
 export {
   processRelegationPromotion,

@@ -297,6 +297,54 @@ describe("academy placement decisions", () => {
       reason.includes("Evidence-led presentation: evidence +4"),
     )).toBe(true);
   });
+
+  it("lets the seasonal recruitment climate materially change club evaluation", () => {
+    const borderline = report({
+      conviction: "recommend",
+      projectedRole: "boxToBox",
+      recommendedAction: "offerAcademyPlace",
+      estimatedWeeklyWage: 900,
+      riskFactors: ["Physical adaptation", "Education transition"],
+      categoryVerdicts: {
+        potential: verdict("medium", "hyp-potential"),
+        roleFit: verdict("medium", "hyp-role"),
+        characterRisk: verdict("low", "hyp-character", "Character evidence remains limited."),
+      },
+    });
+    const shared = {
+      report: borderline,
+      brief: brief({ riskTolerance: "low", competitionPressure: 50 }),
+      player: visiblePlayer,
+      observations: observations().slice(0, 2),
+      scout: decisionScout,
+      club: club(),
+      relationshipScore: 35,
+    };
+    const openMarket = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("seasonal-recruitment"),
+      worldConditionContext: {
+        scoreAdjustment: 10,
+        label: "Open Transfer Market",
+      },
+    });
+    const creditSqueeze = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("seasonal-recruitment"),
+      worldConditionContext: {
+        scoreAdjustment: -10,
+        label: "Credit Squeeze",
+      },
+    });
+
+    expect(openMarket.breakdown.total).toBeGreaterThan(
+      creditSqueeze.breakdown.total,
+    );
+    expect(openMarket.breakdown.total - creditSqueeze.breakdown.total)
+      .toBeGreaterThanOrEqual(18);
+    expect(openMarket.reasons.join(" ")).toContain("Open Transfer Market increases");
+    expect(creditSqueeze.reasons.join(" ")).toContain("Credit Squeeze reduces");
+  });
 });
 
 describe("academy brief lifecycle invariants", () => {

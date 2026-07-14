@@ -1,12 +1,21 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore, type SaveSlotSummary } from "@/stores/gameStore";
 import { useAuthStore } from "@/stores/authStore";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Trash2, LogOut } from "lucide-react";
+import {
+  AlertTriangle,
+  Cloud,
+  Loader2,
+  LogOut,
+  Map,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { APP_VERSION } from "@/config/version";
 import { AuthModal } from "./AuthModal";
@@ -15,7 +24,6 @@ import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import {
   BETA_CLOUD_SAVES_ENABLED,
   BETA_CLOUD_SAVES_MESSAGE,
-  BETA_GLOBAL_LEADERBOARD_MESSAGE,
 } from "@/config/beta";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 
@@ -38,7 +46,16 @@ export function MainMenu() {
     isLoadingSave,
     selectedScenarioId,
     setSelectedScenario,
-  } = useGameStore();
+  } = useGameStore(useShallow((state) => ({
+    setScreen: state.setScreen,
+    saveSlots: state.saveSlots,
+    refreshSaveSlots: state.refreshSaveSlots,
+    loadFromSlot: state.loadFromSlot,
+    deleteSlot: state.deleteSlot,
+    isLoadingSave: state.isLoadingSave,
+    selectedScenarioId: state.selectedScenarioId,
+    setSelectedScenario: state.setSelectedScenario,
+  })));
 
   const {
     isLoading: isAuthLoading,
@@ -46,7 +63,13 @@ export function MainMenu() {
     displayName,
     signOut,
     cloudSaveEnabled,
-  } = useAuthStore();
+  } = useAuthStore(useShallow((state) => ({
+    isLoading: state.isLoading,
+    isAuthenticated: state.isAuthenticated,
+    displayName: state.displayName,
+    signOut: state.signOut,
+    cloudSaveEnabled: state.cloudSaveEnabled,
+  })));
 
   const [showLoadPicker, setShowLoadPicker] = useState(false);
   const [showSplash, setShowSplash] = useState(!splashShownThisSession);
@@ -62,21 +85,42 @@ export function MainMenu() {
   useEffect(() => {
     if (!showSplash) return;
     splashShownThisSession = true;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShowSplash(false);
+      return;
+    }
+
+    const handleSplashKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setShowSplash(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleSplashKeyDown);
     splashTimerRef.current = setTimeout(() => setShowSplash(false), 2200);
-    return () => clearTimeout(splashTimerRef.current);
+    return () => {
+      window.removeEventListener("keydown", handleSplashKeyDown);
+      clearTimeout(splashTimerRef.current);
+    };
   }, [showSplash]);
 
   const compatibleSaveSlots = IS_YOUTH_EARLY_ACCESS
-    ? saveSlots.filter((save) => save.specialization === "youth")
+    ? saveSlots.filter(
+        (save) => save.specialization === "youth" || Boolean(save.unavailable),
+      )
     : saveSlots;
   const autosave = compatibleSaveSlots.find((s) => s.slot === 0);
   const manualSaves = compatibleSaveSlots.filter((s) => s.slot > 0);
   const unsupportedSaveCount = saveSlots.length - compatibleSaveSlots.length;
+  const continueSave = [...compatibleSaveSlots]
+    .filter((save) => !save.unavailable)
+    .sort((left, right) => right.savedAt - left.savedAt)[0];
 
   const handleContinue = async () => {
-    const mostRecent = [...compatibleSaveSlots].sort((a, b) => b.savedAt - a.savedAt)[0];
-    if (mostRecent) {
-      await loadFromSlot(mostRecent.slot);
+    if (continueSave) {
+      await loadFromSlot(continueSave.slot);
     }
   };
 
@@ -106,7 +150,8 @@ export function MainMenu() {
     });
   };
 
-  const hasSaves = compatibleSaveSlots.length > 0;
+  const hasSaveEntries = compatibleSaveSlots.length > 0;
+  const hasLoadableSave = Boolean(continueSave);
   const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
   const pendingScenario = selectedScenarioId
     ? getScenarioById(selectedScenarioId)
@@ -114,16 +159,30 @@ export function MainMenu() {
 
   if (showSplash) {
     return (
-      <main className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]">
+      <main
+        className="relative flex min-h-screen flex-col items-center justify-center bg-[#0a0a0a]"
+        data-testid="main-menu-splash"
+        aria-labelledby="talentscout-splash-title"
+      >
         <ScreenBackground src="/images/backgrounds/loading.png" opacity={0.6} />
         <div className="relative z-10 animate-[splashFadeIn_800ms_ease-out_both] text-center">
-          <h1 className="mb-3 text-7xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
+          <h1
+            id="talentscout-splash-title"
+            className="mb-3 text-5xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] sm:text-7xl"
+          >
             Talent<span className="text-emerald-500 drop-shadow-[0_0_24px_rgba(16,185,129,0.5)]">Scout</span>
           </h1>
           <p className="text-lg tracking-wide text-zinc-400 animate-[splashFadeIn_1000ms_ease-out_400ms_both] drop-shadow-[0_1px_4px_rgba(0,0,0,0.8)]">
             The scout&apos;s eye sees what others miss
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowSplash(false)}
+          className="absolute bottom-6 right-6 z-10 min-h-11 rounded-lg border border-white/15 bg-black/35 px-4 text-sm font-medium text-zinc-300 backdrop-blur transition hover:border-white/30 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400"
+        >
+          Skip intro
+        </button>
         <style>{`
           @keyframes splashFadeIn {
             from { opacity: 0; transform: translateY(8px); }
@@ -176,7 +235,10 @@ export function MainMenu() {
       </div>
 
       {!showLoadPicker ? (
-        <div className="relative z-10 flex w-64 flex-col gap-3">
+        <div
+          className="relative z-10 flex w-64 flex-col gap-3"
+          data-testid="main-menu-actions"
+        >
           <Button
             size="lg"
             className="w-full text-base"
@@ -193,20 +255,79 @@ export function MainMenu() {
             variant="secondary"
             size="lg"
             className="w-full text-base"
-            disabled={!hasSaves}
+            disabled={!hasLoadableSave}
             onClick={() => void handleContinue()}
           >
-            Continue
+            {continueSave?.recovery
+              ? "Continue from verified backup"
+              : continueSave?.localUnavailable
+                ? "Continue from cloud recovery"
+                : "Continue"}
           </Button>
           <Button
             variant="outline"
             size="lg"
             className="w-full text-base"
-            disabled={!hasSaves}
+            disabled={!hasSaveEntries}
             onClick={() => setShowLoadPicker(true)}
           >
             Load Game
           </Button>
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full text-base text-zinc-300"
+            onClick={() => setScreen("futureRoadmap")}
+          >
+            <Map size={16} className="mr-2" aria-hidden="true" />
+            Future roadmap
+          </Button>
+
+          {continueSave?.recovery && (
+            <div
+              className="flex gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-left"
+              role="status"
+            >
+              <ShieldCheck
+                size={16}
+                className="mt-0.5 shrink-0 text-amber-300"
+                aria-hidden="true"
+              />
+              <p className="text-xs leading-relaxed text-amber-100">
+                Continue will load the last verified backup because the newest local generation is damaged.
+              </p>
+            </div>
+          )}
+          {continueSave?.localUnavailable && !continueSave.recovery && (
+            <div
+              className="flex gap-2 rounded-lg border border-sky-400/25 bg-sky-400/10 p-3 text-left"
+              role="status"
+            >
+              <Cloud
+                size={16}
+                className="mt-0.5 shrink-0 text-sky-300"
+                aria-hidden="true"
+              />
+              <p className="text-xs leading-relaxed text-sky-100">
+                Continue will load the verified remote copy because the local copy is unavailable.
+              </p>
+            </div>
+          )}
+          {!hasLoadableSave && compatibleSaveSlots.some((save) => save.unavailable) && (
+            <div
+              className="flex gap-2 rounded-lg border border-red-400/25 bg-red-400/10 p-3 text-left"
+              role="alert"
+            >
+              <AlertTriangle
+                size={16}
+                className="mt-0.5 shrink-0 text-red-300"
+                aria-hidden="true"
+              />
+              <p className="text-xs leading-relaxed text-red-100">
+                No verified copy can be loaded. Open Load Game to review the damaged save and its recovery message.
+              </p>
+            </div>
+          )}
           {!IS_YOUTH_EARLY_ACCESS && (
             <Button
               variant="outline"
@@ -238,13 +359,9 @@ export function MainMenu() {
             </p>
           )}
 
-          {/* Auth status indicator */}
-          <div className="mt-2 flex flex-col items-center gap-1.5">
-            {!cloudAuthAvailable ? (
-              <p className="max-w-xs text-center text-xs text-zinc-500">
-                Cloud saves are unavailable in this build.
-              </p>
-            ) : isAuthLoading ? (
+          {cloudAuthAvailable && (
+            <div className="mt-2 flex flex-col items-center gap-1.5">
+            {isAuthLoading ? (
               <p className="max-w-xs text-center text-xs text-zinc-500">
                 Checking cloud account…
               </p>
@@ -267,9 +384,6 @@ export function MainMenu() {
                     Sign Out {displayName ? `(${displayName})` : ""}
                   </button>
                 )}
-                <p className="max-w-xs text-center text-[11px] text-zinc-600">
-                  {BETA_GLOBAL_LEADERBOARD_MESSAGE}
-                </p>
               </>
             ) : (
               <>
@@ -285,12 +399,10 @@ export function MainMenu() {
                   Sign in to connect a cloud account. Turn on Cloud Save Sync in
                   Settings when you want this device to sync.
                 </p>
-                <p className="max-w-xs text-center text-[11px] text-zinc-600">
-                  {BETA_GLOBAL_LEADERBOARD_MESSAGE}
-                </p>
               </>
             )}
-          </div>
+            </div>
+          )}
         </div>
       ) : (
         <div className="relative z-10 w-full max-w-md space-y-3 px-4">
@@ -432,15 +544,54 @@ function SaveSlotCard({
   onDelete: () => void;
   formatDate: (ts: number) => string;
 }) {
+  const isUnavailable = Boolean(save.unavailable);
+  const statusId = `main-menu-save-${save.slot}-${save.source}-status`;
+  const loadLabel = save.recovery
+    ? `Load ${label} from verified backup`
+    : save.localUnavailable
+      ? `Load ${label} from cloud recovery`
+      : `Load ${label}`;
+
   return (
-    <Card className="cursor-pointer transition hover:border-emerald-500/50">
+    <Card
+      className={`transition ${
+        isUnavailable
+          ? "border-red-500/25 bg-red-950/10"
+          : "hover:border-emerald-500/50"
+      }`}
+    >
       <CardContent className="flex items-center justify-between p-4">
-        <button onClick={onLoad} className="flex-1 text-left">
-          <div className="flex items-center gap-2">
+        <button
+          onClick={onLoad}
+          disabled={isUnavailable}
+          aria-label={loadLabel}
+          aria-describedby={
+            save.recovery || save.unavailable || save.localUnavailable
+              ? statusId
+              : undefined
+          }
+          className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+        >
+          <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-medium text-white">{label}</p>
             <Badge variant="secondary" className="text-[10px] uppercase">
               {getSaveSourceLabel(save.source)}
             </Badge>
+            {save.recovery && (
+              <Badge className="border border-amber-400/30 bg-amber-400/10 text-[10px] text-amber-300">
+                Verified backup
+              </Badge>
+            )}
+            {save.unavailable && (
+              <Badge className="border border-red-400/30 bg-red-400/10 text-[10px] text-red-300">
+                Damaged
+              </Badge>
+            )}
+            {save.localUnavailable && (
+              <Badge className="border border-sky-400/30 bg-sky-400/10 text-[10px] text-sky-300">
+                Cloud recovery
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-zinc-400">
             {save.scoutName} &middot; {save.specialization} &middot; S
@@ -449,6 +600,26 @@ function SaveSlotCard({
           <p className="text-xs text-zinc-500">
             Rep: {Math.round(save.reputation)} &middot; {formatDate(save.savedAt)}
           </p>
+          {(save.recovery || save.unavailable || save.localUnavailable) && (
+            <span
+              id={statusId}
+              className={`mt-1.5 block text-xs leading-relaxed ${
+                save.unavailable
+                  ? "text-red-300"
+                  : save.localUnavailable
+                    ? "text-sky-300"
+                    : "text-amber-300"
+              }`}
+              role="status"
+            >
+              {save.unavailable
+                ? save.unavailable.message
+                : save.localUnavailable
+                  ? "The local copy is unavailable; this verified remote copy can still be loaded."
+                  : save.recovery?.message ??
+                    "The newest generation is damaged; this is the last verified backup."}
+            </span>
+          )}
         </button>
         <button
           onClick={(e) => {

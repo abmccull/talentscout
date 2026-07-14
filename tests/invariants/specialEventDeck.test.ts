@@ -7,8 +7,11 @@ import {
   ensureNarrativeDecision,
   evaluateStakeholderMemoryPolicy,
   expireDueDecisions,
+  getActiveRelationshipConflictGroups,
+  getRecurringRelationshipIdentities,
   narrativeDecisionId,
   processDueConsequences,
+  projectConsequenceMetrics,
   selectNarrativeDecision,
 } from "@/engine/consequences";
 import {
@@ -85,11 +88,44 @@ function specialState(
         type: "schoolCoach",
       },
     },
+    finances: {
+      employees: [{
+        id: "employee-1",
+        name: "Samira Cole",
+        role: "scout",
+        quality: 14,
+        salary: 2_400,
+        morale: 64,
+        fatigue: 10,
+        hiredWeek: 1,
+        hiredSeason: 1,
+        reportsGenerated: [],
+        experience: 120,
+        weeklyLog: [],
+        regionFocusWeeks: 0,
+      }],
+    } as unknown as NonNullable<GameState["finances"]>,
     clubs: {
       "club-1": { id: "club-1", name: "Northside Academy" },
     },
     rivalScouts: {
-      "rival-1": { id: "rival-1", name: "Alex Vale" },
+      "rival-1": {
+        id: "rival-1",
+        name: "Alex Vale",
+        quality: 4,
+        specialization: "youth",
+        clubId: "club-2",
+        targetPlayerIds: ["player-1"],
+        reputation: 62,
+        personality: "aggressive",
+        isNemesis: true,
+        competingForPlayers: ["player-1"],
+        scoutingProgress: {},
+        aggressiveness: 0.55,
+        budgetTier: "medium",
+        winsAgainstPlayer: 2,
+        lossesToPlayer: 1,
+      },
     },
     consequenceState: createConsequenceEngineState(),
     eventDirector: createEventDirectorState(),
@@ -102,7 +138,7 @@ function specialState(
 
 describe("trait-sensitive scouting special-event deck", () => {
   it("covers every required scouting conflict with explicit decision policy", () => {
-    expect(SCOUTING_SPECIAL_EVENT_DECK).toHaveLength(8);
+    expect(SCOUTING_SPECIAL_EVENT_DECK).toHaveLength(11);
     expect(new Set(SCOUTING_SPECIAL_EVENT_DECK.map((event) => event.category)))
       .toEqual(new Set([
         "discovery",
@@ -341,6 +377,125 @@ describe("trait-sensitive scouting special-event deck", () => {
     expect(repeatedSelection.error).toBeUndefined();
     expect(Object.values(repeatedSelection.state.consequenceState.obligations)).toHaveLength(1);
     expect(repeatedSelection.state.consequenceState.obligations[obligation.id]).toEqual(obligation);
+  });
+
+  it("materializes simultaneous family and journalist requests before selection", () => {
+    const state = specialState();
+    const event = createScoutingSpecialEvent(
+      state,
+      "relationships-family-media-embargo",
+      {},
+    )!;
+    const offered = ensureNarrativeDecision(state, event);
+    const conflicts = getActiveRelationshipConflictGroups(offered);
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.stakeholderRefs).toEqual(expect.arrayContaining([
+      { kind: "family", id: "player-1" },
+      { kind: "contact", id: "contact-journalist" },
+    ]));
+    expect(Object.values(offered.consequenceState.obligations)).toHaveLength(2);
+
+    const protectedFamily = selectNarrativeDecision(offered, event, 0);
+    expect(protectedFamily.error).toBeUndefined();
+    const statuses = Object.fromEntries(Object.values(
+      protectedFamily.state.consequenceState.obligations,
+    ).map((obligation) => [obligation.kind, obligation.status]));
+    expect(statuses).toMatchObject({
+      familyPrivacy: "fulfilled",
+      mediaAccess: "breached",
+    });
+    const memoryActors = Object.values(protectedFamily.state.consequenceState.memories)
+      .map((memory) => `${memory.stakeholder.kind}:${memory.stakeholder.id}`);
+    expect(memoryActors).toEqual(expect.arrayContaining([
+      "family:player-1",
+      "contact:contact-journalist",
+    ]));
+
+    const projected = projectConsequenceMetrics(
+      protectedFamily.state,
+      protectedFamily.state.consequenceState,
+    );
+    expect(projected.contacts["contact-journalist"].trustLevel).toBe(55);
+    const cast = getRecurringRelationshipIdentities(projected);
+    expect(cast.find((identity) => identity.entity.kind === "family")?.name)
+      .toBe("The Prospect family");
+  });
+
+  it("keeps conflict offers idempotent across reload and resolves timeout defaults", () => {
+    const state = specialState();
+    const event = createScoutingSpecialEvent(
+      state,
+      "relationships-family-media-embargo",
+      {},
+    )!;
+    const registered = ensureNarrativeDecision(state, event);
+    const reloaded = ensureNarrativeDecision(
+      structuredClone(registered),
+      structuredClone(event),
+    );
+    expect(reloaded.consequenceState).toEqual(registered.consequenceState);
+    expect(Object.values(reloaded.consequenceState.obligations)).toHaveLength(2);
+
+    const decision = reloaded.consequenceState.decisions[narrativeDecisionId(event.id)];
+    const expired = expireDueDecisions(
+      reloaded.consequenceState,
+      addGameWeeks(state.fixtures, decision.deadlineAt, 1),
+      38,
+    );
+    const processed = processDueConsequences(expired.state, decision.deadlineAt, 38);
+    expect(expired.error).toBeUndefined();
+    expect(Object.values(processed.state.obligations).map((obligation) => obligation.status))
+      .toEqual(["fulfilled", "fulfilled"]);
+    expect(getActiveRelationshipConflictGroups({ consequenceState: processed.state }))
+      .toHaveLength(0);
+  });
+
+  it("makes employee-versus-agent loyalty change real morale and access", () => {
+    const state = specialState();
+    const event = createScoutingSpecialEvent(
+      state,
+      "relationships-employee-agent-credit",
+      {},
+    )!;
+    expect(event.description).toContain("Samira Cole");
+    expect(event.description).toContain("Morgan Price");
+
+    const selected = selectNarrativeDecision(state, event, 0);
+    expect(selected.error).toBeUndefined();
+    const projected = projectConsequenceMetrics(
+      selected.state,
+      selected.state.consequenceState,
+    );
+    expect(projected.finances?.employees[0]?.morale).toBe(74);
+    expect(projected.contacts["contact-agent"].trustLevel).toBe(57);
+    expect(Object.values(projected.consequenceState.memories).map(
+      (memory) => memory.stakeholder.kind,
+    )).toEqual(expect.arrayContaining(["employee", "contact"]));
+  });
+
+  it("turns an individual rival dispute into persistent behavioral pressure", () => {
+    const state = specialState();
+    const event = createScoutingSpecialEvent(
+      state,
+      "relationships-rival-agent-ceasefire",
+      {},
+    )!;
+    expect(event.description).toContain("Alex Vale");
+
+    const selected = selectNarrativeDecision(state, event, 1);
+    expect(selected.error).toBeUndefined();
+    const projected = projectConsequenceMetrics(
+      selected.state,
+      selected.state.consequenceState,
+    );
+    expect(projected.rivalScouts["rival-1"].aggressiveness).toBe(0.7);
+    expect(projected.contacts["contact-agent"].trustLevel).toBe(74);
+    const rivalMemory = Object.values(projected.consequenceState.memories).find(
+      (memory) => memory.stakeholder.kind === "rival",
+    );
+    expect(rivalMemory?.stakeholder.id).toBe("rival-1");
+    expect(rivalMemory?.tags).toContain("directCompetition");
   });
 
   it("auto-selects each event's designed default only after its deadline", () => {

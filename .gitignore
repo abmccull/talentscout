@@ -40,3 +40,29 @@ libsteam_api.so
 # Playwright
 playwright-report/
 test-results/
+
+# Generated release-candidate evidence. These files are created after the
+# source commit is fixed; tracking them would make the candidate self-referential.
+artifacts/release/candidate-package-manifest.json
+artifacts/release/release-evidence-check.json
+artifacts/release/packages/
+# Candidate-bound evidence is generated only after the source commit is fixed.
+# Ignoring it avoids a self-referential commit while CI retains the exact file.
+artifacts/release/generated/
+certification-source/
+# Packaged-runtime probes create complete Chromium profiles containing caches,
+# IndexedDB data, and machine-local browser state. Keep only their compact
+# JSON evidence; never stage the transient profiles themselves.
+artifacts/release/probe-cdp-profile*/
+artifacts/release/win-smoke-*/
+artifacts/release/**/runtime-profile/
+artifacts/release/**/runtime-package-no-steam/
+artifacts/release/**/runtime-installed-app/
+artifacts/release/**/runtime-profile-installed/
+artifacts/release/probe-*.png
+release-artifacts/
+
+# Historical soak snapshots are not release evidence. Canonical long-career
+# output now lives under the ignored candidate-bound release directory above.
+artifacts/soak/long-career-release-summary.json
+artifacts/soak/workers/

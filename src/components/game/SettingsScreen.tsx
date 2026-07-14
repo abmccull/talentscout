@@ -39,12 +39,14 @@ import { getLastCloudSyncStatus } from "@/lib/saveProvider";
 import { getCountryData, getAvailableCountries } from "@/data/index";
 import { SaveLoadModal } from "./SaveLoadModal";
 import { FeedbackModal } from "./FeedbackModal";
+import { isFeedbackSubmissionAvailable } from "@/lib/feedbackService";
 import { AuthModal } from "./AuthModal";
 import {
   BETA_CLOUD_SAVES_ENABLED,
   BETA_CLOUD_SAVES_MESSAGE,
 } from "@/config/beta";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import { useShallow } from "zustand/react/shallow";
 
 function PillToggle({
   checked,
@@ -115,11 +117,26 @@ export function SettingsScreen() {
   const {
     gameState,
     saveSlots,
+    saveSyncStatus,
     refreshSaveSlots,
+    refreshSaveSyncStatus,
+    retryPendingSaveSync,
     saveToSlot,
     isSaving,
     setScreen,
-  } = useGameStore();
+  } = useGameStore(
+    useShallow((state) => ({
+      gameState: state.gameState,
+      saveSlots: state.saveSlots,
+      saveSyncStatus: state.saveSyncStatus,
+      refreshSaveSlots: state.refreshSaveSlots,
+      refreshSaveSyncStatus: state.refreshSaveSyncStatus,
+      retryPendingSaveSync: state.retryPendingSaveSync,
+      saveToSlot: state.saveToSlot,
+      isSaving: state.isSaving,
+      setScreen: state.setScreen,
+    })),
+  );
 
   const {
     isLoading: isAuthLoading,
@@ -128,15 +145,34 @@ export function SettingsScreen() {
     cloudSaveEnabled,
     toggleCloudSave,
     signOut,
-  } = useAuthStore();
+  } = useAuthStore(
+    useShallow((state) => ({
+      isLoading: state.isLoading,
+      isAuthenticated: state.isAuthenticated,
+      displayName: state.displayName,
+      cloudSaveEnabled: state.cloudSaveEnabled,
+      toggleCloudSave: state.toggleCloudSave,
+      signOut: state.signOut,
+    })),
+  );
 
-  const { setSetting, ...settings } = useSettingsStore();
+  const { setSetting, ...settings } = useSettingsStore(
+    useShallow((state) => ({
+      setSetting: state.setSetting,
+      fontSize: state.fontSize,
+      colorblindMode: state.colorblindMode,
+      reducedMotion: state.reducedMotion,
+    })),
+  );
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [showSaveLoadModal, setShowSaveLoadModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [moddedKeys, setModdedKeys] = useState<string[]>([]);
-  const [modStatus, setModStatus] = useState<string | null>(null);
+  const [modStatus, setModStatus] = useState<{
+    message: string;
+    kind: "success" | "error";
+  } | null>(null);
   const [showFeedbackModal, setShowFeedbackModal] = useState(false);
   const [cloudSyncStatus, setCloudSyncStatus] = useState(() =>
     getLastCloudSyncStatus(),
@@ -157,11 +193,14 @@ export function SettingsScreen() {
   }, [refreshSaveSlots, isAuthenticated, cloudSaveEnabled]);
 
   useEffect(() => {
-    const syncStatus = () => setCloudSyncStatus(getLastCloudSyncStatus());
+    const syncStatus = () => {
+      setCloudSyncStatus(getLastCloudSyncStatus());
+      void refreshSaveSyncStatus();
+    };
     syncStatus();
     const intervalId = window.setInterval(syncStatus, 1000);
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [refreshSaveSyncStatus]);
 
   if (!gameState) return null;
 
@@ -180,6 +219,7 @@ export function SettingsScreen() {
   );
   const unsupportedSaveCount = allManualSaves.length - manualSaves.length;
   const cloudAuthAvailable = BETA_CLOUD_SAVES_ENABLED && Boolean(supabase);
+  const feedbackSubmissionAvailable = isFeedbackSubmissionAvailable();
 
   const handleSave = async (slot: number) => {
     if (reservedSlots.has(slot)) {
@@ -247,11 +287,14 @@ export function SettingsScreen() {
             {!cloudAuthAvailable ? (
               <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
                 <p className="text-sm font-medium text-white">
-                  Cloud saves unavailable
+                  {BETA_CLOUD_SAVES_ENABLED
+                    ? "Cloud account unavailable"
+                    : "Cloud saves unavailable in this build"}
                 </p>
                 <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                  This build does not have Supabase configured, so saves stay on
-                  this device only.
+                  {BETA_CLOUD_SAVES_ENABLED
+                    ? "The cloud service is not configured. Saves remain safely on this device."
+                    : BETA_CLOUD_SAVES_MESSAGE}
                 </p>
               </div>
             ) : isAuthLoading ? (
@@ -310,7 +353,9 @@ export function SettingsScreen() {
                 <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
                   <p className="text-sm font-medium text-white">
                     {cloudSaveEnabled
-                      ? cloudSyncStatus.pending
+                      ? saveSyncStatus.pendingCount > 0
+                        ? `${saveSyncStatus.pendingCount} cloud ${saveSyncStatus.pendingCount === 1 ? "change" : "changes"} queued`
+                        : cloudSyncStatus.pending
                         ? "Sync in progress"
                         : cloudSyncStatus.lastError
                           ? "Sync needs attention"
@@ -321,11 +366,23 @@ export function SettingsScreen() {
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                     {cloudSaveEnabled
-                      ? cloudSyncStatus.lastError
-                        ? `Local saves still work, but cloud sync failed: ${cloudSyncStatus.lastError}`
+                      ? saveSyncStatus.pendingCount > 0
+                        ? `Local save and delete choices are safe. Reconnect and retry the queue.${saveSyncStatus.lastError ? ` Last error: ${saveSyncStatus.lastError}` : ""}`
+                        : cloudSyncStatus.lastError
+                          ? `Local saves still work, but cloud sync failed: ${cloudSyncStatus.lastError}`
                         : "Manual saves and weekly autosaves write locally first, then sync in the background."
                       : "You can still save locally. Re-enable cloud sync any time to resume uploading."}
                   </p>
+                  {cloudSaveEnabled && saveSyncStatus.pendingCount > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-11"
+                      onClick={() => void retryPendingSaveSync()}
+                    >
+                      Retry Pending Sync
+                    </Button>
+                  )}
                 </div>
               </>
             ) : (
@@ -603,13 +660,14 @@ export function SettingsScreen() {
                     if (!file) return;
                     void importGameData(file).then((result) => {
                       if (result.imported.length > 0) {
-                        setModStatus(
-                          `Imported ${result.imported.length} country data file(s)`,
-                        );
+                        setModStatus({
+                          message: `Imported ${result.imported.length} country data file(s)`,
+                          kind: "success",
+                        });
                         void getModdedKeys().then(setModdedKeys);
                       }
                       if (result.errors.length > 0) {
-                        setModStatus(result.errors.join(", "));
+                        setModStatus({ message: result.errors.join(", "), kind: "error" });
                       }
                       clearTimeout(modTimerRef.current);
                       modTimerRef.current = setTimeout(
@@ -633,7 +691,7 @@ export function SettingsScreen() {
                   onClick={() => {
                     void resetModData().then(() => {
                       setModdedKeys([]);
-                      setModStatus("Reset to default data");
+                      setModStatus({ message: "Reset to default data", kind: "success" });
                       clearTimeout(modTimerRef.current);
                       modTimerRef.current = setTimeout(
                         () => setModStatus(null),
@@ -649,7 +707,15 @@ export function SettingsScreen() {
               )}
             </div>
 
-            {modStatus && <p className="text-xs text-emerald-400">{modStatus}</p>}
+            {modStatus && (
+              <p
+                className={`text-xs ${modStatus.kind === "error" ? "text-red-300" : "text-emerald-400"}`}
+                role="status"
+                aria-live="polite"
+              >
+                {modStatus.message}
+              </p>
+            )}
 
             {moddedKeys.length > 0 && (
               <div className="rounded-md border border-[#27272a] bg-[#0c0c0c] p-3">
@@ -747,7 +813,9 @@ export function SettingsScreen() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-zinc-500">
-              Found a bug? Have a suggestion? We&apos;d love to hear from you.
+              {feedbackSubmissionAvailable
+                ? "Found a bug? Have a suggestion? We'd love to hear from you."
+                : "Offline mode opens a pre-filled email draft so feedback is never submitted to a dead endpoint."}
             </p>
             <Button
               variant="outline"
@@ -755,7 +823,7 @@ export function SettingsScreen() {
               className="min-h-11"
             >
               <MessageSquarePlus size={14} className="mr-2" aria-hidden="true" />
-              Send Feedback
+              {feedbackSubmissionAvailable ? "Send Feedback" : "Draft Feedback Email"}
             </Button>
           </CardContent>
         </Card>

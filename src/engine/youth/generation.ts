@@ -406,9 +406,10 @@ export function generateRegionalYouth(
   subRegions: SubRegion[],
   wonderkidMultiplier: number = 1.0,
   generationNamespace = "regional",
+  opportunityMultiplier = 1,
 ): UnsignedYouth[] {
   // 30% chance this country produces youth this week
-  if (!rng.chance(0.3)) {
+  if (!rng.chance(Math.max(0.05, Math.min(0.6, 0.3 * opportunityMultiplier)))) {
     return [];
   }
 
@@ -562,6 +563,9 @@ export function generateAcademyIntake(
 // YOUTH AGING PROCESS
 // =============================================================================
 
+/** Maximum time an unresolved prospect may remain in the active pool. */
+export const UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS = 4;
+
 /**
  * Process the annual aging pass for all unsigned youth in the world.
  *
@@ -569,6 +573,7 @@ export function generateAcademyIntake(
  *  - Age 19+:  forced retirement (all leave football)
  *  - Age 18+:  50% chance NPC minor club signs them / 50% leave football
  *  - Age 17+ with buzzLevel >= 60: 30% chance NPC club signs (rating >= 10)
+ *  - Otherwise unresolved after four completed seasons: leave football
  *
  * NPC auto-sign picks a random club whose youthAcademyRating >= 10.
  *
@@ -581,7 +586,7 @@ export function processYouthAging(
   rng: RNG,
   unsignedYouth: Record<string, UnsignedYouth>,
   clubs: Record<string, Club>,
-  _currentSeason: number,
+  currentSeason: number,
 ): {
   updated: Record<string, UnsignedYouth>;
   autoSigned: Array<{ youthId: string; clubId: string }>;
@@ -640,8 +645,18 @@ export function processYouthAging(
           placedClubId: club.id,
         };
         autoSigned.push({ youthId: youth.id, clubId: club.id });
+        continue;
       }
       // If chance fails, youth stays unsigned — no retirement at 17
+    }
+
+    // A prospect generated in season N has completed one season when the
+    // season-N rollover runs. Age-specific outcomes above take precedence,
+    // while this hard boundary keeps the active opportunity pool bounded.
+    const completedSeasons = Math.max(0, currentSeason - youth.generatedSeason + 1);
+    if (completedSeasons >= UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS) {
+      updated[youth.id] = { ...youth, retired: true };
+      retired.push(youth.id);
     }
   }
 
@@ -649,8 +664,9 @@ export function processYouthAging(
 }
 
 /**
- * Commit the optimistic placement flags produced by processYouthAging only
- * when the authoritative lifecycle transaction recorded the matching move.
+ * Reconcile optimistic youth signings against the authoritative lifecycle.
+ * Rejected moves return to the opportunity pool; committed signings leave it
+ * because the signed Player and movement history are now durable truth.
  */
 export function reconcileYouthSigningPlacements(
   unsignedYouth: Record<string, UnsignedYouth>,
@@ -667,8 +683,11 @@ export function reconcileYouthSigningPlacements(
   for (const { youthId, clubId } of autoSigned) {
     const youth = reconciled[youthId];
     if (!youth) continue;
-    if (appliedSigningKeys.has(`${youth.player.id}:${clubId}`)) continue;
     if (reconciled === unsignedYouth) reconciled = { ...unsignedYouth };
+    if (appliedSigningKeys.has(`${youth.player.id}:${clubId}`)) {
+      delete reconciled[youthId];
+      continue;
+    }
     reconciled[youthId] = {
       ...youth,
       placed: false,

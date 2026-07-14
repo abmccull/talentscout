@@ -26,23 +26,40 @@
  *     "autosave" → slot 0     ("talentscout_autosave.json" conceptually)
  *     "slot_1"   → slot 1     ("talentscout_slot_1.json" conceptually)
  *     "slot_2"   → slot 2     etc.
- *   Any unrecognised slot name maps to slot 5 (a reserved overflow slot).
+ *   Non-canonical slot names are rejected before any backend can be touched.
  */
 
-import { getSteam } from "@/lib/steam/steamInterface";
+import {
+  getSteam,
+  isSteamRuntimeConfigured,
+} from "@/lib/steam/steamInterface";
 import { supabase } from "@/lib/supabase";
 import { SupabaseCloudSaveProvider } from "@/lib/supabaseCloudSave";
 import {
   saveGame,
-  loadGame,
+  loadGameWithRecovery,
   listSaves,
-  deleteSave,
+  deleteSaveAndEnqueueRemoteDeletes,
+  commitConflictResolution,
+  enqueueSaveSync,
+  getSaveSyncTask,
+  listSaveArchives,
+  listSaveSyncQueue,
+  markSaveSyncTaskPending,
+  processSaveSyncTask,
+  restoreSaveArchive,
   migrateSaveRecord,
-  migrateSaveState,
+  type SaveArchiveSummary,
+  type SaveRecoveryNotice,
   type SaveRecord,
+  type SaveSyncQueueRecord,
+  type SaveSyncTarget,
+  type SaveUnavailableNotice,
 } from "@/lib/db";
 import { captureException } from "@/lib/sentry";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
+import { SaveMigrationError } from "@/lib/saveEnvelope";
+import { createSaveEnvelope } from "@/lib/saveEnvelope";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -68,6 +85,9 @@ export interface SaveEntry {
   specialization: string;
   reputation: number;
   savedAt: number; // Unix ms
+  /** Present when the newest local generation is corrupt and this row is a verified fallback. */
+  recovery?: SaveRecoveryNotice;
+  unavailable?: SaveUnavailableNotice;
 }
 
 /**
@@ -79,6 +99,18 @@ export interface LoadResult {
   source: SaveSource;
   name: string;
   timestamp: number; // Unix ms
+  recovery?: SaveRecoveryNotice;
+}
+
+export interface ConflictResolutionResult extends LoadResult {
+  archived: SaveArchiveSummary;
+}
+
+export interface PersistentCloudSyncStatus {
+  pendingCount: number;
+  failedCount: number;
+  lastError: string | null;
+  oldestQueuedAt: number | null;
 }
 
 export interface SaveOptions {
@@ -100,8 +132,8 @@ export interface SaveConflict {
   cloud: { timestamp: number; preview: string; source: "steam" | "supabase" };
 }
 
-/** How far apart two save timestamps must be before flagging a conflict. */
-const CONFLICT_THRESHOLD_MS = 60_000; // 60 seconds
+/** Canonical mirrors share an exact timestamp; any difference is a branch. */
+const CONFLICT_THRESHOLD_MS = 0;
 
 // ---------------------------------------------------------------------------
 // SaveProvider interface
@@ -143,8 +175,9 @@ export interface SaveProvider {
   listSaves(): Promise<SaveEntry[]>;
 
   /**
-   * Delete the slot from all writable backends participating in this provider.
-   * Backends that do not support deletion are skipped.
+   * Commit deletion locally and enqueue an idempotent tombstone for every
+   * configured or previously queued remote backend. Offline deletions remain
+   * queued and stale remote copies are hidden until retry succeeds.
    */
   delete(slotName: string): Promise<void>;
 
@@ -155,6 +188,27 @@ export interface SaveProvider {
    * no cloud backend is available / the slot does not exist in the cloud).
    */
   checkConflict(slotName: string): Promise<SaveConflict | null>;
+
+  /**
+   * Resolve a divergence without destroying the unselected branch. The loser
+   * is committed to the local recovery journal before any remote overwrite.
+   */
+  resolveConflict(
+    slotName: string,
+    preferredSource: SaveSource,
+  ): Promise<ConflictResolutionResult>;
+
+  /** Player-visible immutable recovery copies, newest first. */
+  listRecoveryCopies(slotName?: string): Promise<SaveArchiveSummary[]>;
+
+  /** Restore a journal generation locally while preserving the displaced head. */
+  restoreRecoveryCopy(archiveId: string): Promise<LoadResult>;
+
+  /** Persistent offline queue state; unlike the legacy status it survives reloads. */
+  getSyncStatus(): Promise<PersistentCloudSyncStatus>;
+
+  /** Retry every queued backend write that is available in this runtime. */
+  retryPendingSync(): Promise<PersistentCloudSyncStatus>;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,21 +245,18 @@ export interface SaveProviderOptions {
  *   "slot_2"    → 2
  *   "slot_3"    → 3
  *   "slot_4"    → 4
- *   "slot_5"    → 5 (also used as the overflow for unrecognised names)
+ *   "slot_5"    → 5
  *
  * The numeric slot feeds directly into db.saveGame() and
  * SteamInterface.setCloudSave() / getCloudSave().
  */
 function slotNameToNumber(slotName: string): number {
   if (slotName === "autosave") return 0;
-  const match = /^slot_(\d+)$/.exec(slotName);
-  if (match) {
-    const n = parseInt(match[1]!, 10);
-    // Cap at 5 to stay within the defined manual-save range (slots 1-5).
-    return Math.min(Math.max(n, 1), 5);
-  }
-  // Unknown names fall back to slot 5 (the last manual slot) as an overflow.
-  return 5;
+  const match = /^slot_([1-5])$/.exec(slotName);
+  if (match) return Number(match[1]);
+  throw new RangeError(
+    `Unknown save slot "${slotName}". Expected autosave or slot_1 through slot_5.`,
+  );
 }
 
 /**
@@ -227,10 +278,6 @@ function slotNumberToName(slot: number): string {
  *
  * Returns null when the blob is missing, empty, or malformed.
  */
-function parseSteamTimestamp(raw: string | null): number | null {
-  return parseSteamSaveRecord(raw)?.savedAt ?? null;
-}
-
 /**
  * Build a short preview string from a SaveRecord-shaped blob.
  * Falls back to a generic label when the shape is unexpected.
@@ -279,6 +326,55 @@ function parseSteamSaveRecord(raw: string | null): SaveRecord | null {
   }
 }
 
+interface RecordCandidate {
+  record: SaveRecord;
+  source: SaveSource;
+  recovery?: SaveRecoveryNotice;
+}
+
+function candidateToLoadResult(candidate: RecordCandidate): LoadResult {
+  return {
+    data: JSON.stringify(candidate.record.state),
+    source: candidate.source,
+    name: candidate.record.name,
+    timestamp: candidate.record.savedAt,
+    recovery: candidate.recovery,
+  };
+}
+
+function conflictIdFor(
+  slot: number,
+  local: SaveRecord,
+  cloud: RecordCandidate,
+): string {
+  return [
+    "slot",
+    slot,
+    "local",
+    local.savedAt,
+    cloud.source,
+    cloud.record.savedAt,
+  ].join(":");
+}
+
+// A slot can be saved again while an earlier mirror is still in flight.
+// Serializing by persisted queue key prevents a slower old upload from
+// landing after the newer one and leaving the remote silently stale.
+const syncTaskLocks = new Map<string, Promise<void>>();
+
+function serializeSyncTask<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const previous = syncTaskLocks.get(key) ?? Promise.resolve();
+  const run = previous.catch(() => undefined).then(work);
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  syncTaskLocks.set(key, settled);
+  return run.finally(() => {
+    if (syncTaskLocks.get(key) === settled) syncTaskLocks.delete(key);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
@@ -290,6 +386,128 @@ class SaveProviderImpl implements SaveProvider {
   constructor(options: SaveProviderOptions) {
     this.userId = options.userId ?? null;
     this.includeSteam = options.includeSteam ?? true;
+  }
+
+  private configuredSyncTargets(): SaveSyncTarget[] {
+    const targets: SaveSyncTarget[] = [];
+    const steam = getSteam();
+    // The packaged Steam target remains configured while the client is
+    // offline or its asynchronous initialization is still resolving. Enqueue
+    // first; uploadQueuedRecord will fail safely and retain the task for retry.
+    if (
+      this.includeSteam
+      && (isSteamRuntimeConfigured() || steam.isAvailable())
+    ) {
+      targets.push("steam");
+    }
+    if (supabase && this.userId) targets.push("supabase");
+    return targets;
+  }
+
+  private async uploadQueuedRecord(
+    target: SaveSyncTarget,
+    record: SaveRecord,
+  ): Promise<void> {
+    if (target === "steam") {
+      const steam = getSteam();
+      if (!this.includeSteam || !steam.isAvailable()) {
+        throw new Error("Steam Cloud is unavailable. The local save remains queued.");
+      }
+      await steam.setCloudSave(record.slot, JSON.stringify(record));
+      return;
+    }
+
+    if (!supabase || !this.userId) {
+      throw new Error("Cloud sync is unavailable. The local save remains queued.");
+    }
+    const cloud = new SupabaseCloudSaveProvider(this.userId);
+    await cloud.uploadSave(
+      record.slot,
+      record.state,
+      record.name,
+      record.savedAt,
+    );
+  }
+
+  private async deleteQueuedRemote(target: SaveSyncTarget, slot: number): Promise<void> {
+    if (target === "steam") {
+      const steam = getSteam();
+      if (!this.includeSteam || !steam.isAvailable()) {
+        throw new Error("Steam Cloud is unavailable. The deletion remains queued.");
+      }
+      await steam.deleteCloudSave(slot);
+      return;
+    }
+
+    if (!supabase || !this.userId) {
+      throw new Error("Cloud sync is unavailable. The deletion remains queued.");
+    }
+    const cloud = new SupabaseCloudSaveProvider(this.userId);
+    await cloud.deleteCloudSave(slot);
+  }
+
+  private async processQueuedTask(task: SaveSyncQueueRecord): Promise<boolean> {
+    return serializeSyncTask(task.id, async () => {
+      const outcome = await processSaveSyncTask(task.id, (current) =>
+        current.operation === "upload"
+          ? this.uploadQueuedRecord(current.target, current.record)
+          : this.deleteQueuedRemote(current.target, current.slot),
+      );
+      if (outcome === "failed") {
+        const queue = await listSaveSyncQueue();
+        const failed = queue.find((entry) => entry.id === task.id);
+        const error = failed?.lastError ?? `${task.target} sync failed`;
+        markCloudSyncFailed(error);
+        captureException(new Error(error));
+        return false;
+      }
+      if (outcome === "synced") markCloudSyncComplete();
+      return true;
+    });
+  }
+
+  private async hasPendingDelete(
+    target: SaveSyncTarget,
+    slot: number,
+  ): Promise<boolean> {
+    return (await getSaveSyncTask(target, slot))?.operation === "delete";
+  }
+
+  private async mirrorRecord(
+    record: SaveRecord,
+    waitForCloud: boolean,
+    requestedTargets?: readonly SaveSyncTarget[],
+  ): Promise<void> {
+    const configured = new Set(this.configuredSyncTargets());
+    const targets = requestedTargets
+      ? requestedTargets.filter((target) => configured.has(target))
+      : [...configured];
+    if (targets.length === 0) return;
+
+    const tasks: SaveSyncQueueRecord[] = [];
+    for (const target of targets) {
+      tasks.push(await enqueueSaveSync(record, target));
+    }
+    markCloudSyncPending();
+
+    const upload = async () => {
+      const outcomes = await Promise.all(
+        tasks.map((task) => this.processQueuedTask(task)),
+      );
+      if (outcomes.some((succeeded) => !succeeded)) {
+        throw new Error(
+          "The save is safe locally, but one or more cloud copies remain queued.",
+        );
+      }
+    };
+
+    if (waitForCloud) {
+      await upload();
+    } else {
+      void upload().catch((error: unknown) => {
+        console.warn("SaveProvider: remote mirror remains queued:", error);
+      });
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -306,66 +524,35 @@ class SaveProviderImpl implements SaveProvider {
 
     // ---- Primary write: IndexedDB (must succeed before we return) ----------
     //
-    // db.saveGame() expects a GameState object, so we parse and migrate the
-    // raw JSON here.  migrateSaveState() applies backward-compatible defaults
-    // and throws when the blob is structurally invalid.
-    let state;
+    // IndexedDB owns the one canonical write migration. Remote backends then
+    // receive that exact migrated snapshot rather than independently
+    // interpreting the caller's JSON.
+    const saveName =
+      displayName ?? (slotName === "autosave" ? "Autosave" : `Save ${slot}`);
+    let parsed: unknown;
     try {
-      state = migrateSaveState(JSON.parse(data) as unknown);
+      parsed = JSON.parse(data) as unknown;
     } catch (err) {
       throw new Error(
         `SaveProvider.save: invalid save data for slot "${slotName}": ${String(err)}`,
       );
     }
 
-    const saveName =
-      displayName ?? (slotName === "autosave" ? "Autosave" : `Save ${slot}`);
-    const record = await saveGame(slot, saveName, state);
-    let steamUpload: Promise<void> | null = null;
-    const steam = getSteam();
-    if (this.includeSteam && steam.isAvailable()) {
-      steamUpload = steam
-        .setCloudSave(slot, JSON.stringify(record))
-        .catch((err: unknown) => {
-          console.warn(
-            `SaveProvider: Steam Cloud write failed for slot "${slotName}":`,
-            err,
-          );
-          captureException(err);
-          if (options?.waitForCloud) throw err;
-        });
-    }
-    // IndexedDB succeeded. Remote providers receive the same versioned record
-    // so reads, conflict checks, and deletion share one canonical shape.
-
-    // ---- Secondary write: Supabase ----------------------------------------
-    let supabaseUpload: Promise<void> | null = null;
-    if (supabase && this.userId) {
-      markCloudSyncPending();
-      const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
-      supabaseUpload = supabaseProvider
-        .uploadSave(slot, state, saveName)
-        .then(() => {
-          markCloudSyncComplete();
-        })
-        .catch((err: unknown) => {
-          markCloudSyncFailed(err);
-          console.warn(
-            `SaveProvider: Supabase write failed for slot "${slotName}":`,
-            err,
-          );
-          captureException(err);
-          if (options?.waitForCloud) throw err;
-        });
+    let record: SaveRecord;
+    try {
+      record = await saveGame(slot, saveName, parsed);
+    } catch (err) {
+      if (err instanceof SaveMigrationError) {
+        throw new Error(
+          `SaveProvider.save: invalid save data for slot "${slotName}": ${err.message}`,
+        );
+      }
+      throw err;
     }
 
-    if (options?.waitForCloud) {
-      await Promise.all(
-        [steamUpload, supabaseUpload].filter(
-          (upload): upload is Promise<void> => upload !== null,
-        ),
-      );
-    }
+    // The queue row commits before upload begins, so going offline or closing
+    // the app cannot turn a successful local save into an untracked cloud gap.
+    await this.mirrorRecord(record, options?.waitForCloud ?? false);
   }
 
   // -------------------------------------------------------------------------
@@ -377,21 +564,23 @@ class SaveProviderImpl implements SaveProvider {
 
     // Gather candidates from all available backends in parallel.
     const candidates = await Promise.all([
-      this._loadFromLocal(slot),
-      this._loadFromSteam(slot),
-      this._loadFromSupabase(slot),
+      this._loadLocalRecord(slot),
+      this._loadSteamRecord(slot),
+      this._loadSupabaseRecord(slot),
     ]);
 
     // Pick the candidate with the newest timestamp.
-    let best: LoadResult | null = null;
+    let best: RecordCandidate | null = null;
     for (const candidate of candidates) {
       if (!candidate) continue;
-      if (!best || candidate.timestamp > best.timestamp) {
+      if (!best || candidate.record.savedAt > best.record.savedAt) {
         best = candidate;
       }
     }
 
-    return best;
+    if (!best) return null;
+    mergePersistedPlayerExperience(best.record.playerExperience);
+    return candidateToLoadResult(best);
   }
 
   async loadFromSource(
@@ -399,31 +588,34 @@ class SaveProviderImpl implements SaveProvider {
     source: SaveSource,
   ): Promise<LoadResult | null> {
     const slot = slotNameToNumber(slotName);
+    const candidate = await this._loadRecordFromSource(slot, source);
+    if (!candidate) return null;
+    mergePersistedPlayerExperience(candidate.record.playerExperience);
+    return candidateToLoadResult(candidate);
+  }
 
+  private _loadRecordFromSource(
+    slot: number,
+    source: SaveSource,
+  ): Promise<RecordCandidate | null> {
     switch (source) {
       case "local":
-        return this._loadFromLocal(slot);
+        return this._loadLocalRecord(slot);
       case "steam":
-        return this._loadFromSteam(slot);
+        return this._loadSteamRecord(slot);
       case "supabase":
-        return this._loadFromSupabase(slot);
+        return this._loadSupabaseRecord(slot);
     }
   }
 
-  private async _loadFromLocal(slot: number): Promise<LoadResult | null> {
+  private async _loadLocalRecord(slot: number): Promise<RecordCandidate | null> {
     try {
-      const saves = await listSaves();
-      const meta = saves.find((s) => s.slot === slot);
-      if (!meta) return null;
-
-      const state = await loadGame(slot);
-      if (!state) return null;
-
+      const loaded = await loadGameWithRecovery(slot);
+      if (!loaded) return null;
       return {
-        data: JSON.stringify(state),
         source: "local",
-        name: meta.name,
-        timestamp: meta.savedAt,
+        record: loaded.record,
+        recovery: loaded.recovery,
       };
     } catch (err) {
       console.warn("SaveProvider: IndexedDB load error:", err);
@@ -432,8 +624,9 @@ class SaveProviderImpl implements SaveProvider {
     }
   }
 
-  private async _loadFromSteam(slot: number): Promise<LoadResult | null> {
+  private async _loadSteamRecord(slot: number): Promise<RecordCandidate | null> {
     if (!this.includeSteam) return null;
+    if (await this.hasPendingDelete("steam", slot)) return null;
     const steam = getSteam();
     if (!steam.isAvailable()) return null;
 
@@ -441,13 +634,9 @@ class SaveProviderImpl implements SaveProvider {
       const raw = await steam.getCloudSave(slot);
       const record = parseSteamSaveRecord(raw);
       if (!record) return null;
-      mergePersistedPlayerExperience(record.playerExperience);
-
       return {
-        data: JSON.stringify(record.state),
         source: "steam",
-        name: record.name,
-        timestamp: record.savedAt,
+        record,
       };
     } catch (err) {
       console.warn("SaveProvider: Steam Cloud load error:", err);
@@ -456,8 +645,9 @@ class SaveProviderImpl implements SaveProvider {
     }
   }
 
-  private async _loadFromSupabase(slot: number): Promise<LoadResult | null> {
+  private async _loadSupabaseRecord(slot: number): Promise<RecordCandidate | null> {
     if (!supabase || !this.userId) return null;
+    if (await this.hasPendingDelete("supabase", slot)) return null;
 
     try {
       const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
@@ -470,12 +660,18 @@ class SaveProviderImpl implements SaveProvider {
       const state = await supabaseProvider.downloadSave(slot);
       if (!state) return null;
 
-      return {
-        data: JSON.stringify(state),
-        source: "supabase",
+      const envelope = createSaveEnvelope(state, meta.savedAt);
+      const record = migrateSaveRecord({
+        ...envelope,
+        slot: meta.slot,
         name: meta.name,
-        timestamp: meta.savedAt,
-      };
+        season: meta.season,
+        week: meta.week,
+        scoutName: meta.scoutName,
+        specialization: meta.specialization,
+        reputation: meta.reputation,
+      });
+      return { source: "supabase", record };
     } catch (err) {
       console.warn("SaveProvider: Supabase load error:", err);
       captureException(err);
@@ -521,6 +717,8 @@ class SaveProviderImpl implements SaveProvider {
       specialization: r.specialization,
       reputation: r.reputation,
       savedAt: r.savedAt,
+      recovery: r.recovery,
+      unavailable: r.unavailable,
     }));
   }
 
@@ -529,15 +727,18 @@ class SaveProviderImpl implements SaveProvider {
     const steam = getSteam();
     if (!steam.isAvailable()) return [];
 
-    // Probe each known slot in parallel.  Steam does not offer a "list all"
-    // API, so we check every slot we might have written to (0-5).
+    // Steam save reads are intentionally sequential. Each read owns a bounded
+    // main-process transfer; parallel probing can exceed that capacity and make
+    // valid cloud slots disappear from the list.
     const KNOWN_SLOTS = [0, 1, 2, 3, 4, 5] as const;
-    const settled = await Promise.allSettled(
-      KNOWN_SLOTS.map(async (slot) => {
+    const entries: SaveEntry[] = [];
+    for (const slot of KNOWN_SLOTS) {
+      try {
+        if (await this.hasPendingDelete("steam", slot)) continue;
         const raw = await steam.getCloudSave(slot);
         const record = parseSteamSaveRecord(raw);
-        if (!record) return null;
-        return {
+        if (!record) continue;
+        entries.push({
           slotName: slotNumberToName(slot),
           slot: record.slot,
           source: "steam" as const,
@@ -548,14 +749,10 @@ class SaveProviderImpl implements SaveProvider {
           specialization: record.specialization,
           reputation: record.reputation,
           savedAt: record.savedAt,
-        };
-      }),
-    );
-
-    const entries: SaveEntry[] = [];
-    for (const r of settled) {
-      if (r.status === "fulfilled" && r.value !== null) {
-        entries.push(r.value);
+        });
+      } catch (error) {
+        console.warn(`SaveProvider: Steam Cloud slot ${slot} list error:`, error);
+        captureException(error);
       }
     }
     return entries;
@@ -565,18 +762,26 @@ class SaveProviderImpl implements SaveProvider {
     if (!supabase || !this.userId) return [];
     const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
     const metas = await supabaseProvider.listCloudSaves();
-    return metas.map((m) => ({
-      slotName: slotNumberToName(m.slot),
-      slot: m.slot,
-      source: "supabase" as const,
-      name: m.name,
-      scoutName: m.scoutName,
-      season: m.season,
-      week: m.week,
-      specialization: m.specialization,
-      reputation: m.reputation,
-      savedAt: m.savedAt,
-    }));
+    const entries = await Promise.all(
+      metas.map(async (m) => {
+        if (await this.hasPendingDelete("supabase", m.slot)) return null;
+        return {
+          slotName: slotNumberToName(m.slot),
+          slot: m.slot,
+          source: "supabase" as const,
+          name: m.name,
+          scoutName: m.scoutName,
+          season: m.season,
+          week: m.week,
+          specialization: m.specialization,
+          reputation: m.reputation,
+          savedAt: m.savedAt,
+        };
+      }),
+    );
+    return entries.filter(
+      (entry): entry is NonNullable<(typeof entries)[number]> => entry !== null,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -586,92 +791,145 @@ class SaveProviderImpl implements SaveProvider {
   async checkConflict(slotName: string): Promise<SaveConflict | null> {
     const slot = slotNameToNumber(slotName);
 
-    // Fetch local metadata (without loading the full state).
-    let localTimestamp: number | null = null;
-    let localData: string | null = null;
-    try {
-      const saves = await listSaves();
-      const meta = saves.find((s) => s.slot === slot);
-      if (meta) {
-        localTimestamp = meta.savedAt;
-        // Load the full state only so we can generate a preview string.
-        const state = await loadGame(slot);
-        if (state) {
-          localData = JSON.stringify(state);
-        }
+    const local = await this._loadLocalRecord(slot);
+    if (!local) return null;
+
+    const cloudCandidates = await Promise.all([
+      this._loadSteamRecord(slot),
+      this._loadSupabaseRecord(slot),
+    ]);
+    for (const cloud of cloudCandidates) {
+      if (!cloud) continue;
+      if (
+        Math.abs(cloud.record.savedAt - local.record.savedAt)
+        <= CONFLICT_THRESHOLD_MS
+      ) {
+        continue;
       }
-    } catch {
-      // Local read failure — no conflict to report.
-      return null;
+      return {
+        slotName,
+        local: {
+          timestamp: local.record.savedAt,
+          preview: buildPreview(JSON.stringify(local.record.state)),
+        },
+        cloud: {
+          timestamp: cloud.record.savedAt,
+          preview: buildPreview(JSON.stringify(cloud.record.state)),
+          source: cloud.source as "steam" | "supabase",
+        },
+      };
     }
-
-    if (localTimestamp === null) {
-      // No local save exists; nothing to conflict with.
-      return null;
-    }
-
-    // Check Steam Cloud first (preferred when available).
-    const steam = getSteam();
-    if (this.includeSteam && steam.isAvailable()) {
-      try {
-        const raw = await steam.getCloudSave(slot);
-        const steamTimestamp = parseSteamTimestamp(raw);
-        if (
-          steamTimestamp !== null &&
-          raw !== null &&
-          Math.abs(steamTimestamp - localTimestamp) > CONFLICT_THRESHOLD_MS
-        ) {
-          return {
-            slotName,
-            local: {
-              timestamp: localTimestamp,
-              preview: localData ? buildPreview(localData) : "Local save",
-            },
-            cloud: {
-              timestamp: steamTimestamp,
-              preview: buildPreview(raw),
-              source: "steam",
-            },
-          };
-        }
-      } catch {
-        // Steam read failure — fall through to Supabase check.
-      }
-    }
-
-    // Check Supabase.
-    if (supabase && this.userId) {
-      try {
-        const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
-        const { hasConflict, cloudTimestamp } =
-          await supabaseProvider.checkConflict(slot, localTimestamp);
-
-        if (hasConflict && cloudTimestamp !== undefined) {
-          // We need the full cloud state to generate a preview.
-          const cloudState = await supabaseProvider.downloadSave(slot);
-          const cloudPreview = cloudState
-            ? buildPreview(JSON.stringify(cloudState))
-            : "Cloud save";
-
-          return {
-            slotName,
-            local: {
-              timestamp: localTimestamp,
-              preview: localData ? buildPreview(localData) : "Local save",
-            },
-            cloud: {
-              timestamp: cloudTimestamp,
-              preview: cloudPreview,
-              source: "supabase",
-            },
-          };
-        }
-      } catch {
-        // Supabase read failure — no conflict to report.
-      }
-    }
-
     return null;
+
+  }
+
+  async resolveConflict(
+    slotName: string,
+    preferredSource: SaveSource,
+  ): Promise<ConflictResolutionResult> {
+    const slot = slotNameToNumber(slotName);
+    const conflict = await this.checkConflict(slotName);
+    if (!conflict) {
+      throw new Error("This save no longer has a conflict. Refresh the save list.");
+    }
+    if (preferredSource !== "local" && preferredSource !== conflict.cloud.source) {
+      throw new Error("The selected cloud copy is no longer part of this conflict.");
+    }
+
+    let [local, cloud] = await Promise.all([
+      this._loadLocalRecord(slot),
+      this._loadRecordFromSource(slot, conflict.cloud.source),
+    ]);
+    if (!local || !cloud) {
+      throw new Error("One side of the save conflict disappeared. Refresh before choosing.");
+    }
+    if (
+      local.record.savedAt !== conflict.local.timestamp
+      || cloud.record.savedAt !== conflict.cloud.timestamp
+    ) {
+      throw new Error("This conflict changed while it was open. Review the updated copies.");
+    }
+
+    if (local.recovery) {
+      // A conflict decision must never operate against corrupt head bytes.
+      // Promote the verified generation first, then re-check the remote branch
+      // before atomically archiving whichever valid branch the player rejects.
+      const restored = await restoreSaveArchive(local.recovery.archiveId);
+      const refreshedCloud = await this._loadRecordFromSource(
+        slot,
+        conflict.cloud.source,
+      );
+      if (
+        !refreshedCloud
+        || refreshedCloud.record.savedAt !== conflict.cloud.timestamp
+      ) {
+        throw new Error(
+          "The cloud save changed while the verified local recovery was restored. Review the updated copies.",
+        );
+      }
+      local = { source: "local", record: restored };
+      cloud = refreshedCloud;
+    }
+
+    const selected = preferredSource === "local" ? local : cloud;
+    const losing = preferredSource === "local" ? cloud : local;
+    const commit = await commitConflictResolution({
+      conflictId: conflictIdFor(slot, local.record, cloud),
+      slot,
+      expectedLocalTimestamp: local.record.savedAt,
+      selectedSource: selected.source,
+      losingSource: losing.source,
+      selected: selected.record,
+      losing: losing.record,
+    });
+
+    // Resolve only the branch the player reviewed. A second divergent remote
+    // remains untouched and will receive its own conflict prompt.
+    await this.mirrorRecord(commit.selected, true, [conflict.cloud.source]);
+    mergePersistedPlayerExperience(commit.selected.playerExperience);
+    return {
+      ...candidateToLoadResult({ source: "local", record: commit.selected }),
+      archived: commit.archive,
+    };
+  }
+
+  async listRecoveryCopies(slotName?: string): Promise<SaveArchiveSummary[]> {
+    return listSaveArchives(
+      slotName === undefined ? undefined : slotNameToNumber(slotName),
+    );
+  }
+
+  async restoreRecoveryCopy(archiveId: string): Promise<LoadResult> {
+    const record = await restoreSaveArchive(archiveId);
+    // Restoring selects canonical history. Queue that exact record for each
+    // configured remote so an older cloud branch cannot silently reappear.
+    // The local restore remains successful while an offline mirror is retried.
+    await this.mirrorRecord(record, false);
+    mergePersistedPlayerExperience(record.playerExperience);
+    return candidateToLoadResult({ source: "local", record });
+  }
+
+  async getSyncStatus(): Promise<PersistentCloudSyncStatus> {
+    const queue = await listSaveSyncQueue();
+    const failed = queue.filter((task) => task.status === "failed");
+    return {
+      pendingCount: queue.length,
+      failedCount: failed.length,
+      lastError: failed.at(-1)?.lastError ?? null,
+      oldestQueuedAt: queue[0]?.createdAt ?? null,
+    };
+  }
+
+  async retryPendingSync(): Promise<PersistentCloudSyncStatus> {
+    const available = new Set(this.configuredSyncTargets());
+    const queue = await listSaveSyncQueue();
+    const retryable = queue.filter((task) => available.has(task.target));
+    if (retryable.length > 0) markCloudSyncPending();
+    for (const task of retryable) {
+      const pending = await markSaveSyncTaskPending(task.id);
+      if (pending) await this.processQueuedTask(pending);
+    }
+    return this.getSyncStatus();
   }
 
   // -------------------------------------------------------------------------
@@ -680,21 +938,19 @@ class SaveProviderImpl implements SaveProvider {
 
   async delete(slotName: string): Promise<void> {
     const slot = slotNameToNumber(slotName);
-    const tasks: Promise<void>[] = [];
+    const configured = new Set(this.configuredSyncTargets());
+    const tombstones = await deleteSaveAndEnqueueRemoteDeletes(
+      slot,
+      [...configured],
+    );
+    const retryable = tombstones.filter((task) => configured.has(task.target));
+    if (retryable.length === 0) return;
 
-    tasks.push(deleteSave(slot));
-
-    const steam = getSteam();
-    if (this.includeSteam && steam.isAvailable()) {
-      tasks.push(steam.deleteCloudSave(slot));
-    }
-
-    if (supabase && this.userId) {
-      const supabaseProvider = new SupabaseCloudSaveProvider(this.userId);
-      tasks.push(supabaseProvider.deleteCloudSave(slot));
-    }
-
-    await Promise.all(tasks);
+    markCloudSyncPending();
+    // Local deletion is already committed. Remote failures deliberately do
+    // not reject this operation: their tombstones stay visible in sync status,
+    // suppress stale cloud reads, and can be retried after reconnecting.
+    await Promise.all(retryable.map((task) => this.processQueuedTask(task)));
   }
 }
 

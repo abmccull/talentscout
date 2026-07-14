@@ -19,24 +19,28 @@ import type {
   StandingEntry,
   TacticalStyle,
 } from "@/engine/core/types";
-import { buildStandings } from "@/engine/core/standings";
+import { buildStandingsByLeague } from "@/engine/core/standings";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
 import type { RelegationResult } from "@/engine/world/relegation";
 import {
   isMaterialHistoricalMovement,
   selectWorldHistoryPlayers,
 } from "@/engine/world/saveRetention";
+import type {
+  PlayerCareerStatus,
+  PlayerSeasonHistory,
+  PlayerSeasonPerformance,
+} from "@/engine/world/worldHistoryTypes";
+export type {
+  PlayerCareerStatus,
+  PlayerSeasonHistory,
+  PlayerSeasonPerformance,
+} from "@/engine/world/worldHistoryTypes";
 
 export const WORLD_HISTORY_VERSION = 1 as const;
 export const WORLD_HISTORY_MAX_SEASONS = 30;
 
 export type ClubLeagueMovement = "promoted" | "relegated" | "stayed";
-export type PlayerCareerStatus =
-  | "contracted"
-  | "onLoan"
-  | "freeAgent"
-  | "retired"
-  | "exitedFootball";
 
 export interface ClubSeasonStanding {
   position: number;
@@ -72,38 +76,6 @@ export interface ClubSeasonHistory {
   scoutingPhilosophy: ScoutingPhilosophy;
   tacticalStyle?: TacticalStyle;
   manager?: ManagerSeasonIdentity;
-}
-
-export interface PlayerSeasonPerformance {
-  appearances: number;
-  starts: number;
-  /** Present only when every appearance has an explicit minutes value. */
-  minutesPlayed?: number;
-  appearancesWithoutMinutes: number;
-  averageRating: number;
-  goals: number;
-  assists: number;
-  cleanSheets: number;
-}
-
-export interface PlayerSeasonHistory {
-  playerId: string;
-  /** Stable display identity survives retirement-record compaction. */
-  firstName?: string;
-  lastName?: string;
-  nationality?: string;
-  age: number;
-  position: Player["position"];
-  currentAbility: number;
-  marketValue: number;
-  registeredClubId?: string;
-  contractClubId?: string;
-  loanParentClubId?: string;
-  status: PlayerCareerStatus;
-  /** Exact movement-ledger entries which occurred during this season. */
-  movementEventIds: string[];
-  /** Omitted when no explicit match participation exists. */
-  performance?: PlayerSeasonPerformance;
 }
 
 export interface LeagueSeasonHistory {
@@ -295,17 +267,15 @@ function buildSeasonRecord(
     movements.sort((a, b) => a.week - b.week || a.id.localeCompare(b.id));
   }
 
+  const standingsByLeague = buildStandingsByLeague(
+    snapshot.fixtures,
+    snapshot.clubs,
+    completedSeason,
+  );
   const leagueStandings = new Map<string, StandingEntry[]>();
   for (const league of Object.values(snapshot.leagues).sort((a, b) => a.id.localeCompare(b.id))) {
     const entries = sortStandings(
-      Object.values(
-        buildStandings(
-          league.id,
-          snapshot.fixtures,
-          snapshot.clubs,
-          completedSeason,
-        ),
-      ),
+      Object.values(standingsByLeague[league.id] ?? {}),
     );
     leagueStandings.set(league.id, entries);
   }

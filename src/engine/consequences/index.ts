@@ -6,3 +6,4 @@ export * from "./projection";
 export * from "./lifecycle";
 export * from "./stakeholderMemoryPolicy";
 export * from "./stakeholderEcology";
+export * from "./relationshipIdentities";

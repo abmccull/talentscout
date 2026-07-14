@@ -53,6 +53,127 @@ describe("save envelope migrations", () => {
     expect(migrated.state.scout.skills.potentialAssessment).toBe(5);
     expect(migrated.state.scout.careerPath).toBe("independent");
     expect(migrated.state.scout.careerPathChosen).toBe(false);
+    expect(migrated.state.weeklyStrategy).toEqual({
+      intentId: "balancedDesk",
+      delegationPolicyId: "adaptiveDesk",
+      lastChangedWeek: 7,
+      lastChangedSeason: 2,
+      history: [],
+    });
+  });
+
+  it("keeps the canonical game-state migration pure and idempotent", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const original = structuredClone(legacy.state);
+
+    const migrated = migrateSaveState(legacy.state);
+    const migratedAgain = migrateSaveState(migrated);
+
+    expect(legacy.state).toEqual(original);
+    expect(migrated).not.toBe(legacy.state);
+    expect(migrated.scout).not.toBe(legacy.state.scout);
+    expect(migratedAgain).toEqual(migrated);
+  });
+
+  it("converges direct-state and provider-record migration paths", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    } & Record<string, unknown>;
+
+    const direct = migrateSaveState(legacy.state);
+    const fromProviderRecord = migrateSaveRecord(legacy).state;
+
+    expect(fromProviderRecord).toEqual(direct);
+  });
+
+  it("derives save-list metadata from the state it will actually load", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as Record<
+      string,
+      unknown
+    >;
+    legacy.season = 99;
+    legacy.week = 44;
+    legacy.scoutName = "Misleading Remote Name";
+    legacy.reputation = 88;
+
+    const migrated = migrateSaveRecord(legacy);
+
+    expect(migrated).toMatchObject({
+      season: migrated.state.currentSeason,
+      week: migrated.state.currentWeek,
+      scoutName: `${migrated.state.scout.firstName} ${migrated.state.scout.lastName}`,
+      specialization: migrated.state.scout.primarySpecialization,
+      reputation: migrated.state.scout.reputation,
+    });
+  });
+
+  it("reconciles legacy country lists before generating active world conditions", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const state = {
+      ...legacy.state,
+      countries: ["england", "spain"],
+      subRegions: {
+        london: {
+          id: "london",
+          name: "London",
+          country: "England",
+          countryKey: "england",
+          familiarity: 0,
+        },
+      },
+      unsignedYouth: {
+        prospect: {
+          id: "prospect",
+          country: "england",
+          player: { id: "prospect-player" },
+        },
+      },
+      youthTournaments: {},
+    };
+
+    const migrated = migrateSaveState(state);
+
+    expect(migrated.countries).toEqual(["england"]);
+    expect(migrated.worldConditionState?.active.every(
+      (condition) =>
+        condition.scope === "global" || condition.countryId === "england",
+    )).toBe(true);
+  });
+
+  it("repairs an omitted legacy skills map without mutating the source", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: { scout: Record<string, unknown> };
+    };
+    delete legacy.state.scout.skills;
+
+    const migrated = migrateSaveState(legacy.state);
+
+    expect(legacy.state.scout).not.toHaveProperty("skills");
+    expect(migrated.scout.skills).toMatchObject({
+      playerJudgment: 5,
+      potentialAssessment: 5,
+    });
+  });
+
+  it.each([
+    {
+      state: { currentSeason: 1, currentWeek: 1, scout: null },
+      message: "scout must be an object",
+    },
+    {
+      state: { currentSeason: 0, currentWeek: 1, scout: {} },
+      message: "currentSeason and currentWeek must be positive integers",
+    },
+    {
+      state: { currentSeason: 1, currentWeek: Number.NaN, scout: {} },
+      message: "currentSeason and currentWeek must be positive integers",
+    },
+  ])("rejects malformed-but-key-present legacy state: $message", ({ state, message }) => {
+    expect(() => migrateSaveState(state)).toThrow(message);
   });
 
   it("does not reopen the path decision for established legacy careers", () => {

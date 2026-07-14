@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useGameStore, type ClubStanding } from "@/stores/gameStore";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, ChevronDown, ChevronUp } from "lucide-react";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,7 +50,7 @@ export function LeagueStandingsWidget() {
   }, [gameState]);
 
   // Default to the top-tier league in the scout's home country
-  const homeCountry = gameState?.countries[0] ?? "";
+  const homeCountry = gameState ? getScoutHomeCountry(gameState.scout) : "";
   const homeLeagueId = useMemo(() => {
     const home = leagues.find(
       (l) => l.country.toLowerCase() === homeCountry.toLowerCase() && l.tier === 1,

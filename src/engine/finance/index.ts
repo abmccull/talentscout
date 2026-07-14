@@ -9,6 +9,7 @@ export {
   initializeFinances,
   calculateMonthlyExpenses,
   processWeeklyFinances,
+  sumOperatingExpenses,
   canAfford,
   purchaseEquipmentUpgrade,
   getEquipmentObservationBonus,
@@ -101,7 +102,20 @@ export type { EmployeeWorkResult } from "./employeeWork";
 export { getEmployeeEfficiency, processEmployeeWork } from "./employeeWork";
 export { updateClientSatisfaction, processClientRelationshipWeek, pitchToClub, negotiateRetainerTerms, ensureClientRelationship, recordClientDelivery } from "./clientRelationships";
 export { checkEmployeeEvents, resolveEmployeeEvent, expireEmployeeEvents } from "./employeeEvents";
-export { openSatelliteOffice, closeSatelliteOffice, assignEmployeeToSatellite, unassignEmployeeFromSatellite, processSatelliteOfficeCosts } from "./internationalExpansion";
+export {
+  openSatelliteOffice,
+  closeSatelliteOffice,
+  assignEmployeeToSatellite,
+  unassignEmployeeFromSatellite,
+  processSatelliteOfficeCosts,
+  getHomeBaseRelocationQuote,
+  relocateHomeBase,
+  SATELLITE_OFFICE_CLOSURE_BASE_COST,
+} from "./internationalExpansion";
+export type {
+  HomeBaseRelocationQuote,
+  HomeBaseRelocationResult,
+} from "./internationalExpansion";
 export { processAnnualAwards } from "./awards";
 export { getLoanEligibility, takeLoan, processLoanPayment, repayLoanEarly } from "./loans";
 export { generateConsultingOffers, acceptConsulting, processConsultingDeadline, completeConsulting } from "./consulting";

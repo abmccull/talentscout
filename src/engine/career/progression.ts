@@ -26,6 +26,7 @@ import {
   getSeasonEndWindow,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
+import { selectLatestReportsByCaseOpenedInRange } from "@/engine/reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Reputation event union
@@ -291,8 +292,10 @@ export function calculatePerformanceReview(
   season: number,
   tierContext?: TierReviewContext,
 ): PerformanceReview {
-  const seasonReports = reports.filter(
-    (r) => r.submittedSeason === season && r.scoutId === scout.id,
+  const seasonReports = selectLatestReportsByCaseOpenedInRange(
+    reports.filter((report) => report.scoutId === scout.id),
+    { submittedSeason: season, submittedWeek: Number.MIN_SAFE_INTEGER },
+    { submittedSeason: season, submittedWeek: Number.MAX_SAFE_INTEGER },
   );
 
   const reportsSubmitted = seasonReports.length;

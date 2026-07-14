@@ -94,7 +94,7 @@ With 10 scenarios, 45 achievements, and a multi-season legacy system that tracks
 | **Processor** | Any 64-bit processor (Intel Core i3 / AMD Ryzen 3 or equivalent) |
 | **Memory** | 4 GB RAM |
 | **Graphics** | Integrated graphics sufficient — no 3D rendering |
-| **Storage** | 500 MB available space |
+| **Storage** | 1 GB available space |
 | **Display** | 1280×720 |
 
 ### Recommended
@@ -102,6 +102,7 @@ With 10 scenarios, 45 achievements, and a multi-season legacy system that tracks
 |---|---|
 | **OS** | Windows 11 / macOS 14 Sonoma / Ubuntu 22.04 LTS |
 | **Memory** | 8 GB RAM |
+| **Storage** | 2 GB available space |
 | **Display** | 1920×1080 |
 
 > Note: TalentScout is a browser-based simulation rendered in Next.js. Performance scales with browser and system RAM, not GPU.

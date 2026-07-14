@@ -24,7 +24,7 @@ export const gettingStartedArticles: WikiArticle[] = [
     summary:
       "Week-by-week flow: schedule activities, attend matches, observe players, write reports, and progress your career.",
     searchText:
-      "TalentScout runs on a week-by-week calendar. Each week you plan your schedule, advance time, and watch the results unfold. The core loop is: Schedule activities — fill your 7 day-slots with matches, video sessions, network meetings, study, and more. Attend matches — observe players live during match phases, applying focus lenses to gather attribute readings. Observe players — each observation builds a confidence interval around a player's true attributes. Write reports — compile your observations into a formal report with a conviction level. Submit and progress — submitted reports earn reputation, which unlocks higher career tiers, better opportunities, and specialization perks.",
+      "TalentScout runs on a week-by-week calendar. Plan scarce time, gather uncertain evidence in different contexts, form a judgment, and file a distinct scouting case. Deliver the recommendation, then live with club decisions and long-term player outcomes. Revisions require new evidence and do not manufacture report volume.",
     content: (
       <SectionBlock>
         <Para>
@@ -60,10 +60,10 @@ export const gettingStartedArticles: WikiArticle[] = [
             </>,
             <>
               <span className="font-medium text-zinc-200">
-                Submit and progress
+                Submit and live with the call
               </span>{" "}
-              — submitted reports earn reputation, which unlocks higher career
-              tiers, better opportunities, and specialization perks.
+              — open a distinct evidence-backed case, deliver it to a decision-maker,
+              and build lasting reputation from what happens next.
             </>,
           ]}
         />
@@ -227,7 +227,7 @@ export const gettingStartedArticles: WikiArticle[] = [
     summary:
       "Step-by-step walkthrough of observing a player and writing your first scouting report.",
     searchText:
-      "Writing your first scouting report is the core milestone of TalentScout. Here is how to go from observation to submission. Step 1: Attend a Match. Schedule an Attend Match activity and select a fixture from the available list. Before the match starts you will choose a player to focus on and a focus lens (General is safest for your first time). Step 2: Watch the Phases. The match plays out in 12-18 phases. During each phase your focus lens gathers attribute readings for the player you selected. After each phase you can see preliminary readings appear — these have confidence intervals that show how certain the reading is. Step 3: Review Your Readings. After the match, check the player's profile in the Observations tab. You will see each attribute you observed alongside its confidence range. Wider ranges mean more uncertainty; narrow ranges mean you have a strong read. Step 4: Write the Report. Schedule a Write Report activity in a future day-slot. Select the player, review all your readings, and choose a conviction level. For your first report, Note or Recommend are safe choices — save Strong Recommend and Table Pound until you are confident in your skills. Step 5: Submit. Once the report is written, submit it. If you are on the club path it goes into your club's scouting pool. If independent, you can list it on the marketplace. After submission you earn reputation based on report quality. Check your Report History screen to track outcomes as transfer windows resolve.",
+      "Writing your first scouting report is TalentScout's core milestone. Observe a player, review uncertain readings, choose conviction, and file one accountable case. Club scouts deliver it internally; independent scouts may list it on the marketplace. The first filing receives modest craft credit, but the meaningful reputation comes from delivery, decisions, and later outcomes. A revision requires new evidence.",
     content: (
       <SectionBlock>
         <Para>
@@ -268,9 +268,9 @@ export const gettingStartedArticles: WikiArticle[] = [
         <Para>
           Once the report is written, submit it. If you are on the club path it
           goes into your club&apos;s scouting pool. If independent, you can list
-          it on the marketplace. After submission you earn reputation based on
-          report quality. Check your Report History screen to track outcomes as
-          transfer windows resolve.
+          it on the marketplace. The first filing receives modest craft credit;
+          revisions need new evidence and do not inflate your output. Check
+          Report History to follow the decision and long-term outcome.
         </Para>
       </SectionBlock>
     ),

@@ -10,6 +10,12 @@ import { buildSearchIndex, searchWiki, type SearchIndex } from "./wikiSearch";
 import type { WikiArticle, WikiCategory, WikiView } from "./wikiTypes";
 import { WIKI_CATEGORIES } from "@/data/wiki/categories";
 import { ALL_ARTICLES, CATEGORY_BY_SLUG } from "@/data/wiki";
+import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import {
+  YOUTH_EARLY_ACCESS_HIDDEN_WIKI_CATEGORY_SLUGS,
+  YOUTH_EARLY_ACCESS_SEARCH_TEXT_OVERRIDES,
+  isWikiArticleAvailableForBuild,
+} from "./wikiScope";
 
 const CHAPTER_TO_SLUG: Record<string, string> = {
   "getting-started": "the-game-loop",
@@ -29,23 +35,6 @@ const CHAPTER_TO_SLUG: Record<string, string> = {
   reports: "perception-model",
   networking: "contact-types",
 };
-
-const HIDDEN_CATEGORY_SLUGS = new Set([
-  "equipment",
-  "contacts-network",
-  "agency",
-  "match-systems",
-]);
-
-const HIDDEN_ARTICLE_SLUGS = new Set([
-  "first-team-scout-spec",
-  "regional-expert-spec",
-  "data-scout-spec",
-  "career-paths",
-  "specialization-depth",
-  "training-courses",
-  "international-offices",
-]);
 
 let navigateToArticleRef: ((slug: string) => void) | null = null;
 
@@ -100,11 +89,16 @@ export function WikiScreen() {
 
   const visibleArticles = useMemo(
     () =>
-      ALL_ARTICLES.filter(
-        (article) =>
-          !HIDDEN_CATEGORY_SLUGS.has(article.category) &&
-          !HIDDEN_ARTICLE_SLUGS.has(article.slug),
-      ),
+      IS_YOUTH_EARLY_ACCESS
+        ? ALL_ARTICLES.filter((article) =>
+            isWikiArticleAvailableForBuild(article.slug, article.category),
+          ).map((article) => ({
+            ...article,
+            searchText:
+              YOUTH_EARLY_ACCESS_SEARCH_TEXT_OVERRIDES[article.slug] ??
+              article.searchText,
+          }))
+        : ALL_ARTICLES,
     [],
   );
 
@@ -117,7 +111,12 @@ export function WikiScreen() {
   );
 
   const comingLaterCategories = useMemo(
-    () => WIKI_CATEGORIES.filter((category) => HIDDEN_CATEGORY_SLUGS.has(category.slug)),
+    () =>
+      IS_YOUTH_EARLY_ACCESS
+        ? WIKI_CATEGORIES.filter((category) =>
+            YOUTH_EARLY_ACCESS_HIDDEN_WIKI_CATEGORY_SLUGS.has(category.slug),
+          )
+        : [],
     [],
   );
 
@@ -268,13 +267,14 @@ export function WikiScreen() {
               </>
             ) : effectiveView.mode === "article" ? (
               <div className="space-y-4">
-                {!isVisibleArticle && (
+                {!isVisibleArticle ? (
                   <ScopeNotice
                     title="Full-game reference"
-                    body="This article is preserved for later career branches and inaccessible systems. The Youth Scout Early Access build hides it from browse and search by default."
+                    body="This article is preserved for a later build. Its systems are not available in Youth Scout Early Access, so the content is quarantined from browse, search, and direct links."
                   />
+                ) : (
+                  <WikiArticlePage slug={effectiveView.slug} onNavigate={navigate} />
                 )}
-                <WikiArticlePage slug={effectiveView.slug} onNavigate={navigate} />
               </div>
             ) : effectiveView.mode === "category" ? (
               <CategoryPage
@@ -324,7 +324,7 @@ function IndexPage({
 
       <ScopeNotice
         title="Build-aware handbook"
-        body="This view focuses on Youth Scout gameplay, reports, world travel, finances, and career basics. Held-back agency, equipment, network, and match-management systems are intentionally de-emphasized."
+        body="This view covers the complete Youth Scout career, including reports, world travel, relationships, equipment, training, agency growth, and regional offices. Other scouting specializations, first-team match control, and transfer negotiations remain held back."
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

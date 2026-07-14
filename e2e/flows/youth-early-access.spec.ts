@@ -53,7 +53,9 @@ async function startFreshYouthCareer(
   ).toBeVisible();
   await gamePage.page.getByRole("button", { name: /^Begin Career$/ }).click();
 
-  await gamePage.waitForScreen(options.keepTutorials ? "observation" : "dashboard", 30_000);
+  // Every new Youth EA career begins inside the authored discovery session.
+  // Dismissing tutorial overlays must not skip that gameplay hook.
+  await gamePage.waitForScreen("observation", 30_000);
 }
 
 async function createListedFirstReport(gamePage: GamePage, scoutLastName: string) {
@@ -171,6 +173,34 @@ test.describe("Youth Early Access", () => {
     await expect(gamePage.page.getByRole("button", { name: "Leaderboard" })).toHaveCount(0);
     await expect(gamePage.page.getByRole("button", { name: "Analytics" })).toHaveCount(0);
     await expect(gamePage.page.getByRole("heading", { name: /Rival Scouts Activity/ })).toHaveCount(0);
+
+    gamePage.expectNoConsoleErrors();
+  });
+
+  test("screen scope preserves drill-downs and contains stale full-game routes", async ({ gamePage }) => {
+    await startFreshYouthCareer(gamePage, "Scope");
+
+    const actionRoutes = await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      store.getState().setScreen("agency");
+      const allowedDetail = store.getState().currentScreen;
+      store.getState().setScreen("analytics");
+      const futureFallback = store.getState().currentScreen;
+      return { allowedDetail, futureFallback };
+    });
+
+    expect(actionRoutes).toEqual({
+      allowedDetail: "agency",
+      futureFallback: "career",
+    });
+
+    // Direct state restoration bypasses the navigation action. The play-route
+    // boundary must still normalize it before a full-game module can render.
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      store.setState({ currentScreen: "match" });
+    });
+    await gamePage.waitForScreen("calendar");
 
     gamePage.expectNoConsoleErrors();
   });

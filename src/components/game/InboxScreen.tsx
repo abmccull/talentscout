@@ -38,6 +38,7 @@ import {
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { useShallow } from "zustand/react/shallow";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -278,12 +279,17 @@ function NarrativeEventCard({
 
   return (
     <div className={`rounded-lg border p-4 ${borderClass}`}>
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="mb-3 flex flex-col items-stretch gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+        <div className="flex w-full min-w-0 items-start gap-2 sm:flex-1">
           <Zap size={14} className="shrink-0 text-purple-400" aria-hidden="true" />
-          <span className="font-semibold text-white truncate">{event.title}</span>
+          <span
+            data-testid="narrative-event-title"
+            className="min-w-0 break-words font-semibold leading-snug text-white"
+          >
+            {event.title}
+          </span>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex max-w-full flex-wrap items-center gap-1.5 sm:shrink-0">
           {/* F2: Chain indicator badge */}
           {isChainEvent && chainStepLabel && (
             <Badge variant="outline" className="text-[10px] border-sky-500/50 text-sky-400 bg-sky-500/10">
@@ -815,7 +821,23 @@ export function InboxScreen() {
     setScreen,
     setPendingInternationalCountry,
     startReport,
-  } = useGameStore();
+  } = useGameStore(
+    useShallow((state) => ({
+      gameState: state.gameState,
+      markMessageRead: state.markMessageRead,
+      markAllRead: state.markAllRead,
+      acknowledgeNarrativeEvent: state.acknowledgeNarrativeEvent,
+      resolveNarrativeEventChoice: state.resolveNarrativeEventChoice,
+      resolveSeasonEvent: state.resolveSeasonEvent,
+      handleGossipAction: state.handleGossipAction,
+      acceptMarketplaceBid: state.acceptMarketplaceBid,
+      declineMarketplaceBid: state.declineMarketplaceBid,
+      selectPlayer: state.selectPlayer,
+      setScreen: state.setScreen,
+      setPendingInternationalCountry: state.setPendingInternationalCountry,
+      startReport: state.startReport,
+    })),
+  );
   const { playSFX } = useAudio();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // A7: Enhanced filter/sort state

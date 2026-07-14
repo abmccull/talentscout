@@ -12,6 +12,7 @@
 
 import type { GameState, NarrativeEventType, UnsignedYouth } from "@/engine/core/types";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 // =============================================================================
 // EventContext — fields extracted from GameState for template rendering
@@ -65,10 +66,13 @@ export interface EventTemplate {
 // Helper — pick a display name for the first submitted-report player
 // =============================================================================
 
+function accountableReports(state: GameState) {
+  return selectLatestReportsByCase(Object.values(state.reports));
+}
+
 function firstReportPlayerName(state: GameState): string {
-  const reportIds = Object.keys(state.reports);
-  if (reportIds.length === 0) return "the player";
-  const report = state.reports[reportIds[0]];
+  const report = accountableReports(state)[0];
+  if (!report) return "the player";
   const player = state.players[report.playerId];
   if (!player) return "the player";
   return `${player.firstName} ${player.lastName}`;
@@ -145,7 +149,7 @@ function oldReportPlayerName(state: GameState): string {
 
 /** Returns the name of a report player with conviction >= recommend. */
 function recommendedReportPlayerName(state: GameState): string {
-  const report = Object.values(state.reports).find(
+  const report = accountableReports(state).find(
     (r) => r.conviction === "recommend" || r.conviction === "strongRecommend" || r.conviction === "tablePound",
   );
   if (!report) return "one of your recommended players";
@@ -632,7 +636,7 @@ const wonderkidPressureTemplate: EventTemplate = {
     );
   },
   prerequisites: (state) =>
-    Object.values(state.reports).some((r) => r.conviction === "tablePound"),
+    accountableReports(state).some((r) => r.conviction === "tablePound"),
   choices: undefined,
 };
 
@@ -737,7 +741,7 @@ const injurySetbackTemplate: EventTemplate = {
     );
   },
   prerequisites: (state) =>
-    Object.values(state.reports).some(
+    accountableReports(state).some(
       (r) => r.conviction === "recommend" || r.conviction === "strongRecommend" || r.conviction === "tablePound",
     ),
   choices: undefined,
@@ -775,7 +779,7 @@ const lateBloomingSurpriseTemplate: EventTemplate = {
       `ever truly finished until the player's career is.`
     );
   },
-  prerequisites: (state) => Object.keys(state.reports).length >= 5,
+  prerequisites: (state) => accountableReports(state).length >= 5,
   choices: undefined,
 };
 
@@ -1247,7 +1251,7 @@ export function buildEventContext(
     // -------------------------------------------------------------------------
 
     case "wonderkidPressure": {
-      const tablePoundReport = Object.values(state.reports).find(
+      const tablePoundReport = accountableReports(state).find(
         (r) => r.conviction === "tablePound",
       );
       const player = tablePoundReport
@@ -1420,7 +1424,7 @@ export function extractRelatedIds(
     }
 
     case "careerCrossroads": {
-      const report = Object.values(state.reports)[0];
+      const report = accountableReports(state)[0];
       return report ? [report.playerId] : [];
     }
 
@@ -1430,9 +1434,8 @@ export function extractRelatedIds(
     case "playerHomesick":
     case "playerControversy":
     case "lateBloomingSurprise": {
-      const reportIds = Object.keys(state.reports);
-      if (reportIds.length === 0) return [];
-      const report = state.reports[reportIds[0]];
+      const report = accountableReports(state)[0];
+      if (!report) return [];
       return [report.playerId];
     }
 
@@ -1459,9 +1462,8 @@ export function extractRelatedIds(
     }
 
     case "reportCitedInBoardMeeting": {
-      const reportIds = Object.keys(state.reports);
-      if (reportIds.length === 0) return [];
-      const report = state.reports[reportIds[0]];
+      const report = accountableReports(state)[0];
+      if (!report) return [];
       const ids: string[] = [report.playerId];
       if (scout.currentClubId) ids.push(scout.currentClubId);
       return ids;
@@ -1485,8 +1487,10 @@ export function extractRelatedIds(
 
     case "wonderkidPressure":
     case "injurySetback": {
-      const report = Object.values(state.reports).find(
-        (r) => r.conviction === "tablePound" || r.conviction === "strongRecommend",
+      const report = accountableReports(state).find(
+        (r) => r.conviction === "tablePound"
+          || r.conviction === "strongRecommend"
+          || r.conviction === "recommend",
       );
       return report ? [report.playerId] : [];
     }

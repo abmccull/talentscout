@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1072,7 +1073,11 @@ function VenuesTab() {
 // ─── Main screen ─────────────────────────────────────────────────────────────
 
 export function YouthScoutingScreen() {
-  const { gameState, selectPlayer, setScreen } = useGameStore();
+  const { gameState, selectPlayer, setScreen } = useGameStore(useShallow((state) => ({
+    gameState: state.gameState,
+    selectPlayer: state.selectPlayer,
+    setScreen: state.setScreen,
+  })));
   const [activeTab, setActiveTab] = useState<Tab>("unsigned");
   const [sort, setSort] = useState<SortOption>("buzz");
   const [filterCountry, setFilterCountry] = useState("");
@@ -1119,7 +1124,9 @@ export function YouthScoutingScreen() {
   const discoveredByScout = youthList.filter((y) =>
     y.discoveredBy.includes(scout.id),
   ).length;
-  const placedCount = youthList.filter((y) => y.placed).length;
+  const placedCount = Object.values(gameState.placementReports ?? {}).filter(
+    (report) => report.scoutId === scout.id && report.clubResponse === "accepted",
+  ).length;
   const countries = [...new Set(youthList.map((y) => y.country))].sort();
   const positions = [...new Set(youthList.map((y) => y.player.position))].sort();
   const nationalities = [...new Set(youthList.map((y) => y.player.nationality))].sort();

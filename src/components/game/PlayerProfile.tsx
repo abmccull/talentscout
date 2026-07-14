@@ -25,6 +25,7 @@ import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
+import { hasObservableRecurringInjuryConcern } from "@/engine/scout/playerFacingIntel";
 import { Tooltip } from "@/components/ui/tooltip";
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
@@ -47,6 +48,8 @@ import {
 } from "@/lib/playerResolution";
 import { EvidenceBoard } from "@/components/game/evidence";
 import { getSeasonLength } from "@/engine/core/gameDate";
+import { projectPlayerDevelopmentEnvironment } from "@/engine/world/developmentEnvironment";
+import { useShallow } from "zustand/react/shallow";
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -472,6 +475,21 @@ function StatisticalProfileCard({ profile, anomalies }: StatProfileCardProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {profile.evidenceContext && (
+          <div className="rounded-md border border-cyan-500/20 bg-cyan-500/5 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 text-[10px]">
+              <span className="font-medium capitalize text-cyan-200">
+                {profile.evidenceContext.accessTier} regional data access
+              </span>
+              <span className="font-mono text-cyan-300">
+                {Math.round(profile.evidenceContext.confidence * 100)}% source confidence
+              </span>
+            </div>
+            <p className="mt-1 text-[9px] leading-relaxed text-zinc-500">
+              {profile.evidenceContext.explanation}
+            </p>
+          </div>
+        )}
         {/* Per-90 stats grid */}
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {statKeys.map((key) => {
@@ -769,8 +787,7 @@ function InjuryStatusCard({ player }: { player: import("@/engine/core/types").Pl
   const history = player.injuryHistory;
   const injuries = history?.injuries ?? [];
   const totalWeeksMissed = history?.totalWeeksMissed ?? 0;
-  const proneness = history?.injuryProneness ?? 0;
-  const reinjuryWindow = history?.reinjuryWindowWeeksLeft ?? 0;
+  const recurringConcern = hasObservableRecurringInjuryConcern(history);
 
   // Only show card if player has injury data worth showing
   if (!currentInjury && injuries.length === 0) return null;
@@ -781,9 +798,9 @@ function InjuryStatusCard({ player }: { player: import("@/engine/core/types").Pl
         <CardTitle className="flex items-center gap-2 text-sm">
           <HeartPulse size={14} className={currentInjury ? "text-red-500" : "text-zinc-500"} />
           Injury Status
-          {proneness >= 0.15 && (
+          {recurringConcern && (
             <Badge variant="destructive" className="ml-auto text-[10px]">
-              Injury Prone
+              Recurring Injury History
             </Badge>
           )}
         </CardTitle>
@@ -818,12 +835,12 @@ function InjuryStatusCard({ player }: { player: import("@/engine/core/types").Pl
           </div>
         )}
 
-        {/* Reinjury risk warning */}
-        {!currentInjury && reinjuryWindow > 0 && (
+        {/* Concern inferred from the visible injury log, not the hidden proneness model. */}
+        {!currentInjury && recurringConcern && (
           <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 p-2">
             <AlertTriangle size={12} className="text-amber-400 shrink-0" />
             <p className="text-[10px] text-amber-300">
-              Elevated reinjury risk — {reinjuryWindow} week{reinjuryWindow !== 1 ? "s" : ""} remaining
+              The visible injury record warrants a dedicated medical follow-up.
             </p>
           </div>
         )}
@@ -1109,7 +1126,27 @@ export function PlayerProfile() {
     recommendPlayerForLoan,
     recallLoanPlayer,
     scheduleActivity,
-  } = useGameStore();
+  } = useGameStore(
+    useShallow((state) => ({
+      gameState: state.gameState,
+      selectedPlayerId: state.selectedPlayerId,
+      setScreen: state.setScreen,
+      getPlayerObservations: state.getPlayerObservations,
+      getPlayerReports: state.getPlayerReports,
+      startReport: state.startReport,
+      getClub: state.getClub,
+      getLeague: state.getLeague,
+      toggleWatchlist: state.toggleWatchlist,
+      setPendingFixtureClubFilter: state.setPendingFixtureClubFilter,
+      setPendingCalendarActivity: state.setPendingCalendarActivity,
+      setPendingInternationalCountry: state.setPendingInternationalCountry,
+      tapNetworkForPlayer: state.tapNetworkForPlayer,
+      initiateTransferNegotiation: state.initiateTransferNegotiation,
+      recommendPlayerForLoan: state.recommendPlayerForLoan,
+      recallLoanPlayer: state.recallLoanPlayer,
+      scheduleActivity: state.scheduleActivity,
+    })),
+  );
 
   const [networkIntel, setNetworkIntel] = useState<{ title: string; body: string; contactName?: string } | null>(null);
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
@@ -1130,6 +1167,10 @@ export function PlayerProfile() {
 
   const player = resolvedPlayer.player;
   const isRetired = resolvedPlayer.isRetired;
+  const developmentEnvironment = isRetired
+    ? undefined
+    : projectPlayerDevelopmentEnvironment(gameState, player);
+  const recurringInjuryConcern = hasObservableRecurringInjuryConcern(player.injuryHistory);
   const canonicalPlayerId = resolvedPlayer.playerId;
   const unsignedYouthRecord = resolvedPlayer.unsignedYouth;
   const relatedPlayerIds = new Set(
@@ -1140,8 +1181,33 @@ export function PlayerProfile() {
   const league = club ? getLeague(club.leagueId) : undefined;
   const observations = getPlayerObservations(canonicalPlayerId);
   const reports = getPlayerReports(canonicalPlayerId);
+  const latestAuthoredRole = [...reports]
+    .sort((left, right) =>
+      right.submittedSeason - left.submittedSeason
+      || right.submittedWeek - left.submittedWeek
+      || (right.revision ?? 0) - (left.revision ?? 0),
+    )
+    .find((report) => report.projectedRole)?.projectedRole;
+  const inferredRoleScores = new Map<string, { total: number; count: number }>();
+  for (const observation of observations) {
+    for (const inference of observation.inferredRoleFit ?? []) {
+      const aggregate = inferredRoleScores.get(inference.role) ?? { total: 0, count: 0 };
+      aggregate.total += inference.suitability;
+      aggregate.count += 1;
+      inferredRoleScores.set(inference.role, aggregate);
+    }
+  }
+  const inferredRoles = [...inferredRoleScores.entries()]
+    .map(([role, aggregate]) => ({
+      role,
+      suitability: Math.round(aggregate.total / aggregate.count),
+    }))
+    .sort((left, right) => right.suitability - left.suitability);
+  const displayedRoles = latestAuthoredRole
+    ? [{ role: latestAuthoredRole, suitability: undefined }]
+    : inferredRoles.slice(0, 2);
 
-  // Own-club check: signed players at scout's club show exact values
+  // Own-club status controls club actions, never access to engine truth.
   const isOwnClubPlayer = !!(player.clubId && player.clubId === gameState.scout.currentClubId);
   const transferWindowOpen = gameState.transferWindow
     ? isTransferWindowOpen([gameState.transferWindow], gameState.currentWeek)
@@ -1455,9 +1521,9 @@ export function PlayerProfile() {
                     Injured — {player.currentInjury.weeksRemaining}w
                   </Badge>
                 )}
-                {!player.injured && player.injured === false && (player.injuryHistory?.reinjuryWindowWeeksLeft ?? 0) > 0 && (
+                {!player.injured && recurringInjuryConcern && (
                   <Badge className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px]">
-                    Reinjury Risk
+                    Recurring Injury History
                   </Badge>
                 )}
                 <span className="text-sm text-zinc-400">
@@ -1878,6 +1944,84 @@ export function PlayerProfile() {
           )}
         </div>
 
+        {developmentEnvironment && (
+          <Card data-testid="development-environment" className="mb-6 overflow-hidden border-cyan-500/20 bg-cyan-500/[0.04]">
+            <CardHeader className="pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">
+                    Development environment
+                  </p>
+                  <CardTitle className="mt-1 text-base text-white">
+                    {developmentEnvironment.headline}
+                  </CardTitle>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    {developmentEnvironment.clubName} · visible pathway evidence
+                  </p>
+                </div>
+                <div
+                  className="rounded-lg border border-cyan-400/20 bg-black/20 px-3 py-2 text-right"
+                  aria-label={`Development environment score ${developmentEnvironment.score} out of 100`}
+                >
+                  <p className="text-xs uppercase tracking-wider text-zinc-400">Environment</p>
+                  <p className="font-mono text-lg font-bold text-cyan-200">
+                    {developmentEnvironment.score}
+                    <span className="text-xs font-normal text-zinc-500">/100</span>
+                  </p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-xs leading-relaxed text-zinc-300">
+                {developmentEnvironment.summary}
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2" aria-label="Development factors">
+                {developmentEnvironment.factors.map((factor) => {
+                  const positive = factor.impact === "positive" || factor.impact === "strong-positive";
+                  const negative = factor.impact === "negative" || factor.impact === "strong-negative";
+                  return (
+                    <div key={factor.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                      <div className="flex items-center gap-2">
+                        {positive ? (
+                          <TrendingUp size={13} className="shrink-0 text-emerald-400" aria-hidden="true" />
+                        ) : negative ? (
+                          <AlertTriangle size={13} className="shrink-0 text-amber-400" aria-hidden="true" />
+                        ) : (
+                          <Minus size={13} className="shrink-0 text-zinc-500" aria-hidden="true" />
+                        )}
+                        <p className="text-xs font-semibold text-zinc-200">{factor.label}</p>
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{factor.summary}</p>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="border-t border-white/10 pt-3 text-xs text-cyan-200/80">
+                Next review: {developmentEnvironment.reviewPrompt}
+              </p>
+              {(player.developmentHistory?.length ?? 0) > 0 && (
+                <div className="border-t border-white/10 pt-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                    Recent development turns
+                  </p>
+                  <ol className="mt-2 space-y-2">
+                    {[...(player.developmentHistory ?? [])].reverse().slice(0, 4).map((entry) => (
+                      <li key={entry.id} className="flex gap-3 text-xs">
+                        <span className="shrink-0 font-mono text-xs text-zinc-400">
+                          S{entry.season} W{entry.week}
+                        </span>
+                        <span className={entry.outcome === "improved" ? "text-emerald-300" : "text-amber-300"}>
+                          {entry.summary}
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Unsigned Youth Details */}
         {unsignedYouthRecord && (
           <div className="mb-6">
@@ -2066,41 +2210,27 @@ export function PlayerProfile() {
                             </span>
                           </Tooltip>
                           {reading ? (
-                            isOwnClubPlayer ? (
-                              <>
-                                <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
-                                  <div
-                                    className="absolute left-0 top-0 h-full rounded-full bg-emerald-500"
-                                    style={{ width: `${(player.attributes[attr as keyof typeof player.attributes] / 20) * 100}%` }}
-                                  />
-                                </div>
-                                <span className="w-8 shrink-0 text-right text-xs font-mono font-medium text-white">
-                                  {player.attributes[attr as keyof typeof player.attributes]}
+                            <>
+                              <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
+                                <div
+                                  className={`absolute top-0 h-full rounded-full ${attributeValueColor(reading.perceivedValue)}`}
+                                  style={{
+                                    left: `${(((reading.rangeLow ?? reading.perceivedValue) - 1) / 19) * 100}%`,
+                                    width: `${((((reading.rangeHigh ?? reading.perceivedValue) - (reading.rangeLow ?? reading.perceivedValue)) || 1) / 19) * 100}%`,
+                                  }}
+                                />
+                              </div>
+                              <AttributeValueTooltip value={reading.perceivedValue} confidence={reading.confidence}>
+                                <span className="w-10 shrink-0 text-right text-xs font-mono font-medium text-white cursor-help">
+                                  {reading.rangeLow != null && reading.rangeHigh != null && reading.rangeLow !== reading.rangeHigh
+                                    ? `${reading.rangeLow}-${reading.rangeHigh}`
+                                    : reading.perceivedValue}
                                 </span>
-                              </>
-                            ) : (
-                              <>
-                                <div className="flex-1 relative h-1.5 rounded-full bg-[#27272a] overflow-hidden">
-                                  <div
-                                    className={`absolute top-0 h-full rounded-full ${attributeValueColor(reading.perceivedValue)}`}
-                                    style={{
-                                      left: `${(((reading.rangeLow ?? reading.perceivedValue) - 1) / 19) * 100}%`,
-                                      width: `${((((reading.rangeHigh ?? reading.perceivedValue) - (reading.rangeLow ?? reading.perceivedValue)) || 1) / 19) * 100}%`,
-                                    }}
-                                  />
-                                </div>
-                                <AttributeValueTooltip value={reading.perceivedValue} confidence={reading.confidence}>
-                                  <span className="w-10 shrink-0 text-right text-xs font-mono font-medium text-white cursor-help">
-                                    {reading.rangeLow != null && reading.rangeHigh != null && reading.rangeLow !== reading.rangeHigh
-                                      ? `${reading.rangeLow}-${reading.rangeHigh}`
-                                      : reading.perceivedValue}
-                                  </span>
-                                </AttributeValueTooltip>
-                                <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500" title={`${reading.observationCount} observation${reading.observationCount !== 1 ? "s" : ""}`}>
-                                  {reading.observationCount}x
-                                </span>
-                              </>
-                            )
+                              </AttributeValueTooltip>
+                              <span className="w-6 shrink-0 text-right text-[10px] text-zinc-500" title={`${reading.observationCount} observation${reading.observationCount !== 1 ? "s" : ""}`}>
+                                {reading.observationCount}x
+                              </span>
+                            </>
                           ) : (
                             <>
                               <div className="flex-1 h-1.5 rounded-full bg-[#27272a]" />
@@ -2245,28 +2375,36 @@ export function PlayerProfile() {
               </div>
             )}
 
-            {/* Natural Role */}
-            {player.naturalRole && observations.length >= 3 && (
+            {/* Tactical-role conclusions must come from authored or observed evidence. */}
+            {displayedRoles.length > 0 && (
               <div>
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 mb-3">
                   Tactical Role
                 </h2>
                 <Card>
                   <CardContent className="px-4 pb-4 pt-4">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-zinc-400">Natural Role</span>
-                      <span className="rounded bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-400">
-                        {player.naturalRole.replace(/([A-Z])/g, " $1").trim()}
-                      </span>
+                    <div className="space-y-2">
+                      {displayedRoles.map((role, index) => (
+                        <div className="flex items-center gap-3" key={role.role}>
+                          <span className="text-xs text-zinc-400">
+                            {index === 0 ? "Best evidence" : "Alternative"}
+                          </span>
+                          <span className="rounded bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-400">
+                            {role.role.replace(/([A-Z])/g, " $1").trim()}
+                          </span>
+                          {role.suitability !== undefined && (
+                            <span className="text-[10px] text-zinc-500">
+                              {role.suitability}% observed fit
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-zinc-500">
+                        {latestAuthoredRole
+                          ? "From your latest submitted role projection."
+                          : "Aggregated from role-fit evidence in your observations."}
+                      </p>
                     </div>
-                    {player.secondaryRole && (
-                      <div className="flex items-center gap-3 mt-2">
-                        <span className="text-xs text-zinc-400">Secondary</span>
-                        <span className="rounded bg-zinc-700/50 px-2 py-0.5 text-xs font-medium text-zinc-300">
-                          {player.secondaryRole.replace(/([A-Z])/g, " $1").trim()}
-                        </span>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -2630,7 +2768,7 @@ export function PlayerProfile() {
                         </div>
                         <p className="flex items-center gap-1 text-xs text-zinc-400">
                           Quality: {r.qualityScore}/100
-                          <HelpTooltip text="Report quality based on observation count, accuracy, and conviction. Higher quality reports earn more income and reputation." />
+                          <HelpTooltip text="Report craft is based on evidence depth, confidence, detail, and conviction calibration. Strong work improves market value, while reputation ultimately follows distinct cases and their outcomes." />
                         </p>
                         {r.clubResponse && (
                           <p className="text-xs text-zinc-500 capitalize mt-0.5">

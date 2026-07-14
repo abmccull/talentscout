@@ -16,6 +16,7 @@ import type {
   WorldHistoryState,
   WorldSeasonHistory,
 } from "@/engine/world/worldHistory";
+import { WorldHistoryComparison } from "@/components/game/WorldHistoryComparison";
 
 interface WorldHistoryDrawerProps {
   history?: WorldHistoryState;
@@ -140,6 +141,7 @@ export function WorldHistoryDrawer({
 }: WorldHistoryDrawerProps) {
   const [open, setOpen] = useState(false);
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
+  const [archiveView, setArchiveView] = useState<"season" | "comparison">("season");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
   const seasons = history?.seasons ?? [];
@@ -229,7 +231,7 @@ export function WorldHistoryDrawer({
           aria-describedby="world-history-description"
           className="absolute inset-x-3 bottom-3 top-28 z-40 overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur-xl focus:outline-none md:left-auto md:w-[min(460px,calc(100%-1.5rem))]"
         >
-          <div className="sticky top-0 z-10 -mx-1 -mt-1 flex items-start justify-between gap-4 bg-zinc-950/95 px-1 pb-3">
+          <div className="sticky top-0 z-10 -mx-1 -mt-1 flex items-start justify-between gap-4 bg-zinc-950 px-1 pb-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-300">
                 Living world record
@@ -249,7 +251,52 @@ export function WorldHistoryDrawer({
             </button>
           </div>
 
-          {season && story ? (
+          {seasons.length > 0 && (
+            <div className="mt-2 grid grid-cols-2 gap-2" aria-label="Archive view">
+              <button
+                type="button"
+                aria-pressed={archiveView === "season"}
+                onClick={() => setArchiveView("season")}
+                className={`min-h-11 rounded-lg border px-3 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${
+                  archiveView === "season"
+                    ? "border-amber-400/50 bg-amber-400/10 text-amber-100"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600"
+                }`}
+              >
+                Season story
+              </button>
+              <button
+                type="button"
+                aria-pressed={archiveView === "comparison"}
+                onClick={() => setArchiveView("comparison")}
+                className={`min-h-11 rounded-lg border px-3 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-300 ${
+                  archiveView === "comparison"
+                    ? "border-amber-400/50 bg-amber-400/10 text-amber-100"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600"
+                }`}
+              >
+                Compare careers
+              </button>
+            </div>
+          )}
+
+          {archiveView === "comparison" && history && seasons.length > 0 ? (
+            <WorldHistoryComparison
+              history={history}
+              clubs={clubs}
+              leagues={leagues}
+              players={players}
+              retiredPlayers={retiredPlayers}
+              onInspectSeason={(targetSeason) => {
+                setSelectedSeason(targetSeason);
+                setArchiveView("season");
+              }}
+              onOpenPlayer={onOpenPlayer ? (playerId) => {
+                close();
+                onOpenPlayer(playerId);
+              } : undefined}
+            />
+          ) : season && story ? (
             <>
               <label className="mt-2 block sm:hidden">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">

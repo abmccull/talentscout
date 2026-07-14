@@ -18,9 +18,8 @@
  * Design notes:
  *  - Modifiers are intentionally kept on a narrow [0.5, 1.5] scale so that
  *    regional expertise never overwhelms the base scout-skill system.
- *  - "Home country" = whichever country has the highest familiarity in the
- *    scout's countryReputations map (seeded at 50 on game start, 0 for all
- *    others by initializeCountryReputations).
+ *  - "Home country" is the scout's persisted permanent base. Legacy saves use
+ *    the highest-familiarity fallback only until migration pins that value.
  */
 
 import type { Scout, CountryReputation, RegionalKnowledge } from "@/engine/core/types";
@@ -101,9 +100,8 @@ export function getRegionalExpertiseModifier(
  *
  * Eligibility criteria:
  *  1. The scout's primary specialization must be "regional".
- *  2. The queried country must be the scout's home country (the country with
- *     the highest familiarity in countryReputations, as determined by
- *     getScoutHomeCountry from ./travel.ts).
+ *  2. The queried country must be the scout's permanent home country, as
+ *     determined by getScoutHomeCountry from ./travel.ts.
  *
  * F13 Rebalance: The bonus now uses a graduated curve based on regional
  * knowledge level instead of a flat 70% reduction:

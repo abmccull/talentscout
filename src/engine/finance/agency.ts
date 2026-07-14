@@ -158,6 +158,10 @@ export function fireEmployee(
   return {
     ...finances,
     employees: finances.employees.filter((e) => e.id !== employeeId),
+    satelliteOffices: finances.satelliteOffices.map((office) => ({
+      ...office,
+      employeeIds: office.employeeIds.filter((id) => id !== employeeId),
+    })),
     transactions: [
       ...finances.transactions,
       {
@@ -318,6 +322,12 @@ export function processEmployeeWeek(
   let financesWithRemaining: FinancialRecord = {
     ...baseFinances,
     employees: remaining,
+    satelliteOffices: baseFinances.satelliteOffices.map((office) => ({
+      ...office,
+      employeeIds: office.employeeIds.filter(
+        (employeeId) => !resignations.includes(employeeId),
+      ),
+    })),
     lastEmployeeEconomicsWeek: week > 0 ? { week, season } : baseFinances.lastEmployeeEconomicsWeek,
     transactions: resignations.length > 0
       ? [

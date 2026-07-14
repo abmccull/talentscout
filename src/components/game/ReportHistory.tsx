@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -585,7 +586,22 @@ export function ReportHistory() {
     acceptMarketplaceBid, declineMarketplaceBid, acceptExclusiveUpgradeBid,
     comparisonReportIds, addToComparison, removeFromComparison, clearComparison,
     pendingListingReportId, dismissPendingListing,
-  } = useGameStore();
+  } = useGameStore(useShallow((state) => ({
+    gameState: state.gameState,
+    selectPlayer: state.selectPlayer,
+    setScreen: state.setScreen,
+    listReportForSale: state.listReportForSale,
+    withdrawReportListing: state.withdrawReportListing,
+    acceptMarketplaceBid: state.acceptMarketplaceBid,
+    declineMarketplaceBid: state.declineMarketplaceBid,
+    acceptExclusiveUpgradeBid: state.acceptExclusiveUpgradeBid,
+    comparisonReportIds: state.comparisonReportIds,
+    addToComparison: state.addToComparison,
+    removeFromComparison: state.removeFromComparison,
+    clearComparison: state.clearComparison,
+    pendingListingReportId: state.pendingListingReportId,
+    dismissPendingListing: state.dismissPendingListing,
+  })));
   const [selectedReport, setSelectedReport] = useState<ScoutReport | null>(null);
   const [listingReport, setListingReport] = useState<ScoutReport | null>(null);
   const [expandedBidsListingId, setExpandedBidsListingId] = useState<string | null>(null);

@@ -240,7 +240,7 @@ test.describe("Delayed scout report validation regression", () => {
     expect(validation.validationMessage).not.toBeNull();
     expect(validation.validationMessage.body).toContain("after 2 seasons");
     expect(validation.validationMessage.body).toContain("Accuracy: 100/100");
-    expect(validation.validationMessage.body).toContain("Reputation +3");
+    expect(validation.validationMessage.body).toMatch(/reputation \+3/i);
     expect(validation.reputationAfter).toBeGreaterThan(validation.reputationBefore);
 
     // Multi-season validation can leave the end-of-season presentation open.

@@ -27,11 +27,17 @@ jobs:
 
       - run: npm ci
 
+      - name: Dependency vulnerability audit
+        run: npm audit --audit-level=moderate
+
       - name: Type check
         run: npx tsc --noEmit
 
       - name: Lint
         run: npm run lint
+
+      - name: Architecture dependency gate
+        run: npm run test:architecture
 
       - name: Replayability divergence gate
         run: npm run test:replayability

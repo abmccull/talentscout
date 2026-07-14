@@ -11,10 +11,17 @@ import { generatePlayer } from "@/engine/players/generation";
 import { generateReportContent, prepareReportSubmission } from "@/engine/reports";
 import { RNG } from "@/engine/rng";
 import { createScout } from "@/engine/scout/creation";
-import { observePlayer, observePlayerLight } from "@/engine/scout/perception";
+import {
+  createObservationEvidenceIndex,
+  getPlayerObservationEvidence,
+  observePlayer,
+  observePlayerLight,
+  upsertObservationEvidence,
+} from "@/engine/scout/perception";
 import { createReportActions } from "@/stores/actions/reportActions";
 import { createFinanceActions } from "@/stores/actions/financeActions";
 import { initializeFinances } from "@/engine/finance";
+import { calculatePerformanceReview } from "@/engine/career/progression";
 import type {
   GameStoreState,
   GetState,
@@ -62,6 +69,96 @@ function withDate(observation: Observation, index: number): Observation {
 }
 
 describe("scouting evidence invariants", () => {
+  it("keeps indexed transaction evidence outcome- and RNG-equivalent", () => {
+    const player = makePlayer();
+    const otherPlayer = generatePlayer(new RNG("indexed-other-player"), {
+      position: "CB",
+      ageRange: [18, 18],
+      abilityRange: [85, 85],
+      nationality: "English",
+      clubId: "",
+    });
+    const scout = makeScout();
+    const first = withDate(observePlayerLight(
+      new RNG("indexed-history-first"),
+      player,
+      scout,
+      "academyVisit",
+      [],
+    ), 0);
+    const unrelated = withDate(observePlayerLight(
+      new RNG("indexed-history-other"),
+      otherPlayer,
+      scout,
+      "trainingGround",
+      [],
+    ), 0);
+    const history = [first, unrelated];
+    const index = createObservationEvidenceIndex(history);
+    const legacyRng = new RNG("indexed-equivalence-next");
+    const indexedRng = new RNG("indexed-equivalence-next");
+
+    const legacyNext = observePlayerLight(
+      legacyRng,
+      player,
+      scout,
+      "videoAnalysis",
+      history,
+    );
+    const indexedNext = observePlayerLight(
+      indexedRng,
+      player,
+      scout,
+      "videoAnalysis",
+      getPlayerObservationEvidence(index, player.id),
+    );
+
+    expect(indexedNext).toEqual(legacyNext);
+    expect(indexedRng.nextFloat(0, 1)).toBe(legacyRng.nextFloat(0, 1));
+
+    const datedNext = withDate(indexedNext, 1);
+    upsertObservationEvidence(index, datedNext);
+    const legacyFollowUpRng = new RNG("indexed-equivalence-follow-up");
+    const indexedFollowUpRng = new RNG("indexed-equivalence-follow-up");
+    const legacyFollowUp = observePlayerLight(
+      legacyFollowUpRng,
+      player,
+      scout,
+      "followUpSession",
+      [...history, datedNext],
+    );
+    const indexedFollowUp = observePlayerLight(
+      indexedFollowUpRng,
+      player,
+      scout,
+      "followUpSession",
+      getPlayerObservationEvidence(index, player.id),
+    );
+
+    expect(indexedFollowUp).toEqual(legacyFollowUp);
+    expect(indexedFollowUpRng.nextFloat(0, 1)).toBe(
+      legacyFollowUpRng.nextFloat(0, 1),
+    );
+  });
+
+  it("upserts observation evidence without duplicating an existing record", () => {
+    const player = makePlayer();
+    const scout = makeScout();
+    const original = withDate(observePlayerLight(
+      new RNG("indexed-upsert"),
+      player,
+      scout,
+      "academyVisit",
+      [],
+    ), 0);
+    const index = createObservationEvidenceIndex([original]);
+    const replacement = { ...original, notes: ["replacement"] };
+
+    upsertObservationEvidence(index, replacement);
+
+    expect(getPlayerObservationEvidence(index, player.id)).toEqual([replacement]);
+  });
+
   it("increments light-observation depth linearly from distinct records", () => {
     const player = makePlayer();
     const scout = makeScout();
@@ -238,6 +335,8 @@ describe("report submission invariants", () => {
 
     expect(storedReport.qualityScore).toBe(expected.quality.score);
     expect(storedReport.craftBreakdown).toEqual(expected.quality.breakdown);
+    expect(storedReport.evidenceObservationIds).toEqual([observation.id]);
+    expect(storedReport.revision).toBe(1);
     expect(Object.keys(afterFirst.reports)).toEqual([expected.report.id]);
     expect(afterFirst.scout.reportsSubmitted).toBe(scout.reportsSubmitted + 1);
     expect(afterFirst.discoveryRecords).toHaveLength(1);
@@ -311,5 +410,130 @@ describe("report submission invariants", () => {
     expect(afterSale.players).toBe(playersBeforeSale);
     expect(afterSale.playerMovementHistory).toBe(afterRetry.playerMovementHistory);
     expect(afterSale.scoutingCases[storedReport.caseId!].deliveryIds).toEqual([delivery.id]);
+  });
+
+  it("requires new evidence for revisions and never turns revisions into report-volume rewards", () => {
+    const player = makePlayer();
+    const scout = makeScout();
+    const firstObservation = withDate(observePlayerLight(
+      new RNG("accountable-report-observation-1"),
+      player,
+      scout,
+      "statsBriefing",
+      [],
+    ), 0);
+    const firstDraft = generateReportContent(player, [firstObservation], scout);
+    const summary = "An accountable judgment that changes only when the evidence changes.";
+
+    let store = {
+      gameState: {
+        seed: NEW_GAME_CONFIG.worldSeed,
+        currentWeek: 1,
+        currentSeason: 1,
+        difficulty: "normal",
+        scout,
+        players: { [player.id]: player },
+        unsignedYouth: {},
+        retiredPlayers: {},
+        observations: { [firstObservation.id]: firstObservation },
+        reports: {},
+        scoutingCases: {},
+        discoveryRecords: [],
+        clubResponses: [],
+        systemFitCache: {},
+        predictions: [],
+        inbox: [],
+        scoutingInfrastructure: {
+          dataSubscription: "none",
+          travelBudget: "economy",
+          officeEquipment: "basic",
+          investmentCosts: { weekly: 0, oneTime: 0 },
+        },
+      } as unknown as GameState,
+      selectedPlayerId: player.id,
+      currentScreen: "reportWriter",
+      pendingListingReportId: null,
+    } as unknown as GameStoreState;
+    const get = (() => store) as GetState;
+    const set = ((partial) => {
+      const update = typeof partial === "function" ? partial(store) : partial;
+      store = { ...store, ...update };
+    }) as SetState;
+    const actions = createReportActions(get, set);
+
+    actions.submitReport(
+      "recommend",
+      summary,
+      firstDraft.suggestedStrengths.slice(0, 3),
+      firstDraft.suggestedWeaknesses.slice(0, 2),
+    );
+    const afterInitial = store.gameState!;
+    const initialReport = Object.values(afterInitial.reports)[0];
+    const initialReputation = afterInitial.scout.reputation;
+    const initialVolume = afterInitial.scout.reportsSubmitted;
+
+    store = {
+      ...store,
+      currentScreen: "reportWriter",
+      gameState: { ...afterInitial, currentWeek: 2 },
+    };
+    actions.submitReport(
+      "recommend",
+      summary,
+      firstDraft.suggestedStrengths.slice(0, 3),
+      firstDraft.suggestedWeaknesses.slice(0, 2),
+    );
+    expect(Object.values(store.gameState!.reports)).toHaveLength(1);
+    expect(store.gameState!.scout.reputation).toBe(initialReputation);
+    expect(store.gameState!.scout.reportsSubmitted).toBe(initialVolume);
+    expect(store.gameState!.inbox.at(-1)?.title).toBe("Report revision needs new evidence");
+
+    const secondObservation = withDate(observePlayerLight(
+      new RNG("accountable-report-observation-2"),
+      player,
+      scout,
+      "liveMatch",
+      [firstObservation],
+    ), 1);
+    const secondDraft = generateReportContent(player, [firstObservation, secondObservation], scout);
+    store = {
+      ...store,
+      currentScreen: "reportWriter",
+      gameState: {
+        ...store.gameState!,
+        observations: {
+          ...store.gameState!.observations,
+          [secondObservation.id]: secondObservation,
+        },
+      },
+    };
+    actions.submitReport(
+      "strongRecommend",
+      `${summary} A different context strengthened the opinion.`,
+      secondDraft.suggestedStrengths.slice(0, 3),
+      secondDraft.suggestedWeaknesses.slice(0, 2),
+    );
+
+    const afterRevision = store.gameState!;
+    const revisions = Object.values(afterRevision.reports)
+      .sort((left, right) => (left.revision ?? 1) - (right.revision ?? 1));
+    expect(revisions).toHaveLength(2);
+    expect(revisions[1]).toMatchObject({
+      revision: 2,
+      supersedesReportId: initialReport.id,
+      caseId: initialReport.caseId,
+      reputationDelta: 0,
+    });
+    expect(revisions[1].evidenceObservationIds).toEqual(
+      [firstObservation.id, secondObservation.id].sort(),
+    );
+    expect(afterRevision.scout.reputation).toBe(initialReputation);
+    expect(afterRevision.scout.reportsSubmitted).toBe(initialVolume);
+    expect(afterRevision.scoutingCases[initialReport.caseId!].reportIds).toEqual(
+      revisions.map((report) => report.id),
+    );
+
+    const review = calculatePerformanceReview(afterRevision.scout, revisions, 1);
+    expect(review.reportsSubmitted).toBe(1);
   });
 });

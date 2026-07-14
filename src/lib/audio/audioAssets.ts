@@ -120,7 +120,12 @@ function pickVariant(def: AudioAssetDef): string {
 /**
  * Returns (or creates) a Howl for a specific source file.
  */
-function getOrCreateHowl(src: string, loop: boolean, volume: number): Howl {
+function getOrCreateHowl(
+  src: string,
+  loop: boolean,
+  volume: number,
+  stream: boolean,
+): Howl {
   const cached = howlCache.get(src);
   if (cached) return cached;
 
@@ -128,6 +133,11 @@ function getOrCreateHowl(src: string, loop: boolean, volume: number): Howl {
     src: [src],
     loop,
     volume,
+    // Music and ambience are multi-megabyte assets. HTML5 Audio streams them
+    // instead of forcing a full WebAudio fetch/decode on the gameplay thread.
+    // SFX stay on WebAudio for low-latency one-shot playback.
+    html5: stream,
+    preload: stream ? "metadata" : true,
     onloaderror: (_id, err) => {
       console.warn(`[AudioEngine] Failed to load ${src}:`, err);
     },
@@ -169,7 +179,7 @@ export function getHowl(
   if (channel === "sfx") {
     // SFX: pick a random variant every time for variety
     const src = pickVariant(def);
-    return getOrCreateHowl(src, false, def.volume ?? 1);
+    return getOrCreateHowl(src, false, def.volume ?? 1, false);
   }
 
   // Ambience: use a stable cache key so the same variant loops
@@ -182,6 +192,8 @@ export function getHowl(
     src: [src],
     loop: def.loop ?? false,
     volume: def.volume ?? 1,
+    html5: true,
+    preload: "metadata",
     onloaderror: (_id, err) => {
       console.warn(`[AudioEngine] Failed to load ${src}:`, err);
     },
@@ -217,6 +229,6 @@ export function pickMusicVariant(
   }
 
   const src = candidates[Math.floor(Math.random() * candidates.length)];
-  const howl = getOrCreateHowl(src, !isPlaylist, def.volume ?? 1);
+  const howl = getOrCreateHowl(src, !isPlaylist, def.volume ?? 1, true);
   return { howl, src, isPlaylist };
 }

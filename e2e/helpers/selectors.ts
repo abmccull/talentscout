@@ -14,6 +14,11 @@ export function navItem(screen: string): string {
   return `[data-tutorial-id="nav-${screen}"]`;
 }
 
+/** Generate the compact mobile workspace-navigation selector. */
+export function mobileNavItem(screen: string): string {
+  return `[data-tutorial-id="mobile-nav-${screen}"]`;
+}
+
 // ─── Screen Name → Nav Selector Map ─────────────────────────────────────────
 
 export const NAV_SCREENS = {

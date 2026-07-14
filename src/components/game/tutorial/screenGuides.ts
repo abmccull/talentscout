@@ -3,7 +3,7 @@
  *
  * Each guide is tied to a GameScreen ID and contains 1–6 steps. Steps
  * reference DOM elements via `data-tutorial-id` attributes — exactly the
- * same mechanism used by TutorialOverlay. The ScreenGuidePanel renders these
+ * same target mechanism used by MentorOverlay. ScreenGuidePanel renders these
  * as a right-edge slide-in panel rather than a spotlight overlay.
  *
  * Mentor voice: concise, practical, in-character (Margaret Chen / Tommy Reyes).

@@ -3,7 +3,7 @@
  */
 
 import { test as base, expect, type Page } from "@playwright/test";
-import { navItem, SELECTORS } from "./helpers/selectors";
+import { mobileNavItem, navItem, SELECTORS } from "./helpers/selectors";
 import {
   navigateToGame,
   injectGameState,
@@ -87,7 +87,7 @@ export class GamePage {
       if (!(await dialog.isVisible({ timeout: 500 }).catch(() => false))) return;
 
       const dismissButton = dialog.getByRole("button", {
-        name: /^(Incredible!|Continue)$/,
+        name: /^(Incredible!|Continue|Close week summary|Continue to promotion|Continue to milestone)$/,
       });
       if (!(await dismissButton.isVisible({ timeout: 500 }).catch(() => false))) return;
 
@@ -102,8 +102,23 @@ export class GamePage {
   }
 
   async navigateTo(screen: string): Promise<void> {
-    await this.page.click(navItem(screen));
-    await this.page.waitForTimeout(300);
+    const viewport = this.page.viewportSize();
+    const isMobile = Boolean(viewport && viewport.width < 768);
+    const mobileSidebarOpen = isMobile && await this.page
+      .locator('aside[aria-label="Game navigation"]')
+      .evaluate((sidebar) => sidebar.classList.contains("translate-x-0"));
+
+    await this.page.click(
+      isMobile && !mobileSidebarOpen ? mobileNavItem(screen) : navItem(screen),
+    );
+    await this.waitForScreen(screen, 60_000);
+    // `currentScreen` changes before a first-visit dynamic workspace has
+    // downloaded and committed. Wait for the route-level loading fallback to
+    // leave so callers measure and interact with the destination they named,
+    // rather than accidentally charging its load to the next click.
+    await this.page
+      .getByText(/^Loading workspace/)
+      .waitFor({ state: "hidden", timeout: 60_000 });
   }
 
   async setScreen(screen: string): Promise<void> {
@@ -293,11 +308,6 @@ export class GamePage {
     }
 
     await this.dismissBlockingDialogs();
-
-    const summaryContinue = this.page.getByRole("button", { name: /^Continue$/ });
-    if (await summaryContinue.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await summaryContinue.click();
-    }
 
     const finalScreen = await this.getCurrentScreen();
     if (finalScreen !== "calendar") {

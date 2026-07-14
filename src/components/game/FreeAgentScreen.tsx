@@ -8,6 +8,10 @@ import { useGameStore } from "@/stores/gameStore";
 import type { FreeAgent, FreeAgentNegotiation, Position } from "@/engine/core/types";
 import { getFamiliarityVisibility } from "@/engine/freeAgents/discovery";
 import {
+  getPerceivedAbility,
+  type PerceivedAbility,
+} from "@/engine/scout/perceivedAbility";
+import {
   countryKeyFromNationality,
   getCountryDisplayName,
   normalizeCountryKey,
@@ -114,6 +118,17 @@ export function FreeAgentScreen() {
   const players = gameState?.players;
   const negotiations = gameState?.freeAgentNegotiations;
   const hasClubContext = Boolean(gameState?.scout.currentClubId);
+  const observations = gameState?.observations;
+
+  const perceivedByPlayer = useMemo(() => {
+    const result = new Map<string, PerceivedAbility>();
+    const observationList = Object.values(observations ?? {});
+    for (const agent of pool?.agents ?? []) {
+      const perceived = getPerceivedAbility(observationList, agent.playerId);
+      if (perceived) result.set(agent.playerId, perceived);
+    }
+    return result;
+  }, [observations, pool]);
 
   // Build list of visible free agents
   const visibleAgents = useMemo(() => {
@@ -176,7 +191,14 @@ export function FreeAgentScreen() {
           cmp = pa.position.localeCompare(pb.position);
           break;
         case "ca":
-          cmp = pa.currentAbility - pb.currentAbility;
+          {
+            const perceivedA = perceivedByPlayer.get(pa.id)?.ca;
+            const perceivedB = perceivedByPlayer.get(pb.id)?.ca;
+            if (perceivedA === undefined && perceivedB === undefined) return 0;
+            if (perceivedA === undefined) return 1;
+            if (perceivedB === undefined) return -1;
+            cmp = perceivedA - perceivedB;
+          }
           break;
         case "wage":
           cmp = a.wageExpectation - b.wageExpectation;
@@ -189,7 +211,7 @@ export function FreeAgentScreen() {
     });
 
     return result;
-  }, [visibleAgents, search, positionFilter, sortKey, sortDir, discoveredOnly, players]);
+  }, [visibleAgents, search, positionFilter, sortKey, sortDir, discoveredOnly, players, perceivedByPlayer]);
 
   const negotiationByPlayer = useMemo(() => {
     const byPlayer = new Map<string, FreeAgentNegotiation>();
@@ -362,6 +384,7 @@ export function FreeAgentScreen() {
                   player={gameState.players[agent.playerId]}
                   scout={scout}
                   clubs={gameState.clubs}
+                  perceived={perceivedByPlayer.get(agent.playerId)}
                   negotiation={negotiationByPlayer.get(agent.playerId)}
                   canNegotiate={hasClubContext}
                   onOpenTalks={() =>
@@ -405,6 +428,7 @@ function FreeAgentRow({
   player,
   scout,
   clubs,
+  perceived,
   negotiation,
   canNegotiate,
   onOpenTalks,
@@ -417,6 +441,7 @@ function FreeAgentRow({
   scout: ReturnType<typeof useGameStore.getState>["gameState"] extends infer S
     ? S extends { scout: infer SC } ? SC : never : never;
   clubs: Record<string, { name: string }>;
+  perceived?: PerceivedAbility;
   negotiation?: FreeAgentNegotiation;
   canNegotiate: boolean;
   onOpenTalks: () => void;
@@ -460,8 +485,8 @@ function FreeAgentRow({
       </td>
       <td className="px-4 py-3 text-zinc-400">{player.age}</td>
       <td className="px-4 py-3">
-        {showDetails ? (
-          <QualityBar ca={player.currentAbility} />
+        {showDetails && perceived ? (
+          <QualityBar perceived={perceived} />
         ) : (
           <span className="text-xs text-zinc-600">—</span>
         )}
@@ -538,20 +563,26 @@ function FreeAgentRow({
   );
 }
 
-function QualityBar({ ca }: { ca: number }) {
-  const pct = Math.min(100, (ca / 200) * 100);
+function QualityBar({ perceived }: { perceived: PerceivedAbility }) {
+  const pct = Math.min(100, (perceived.ca / 5) * 100);
   const color =
-    ca >= 75 ? "bg-emerald-500" :
-    ca >= 60 ? "bg-blue-500" :
-    ca >= 45 ? "bg-amber-500" :
+    perceived.ca >= 4 ? "bg-emerald-500" :
+    perceived.ca >= 3 ? "bg-blue-500" :
+    perceived.ca >= 2 ? "bg-amber-500" :
     "bg-zinc-500";
+  const estimate = perceived.caLow === perceived.caHigh
+    ? `${perceived.ca.toFixed(1)}\u2605`
+    : `${perceived.caLow.toFixed(1)}\u2013${perceived.caHigh.toFixed(1)}\u2605`;
 
   return (
-    <div className="flex items-center gap-2">
+    <div
+      className="flex items-center gap-2"
+      title={`Observed estimate (${Math.round(perceived.caConfidence * 100)}% confidence)`}
+    >
       <div className="h-2 w-16 overflow-hidden rounded-full bg-zinc-800">
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-xs text-zinc-400">{ca}</span>
+      <span className="text-xs text-zinc-400">{estimate}</span>
     </div>
   );
 }

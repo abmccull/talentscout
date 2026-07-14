@@ -394,6 +394,10 @@ function generateBidsForListing(
   clientRelationships: ClientRelationship[],
   guaranteeBid: boolean = false,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+  marketContext: {
+    valueMultiplier: number;
+    demandMultiplier: number;
+  } = { valueMultiplier: 1, demandMultiplier: 1 },
 ): { bids: MarketplaceBid[]; inboxMessages: InboxMessage[] } {
   const newBids: MarketplaceBid[] = [];
   const messages: InboxMessage[] = [];
@@ -461,7 +465,8 @@ function generateBidsForListing(
       affordability *
       scoutRep *
       marketTemp *
-      listingAgeFactor;
+      listingAgeFactor *
+      marketContext.demandMultiplier;
 
     if (!isGuaranteedFirstBid && !rng.chance(Math.min(0.6, probability))) continue;
 
@@ -480,11 +485,11 @@ function generateBidsForListing(
 
     let amount = Math.round(
       listing.price * needMult * budgetMult * priorityMult * competitionMult
-      * repeatBuyerMult * accuracyMult * noise,
+      * repeatBuyerMult * accuracyMult * noise * marketContext.valueMultiplier,
     );
     amount = Math.max(
-      Math.round(listing.price * 0.6),
-      Math.min(Math.round(listing.price * 2.5), amount),
+      Math.round(listing.price * 0.6 * marketContext.valueMultiplier),
+      Math.min(Math.round(listing.price * 2.5 * marketContext.valueMultiplier), amount),
     );
 
     const bidDurationWeeks = rng.nextInt(2, 3);
@@ -506,6 +511,8 @@ function generateBidsForListing(
     if (repeatBuyerMult > 1.0) reasons.push(`repeat buyer (${reportsDelivered} prior)`);
     if (accuracyMult > 1.05) reasons.push(`accuracy premium`);
     if (competitionMult > 1.0) reasons.push(`${listing.bids.filter((b) => b.status === "pending").length} competing bids`);
+    if (marketContext.valueMultiplier > 1.01) reasons.push("strong seasonal demand");
+    if (marketContext.valueMultiplier < 0.99) reasons.push("cautious seasonal market");
     const bidReason = reasons.join(" · ");
 
     const bid: MarketplaceBid = {
@@ -560,11 +567,13 @@ function generateBidsForListing(
         if (needMatchScore < 70) continue;
 
         // 8% base chance
-        if (!rng.chance(0.08)) continue;
+        if (!rng.chance(Math.min(0.16, 0.08 * marketContext.demandMultiplier))) continue;
 
         // Upgrade price: 2-3x the listing price
         const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
-        const upgradeAmount = Math.round(listing.price * upgradeMult);
+        const upgradeAmount = Math.round(
+          listing.price * upgradeMult * marketContext.valueMultiplier,
+        );
         const bidDurationWeeks = rng.nextInt(2, 3);
         const bidExpiry = addGameWeeksWithSeasonLength(
           { week, season },
@@ -621,6 +630,10 @@ export function processMarketplaceBids(
   season: number,
   unsignedYouth: Record<string, UnsignedYouth> = {},
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+  marketContext: {
+    valueMultiplier: number;
+    demandMultiplier: number;
+  } = { valueMultiplier: 1, demandMultiplier: 1 },
 ): { finances: FinancialRecord; inboxMessages: InboxMessage[] } {
   let updatedFinances = finances;
   const allInboxMessages: InboxMessage[] = [];
@@ -653,6 +666,7 @@ export function processMarketplaceBids(
       updatedFinances.clientRelationships,
       firstBidGuaranteeAvailable,
       seasonLength,
+      marketContext,
     );
 
     if (newBids.length > 0) {

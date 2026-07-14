@@ -57,6 +57,113 @@ test.describe("Youth geography and travel", () => {
     gamePage.expectNoConsoleErrors();
   });
 
+  test("country browser exposes generated destinations, world tier, and earned local intelligence", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      currentSeason: 1,
+      countries: ["england", "nigeria"],
+      scout: {
+        careerTier: 2,
+        primarySpecialization: "youth",
+        careerPath: "independent",
+      },
+    });
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      store.getState().loadGame({
+        ...state,
+        regionalKnowledge: {
+          ...state.regionalKnowledge,
+          nigeria: {
+            ...state.regionalKnowledge.nigeria,
+            countryId: "nigeria",
+            knowledgeLevel: 38,
+            discoveredLeagues: ["hl_nga_npl"],
+            culturalInsights: [],
+            localContacts: ["local-contact-nigeria"],
+            scoutingEfficiency: 0.88,
+          },
+        },
+      });
+    });
+
+    await gamePage.navigateTo("internationalView");
+    await gamePage.page.getByRole("button", { name: /Browse countries/i }).click();
+    const browser = gamePage.page.getByTestId("country-browser");
+    await expect(browser).toBeVisible();
+    await expect(browser.getByRole("button", { name: /England, Full world/i })).toBeVisible();
+    const nigeria = browser.getByRole("button", { name: /Nigeria, Talent pool/i });
+    await expect(nigeria).toBeVisible();
+
+    await nigeria.click();
+    const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });
+    await expect(dossier).toContainText("World coverage");
+    await expect(dossier).toContainText("Talent pool");
+    await expect(dossier).toContainText("Knowledge");
+    await expect(dossier).toContainText("38/100");
+    await expect(dossier).toContainText("Nigeria National League");
+    const dossierAxe = await new AxeBuilder({ page: gamePage.page })
+      .include('[role="dialog"]')
+      .analyze();
+    expect(
+      dossierAxe.violations.filter(
+        (violation) => violation.impact === "critical" || violation.impact === "serious",
+      ),
+    ).toEqual([]);
+    await gamePage.page.keyboard.press("Escape");
+    await expect(dossier).toBeHidden();
+    await expect(nigeria).toBeFocused();
+
+    const search = browser.getByRole("textbox", { name: "Search generated countries" });
+    await search.fill("england");
+    await expect(browser.getByRole("button", { name: /England, Full world/i })).toBeVisible();
+    await expect(nigeria).toHaveCount(0);
+    gamePage.expectNoConsoleErrors();
+  });
+
+  test("country browser and dossier remain operable at a phone viewport", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.page.setViewportSize({ width: 390, height: 844 });
+    await gamePage.injectState({
+      currentWeek: 1,
+      currentSeason: 1,
+      countries: ["england", "nigeria"],
+      scout: {
+        careerTier: 2,
+        primarySpecialization: "youth",
+        careerPath: "independent",
+      },
+    });
+
+    await gamePage.navigateTo("internationalView");
+    const browserTrigger = gamePage.page.getByRole("button", { name: /Browse countries/i });
+    await expect(browserTrigger).toBeVisible();
+    await browserTrigger.click();
+
+    const browser = gamePage.page.getByTestId("country-browser");
+    await expect(browser).toBeVisible();
+    const browserBox = await browser.boundingBox();
+    expect(browserBox?.x).toBeGreaterThanOrEqual(0);
+    expect(browserBox?.width).toBeLessThanOrEqual(390);
+
+    const nigeria = browser.getByRole("button", { name: /Nigeria, Talent pool/i });
+    await nigeria.click();
+    const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });
+    await expect(dossier).toBeVisible();
+    const dossierBox = await dossier.boundingBox();
+    expect(dossierBox?.x).toBeGreaterThanOrEqual(0);
+    expect((dossierBox?.x ?? 0) + (dossierBox?.width ?? 0)).toBeLessThanOrEqual(390);
+    expect(dossierBox?.y).toBeGreaterThanOrEqual(0);
+    expect((dossierBox?.y ?? 0) + (dossierBox?.height ?? 0)).toBeLessThanOrEqual(844);
+
+    await gamePage.page.keyboard.press("Escape");
+    await expect(dossier).toBeHidden();
+    await expect(nigeria).toBeFocused();
+    gamePage.expectNoConsoleErrors();
+  });
+
   test("international travel is visible, funded, scheduled, and becomes the effective location", async ({ gamePage }) => {
     test.setTimeout(120_000);
     await gamePage.goto();

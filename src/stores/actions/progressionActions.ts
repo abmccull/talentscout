@@ -7,6 +7,7 @@
  * specialization unlocks, international travel, and narrative events.
  */
 import type { GetState, SetState } from "./types";
+import { clearTerminalNarrativeInboxActions } from "./narrativeInboxState";
 import type {
   GameState,
   InboxMessage,
@@ -29,6 +30,11 @@ import {
 } from "@/engine/career/index";
 import { applyClubEmploymentTransition } from "@/engine/career/transitions";
 import {
+  chooseCareerRecoveryPlan,
+  isCareerRecoveryBlockingOffers,
+  type CareerRecoveryPlanId,
+} from "@/engine/career/recovery";
+import {
   calculateSigningBonus,
   getActiveEquipmentBonuses,
   applyBalanceTransaction,
@@ -36,8 +42,10 @@ import {
 import {
   bookTravel,
   getTravelDuration,
-  getTravelSlots,
   getScoutHomeCountry as getScoutHome,
+  isInternationalAssignmentEligibleCountry,
+  isTravelEligibleCountry,
+  getRegionalTravelQuote,
 } from "@/engine/world/index";
 import { addActivity, canAddActivity } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameLoop";
@@ -506,9 +514,38 @@ export function createProgressionActions(get: GetState, set: SetState) {
     },
     // ── Career ────────────────────────────────────────────────────────────────
 
+    chooseCareerRecovery: (planId: CareerRecoveryPlanId) => {
+      const { gameState } = get();
+      if (!gameState) return;
+      const result = chooseCareerRecoveryPlan(gameState, planId);
+      if (result.accepted) {
+        set({ gameState: result.state });
+        return;
+      }
+      set({
+        gameState: {
+          ...gameState,
+          inbox: [
+            ...gameState.inbox,
+            {
+              id: `career-recovery-rejected:s${gameState.currentSeason}w${gameState.currentWeek}:${planId}`,
+              week: gameState.currentWeek,
+              season: gameState.currentSeason,
+              type: "feedback",
+              title: "Recovery route unavailable",
+              body: result.reason ?? "That recovery route can no longer be selected.",
+              read: false,
+              actionRequired: false,
+            },
+          ],
+        },
+      });
+    },
+
     acceptJob: (offerId: string) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
+      if (isCareerRecoveryBlockingOffers(gameState)) return;
       const offer = gameState.jobOffers.find((o) => o.id === offerId);
       if (!offer) return;
       if (!canAcceptJobOffer(offer, gameState.currentWeek, gameState.currentSeason)) {
@@ -770,11 +807,16 @@ export function createProgressionActions(get: GetState, set: SetState) {
       const { gameState } = get();
       if (!gameState) return false;
       if (gameState.scout.travelBooking) return false;
+      // A country name in a static catalogue or stale legacy save is not
+      // enough: travel is permitted only when the current world actually
+      // contains a usable generated destination.
+      if (!isTravelEligibleCountry(gameState, country)) return false;
 
       const homeCountry = getScoutHome(gameState.scout);
+      const regionalQuote = getRegionalTravelQuote(gameState, country);
       const duration = Math.max(
         1,
-        options?.duration ?? getTravelDuration(homeCountry, country),
+        options?.duration ?? regionalQuote.duration ?? getTravelDuration(homeCountry, country),
       );
       const departureWeek = gameState.currentWeek + 1;
 
@@ -783,7 +825,8 @@ export function createProgressionActions(get: GetState, set: SetState) {
         : undefined;
       const travelSlots = Math.max(
         1,
-        getTravelSlots(homeCountry, country) - (equipmentBonuses?.travelSlotReduction ?? 0),
+        regionalQuote.slots
+          - (equipmentBonuses?.travelSlotReduction ?? 0),
       );
       const travelActivity: Activity = {
         type: "internationalTravel",
@@ -801,12 +844,16 @@ export function createProgressionActions(get: GetState, set: SetState) {
         travelStartIndex,
       );
 
+      const quotedTravelCost = Math.round(
+        regionalQuote.cost * (1 - (equipmentBonuses?.travelCostReduction ?? 0)),
+      );
       const updatedScout = bookTravel(
         gameState.scout,
         country,
         departureWeek,
         duration,
         getSeasonLength(gameState.fixtures, gameState.currentSeason),
+        quotedTravelCost,
       );
       const travelCost = updatedScout.travelBooking?.cost ?? 0;
       if ((gameState.finances?.balance ?? Infinity) < travelCost) return false;
@@ -820,6 +867,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
         options?.assignmentId
         && (
           !acceptedAssignment
+          || !isInternationalAssignmentEligibleCountry(gameState, acceptedAssignment.country)
           || normalizeCountryKey(acceptedAssignment.country) !== normalizeCountryKey(country)
         )
       ) {
@@ -878,7 +926,14 @@ export function createProgressionActions(get: GetState, set: SetState) {
       const event = gameState.narrativeEvents.find((e) => e.id === eventId);
       const updatedEvents = acknowledgeEvent(gameState.narrativeEvents, eventId);
       // A5: Apply consequences if the event has them and no choices (auto-apply on acknowledge)
-      let updatedState: GameState = { ...gameState, narrativeEvents: updatedEvents };
+      let updatedState: GameState = {
+        ...gameState,
+        narrativeEvents: updatedEvents,
+        inbox: clearTerminalNarrativeInboxActions(
+          gameState.inbox,
+          updatedEvents,
+        ),
+      };
       if (event?.consequences && event.consequences.length > 0 && (!event.choices || event.choices.length === 0)) {
         updatedState = applyConsequences(updatedState, event.consequences);
       }
@@ -1158,6 +1213,14 @@ export function createProgressionActions(get: GetState, set: SetState) {
         event,
         choiceIndex,
       );
+
+      const repairedInbox = clearTerminalNarrativeInboxActions(
+        finalState.inbox,
+        finalState.narrativeEvents,
+      );
+      if (repairedInbox !== finalState.inbox) {
+        finalState = { ...finalState, inbox: repairedInbox };
+      }
 
       set({ gameState: finalState });
     },

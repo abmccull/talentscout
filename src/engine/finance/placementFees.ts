@@ -11,6 +11,7 @@ import type {
   Scout,
   ConvictionLevel,
 } from "../core/types";
+import { selectLatestReportsByCase } from "../reports/reportAccountability";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -141,9 +142,16 @@ export function checkPlacementFeeEligibility(
   reports: Record<string, ScoutReport>,
   scoutId: string,
 ): ScoutReport | undefined {
-  return Object.values(reports).find(
-    (r) => r.playerId === transferPlayerId && r.scoutId === scoutId,
-  );
+  return selectLatestReportsByCase(
+    Object.values(reports).filter(
+      (report) => report.playerId === transferPlayerId && report.scoutId === scoutId,
+    ),
+  ).sort((left, right) =>
+    right.submittedSeason - left.submittedSeason
+    || right.submittedWeek - left.submittedWeek
+    || (right.revision ?? 1) - (left.revision ?? 1)
+    || right.id.localeCompare(left.id)
+  )[0];
 }
 
 /**

@@ -27,7 +27,11 @@ import type {
   StandingEntry,
   InboxMessage,
 } from "@/engine/core/types";
-import { buildStandings } from "@/engine/core/standings";
+import {
+  buildStandings,
+  buildStandingsByLeague,
+  type StandingsByLeague,
+} from "@/engine/core/standings";
 
 // =============================================================================
 // PUBLIC TYPES
@@ -96,13 +100,15 @@ function sortStandings(entries: StandingEntry[]): StandingEntry[] {
 function getLeagueStandingsSorted(
   league: League,
   state: GameState,
+  standingsByLeague?: StandingsByLeague,
 ): StandingEntry[] {
-  const standingsMap = buildStandings(
-    league.id,
-    state.fixtures,
-    state.clubs,
-    state.currentSeason,
-  );
+  const standingsMap = standingsByLeague?.[league.id]
+    ?? buildStandings(
+      league.id,
+      state.fixtures,
+      state.clubs,
+      state.currentSeason,
+    );
   return sortStandings(Object.values(standingsMap));
 }
 
@@ -155,6 +161,11 @@ export function processRelegationPromotion(
   const events: RelegationEvent[] = [];
   const flaggedPlayerIds: string[] = [];
   const messages: InboxMessage[] = [];
+  const standingsByLeague = buildStandingsByLeague(
+    state.fixtures,
+    state.clubs,
+    state.currentSeason,
+  );
 
   const upperLeagues = Object.values(state.leagues)
     .filter((league) =>
@@ -175,8 +186,8 @@ export function processRelegationPromotion(
     );
     if (!lowerLeague) continue;
 
-    const upperStandings = getLeagueStandingsSorted(upperLeague, state);
-    const lowerStandings = getLeagueStandingsSorted(lowerLeague, state);
+    const upperStandings = getLeagueStandingsSorted(upperLeague, state, standingsByLeague);
+    const lowerStandings = getLeagueStandingsSorted(lowerLeague, state, standingsByLeague);
     // Secondary talent-pool leagues deliberately have no fixtures. They must
     // not move clubs based on an all-zero alphabetical pseudo-table.
     if (
@@ -381,6 +392,7 @@ export function applyRelegationResult(
 export function getStandingsPriceModifier(
   clubId: string,
   state: GameState,
+  standingsByLeague?: StandingsByLeague,
 ): number {
   const club = state.clubs[clubId];
   if (!club) return 1.0;
@@ -388,7 +400,7 @@ export function getStandingsPriceModifier(
   const league = state.leagues[club.leagueId];
   if (!league) return 1.0;
 
-  const standings = getLeagueStandingsSorted(league, state);
+  const standings = getLeagueStandingsSorted(league, state, standingsByLeague);
   if (standings.length === 0) return 1.0;
 
   const position = standings.findIndex((s) => s.clubId === clubId);
