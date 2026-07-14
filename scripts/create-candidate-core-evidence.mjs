@@ -61,11 +61,14 @@ const generatedOutputPrefixes = [
   "playwright-report/",
   "test-results/",
 ];
-const finalStatusLines = execFileSync(
+const finalStatusOutput = execFileSync(
   "git",
   ["status", "--porcelain", "--untracked-files=all"],
   { cwd: root, encoding: "utf8" },
-).trim().split(/\r?\n/).filter(Boolean);
+);
+// Do not trim porcelain output: a leading space is the worktree status column.
+// Removing it corrupts the first path (for example, `artifacts` -> `rtifacts`).
+const finalStatusLines = finalStatusOutput.split(/\r?\n/).filter(Boolean);
 const changedPaths = finalStatusLines.flatMap((line) =>
   line.slice(3).split(" -> ").map((path) => path.replaceAll("\\", "/"))
 );
