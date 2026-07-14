@@ -584,14 +584,11 @@ async function offlineProbe(page) {
 
 async function restoreLoadFromMainMenu(page) {
   await skipSplash(page);
-  const continueButton = page.getByRole("button", { name: "Continue", exact: true });
+  const continueButton = page.getByRole("button", {
+    name: /^Continue(?: from (?:verified backup|cloud recovery))?$/,
+  });
   await continueButton.waitFor({ timeout: 30_000 });
-  await page.waitForFunction(() => {
-    const button = Array.from(document.querySelectorAll("button"))
-      .find((candidate) => candidate.textContent?.trim() === "Continue");
-    return button && !button.disabled;
-  }, { timeout: 30_000 });
-  await continueButton.click();
+  await continueButton.click({ timeout: 30_000 });
   await page.getByRole("button", { name: "Settings", exact: true }).waitFor({
     timeout: 30_000,
   });
