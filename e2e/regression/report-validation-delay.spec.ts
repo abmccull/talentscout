@@ -112,7 +112,7 @@ test.describe("Delayed scout report validation regression", () => {
     ).toBeVisible();
     await expect(gamePage.page.getByText(/Validated accuracy:/)).toHaveCount(0);
 
-    const validation = await gamePage.page.evaluate(() => {
+    const validation = await gamePage.page.evaluate(async () => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
       const report = Object.values(state.reports).at(-1) as any;
@@ -197,7 +197,7 @@ test.describe("Delayed scout report validation regression", () => {
       // Use the canonical Early Access week path. Batch advance intentionally
       // skips store-level season review/validation orchestration.
       store.getState().startWeekSimulation();
-      store.getState().fastForwardWeek();
+      await store.getState().fastForwardWeek();
 
       const after = store.getState().gameState;
       const validatedReport = after.reports[report.id];

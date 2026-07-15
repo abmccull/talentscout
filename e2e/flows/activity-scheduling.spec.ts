@@ -105,10 +105,9 @@ test.describe("Activity Scheduling", () => {
     });
     await gamePage.page.waitForTimeout(200);
 
-    await gamePage.page.evaluate(() => {
-      (window as any).__GAME_STORE__.getState().fastForwardWeek();
+    await gamePage.page.evaluate(async () => {
+      await (window as any).__GAME_STORE__.getState().fastForwardWeek();
     });
-    await gamePage.page.waitForTimeout(300);
 
     // After fast forward, simulation should be done or week advanced
     const simDone = await gamePage.page.evaluate(() => {

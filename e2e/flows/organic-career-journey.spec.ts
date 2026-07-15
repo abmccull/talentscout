@@ -80,11 +80,11 @@ async function authorReportsToCount(page: Page, targetCount: number) {
 }
 
 async function advanceCanonicalEmptyWeek(page: Page) {
-  const result = await page.evaluate(() => {
+  const result = await page.evaluate(async () => {
     const store = (window as any).__GAME_STORE__;
     const before = store.getState().gameState;
     store.getState().startWeekSimulation();
-    store.getState().fastForwardWeek();
+    await store.getState().fastForwardWeek();
     const postSimulationStore = store.getState();
     const after = postSimulationStore.gameState;
     return {
