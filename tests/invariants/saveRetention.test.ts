@@ -863,6 +863,8 @@ describe("long-career save retention", () => {
               injury("closed-old", 2),
               activeHistoricalInjury,
               injury("review-window", 6),
+              injury("recent-a", 7),
+              injury("recent-b", 7),
               injury("current", 8),
             ],
             totalWeeksMissed: 20,
@@ -878,7 +880,8 @@ describe("long-career save retention", () => {
 
     expect(retained.injuries.map((entry) => entry.id)).toEqual([
       "active-historical",
-      "review-window",
+      "recent-a",
+      "recent-b",
       "current",
     ]);
     expect(retained.totalWeeksMissed).toBe(20);

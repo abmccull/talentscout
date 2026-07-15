@@ -45,6 +45,8 @@ export const PLAYER_INJURY_DETAIL_RETENTION_SEASONS = 3;
  * careers the scout has actually touched.
  */
 export const BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT = 3;
+/** Background injury detail supports recent-risk mechanics without becoming a career log. */
+export const BACKGROUND_PLAYER_INJURY_HISTORY_LIMIT = 3;
 
 export const SAVE_RETENTION_COLLECTION_KEYS = [
   "players",
@@ -238,13 +240,13 @@ function projectWorldHistoryMovementSummaries(
 function compactPlayerRecord(
   player: Player,
   currentSeason: number,
-  preserveFullDevelopmentHistory = false,
+  preserveFullDossierHistory = false,
 ): Player {
   const compactedDevelopmentHistory = player.developmentHistory
     ? compactPlayerDevelopmentHistory(player.developmentHistory)
     : undefined;
   const developmentHistory = compactedDevelopmentHistory
-    && !preserveFullDevelopmentHistory
+    && !preserveFullDossierHistory
     && compactedDevelopmentHistory.length > BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT
     ? compactedDevelopmentHistory.slice(-BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT)
     : compactedDevelopmentHistory;
@@ -253,9 +255,20 @@ function compactPlayerRecord(
     1,
     currentSeason - PLAYER_INJURY_DETAIL_RETENTION_SEASONS + 1,
   );
-  const retainedInjuries = injuryHistory?.injuries.filter((injury) =>
+  const injuriesInConsequenceWindow = injuryHistory?.injuries.filter((injury) =>
     injury.occurredSeason >= injuryCutoff || injury.id === player.currentInjury?.id
   );
+  const recentBackgroundInjuries = injuriesInConsequenceWindow
+    && !preserveFullDossierHistory
+    && injuriesInConsequenceWindow.length > BACKGROUND_PLAYER_INJURY_HISTORY_LIMIT
+    ? injuriesInConsequenceWindow.slice(-BACKGROUND_PLAYER_INJURY_HISTORY_LIMIT)
+    : injuriesInConsequenceWindow;
+  const activeInjury = player.currentInjury;
+  const retainedInjuries = activeInjury
+    && recentBackgroundInjuries
+    && !recentBackgroundInjuries.some((injury) => injury.id === activeInjury.id)
+    ? [activeInjury, ...recentBackgroundInjuries]
+    : recentBackgroundInjuries;
   const compactedInjuryHistory = injuryHistory && retainedInjuries
     ? retainedInjuries.length === injuryHistory.injuries.length
       ? injuryHistory

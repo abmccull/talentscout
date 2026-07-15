@@ -62,6 +62,52 @@ function league(id: string, country: string, clubIds: string[]): League {
 }
 
 describe("AI transfer destination index", () => {
+  it("reserves same-tick squad capacity before transfer movements commit", () => {
+    const source = player("source", "source-club", "CM");
+    const destinationPlayers = Array.from({ length: 29 }, (_, index) =>
+      player(`destination-${index}`, "destination", "CM")
+    );
+    const state = {
+      currentSeason: 1,
+      players: Object.fromEntries([
+        [source.id, source],
+        ...destinationPlayers.map((candidate) => [candidate.id, candidate] as const),
+      ]),
+      clubs: {
+        "source-club": club("source-club", "england", 55, [source.id]),
+        destination: club(
+          "destination",
+          "spain",
+          55,
+          destinationPlayers.map((candidate) => candidate.id),
+        ),
+      },
+      leagues: {
+        england: league("england", "England", ["source-club"]),
+        spain: league("spain", "Spain", ["destination"]),
+      },
+    } as unknown as GameState;
+    const index = createTransferDestinationIndex(state);
+
+    expect(findTransferDestination(
+      source,
+      state.clubs["source-club"],
+      state,
+      new RNG("first-arrival"),
+      index,
+    )?.id).toBe("destination");
+
+    index.reservedIncomingByClub.set("destination", 1);
+
+    expect(findTransferDestination(
+      source,
+      state.clubs["source-club"],
+      state,
+      new RNG("second-arrival"),
+      index,
+    )).toBeNull();
+  });
+
   it("preserves weighted destination and RNG position while indexing squad roles once", () => {
     const players = {
       source: player("source", "source-club", "CM"),

@@ -1475,6 +1475,8 @@ function isTransferEligible(player: Player, currentSeason: number): boolean {
 export interface TransferDestinationIndex {
   clubs: readonly Club[];
   primaryPositionCountByClub: ReadonlyMap<string, ReadonlyMap<Position, number>>;
+  /** Same-tick arrivals reserve capacity before authoritative movement commit. */
+  reservedIncomingByClub: Map<string, number>;
 }
 
 /** Immutable club facts reused by every transfer candidate in one tick. */
@@ -1490,7 +1492,7 @@ export function createTransferDestinationIndex(state: GameState): TransferDestin
     }
     primaryPositionCountByClub.set(club.id, positionCounts);
   }
-  return { clubs, primaryPositionCountByClub };
+  return { clubs, primaryPositionCountByClub, reservedIncomingByClub: new Map() };
 }
 
 export function findTransferDestination(
@@ -1507,7 +1509,8 @@ export function findTransferDestination(
   const candidates = (index?.clubs ?? Object.values(state.clubs)).filter((club) => {
     if (club.id === fromClub.id) return false;
     if (club.budget < player.marketValue * 0.5) return false;
-    if (club.playerIds.length >= 30) return false;
+    const reservedIncoming = index?.reservedIncomingByClub.get(club.id) ?? 0;
+    if (club.playerIds.length + reservedIncoming >= 30) return false;
     const repDiff = Math.abs(club.reputation - targetReputation);
     return repDiff <= 20; // Only clubs within 20 reputation points
   });
@@ -1600,6 +1603,10 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     if (destination.budget - alreadySpent < fee) continue;
 
     spentBudget.set(destination.id, alreadySpent + fee);
+    destinationIndex.reservedIncomingByClub.set(
+      destination.id,
+      (destinationIndex.reservedIncomingByClub.get(destination.id) ?? 0) + 1,
+    );
 
     transfers.push({
       playerId: player.id,
