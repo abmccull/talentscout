@@ -22,6 +22,26 @@ import { generatePlayer } from "@/engine/players/generation";
 import type { CountryData } from "@/data/types";
 import { normalizeCountryKey } from "@/lib/country";
 
+/**
+ * Selected senior and academy identities simulated in full for one club.
+ * The wider football pyramid is abstracted; annual intakes refill openings
+ * instead of expanding every detailed roster forever.
+ */
+export const SIMULATED_CLUB_PLAYER_CAP = 25;
+
+export function limitAcademyIntakeToClubCapacity(
+  club: Club,
+  intake: readonly Player[],
+): Player[] {
+  const detailedPlayerIds = new Set([
+    ...club.playerIds,
+    ...(club.academyPlayerIds ?? []),
+    ...(club.loanedOutPlayerIds ?? []),
+  ]);
+  const availablePlaces = Math.max(0, SIMULATED_CLUB_PLAYER_CAP - detailedPlayerIds.size);
+  return intake.slice(0, availablePlaces);
+}
+
 // =============================================================================
 // INTERNAL TYPES
 // =============================================================================

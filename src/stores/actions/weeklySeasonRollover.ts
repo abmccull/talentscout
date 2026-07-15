@@ -51,7 +51,11 @@ import {
 import { trackPostTransfer } from "@/engine/reports/reporting";
 import { ensureSeasonFixtures } from "@/engine/world/fixtures";
 import { getWorldConditionModifiers } from "@/engine/world";
-import { generateAcademyIntake, generateRegionalYouth } from "@/engine/youth/generation";
+import {
+  generateAcademyIntake,
+  generateRegionalYouth,
+  limitAcademyIntakeToClubCapacity,
+} from "@/engine/youth/generation";
 import { generateSeasonTournaments } from "@/engine/youth";
 import { getCountryDataSync, getSecondaryCountries } from "@/data";
 import { normalizeCountryKey } from "@/lib/country";
@@ -721,11 +725,14 @@ export function processWeeklySeasonRollover(
           return league?.country.toLowerCase() === countryData.name.toLowerCase();
         });
         for (const club of countryClubs) {
-          const intake = generateAcademyIntake(
-            youthRng,
+          const intake = limitAcademyIntakeToClubCapacity(
             club,
-            countryData,
-            newState.currentSeason,
+            generateAcademyIntake(
+              youthRng,
+              club,
+              countryData,
+              newState.currentSeason,
+            ),
           );
           newAcademyPlayers.push(...intake);
         }
