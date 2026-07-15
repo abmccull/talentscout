@@ -8,6 +8,7 @@ import type {
 } from "@/engine/core/types";
 import {
   compactLongCareerHistory,
+  collectCausallyReferencedPlayerIds,
   findSaveRetentionReferenceViolations,
   measureSaveRetentionFootprint,
   migrateHistoricalFixtureRetention,
@@ -68,6 +69,56 @@ function state(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("long-career save retention", () => {
+  it("does not mistake background world traffic for permanent scout causality", () => {
+    const players = Object.fromEntries(
+      ["background-loan", "scout-loan", "old-news", "recent-action"].map((id) => [
+        id,
+        { id, recentMatchRatings: [] } as unknown as Player,
+      ]),
+    );
+    const sample = state({
+      currentSeason: 8,
+      players,
+      activeLoans: [
+        { id: "ai-loan", playerId: "background-loan" },
+        { id: "authored-loan", playerId: "scout-loan", scoutId: "scout" },
+      ] as GameState["activeLoans"],
+      inbox: [
+        {
+          id: "old-news",
+          week: 1,
+          season: 3,
+          type: "news",
+          title: "Old news",
+          body: "Historical notification",
+          read: false,
+          actionRequired: true,
+          relatedId: "old-news",
+          relatedEntityType: "player",
+        },
+        {
+          id: "recent-action",
+          week: 1,
+          season: 8,
+          type: "event",
+          title: "Recent action",
+          body: "A live decision",
+          read: false,
+          actionRequired: true,
+          relatedId: "recent-action",
+          relatedEntityType: "player",
+        },
+      ],
+    });
+
+    const causal = collectCausallyReferencedPlayerIds(sample);
+
+    expect(causal.has("background-loan")).toBe(false);
+    expect(causal.has("old-news")).toBe(false);
+    expect(causal.has("scout-loan")).toBe(true);
+    expect(causal.has("recent-action")).toBe(true);
+  });
+
   it("keeps active-season details and every older fixture still referenced by durable evidence", () => {
     const retained = retainRequiredFixtureHistory(state());
 
@@ -205,15 +256,6 @@ describe("long-career save retention", () => {
         fromClubId: "home",
         toClubId: "loan-club",
       },
-      {
-        id: "archived-unlisted",
-        playerId: "unlisted-player",
-        type: "permanentTransfer",
-        week: 2,
-        fromClubId: "old-club",
-        toClubId: "new-club",
-        fee: 2_000_000,
-      },
     ]);
     expect(compacted.playerMovementHistory.map((movement) => movement.id).sort()).toEqual([
       "archived-causal",
@@ -222,6 +264,63 @@ describe("long-career save retention", () => {
     expect(JSON.stringify(archive.playerMovementSummaries)).not.toContain("Legacy reason");
     expect(JSON.stringify(archive.playerMovementSummaries)).not.toContain("loan-detail");
     expect(findSaveRetentionReferenceViolations(compacted)).toEqual([]);
+    expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
+  });
+
+  it("retires old background movement summaries only after safe archive projection", () => {
+    const legacy = state({
+      currentSeason: 10,
+      reports: {
+        causal: {
+          id: "causal-report",
+          playerId: "causal-player",
+        } as GameState["reports"][string],
+      },
+      playerMovementHistory: [
+        {
+          id: "causal-transfer",
+          playerId: "causal-player",
+          type: "permanentTransfer",
+          week: 2,
+          season: 1,
+        },
+        {
+          id: "background-transfer",
+          playerId: "background-player",
+          type: "permanentTransfer",
+          week: 3,
+          season: 1,
+        },
+      ],
+      worldHistory: {
+        version: 1,
+        latestRecordedSeason: 1,
+        seasons: [{
+          season: 1,
+          recordedAfterTotalWeeks: 46,
+          leagues: [],
+          clubs: [],
+          players: [{
+            playerId: "causal-player",
+            age: 20,
+            position: "CM",
+            currentAbility: 100,
+            marketValue: 1_000_000,
+            status: "contracted",
+            movementEventIds: ["causal-transfer"],
+          }],
+        }],
+      },
+    });
+
+    const compacted = compactLongCareerHistory(legacy);
+
+    expect(compacted.worldHistory?.seasons[0].playerMovementSummaries?.map(
+      (summary) => summary.id,
+    )).toEqual(["causal-transfer"]);
+    expect(compacted.playerMovementHistory.map((movement) => movement.id)).toEqual([
+      "causal-transfer",
+    ]);
     expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
   });
 
@@ -254,6 +353,37 @@ describe("long-career save retention", () => {
 
     expect(retained).toHaveLength(WORLD_HISTORY_PLAYER_LIMIT);
     expect(retained.some((player) => player.playerId === causalId)).toBe(true);
+  });
+
+  it("supports a smaller historic public archive without dropping causal careers", () => {
+    const players = Array.from(
+      { length: 12 },
+      (_, index): PlayerSeasonHistory => ({
+        playerId: `player-${index}`,
+        age: 24,
+        position: "CM",
+        currentAbility: 100 + index,
+        marketValue: 1_000_000 + index,
+        status: "contracted",
+        movementEventIds: [],
+        performance: {
+          appearances: 20,
+          starts: 18,
+          minutesPlayed: 1_600,
+          appearancesWithoutMinutes: 0,
+          averageRating: 6 + index / 10,
+          goals: index,
+          assists: 0,
+          cleanSheets: 0,
+        },
+      }),
+    );
+
+    const retained = selectWorldHistoryPlayers(players, new Set(["player-0"]), 4);
+
+    expect(retained).toHaveLength(4);
+    expect(retained.some((player) => player.playerId === "player-0")).toBe(true);
+    expect(retained.some((player) => player.playerId === "player-11")).toBe(true);
   });
 
   it("coalesces duplicate legacy season rows without double-counting performance", () => {
@@ -674,7 +804,15 @@ describe("long-career save retention", () => {
         ];
       }),
     );
-    const legacy = state({ players });
+    const legacy = state({
+      players,
+      reports: {
+        causal: {
+          id: "causal",
+          playerId: "synthetic-0",
+        } as GameState["reports"][string],
+      },
+    });
     const before = measureSaveRetentionFootprint(legacy);
 
     const compacted = compactLongCareerHistory(legacy);
@@ -688,11 +826,64 @@ describe("long-career save retention", () => {
       })),
     );
     expect(JSON.stringify(compacted.players)).not.toContain('"factors"');
+    expect(compacted.players["synthetic-1"].developmentHistory).toHaveLength(3);
     expect(after.collections.players).toBeLessThan(before.collections.players * 0.45);
     expect(before.collections.players - after.collections.players).toBeGreaterThan(1024 * 1024);
     expect(compactLongCareerHistory(JSON.parse(JSON.stringify(compacted)) as GameState)).toEqual(
       compacted,
     );
+  });
+
+  it("retains actionable injury detail while compacting closed historical incidents", () => {
+    const injury = (id: string, season: number) => ({
+      id,
+      playerId: "player",
+      type: "hamstring" as const,
+      severity: "moderate" as const,
+      recoveryWeeks: 5,
+      weeksRemaining: 0,
+      reinjuryRisk: 0,
+      occurredWeek: 10,
+      occurredSeason: season,
+    });
+    const activeHistoricalInjury = {
+      ...injury("active-historical", 3),
+      weeksRemaining: 2,
+    };
+    const legacy = state({
+      currentSeason: 8,
+      players: {
+        player: {
+          id: "player",
+          recentMatchRatings: [],
+          currentInjury: activeHistoricalInjury,
+          injuryHistory: {
+            playerId: "player",
+            injuries: [
+              injury("closed-old", 2),
+              activeHistoricalInjury,
+              injury("review-window", 6),
+              injury("current", 8),
+            ],
+            totalWeeksMissed: 20,
+            injuryProneness: 0.12,
+            reinjuryWindowWeeksLeft: 0,
+          },
+        } as unknown as Player,
+      },
+    });
+
+    const compacted = compactLongCareerHistory(legacy);
+    const retained = compacted.players.player.injuryHistory!;
+
+    expect(retained.injuries.map((entry) => entry.id)).toEqual([
+      "active-historical",
+      "review-window",
+      "current",
+    ]);
+    expect(retained.totalWeeksMissed).toBe(20);
+    expect(retained.injuryProneness).toBe(0.12);
+    expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
   });
 
   it("reports exact broken compaction-owned references", () => {

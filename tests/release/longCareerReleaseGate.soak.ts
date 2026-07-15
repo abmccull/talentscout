@@ -62,7 +62,9 @@ const MAX_RSS_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_POST_GC_HEAP_GROWTH_BYTES = 1024 * 1024 * 1024;
 const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   players: 32 * 1024 * 1024,
-  worldHistory: 16 * 1024 * 1024,
+  // Five recent seasons keep broad 500-player comparison detail; older
+  // seasons keep an elite public archive plus every scout-causal career.
+  worldHistory: 24 * 1024 * 1024,
   fixtures: 8 * 1024 * 1024,
   matchRatings: 8 * 1024 * 1024,
   playerMovementHistory: 8 * 1024 * 1024,
@@ -190,6 +192,64 @@ function serializedRoundTripDigest(state: GameState): string {
 
 function serializedBytes(state: GameState): number {
   return Buffer.byteLength(JSON.stringify(state), "utf8");
+}
+
+function valueBytes(value: unknown): number {
+  const serialized = JSON.stringify(value);
+  return serialized === undefined ? 0 : Buffer.byteLength(serialized, "utf8");
+}
+
+function playerRetentionDiagnostic(state: GameState): Record<string, unknown> {
+  const players = Object.values(state.players);
+  const fieldBytes = {
+    seasonRatings: 0,
+    injuryHistory: 0,
+    developmentHistory: 0,
+    recentMatchRatings: 0,
+    attributes: 0,
+    personalityProfile: 0,
+    remainingPlayerFields: 0,
+  };
+  for (const player of players) {
+    const {
+      seasonRatings,
+      injuryHistory,
+      developmentHistory,
+      recentMatchRatings,
+      attributes,
+      personalityProfile,
+      ...remainingPlayerFields
+    } = player;
+    fieldBytes.seasonRatings += valueBytes(seasonRatings);
+    fieldBytes.injuryHistory += valueBytes(injuryHistory);
+    fieldBytes.developmentHistory += valueBytes(developmentHistory);
+    fieldBytes.recentMatchRatings += valueBytes(recentMatchRatings);
+    fieldBytes.attributes += valueBytes(attributes);
+    fieldBytes.personalityProfile += valueBytes(personalityProfile);
+    fieldBytes.remainingPlayerFields += valueBytes(remainingPlayerFields);
+  }
+  const rosterSizes = Object.values(state.clubs).map((club) => ({
+    senior: club.playerIds.length,
+    academy: club.academyPlayerIds?.length ?? 0,
+  }));
+  return {
+    season: state.currentSeason,
+    activePlayers: players.length,
+    averagePlayerBytes: players.length > 0
+      ? Math.round(valueBytes(state.players) / players.length)
+      : 0,
+    fieldBytes,
+    roster: {
+      maxSenior: Math.max(0, ...rosterSizes.map((size) => size.senior)),
+      maxAcademy: Math.max(0, ...rosterSizes.map((size) => size.academy)),
+      averageSenior: round(
+        rosterSizes.reduce((sum, size) => sum + size.senior, 0) / Math.max(1, rosterSizes.length),
+      ),
+      averageAcademy: round(
+        rosterSizes.reduce((sum, size) => sum + size.academy, 0) / Math.max(1, rosterSizes.length),
+      ),
+    },
+  };
 }
 
 function largestCollections(state: GameState): Array<{ key: string; bytes: number }> {
@@ -513,6 +573,12 @@ function assertReleaseInvariants(
   expect(bytes, "serialized save growth exceeds release multiplier").toBeLessThanOrEqual(
     initialBytes * MAX_GROWTH_MULTIPLIER,
   );
+  if (retentionFootprint.collections.players > COLLECTION_BYTE_BUDGETS.players) {
+    console.info(
+      "LONG_CAREER_PLAYER_RETENTION_FAILURE",
+      JSON.stringify(playerRetentionDiagnostic(state)),
+    );
+  }
   for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
     expect(
       retentionFootprint.collections[key],

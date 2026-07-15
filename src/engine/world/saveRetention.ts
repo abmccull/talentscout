@@ -22,12 +22,29 @@ import type {
 export const FIXTURE_DETAIL_RETENTION_SEASONS = 1;
 /** Global public archive rows per season, plus every scout-causal player. */
 export const WORLD_HISTORY_PLAYER_LIMIT = 500;
+/** Recent seasons retain the broad comparison field used by expert workflows. */
+export const WORLD_HISTORY_DETAILED_PLAYER_SEASONS = 5;
+/** Older seasons retain elite public careers plus every scout-causal player. */
+export const WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT = 100;
 /**
  * Recent raw moves power the detailed dossier and consequence surfaces.
  * Older non-causal movements remain visible through the compact season
  * archive, not as an indefinitely growing world ledger.
  */
 export const PLAYER_MOVEMENT_DETAIL_RETENTION_SEASONS = 3;
+/**
+ * Exact injury incidents are needed for the current season, two-season
+ * recommendation reviews, and recent-risk explanations. Lifetime weeks
+ * missed and proneness already live on InjuryHistory, so older incident rows
+ * are duplicate detail once those consequence windows have closed.
+ */
+export const PLAYER_INJURY_DETAIL_RETENTION_SEASONS = 3;
+/**
+ * Unobserved world players need enough recent context for explainable form and
+ * development, but not the full dossier timeline reserved for players whose
+ * careers the scout has actually touched.
+ */
+export const BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT = 3;
 
 export const SAVE_RETENTION_COLLECTION_KEYS = [
   "players",
@@ -218,11 +235,43 @@ function projectWorldHistoryMovementSummaries(
   };
 }
 
-function compactPlayerRecord(player: Player): Player {
-  if (!player.developmentHistory) return player;
+function compactPlayerRecord(
+  player: Player,
+  currentSeason: number,
+  preserveFullDevelopmentHistory = false,
+): Player {
+  const compactedDevelopmentHistory = player.developmentHistory
+    ? compactPlayerDevelopmentHistory(player.developmentHistory)
+    : undefined;
+  const developmentHistory = compactedDevelopmentHistory
+    && !preserveFullDevelopmentHistory
+    && compactedDevelopmentHistory.length > BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT
+    ? compactedDevelopmentHistory.slice(-BACKGROUND_PLAYER_DEVELOPMENT_HISTORY_LIMIT)
+    : compactedDevelopmentHistory;
+  const injuryHistory = player.injuryHistory;
+  const injuryCutoff = Math.max(
+    1,
+    currentSeason - PLAYER_INJURY_DETAIL_RETENTION_SEASONS + 1,
+  );
+  const retainedInjuries = injuryHistory?.injuries.filter((injury) =>
+    injury.occurredSeason >= injuryCutoff || injury.id === player.currentInjury?.id
+  );
+  const compactedInjuryHistory = injuryHistory && retainedInjuries
+    ? retainedInjuries.length === injuryHistory.injuries.length
+      ? injuryHistory
+      : { ...injuryHistory, injuries: retainedInjuries }
+    : injuryHistory;
+
+  if (
+    developmentHistory === player.developmentHistory
+    && compactedInjuryHistory === player.injuryHistory
+  ) {
+    return player;
+  }
   return {
     ...player,
-    developmentHistory: compactPlayerDevelopmentHistory(player.developmentHistory),
+    ...(developmentHistory ? { developmentHistory } : {}),
+    ...(compactedInjuryHistory ? { injuryHistory: compactedInjuryHistory } : {}),
   };
 }
 
@@ -281,8 +330,12 @@ export function collectCausallyReferencedPlayerIds(state: GameState): Set<string
   });
   (state.activeNegotiations ?? []).forEach((record) => add(record.playerId));
   (state.freeAgentNegotiations ?? []).forEach((record) => add(record.freeAgentId));
-  (state.activeLoans ?? []).forEach((record) => add(record.playerId));
-  (state.loanHistory ?? []).forEach((record) => add(record.playerId));
+  (state.activeLoans ?? [])
+    .filter((record) => record.scoutId !== undefined)
+    .forEach((record) => add(record.playerId));
+  (state.loanHistory ?? [])
+    .filter((record) => record.scoutId !== undefined)
+    .forEach((record) => add(record.playerId));
   (state.loanRecommendations ?? []).forEach((record) => add(record.playerId));
   Object.values(state.contacts ?? {}).forEach((contact) => contact.knownPlayerIds.forEach(add));
   Object.values(state.contacts ?? {}).forEach((contact) => {
@@ -296,7 +349,17 @@ export function collectCausallyReferencedPlayerIds(state: GameState): Set<string
   });
   (state.rivalActivities ?? []).forEach((activity) => add(activity.playerId));
   (state.narrativeEvents ?? []).forEach((event) => event.relatedIds.forEach(addEntityId));
-  (state.inbox ?? []).forEach((message) => addEntityId(message.relatedId));
+  // Inbox news is a transient navigation surface, not permanent authorship.
+  // Preserve a player solely for a still-actionable recent message; durable
+  // scout work is already represented by reports, cases, decisions, loans,
+  // contacts, and consequence memory above.
+  (state.inbox ?? [])
+    .filter((message) =>
+      message.actionRequired
+      && !message.read
+      && message.season >= Math.max(1, state.currentSeason - 1)
+    )
+    .forEach((message) => addEntityId(message.relatedId));
   (state.eventChains ?? []).forEach((chain) => addEntityId(chain.context.playerId));
   (state.activeStorylines ?? []).forEach((storyline) => {
     const playerId = storyline.context.playerId;
@@ -349,7 +412,13 @@ export function collectReferencedUnsignedYouthIds(
   Object.values(state.placementReports ?? {}).forEach((report) => ids.add(report.unsignedYouthId));
   for (const activity of state.schedule?.activities ?? []) addEntityId(activity?.targetId);
   (state.narrativeEvents ?? []).forEach((event) => event.relatedIds.forEach(addEntityId));
-  (state.inbox ?? []).forEach((message) => addEntityId(message.relatedId));
+  (state.inbox ?? [])
+    .filter((message) =>
+      message.actionRequired
+      && !message.read
+      && message.season >= Math.max(1, state.currentSeason - 1)
+    )
+    .forEach((message) => addEntityId(message.relatedId));
 
   const addEntityRef = (ref: { kind: string; id: string } | undefined): void => {
     if (ref?.kind === "unsignedYouth") addEntityId(ref.id);
@@ -410,6 +479,7 @@ function stableHistoryPreferenceKey(player: PlayerSeasonHistory): string {
 export function selectWorldHistoryPlayers(
   players: readonly PlayerSeasonHistory[],
   causalPlayerIds: ReadonlySet<string>,
+  publicPlayerLimit = WORLD_HISTORY_PLAYER_LIMIT,
 ): PlayerSeasonHistory[] {
   // Malformed or legacy saves may contain the same player twice. Coalesce
   // those rows without adding performance totals (which would double-count a season).
@@ -455,7 +525,7 @@ export function selectWorldHistoryPlayers(
         publicHistoryScore(b) - publicHistoryScore(a)
         || a.playerId.localeCompare(b.playerId),
     )
-    .slice(0, Math.max(0, WORLD_HISTORY_PLAYER_LIMIT - causal.length));
+    .slice(0, Math.max(0, publicPlayerLimit - causal.length));
 
   return [...causal, ...publicPlayers].sort((a, b) => a.playerId.localeCompare(b.playerId));
 }
@@ -690,14 +760,25 @@ export function compactLongCareerHistory(state: GameState): GameState {
       .map(([youthId, youth]) => [
         youthId,
         youth.player.developmentHistory
-          ? { ...youth, player: compactPlayerRecord(youth.player) }
+          ? {
+              ...youth,
+              player: compactPlayerRecord(
+                youth.player,
+                state.currentSeason,
+                causalPlayerIds.has(youth.player.id),
+              ),
+            }
           : youth,
       ]),
   );
   const players = Object.fromEntries(
     Object.entries(state.players ?? {}).map(([playerId, player]) => [
       playerId,
-      compactPlayerRecord(player),
+      compactPlayerRecord(
+        player,
+        state.currentSeason,
+        causalPlayerIds.has(playerId),
+      ),
     ]),
   );
   const retainedYouthPlayerIds = new Set(
@@ -714,6 +795,14 @@ export function compactLongCareerHistory(state: GameState): GameState {
   let worldHistory = projectWorldHistoryMovementSummaries(
     state.worldHistory,
     state.playerMovementHistory ?? [],
+  );
+  // Record projection coverage before tiering the public archive. This lets a
+  // closed, non-causal background move age out of both the raw ledger and the
+  // old public summary without weakening the legacy-save safety rule below.
+  const projectedArchivedMovementIds = new Set(
+    worldHistory?.seasons.flatMap((season) =>
+      season.playerMovementSummaries?.map((summary) => summary.id) ?? [],
+    ) ?? [],
   );
   worldHistory = worldHistory
     ? {
@@ -747,17 +836,33 @@ export function compactLongCareerHistory(state: GameState): GameState {
   if (worldHistory) {
     worldHistory = {
       ...worldHistory,
-      seasons: worldHistory.seasons.map((season) => ({
-        ...season,
-        players: selectWorldHistoryPlayers(season.players, causalPlayerIds),
-      })),
+      seasons: worldHistory.seasons.map((season) => {
+        const keepsFullMovementDetail =
+          season.season >= state.currentSeason - WORLD_HISTORY_DETAILED_PLAYER_SEASONS;
+        const players = selectWorldHistoryPlayers(
+          season.players,
+          causalPlayerIds,
+          keepsFullMovementDetail
+            ? WORLD_HISTORY_PLAYER_LIMIT
+            : WORLD_HISTORY_ARCHIVE_PLAYER_LIMIT,
+        );
+        const retainedPlayerIds = new Set(players.map((player) => player.playerId));
+        const playerMovementSummaries = season.playerMovementSummaries?.filter(
+          (summary) =>
+            keepsFullMovementDetail
+            || retainedPlayerIds.has(summary.playerId)
+            || causalPlayerIds.has(summary.playerId),
+        );
+        return {
+          ...season,
+          players,
+          ...(playerMovementSummaries && playerMovementSummaries.length > 0
+            ? { playerMovementSummaries }
+            : { playerMovementSummaries: undefined }),
+        };
+      }),
     };
   }
-  const archivedMovementIds = new Set(
-    worldHistory?.seasons.flatMap((season) =>
-      season.playerMovementSummaries?.map((summary) => summary.id) ?? [],
-    ) ?? [],
-  );
   const playerMovementHistory = (state.playerMovementHistory ?? []).filter(
     (movement) => {
       // Renewals do not enter the permanent archive. Their active-contract
@@ -782,7 +887,7 @@ export function compactLongCareerHistory(state: GameState): GameState {
       // Never release a raw row until an immutable archive summary exists.
       // This makes a partial/legacy WorldHistory safe: unresolved movement
       // rows retain their source rather than becoming dangling pointers.
-      return !archivedMovementIds.has(movement.id);
+      return !projectedArchivedMovementIds.has(movement.id);
     },
   );
 
@@ -798,7 +903,14 @@ export function compactLongCareerHistory(state: GameState): GameState {
   const retiredPlayers = Object.fromEntries(
     Object.entries(state.retiredPlayers ?? {})
       .filter(([playerId]) => retainedRetiredPlayerIds.has(playerId))
-      .map(([playerId, player]) => [playerId, compactPlayerRecord(player)]),
+      .map(([playerId, player]) => [
+        playerId,
+        compactPlayerRecord(
+          player,
+          state.currentSeason,
+          causalPlayerIds.has(playerId),
+        ),
+      ]),
   );
   const retiredPlayerIds = (state.retiredPlayerIds ?? []).filter((playerId) =>
     retiredPlayers[playerId] !== undefined,

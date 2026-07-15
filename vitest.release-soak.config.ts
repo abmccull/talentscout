@@ -10,7 +10,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/release/**/*.soak.ts"],
-    testTimeout: 1_800_000,
+    // A canonical 30-season career advances every ordinary week and performs
+    // season-boundary save round-trips. Late-world runs can legitimately pass
+    // the old 30-minute ceiling on release hardware without being stalled.
+    testTimeout: 3_600_000,
     hookTimeout: 120_000,
     maxWorkers: 1,
     coverage: { enabled: false },
