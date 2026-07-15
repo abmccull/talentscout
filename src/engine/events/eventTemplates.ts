@@ -11,6 +11,12 @@
  */
 
 import type { GameState, NarrativeEventType, UnsignedYouth } from "@/engine/core/types";
+import {
+  CONTENT_SCHEMA_VERSION,
+  defineContentPack,
+  hasNonBlankString,
+  type ContentValidationIssue,
+} from "@/engine/content/contracts";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
@@ -1054,7 +1060,7 @@ const financialFairPlayImpactTemplate: EventTemplate = {
 // Exported registry — ordered array used by narrativeEvents.ts
 // =============================================================================
 
-export const EVENT_TEMPLATES: ReadonlyArray<EventTemplate> = [
+const EVENT_TEMPLATE_DEFINITIONS: readonly EventTemplate[] = [
   // Original 8
   rivalPoachTemplate,
   managerFiredTemplate,
@@ -1103,6 +1109,51 @@ export const EVENT_TEMPLATES: ReadonlyArray<EventTemplate> = [
   scoutingAwardNominationTemplate,
   financialFairPlayImpactTemplate,
 ];
+
+function validateEventTemplate(
+  template: EventTemplate,
+): readonly Omit<ContentValidationIssue, "packId" | "definitionId">[] {
+  const issues: Array<Omit<ContentValidationIssue, "packId" | "definitionId">> = [];
+  if (!hasNonBlankString(template.titleTemplate)) {
+    issues.push({ path: "titleTemplate", message: "must be a non-empty string" });
+  }
+  if (typeof template.descriptionTemplate !== "function") {
+    issues.push({ path: "descriptionTemplate", message: "must be a function" });
+  }
+  if (typeof template.prerequisites !== "function") {
+    issues.push({ path: "prerequisites", message: "must be a function" });
+  }
+  for (const [index, choice] of (template.choices ?? []).entries()) {
+    if (!hasNonBlankString(choice.label)) {
+      issues.push({ path: `choices[${index}].label`, message: "must be a non-empty string" });
+    }
+    if (!hasNonBlankString(choice.effect)) {
+      issues.push({ path: `choices[${index}].effect`, message: "must be a non-empty string" });
+    }
+    if (choice.knownTradeoffs?.some((tradeoff) => !hasNonBlankString(tradeoff))) {
+      issues.push({ path: `choices[${index}].knownTradeoffs`, message: "must contain only non-empty strings" });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Versioned authored event catalogue. Save data retains event instances and
+ * stable event types; this pack guards the static definitions at startup.
+ */
+export const EVENT_TEMPLATE_CONTENT_PACK = defineContentPack({
+  manifest: {
+    id: "talentscout.narrative-event-templates",
+    kind: "event-template",
+    schemaVersion: CONTENT_SCHEMA_VERSION,
+    contentVersion: "events.1",
+  },
+  entries: EVENT_TEMPLATE_DEFINITIONS,
+  getDefinitionId: (template) => template.type,
+  validateDefinition: validateEventTemplate,
+});
+
+export const EVENT_TEMPLATES = EVENT_TEMPLATE_CONTENT_PACK.entries;
 
 // =============================================================================
 // Context extraction helpers — exported for use in narrativeEvents.ts

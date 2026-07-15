@@ -112,6 +112,37 @@ describe.sequential("save provider resilience", () => {
     await expect(provider.load("manual")).rejects.toThrow("Unknown save slot");
   });
 
+  it("uses a structured state boundary and keeps legacy load JSON lazy", async () => {
+    steamState.available = true;
+    steamState.runtimeConfigured = true;
+    steamMock.setCloudSave.mockClear();
+    const provider = createSaveProvider({ includeSteam: true });
+    await provider.delete("slot_3");
+
+    const first = await provider.saveState(
+      "slot_3",
+      stateAt(17),
+      "Structured local",
+      { waitForCloud: true },
+    );
+    const duplicate = await provider.saveState(
+      "slot_3",
+      { ...stateAt(17), lastSaved: 123_456 },
+      "Structured local",
+      { waitForCloud: true },
+    );
+    const loaded = await provider.load("slot_3");
+
+    expect(first.wrote).toBe(true);
+    expect(duplicate.wrote).toBe(false);
+    expect(steamMock.setCloudSave).toHaveBeenCalledTimes(1);
+    expect(loaded?.state.currentWeek).toBe(17);
+    expect(Object.getOwnPropertyDescriptor(loaded!, "data")?.get).toBeTypeOf(
+      "function",
+    );
+    expect(JSON.parse(loaded!.data)).toMatchObject({ currentWeek: 17 });
+  });
+
   it("commits locally before a failed cloud write and retries the persisted queue", async () => {
     const provider = createSaveProvider({ includeSteam: true });
     await provider.save(

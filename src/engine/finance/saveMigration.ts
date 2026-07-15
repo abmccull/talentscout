@@ -8,7 +8,6 @@
 
 import type {
   FinancialRecord,
-  CareerPath,
   LifestyleConfig,
   Office,
   CareerTier,
@@ -84,69 +83,68 @@ export function migrateFinancialRecord(
   old: FinancialRecord,
   scout: Scout,
 ): FinancialRecord {
-  // Existing new-shape records may still predate the opening-balance ledger.
-  if (old.careerPath !== undefined) {
-    return reconcileFinancialLedger(old);
-  }
-
-  const careerPath: CareerPath = scout.careerPath ?? "club";
+  // Some intermediate saves already carried a careerPath but predated later
+  // economics collections. Normalize the complete record rather than treating
+  // that one marker as proof of a current schema.
+  const legacy = old as Partial<FinancialRecord>;
+  const expenses = (
+    legacy.expenses && typeof legacy.expenses === "object" ? legacy.expenses : {}
+  ) as Partial<FinancialRecord["expenses"]>;
+  const array = <Value>(value: Value[] | undefined): Value[] =>
+    Array.isArray(value) ? value : [];
+  const finite = (value: number | undefined, fallback = 0): number =>
+    Number.isFinite(value) ? value! : fallback;
 
   return reconcileFinancialLedger({
-    ...old,
-
-    // Ensure new expense types exist in the expenses record
+    ...legacy,
+    balance: finite(legacy.balance),
+    monthlyIncome: finite(legacy.monthlyIncome),
+    equipmentLevel: finite(legacy.equipmentLevel, 1),
+    transactions: array(legacy.transactions),
     expenses: {
-      ...old.expenses,
-      lifestyle: old.expenses.lifestyle ?? 0,
-      officeCost: old.expenses.officeCost ?? 0,
-      employeeSalaries: old.expenses.employeeSalaries ?? 0,
-      marketing: old.expenses.marketing ?? 0,
-      loanPayment: old.expenses.loanPayment ?? 0,
-      courseFees: old.expenses.courseFees ?? 0,
-      insurance: old.expenses.insurance ?? 0,
+      ...expenses,
+      lifestyle: finite(expenses.lifestyle),
+      officeCost: finite(expenses.officeCost),
+      employeeSalaries: finite(expenses.employeeSalaries),
+      marketing: finite(expenses.marketing),
+      loanPayment: finite(expenses.loanPayment),
+      courseFees: finite(expenses.courseFees),
+      insurance: finite(expenses.insurance),
     },
-
-    // Career path
-    careerPath,
-    independentTier: undefined,
-
-    // Revenue tracking — all zeroed for existing saves
-    reportSalesRevenue: 0,
-    placementFeeRevenue: 0,
-    retainerRevenue: 0,
-    consultingRevenue: 0,
-    sellOnRevenue: 0,
-    bonusRevenue: 0,
-
-    // Contracts & records — empty
-    retainerContracts: [],
-    activeLoan: undefined,
-    placementFeeRecords: [],
-    reportListings: [],
-    consultingContracts: [],
-
-    // Assets
-    office: DEFAULT_OFFICE,
-    employees: [],
-    lifestyle: defaultLifestyle(scout.careerTier),
-    completedCourses: [],
-    activeEnrollment: undefined,
-    ownedVehicle: undefined,
-
-    // Pending offers
-    pendingRetainerOffers: [],
-    pendingConsultingOffers: [],
-
-    // Market
-    marketTemperature: "normal",
-    activeEconomicEvents: [],
-
-    // Agency overhaul
-    clientRelationships: [],
-    pendingEmployeeEvents: [],
-    satelliteOffices: [],
-    awards: [],
-  });
+    careerPath: legacy.careerPath ?? scout.careerPath ?? "club",
+    independentTier: legacy.independentTier,
+    reportSalesRevenue: finite(legacy.reportSalesRevenue),
+    placementFeeRevenue: finite(legacy.placementFeeRevenue),
+    retainerRevenue: finite(legacy.retainerRevenue),
+    consultingRevenue: finite(legacy.consultingRevenue),
+    sellOnRevenue: finite(legacy.sellOnRevenue),
+    bonusRevenue: finite(legacy.bonusRevenue),
+    retainerContracts: array(legacy.retainerContracts),
+    activeLoan: legacy.activeLoan,
+    placementFeeRecords: array(legacy.placementFeeRecords),
+    reportListings: array(legacy.reportListings),
+    consultingContracts: array(legacy.consultingContracts),
+    office: legacy.office ?? DEFAULT_OFFICE,
+    employees: array(legacy.employees),
+    lifestyle: legacy.lifestyle ?? defaultLifestyle(scout.careerTier ?? 1),
+    completedCourses: array(legacy.completedCourses),
+    activeEnrollment: legacy.activeEnrollment,
+    ownedVehicle: legacy.ownedVehicle,
+    pendingRetainerOffers: array(legacy.pendingRetainerOffers),
+    pendingConsultingOffers: array(legacy.pendingConsultingOffers),
+    marketTemperature: legacy.marketTemperature ?? "normal",
+    activeEconomicEvents: array(legacy.activeEconomicEvents),
+    clientRelationships: array(legacy.clientRelationships),
+    pendingEmployeeEvents: array(legacy.pendingEmployeeEvents),
+    satelliteOffices: array(legacy.satelliteOffices),
+    awards: array(legacy.awards),
+    loans: array(legacy.loans),
+    starterBonus: legacy.starterBonus ?? {
+      firstReportBonusUsed: false,
+      firstPlacementBonusUsed: false,
+      starterStipendWeeksRemaining: 0,
+    },
+  } as FinancialRecord);
 }
 
 /**

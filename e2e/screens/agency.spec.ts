@@ -25,7 +25,7 @@ test.describe("Agency Screen", () => {
     await gamePage.goto();
     await gamePage.injectLateGameState("youth");
 
-    await gamePage.navigateTo("agency");
+    await gamePage.setScreen("agency");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();
@@ -41,7 +41,7 @@ test.describe("Agency Screen", () => {
     await gamePage.goto();
     await gamePage.injectLateGameState("youth");
 
-    await gamePage.navigateTo("agency");
+    await gamePage.setScreen("agency");
     await gamePage.page.waitForTimeout(500);
 
     // Agency should have multiple tabs (Assistants, Clients, Infrastructure, etc.)

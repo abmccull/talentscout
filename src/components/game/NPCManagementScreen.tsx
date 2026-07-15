@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -564,41 +565,63 @@ function ReportCard({
 
 export function NPCManagementScreen() {
   const {
-    gameState,
+    scout,
+    npcScoutsById,
+    territoriesById,
+    npcReportsById,
+    npcDelegationsById,
+    leadershipPortfolio,
+    watchlist,
+    playersById,
     assignNPCScoutTerritory,
     reviewNPCReport,
-    getPlayer,
     delegateScouting,
     toggleWatchlist,
     resolveLeadershipResponsibility,
-  } = useGameStore();
+  } = useGameStore(
+    useShallow((state) => ({
+      scout: state.gameState?.scout,
+      npcScoutsById: state.gameState?.npcScouts,
+      territoriesById: state.gameState?.territories,
+      npcReportsById: state.gameState?.npcReports,
+      npcDelegationsById: state.gameState?.npcDelegations,
+      leadershipPortfolio: state.gameState?.leadershipPortfolio,
+      watchlist: state.gameState?.watchlist,
+      playersById: state.gameState?.players,
+      assignNPCScoutTerritory: state.assignNPCScoutTerritory,
+      reviewNPCReport: state.reviewNPCReport,
+      delegateScouting: state.delegateScouting,
+      toggleWatchlist: state.toggleWatchlist,
+      resolveLeadershipResponsibility: state.resolveLeadershipResponsibility,
+    })),
+  );
   const [selectedScoutId, setSelectedScoutId] = useState<string | null>(null);
 
   // All hooks must be called before any conditional return.
   const npcScouts = useMemo(
-    () => Object.values(gameState?.npcScouts ?? {}),
-    [gameState?.npcScouts]
+    () => Object.values(npcScoutsById ?? {}),
+    [npcScoutsById]
   );
 
   const allTerritories = useMemo(
-    () => Object.values(gameState?.territories ?? {}),
-    [gameState?.territories]
+    () => Object.values(territoriesById ?? {}),
+    [territoriesById]
   );
 
   const allNPCReports = useMemo(
     () =>
-      Object.values(gameState?.npcReports ?? {}).sort(
+      Object.values(npcReportsById ?? {}).sort(
         (a, b) => b.week - a.week || b.season - a.season
       ),
-    [gameState?.npcReports]
+    [npcReportsById]
   );
 
   const activeDelegations = useMemo(
     () =>
-      Object.values(gameState?.npcDelegations ?? {})
+      Object.values(npcDelegationsById ?? {})
         .filter((delegation) => !delegation.completed)
         .sort((a, b) => a.weeksRemaining - b.weeksRemaining),
-    [gameState?.npcDelegations]
+    [npcDelegationsById]
   );
 
   const activeDelegationsByScout = useMemo(
@@ -620,40 +643,39 @@ export function NPCManagementScreen() {
   );
 
   const selectedScout = useMemo(
-    () => (selectedScoutId ? (gameState?.npcScouts[selectedScoutId] ?? null) : null),
-    [selectedScoutId, gameState?.npcScouts]
+    () => (selectedScoutId ? (npcScoutsById?.[selectedScoutId] ?? null) : null),
+    [selectedScoutId, npcScoutsById]
   );
 
   const selectedTerritory = useMemo(
     () =>
       selectedScout?.territoryId
-        ? (gameState?.territories[selectedScout.territoryId] ?? undefined)
+        ? (territoriesById?.[selectedScout.territoryId] ?? undefined)
         : undefined,
-    [selectedScout, gameState?.territories]
+    [selectedScout, territoriesById]
   );
 
-  if (!gameState) return null;
+  if (!scout || !territoriesById || !playersById) return null;
 
-  const { scout } = gameState;
+  const watchlistIds = watchlist ?? [];
   const isTierEligible = scout.careerTier >= 4;
 
   const getPlayerName = (playerId: string): string => {
-    const p = getPlayer(playerId);
+    const p = playersById[playerId];
     return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
   };
 
   const getTerritoryForScout = (npcScout: NPCScout): Territory | undefined =>
-    npcScout.territoryId ? gameState.territories[npcScout.territoryId] : undefined;
+    npcScout.territoryId ? territoriesById[npcScout.territoryId] : undefined;
 
   const unreviewedCount = allNPCReports.filter((r) => !r.reviewed).length;
   const openLeadershipResponsibilities = Object.values(
-    gameState.leadershipPortfolio?.responsibilities ?? {},
+    leadershipPortfolio?.responsibilities ?? {},
   ).filter((responsibility) => responsibility.status === "open");
-  const leadershipAttentionRemaining = gameState.leadershipPortfolio
+  const leadershipAttentionRemaining = leadershipPortfolio
     ? Math.max(
         0,
-        gameState.leadershipPortfolio.attentionCapacity
-          - gameState.leadershipPortfolio.attentionUsed,
+        leadershipPortfolio.attentionCapacity - leadershipPortfolio.attentionUsed,
       )
     : 0;
 
@@ -804,7 +826,7 @@ export function NPCManagementScreen() {
                     onMarkReviewed={reviewNPCReport}
                     onClose={() => setSelectedScoutId(null)}
                     getPlayerName={getPlayerName}
-                    watchlist={gameState.watchlist ?? []}
+                    watchlist={watchlistIds}
                     onDelegate={delegateScouting}
                     onToggleWatchlist={toggleWatchlist}
                   />
@@ -829,7 +851,7 @@ export function NPCManagementScreen() {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {allNPCReports.map((report) => {
-                    const npcScout = gameState.npcScouts[report.npcScoutId];
+                    const npcScout = npcScoutsById?.[report.npcScoutId];
                     const scoutName = npcScout
                       ? `${npcScout.firstName} ${npcScout.lastName}`
                       : "Unknown Scout";
@@ -842,7 +864,7 @@ export function NPCManagementScreen() {
                           report={report}
                           playerName={getPlayerName(report.playerId)}
                           onMarkReviewed={reviewNPCReport}
-                          isWatchlisted={(gameState.watchlist ?? []).includes(report.playerId)}
+                          isWatchlisted={watchlistIds.includes(report.playerId)}
                           onToggleWatchlist={toggleWatchlist}
                           onDelegate={
                             selectedScout

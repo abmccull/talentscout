@@ -5,6 +5,8 @@ import { createReportActions } from "./actions/reportActions";
 import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
 import { createWeeklyActions } from "./actions/weeklyActions";
+import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
+import { terminateWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 import type {
   GameState,
   NewGameConfig,
@@ -73,7 +75,6 @@ import type { CardEvent } from "@/engine/core/types";
 import type { ActivityChoiceId } from "@/engine/core/activityInteractions";
 import type { ActivityQualityResult, ActivityQualityTier } from "@/engine/core/activityQuality";
 import { generateDirectives } from "@/engine/firstTeam";
-import { migrateLegacyTransferParticipation } from "@/engine/firstTeam/transferTracker";
 import { checkToolUnlocks } from "@/engine/tools";
 import { classifyStandingZone } from "@/engine/world/index";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
@@ -83,7 +84,6 @@ import {
 } from "@/engine/youth";
 import { createLeaderboardEntry, submitLeaderboardEntry } from "@/lib/leaderboard";
 import { generateBoardProfile } from "@/engine/firstTeam/boardAI";
-import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import { createRNG } from "@/engine/rng";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
@@ -95,9 +95,9 @@ import {
   getScoutIdentityContentDefinitionIds,
   getRunSimulationModifiers,
   getWorldTraitContentDefinitionIds,
-  repairRunManifest,
-  validateRunManifest,
 } from "@/engine/run";
+import { getRunContentDefinitionIds } from "@/engine/content/registry";
+import { getGameModeIdForSpecialization } from "@/engine/content/modeDefinitions";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
 import { generateSeasonEvents, getActiveSeasonEvents } from "@/engine/core/seasonEvents";
@@ -114,8 +114,6 @@ import {
   getWorldConditionContentDefinitionIds,
   getWorldConditionModifiers,
   initializeWorld,
-  isInternationalAssignmentEligibleCountry,
-  isTravelEligibleCountry,
 } from "@/engine/world";
 import { createScout } from "@/engine/scout/creation";
 import {
@@ -135,15 +133,10 @@ import {
 } from "@/engine/specializations/regionalKnowledge";
 import { getUnlockedPerks } from "@/engine/specializations/perks";
 import { generateManagerProfiles } from "@/engine/analytics";
-import { generateRegionalYouth, generateSubRegions } from "@/engine/youth/generation";
+import { generateRegionalYouth } from "@/engine/youth/generation";
 import {
   initializeFinances,
   applyBalanceTransaction,
-  migrateFinancialRecord,
-  migrateEmployeeSkillsInRecord,
-  normalizeEmployeeContractsInRecord,
-  migrateReportListingBids,
-  migrateEquipmentLevel,
 } from "@/engine/finance";
 import type { EquipmentItemId } from "@/engine/finance";
 import type { EmployeeAssignment, ClientRelationship } from "@/engine/core/types";
@@ -152,23 +145,25 @@ import {
   generateRivalScouts,
   getRivalOrganizationContentDefinitionIds,
   initializeRivalOrganizations,
-  migrateRivalOrganizationState,
 } from "@/engine/rivals";
 import { getCountryDataSync, getSecondaryCountries } from "@/data/index";
 import {
   migrateSaveState,
-  migrateFreeAgentGeography,
   type SaveRecord,
   AUTOSAVE_SLOT,
 } from "@/lib/db";
-import type { SaveConflict, SaveSource } from "@/lib/saveProvider";
+import {
+  loadResultGameState,
+  persistGameState,
+  type SaveConflict,
+  type SaveSource,
+} from "@/lib/saveProvider";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import {
   applyScenarioSetup,
   applyScenarioOverrides,
   getInvalidScenarioReason,
-  reconcileScenarioAuthority,
 } from "@/engine/scenarios";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
@@ -187,11 +182,6 @@ import {
   resolvePlayerEntity,
 } from "@/lib/playerResolution";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
-import { migrateScoutingCases } from "@/engine/reports";
-import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
-import { migratePoliticalMeetingState } from "@/engine/career/politicalMeetings";
-import { migrateObservationSessionInteractions } from "@/engine/observation/interactionSelection";
-import { compactLongCareerHistory } from "@/engine/world/saveRetention";
 import {
   createOpeningCase,
   type OpeningCaseChoiceId,
@@ -302,479 +292,6 @@ function seedContactKnownPlayerIds(
 // ---------------------------------------------------------------------------
 // Migration: Player roles, traits & tactical depth expansion
 // ---------------------------------------------------------------------------
-function migratePlayerRolesAndTraits(state: GameState): void {
-  const clampAttr = (v: number) => Math.round(Math.max(1, Math.min(20, v)));
-
-  // Migrate players: derive new attributes from existing ones
-  for (const player of Object.values(state.players)) {
-    const a = player.attributes;
-    // Only migrate if new attributes are missing
-    if (a.tackling === undefined) {
-      a.tackling = clampAttr(a.defensiveAwareness * 0.6 + a.strength * 0.4);
-      a.finishing = clampAttr(a.shooting * 0.7 + a.composure * 0.3);
-      a.jumping = clampAttr(a.heading * 0.5 + a.strength * 0.3 + a.agility * 0.2);
-      a.balance = clampAttr(a.agility * 0.6 + a.strength * 0.4);
-      a.anticipation = clampAttr(a.positioning * 0.5 + a.decisionMaking * 0.5);
-      a.vision = clampAttr(a.passing * 0.5 + a.decisionMaking * 0.5);
-      a.marking = clampAttr(a.defensiveAwareness * 0.7 + a.positioning * 0.3);
-      a.teamwork = clampAttr(a.workRate * 0.6 + a.decisionMaking * 0.4);
-    }
-    // Default empty trait arrays
-    if (!player.playerTraits) player.playerTraits = [];
-    if (!player.playerTraitsRevealed) player.playerTraitsRevealed = [];
-  }
-
-  // Migrate unsigned youth (same attribute derivation)
-  if (state.unsignedYouth) {
-    for (const youth of Object.values(state.unsignedYouth)) {
-      const a = (youth as unknown as Player).attributes;
-      if (a && a.tackling === undefined) {
-        a.tackling = clampAttr(a.defensiveAwareness * 0.6 + a.strength * 0.4);
-        a.finishing = clampAttr(a.shooting * 0.7 + a.composure * 0.3);
-        a.jumping = clampAttr(a.heading * 0.5 + a.strength * 0.3 + a.agility * 0.2);
-        a.balance = clampAttr(a.agility * 0.6 + a.strength * 0.4);
-        a.anticipation = clampAttr(a.positioning * 0.5 + a.decisionMaking * 0.5);
-        a.vision = clampAttr(a.passing * 0.5 + a.decisionMaking * 0.5);
-        a.marking = clampAttr(a.defensiveAwareness * 0.7 + a.positioning * 0.3);
-        a.teamwork = clampAttr(a.workRate * 0.6 + a.decisionMaking * 0.4);
-      }
-    }
-  }
-
-  // Migrate clubs: generate tactical style from philosophy + reputation
-  for (const club of Object.values(state.clubs)) {
-    if (!club.tacticalStyle) {
-      club.tacticalStyle = deriveTacticalStyleFromPhilosophy(
-        club.scoutingPhilosophy,
-        club.reputation,
-      );
-    }
-  }
-
-  // Clear system fit cache (will recompute with new formula)
-  state.systemFitCache = {};
-}
-
-/**
- * Migration: Add match rating system fields to existing saves.
- * Players get empty recentMatchRatings and seasonRatings arrays.
- * GameState gets empty matchRatings record.
- */
-function migrateMatchRatings(state: GameState): void {
-  // eslint-disable-next-line
-  if ((state as any).matchRatings === undefined) {
-    (state as any).matchRatings = {};
-  }
-  for (const player of Object.values(state.players)) {
-    if (!player.recentMatchRatings) {
-      (player as Player).recentMatchRatings = [];
-    }
-    if (!player.seasonRatings) {
-      (player as Player).seasonRatings = [];
-    }
-  }
-  // Also migrate unsigned youth players
-  if (state.unsignedYouth) {
-    for (const youth of Object.values(state.unsignedYouth)) {
-      const p = youth.player;
-      if (p && !p.recentMatchRatings) {
-        p.recentMatchRatings = [];
-      }
-      if (p && !p.seasonRatings) {
-        p.seasonRatings = [];
-      }
-    }
-  }
-}
-
-/**
- * Migration: Add injury system fields to existing saves.
- * Players get default injuryHistory and currentInjury derived from existing injury state.
- */
-function migrateInjurySystem(state: GameState): void {
-  for (const player of Object.values(state.players)) {
-    // Default new fields if missing
-    player.injuryHistory ??= {
-      playerId: player.id,
-      injuries: [],
-      totalWeeksMissed: 0,
-      injuryProneness: 0,
-      reinjuryWindowWeeksLeft: 0,
-    };
-    // If player is currently injured but has no currentInjury object, synthesize one
-    if (player.injured && !player.currentInjury) {
-      player.currentInjury = {
-        id: `inj_migrated_${player.id}`,
-        playerId: player.id,
-        type: "knock",
-        severity: player.injuryWeeksRemaining <= 2 ? "minor" : player.injuryWeeksRemaining <= 5 ? "moderate" : "serious",
-        recoveryWeeks: player.injuryWeeksRemaining,
-        weeksRemaining: player.injuryWeeksRemaining,
-        reinjuryRisk: 0,
-        occurredWeek: state.currentWeek,
-        occurredSeason: state.currentSeason,
-      };
-    }
-  }
-  // Also migrate unsigned youth players
-  if (state.unsignedYouth) {
-    for (const youth of Object.values(state.unsignedYouth)) {
-      const p = youth.player;
-      if (p) {
-        p.injuryHistory ??= {
-          playerId: p.id,
-          injuries: [],
-          totalWeeksMissed: 0,
-          injuryProneness: 0,
-          reinjuryWindowWeeksLeft: 0,
-        };
-      }
-    }
-  }
-}
-
-/**
- * Migration: Add effects, choices, and resolved fields to existing season events.
- * Older saves have bare-bones SeasonEvent objects without mechanical effects.
- * We regenerate from the template to pick up the new fields.
- */
-function migrateSeasonEvents(state: GameState): void {
-  if (!state.seasonEvents || state.seasonEvents.length === 0) return;
-
-  const seasonLength = getSeasonLength(state.fixtures, state.currentSeason);
-  const freshEvents = generateSeasonEvents(state.currentSeason, seasonLength);
-  const existingByName = new Map(
-    state.seasonEvents.map((event) => [event.name, event]),
-  );
-
-  // Reapply persisted decisions to the freshly scaled canonical calendar.
-  state.seasonEvents = freshEvents.map((template) => {
-    const existing = existingByName.get(template.name);
-    return existing
-      ? {
-          ...template,
-          resolved: existing.resolved ?? false,
-          choiceSelected: existing.choiceSelected,
-        }
-      : template;
-  });
-}
-
-function migrateInboxMessages(state: GameState): void {
-  if (!state.inbox || state.inbox.length === 0 || !state.seasonEvents) return;
-
-  const seasonEventsByName = new Map(
-    state.seasonEvents.map((event) => [event.name, event]),
-  );
-
-  state.inbox = state.inbox.map((message) => {
-    if (message.type !== "event") return message;
-
-    const titleBase = message.title.replace(/\s+— Decision Required$/, "");
-    const seasonEvent = seasonEventsByName.get(titleBase);
-    if (!seasonEvent) return message;
-
-    const actionable = !seasonEvent.resolved && (
-      !seasonEvent.relevantSpecializations ||
-      seasonEvent.relevantSpecializations.includes(state.scout.primarySpecialization)
-    );
-
-    return {
-      ...message,
-      title: actionable ? `${seasonEvent.name} — Decision Required` : seasonEvent.name,
-      body: actionable
-        ? `${seasonEvent.description}. You have a decision to make regarding your scouting strategy during this period.`
-        : `${seasonEvent.description}. This shapes the wider football landscape, but there is nothing you need to decide directly right now.`,
-      actionRequired: actionable,
-      relatedId: seasonEvent.id,
-      relatedEntityType: "seasonEvent",
-    };
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Migration: Personality profiles (F9)
-// ---------------------------------------------------------------------------
-function migratePersonalityProfiles(state: GameState): void {
-  const migratePlayer = (player: Player) => {
-    if (!player.personalityProfile) {
-      const traits = player.personalityTraits ?? [];
-      const traitSet = new Set(traits);
-
-      type PA = import("@/engine/core/types").PersonalityArchetype;
-      let archetype: PA = "professional";
-      if (traitSet.has("leader")) archetype = "leader";
-      else if (traitSet.has("bigGamePlayer") || traitSet.has("pressurePlayer")) archetype = "clutch";
-      else if (traitSet.has("ambitious")) archetype = "ambitious";
-      else if (traitSet.has("loyal") || traitSet.has("modelCitizen")) archetype = "loyal";
-      else if (traitSet.has("temperamental") && traitSet.has("controversialCharacter")) archetype = "disruptive";
-      else if (traitSet.has("temperamental")) archetype = "hothead";
-      else if (traitSet.has("introvert")) archetype = "introvert";
-      else if (traitSet.has("easygoing")) archetype = "professional";
-      else if (traitSet.has("flair")) archetype = "ambitious";
-
-      const DEFAULTS: Record<PA, { tw: number; dri: number; fv: number; bmm: number }> = {
-        leader:       { tw: 0.3,  dri: 3,  fv: 0.3,  bmm: 1 },
-        mercenary:    { tw: 0.9,  dri: -1, fv: 0.5,  bmm: 0 },
-        homesick:     { tw: 0.2,  dri: 0,  fv: 0.6,  bmm: -1 },
-        ambitious:    { tw: 0.7,  dri: 1,  fv: 0.4,  bmm: 1 },
-        loyal:        { tw: 0.15, dri: 2,  fv: 0.25, bmm: 0 },
-        disruptive:   { tw: 0.6,  dri: -2, fv: 0.7,  bmm: 0 },
-        introvert:    { tw: 0.35, dri: 0,  fv: 0.35, bmm: -1 },
-        professional: { tw: 0.5,  dri: 1,  fv: 0.2,  bmm: 0 },
-        hothead:      { tw: 0.55, dri: -1, fv: 0.8,  bmm: -1 },
-        clutch:       { tw: 0.4,  dri: 2,  fv: 0.35, bmm: 2 },
-      };
-      const d = DEFAULTS[archetype];
-
-      player.personalityProfile = {
-        archetype,
-        traits: [...traits],
-        transferWillingness: d.tw,
-        dressingRoomImpact: d.dri,
-        formVolatility: d.fv,
-        bigMatchModifier: d.bmm,
-        hiddenUntilRevealed: true,
-        revealedTraits: [...(player.personalityRevealed ?? [])],
-      };
-    }
-  };
-
-  for (const player of Object.values(state.players)) {
-    migratePlayer(player);
-  }
-  if (state.unsignedYouth) {
-    for (const youth of Object.values(state.unsignedYouth)) {
-      if (youth.player) {
-        migratePlayer(youth.player);
-      }
-    }
-  }
-}
-
-/**
- * Migration: F14 Financial Strategy Layer.
- * Ensures scoutingInfrastructure and assistantScouts exist on older saves.
- */
-function migrateFinancialStrategy(state: GameState): void {
-  const s = state as Record<string, any>; // eslint-disable-line
-  if (s.scoutingInfrastructure === undefined) {
-    s.scoutingInfrastructure = {
-      dataSubscription: "none",
-      travelBudget: "economy",
-      officeEquipment: "basic",
-      investmentCosts: { weekly: 0, oneTime: 0 },
-    };
-  }
-  if (s.assistantScouts === undefined) {
-    s.assistantScouts = [];
-  }
-}
-
-/**
- * Migration: Add regional knowledge system (F13) to existing saves.
- * Initializes empty regional knowledge records for all countries.
- */
-function migrateRegionalKnowledge(state: GameState): void {
-  // eslint-disable-next-line
-  const s = state as unknown as Record<string, unknown>;
-  if (s.regionalKnowledge === undefined || s.regionalKnowledge === null) {
-    const countries = state.countries ?? [];
-    const startingCountry =
-      normalizeCountryKey(getScoutHomeCountry(state.scout))
-      ?? normalizeCountryKey(countries[0])
-      ?? "england";
-    s.regionalKnowledge = initializeRegionalKnowledge(countries, startingCountry);
-  }
-  if (!state.subRegions || Object.keys(state.subRegions).length === 0) {
-    const generatedSubRegions: GameState["subRegions"] = {};
-    for (const countryKey of state.countries ?? []) {
-      const countryData = getCountryDataSync(countryKey);
-      if (!countryData) continue;
-      for (const subRegion of generateSubRegions(countryData.name)) {
-        generatedSubRegions[subRegion.id] = subRegion;
-      }
-    }
-    state.subRegions = generatedSubRegions;
-  }
-  for (const subRegion of Object.values(state.subRegions ?? {})) {
-    subRegion.countryKey ??= normalizeCountryKey(subRegion.country);
-  }
-  for (const territory of Object.values(state.territories ?? {})) {
-    territory.countryKey ??=
-      normalizeCountryKey(territory.country)
-      ?? normalizeCountryKey(territory.id.replace(/^territory_/, ""));
-  }
-  for (const tournament of Object.values(state.youthTournaments ?? {})) {
-    tournament.countryKey ??= normalizeCountryKey(tournament.country);
-  }
-  const synchronized = synchronizeRegionalFamiliarity(
-    state.scout,
-    state.subRegions,
-    state.regionalKnowledge,
-  );
-  state.scout = synchronized.scout;
-  state.subRegions = synchronized.subRegions;
-}
-
-/**
- * Pin the operating base and reconcile legacy satellite-office geography.
- * Presence itself remains derived, so no additional mutable meter can drift.
- */
-function migrateRegionalPresence(state: GameState): void {
-  const eligibleCountries = new Set(getTravelEligibleCountryKeys(state));
-  const manifestHome = normalizeCountryKey(state.runManifest?.startingCountry);
-  const inferredHome = normalizeCountryKey(getScoutHomeCountry(state.scout));
-  const fallbackHome = normalizeCountryKey(state.countries[0]);
-  const homeCountry = [
-    normalizeCountryKey(state.scout.homeCountry),
-    manifestHome,
-    inferredHome,
-    fallbackHome,
-  ].find((country): country is string => !!country && (
-    eligibleCountries.size === 0 || eligibleCountries.has(country)
-  ));
-  if (homeCountry) {
-    state.scout = { ...state.scout, homeCountry };
-  }
-
-  if (!state.finances) return;
-  const employeeIds = new Set(state.finances.employees.map((employee) => employee.id));
-  const claimedEmployees = new Set<string>();
-  const claimedCountries = new Set<string>();
-  const satelliteOffices = state.finances.satelliteOffices.flatMap((office) => {
-    const country = normalizeCountryKey(office.region);
-    if (!country || claimedCountries.has(country)) return [];
-    if (eligibleCountries.size > 0 && !eligibleCountries.has(country)) return [];
-    claimedCountries.add(country);
-    const validEmployeeIds = [...new Set(office.employeeIds)].filter((employeeId) => {
-      if (!employeeIds.has(employeeId) || claimedEmployees.has(employeeId)) return false;
-      claimedEmployees.add(employeeId);
-      return true;
-    });
-    return [{ ...office, region: country, employeeIds: validEmployeeIds }];
-  });
-  state.finances = { ...state.finances, satelliteOffices };
-}
-
-/**
- * A legacy save may carry a broad/static `countries` list that includes core
- * countries never generated for that career. Keep presentation state aligned
- * with the persisted simulation surface before any map or travel UI reads it.
- */
-function migrateWorldCountryEligibility(state: GameState): void {
-  const generatedCountries = getTravelEligibleCountryKeys(state);
-
-  // Do not erase a legacy save's presentation list when it predates the
-  // persisted world records required to prove eligibility. The UI and travel
-  // action still require generated evidence, so this fallback cannot revive a
-  // ghost destination; it simply avoids turning a recoverable old save into
-  // an empty-world save during migration.
-  if (generatedCountries.length > 0) {
-    state.countries = generatedCountries;
-  }
-}
-
-/**
- * Remove pending/in-progress travel work that points at a no-longer-generated
- * destination. Historical assignments are intentionally retained as records.
- */
-function migrateInternationalDestinationEligibility(state: GameState): void {
-  state.internationalAssignments = (state.internationalAssignments ?? []).filter(
-    (assignment) => isInternationalAssignmentEligibleCountry(state, assignment.country),
-  );
-
-  const activeAssignment = state.activeInternationalAssignment;
-  if (
-    activeAssignment
-    && !isInternationalAssignmentEligibleCountry(state, activeAssignment.country)
-  ) {
-    state.activeInternationalAssignment = null;
-  }
-
-  const booking = state.scout.travelBooking;
-  if (booking && !isTravelEligibleCountry(state, booking.destinationCountry)) {
-    const destinationKey = normalizeCountryKey(booking.destinationCountry);
-    state.scout = {
-      ...state.scout,
-      travelBooking: undefined,
-    };
-    if (state.schedule?.activities) {
-      state.schedule = {
-        ...state.schedule,
-        activities: state.schedule.activities.map((activity) =>
-          activity?.type === "internationalTravel"
-          && normalizeCountryKey(activity.targetId) === destinationKey
-            ? null
-            : activity,
-        ),
-      };
-    }
-  }
-}
-
-/**
- * Migration: F12 Youth Pipeline Tracking.
- * Ensures alumni records have careerUpdates, currentStatus, seasonStats,
- * becameContact fields for existing saves.
- */
-/**
- * Migration: F8 Rival Scouts Enhancement.
- * Adds new fields to existing rival scouts (scoutingProgress, aggressiveness, budgetTier)
- * and initialises rivalActivities on GameState.
- */
-function migrateRivalScouts(state: GameState): void {
-  // eslint-disable-next-line
-  const s = state as any;
-  s.rivalActivities ??= [];
-  if (s.rivalScouts) {
-    for (const rival of Object.values(s.rivalScouts) as any[]) {
-      rival.scoutingProgress ??= {};
-      if (rival.aggressiveness === undefined) {
-        const bases: Record<string, number> = {
-          aggressive: 0.8,
-          methodical: 0.3,
-          connected: 0.5,
-          lucky: 0.6,
-        };
-        rival.aggressiveness = bases[rival.personality as string] ?? 0.5;
-      }
-      rival.budgetTier ??= "medium";
-    }
-  }
-}
-
-/**
- * Migration: F3 Contact Network Depth
- * Adds new F3 fields to existing contacts with sensible defaults.
- */
-function migrateContactNetworkDepth(state: GameState): void {
-  if (!state.contacts) return;
-  for (const contact of Object.values(state.contacts)) {
-    // eslint-disable-next-line
-    const c = contact as any;
-    c.trustLevel ??= c.relationship ?? 30;
-    c.loyalty ??= 50;
-    c.interactionHistory ??= [];
-    c.gossipQueue ??= [];
-    c.referralNetwork ??= [];
-    c.betrayalRisk ??= 0;
-    // exclusiveWindow is intentionally left undefined (optional field)
-  }
-}
-
-function migrateAlumniPipeline(state: GameState): void {
-  if (!state.alumniRecords) return;
-  for (const record of state.alumniRecords) {
-    // eslint-disable-next-line
-    const r = record as any;
-    r.careerUpdates ??= [];
-    r.currentStatus ??= "academy";
-    r.seasonStats ??= [];
-    r.becameContact ??= false;
-  }
-}
-
 // Module-level flag to prevent autosave race condition (Fix #24)
 let _autosavePending = false;
 
@@ -801,6 +318,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   lastInsightResult: null,
   lastWeekSummary: null,
   batchSummary: null,
+  isAdvancingWeek: false,
+  lastWeeklyExecutionRoute: null,
+  lastWeeklyWorkerTelemetry: null,
+  weeklyTransactionError: null,
   lastMatchResult: null,
   selectedPlayerId: null,
   selectedFixtureId: null,
@@ -850,6 +371,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Start new game
   startNewGame: async (config) => {
     if (newGameStartInFlight) return;
+    terminateWeeklySimulationWorker();
+    set({
+      isAdvancingWeek: false,
+      lastWeeklyExecutionRoute: null,
+      lastWeeklyWorkerTelemetry: null,
+      weeklyTransactionError: null,
+    });
     newGameStartInFlight = true;
     try {
     // Apply scenario config overrides before world generation
@@ -901,6 +429,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       flawId: effectiveConfig.flawId,
       doctrineIds: effectiveConfig.doctrineIds,
       contentDefinitionIds: [
+        ...getRunContentDefinitionIds(
+          getGameModeIdForSpecialization(effectiveConfig.specialization),
+          scenario?.id,
+        ),
         ...getWorldTraitContentDefinitionIds(),
         ...getWorldConditionContentDefinitionIds(),
         ...getScoutIdentityContentDefinitionIds(),
@@ -954,7 +486,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
 
     // Generate initial unsigned youth so the pool is populated from game start.
-    // Country data is loaded into SYNC_REGISTRY by initializeWorld, so getCountryDataSync works.
+    // World initialization populates the synchronous country cache, so this
+    // lookup is safe without introducing an async branch into new-game setup.
     const initialUnsignedYouth: Record<string, UnsignedYouth> = {};
     if (effectiveConfig.specialization === "youth") {
       const youthRng = createRNG(`${effectiveConfig.worldSeed}-youth-s1`);
@@ -1399,257 +932,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   loadGame: (rawState) => {
+    terminateWeeklySimulationWorker();
     // Every runtime entrypoint, including direct test/import loads, passes
     // through the same pure and idempotent migration used by save providers.
-    const state = migrateSaveState(rawState);
-    const migrated: GameState = {
-      ...state,
-      scout: { ...state.scout, skills: { ...state.scout.skills } },
-      finances: state.finances ? { ...state.finances } : state.finances,
-      npcDelegations: { ...(state.npcDelegations ?? {}) },
-      transferRecords: (state.transferRecords ?? []).map((record) => ({
-        ...record,
-        seasonParticipation: record.seasonParticipation?.map((season) => ({ ...season })),
-        outcomeEvidence: record.outcomeEvidence ? [...record.outcomeEvidence] : undefined,
-      })),
-    };
-    if (!migrated.runManifest) {
-      const legacyCountries = migrated.countries?.length
-        ? migrated.countries
-        : ["england"];
-      migrated.runManifest = createRunManifest({
-        rootSeed: migrated.seed || "legacy-import",
-        specialization: migrated.scout.primarySpecialization ?? "youth",
-        difficulty: migrated.difficulty ?? "normal",
-        selectedCountries: legacyCountries,
-        startingCountry: legacyCountries[0],
-        integrity: "legacy-import",
-        creationRulesVersion: "legacy-pre-run-manifest",
-      });
-    } else {
-      try {
-        if (validateRunManifest(migrated.runManifest, migrated.seed).length > 0) {
-          migrated.runManifest = repairRunManifest(
-            migrated.runManifest,
-            migrated.seed || migrated.runManifest.rootSeed,
-          );
-        }
-      } catch {
-        const legacyCountries = migrated.countries?.length
-          ? migrated.countries
-          : ["england"];
-        migrated.runManifest = createRunManifest({
-          rootSeed: migrated.seed || "legacy-import",
-          specialization: migrated.scout.primarySpecialization ?? "youth",
-          difficulty: migrated.difficulty ?? "normal",
-          selectedCountries: legacyCountries,
-          startingCountry: legacyCountries[0],
-          integrity: "legacy-import",
-          creationRulesVersion: "legacy-pre-run-manifest",
-        });
-      }
-    }
-    migrated.consequenceState = createConsequenceEngineState(
-      migrated.consequenceState,
-    );
-    migrated.eventDirector = createEventDirectorState(migrated.eventDirector);
-    migrateFreeAgentGeography(migrated);
-    migrateWorldCountryEligibility(migrated);
-    // Migration: add new scout skills if loading an older save
-    if (migrated.scout.skills.playerJudgment === undefined) {
-      migrated.scout.skills.playerJudgment = 5;
-      migrated.scout.skills.potentialAssessment = 5;
-    }
-    // Migration: add careerPath to scout if missing
-    if (migrated.scout.careerPath === undefined) {
-      migrated.scout.careerPath = migrated.scout.currentClubId
-        ? "club"
-        : "independent";
-    }
-    // Legacy compatibility: an established Tier-2+ career (or any active club
-    // contract) is treated as an already-made choice so an old save is never
-    // interrupted by a retroactive fork. Only an unemployed Tier-1 scout keeps
-    // the new deliberate choice ahead of them.
-    if (migrated.scout.careerPathChosen === undefined) {
-      migrated.scout.careerPathChosen = Boolean(
-        migrated.scout.currentClubId || migrated.scout.careerTier >= 2,
-      );
-    }
-    // Migration: convert old equipmentLevel to new equipment loadout system
-    if (migrated.finances && !migrated.finances.equipment) {
-      migrated.finances.equipment = migrateEquipmentLevel(migrated.finances.equipmentLevel);
-    }
-    // Migration: economics revamp — add new financial fields
-    if (migrated.finances) {
-      migrated.finances = migrateFinancialRecord(migrated.finances, migrated.scout);
-    }
-    // Migration: employee skills system
-    if (migrated.finances && migrated.finances.employees.some((e) => !e.skills)) {
-      const rng = createRNG(`${migrated.seed}-skill-migrate`);
-      migrated.finances = migrateEmployeeSkillsInRecord(migrated.finances, rng);
-    }
-    // Migration: enforce deterministic employee market bands and initialize
-    // pay satisfaction. Legacy £1/negative contracts move to the nearest legal
-    // floor and receive a zero-value audit-ledger entry.
-    if (migrated.finances) {
-      migrated.finances = normalizeEmployeeContractsInRecord(
-        migrated.finances,
-        migrated.scout.reputation,
-        migrated.currentWeek,
-        migrated.currentSeason,
-      );
-    }
-    // Migration: report listing bids
-    if (migrated.finances) {
-      migrated.finances = migrateReportListingBids(
-        migrated.finances,
-        getSeasonLength(migrated.fixtures, migrated.currentSeason),
-      );
-    }
-    // Migration: Player roles, traits & tactical depth expansion
-    migratePlayerRolesAndTraits(migrated);
-    // Migration: Match rating system
-    migrateMatchRatings(migrated);
-    // Migration: replace fabricated transfer appearances and unsupported causes
-    migrated.transferRecords = migrateLegacyTransferParticipation(
-      migrated.transferRecords,
-    );
-    // Migration: Season event effects (F1)
-    migrateSeasonEvents(migrated);
-    migrateInboxMessages(migrated);
-    // Migration: Injury system (F7)
-    migrateInjurySystem(migrated);
-    // Migration: Personality profiles (F9)
-    migratePersonalityProfiles(migrated);
-    // Migration: F14 Financial Strategy Layer
-    migrateFinancialStrategy(migrated);
-    // Migration: F13 Regional Scouting Depth
-    migrateRegionalKnowledge(migrated);
-    // Migration: pin home base and reconcile office/staff presence.
-    migrateRegionalPresence(migrated);
-    // Migration: discipline/card system
-    // eslint-disable-next-line
-    if ((migrated as any).disciplinaryRecords === undefined) {
-      (migrated as any).disciplinaryRecords = {};
-    }
-    // Migration: F12 Youth Pipeline Tracking
-    migrateAlumniPipeline(migrated);
-    // Migration: causal report -> delivery -> decision -> alumni history.
-    migrateScoutingCases(migrated);
-    // Migration: F4 Transfer Negotiation System
-    // eslint-disable-next-line
-    (migrated as any).activeNegotiations ??= [];
-    // Migration: F8 Rival Scouts Enhancement
-    migrateRivalScouts(migrated);
-    migrated.rivalOrganizationState = migrateRivalOrganizationState(
-      migrated.seed,
-      migrated.rivalScouts,
-      migrated.rivalOrganizationState,
-      Math.max(1, migrated.currentSeason),
-    );
-    // Migration: NPC delegation persistence
-    if (!(migrated as GameState & { npcDelegations?: GameState["npcDelegations"] }).npcDelegations) {
-      (migrated as GameState & { npcDelegations: GameState["npcDelegations"] }).npcDelegations = {};
-    }
-    // Migration: F2 Event Chains
-    // eslint-disable-next-line
-    (migrated as any).eventChains ??= [];
-    // Migration: F3 Contact Network Depth
-    migrateContactNetworkDepth(migrated);
-    // Migration: persisted international assignment queue
-    if (!(migrated as GameState & { internationalAssignments?: GameState["internationalAssignments"] }).internationalAssignments) {
-      (migrated as GameState & { internationalAssignments: GameState["internationalAssignments"] }).internationalAssignments = [];
-    }
-    migrated.internationalAssignments = migrated.internationalAssignments.map(
-      migrateInternationalAssignment,
-    );
-    if ((migrated as GameState & { activeInternationalAssignment?: GameState["activeInternationalAssignment"] }).activeInternationalAssignment === undefined) {
-      (migrated as GameState & { activeInternationalAssignment: GameState["activeInternationalAssignment"] }).activeInternationalAssignment = null;
-    }
-    if (migrated.activeInternationalAssignment) {
-      migrated.activeInternationalAssignment = {
-        ...migrateInternationalAssignment(migrated.activeInternationalAssignment),
-        acceptedWeek: migrated.activeInternationalAssignment.acceptedWeek ?? migrated.currentWeek,
-        acceptedSeason: migrated.activeInternationalAssignment.acceptedSeason ?? migrated.currentSeason,
-      };
-    }
-    migrated.internationalAssignmentHistory = (
-      migrated.internationalAssignmentHistory ?? []
-    ).map(migrateInternationalAssignment);
-    migrateInternationalDestinationEligibility(migrated);
-    // Migration: F10 Dynamic Board Expectations
-    // eslint-disable-next-line
-    (migrated as any).boardReactions ??= [];
-    if (
-      migrated.boardProfile?.ultimatumIssued
-      && migrated.boardProfile.ultimatumDeadline !== undefined
-      && migrated.boardProfile.ultimatumDeadlineSeason === undefined
-    ) {
-      migrated.boardProfile.ultimatumDeadlineSeason = migrated.currentSeason;
-    }
-    // boardProfile is optional — generated on first tier 5 promotion or board meeting
-    // Migration: Deep Systems Overhaul — credit score, distress, accuracy, morale
-    if (migrated.finances) {
-      if (migrated.finances.creditScore === undefined) migrated.finances.creditScore = 50;
-      if (migrated.finances.distressLevel === undefined) migrated.finances.distressLevel = "healthy";
-      if (migrated.finances.weeksInDistress === undefined) migrated.finances.weeksInDistress = 0;
-      if (migrated.finances.failedContractCount === undefined) migrated.finances.failedContractCount = 0;
-      if (migrated.finances.blacklistedClubs === undefined) migrated.finances.blacklistedClubs = [];
-      if (migrated.finances.bankruptcyRecoveryCooldown === undefined) migrated.finances.bankruptcyRecoveryCooldown = 0;
-    }
-    if (!migrated.scout.accuracyHistory) migrated.scout.accuracyHistory = [];
-    if (!migrated.scout.performancePulses) migrated.scout.performancePulses = [];
-    if (migrated.scout.specializationXp === undefined) migrated.scout.specializationXp = 0;
-    migrated.scout.unlockedPerks = Array.from(new Set([
-      ...(migrated.scout.unlockedPerks ?? []),
-      ...getUnlockedPerks(
-        migrated.scout.primarySpecialization,
-        migrated.scout.specializationLevel ?? 1,
-      ).map((perk) => perk.id),
-    ]));
-    if (migrated.scout.avatarId === undefined) migrated.scout.avatarId = 1;
-    // Migration: Youth Tournament System
-    // eslint-disable-next-line
-    if (!(migrated as any).youthTournaments) (migrated as any).youthTournaments = {};
-    migrated.youthRecruitmentBriefs ??= {};
-    migrated.recommendationReviews ??= {};
-    // Migration: Player Loan System
-    // eslint-disable-next-line
-    (migrated as any).activeLoans ??= [];
-    // eslint-disable-next-line
-    (migrated as any).loanHistory ??= [];
-    // eslint-disable-next-line
-    (migrated as any).loanRecommendations ??= [];
-    (migrated as any).retiredPlayers ??= {};
-    (migrated as any).playerMovementHistory ??= [];
-    for (const player of Object.values(migrated.players ?? {})) {
-      if (player.contractClubId === undefined) {
-        player.contractClubId = (player.loanParentClubId ?? player.clubId) || undefined;
-      }
-    }
-    // Ensure clubs have loan tracking arrays
-    for (const club of Object.values(migrated.clubs ?? {})) {
-      if (!(club as any).loanedOutPlayerIds) (club as any).loanedOutPlayerIds = [];
-      if (!(club as any).loanedInPlayerIds) (club as any).loanedInPlayerIds = [];
-      if (!(club as any).academyPlayerIds) (club as any).academyPlayerIds = [];
-    }
-    const compactedHistoryState = compactLongCareerHistory(migrated);
-    const scenarioSafeState = reconcileScenarioAuthority(
-      migratePoliticalMeetingState(compactedHistoryState),
-    );
-    const serializedSession = scenarioSafeState.activeObservationSession
-      ? migrateObservationSessionInteractions(scenarioSafeState.activeObservationSession)
-      : null;
-    const serializedCompletionId = serializedSession?.activityInstanceId
-      ?? serializedSession?.id;
-    const resumableSession = serializedSession
-      && serializedSession.state !== "complete"
-      && !(scenarioSafeState.completedInteractiveSessions ?? []).includes(
-        serializedCompletionId ?? "",
-      )
-        ? serializedSession
-        : null;
-    scenarioSafeState.activeObservationSession = resumableSession;
+    const scenarioSafeState = migrateSaveState(rawState);
+    assertEarlyAccessSaveCompatibility(scenarioSafeState);
+    const resumableSession = scenarioSafeState.activeObservationSession ?? null;
     const awaitingOpeningDecision = scenarioSafeState.openingCase?.stage === "decision";
     const restoreScreen = resumableSession
       ? "observation"
@@ -1674,15 +962,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       batchSummary: null,
       saveConflict: null,
       isResolvingSaveConflict: false,
+      isAdvancingWeek: false,
+      lastWeeklyExecutionRoute: null,
+      lastWeeklyWorkerTelemetry: null,
+      weeklyTransactionError: null,
     });
 
-    // Resume guided session if it wasn't completed in a previous session
     const tutState = useTutorialStore.getState();
     if (!tutState.dismissed && !tutState.guidedSessionCompleted) {
-      const hasIncomplete = Object.values(tutState.guidedMilestones).some(v => !v);
-      if (hasIncomplete) {
-        useTutorialStore.setState({ guidedSessionActive: true });
-      }
+      const hasIncomplete = Object.values(tutState.guidedMilestones).some((value) => !value);
+      if (hasIncomplete) useTutorialStore.setState({ guidedSessionActive: true });
     }
   },
 
@@ -1696,7 +985,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
     set({ gameState: saved });
     getActiveSaveProvider()
-      .then((provider) => provider.save("autosave", JSON.stringify(saved), "Autosave"))
+      .then((provider) => persistGameState(provider, "autosave", saved, "Autosave"))
+      .then((commit) => {
+        const savedAt = commit?.record.state.lastSaved;
+        if (!Number.isFinite(savedAt)) return;
+        set((current) => {
+          const currentState = current.gameState;
+          if (!currentState || currentState.lastSaved >= savedAt!) return {};
+          return {
+            gameState: {
+              ...currentState,
+              lastSaved: savedAt!,
+            },
+          };
+        });
+      })
       .catch((err) => {
         console.warn("saveGame: provider persist failed:", err);
         void import("@/lib/sentry").then(({ captureException }) => captureException(err));
@@ -1716,12 +1019,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
         lastSaved: Date.now(),
       };
       const provider = await getActiveSaveProvider();
-      await provider.save(
+      const commit = await persistGameState(
+        provider,
         slotNumberToSaveName(slot),
-        JSON.stringify(saved),
+        saved,
         name,
       );
-      set({ gameState: saved });
+      set({
+        gameState: {
+          ...saved,
+          lastSaved: commit?.record.state.lastSaved ?? Date.now(),
+        },
+      });
       await get().refreshSaveSlots();
     } finally {
       set({ isSaving: false });
@@ -1748,9 +1057,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const loaded = await provider.load(slotName);
       if (!loaded) return;
 
-      const state = migrateSaveState(JSON.parse(loaded.data) as unknown);
-      assertEarlyAccessSaveCompatibility(state);
-      get().loadGame(state);
+      get().loadGame(loadResultGameState(loaded));
     } finally {
       set({ isLoadingSave: false });
     }
@@ -1808,9 +1115,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       const provider = await getActiveSaveProvider();
       const restored = await provider.restoreRecoveryCopy(archiveId);
-      const state = migrateSaveState(JSON.parse(restored.data) as unknown);
-      assertEarlyAccessSaveCompatibility(state);
-      get().loadGame(state);
+      get().loadGame(loadResultGameState(restored));
       await get().refreshSaveSlots();
     } finally {
       set({ isLoadingSave: false });
@@ -1840,9 +1145,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       const slotName = slotNumberToSaveName(slot);
       const resolved = await provider.resolveConflict(slotName, preferredSource);
 
-      const state = migrateSaveState(JSON.parse(resolved.data) as unknown);
-      assertEarlyAccessSaveCompatibility(state);
-      get().loadGame(state);
+      get().loadGame(loadResultGameState(resolved));
       set({ saveConflict: null });
       await get().refreshSaveSlots();
     } finally {
@@ -1852,6 +1155,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   // Weekly cycle actions (extracted to actions/weeklyActions.ts)
   ...createWeeklyActions(get, set),
+  ...createWeeklyAsyncActions(get, set),
   // Observation session & insight actions (extracted to actions/observationActions.ts)
   ...createObservationActions(get, set),
 

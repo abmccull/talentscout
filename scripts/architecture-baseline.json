@@ -2,5 +2,11 @@
   "schemaVersion": 1,
   "maximumStronglyConnectedComponents": 0,
   "maximumModulesInCycles": 0,
-  "allowedCycleGroups": []
+  "allowedCycleGroups": [],
+  "maximumModuleLinesByModule": {
+    "src/stores/actions/weeklyActions.ts": 7700,
+    "src/stores/actions/weeklySimulationSupport.ts": 450,
+    "src/engine/core/weeklySimulationPipeline.ts": 320,
+    "src/engine/core/weeklyTransactionProtocol.ts": 220
+  }
 }

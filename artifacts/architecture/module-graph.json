@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T03:19:48.079Z",
+  "generatedAt": "2026-07-14T13:04:58.302Z",
   "summary": {
-    "modules": 458,
-    "internalEdges": 1916,
+    "modules": 465,
+    "internalEdges": 1974,
     "stronglyConnectedComponents": 0,
     "modulesInCycles": 0
   },
   "largestModules": [
     {
       "file": "src/stores/actions/weeklyActions.ts",
-      "lines": 7965
+      "lines": 7467
     },
     {
       "file": "src/engine/core/types.ts",
-      "lines": 5241
+      "lines": 5248
     },
     {
       "file": "src/engine/core/gameLoop.ts",
@@ -25,16 +25,12 @@
       "lines": 2898
     },
     {
-      "file": "src/components/game/CareerScreen.tsx",
-      "lines": 2519
-    },
-    {
       "file": "src/components/game/Dashboard.tsx",
       "lines": 2457
     },
     {
-      "file": "src/stores/gameStore.ts",
-      "lines": 2292
+      "file": "src/components/game/CareerScreen.tsx",
+      "lines": 2236
     },
     {
       "file": "src/components/game/NewGameScreen.tsx",
@@ -45,16 +41,16 @@
       "lines": 2057
     },
     {
+      "file": "src/engine/observation/investigation.ts",
+      "lines": 1950
+    },
+    {
       "file": "src/engine/events/specialEventDeck.ts",
       "lines": 1832
     },
     {
       "file": "src/components/game/ReportHistory.tsx",
       "lines": 1822
-    },
-    {
-      "file": "src/engine/observation/investigation.ts",
-      "lines": 1787
     },
     {
       "file": "src/components/game/ObservationScreen.tsx",
@@ -66,11 +62,19 @@
     },
     {
       "file": "src/lib/db.ts",
-      "lines": 1682
+      "lines": 1634
     },
     {
       "file": "src/engine/events/eventTemplates.ts",
-      "lines": 1551
+      "lines": 1602
+    },
+    {
+      "file": "src/stores/gameStore.ts",
+      "lines": 1552
+    },
+    {
+      "file": "src/engine/insight/actions.ts",
+      "lines": 1426
     },
     {
       "file": "src/components/game/CalendarScreen.tsx",
@@ -87,10 +91,6 @@
     {
       "file": "src/engine/rivals/rivalScouts.ts",
       "lines": 1365
-    },
-    {
-      "file": "src/engine/insight/actions.ts",
-      "lines": 1361
     },
     {
       "file": "src/components/game/YouthScoutingScreen.tsx",

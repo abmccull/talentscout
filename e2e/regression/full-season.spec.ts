@@ -17,6 +17,11 @@
 import { test, expect } from "../fixtures";
 import { SPECIALIZATIONS } from "../helpers/selectors";
 
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+const SPECIALIZATIONS_UNDER_TEST = IS_YOUTH_EARLY_ACCESS
+  ? (["youth"] as const)
+  : SPECIALIZATIONS;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Milestone checkpoints within a season (week numbers to pause and verify). */
@@ -37,7 +42,7 @@ async function advanceToWeek(
   const MAX_LOOPS = 20; // Safety valve to prevent infinite loops
 
   const result = await page.evaluate(
-    ({ target, maxLoops }) => {
+    async ({ target, maxLoops }) => {
       const store = (window as any).__GAME_STORE__;
       if (!store) throw new Error("__GAME_STORE__ not found");
 
@@ -78,7 +83,7 @@ async function advanceToWeek(
 
         const remaining = target - store.getState().gameState.currentWeek;
         if (remaining <= 0) break;
-        store.getState().batchAdvance(remaining);
+        await store.getState().batchAdvance(remaining);
       }
 
       const after = store.getState().gameState;
@@ -135,7 +140,18 @@ async function getStateSnapshot(page: import("@playwright/test").Page) {
 
 // ─── Key screens to verify after season end ──────────────────────────────────
 
-const POST_SEASON_SCREENS = [
+const POST_SEASON_SCREENS = IS_YOUTH_EARLY_ACCESS ? [
+  "dashboard",
+  "calendar",
+  "youthScouting",
+  "reportHistory",
+  "career",
+  "inbox",
+  "network",
+  "settings",
+  "finances",
+  "achievements",
+] as const : [
   "dashboard",
   "calendar",
   "playerDatabase",
@@ -154,7 +170,7 @@ test.describe("Full Season Playthrough", () => {
   // These tests advance through an entire season — give them extra time.
   test.setTimeout(120_000);
 
-  for (const spec of SPECIALIZATIONS) {
+  for (const spec of SPECIALIZATIONS_UNDER_TEST) {
     test(`complete season 1 as ${spec} specialist`, async ({ gamePage }) => {
       await gamePage.goto();
 
@@ -280,10 +296,26 @@ test.describe("Full Season Playthrough", () => {
         selectedCountries: ["england"],
         nationality: "English",
         avatarId: 1,
+        skillAllocations: {
+          technicalEye: 2,
+          physicalAssessment: 1,
+          psychologicalRead: 1,
+          playerJudgment: 1,
+          potentialAssessment: 3,
+        },
       });
     });
 
-    // Wait for game to initialize
+    // A seeded career can legitimately begin in the contextual opening case
+    // rather than at the Desk. The balance regression needs a live world, not
+    // a particular presentation route, so wait for state and then take the
+    // normal Desk route explicitly.
+    await gamePage.page.waitForFunction(
+      () => (window as any).__GAME_STORE__?.getState()?.gameState != null,
+      undefined,
+      { timeout: 30_000 },
+    );
+    await gamePage.setScreen("dashboard");
     await gamePage.waitForScreen("dashboard", 30_000);
 
     // Verify difficulty and initial financial state

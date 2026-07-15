@@ -1,6 +1,13 @@
 import { test, expect } from "../fixtures";
 
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
 test.describe("Player Database Screen", () => {
+  test.skip(
+    IS_YOUTH_EARLY_ACCESS,
+    "Player Database is exercised by the full-game build; Youth EA exposes prospect dossiers instead.",
+  );
+
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectMidGameState("firstTeam");

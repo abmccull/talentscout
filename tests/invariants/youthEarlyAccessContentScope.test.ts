@@ -16,7 +16,7 @@ import {
   isGameScreenAllowedForBuild,
 } from "@/stores/gameScreenScope";
 import { TOTAL_ACHIEVEMENT_COUNT } from "@/stores/achievementStore";
-import { hasBrowsedYouthLoanWorkspace } from "@/stores/actions/weeklyActions";
+import { hasBrowsedYouthLoanWorkspace } from "@/stores/actions/weeklyPresentationEffects";
 import {
   CAREER_FINANCE_DRILLDOWN,
   CAREER_RECORD_DRILLDOWNS,

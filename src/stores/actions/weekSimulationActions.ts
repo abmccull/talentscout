@@ -669,7 +669,7 @@ export function createWeekSimulationActions(
     });
   },
 
-  advanceDay: () => {
+  advanceDay: async () => {
     const sim = get().weekSimulation;
     if (!sim || sim.currentDay >= 7) return;
     let current = sim.dayResults[sim.currentDay];
@@ -707,7 +707,14 @@ export function createWeekSimulationActions(
         },
       });
       // Trigger the actual week advancement
-      get().advanceWeek();
+      const sourceSeason = get().gameState?.currentSeason;
+      const sourceWeek = get().gameState?.currentWeek;
+      await get().advanceWeekAsync();
+      const committedState = get().gameState;
+      const advanced = committedState == null
+        || committedState.currentSeason !== sourceSeason
+        || committedState.currentWeek !== sourceWeek;
+      if (!advanced) return;
       const { currentScreen } = get();
       if (currentScreen === "weekSimulation") {
         set({ weekSimulation: null, currentScreen: "calendar" });
@@ -724,7 +731,7 @@ export function createWeekSimulationActions(
     }
   },
 
-  fastForwardWeek: () => {
+  fastForwardWeek: async () => {
     const sim = get().weekSimulation;
     if (!sim) return;
 
@@ -749,7 +756,14 @@ export function createWeekSimulationActions(
     });
 
     // Skip to end and run the full advanceWeek
-    get().advanceWeek();
+    const sourceSeason = get().gameState?.currentSeason;
+    const sourceWeek = get().gameState?.currentWeek;
+    await get().advanceWeekAsync();
+    const committedState = get().gameState;
+    const advanced = committedState == null
+      || committedState.currentSeason !== sourceSeason
+      || committedState.currentWeek !== sourceWeek;
+    if (!advanced) return;
     const { currentScreen } = get();
     if (currentScreen === "weekSimulation") {
       set({ weekSimulation: null, currentScreen: "calendar" });

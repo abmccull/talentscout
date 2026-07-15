@@ -124,6 +124,21 @@ for (const file of files) if (!indexes.has(file)) connect(file);
 const cycles = components
   .map((component) => component.map((file) => normalize(relative(root, file))))
   .sort((left, right) => right.length - left.length || left[0].localeCompare(right[0]));
+const lineCountByModule = new Map(
+  lineCounts.map(({ file, lines }) => [file, lines]),
+);
+const baseline = checkBaseline
+  ? JSON.parse(await readFile(baselinePath, "utf8"))
+  : null;
+const guardedModules = Object.entries(
+  baseline?.maximumModuleLinesByModule ?? {},
+)
+  .map(([file, maximumLines]) => ({
+    file,
+    maximumLines,
+    lines: lineCountByModule.get(file),
+  }))
+  .sort((left, right) => left.file.localeCompare(right.file));
 const report = {
   schemaVersion: 1,
   generatedAt: new Date().toISOString(),
@@ -134,6 +149,7 @@ const report = {
     modulesInCycles: new Set(cycles.flat()).size,
   },
   largestModules: lineCounts.sort((left, right) => right.lines - left.lines).slice(0, 30),
+  guardedModules,
   cycles,
 };
 if (shouldWriteReport) {
@@ -147,24 +163,39 @@ if (shouldWriteReport) {
 }
 
 if (checkBaseline) {
-  const baseline = JSON.parse(await readFile(baselinePath, "utf8"));
+  const baselineConfig = baseline;
   const violations = [];
-  if (report.summary.stronglyConnectedComponents > baseline.maximumStronglyConnectedComponents) {
+  if (report.summary.stronglyConnectedComponents > baselineConfig.maximumStronglyConnectedComponents) {
     violations.push(
-      `SCC count ${report.summary.stronglyConnectedComponents} exceeds ${baseline.maximumStronglyConnectedComponents}`,
+      `SCC count ${report.summary.stronglyConnectedComponents} exceeds ${baselineConfig.maximumStronglyConnectedComponents}`,
     );
   }
-  if (report.summary.modulesInCycles > baseline.maximumModulesInCycles) {
+  if (report.summary.modulesInCycles > baselineConfig.maximumModulesInCycles) {
     violations.push(
-      `cyclic module count ${report.summary.modulesInCycles} exceeds ${baseline.maximumModulesInCycles}`,
+      `cyclic module count ${report.summary.modulesInCycles} exceeds ${baselineConfig.maximumModulesInCycles}`,
     );
   }
   for (const cycle of report.cycles) {
-    const allowedGroup = baseline.allowedCycleGroups.find((group) =>
+    const allowedGroup = baselineConfig.allowedCycleGroups.find((group) =>
       cycle.every((module) => group.modules.includes(module)),
     );
     if (!allowedGroup) {
       violations.push(`unapproved cycle: ${cycle.join(" -> ")}`);
+    }
+  }
+  for (const guarded of guardedModules) {
+    if (guarded.lines === undefined) {
+      violations.push(`guarded module is missing: ${guarded.file}`);
+      continue;
+    }
+    if (typeof guarded.maximumLines !== "number" || !Number.isFinite(guarded.maximumLines)) {
+      violations.push(`invalid line limit for ${guarded.file}`);
+      continue;
+    }
+    if (guarded.lines > guarded.maximumLines) {
+      violations.push(
+        `${guarded.file} has ${guarded.lines} lines, exceeding ${guarded.maximumLines}`,
+      );
     }
   }
   if (violations.length > 0) {

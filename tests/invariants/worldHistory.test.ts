@@ -296,6 +296,24 @@ describe("authoritative world history", () => {
         movementEventIds: ["retire-veteran"],
       }),
     );
+    expect(season.playerMovementSummaries).toEqual([
+      {
+        id: "move-active",
+        playerId: "active",
+        type: "permanentTransfer",
+        week: 1,
+        fromClubId: "beta",
+        toClubId: "alpha",
+        fee: 500_000,
+      },
+      {
+        id: "retire-veteran",
+        playerId: "veteran",
+        type: "retirement",
+        week: 2,
+        fromClubId: "beta",
+      },
+    ]);
   });
 
   it("is deterministic, does not mutate its snapshot, and records a rollover exactly once", () => {

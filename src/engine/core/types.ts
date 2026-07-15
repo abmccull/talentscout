@@ -1921,13 +1921,20 @@ export type RunIntegrity = "standard" | "ironman" | "legacy-import";
 
 /** Immutable creation-time identity used to replay and compare a career. */
 export interface RunManifest {
-  manifestVersion: 1;
+  /**
+   * V1 careers retained only a content fingerprint. V2 additionally retains
+   * the immutable definition ledger used to produce it, so content migrations
+   * can explain a mismatch instead of treating it as an opaque hash.
+   */
+  manifestVersion: 1 | 2;
   rootSeed: string;
   runId: string;
   fingerprint: string;
   creationRulesVersion: string;
   contentVersion: string;
   contentFingerprint: string;
+  /** Present for V2 runs; intentionally absent on untouched V1 careers. */
+  contentDefinitionIds?: string[];
   specialization: Specialization;
   difficulty: DifficultyLevel;
   selectedCountries: string[];

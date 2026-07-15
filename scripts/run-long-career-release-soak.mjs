@@ -65,36 +65,54 @@ async function runWorker(seedIndex, suffix = "run") {
     workerDirectory,
     `seed-${String(seedIndex).padStart(2, "0")}-${suffix}.json`,
   );
-  await new Promise((resolveWorker, rejectWorker) => {
-    const child = spawn(
-      process.execPath,
-      [
-        "--expose-gc",
-        vitestEntry,
-        "run",
-        "--config",
-        "vitest.release-soak.config.ts",
-      ],
-      {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          SOAK_SEEDS: "1",
-          SOAK_SEED_START: String(seedIndex),
-          SOAK_SEASONS: String(seasonCount),
-          SOAK_OUTPUT: workerOutput,
-          SOAK_WORKER_MODE: "true",
-          SOAK_DIAGNOSTIC_ONLY: "false",
+  try {
+    await new Promise((resolveWorker, rejectWorker) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "--expose-gc",
+          vitestEntry,
+          "run",
+          "--config",
+          "vitest.release-soak.config.ts",
+        ],
+        {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            SOAK_SEEDS: "1",
+            SOAK_SEED_START: String(seedIndex),
+            SOAK_SEASONS: String(seasonCount),
+            SOAK_OUTPUT: workerOutput,
+            SOAK_WORKER_MODE: "true",
+            SOAK_DIAGNOSTIC_ONLY: "false",
+          },
+          stdio: "inherit",
         },
-        stdio: "inherit",
-      },
-    );
-    child.once("error", rejectWorker);
-    child.once("exit", (code, signal) => {
-      if (code === 0) resolveWorker();
-      else rejectWorker(new Error(`Soak worker ${seedIndex} failed (${signal ?? code})`));
+      );
+      child.once("error", rejectWorker);
+      child.once("exit", (code, signal) => {
+        if (code === 0) resolveWorker();
+        else rejectWorker(new Error(`Soak worker ${seedIndex} failed (${signal ?? code})`));
+      });
     });
-  });
+  } catch (error) {
+    await writeFile(
+      workerOutput.replace(/\.json$/, "-failure.json"),
+      `${JSON.stringify({
+        schemaVersion: 1,
+        evidenceKind: "long-career-worker-failure",
+        generatedAt: new Date().toISOString(),
+        candidateCommitSha: currentHeadSha,
+        seedIndex,
+        seed: `release-soak-${String(seedIndex).padStart(2, "0")}`,
+        seasonCount,
+        message: error instanceof Error ? error.message : String(error),
+      }, null, 2)}\n`,
+      "utf8",
+    );
+    throw error;
+  }
   return JSON.parse(await readFile(workerOutput, "utf8"));
 }
 

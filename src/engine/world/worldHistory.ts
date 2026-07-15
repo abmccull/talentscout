@@ -28,11 +28,17 @@ import {
 } from "@/engine/world/saveRetention";
 import type {
   PlayerCareerStatus,
+  PlayerMovementArchiveSummary,
   PlayerSeasonHistory,
   PlayerSeasonPerformance,
 } from "@/engine/world/worldHistoryTypes";
+import {
+  sortPlayerMovementArchiveSummaries,
+  summarizePlayerMovement,
+} from "@/engine/world/worldHistoryTypes";
 export type {
   PlayerCareerStatus,
+  PlayerMovementArchiveSummary,
   PlayerSeasonHistory,
   PlayerSeasonPerformance,
 } from "@/engine/world/worldHistoryTypes";
@@ -93,6 +99,17 @@ export interface WorldSeasonHistory {
   leagues: LeagueSeasonHistory[];
   clubs: ClubSeasonHistory[];
   players: PlayerSeasonHistory[];
+  /**
+   * Compact projection of every material player movement resolved this season.
+   *
+   * This is deliberately independent of the bounded public `players` rows, so
+   * archive compaction can safely release raw ledger entries even for players
+   * that were not selected into a season comparison row.
+   *
+   * Optional for legacy saves; migration fills it from the raw ledger when
+   * that source is still available.
+   */
+  playerMovementSummaries?: PlayerMovementArchiveSummary[];
 }
 
 export interface WorldHistoryState {
@@ -256,9 +273,19 @@ function buildSeasonRecord(
   const retiredPlayerIds = new Set(snapshot.retiredPlayerIds);
   const movementsByPlayer = new Map<string, PlayerMovementEvent[]>();
 
-  for (const movement of snapshot.playerMovementHistory) {
-    if (movement.season !== completedSeason) continue;
-    if (!isMaterialHistoricalMovement(movement)) continue;
+  const materialMovements = snapshot.playerMovementHistory
+    .filter(
+      (movement) =>
+        movement.season === completedSeason
+        && isMaterialHistoricalMovement(movement),
+    )
+    .sort(
+      (left, right) =>
+        left.playerId.localeCompare(right.playerId)
+        || left.week - right.week
+        || left.id.localeCompare(right.id),
+    );
+  for (const movement of materialMovements) {
     const playerMovements = movementsByPlayer.get(movement.playerId) ?? [];
     playerMovements.push(movement);
     movementsByPlayer.set(movement.playerId, playerMovements);
@@ -404,6 +431,13 @@ function buildSeasonRecord(
     leagues,
     clubs,
     players: retainedPlayers,
+    ...(materialMovements.length > 0
+      ? {
+          playerMovementSummaries: sortPlayerMovementArchiveSummaries(
+            materialMovements.map(summarizePlayerMovement),
+          ),
+        }
+      : {}),
   };
 }
 

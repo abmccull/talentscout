@@ -17,10 +17,38 @@ env:
   NEXT_PUBLIC_BUILD_VERSION: ${{ github.sha }}
 
 jobs:
-  simulation-soak:
-    name: Canonical and accelerated long-career soaks
+  browser-regression:
+    name: Full Chromium browser regression
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:e2e
+      - run: npm run test:e2e
+
+      - name: Upload browser regression evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: nightly-browser-regression-evidence
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  simulation-soak:
+    name: Canonical full-week long-career soaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

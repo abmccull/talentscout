@@ -12,7 +12,27 @@ import {
   SEASON2_SCREENS,
 } from "../helpers/selectors";
 
-test.describe("Sidebar Navigation", () => {
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+const YOUTH_EA_WORKSPACES = [
+  "dashboard",
+  "calendar",
+  "youthScouting",
+  "reportHistory",
+  "internationalView",
+  "career",
+] as const;
+
+/**
+ * These tier-gated sidebar assertions describe the broader full-game shell.
+ * Youth Scout EA intentionally ships six stable workspaces and exposes the
+ * rest as contextual Career/Planner/Prospect drill-downs, so running these
+ * assertions against the EA build would test a product we do not ship.
+ */
+test.describe("Full-game tier-gated sidebar", () => {
+  test.skip(
+    IS_YOUTH_EARLY_ACCESS,
+    "Tier-gated sidebar navigation is reserved for the planned full-game build.",
+  );
   test.describe("Tier 1 fresh game (week 1)", () => {
     test.beforeEach(async ({ gamePage }) => {
       await gamePage.goto();
@@ -198,6 +218,10 @@ test.describe("Sidebar Navigation", () => {
     });
 
     test("first-team scout sees Players (not Youth Hub) in scouting section", async ({ gamePage }) => {
+      test.skip(
+        IS_YOUTH_EARLY_ACCESS,
+        "First Team Scout navigation is intentionally reserved for the full-game build.",
+      );
       await gamePage.goto();
       await gamePage.injectState({
         currentWeek: 1,
@@ -207,5 +231,43 @@ test.describe("Sidebar Navigation", () => {
       const players = gamePage.page.locator(navItem("playerDatabase"));
       await expect(players).toBeVisible();
     });
+  });
+});
+
+test.describe("Youth Scout EA permanent workspace navigation", () => {
+  test.skip(
+    !IS_YOUTH_EARLY_ACCESS,
+    "The six-workspace navigation contract applies only to Youth Scout EA.",
+  );
+
+  test("keeps the six core workspaces available from the first week", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      scout: { careerTier: 1, primarySpecialization: "youth" },
+    });
+
+    for (const screen of YOUTH_EA_WORKSPACES) {
+      await expect(gamePage.page.locator(navItem(screen))).toBeVisible();
+    }
+
+    for (const detail of ["network", "rivals", "npcManagement", "training"]) {
+      await expect(gamePage.page.locator(navItem(detail))).toHaveCount(0);
+    }
+  });
+
+  test("opens each core workspace from the shell", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      scout: { careerTier: 1, primarySpecialization: "youth" },
+    });
+
+    for (const screen of YOUTH_EA_WORKSPACES) {
+      await gamePage.navigateTo(screen);
+      expect(await gamePage.getCurrentScreen()).toBe(screen);
+    }
+
+    gamePage.expectNoConsoleErrors();
   });
 });

@@ -14,6 +14,12 @@ import type {
   DialogueOption,
   DialogueConsequence,
 } from "@/engine/observation/types";
+import {
+  CONTENT_SCHEMA_VERSION,
+  defineContentPack,
+  hasNonBlankString,
+  type ContentValidationIssue,
+} from "@/engine/content/contracts";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 // =============================================================================
@@ -22,6 +28,21 @@ import { resolveCareerPathText } from "@/engine/utils/textResolution";
 
 /** Risk levels that map to consequence severity. */
 type RiskLevel = "safe" | "moderate" | "bold";
+
+export type InvestigationConsequenceNarrativeCategory =
+  | "safe"
+  | "moderate"
+  | "moderate-negative"
+  | "bold-positive"
+  | "bold-negative"
+  | "insight";
+
+export interface InvestigationConsequenceNarrative {
+  /** Stable authored identifier retained in run content fingerprints. */
+  id: string;
+  category: InvestigationConsequenceNarrativeCategory;
+  text: string;
+}
 
 /**
  * Raw template data for a single dialogue option before IDs are assigned.
@@ -1487,7 +1508,7 @@ export const DIALOGUE_TEMPLATES: Record<string, ActivityTemplates[]> = {
 // CONSEQUENCE NARRATIVE BANKS
 // =============================================================================
 
-const SAFE_NARRATIVES = [
+const SAFE_NARRATIVE_TEXTS = [
   "The cautious approach pays off — you gather solid, reliable information without creating tension.",
   "You keep the atmosphere relaxed. What you learn is modest, but the relationship is intact.",
   "Nothing is forced. The read is partial, but the door stays open for follow-up.",
@@ -1495,7 +1516,7 @@ const SAFE_NARRATIVES = [
   "You learn less than you'd like, but you leave on good terms — and that has its own value.",
 ];
 
-const MODERATE_NARRATIVES = [
+const MODERATE_NARRATIVE_TEXTS = [
   "The push yields results. You land meaningful information, though the contact shifts slightly in their seat.",
   "A balanced read — enough pressure to get somewhere real, not enough to cause friction.",
   "They respond well to the directness. You learn something genuinely useful.",
@@ -1503,20 +1524,20 @@ const MODERATE_NARRATIVES = [
   "A mixed return: solid insight but a faint undercurrent of wariness from the other party.",
 ];
 
-const MODERATE_NEGATIVE_NARRATIVES = [
+const MODERATE_NEGATIVE_NARRATIVE_TEXTS = [
   "The pressure was slightly misjudged. They close up, and you sense you've pushed just a fraction too hard.",
   "It doesn't land the way you intended — they deflect and the moment is lost.",
   "You got something, but you can feel a small amount of trust was spent in the process.",
 ];
 
-const BOLD_POSITIVE_NARRATIVES = [
+const BOLD_POSITIVE_NARRATIVE_TEXTS = [
   "The bold move pays off completely. You get more than you expected — and they respect the directness.",
   "They take the challenge head-on. The risk was high, but the return justifies every bit of it.",
   "A gamble that lands. You've revealed something significant, and the contact is impressed by your confidence.",
   "Pushing hard worked. You've gained a major insight that would have taken weeks through careful observation.",
 ];
 
-const BOLD_NEGATIVE_NARRATIVES = [
+const BOLD_NEGATIVE_NARRATIVE_TEXTS = [
   "You overplayed your hand. They pull back sharply, and the atmosphere sours.",
   "Too much, too soon. The relationship takes a hit that won't be quick to repair.",
   "The boldness backfires. They shut down, and you're left with less than when you started.",
@@ -1524,11 +1545,151 @@ const BOLD_NEGATIVE_NARRATIVES = [
   "They're offended by the approach. The conversation ends early, and you'll need time to recover from this.",
 ];
 
-const INSIGHT_NARRATIVES = [
+const INSIGHT_NARRATIVE_TEXTS = [
   "A small detail catches your eye — something worth noting in the file.",
   "They let slip more than they intended. Your instincts were right.",
   "The extra push surfaces a hidden detail that changes your read of the player.",
 ];
+
+const CONSEQUENCE_NARRATIVE_IDS: Readonly<
+  Record<InvestigationConsequenceNarrativeCategory, readonly string[]>
+> = {
+  safe: [
+    "safe-reliable-information",
+    "safe-relationship-intact",
+    "safe-follow-up-door",
+    "safe-steady-groundwork",
+    "safe-good-terms",
+  ],
+  moderate: [
+    "moderate-pressure-yields",
+    "moderate-balanced-read",
+    "moderate-directness-rewarded",
+    "moderate-gamble-pays",
+    "moderate-mixed-return",
+  ],
+  "moderate-negative": [
+    "moderate-negative-misjudged-pressure",
+    "moderate-negative-moment-lost",
+    "moderate-negative-trust-spent",
+  ],
+  "bold-positive": [
+    "bold-positive-directness-respected",
+    "bold-positive-risk-justified",
+    "bold-positive-significant-reveal",
+    "bold-positive-major-insight",
+  ],
+  "bold-negative": [
+    "bold-negative-overplayed-hand",
+    "bold-negative-too-soon",
+    "bold-negative-shut-down",
+    "bold-negative-costly-misjudgement",
+    "bold-negative-offended",
+  ],
+  insight: [
+    "insight-file-detail",
+    "insight-unintended-admission",
+    "insight-hidden-detail",
+  ],
+};
+
+const CONSEQUENCE_NARRATIVE_CATEGORIES = new Set<InvestigationConsequenceNarrativeCategory>([
+  "safe",
+  "moderate",
+  "moderate-negative",
+  "bold-positive",
+  "bold-negative",
+  "insight",
+]);
+
+function defineNarrativeEntries(
+  category: InvestigationConsequenceNarrativeCategory,
+  texts: readonly string[],
+): InvestigationConsequenceNarrative[] {
+  const ids = CONSEQUENCE_NARRATIVE_IDS[category];
+  if (ids.length !== texts.length) {
+    throw new Error(
+      `investigation consequence narrative IDs do not match ${category} text count`,
+    );
+  }
+  return texts.map((text, index) => ({
+    id: ids[index],
+    category,
+    text,
+  }));
+}
+
+const INVESTIGATION_CONSEQUENCE_NARRATIVE_DEFINITIONS: readonly InvestigationConsequenceNarrative[] = [
+  ...defineNarrativeEntries("safe", SAFE_NARRATIVE_TEXTS),
+  ...defineNarrativeEntries("moderate", MODERATE_NARRATIVE_TEXTS),
+  ...defineNarrativeEntries(
+    "moderate-negative",
+    MODERATE_NEGATIVE_NARRATIVE_TEXTS,
+  ),
+  ...defineNarrativeEntries("bold-positive", BOLD_POSITIVE_NARRATIVE_TEXTS),
+  ...defineNarrativeEntries("bold-negative", BOLD_NEGATIVE_NARRATIVE_TEXTS),
+  ...defineNarrativeEntries("insight", INSIGHT_NARRATIVE_TEXTS),
+];
+
+function validateInvestigationConsequenceNarrative(
+  narrative: InvestigationConsequenceNarrative,
+): readonly Omit<ContentValidationIssue, "packId" | "definitionId">[] {
+  const issues: Array<Omit<ContentValidationIssue, "packId" | "definitionId">> = [];
+  if (!CONSEQUENCE_NARRATIVE_CATEGORIES.has(narrative.category)) {
+    issues.push({ path: "category", message: "must be a supported consequence category" });
+  }
+  if (!hasNonBlankString(narrative.text)) {
+    issues.push({ path: "text", message: "must be a non-empty string" });
+  }
+  return issues;
+}
+
+/**
+ * Consequence prose accompanies real trust and insight effects. Keep it in
+ * the run ledger so authored changes cannot silently rewrite a career.
+ */
+export const INVESTIGATION_CONSEQUENCE_NARRATIVE_CONTENT_PACK = defineContentPack({
+  manifest: {
+    id: "talentscout.investigation-consequence-narratives",
+    kind: "investigation-consequence-narrative",
+    schemaVersion: CONTENT_SCHEMA_VERSION,
+    contentVersion: "investigation-consequence-narratives.1",
+  },
+  entries: INVESTIGATION_CONSEQUENCE_NARRATIVE_DEFINITIONS,
+  getDefinitionId: (narrative) => narrative.id,
+  validateDefinition: validateInvestigationConsequenceNarrative,
+});
+
+export const INVESTIGATION_CONSEQUENCE_NARRATIVES =
+  INVESTIGATION_CONSEQUENCE_NARRATIVE_CONTENT_PACK.entries;
+
+const narrativesByCategory = new Map<
+  InvestigationConsequenceNarrativeCategory,
+  readonly InvestigationConsequenceNarrative[]
+>();
+
+for (const category of CONSEQUENCE_NARRATIVE_CATEGORIES) {
+  const narratives = INVESTIGATION_CONSEQUENCE_NARRATIVES.filter(
+    (narrative) => narrative.category === category,
+  );
+  if (narratives.length === 0) {
+    throw new Error(
+      `investigation consequence narrative pack has no ${category} entries`,
+    );
+  }
+  narrativesByCategory.set(category, narratives);
+}
+
+function pickConsequenceNarrative(
+  rng: RNG,
+  category: InvestigationConsequenceNarrativeCategory,
+): string {
+  const narratives = narrativesByCategory.get(category);
+  if (!narratives) {
+    throw new Error(`Unknown investigation consequence category: ${category}`);
+  }
+  return rng.pick(narratives).text;
+}
 
 // =============================================================================
 // CONSEQUENCE GENERATION
@@ -1561,7 +1722,7 @@ export function generateDialogueConsequence(
 }
 
 function buildSafeConsequence(rng: RNG): DialogueConsequence {
-  const narrativeText = rng.pick(SAFE_NARRATIVES);
+  const narrativeText = pickConsequenceNarrative(rng, "safe");
 
   // Safe choices reliably improve the relationship by a small amount
   const relationshipDelta = rng.nextInt(1, 2);
@@ -1578,7 +1739,7 @@ function buildModerateConsequence(rng: RNG): DialogueConsequence {
   const isNegative = rng.chance(0.2);
 
   if (isNegative) {
-    const narrativeText = rng.pick(MODERATE_NEGATIVE_NARRATIVES);
+    const narrativeText = pickConsequenceNarrative(rng, "moderate-negative");
     return {
       narrativeText,
       relationshipDelta: -1,
@@ -1586,10 +1747,12 @@ function buildModerateConsequence(rng: RNG): DialogueConsequence {
     };
   }
 
-  const narrativeText = rng.pick(MODERATE_NARRATIVES);
+  const narrativeText = pickConsequenceNarrative(rng, "moderate");
 
   // Small chance of a bonus insight narrative appended
-  const bonusInsightText = rng.chance(0.3) ? ` ${rng.pick(INSIGHT_NARRATIVES)}` : "";
+  const bonusInsightText = rng.chance(0.3)
+    ? ` ${pickConsequenceNarrative(rng, "insight")}`
+    : "";
 
   return {
     narrativeText: narrativeText + bonusInsightText,
@@ -1603,7 +1766,7 @@ function buildBoldConsequence(rng: RNG): DialogueConsequence {
   const isNegative = rng.chance(0.45);
 
   if (isNegative) {
-    const narrativeText = rng.pick(BOLD_NEGATIVE_NARRATIVES);
+    const narrativeText = pickConsequenceNarrative(rng, "bold-negative");
     return {
       narrativeText,
       relationshipDelta: rng.nextInt(-3, -2),
@@ -1611,7 +1774,7 @@ function buildBoldConsequence(rng: RNG): DialogueConsequence {
     };
   }
 
-  const narrativeText = rng.pick(BOLD_POSITIVE_NARRATIVES);
+  const narrativeText = pickConsequenceNarrative(rng, "bold-positive");
 
   return {
     narrativeText,

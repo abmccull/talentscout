@@ -13,6 +13,13 @@
  */
 
 import type { GameState } from "../core/types";
+import {
+  CONTENT_SCHEMA_VERSION,
+  defineContentPack,
+  getContentEntry,
+  hasNonBlankString,
+  type ContentValidationIssue,
+} from "../content/contracts";
 
 // =============================================================================
 // TYPES
@@ -52,6 +59,17 @@ export interface ScenarioDef {
     constraints?: Record<string, unknown>;
   };
 }
+
+const SCENARIO_DIFFICULTIES = new Set<ScenarioDef["difficulty"]>([
+  "easy",
+  "medium",
+  "hard",
+  "expert",
+]);
+const SCENARIO_CATEGORIES = new Set<ScenarioDef["category"]>([
+  "starter",
+  "advanced",
+]);
 
 // =============================================================================
 // HELPERS
@@ -105,7 +123,7 @@ function countCountriesScouted(state: GameState): number {
 // SCENARIO DEFINITIONS
 // =============================================================================
 
-export const SCENARIOS: ScenarioDef[] = [
+const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
   // ── 1. The Rescue Job ──────────────────────────────────────────────────────
   {
     id: "the_rescue_job",
@@ -519,3 +537,79 @@ export const SCENARIOS: ScenarioDef[] = [
     ],
   },
 ];
+
+function validateScenarioDefinition(
+  scenario: ScenarioDef,
+): readonly Omit<ContentValidationIssue, "packId" | "definitionId">[] {
+  const issues: Array<Omit<ContentValidationIssue, "packId" | "definitionId">> = [];
+  for (const [path, value] of [
+    ["name", scenario.name],
+    ["description", scenario.description],
+    ["setup.startingCountry", scenario.setup.startingCountry],
+  ] as const) {
+    if (!hasNonBlankString(value)) {
+      issues.push({ path, message: "must be a non-empty string" });
+    }
+  }
+  if (!Number.isInteger(scenario.estimatedSeasons) || scenario.estimatedSeasons < 1) {
+    issues.push({ path: "estimatedSeasons", message: "must be a positive integer" });
+  }
+  if (!SCENARIO_DIFFICULTIES.has(scenario.difficulty)) {
+    issues.push({ path: "difficulty", message: "must be a supported difficulty" });
+  }
+  if (!SCENARIO_CATEGORIES.has(scenario.category)) {
+    issues.push({ path: "category", message: "must be a supported category" });
+  }
+  for (const [path, value] of [
+    ["setup.startingTier", scenario.setup.startingTier],
+    ["setup.startingSeason", scenario.setup.startingSeason],
+    ["setup.startingWeek", scenario.setup.startingWeek],
+    ["setup.startingReputation", scenario.setup.startingReputation],
+  ] as const) {
+    if (!Number.isFinite(value)) {
+      issues.push({ path, message: "must be a finite number" });
+    }
+  }
+  if (scenario.objectives.length === 0) {
+    issues.push({ path: "objectives", message: "must contain at least one objective" });
+  }
+  const objectiveIds = new Set<string>();
+  for (const [index, objective] of scenario.objectives.entries()) {
+    if (!hasNonBlankString(objective.id)) {
+      issues.push({ path: `objectives[${index}].id`, message: "must be a non-empty string" });
+    } else if (objectiveIds.has(objective.id)) {
+      issues.push({ path: `objectives[${index}].id`, message: "must be unique within the scenario" });
+    } else {
+      objectiveIds.add(objective.id);
+    }
+    if (!hasNonBlankString(objective.description)) {
+      issues.push({ path: `objectives[${index}].description`, message: "must be a non-empty string" });
+    }
+    if (typeof objective.check !== "function") {
+      issues.push({ path: `objectives[${index}].check`, message: "must be a function" });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Versioned authored challenge/scenario catalogue. Active save references are
+ * still reconciled by scenarioAuthority, which archives removed IDs safely.
+ */
+export const SCENARIO_CONTENT_PACK = defineContentPack({
+  manifest: {
+    id: "talentscout.scenarios",
+    kind: "scenario",
+    schemaVersion: CONTENT_SCHEMA_VERSION,
+    contentVersion: "scenarios.1",
+  },
+  entries: SCENARIO_DEFINITIONS,
+  getDefinitionId: (scenario) => scenario.id,
+  validateDefinition: validateScenarioDefinition,
+});
+
+export const SCENARIOS = SCENARIO_CONTENT_PACK.entries;
+
+export function getScenarioDefinition(id: string): ScenarioDef | undefined {
+  return getContentEntry(SCENARIO_CONTENT_PACK, id);
+}

@@ -11,13 +11,12 @@
  *
  * This module is intentionally decoupled from the existing CloudSaveProvider
  * hierarchy.  It is a new, higher-level abstraction designed to sit above all
- * three backends and provide a string-oriented API (serialized JSON in, JSON
- * out) so callers do not need to know which backend ultimately fulfilled the
- * request.
+ * three backends. First-party callers use a structured GameState boundary;
+ * the older serialized JSON API remains available for external compatibility.
  *
  * Usage:
  *   const provider = createSaveProvider({ userId: authStore.userId });
- *   await provider.save("autosave", JSON.stringify(gameState));
+ *   await provider.saveState("autosave", gameState);
  *   const result = await provider.load("autosave");
  *
  * Steam Cloud notes:
@@ -36,7 +35,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { SupabaseCloudSaveProvider } from "@/lib/supabaseCloudSave";
 import {
-  saveGame,
+  saveGameWithResult,
   loadGameWithRecovery,
   listSaves,
   deleteSaveAndEnqueueRemoteDeletes,
@@ -52,10 +51,12 @@ import {
   type SaveArchiveSummary,
   type SaveRecoveryNotice,
   type SaveRecord,
+  type SaveGameCommit,
   type SaveSyncQueueRecord,
   type SaveSyncTarget,
   type SaveUnavailableNotice,
 } from "@/lib/db";
+import type { GameState } from "@/engine/core/types";
 import { captureException } from "@/lib/sentry";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
 import { SaveMigrationError } from "@/lib/saveEnvelope";
@@ -92,10 +93,14 @@ export interface SaveEntry {
 
 /**
  * Result of a successful load() call.
- * `data` is the raw serialised JSON string exactly as it was stored.
+ *
+ * `state` is the canonical structured payload used by first-party callers.
+ * `data` remains a lazy legacy compatibility view: it is serialized only when
+ * an older integration explicitly reads it.
  */
 export interface LoadResult {
-  data: string;
+  readonly state: GameState;
+  readonly data: string;
   source: SaveSource;
   name: string;
   timestamp: number; // Unix ms
@@ -116,6 +121,9 @@ export interface PersistentCloudSyncStatus {
 export interface SaveOptions {
   waitForCloud?: boolean;
 }
+
+/** Result returned by the structured save boundary before cloud mirroring. */
+export type SaveWriteResult = SaveGameCommit;
 
 /**
  * Describes a conflict between a local save and a cloud save for the same
@@ -152,6 +160,18 @@ export interface SaveProvider {
     displayName?: string,
     options?: SaveOptions,
   ): Promise<void>;
+
+  /**
+   * Persist an in-memory state directly. This is the preferred first-party
+   * boundary: it removes the historical stringify -> parse hop before the
+   * canonical migration and local journal commit.
+   */
+  saveState(
+    slotName: string,
+    state: unknown,
+    displayName?: string,
+    options?: SaveOptions,
+  ): Promise<SaveWriteResult>;
 
   /**
    * Load game data for the given slot.
@@ -209,6 +229,40 @@ export interface SaveProvider {
 
   /** Retry every queued backend write that is available in this runtime. */
   retryPendingSync(): Promise<PersistentCloudSyncStatus>;
+}
+
+/**
+ * Minimal compatibility surface for test doubles and older integrations that
+ * only implement the legacy string-oriented `save` method.
+ */
+export type SaveProviderCompatibility = Pick<SaveProvider, "save"> & Partial<
+  Pick<SaveProvider, "saveState">
+>;
+
+/**
+ * Prefer the structured persistence path while preserving legacy providers
+ * during a gradual migration. First-party callers should use this instead of
+ * serializing a GameState before the provider boundary.
+ */
+export async function persistGameState(
+  provider: SaveProviderCompatibility,
+  slotName: string,
+  state: unknown,
+  displayName?: string,
+  options?: SaveOptions,
+): Promise<SaveWriteResult | null> {
+  if (typeof provider.saveState === "function") {
+    return provider.saveState(slotName, state, displayName, options);
+  }
+  await provider.save(slotName, JSON.stringify(state), displayName, options);
+  return null;
+}
+
+/** Read a modern structured result, with a legacy JSON fallback for adapters. */
+export function loadResultGameState(
+  result: Pick<LoadResult, "data"> & Partial<Pick<LoadResult, "state">>,
+): unknown {
+  return result.state ?? JSON.parse(result.data);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,9 +336,9 @@ function slotNumberToName(slot: number): string {
  * Build a short preview string from a SaveRecord-shaped blob.
  * Falls back to a generic label when the shape is unexpected.
  */
-function buildPreview(raw: string): string {
+function buildPreview(raw: unknown): string {
   try {
-    const parsed: unknown = JSON.parse(raw);
+    const parsed: unknown = typeof raw === "string" ? JSON.parse(raw) : raw;
     if (typeof parsed === "object" && parsed !== null) {
       const r = parsed as Record<string, unknown>;
       const season =
@@ -333,13 +387,21 @@ interface RecordCandidate {
 }
 
 function candidateToLoadResult(candidate: RecordCandidate): LoadResult {
-  return {
-    data: JSON.stringify(candidate.record.state),
+  let serializedState: string | undefined;
+  const result: Omit<LoadResult, "data"> = {
+    state: candidate.record.state,
     source: candidate.source,
     name: candidate.record.name,
     timestamp: candidate.record.savedAt,
     recovery: candidate.recovery,
   };
+  return Object.defineProperty(result, "data", {
+    enumerable: true,
+    get(): string {
+      serializedState ??= JSON.stringify(candidate.record.state);
+      return serializedState;
+    },
+  }) as LoadResult;
 }
 
 function conflictIdFor(
@@ -361,6 +423,22 @@ function conflictIdFor(
 // Serializing by persisted queue key prevents a slower old upload from
 // landing after the newer one and leaving the remote silently stale.
 const syncTaskLocks = new Map<string, Promise<void>>();
+
+// Providers are intentionally short-lived (the active provider is resolved on
+// demand), so acknowledgement must outlive an individual provider instance.
+// This bounded session cache prevents duplicate cloud uploads for an unchanged
+// local revision while still re-attempting a target that becomes available
+// later in the session. The durable queue remains the source of truth for
+// offline/retry behavior.
+const mirroredRevisionByTarget = new Map<string, number>();
+
+function mirrorRevisionKey(target: SaveSyncTarget, record: SaveRecord): string {
+  return `${target}:${record.slot}`;
+}
+
+function mirrorRevision(record: SaveRecord): number {
+  return record.storageRevision ?? record.savedAt;
+}
 
 function serializeSyncTask<T>(key: string, work: () => Promise<T>): Promise<T> {
   const previous = syncTaskLocks.get(key) ?? Promise.resolve();
@@ -499,6 +577,9 @@ class SaveProviderImpl implements SaveProvider {
           "The save is safe locally, but one or more cloud copies remain queued.",
         );
       }
+      for (const target of targets) {
+        mirroredRevisionByTarget.set(mirrorRevisionKey(target, record), mirrorRevision(record));
+      }
     };
 
     if (waitForCloud) {
@@ -508,6 +589,23 @@ class SaveProviderImpl implements SaveProvider {
         console.warn("SaveProvider: remote mirror remains queued:", error);
       });
     }
+  }
+
+  /**
+   * A deduplicated local request must not upload the same revision again. A
+   * failed/offline mirror is different: its durable queue row is still work
+   * that should get another attempt on the next explicit save.
+   */
+  private async requiresMirror(record: SaveRecord): Promise<boolean> {
+    const targets = this.configuredSyncTargets();
+    if (targets.length === 0) return false;
+    const queued = await Promise.all(
+      targets.map((target) => getSaveSyncTask(target, record.slot)),
+    );
+    return queued.some((task) => task !== null)
+      || targets.some((target) =>
+        mirroredRevisionByTarget.get(mirrorRevisionKey(target, record))
+        !== mirrorRevision(record));
   }
 
   // -------------------------------------------------------------------------
@@ -520,15 +618,6 @@ class SaveProviderImpl implements SaveProvider {
     displayName?: string,
     options?: SaveOptions,
   ): Promise<void> {
-    const slot = slotNameToNumber(slotName);
-
-    // ---- Primary write: IndexedDB (must succeed before we return) ----------
-    //
-    // IndexedDB owns the one canonical write migration. Remote backends then
-    // receive that exact migrated snapshot rather than independently
-    // interpreting the caller's JSON.
-    const saveName =
-      displayName ?? (slotName === "autosave" ? "Autosave" : `Save ${slot}`);
     let parsed: unknown;
     try {
       parsed = JSON.parse(data) as unknown;
@@ -538,13 +627,26 @@ class SaveProviderImpl implements SaveProvider {
       );
     }
 
-    let record: SaveRecord;
+    await this.saveState(slotName, parsed, displayName, options);
+  }
+
+  async saveState(
+    slotName: string,
+    state: unknown,
+    displayName?: string,
+    options?: SaveOptions,
+  ): Promise<SaveWriteResult> {
+    const slot = slotNameToNumber(slotName);
+    const saveName =
+      displayName ?? (slotName === "autosave" ? "Autosave" : `Save ${slot}`);
+
+    let commit: SaveWriteResult;
     try {
-      record = await saveGame(slot, saveName, parsed);
+      commit = await saveGameWithResult(slot, saveName, state);
     } catch (err) {
       if (err instanceof SaveMigrationError) {
         throw new Error(
-          `SaveProvider.save: invalid save data for slot "${slotName}": ${err.message}`,
+          `SaveProvider.saveState: invalid save data for slot "${slotName}": ${err.message}`,
         );
       }
       throw err;
@@ -552,7 +654,12 @@ class SaveProviderImpl implements SaveProvider {
 
     // The queue row commits before upload begins, so going offline or closing
     // the app cannot turn a successful local save into an untracked cloud gap.
-    await this.mirrorRecord(record, options?.waitForCloud ?? false);
+    // When no new revision exists, retry queued work or mirror once to a newly
+    // configured target; session acknowledgements suppress duplicate uploads.
+    if (commit.wrote || await this.requiresMirror(commit.record)) {
+      await this.mirrorRecord(commit.record, options?.waitForCloud ?? false);
+    }
+    return commit;
   }
 
   // -------------------------------------------------------------------------
@@ -810,11 +917,11 @@ class SaveProviderImpl implements SaveProvider {
         slotName,
         local: {
           timestamp: local.record.savedAt,
-          preview: buildPreview(JSON.stringify(local.record.state)),
+          preview: buildPreview(local.record.state),
         },
         cloud: {
           timestamp: cloud.record.savedAt,
-          preview: buildPreview(JSON.stringify(cloud.record.state)),
+          preview: buildPreview(cloud.record.state),
           source: cloud.source as "steam" | "supabase",
         },
       };
@@ -887,10 +994,10 @@ class SaveProviderImpl implements SaveProvider {
     // remains untouched and will receive its own conflict prompt.
     await this.mirrorRecord(commit.selected, true, [conflict.cloud.source]);
     mergePersistedPlayerExperience(commit.selected.playerExperience);
-    return {
-      ...candidateToLoadResult({ source: "local", record: commit.selected }),
-      archived: commit.archive,
-    };
+    return Object.assign(
+      candidateToLoadResult({ source: "local", record: commit.selected }),
+      { archived: commit.archive },
+    ) as ConflictResolutionResult;
   }
 
   async listRecoveryCopies(slotName?: string): Promise<SaveArchiveSummary[]> {

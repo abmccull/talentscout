@@ -17,7 +17,7 @@ import { createRunManifest } from "@/engine/run";
 import { RNG } from "@/engine/rng";
 import { generateNarrativeEventOfType } from "@/engine/events";
 import { createProgressionActions } from "@/stores/actions/progressionActions";
-import { projectExpiredNarrativeDefaults } from "@/stores/actions/weeklyActions";
+import { projectExpiredNarrativeDefaults } from "@/stores/actions/weeklyNarrativeConsequences";
 import type {
   GameStoreState,
   GetState,

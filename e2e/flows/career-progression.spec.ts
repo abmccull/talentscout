@@ -17,16 +17,24 @@ test.describe("Career Progression", () => {
     expect(content).toContain("Tier");
   });
 
-  test("tier 2 scout has expanded nav", async ({ gamePage }) => {
+  test("tier 2 scout has expanded career drill-downs", async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectMidGameState("youth");
 
     const tier = await gamePage.getScoutTier();
     expect(tier).toBe(2);
 
-    // Network and Rivals should be visible at tier 2
-    await expect(gamePage.page.locator('[data-tutorial-id="nav-network"]')).toBeVisible();
-    await expect(gamePage.page.locator('[data-tutorial-id="nav-rivals"]')).toBeVisible();
+    // The EA shell deliberately keeps six permanent workspaces. Network and
+    // rivals are Career drill-downs rather than permanent sidebar entries.
+    await gamePage.navigateTo("career");
+    await gamePage.page.getByRole("tab", { name: "Track Record" }).click();
+    const records = gamePage.page.getByTestId("career-record-drilldowns");
+    await expect(records).toBeVisible();
+    await records.getByRole("button", { name: /Network/i }).click();
+    await gamePage.waitForScreen("network");
+
+    await gamePage.setScreen("rivals");
+    await gamePage.waitForScreen("rivals");
   });
 
   test("tier 4 scout has full feature set", async ({ gamePage }) => {
@@ -36,8 +44,10 @@ test.describe("Career Progression", () => {
     const tier = await gamePage.getScoutTier();
     expect(tier).toBe(4);
 
-    // NPC management should be visible at tier 4
-    await expect(gamePage.page.locator('[data-tutorial-id="nav-npcManagement"]')).toBeVisible();
+    // Leadership staff management is a Career detail, not a permanent nav item.
+    await gamePage.setScreen("npcManagement");
+    await gamePage.waitForScreen("npcManagement");
+    await expect(gamePage.page.getByRole("heading", { name: "NPC Scout Management" })).toBeVisible();
   });
 
   test("career screen renders for each tier", async ({ gamePage }) => {

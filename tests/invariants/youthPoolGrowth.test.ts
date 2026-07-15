@@ -41,7 +41,7 @@ describe("unsigned-youth population integrity", () => {
     const initial = useGameStore.getState().gameState!;
     const initialYouthIds = Object.keys(initial.unsignedYouth).sort();
 
-    useGameStore.getState().batchAdvance(8);
+    await useGameStore.getState().batchAdvance(8);
 
     const after = useGameStore.getState().gameState!;
     expect(after.currentSeason).toBe(initial.currentSeason);
@@ -113,7 +113,7 @@ describe("unsigned-youth population integrity", () => {
       },
     });
 
-    useGameStore.getState().batchAdvance(1);
+    await useGameStore.getState().batchAdvance(1);
 
     const after = useGameStore.getState().gameState!;
     expect(after.currentSeason).toBe(initial.currentSeason + 1);
@@ -238,7 +238,7 @@ describe("unsigned-youth population integrity", () => {
       },
     });
 
-    useGameStore.getState().batchAdvance(1);
+    await useGameStore.getState().batchAdvance(1);
 
     const after = useGameStore.getState().gameState!;
     expect(after.placementReports[placementId].clubResponse).toBe("accepted");

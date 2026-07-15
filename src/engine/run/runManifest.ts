@@ -15,7 +15,7 @@ import type {
   Specialization,
 } from "@/engine/core/types";
 
-export const RUN_MANIFEST_VERSION = 1 as const;
+export const RUN_MANIFEST_VERSION = 2 as const;
 export const RUN_RULES_VERSION = "youth-ea.3" as const;
 export const RUN_CONTENT_VERSION = "run-content.2" as const;
 export const NAMED_RNG_VERSION = "named-rng.1" as const;
@@ -39,6 +39,8 @@ export interface CreateRunManifestInput {
   contentVersion?: string;
   /** All IDs in the definition catalog that can influence this run. */
   contentDefinitionIds?: readonly string[];
+  /** V1 is reserved for reconstructing an untouched pre-ledger career. */
+  manifestVersion?: 1 | 2;
 }
 
 type CanonicalValue =
@@ -211,18 +213,24 @@ export function createRunManifest(input: CreateRunManifestInput): RunManifest {
     ? requireNonEmpty(input.flawId, "flawId")
     : undefined;
   const integrity = input.integrity ?? "standard";
+  const contentDefinitionIds = uniqueSorted(
+    input.contentDefinitionIds ?? [],
+    "content definition ID",
+  );
+  const manifestVersion = input.manifestVersion ?? RUN_MANIFEST_VERSION;
   const contentFingerprint = createContentFingerprint(
     creationRulesVersion,
     contentVersion,
-    input.contentDefinitionIds ?? [],
+    contentDefinitionIds,
   );
 
   const identity = {
-    manifestVersion: RUN_MANIFEST_VERSION,
+    manifestVersion,
     rootSeed,
     creationRulesVersion,
     contentVersion,
     contentFingerprint,
+    ...(manifestVersion >= 2 ? { contentDefinitionIds } : {}),
     specialization: input.specialization,
     difficulty: input.difficulty,
     selectedCountries,
@@ -245,7 +253,7 @@ export function createRunManifest(input: CreateRunManifestInput): RunManifest {
 }
 
 function manifestIdentity(manifest: RunManifest): Omit<RunManifest, "runId" | "fingerprint"> {
-  return {
+  const identity: Omit<RunManifest, "runId" | "fingerprint"> = {
     manifestVersion: manifest.manifestVersion,
     rootSeed: manifest.rootSeed,
     creationRulesVersion: manifest.creationRulesVersion,
@@ -263,6 +271,16 @@ function manifestIdentity(manifest: RunManifest): Omit<RunManifest, "runId" | "f
     legacyUnlockIds: [...manifest.legacyUnlockIds],
     integrity: manifest.integrity,
   };
+  // V1 manifests predate the source ledger. Omitting it here preserves their
+  // historical fingerprint exactly; V2 fingerprints bind both the ledger and
+  // its derived hash.
+  if (manifest.contentDefinitionIds !== undefined) {
+    identity.contentDefinitionIds = uniqueSorted(
+      manifest.contentDefinitionIds,
+      "content definition ID",
+    );
+  }
+  return identity;
 }
 
 /** Recompute the immutable identity hash without trusting the persisted hash. */
@@ -279,7 +297,33 @@ export function validateRunManifest(
   expectedRootSeed?: string,
 ): string[] {
   const errors: string[] = [];
-  const fingerprint = computeRunManifestFingerprint(manifest);
+  if (manifest.manifestVersion !== 1 && manifest.manifestVersion !== 2) {
+    errors.push("run manifest version is unsupported");
+  }
+  if (manifest.manifestVersion >= 2 && !Array.isArray(manifest.contentDefinitionIds)) {
+    errors.push("run manifest V2 is missing its content definition ledger");
+  }
+  if (Array.isArray(manifest.contentDefinitionIds)) {
+    try {
+      const expectedContentFingerprint = createContentFingerprint(
+        manifest.creationRulesVersion,
+        manifest.contentVersion,
+        manifest.contentDefinitionIds,
+      );
+      if (manifest.contentFingerprint !== expectedContentFingerprint) {
+        errors.push("run manifest content fingerprint does not match its definition ledger");
+      }
+    } catch {
+      errors.push("run manifest content definition ledger is invalid");
+    }
+  }
+  let fingerprint: string | undefined;
+  try {
+    fingerprint = computeRunManifestFingerprint(manifest);
+  } catch {
+    errors.push("run manifest immutable inputs are invalid");
+  }
+  if (fingerprint === undefined) return errors;
   if (manifest.fingerprint !== fingerprint) {
     errors.push("run manifest fingerprint does not match its immutable inputs");
   }
@@ -301,14 +345,43 @@ export function repairRunManifest(
   manifest: RunManifest,
   authoritativeRootSeed: string,
 ): RunManifest {
+  let contentDefinitionIds: string[] | undefined;
+  if (Array.isArray(manifest.contentDefinitionIds)) {
+    try {
+      contentDefinitionIds = uniqueSorted(
+        manifest.contentDefinitionIds,
+        "content definition ID",
+      );
+    } catch {
+      contentDefinitionIds = undefined;
+    }
+  }
+  const manifestVersion: 1 | 2 = manifest.manifestVersion === 2 && contentDefinitionIds
+    ? 2
+    : 1;
+  const repairedContentDefinitionIds = manifestVersion === 2
+    ? contentDefinitionIds
+    : undefined;
+  const contentFingerprint = repairedContentDefinitionIds
+    ? createContentFingerprint(
+      manifest.creationRulesVersion,
+      manifest.contentVersion,
+      repairedContentDefinitionIds,
+    )
+    : manifest.contentFingerprint;
   const repairedBase: RunManifest = {
     ...manifest,
+    manifestVersion,
     rootSeed: requireNonEmpty(authoritativeRootSeed, "authoritativeRootSeed"),
+    contentFingerprint,
     selectedCountries: [...manifest.selectedCountries],
     worldTraitIds: [...manifest.worldTraitIds],
     mutatorIds: [...manifest.mutatorIds],
     doctrineIds: [...manifest.doctrineIds],
     legacyUnlockIds: [...manifest.legacyUnlockIds],
+    contentDefinitionIds: repairedContentDefinitionIds
+      ? [...repairedContentDefinitionIds]
+      : undefined,
     integrity: "legacy-import",
     runId: "",
     fingerprint: "",

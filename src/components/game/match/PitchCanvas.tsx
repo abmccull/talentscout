@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo, useState } from "react";
 import type { MatchPhase } from "@/engine/core/types";
 import {
   POSITION_DEFAULTS,
@@ -354,6 +354,9 @@ export function PitchCanvas({
   const frameRef = useRef<number>(0);
   const drawnPlayersRef = useRef<DrawnPlayer[]>([]);
   const startTimeRef = useRef<number>(Date.now());
+  const [isPageVisible, setIsPageVisible] = useState(
+    () => typeof document === "undefined" || !document.hidden,
+  );
 
   // Memoize the set so hooks depending on it don't rebuild on every render
   const involvedSet = useMemo(
@@ -559,9 +562,54 @@ export function PitchCanvas({
     involvedSet,
   ]);
 
+  const shouldAnimate = isPageVisible && (
+    focusedPlayerId !== undefined
+    || weather === "rain"
+    || weather === "heavyRain"
+    || weather === "snow"
+  );
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+
+    const handleVisibilityChange = () => {
+      setIsPageVisible(!document.hidden);
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      draw();
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [draw]);
+
   // Animation loop
   useEffect(() => {
     startTimeRef.current = Date.now();
+    draw();
+
+    if (!shouldAnimate) {
+      cancelAnimationFrame(frameRef.current);
+      return () => {
+        cancelAnimationFrame(frameRef.current);
+      };
+    }
 
     const loop = () => {
       draw();
@@ -572,7 +620,7 @@ export function PitchCanvas({
     return () => {
       cancelAnimationFrame(frameRef.current);
     };
-  }, [draw]);
+  }, [draw, shouldAnimate]);
 
   // Handle click to identify which player was clicked
   const handleClick = useCallback(

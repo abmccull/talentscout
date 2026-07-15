@@ -1,4 +1,12 @@
-import { test, expect } from "../fixtures";
+import { test, expect, type GamePage } from "../fixtures";
+
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
+async function waitForDesk(gamePage: GamePage) {
+  await expect(
+    gamePage.page.getByRole("heading", { name: "Scouting Desk" }),
+  ).toBeVisible({ timeout: 60_000 });
+}
 
 test.describe("Dashboard Screen", () => {
   test.describe("fresh game", () => {
@@ -8,6 +16,7 @@ test.describe("Dashboard Screen", () => {
         currentWeek: 1,
         scout: { careerTier: 1, primarySpecialization: "youth" },
       });
+      await waitForDesk(gamePage);
     });
 
     test("dashboard renders with game info", async ({ gamePage }) => {
@@ -38,13 +47,17 @@ test.describe("Dashboard Screen", () => {
   });
 
   test.describe("specialization-specific cards", () => {
-    for (const spec of ["youth", "firstTeam", "regional", "data"] as const) {
+    const specializations = IS_YOUTH_EARLY_ACCESS
+      ? (["youth"] as const)
+      : (["youth", "firstTeam", "regional", "data"] as const);
+    for (const spec of specializations) {
       test(`${spec} dashboard renders without crash`, async ({ gamePage }) => {
         await gamePage.goto();
         await gamePage.injectState({
           currentWeek: 5,
           scout: { careerTier: 1, primarySpecialization: spec },
         });
+        await waitForDesk(gamePage);
 
         const screen = await gamePage.getCurrentScreen();
         expect(screen).toBe("dashboard");
@@ -63,6 +76,7 @@ test.describe("Dashboard Screen", () => {
       currentWeek: 5,
       scout: { careerTier: 1, primarySpecialization: "youth" },
     });
+    await waitForDesk(gamePage);
 
     // Look for clickable cards/buttons on the dashboard
     const buttons = gamePage.page.locator("button, [role='button'], a");

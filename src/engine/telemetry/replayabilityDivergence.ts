@@ -32,6 +32,8 @@ import {
   getWorldTraitContentDefinitionIds,
   stableFingerprint,
 } from "@/engine/run";
+import { getRunContentDefinitionIds } from "@/engine/content/registry";
+import { getWorldConditionContentDefinitionIds } from "@/engine/world";
 
 const TELEMETRY_VERSION = 2 as const;
 const ACTIVE_RIVAL_ORGANIZATION_COUNT = 3;
@@ -567,9 +569,14 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
     flawId,
     doctrineIds: [doctrineId],
     contentDefinitionIds: [
+      ...getRunContentDefinitionIds("youth-scout"),
       ...getWorldTraitContentDefinitionIds(),
+      ...getWorldConditionContentDefinitionIds(),
       ...getScoutIdentityContentDefinitionIds(),
       ...getRivalOrganizationContentDefinitionIds(),
+      "narrative-catalog:youth-ea.3",
+      "storyline-catalog:storylines.1",
+      "consequence-engine:consequences.1",
       ...SCOUTING_SPECIAL_EVENT_DECK.map((definition) =>
         `scouting-special-event:${definition.id}`,
       ),

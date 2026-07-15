@@ -41,6 +41,9 @@ libsteam_api.so
 playwright-report/
 test-results/
 
+# Generated coverage reports are CI artifacts, not source.
+artifacts/coverage/
+
 # Generated release-candidate evidence. These files are created after the
 # source commit is fixed; tracking them would make the candidate self-referential.
 artifacts/release/candidate-package-manifest.json

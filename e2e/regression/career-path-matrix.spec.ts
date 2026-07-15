@@ -1,11 +1,15 @@
 import { test, expect } from "../fixtures";
 
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
 /**
  * Regression: verify all 4 specializations × 2 career paths
  * can survive 10 weeks of advancement without crashes.
  */
 test.describe("Career Path Matrix Regression", () => {
-  const specs = ["youth", "firstTeam", "regional", "data"] as const;
+  const specs = IS_YOUTH_EARLY_ACCESS
+    ? (["youth"] as const)
+    : (["youth", "firstTeam", "regional", "data"] as const);
 
   for (const spec of specs) {
     test(`${spec} / club path survives 10 weeks`, async ({ gamePage }) => {

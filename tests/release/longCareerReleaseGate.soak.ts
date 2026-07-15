@@ -119,7 +119,32 @@ interface RunEvidence {
     max: number;
     mean: number;
   };
+  worldHealth: Array<{
+    season: number;
+    activePlayers: number;
+    unsignedYouth: number;
+    freeAgents: number;
+    activeLoans: number;
+    reports: number;
+    observations: number;
+    inboxMessages: number;
+    financialBalance: number | null;
+  }>;
   digest: string;
+}
+
+function collectWorldHealth(state: GameState): RunEvidence["worldHealth"][number] {
+  return {
+    season: state.currentSeason,
+    activePlayers: Object.keys(state.players).length,
+    unsignedYouth: Object.keys(state.unsignedYouth ?? {}).length,
+    freeAgents: state.freeAgentPool?.agents.length ?? 0,
+    activeLoans: state.activeLoans?.length ?? 0,
+    reports: Object.keys(state.reports).length,
+    observations: Object.keys(state.observations).length,
+    inboxMessages: state.inbox.length,
+    financialBalance: state.finances?.balance ?? null,
+  };
 }
 
 function percentile(values: readonly number[], fraction: number): number {
@@ -540,6 +565,7 @@ async function simulateCareer(
   const compactionSamples: SaveRetentionCompactionSample[] = [];
   const pendingCompactionSamples: SaveRetentionCompactionSample[] = [];
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
+  const worldHealth: RunEvidence["worldHealth"] = [];
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
@@ -549,17 +575,9 @@ async function simulateCareer(
     let before = useGameStore.getState().gameState;
     if (!before) throw new Error(`Seed ${seed} lost game state`);
 
-    // This is deliberately a season-boundary stress profile rather than a
-    // duplicate of the browser's every-week career soak. One monthly economy
-    // tick plus the authoritative final-week rollover tick per season gives us
-    // 600 career-seasons of archive/migration/reference coverage in
-    // nightly-CI time. Intervening ordinary weeks remain covered by the
-    // separate browser soak and are intentionally not implied by this gate.
     const seasonLength = getSeasonLength(before.fixtures, before.currentSeason);
-    const targetWeek = before.currentWeek < 4
-      ? Math.min(4, seasonLength)
-      : seasonLength;
-    calendarWeeksSpanned += Math.max(1, targetWeek - before.currentWeek + 1);
+    const targetWeek = Math.min(before.currentWeek, seasonLength);
+    calendarWeeksSpanned += 1;
     before = {
       ...before,
       currentWeek: targetWeek,
@@ -605,6 +623,18 @@ async function simulateCareer(
 
     if (after.currentSeason !== lastCheckedSeason) {
       const footprint = assertReleaseInvariants(after, initialBytes);
+      expect(
+        serializedRoundTripDigest(after),
+        `seed ${seed} changed during the season ${after.currentSeason} save round trip`,
+      ).toBe(deterministicDigest(after));
+      expect(
+        Object.keys(after.players).length,
+        `seed ${seed} exhausted the active player pool`,
+      ).toBeGreaterThan(0);
+      expect(
+        Object.keys(after.unsignedYouth ?? {}).length,
+        `seed ${seed} exhausted the unsigned youth pool`,
+      ).toBeGreaterThan(0);
       const bytes = footprint.totalBytes;
       const boundaryCompactions = pendingCompactionSamples.splice(
         0,
@@ -633,6 +663,7 @@ async function simulateCareer(
       peakHeapUsedBytes = Math.max(peakHeapUsedBytes, afterCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, afterCollection.rssBytes);
       memorySamples.push(afterCollection);
+      worldHealth.push(collectWorldHealth(after));
 
     }
   }
@@ -716,11 +747,12 @@ async function simulateCareer(
       max: round(Math.max(...weeklyLatency)),
       mean: round(weeklyLatency.reduce((sum, value) => sum + value, 0) / weeklyLatency.length),
     },
+    worldHealth,
     digest: finalDigest,
   };
 }
 
-describe("accelerated season-boundary release soak", () => {
+describe("full canonical-week release soak", () => {
   it("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
     expect(RELEASE_SEED_COUNT).toBeGreaterThan(0);
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
@@ -742,9 +774,9 @@ describe("accelerated season-boundary release soak", () => {
       schemaVersion: 2,
       generatedAt: new Date().toISOString(),
       profile: {
-        kind: "accelerated-season-boundary",
-        authoritativeTicksPerSeason: 2,
-        skippedOrdinaryWeeks: true,
+        kind: "full-canonical-weekly-career",
+        authoritativeTicksPerSeason: "calendar-dependent",
+        skippedOrdinaryWeeks: false,
         seedCount: RELEASE_SEED_COUNT,
         seasonCount: RELEASE_SEASON_COUNT,
         deterministicReplaySeed: seeds[0],

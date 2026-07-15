@@ -61,6 +61,51 @@ describe("deterministic run manifest", () => {
     expect(reorderedWorld.fingerprint).not.toBe(first.fingerprint);
   });
 
+  it("persists a V2 content definition ledger while accepting untouched V1 manifests", () => {
+    const current = createRunManifest(BASE_INPUT);
+    expect(current.manifestVersion).toBe(2);
+    expect(current.contentDefinitionIds).toEqual([
+      "arc:family-trust",
+      "trait:agent-cartel",
+      "trait:golden-generation",
+    ]);
+    expect(validateRunManifest(current, BASE_INPUT.rootSeed)).toEqual([]);
+
+    const historical = createRunManifest({
+      ...BASE_INPUT,
+      manifestVersion: 1,
+    });
+    expect(historical.manifestVersion).toBe(1);
+    expect(historical.contentDefinitionIds).toBeUndefined();
+    expect(validateRunManifest(historical, BASE_INPUT.rootSeed)).toEqual([]);
+  });
+
+  it("diagnoses a V2 definition-ledger mismatch independently of its run hash", () => {
+    const current = createRunManifest(BASE_INPUT);
+    const tampered = {
+      ...current,
+      contentDefinitionIds: [...(current.contentDefinitionIds ?? []), "mode:planned"],
+    };
+
+    expect(validateRunManifest(tampered, BASE_INPUT.rootSeed)).toContain(
+      "run manifest content fingerprint does not match its definition ledger",
+    );
+  });
+
+  it("downgrades an incomplete V2 ledger to an explicitly legacy-compatible manifest", () => {
+    const current = createRunManifest(BASE_INPUT);
+    const incomplete = {
+      ...current,
+      contentDefinitionIds: undefined,
+    };
+
+    const repaired = repairRunManifest(incomplete, BASE_INPUT.rootSeed);
+    expect(repaired.manifestVersion).toBe(1);
+    expect(repaired.contentDefinitionIds).toBeUndefined();
+    expect(repaired.integrity).toBe("legacy-import");
+    expect(validateRunManifest(repaired, BASE_INPUT.rootSeed)).toEqual([]);
+  });
+
   it("changes identity when an immutable run-defining choice changes", () => {
     const baseline = createRunManifest(BASE_INPUT);
     const variants = [

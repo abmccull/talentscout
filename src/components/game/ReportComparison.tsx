@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -318,10 +319,26 @@ function formatValue(value: number): string {
 // ---------------------------------------------------------------------------
 
 export function ReportComparison() {
-  const { gameState, comparisonReportIds, clearComparison, removeFromComparison, setScreen } = useGameStore();
+  const {
+    reportsById,
+    playersById,
+    comparisonReportIds,
+    clearComparison,
+    removeFromComparison,
+    setScreen,
+  } = useGameStore(
+    useShallow((state) => ({
+      reportsById: state.gameState?.reports,
+      playersById: state.gameState?.players,
+      comparisonReportIds: state.comparisonReportIds,
+      clearComparison: state.clearComparison,
+      removeFromComparison: state.removeFromComparison,
+      setScreen: state.setScreen,
+    })),
+  );
 
   const { reports, players, comparison, playerNames } = useMemo(() => {
-    if (!gameState) {
+    if (!reportsById || !playersById) {
       return {
         reports: [] as ScoutReport[],
         players: [] as (Player | undefined)[],
@@ -331,17 +348,17 @@ export function ReportComparison() {
     }
 
     const rpts = comparisonReportIds
-      .map((id) => gameState.reports[id])
+      .map((id) => reportsById[id])
       .filter((r): r is ScoutReport => r != null);
 
-    const plrs = rpts.map((r) => gameState.players[r.playerId]);
+    const plrs = rpts.map((r) => playersById[r.playerId]);
     const names = plrs.map((p) => (p ? `${p.firstName} ${p.lastName}` : "Unknown"));
     const comp = rpts.length >= 2 ? compareReports(rpts) : null;
 
     return { reports: rpts, players: plrs, comparison: comp, playerNames: names };
-  }, [gameState, comparisonReportIds]);
+  }, [reportsById, playersById, comparisonReportIds]);
 
-  if (!gameState || reports.length < 2 || !comparison) {
+  if (!reportsById || !playersById || reports.length < 2 || !comparison) {
     return (
       <GameLayout>
         <div className="relative min-h-full p-6">

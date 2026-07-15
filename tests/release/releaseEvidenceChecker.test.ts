@@ -103,11 +103,29 @@ function fixture() {
   return { cwd, commitSha };
 }
 
-function check(cwd: string, overrides: Record<string, string> = {}) {
+function releaseNeutralEnvironment(overrides: Record<string, string> = {}) {
   const env = { ...process.env };
-  delete env.GITHUB_SHA;
-  delete env.RELEASE_CANDIDATE_SHA;
-  Object.assign(env, overrides);
+  // Fixture repositories model their own candidate independently of the
+  // checkout that runs Vitest. GitHub exposes tag metadata to every child
+  // process in tag workflows, so leave that metadata out unless a test
+  // deliberately supplies it.
+  for (const key of [
+    "GITHUB_REF",
+    "GITHUB_REF_NAME",
+    "GITHUB_REF_TYPE",
+    "GITHUB_RUN_ID",
+    "GITHUB_SHA",
+    "RELEASE_CANDIDATE_SHA",
+    "RELEASE_CANDIDATE_TAG",
+    "RELEASE_WORKFLOW_RUN_ID",
+  ]) {
+    delete env[key];
+  }
+  return { ...env, ...overrides };
+}
+
+function check(cwd: string, overrides: Record<string, string> = {}) {
+  const env = releaseNeutralEnvironment(overrides);
   const result = spawnSync(process.execPath, [checker, "--report-only"], {
     cwd,
     env,
@@ -197,7 +215,7 @@ describe("release evidence checker", () => {
     const result = spawnSync(
       process.execPath,
       [manifestGenerator, "test-package=dist/package.bin"],
-      { cwd, encoding: "utf8" },
+      { cwd, env: releaseNeutralEnvironment(), encoding: "utf8" },
     );
     expect(result.status).toBe(0);
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -213,6 +231,34 @@ describe("release evidence checker", () => {
       bytes: 20,
     });
     expect(run(cwd, "git", ["status", "--porcelain", "--untracked-files=all"])).toBe("");
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("records a compatible GitHub tag in a candidate manifest", () => {
+    const { cwd, commitSha } = fixture();
+    run(cwd, "git", ["tag", "-a", "v1.0.0-rc.1", "-m", "candidate"]);
+    const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
+    unlinkSync(manifestPath);
+
+    const result = spawnSync(
+      process.execPath,
+      [manifestGenerator, "test-package=dist/package.bin"],
+      {
+        cwd,
+        env: releaseNeutralEnvironment({
+          GITHUB_REF_TYPE: "tag",
+          GITHUB_REF_NAME: "v1.0.0-rc.1",
+          GITHUB_RUN_ID: "12345",
+        }),
+        encoding: "utf8",
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(readFileSync(manifestPath, "utf8"))).toMatchObject({
+      candidateCommitSha: commitSha,
+      candidateTag: "v1.0.0-rc.1",
+      workflowRunId: "12345",
+    });
   }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("binds a clean candidate to HEAD and recomputes package integrity", () => {
@@ -324,6 +370,8 @@ describe("release evidence checker", () => {
     const runs = Array.from({ length: 20 }, (_, index) => ({
       seed: `release-soak-${String(index + 1).padStart(2, "0")}`,
       reachedSeason: 31,
+      canonicalTicks: 1140,
+      calendarWeeksSpanned: 1140,
       digest: `digest-${index + 1}`,
     }));
     mkdirSync(join(cwd, "artifacts", "release", "generated"), { recursive: true });
@@ -335,6 +383,8 @@ describe("release evidence checker", () => {
       sourceTreeClean: true,
       status: "Passed",
       profile: {
+        kind: "full-canonical-weekly-career",
+        skippedOrdinaryWeeks: false,
         seedCount: 20,
         seasonCount: 30,
         processIsolation: "one-seeded-career-per-process",

@@ -55,13 +55,18 @@ $env:SOAK_CONCURRENCY = "3"
 npm run test:release-soak
 ```
 
-Each seed still runs in its own process. The bounded worker pool only overlaps
-independent processes and writes results back in seed order. The generated
-summary is accepted only when it names the exact commit, came from a clean
-tree, contains at least 20 unique 30-season runs, crosses every final season
-boundary, and reproduces seed one deterministically. The tracked gate remains
+Each seed runs every canonical calendar week in its own process. The bounded
+worker pool only overlaps independent careers and writes results back in seed
+order. The generated summary is accepted only when it names the exact commit,
+came from a clean tree, contains at least 20 unique 30-season runs, crosses
+every final season boundary without skipping ordinary weeks, and reproduces
+seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
+
+This is intentionally a multi-hour release job. Do not shorten it by jumping
+calendar weeks; use a smaller seed/season profile only for local development
+proof, where the resulting evidence remains supporting rather than certifying.
 
 Run the strict gate with:
 

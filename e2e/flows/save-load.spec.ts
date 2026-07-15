@@ -104,9 +104,40 @@ test.describe("Save and Load", () => {
         },
       };
 
-      store.getState().loadGame(legacyState);
+      // First create a valid local record through the public save path. The
+      // EA load boundary rightly refuses to put an unshipped specialization
+      // into the live store, so this test writes the foreign payload directly
+      // into its already-created IndexedDB record to model a save made by a
+      // future/full-game build.
       await store.getState().saveToSlot(2, "Preserved First Team Save");
-      store.getState().loadGame(youthState);
+      await new Promise<void>((resolve, reject) => {
+        const openRequest = indexedDB.open("TalentScoutDB");
+        openRequest.onerror = () => reject(openRequest.error);
+        openRequest.onsuccess = () => {
+          const database = openRequest.result;
+          const transaction = database.transaction("saves", "readwrite");
+          const saves = transaction.objectStore("saves");
+          const readRequest = saves.get(2);
+          readRequest.onerror = () => reject(readRequest.error);
+          readRequest.onsuccess = () => {
+            const record = readRequest.result;
+            if (!record) {
+              reject(new Error("Expected manual save slot 2 before foreign-save injection."));
+              return;
+            }
+            saves.put({
+              ...record,
+              specialization: "firstTeam",
+              state: legacyState,
+            });
+          };
+          transaction.onerror = () => reject(transaction.error);
+          transaction.oncomplete = () => {
+            database.close();
+            resolve();
+          };
+        };
+      });
       await store.getState().refreshSaveSlots();
 
       let error = "";

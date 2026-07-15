@@ -8,6 +8,7 @@ import { resolveGameScreenForBuild } from "@/stores/gameScreenScope";
 import { SettingsApplier } from "@/components/game/SettingsApplier";
 import { useKeyboardNav, setFeedbackOpenHandler } from "@/lib/useKeyboardNav";
 import { ScreenErrorBoundary } from "@/components/game/ScreenErrorBoundary";
+import { warmWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 
 function GameScreenLoading() {
   return (
@@ -409,6 +410,7 @@ export default function Home() {
   // stalls without inflating /play startup.
   useEffect(() => {
     if (!activeCareerId || typeof window === "undefined") return;
+    warmWeeklySimulationWorker();
     const prefetch = () => {
       void Promise.all([
         import("@/components/game/CalendarScreen"),

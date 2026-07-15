@@ -10,7 +10,7 @@ test.describe("Achievements Screen", () => {
   });
 
   test("achievements screen renders", async ({ gamePage }) => {
-    await gamePage.navigateTo("achievements");
+    await gamePage.setScreen("achievements");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();
@@ -23,7 +23,7 @@ test.describe("Achievements Screen", () => {
   });
 
   test("achievements list has entries", async ({ gamePage }) => {
-    await gamePage.navigateTo("achievements");
+    await gamePage.setScreen("achievements");
     await gamePage.page.waitForTimeout(500);
 
     const content = await gamePage.page.innerText("body");

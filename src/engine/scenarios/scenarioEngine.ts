@@ -9,7 +9,11 @@
  */
 
 import type { GameState } from "../core/types";
-import { SCENARIOS, type ScenarioDef, type ScenarioObjective } from "./scenarioDefinitions";
+import {
+  getScenarioDefinition,
+  type ScenarioDef,
+  type ScenarioObjective,
+} from "./scenarioDefinitions";
 
 // =============================================================================
 // PUBLIC TYPES
@@ -49,7 +53,7 @@ export interface FailCheck {
  * Returns undefined when the ID is not recognised.
  */
 export function getScenarioById(id: string): ScenarioDef | undefined {
-  return SCENARIOS.find((s) => s.id === id);
+  return getScenarioDefinition(id);
 }
 
 /**

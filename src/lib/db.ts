@@ -20,12 +20,8 @@ import {
 } from "@/engine/run";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
-import { migrateRivalOrganizationState } from "@/engine/rivals";
-import { reconcileScenarioAuthority } from "@/engine/scenarios/scenarioAuthority";
 import type { CountryData } from "@/data/types";
-import { getUnlockedPerks } from "@/engine/specializations/perks";
 import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
-import { compactLongCareerHistory } from "@/engine/world/saveRetention";
 import { migrateWorldConditionState } from "@/engine/world/worldConditions";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import {
@@ -35,12 +31,18 @@ import {
   SaveMigrationError,
   type SaveEnvelope,
 } from "@/lib/saveEnvelope";
-import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
-import { migrateLegacyTransferParticipation } from "@/engine/firstTeam/transferTracker";
-import { migratePoliticalMeetingState } from "@/engine/career/politicalMeetings";
 import { mergePersistedPlayerExperience } from "@/lib/playerExperience";
 import { normalizeWeeklyStrategyState } from "@/engine/core/weeklyStrategy";
 import { getTravelEligibleCountryKeys } from "@/engine/world/countryAvailability";
+import { applyGameplaySaveMigrations } from "@/lib/gameStateGameplayMigration";
+import {
+  measureSerializedJsonBytes,
+  recordSavePersistenceTelemetry,
+} from "@/lib/saveTelemetry";
+import {
+  areEquivalentSaveMetadata,
+  areEquivalentSaveStates,
+} from "@/lib/saveStateComparison";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -56,6 +58,17 @@ export interface SaveRecord extends SaveEnvelope<GameState> {
   reputation: number;
   /** Monotonic local journal revision. Legacy and cloud records may omit it. */
   storageRevision?: number;
+}
+
+/** Outcome of one local save request before optional cloud mirroring begins. */
+export interface SaveGameCommit {
+  record: SaveRecord;
+  /** False when this request matched the authoritative revision exactly. */
+  wrote: boolean;
+  /** JSON bytes measured only for a real write, never for a dedupe check. */
+  payloadBytes: number | null;
+  /** Bytes appended to the local recovery journal by this request. */
+  archivedBytes: number;
 }
 
 export type SaveArchiveKind = "previous-generation" | "conflict-loser";
@@ -287,6 +300,9 @@ function createSaveRecord(
   persistedState: GameState,
   savedAt = Date.now(),
 ): SaveRecord {
+  // This clone is owned by the persistence boundary. Keeping the timestamp
+  // here makes `lastSaved` truthful for direct DB callers as well as the UI.
+  persistedState.lastSaved = savedAt;
   const envelope = createSaveEnvelope(persistedState, savedAt);
   return {
     ...envelope,
@@ -305,36 +321,26 @@ function archiveIdForPrevious(record: SaveRecord): string {
   return `previous:${record.slot}:${record.storageRevision ?? 0}:${record.savedAt}`;
 }
 
-function utf8ByteLength(value: string): number {
-  let bytes = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const codeUnit = value.charCodeAt(index);
-    if (codeUnit < 0x80) {
-      bytes += 1;
-    } else if (codeUnit < 0x800) {
-      bytes += 2;
-    } else if (
-      codeUnit >= 0xd800
-      && codeUnit <= 0xdbff
-      && index + 1 < value.length
-      && value.charCodeAt(index + 1) >= 0xdc00
-      && value.charCodeAt(index + 1) <= 0xdfff
-    ) {
-      bytes += 4;
-      index += 1;
-    } else {
-      bytes += 3;
-    }
-  }
-  return bytes;
+function saveRecordLogicalBytes(record: SaveRecord): number {
+  return measureSerializedJsonBytes(record);
 }
 
-function saveRecordLogicalBytes(record: SaveRecord): number {
-  const serialized = JSON.stringify(record);
-  if (typeof serialized !== "string") {
-    throw new Error("A save recovery payload could not be serialized.");
-  }
-  return utf8ByteLength(serialized);
+function recordsHaveEquivalentPersistentContent(
+  current: SaveRecord,
+  candidate: SaveRecord,
+): boolean {
+  return current.name === candidate.name
+    && current.schemaVersion === candidate.schemaVersion
+    && current.rulesVersion === candidate.rulesVersion
+    && current.buildVersion === candidate.buildVersion
+    && areEquivalentSaveMetadata(current.playerExperience, candidate.playerExperience)
+    && areEquivalentSaveStates(current.state, candidate.state);
+}
+
+function persistenceClock(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
 }
 
 type NewSaveArchiveRecord = Omit<
@@ -563,11 +569,19 @@ export function migrateFreeAgentGeography(state: GameState): void {
   });
 }
 
-export async function saveGame(
+/**
+ * Commit a canonical local save without serializing it through a string API.
+ *
+ * The journal revision is only advanced when gameplay-relevant content changes.
+ * A checkpoint followed by an identical autosave therefore retains the same
+ * head, recovery history, and cloud revision instead of manufacturing churn.
+ */
+export async function saveGameWithResult(
   slot: number,
   name: string,
   state: unknown,
-): Promise<SaveRecord> {
+): Promise<SaveGameCommit> {
+  const startedAt = persistenceClock();
   // Persist a canonical snapshot without mutating the live Zustand object.
   // This is the same boundary used by IndexedDB, Steam, Supabase, conflict
   // resolution, and direct store loads.
@@ -575,7 +589,7 @@ export async function saveGame(
 
   const candidate = createSaveRecord(slot, name, persistedState);
 
-  return db.transaction("rw", db.saves, db.saveArchives, async () => {
+  const commit = await db.transaction("rw", db.saves, db.saveArchives, async () => {
     const rawCurrent: unknown = await db.saves.get(slot);
     let current: SaveRecord | undefined;
     if (rawCurrent) {
@@ -587,8 +601,21 @@ export async function saveGame(
       }
     }
 
+    // Save timestamps are delivery metadata, not world state. Ignore only the
+    // root GameState.lastSaved field while comparing canonical envelopes so an
+    // identical checkpoint cannot create a fake new generation.
+    if (current && recordsHaveEquivalentPersistentContent(current, candidate)) {
+      return {
+        record: current,
+        wrote: false,
+        payloadBytes: null,
+        archivedBytes: 0,
+      } satisfies SaveGameCommit;
+    }
+
+    let archivedBytes = 0;
     if (current) {
-      await db.saveArchives.put(createVerifiedArchive({
+      const archive = createVerifiedArchive({
         id: archiveIdForPrevious(current),
         slot,
         kind: "previous-generation",
@@ -596,7 +623,9 @@ export async function saveGame(
         createdAt: candidate.savedAt,
         reason: "Replaced by a newer local save",
         record: current,
-      }));
+      });
+      archivedBytes = archive.logicalBytes ?? 0;
+      await db.saveArchives.put(archive);
       persistenceFaultInjector?.("after-archive-before-head");
     }
 
@@ -604,11 +633,40 @@ export async function saveGame(
       ...candidate,
       storageRevision: await nextStorageRevision(slot, current),
     };
+    // Measuring this exact JSON boundary has two jobs: durable byte telemetry
+    // and an early, deterministic failure for non-serializable data that would
+    // otherwise fail only when Steam later tries to mirror it.
+    const payloadBytes = saveRecordLogicalBytes(record);
     await db.saves.put(record);
     persistenceFaultInjector?.("after-head-before-commit");
     await pruneArchives(slot);
-    return record;
+    return {
+      record,
+      wrote: true,
+      payloadBytes,
+      archivedBytes,
+    } satisfies SaveGameCommit;
   });
+
+  recordSavePersistenceTelemetry({
+    recordedAt: Date.now(),
+    slot,
+    storageRevision: commit.record.storageRevision ?? null,
+    disposition: commit.wrote ? "written" : "deduplicated",
+    durationMs: persistenceClock() - startedAt,
+    payloadBytes: commit.payloadBytes,
+    archivedBytes: commit.archivedBytes,
+  });
+  return commit;
+}
+
+/** Backward-compatible record-only API for direct local/cloud adapters. */
+export async function saveGame(
+  slot: number,
+  name: string,
+  state: unknown,
+): Promise<SaveRecord> {
+  return (await saveGameWithResult(slot, name, state)).record;
 }
 
 export async function loadGame(slot: number): Promise<GameState | null> {
@@ -1545,12 +1603,6 @@ export function migrateSaveState(raw: unknown): GameState {
   // Phase 2 defaults — narrative, rivals, tools, manager profiles
   if (!state.narrativeEvents) state.narrativeEvents = [];
   if (!state.rivalScouts) state.rivalScouts = {};
-  state.rivalOrganizationState = migrateRivalOrganizationState(
-    state.seed || state.runManifest.rootSeed,
-    state.rivalScouts,
-    state.rivalOrganizationState,
-    Math.max(1, state.currentSeason),
-  );
   if (!state.unlockedTools) state.unlockedTools = [];
   if (!state.managerProfiles) state.managerProfiles = {};
 
@@ -1596,19 +1648,6 @@ export function migrateSaveState(raw: unknown): GameState {
   if (state.legacyScore.scenariosCompleted === undefined) state.legacyScore.scenariosCompleted = 0;
   if (!state.subRegions) state.subRegions = {};
   if (!state.internationalAssignments) state.internationalAssignments = [];
-  state.internationalAssignments = state.internationalAssignments.map(
-    migrateInternationalAssignment,
-  );
-  if (state.activeInternationalAssignment) {
-    state.activeInternationalAssignment = {
-      ...migrateInternationalAssignment(state.activeInternationalAssignment),
-      acceptedWeek: state.activeInternationalAssignment.acceptedWeek ?? state.currentWeek,
-      acceptedSeason: state.activeInternationalAssignment.acceptedSeason ?? state.currentSeason,
-    };
-  }
-  state.internationalAssignmentHistory = (
-    state.internationalAssignmentHistory ?? []
-  ).map(migrateInternationalAssignment);
   if (!state.retiredPlayerIds) state.retiredPlayerIds = [];
   if (!state.retiredPlayers) state.retiredPlayers = {};
   if (!state.playerMovementHistory) state.playerMovementHistory = [];
@@ -1638,14 +1677,6 @@ export function migrateSaveState(raw: unknown): GameState {
       state.scout.currentClubId || state.scout.careerTier >= 2,
     );
   }
-  state.scout.unlockedPerks = Array.from(new Set([
-    ...(state.scout.unlockedPerks ?? []),
-    ...getUnlockedPerks(
-      state.scout.primarySpecialization,
-      state.scout.specializationLevel ?? 1,
-    ).map((perk) => perk.id),
-  ]));
-
   // New scout skills — playerJudgment and potentialAssessment
   if (state.scout.skills.playerJudgment === undefined) {
     state.scout.skills.playerJudgment = 5;
@@ -1654,28 +1685,13 @@ export function migrateSaveState(raw: unknown): GameState {
     state.scout.skills.potentialAssessment = 5;
   }
 
-  // First-Team Scouting System defaults
-  if (!state.managerDirectives) state.managerDirectives = [];
-  if (!state.clubResponses) state.clubResponses = [];
-  state.transferRecords = migrateLegacyTransferParticipation(state.transferRecords);
-  if (!state.systemFitCache) state.systemFitCache = {};
-
-  // Data Scouting System defaults
-  if (!state.predictions) state.predictions = [];
-  if (!state.dataAnalysts) state.dataAnalysts = [];
-  if (!state.statisticalProfiles) state.statisticalProfiles = {};
-  if (!state.anomalyFlags) state.anomalyFlags = [];
-  if (!state.analystReports) state.analystReports = {};
-
   // Every persistence entrypoint must reconcile legacy cash to its source
   // ledger, not only the Zustand load path.
   if (state.finances) {
     state.finances = reconcileFinancialLedger(state.finances);
   }
 
-  return reconcileScenarioAuthority(
-    migratePoliticalMeetingState(compactLongCareerHistory(state)),
-  );
+  return applyGameplaySaveMigrations(state);
 }
 
 export { db };

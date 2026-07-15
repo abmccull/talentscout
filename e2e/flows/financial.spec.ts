@@ -7,7 +7,7 @@ test.describe("Financial Systems", () => {
   });
 
   test("financial dashboard renders", async ({ gamePage }) => {
-    await gamePage.navigateTo("finances");
+    await gamePage.setScreen("finances");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();
@@ -20,7 +20,7 @@ test.describe("Financial Systems", () => {
   });
 
   test("equipment screen renders", async ({ gamePage }) => {
-    await gamePage.navigateTo("equipment");
+    await gamePage.setScreen("equipment");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();
@@ -33,7 +33,7 @@ test.describe("Financial Systems", () => {
   });
 
   test("agency screen renders", async ({ gamePage }) => {
-    await gamePage.navigateTo("agency");
+    await gamePage.setScreen("agency");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();

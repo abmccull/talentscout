@@ -802,6 +802,8 @@ export function WeekSimulationScreen() {
   const advanceDay = useGameStore((s) => s.advanceDay);
   const chooseSimulationInteraction = useGameStore((s) => s.chooseSimulationInteraction);
   const fastForwardWeek = useGameStore((s) => s.fastForwardWeek);
+  const isAdvancingWeek = useGameStore((s) => s.isAdvancingWeek);
+  const weeklyTransactionError = useGameStore((s) => s.weeklyTransactionError);
   const startObservationSession = useGameStore((s) => s.startObservationSession);
   const setScreen = useGameStore((s) => s.setScreen);
   const { playSFX } = useAudio();
@@ -837,7 +839,11 @@ export function WeekSimulationScreen() {
   const interactionPending = !!currentDayResult?.interaction
     && !currentDayResult.interaction.selectedOptionId
     && !interactiveSessionCompleted;
-  const journeyStatus = isComplete
+  const journeyStatus = weeklyTransactionError
+    ? `The week could not be completed. ${weeklyTransactionError}`
+    : isAdvancingWeek
+    ? "The football world is being simulated. Your completed week is committing now."
+    : isComplete
     ? "Week complete. All seven days have resolved."
     : interactionPending
       ? `Viewing ${currentDayResult?.dayName ?? DAY_NAMES[currentDay]}, day ${currentDay + 1} of 7. Decision required before consequences are revealed.`
@@ -953,7 +959,25 @@ export function WeekSimulationScreen() {
             >
               <h2 id="current-day-journey-heading" className="sr-only">Current day details</h2>
               <AnimatePresence mode="wait" initial={false}>
-                {isComplete ? (
+                {weeklyTransactionError ? (
+                  <Card className="flex min-h-64 flex-col items-center justify-center border-red-400/30 bg-zinc-900/90 p-8 text-center shadow-2xl">
+                    <p className="text-xl font-bold text-white">The week could not be completed</p>
+                    <p className="mt-2 max-w-md text-sm leading-relaxed text-zinc-300">
+                      Your pre-week state is still intact. Retry when you are ready.
+                    </p>
+                  </Card>
+                ) : isAdvancingWeek ? (
+                  <Card className="flex min-h-64 flex-col items-center justify-center border-emerald-400/20 bg-zinc-900/90 p-8 text-center shadow-2xl">
+                    <div
+                      className="h-8 w-8 animate-spin rounded-full border-2 border-emerald-300 border-r-transparent motion-reduce:animate-none"
+                      aria-hidden="true"
+                    />
+                    <p className="mt-5 text-xl font-bold text-white">Simulating the football world</p>
+                    <p className="mt-2 max-w-md text-sm leading-relaxed text-zinc-300">
+                      Resolving matches, careers, relationships, finances, and the consequences of your choices.
+                    </p>
+                  </Card>
+                ) : isComplete ? (
                   <motion.div
                     key="complete"
                     initial={prefersReducedMotion ? false : { opacity: 0, x: 16 }}
@@ -1002,9 +1026,10 @@ export function WeekSimulationScreen() {
                 <Button
                   size="lg"
                   className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
-                  onClick={() => setScreen("calendar")}
+                  onClick={weeklyTransactionError ? fastForwardWithFeedback : () => setScreen("calendar")}
+                  disabled={isAdvancingWeek}
                 >
-                  View Calendar
+                  {weeklyTransactionError ? "Retry Week" : "View Calendar"}
                 </Button>
               ) : isLastDay ? (
                 <Button
@@ -1012,9 +1037,9 @@ export function WeekSimulationScreen() {
                   className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
                   onClick={advanceDayWithFeedback}
                   aria-label="Complete the week and process results"
-                  disabled={interactionPending}
+                  disabled={interactionPending || isAdvancingWeek}
                 >
-                  Complete Week
+                  {isAdvancingWeek ? "Simulating…" : "Complete Week"}
                 </Button>
               ) : (
                 <>
@@ -1023,7 +1048,7 @@ export function WeekSimulationScreen() {
                     className="min-h-11 w-full bg-emerald-700 text-white hover:bg-emerald-800 sm:w-auto"
                     onClick={advanceDayWithFeedback}
                     aria-label="Advance to next day"
-                    disabled={interactionPending}
+                    disabled={interactionPending || isAdvancingWeek}
                   >
                     Next Day
                   </Button>
@@ -1033,6 +1058,7 @@ export function WeekSimulationScreen() {
                     className="min-h-11 w-full border-zinc-600 bg-black/25 sm:w-auto"
                     onClick={fastForwardWithFeedback}
                     aria-label="Skip remaining days and complete the week"
+                    disabled={isAdvancingWeek}
                   >
                     Skip to Results
                   </Button>

@@ -4,6 +4,11 @@ Status: **Unverified** until the exact packaged candidate passes on physical
 machines at or below every declared minimum. Chromium throttling, a virtual
 machine, or a developer workstation is supporting evidence only.
 
+The canonical automated guardrail and the physical certification targets live
+in `src/engine/telemetry/performancePolicy.ts`. The looser Chromium values are
+deliberately a repeatable regression signal, not a replacement for the
+player-facing limits below.
+
 ## Declared Steam minimums under test
 
 These values mirror `docs/steam-store-page.md`. If a machine class cannot pass,

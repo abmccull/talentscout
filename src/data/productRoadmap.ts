@@ -1,3 +1,8 @@
+import {
+  MODE_DEFINITIONS,
+  type GameModeDefinition,
+} from "@/engine/content/modeDefinitions";
+
 export type ProductRoadmapStatus =
   | "available"
   | "validating"
@@ -95,59 +100,24 @@ export const PRODUCT_ROADMAP_PHASES: readonly ProductRoadmapPhase[] = [
   },
 ] as const;
 
+function toProductRoadmapMode(mode: GameModeDefinition): ProductRoadmapMode {
+  return {
+    id: mode.id,
+    // Internal modes never appear as playable roadmap commitments.
+    status: mode.status === "internal" ? "planned" : mode.status,
+    name: mode.name,
+    role: mode.role,
+    fantasy: mode.fantasy,
+    differentiators: mode.differentiators,
+  };
+}
+
+/**
+ * The four career modes come from the versioned engine catalogue. Challenge
+ * Careers remains a player-facing play format, not a fifth GameModeId.
+ */
 export const PRODUCT_ROADMAP_MODES: readonly ProductRoadmapMode[] = [
-  {
-    id: "youth-scout",
-    status: "available",
-    name: "Youth Scout",
-    role: "Discover potential before certainty exists",
-    fantasy:
-      "Find unsigned and academy prospects early, separate flashes from repeatable qualities, persuade decision-makers, and live with the player careers your reports helped create.",
-    differentiators: [
-      "Development projection and incomplete evidence",
-      "Family, academy, access, and placement relationships",
-      "Multi-season accountability for potential, fit, timing, and conviction",
-    ],
-  },
-  {
-    id: "first-team-scout",
-    status: "planned",
-    name: "First Team Scout",
-    role: "Solve immediate recruitment problems",
-    fantasy:
-      "Work from urgent club briefs, judge tactical and dressing-room fit, compare attainable targets, and defend recommendations under transfer-window pressure.",
-    differentiators: [
-      "Role, system, squad, price, and deadline fit",
-      "Manager and sporting-director politics",
-      "Faster feedback with higher financial and reputational exposure",
-    ],
-  },
-  {
-    id: "regional-expert",
-    status: "planned",
-    name: "Regional Expert",
-    role: "Turn local knowledge into an unfair advantage",
-    fantasy:
-      "Build a trusted presence across territories, understand competition and culture, earn difficult access, and recognize talent that visiting scouts misread.",
-    differentiators: [
-      "Persistent regional knowledge and presence",
-      "Travel, language, culture, contacts, and access tradeoffs",
-      "Territory competition and geographically distinct talent markets",
-    ],
-  },
-  {
-    id: "data-scout",
-    status: "planned",
-    name: "Data Scout",
-    role: "Find signal in noisy football evidence",
-    fantasy:
-      "Build and challenge models, identify statistical anomalies, account for league and role context, and know when the numbers demand live verification.",
-    differentiators: [
-      "Models, samples, uncertainty, and competition adjustments",
-      "Analyst workflows and evidence conflicts",
-      "Data-led discovery followed by accountable human interpretation",
-    ],
-  },
+  ...MODE_DEFINITIONS.map(toProductRoadmapMode),
   {
     id: "challenge-careers",
     status: "exploring",

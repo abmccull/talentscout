@@ -729,10 +729,11 @@ subscribePlayerExperience((experience) => {
 });
 
 // Expose store for E2E testing (dev only — stripped in production builds)
+const tutorialBrowserWindow = Reflect.get(globalThis, "window") as Window | undefined;
 if (
-  typeof window !== "undefined"
+  tutorialBrowserWindow
   && (process.env.NODE_ENV !== "production"
     || process.env.NEXT_PUBLIC_ENABLE_E2E_BRIDGE === "true")
 ) {
-  (window as any).__TUTORIAL_STORE__ = useTutorialStore;
+  (tutorialBrowserWindow as any).__TUTORIAL_STORE__ = useTutorialStore;
 }

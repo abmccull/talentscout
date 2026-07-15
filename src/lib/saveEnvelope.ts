@@ -179,6 +179,7 @@ export function createLegacySaveRunManifest(state: Record<string, unknown>) {
     : "legacy-import";
 
   return createRunManifest({
+    manifestVersion: 1,
     rootSeed,
     specialization: migratedSpecialization(scout.primarySpecialization),
     difficulty: migratedDifficulty(state.difficulty),

@@ -3,6 +3,11 @@ import { cpus, platform, release, totalmem } from "node:os";
 import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { Page } from "@playwright/test";
+import {
+  CHROMIUM_EMULATION_BUDGET,
+  evaluateChromiumEmulationBudget,
+  PHYSICAL_CERTIFICATION_LIMITATION,
+} from "@/engine/telemetry/performancePolicy";
 import { expect, test } from "../fixtures";
 import { navItem } from "../helpers/selectors";
 
@@ -11,13 +16,7 @@ const outputPath = resolve(
     ?? "artifacts/performance/low-end-emulation-profile.json",
 );
 
-const budgets = {
-  coldLoadMs: 15_000,
-  navigationP95Ms: 2_500,
-  oneWeekAdvanceMs: 6_000,
-  jsHeapUsedBytes: 512 * 1024 * 1024,
-  domNodes: 18_000,
-};
+const budgets = CHROMIUM_EMULATION_BUDGET;
 
 function percentile(values: number[], fraction: number): number {
   const sorted = [...values].sort((left, right) => left - right);
@@ -75,14 +74,17 @@ async function measureSettledNavigation(page: Page, screen: string): Promise<num
   );
 }
 
-async function measureSettledWeekAdvance(page: Page): Promise<number> {
+async function measureSettledWeekAdvance(page: Page): Promise<{
+  elapsedMs: number;
+  workerTelemetry: Record<string, unknown> | null;
+}> {
   return page.evaluate(async () => {
     const store = (window as any).__GAME_STORE__;
     const before = store?.getState()?.gameState;
     if (!store || !before) throw new Error("Game state unavailable for week profile");
 
     const startedAt = window.performance.now();
-    store.getState().batchAdvance(1);
+    await store.getState().batchAdvance(1);
     let stableFrames = 0;
 
     while (window.performance.now() - startedAt < 60_000) {
@@ -107,7 +109,14 @@ async function measureSettledWeekAdvance(page: Page): Promise<number> {
       stableFrames = advanced && renderedScreen && headerCommitted && !loading
         ? stableFrames + 1
         : 0;
-      if (stableFrames >= 2) return window.performance.now() - startedAt;
+      if (stableFrames >= 2) {
+        return {
+          elapsedMs: window.performance.now() - startedAt,
+          workerTelemetry: structuredClone(
+            store.getState().lastWeeklyWorkerTelemetry ?? null,
+          ),
+        };
+      }
     }
 
     throw new Error("One-week advancement did not settle");
@@ -140,7 +149,7 @@ test.describe("low-end runtime evidence", () => {
       navigationDurationsMs.push(await measureSettledNavigation(gamePage.page, screen));
     }
 
-    const oneWeekAdvanceMs = await measureSettledWeekAdvance(gamePage.page);
+    const weekAdvance = await measureSettledWeekAdvance(gamePage.page);
 
     await cdp.send("HeapProfiler.collectGarbage");
     const rawMetrics = await cdp.send("Performance.getMetrics");
@@ -152,19 +161,27 @@ test.describe("low-end runtime evidence", () => {
       coldLoadMs: Math.round(coldLoadMs * 100) / 100,
       navigationDurationsMs: navigationDurationsMs.map((value) => Math.round(value * 100) / 100),
       navigationP95Ms: Math.round(navigationP95Ms * 100) / 100,
-      oneWeekAdvanceMs: Math.round(oneWeekAdvanceMs * 100) / 100,
+      oneWeekAdvanceMs: Math.round(weekAdvance.elapsedMs * 100) / 100,
+      weeklyWorker: weekAdvance.workerTelemetry,
       jsHeapUsedBytes: Math.round(metrics.JSHeapUsedSize ?? 0),
       jsHeapTotalBytes: Math.round(metrics.JSHeapTotalSize ?? 0),
       domNodes: Math.round(metrics.Nodes ?? 0),
       documents: Math.round(metrics.Documents ?? 0),
       layoutCount: Math.round(metrics.LayoutCount ?? 0),
     };
+    const policyChecks = evaluateChromiumEmulationBudget({
+      coldLoadMs: measured.coldLoadMs,
+      navigationP95Ms: measured.navigationP95Ms,
+      oneWeekAdvanceMs: measured.oneWeekAdvanceMs,
+      jsHeapUsedBytes: measured.jsHeapUsedBytes,
+      domNodes: measured.domNodes,
+    });
     const checks = {
-      coldLoad: measured.coldLoadMs <= budgets.coldLoadMs,
-      navigationP95: measured.navigationP95Ms <= budgets.navigationP95Ms,
-      oneWeekAdvance: measured.oneWeekAdvanceMs <= budgets.oneWeekAdvanceMs,
-      heap: measured.jsHeapUsedBytes <= budgets.jsHeapUsedBytes,
-      domNodes: measured.domNodes <= budgets.domNodes,
+      coldLoad: policyChecks.coldLoadMs,
+      navigationP95: policyChecks.navigationP95Ms,
+      oneWeekAdvance: policyChecks.oneWeekAdvanceMs,
+      heap: policyChecks.jsHeapUsedBytes,
+      domNodes: policyChecks.domNodes,
     };
     const report = {
       schemaVersion: 1,
@@ -194,7 +211,7 @@ test.describe("low-end runtime evidence", () => {
       measured,
       checks,
       status: Object.values(checks).every(Boolean) ? "pass" : "fail",
-      limitation: "This automated profile detects regressions under throttling but does not replace profiling on the minimum supported physical Windows, macOS, and Linux devices.",
+      limitation: PHYSICAL_CERTIFICATION_LIMITATION,
     };
 
     await mkdir(dirname(outputPath), { recursive: true });

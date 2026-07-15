@@ -99,7 +99,7 @@ describe("long-career save retention", () => {
     expect(compacted.matchRatings).toEqual({});
   });
 
-  it("keeps material archive movements while bounding routine renewals", () => {
+  it("projects old material moves before releasing their raw ledger rows", () => {
     const legacy = state({
       currentSeason: 5,
       playerMovementHistory: [
@@ -132,9 +132,97 @@ describe("long-career save retention", () => {
 
     expect(compacted.playerMovementHistory.map((movement) => movement.id)).toEqual([
       "recent-renewal",
-      "transfer",
     ]);
     expect(compacted.worldHistory?.seasons[0].players[0].movementEventIds).toEqual(["transfer"]);
+    expect(compacted.worldHistory?.seasons[0].playerMovementSummaries).toEqual([{
+      id: "transfer",
+      playerId: "player",
+      type: "permanentTransfer",
+      week: 1,
+    }]);
+    expect(findSaveRetentionReferenceViolations(compacted)).toEqual([]);
+  });
+
+  it("backfills every archived-season movement before pruning non-causal raw rows", () => {
+    const legacy = state({
+      currentSeason: 7,
+      reports: {
+        causal: { id: "causal-report", playerId: "causal-player" } as GameState["reports"][string],
+      },
+      playerMovementHistory: [
+        {
+          id: "archived-unlisted",
+          playerId: "unlisted-player",
+          type: "permanentTransfer",
+          week: 2,
+          season: 1,
+          fromClubId: "old-club",
+          toClubId: "new-club",
+          fee: 2_000_000,
+          reason: "Legacy reason that belongs only in the detailed ledger.",
+        },
+        {
+          id: "archived-causal",
+          playerId: "causal-player",
+          type: "loanStart",
+          week: 4,
+          season: 1,
+          fromClubId: "home",
+          toClubId: "loan-club",
+          loanDealId: "loan-detail",
+        },
+        {
+          id: "unarchived-old",
+          playerId: "unarchived-player",
+          type: "release",
+          week: 1,
+          season: 2,
+        },
+      ],
+      worldHistory: {
+        version: 1,
+        latestRecordedSeason: 2,
+        seasons: [{
+          season: 1,
+          recordedAfterTotalWeeks: 46,
+          leagues: [],
+          clubs: [],
+          // Neither player made a public comparison row in this legacy save.
+          players: [],
+        }],
+      },
+    });
+
+    const compacted = compactLongCareerHistory(legacy);
+    const archive = compacted.worldHistory!.seasons[0];
+
+    expect(archive.playerMovementSummaries).toEqual([
+      {
+        id: "archived-causal",
+        playerId: "causal-player",
+        type: "loanStart",
+        week: 4,
+        fromClubId: "home",
+        toClubId: "loan-club",
+      },
+      {
+        id: "archived-unlisted",
+        playerId: "unlisted-player",
+        type: "permanentTransfer",
+        week: 2,
+        fromClubId: "old-club",
+        toClubId: "new-club",
+        fee: 2_000_000,
+      },
+    ]);
+    expect(compacted.playerMovementHistory.map((movement) => movement.id).sort()).toEqual([
+      "archived-causal",
+      "unarchived-old",
+    ]);
+    expect(JSON.stringify(archive.playerMovementSummaries)).not.toContain("Legacy reason");
+    expect(JSON.stringify(archive.playerMovementSummaries)).not.toContain("loan-detail");
+    expect(findSaveRetentionReferenceViolations(compacted)).toEqual([]);
+    expect(compactLongCareerHistory(structuredClone(compacted))).toEqual(compacted);
   });
 
   it("caps global detail while never sampling out a scout-causal player", () => {

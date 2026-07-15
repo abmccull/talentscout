@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -123,7 +124,13 @@ function BreakdownRow({ label, amount, total, accentClass = "bg-emerald-500" }: 
 
 export function FinancialDashboard() {
   const {
-    gameState,
+    finances,
+    scout,
+    clubs,
+    fixtures,
+    currentSeason,
+    currentWeek,
+    playersById,
     takeLoanAction,
     repayLoanAction,
     acceptRetainerContract,
@@ -132,20 +139,44 @@ export function FinancialDashboard() {
     declineRetainerOffer,
     declineConsultingOffer,
     sellEquipmentForCashAction,
-  } = useGameStore();
+  } = useGameStore(
+    useShallow((state) => ({
+      finances: state.gameState?.finances,
+      scout: state.gameState?.scout,
+      clubs: state.gameState?.clubs,
+      fixtures: state.gameState?.fixtures,
+      currentSeason: state.gameState?.currentSeason,
+      currentWeek: state.gameState?.currentWeek,
+      playersById: state.gameState?.players,
+      takeLoanAction: state.takeLoanAction,
+      repayLoanAction: state.repayLoanAction,
+      acceptRetainerContract: state.acceptRetainerContract,
+      cancelRetainerContract: state.cancelRetainerContract,
+      acceptConsultingContract: state.acceptConsultingContract,
+      declineRetainerOffer: state.declineRetainerOffer,
+      declineConsultingOffer: state.declineConsultingOffer,
+      sellEquipmentForCashAction: state.sellEquipmentForCashAction,
+    })),
+  );
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [selectedLoanType, setSelectedLoanType] = useState<LoanType | null>(null);
   const [loanAmount, setLoanAmount] = useState(1000);
 
-  if (!gameState?.finances) {
+  if (
+    !finances
+    || !scout
+    || !clubs
+    || !fixtures
+    || currentSeason == null
+    || currentWeek == null
+    || !playersById
+  ) {
     return (
       <GameLayout>
         <div className="p-6 text-zinc-400">No financial data available.</div>
       </GameLayout>
     );
   }
-
-  const { finances, scout, clubs } = gameState;
 
   const pnl = calculateProfitAndLoss(finances, scout);
   const revenue = calculateRevenueBreakdown(finances, scout);
@@ -859,10 +890,10 @@ export function FinancialDashboard() {
                         const weeksRemaining = Math.max(
                           0,
                           gameWeeksBetween(
-                            gameState.fixtures,
+                            fixtures,
                             {
-                              season: gameState.currentSeason,
-                              week: gameState.currentWeek,
+                              season: currentSeason,
+                              week: currentWeek,
                             },
                             { season: c.deadlineSeason, week: c.deadline },
                           ),
@@ -920,7 +951,7 @@ export function FinancialDashboard() {
                       .sort((a, b) => b.season - a.season || b.week - a.week)
                       .map((record) => {
                         const playerName = (() => {
-                          const p = gameState.players[record.playerId];
+                          const p = playersById[record.playerId];
                           return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
                         })();
                         return (

@@ -1,4 +1,40 @@
-import { test, expect } from "../fixtures";
+import { test, expect, type GamePage } from "../fixtures";
+
+/** Add a canonical event without bypassing the runtime save-migration contract. */
+async function injectNarrativeEvent(
+  gamePage: GamePage,
+  options: { id: string; includeChoices?: boolean },
+) {
+  await gamePage.page.evaluate(({ id, includeChoices }) => {
+    const store = (window as any).__GAME_STORE__;
+    const gameState = store?.getState()?.gameState;
+    if (!gameState) throw new Error("gameState is required to inject a narrative event");
+
+    const event = {
+      id,
+      type: "familyEmergency",
+      week: gameState.currentWeek,
+      season: gameState.currentSeason,
+      title: "Family Emergency",
+      description: "A deterministic event fixture used to exercise the live choice contract.",
+      relatedIds: [],
+      acknowledged: false,
+      choices: includeChoices
+        ? [
+            { label: "Rush home immediately", effect: "familyRushHome" },
+            { label: "Stay focused this week", effect: "familyStayFocused" },
+          ]
+        : undefined,
+    };
+
+    store.setState({
+      gameState: {
+        ...gameState,
+        narrativeEvents: [...(gameState.narrativeEvents ?? []), event],
+      },
+    });
+  }, options);
+}
 
 test.describe("Narrative Events", () => {
   test.beforeEach(async ({ gamePage }) => {
@@ -28,20 +64,7 @@ test.describe("Narrative Events", () => {
   });
 
   test("narrative event has expected structure", async ({ gamePage }) => {
-    // Inject an event directly for deterministic testing
-    await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      gs.narrativeEvents = gs.narrativeEvents ?? [];
-      gs.narrativeEvents.push({
-        id: "test-event-1",
-        type: "scoutingBreakthrough",
-        status: "pending",
-        createdAtWeek: gs.currentWeek,
-        expiresAtWeek: gs.currentWeek + 4,
-      });
-      store.getState().loadGame(gs);
-    });
+    await injectNarrativeEvent(gamePage, { id: "test-event-1" });
     await gamePage.page.waitForTimeout(100);
 
     const event = await gamePage.page.evaluate(() => {
@@ -51,39 +74,18 @@ test.describe("Narrative Events", () => {
     });
 
     expect(event).not.toBeNull();
-    expect(event.type).toBe("scoutingBreakthrough");
-    expect(event.status).toBe("pending");
+    expect(event.type).toBe("familyEmergency");
+    expect(event.acknowledged).toBe(false);
     expect(event.id).toBe("test-event-1");
   });
 
-  test("acknowledge choiceless events via direct state mutation", async ({ gamePage }) => {
-    // Inject a choiceless event
-    await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      gs.narrativeEvents = gs.narrativeEvents ?? [];
-      gs.narrativeEvents.push({
-        id: "choiceless-event",
-        type: "scoutingBreakthrough",
-        status: "pending",
-        createdAtWeek: gs.currentWeek,
-        expiresAtWeek: gs.currentWeek + 4,
-      });
-      store.getState().loadGame(gs);
-    });
+  test("acknowledges choiceless events through the live event action", async ({ gamePage }) => {
+    await injectNarrativeEvent(gamePage, { id: "choiceless-event" });
     await gamePage.page.waitForTimeout(100);
 
-    // Acknowledge by updating event status directly (store resolveNarrativeEvent
-    // operates on engine-generated events with full metadata)
     await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      const event = gs.narrativeEvents?.find((e: any) => e.id === "choiceless-event");
-      if (event) {
-        event.status = "resolved";
-        event.acknowledgedAtWeek = gs.currentWeek;
-        store.getState().loadGame(gs);
-      }
+      store.getState().acknowledgeNarrativeEvent("choiceless-event");
     });
     await gamePage.page.waitForTimeout(100);
 
@@ -94,28 +96,11 @@ test.describe("Narrative Events", () => {
     });
 
     expect(event).not.toBeNull();
-    expect(event.status).toBe("resolved");
+    expect(event.acknowledged).toBe(true);
   });
 
   test("events with choices have multiple options", async ({ gamePage }) => {
-    // Inject an event with choices
-    await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      gs.narrativeEvents = gs.narrativeEvents ?? [];
-      gs.narrativeEvents.push({
-        id: "choice-event",
-        type: "youthProdigyDilemma",
-        status: "pending",
-        choices: [
-          { text: "Recommend immediately", consequence: { type: "reputation", value: 5 } },
-          { text: "Wait and observe more", consequence: { type: "reputation", value: -2 } },
-        ],
-        createdAtWeek: gs.currentWeek,
-        expiresAtWeek: gs.currentWeek + 4,
-      });
-      store.getState().loadGame(gs);
-    });
+    await injectNarrativeEvent(gamePage, { id: "choice-event", includeChoices: true });
     await gamePage.page.waitForTimeout(100);
 
     const event = await gamePage.page.evaluate(() => {
@@ -128,39 +113,16 @@ test.describe("Narrative Events", () => {
     expect(event.choices.length).toBeGreaterThan(1);
   });
 
-  test("resolve event choice via direct state mutation", async ({ gamePage }) => {
-    await gamePage.page.evaluate(() => {
-      const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      gs.narrativeEvents = gs.narrativeEvents ?? [];
-      gs.narrativeEvents.push({
-        id: "resolve-choice-event",
-        type: "boardInquiry",
-        status: "pending",
-        choices: [
-          { text: "Defend your methods", consequence: { type: "reputation", value: 3 } },
-          { text: "Accept criticism", consequence: { type: "reputation", value: -5 } },
-        ],
-        createdAtWeek: gs.currentWeek,
-        expiresAtWeek: gs.currentWeek + 4,
-      });
-      store.getState().loadGame(gs);
+  test("resolves an event choice through the live consequence engine", async ({ gamePage }) => {
+    await injectNarrativeEvent(gamePage, {
+      id: "resolve-choice-event",
+      includeChoices: true,
     });
     await gamePage.page.waitForTimeout(100);
 
-    // Resolve by choosing option 0 and applying consequence directly
     await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      const event = gs.narrativeEvents?.find((e: any) => e.id === "resolve-choice-event");
-      if (event) {
-        event.status = "resolved";
-        // Apply consequence
-        if (event.choices?.[0]?.consequence?.type === "reputation") {
-          gs.scout.reputation += event.choices[0].consequence.value;
-        }
-        store.getState().loadGame(gs);
-      }
+      store.getState().resolveNarrativeEventChoice("resolve-choice-event", 0);
     });
     await gamePage.page.waitForTimeout(100);
 
@@ -171,26 +133,14 @@ test.describe("Narrative Events", () => {
     });
 
     expect(event).not.toBeNull();
-    expect(event.status).toBe("resolved");
+    expect(event.selectedChoice).toBe(0);
   });
 
   test("no console errors during event processing", async ({ gamePage }) => {
-    // Inject and resolve an event via direct state mutation
+    await injectNarrativeEvent(gamePage, { id: "console-test-event" });
     await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
-      const gs = store.getState().gameState;
-      gs.narrativeEvents = gs.narrativeEvents ?? [];
-      gs.narrativeEvents.push({
-        id: "console-test-event",
-        type: "scoutingBreakthrough",
-        status: "pending",
-        createdAtWeek: gs.currentWeek,
-        expiresAtWeek: gs.currentWeek + 4,
-      });
-      // Resolve immediately
-      const event = gs.narrativeEvents.find((e: any) => e.id === "console-test-event");
-      if (event) event.status = "resolved";
-      store.getState().loadGame(gs);
+      store.getState().acknowledgeNarrativeEvent("console-test-event");
     });
     await gamePage.page.waitForTimeout(200);
 

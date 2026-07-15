@@ -1,6 +1,12 @@
 import { test, expect } from "../fixtures";
 
-test.describe("Leaderboard Screen", () => {
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
+test.describe("Planned full-game leaderboard", () => {
+  test.skip(
+    IS_YOUTH_EARLY_ACCESS,
+    "Leaderboard is a planned full-game surface; Youth EA retains career records in the Career workspace.",
+  );
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectState({

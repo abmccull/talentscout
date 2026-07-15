@@ -1,6 +1,12 @@
 import { test, expect } from "../fixtures";
 
-test.describe("Observation Flow", () => {
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
+test.describe("Planned full-game fixture and match observation flow", () => {
+  test.skip(
+    IS_YOUTH_EARLY_ACCESS,
+    "Fixture-browser and match-control observation are planned full-game systems; Youth EA uses the contextual Planner observation loop.",
+  );
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectMidGameState("youth");

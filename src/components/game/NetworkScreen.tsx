@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -150,6 +151,14 @@ function formatAttributeLabel(attribute: string): string {
     professionalism: "Professionalism",
   };
   return labels[attribute] ?? attribute;
+}
+
+function formatPlayerName(
+  player:
+    | { firstName: string; lastName: string }
+    | undefined,
+): string | null {
+  return player ? `${player.firstName} ${player.lastName}` : null;
 }
 
 function ContactDetail({ contact, ecology, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
@@ -505,17 +514,51 @@ function GossipFeedPanel({ contacts, currentWeek }: { contacts: Contact[]; curre
 // =============================================================================
 
 export function NetworkScreen() {
-  const { gameState, scheduleActivity, getPlayer } = useGameStore();
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const {
+    contactsById,
+    contactIntel,
+    playersById,
+    clubsById,
+    rivalScoutsById,
+    consequenceState,
+    currentWeek,
+    currentSeason,
+    scoutId,
+    scheduledActivities,
+    scheduleActivity,
+  } = useGameStore(
+    useShallow((state) => ({
+      contactsById: state.gameState?.contacts,
+      contactIntel: state.gameState?.contactIntel,
+      playersById: state.gameState?.players,
+      clubsById: state.gameState?.clubs,
+      rivalScoutsById: state.gameState?.rivalScouts,
+      consequenceState: state.gameState?.consequenceState,
+      currentWeek: state.gameState?.currentWeek,
+      currentSeason: state.gameState?.currentSeason,
+      scoutId: state.gameState?.scout.id,
+      scheduledActivities: state.gameState?.schedule.activities,
+      scheduleActivity: state.scheduleActivity,
+    })),
+  );
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [scheduledId, setScheduledId] = useState<string | null>(null);
+
+  const contacts = useMemo(
+    () => Object.values(contactsById ?? {}),
+    [contactsById],
+  );
+  const selectedContact = selectedContactId
+    ? (contactsById?.[selectedContactId] ?? null)
+    : null;
 
   const contactIntelMap = useMemo<Map<string, IntelEntry[]>>(() => {
     const map = new Map<string, IntelEntry[]>();
-    if (!gameState) return map;
-    const persistedIntel = gameState.contactIntel;
+    if (!contactsById || !playersById) return map;
+    const persistedIntel = contactIntel;
     const usePersistedIntel = persistedIntel !== undefined && persistedIntel !== null;
 
-    for (const contact of Object.values(gameState.contacts)) {
+    for (const contact of contacts) {
       if (contact.knownPlayerIds.length === 0) {
         map.set(contact.id, []);
         continue;
@@ -525,7 +568,7 @@ export function NetworkScreen() {
         const entries: IntelEntry[] = [];
         const seenIntel = new Set<string>();
         for (const playerId of contact.knownPlayerIds) {
-          const player = getPlayer(playerId);
+          const player = playersById[playerId];
           if (!player) continue;
           for (const intel of persistedIntel[playerId] ?? []) {
             const intelKey = `${intel.playerId}:${intel.attribute}`;
@@ -549,7 +592,7 @@ export function NetworkScreen() {
       const rng = new RNG(`intel-${contact.id}`);
       const entries: IntelEntry[] = [];
       for (const playerId of contact.knownPlayerIds) {
-        const player = getPlayer(playerId);
+        const player = playersById[playerId];
         if (!player) continue;
         const intel = getHiddenAttributeIntel(rng, contact, playerId, player);
         if (intel) {
@@ -562,39 +605,61 @@ export function NetworkScreen() {
       map.set(contact.id, entries);
     }
     return map;
-  }, [gameState, getPlayer]);
+  }, [contacts, contactsById, contactIntel, playersById]);
 
   const contactEcologyMap = useMemo(() => {
     const profiles = new Map<string, StakeholderEcologyProfile>();
-    if (!gameState) return profiles;
+    if (
+      !contactsById
+      || !playersById
+      || !clubsById
+      || !rivalScoutsById
+      || !consequenceState
+      || currentWeek == null
+      || currentSeason == null
+      || !scoutId
+    ) {
+      return profiles;
+    }
     const resolveEntityName = (entity: { kind: string; id: string }) => {
-      if (entity.kind === "player") {
-        const player = getPlayer(entity.id);
-        return player ? `${player.firstName} ${player.lastName}` : undefined;
-      }
-      if (entity.kind === "contact") return gameState.contacts[entity.id]?.name;
-      if (entity.kind === "club") return gameState.clubs[entity.id]?.name;
-      if (entity.kind === "rival") return gameState.rivalScouts[entity.id]?.name;
+      if (entity.kind === "player") return formatPlayerName(playersById[entity.id]) ?? undefined;
+      if (entity.kind === "contact") return contactsById[entity.id]?.name;
+      if (entity.kind === "club") return clubsById[entity.id]?.name;
+      if (entity.kind === "rival") return rivalScoutsById[entity.id]?.name;
       return undefined;
     };
-    for (const contact of Object.values(gameState.contacts)) {
+    for (const contact of contacts) {
       profiles.set(contact.id, buildStakeholderEcologyProfile({
-        state: gameState.consequenceState,
+        state: consequenceState,
         stakeholder: { kind: "contact", id: contact.id },
-        now: { week: gameState.currentWeek, season: gameState.currentSeason },
-        scoutId: gameState.scout.id,
+        now: { week: currentWeek, season: currentSeason },
+        scoutId,
         baseTrust: contact.trustLevel ?? contact.relationship,
         baseInfluence: Math.round((contact.relationship + contact.reliability) / 2),
         resolveEntityName,
       }));
     }
     return profiles;
-  }, [gameState, getPlayer]);
+  }, [
+    contacts,
+    contactsById,
+    playersById,
+    clubsById,
+    rivalScoutsById,
+    consequenceState,
+    currentWeek,
+    currentSeason,
+    scoutId,
+  ]);
 
-  if (!gameState) return null;
-
-  const contacts = Object.values(gameState.contacts);
-  const currentWeek = gameState.currentWeek;
+  if (
+    !contactsById
+    || !playersById
+    || !scheduledActivities
+    || currentWeek == null
+  ) {
+    return null;
+  }
 
   const handleScheduleMeeting = (contact: Contact) => {
     const activity: Activity = {
@@ -604,8 +669,7 @@ export function NetworkScreen() {
       description: `Meet with ${contact.name}`,
     };
     // Schedule on the first free day
-    const activities = gameState.schedule.activities;
-    const firstFree = activities.findIndex((a) => a === null);
+    const firstFree = scheduledActivities.findIndex((activitySlot) => activitySlot === null);
     if (firstFree !== -1) {
       scheduleActivity(activity, firstFree);
       setScheduledId(contact.id);
@@ -614,10 +678,7 @@ export function NetworkScreen() {
 
   const getKnownPlayerNames = (contact: Contact): string[] => {
     return contact.knownPlayerIds
-      .map((id) => {
-        const p = getPlayer(id);
-        return p ? `${p.firstName} ${p.lastName}` : null;
-      })
+      .map((id) => formatPlayerName(playersById[id]))
       .filter((n): n is string => !!n);
   };
 
@@ -666,7 +727,7 @@ export function NetworkScreen() {
                   {contacts.map((contact) => {
                     const config = CONTACT_TYPE_CONFIG[contact.type];
                     const Icon = config.icon;
-                    const isSelected = selectedContact?.id === contact.id;
+                    const isSelected = selectedContactId === contact.id;
                     const wasScheduled = scheduledId === contact.id;
                     const trust = contact.trustLevel ?? contact.relationship;
                     const bRisk = contact.betrayalRisk ?? 0;
@@ -685,7 +746,7 @@ export function NetworkScreen() {
                     return (
                       <button
                         key={contact.id}
-                        onClick={() => setSelectedContact(isSelected ? null : contact)}
+                        onClick={() => setSelectedContactId(isSelected ? null : contact.id)}
                         aria-pressed={isSelected}
                         aria-label={`View contact: ${contact.name}`}
                         className={`rounded-lg border p-4 text-left transition ${
@@ -814,7 +875,7 @@ export function NetworkScreen() {
                     intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
                     currentWeek={currentWeek}
                     onScheduleMeeting={() => handleScheduleMeeting(selectedContact)}
-                    onClose={() => setSelectedContact(null)}
+                    onClose={() => setSelectedContactId(null)}
                   />
                 </div>
               )}

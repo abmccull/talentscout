@@ -10,6 +10,12 @@
  */
 
 import type { PlayerAttribute } from "@/engine/core/types";
+import {
+  CONTENT_SCHEMA_VERSION,
+  defineContentPack,
+  hasNonBlankString,
+  type ContentValidationIssue,
+} from "@/engine/content/contracts";
 import { RNG } from "@/engine/rng/index";
 import type { AtmosphereEvent, VenueAtmosphere } from "./types";
 
@@ -32,7 +38,7 @@ type WeatherCondition = (typeof WEATHER_CONDITIONS)[number];
 // EVENT TEMPLATES
 // =============================================================================
 
-interface EventTemplate {
+export interface AtmosphereEventTemplate {
   id: string;
   description: string;
   effect: AtmosphereEvent["effect"];
@@ -40,7 +46,7 @@ interface EventTemplate {
   noiseDelta: number;
 }
 
-const EVENT_TEMPLATES: readonly EventTemplate[] = [
+const ATMOSPHERE_EVENT_TEMPLATE_DEFINITIONS: readonly AtmosphereEventTemplate[] = [
   {
     id: "rain_starts",
     description: "Rain starts falling, slicking the surface and changing the pace of play.",
@@ -147,6 +153,58 @@ const EVENT_TEMPLATES: readonly EventTemplate[] = [
     noiseDelta: 0.05,
   },
 ];
+
+const ATMOSPHERE_EVENT_EFFECTS = new Set<AtmosphereEvent["effect"]>([
+  "amplify",
+  "dampen",
+  "distraction",
+  "reveal",
+]);
+
+function validateAtmosphereEventTemplate(
+  template: AtmosphereEventTemplate,
+): readonly Omit<ContentValidationIssue, "packId" | "definitionId">[] {
+  const issues: Array<Omit<ContentValidationIssue, "packId" | "definitionId">> = [];
+  if (!hasNonBlankString(template.description)) {
+    issues.push({ path: "description", message: "must be a non-empty string" });
+  }
+  if (!ATMOSPHERE_EVENT_EFFECTS.has(template.effect)) {
+    issues.push({ path: "effect", message: "must be a supported atmosphere effect" });
+  }
+  if (!Number.isFinite(template.noiseDelta)) {
+    issues.push({ path: "noiseDelta", message: "must be a finite number" });
+  }
+  if (
+    template.affectedAttributes?.some(
+      (attribute) => !hasNonBlankString(attribute),
+    )
+  ) {
+    issues.push({
+      path: "affectedAttributes",
+      message: "must contain only non-empty attribute IDs",
+    });
+  }
+  return issues;
+}
+
+/**
+ * Dynamic match conditions affect the evidence a scout receives, so they are
+ * versioned run content rather than incidental presentation copy.
+ */
+export const OBSERVATION_ATMOSPHERE_EVENT_CONTENT_PACK = defineContentPack({
+  manifest: {
+    id: "talentscout.observation-atmosphere-events",
+    kind: "observation-atmosphere-event",
+    schemaVersion: CONTENT_SCHEMA_VERSION,
+    contentVersion: "observation-atmosphere-events.1",
+  },
+  entries: ATMOSPHERE_EVENT_TEMPLATE_DEFINITIONS,
+  getDefinitionId: (template) => template.id,
+  validateDefinition: validateAtmosphereEventTemplate,
+});
+
+export const OBSERVATION_ATMOSPHERE_EVENT_TEMPLATES =
+  OBSERVATION_ATMOSPHERE_EVENT_CONTENT_PACK.entries;
 
 // =============================================================================
 // VENUE DESCRIPTIONS
@@ -396,9 +454,9 @@ export function generateAtmosphereEvent(
   const isTraining = atmosphere.venueType === "trainingVisit";
 
   // Build a weighted pool of candidate events based on context
-  const candidates: Array<{ item: EventTemplate; weight: number }> = [];
+  const candidates: Array<{ item: AtmosphereEventTemplate; weight: number }> = [];
 
-  for (const template of EVENT_TEMPLATES) {
+  for (const template of OBSERVATION_ATMOSPHERE_EVENT_TEMPLATES) {
     let weight = 1;
 
     switch (template.id) {

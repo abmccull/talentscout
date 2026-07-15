@@ -44,6 +44,7 @@ import type {
   TravelBudgetTier,
   WeekSimulationState,
 } from "@/engine/core/types";
+import type { WeeklyWorkerTelemetry } from "@/engine/core/weeklyTransactionProtocol";
 import type { LeadershipResponsibilityChoice } from "@/engine/career/leadership";
 import type { CareerRecoveryPlanId } from "@/engine/career/recovery";
 import type { EquipmentItemId } from "@/engine/finance";
@@ -247,9 +248,14 @@ export interface GameStoreState {
   setDelegationPolicy: (policyId: DelegationPolicyId) => void;
   requestWeekAdvance: () => void;
   advanceWeek: () => void;
+  advanceWeekAsync: () => Promise<void>;
+  isAdvancingWeek: boolean;
+  lastWeeklyExecutionRoute: "worker" | "main-thread-fallback" | null;
+  lastWeeklyWorkerTelemetry: WeeklyWorkerTelemetry | null;
+  weeklyTransactionError: string | null;
 
   autoSchedule: (priorities?: QuickScoutPriorities) => void;
-  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => void;
+  batchAdvance: (weeks: number, priorities?: QuickScoutPriorities) => Promise<void>;
   delegateScouting: (npcScoutId: string, playerId: string) => void;
   resolveLeadershipResponsibility: (
     responsibilityId: string,
@@ -267,8 +273,8 @@ export interface GameStoreState {
     optionId: string,
     focusedPlayerIds?: string[],
   ) => void;
-  advanceDay: () => void;
-  fastForwardWeek: () => void;
+  advanceDay: () => Promise<void>;
+  fastForwardWeek: () => Promise<void>;
 
   scheduleMatch: (fixtureId: string) => boolean;
   startMatch: (fixtureId: string) => void;

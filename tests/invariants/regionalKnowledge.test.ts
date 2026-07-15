@@ -3,7 +3,7 @@ import type { GameState, RegionalKnowledge, Scout, UnsignedYouth } from "@/engin
 import { createRNG } from "@/engine/rng";
 import { processRegionalKnowledgeGrowth } from "@/engine/specializations/regionalKnowledge";
 import { getYouthVenuePool } from "@/engine/youth/venues";
-import { buildScoutQualityData } from "@/stores/actions/weeklyActions";
+import { buildScoutQualityData } from "@/stores/actions/weeklySimulationSupport";
 
 function knowledge(countryId: string, knowledgeLevel: number): RegionalKnowledge {
   return {

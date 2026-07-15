@@ -77,6 +77,85 @@ describe("save envelope migrations", () => {
     expect(migratedAgain).toEqual(migrated);
   });
 
+  it("normalizes required runtime collections at the canonical boundary", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const fitAssessment = { score: 81, source: "legacy report evidence" };
+    const migrated = migrateSaveState({
+      ...legacy.state,
+      finances: { balance: 400, monthlyIncome: 0, equipmentLevel: 1, transactions: [] },
+      systemFitCache: { "prospect:club": fitAssessment },
+    });
+
+    expect(migrated).toMatchObject({
+      activeStorylines: [],
+      eventChains: [],
+      gossipItems: [],
+      satisfactionHistory: [],
+      freeAgentNegotiations: [],
+      freeAgentPool: { agents: [], lastRefreshSeason: 2 },
+      systemFitCache: { "prospect:club": fitAssessment },
+    });
+    expect(migrated.finances?.expenses).toMatchObject({
+      lifestyle: 0,
+      officeCost: 0,
+      employeeSalaries: 0,
+    });
+  });
+
+  it("repairs incomplete legacy attribute sources without introducing NaN ratings", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const migrated = migrateSaveState({
+      ...legacy.state,
+      players: {
+        partial: {
+          id: "partial",
+          attributes: {
+            tackling: Number.NaN,
+            defensiveAwareness: Number.NaN,
+            strength: 12,
+          },
+        },
+      },
+    });
+
+    const attributes = migrated.players.partial.attributes;
+    expect(Number.isFinite(attributes.tackling)).toBe(true);
+    expect(Number.isFinite(attributes.finishing)).toBe(true);
+    expect(Number.isFinite(attributes.teamwork)).toBe(true);
+    expect(attributes.tackling).toBeGreaterThanOrEqual(1);
+    expect(attributes.tackling).toBeLessThanOrEqual(20);
+  });
+
+  it("normalizes intermediate economics saves that already have a career path", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const migrated = migrateSaveState({
+      ...legacy.state,
+      finances: {
+        balance: 250,
+        monthlyIncome: 0,
+        equipmentLevel: 1,
+        expenses: {},
+        transactions: [],
+        careerPath: "independent",
+      },
+    });
+
+    expect(migrated.finances).toMatchObject({
+      careerPath: "independent",
+      employees: [],
+      reportListings: [],
+      satelliteOffices: [],
+      pendingEmployeeEvents: [],
+      loans: [],
+    });
+  });
+
   it("converges direct-state and provider-record migration paths", () => {
     const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
       state: Record<string, unknown>;

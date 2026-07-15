@@ -214,21 +214,21 @@ export class GamePage {
   }
 
   async advanceWeek(): Promise<void> {
-    await this.page.evaluate(() => {
+    await this.page.evaluate(async () => {
       const store = (window as any).__GAME_STORE__;
       const state = store?.getState();
       if (!state) return;
-      state.batchAdvance(1);
+      await state.batchAdvance(1);
     });
     await this.page.waitForTimeout(200);
   }
 
   async advanceWeeks(n: number): Promise<void> {
-    await this.page.evaluate((weeks) => {
+    await this.page.evaluate(async (weeks) => {
       const store = (window as any).__GAME_STORE__;
       const state = store?.getState();
       if (!state) return;
-      state.batchAdvance(weeks);
+      await state.batchAdvance(weeks);
     }, n);
     await this.page.waitForTimeout(300);
   }
@@ -245,6 +245,8 @@ export class GamePage {
     await this.waitForScreen("weekSimulation", 10_000);
 
     for (let step = 0; step < 20; step++) {
+      if (await this.getCurrentScreen() === "calendar") break;
+
       if (launchLiveSession) {
         const interactionResolved = await this.resolveWeekSimulationInteraction();
         if (!interactionResolved) {
@@ -273,6 +275,13 @@ export class GamePage {
 
       const viewCalendar = this.page.getByRole("button", { name: /^View Calendar$/ });
       if (await viewCalendar.isVisible({ timeout: 1_000 }).catch(() => false)) {
+        const enabled = await viewCalendar.evaluate(
+          (element) => !(element as HTMLButtonElement).disabled,
+        ).catch(() => false);
+        if (!enabled) {
+          await this.page.waitForTimeout(250);
+          continue;
+        }
         await viewCalendar.click();
         break;
       }
@@ -281,7 +290,10 @@ export class GamePage {
         name: /^(Complete the week and process results|Complete Week)$/i,
       });
       if (await completeWeek.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        if (!(await completeWeek.isEnabled())) {
+        const enabled = await completeWeek.evaluate(
+          (element) => !(element as HTMLButtonElement).disabled,
+        ).catch(() => false);
+        if (!enabled) {
           await this.page.waitForTimeout(250);
           continue;
         }
@@ -292,7 +304,10 @@ export class GamePage {
 
       const nextDay = this.page.getByRole("button", { name: /^(Advance to next day|Next Day)$/i });
       if (await nextDay.isVisible({ timeout: 1_000 }).catch(() => false)) {
-        if (!(await nextDay.isEnabled())) {
+        const enabled = await nextDay.evaluate(
+          (element) => !(element as HTMLButtonElement).disabled,
+        ).catch(() => false);
+        if (!enabled) {
           await this.page.waitForTimeout(250);
           continue;
         }

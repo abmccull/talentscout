@@ -2,9 +2,21 @@
 
 import { useState, useMemo } from "react";
 import { useGameStore, type ClubStanding } from "@/stores/gameStore";
+import type { GameStoreState } from "@/stores/gameStoreTypes";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, ChevronDown, ChevronUp } from "lucide-react";
+import { gameStateFieldSelector } from "@/engine/core/gameStatePartitions";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+
+// Keep this dashboard widget reactive to the only world surfaces that change
+// its output. Subscribing to the full GameState caused it to re-render for
+// unrelated reports, inbox messages, and tutorial state.
+const selectLeagues = gameStateFieldSelector("leagues");
+const selectFixtures = gameStateFieldSelector("fixtures");
+const selectScoutHomeCountry = (store: GameStoreState) =>
+  store.gameState ? getScoutHomeCountry(store.gameState.scout) : null;
+const selectLeagueStandings = (store: GameStoreState) =>
+  store.getLeagueStandings;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -37,36 +49,41 @@ function zoneTextClass(zone: ClubStanding["zone"]): string {
 // ---------------------------------------------------------------------------
 
 export function LeagueStandingsWidget() {
-  const { gameState, getLeagueStandings } = useGameStore();
+  const leaguesById = useGameStore(selectLeagues);
+  const fixtures = useGameStore(selectFixtures);
+  const homeCountry = useGameStore(selectScoutHomeCountry);
+  const getLeagueStandings = useGameStore(selectLeagueStandings);
   const [expanded, setExpanded] = useState(false);
   const [selectedLeagueId, setSelectedLeagueId] = useState("");
 
   // Gather all leagues, sorted by tier then name
   const leagues = useMemo(() => {
-    if (!gameState) return [];
-    return Object.values(gameState.leagues).sort(
+    if (!leaguesById) return [];
+    return Object.values(leaguesById).sort(
       (a, b) => a.tier - b.tier || a.name.localeCompare(b.name),
     );
-  }, [gameState]);
+  }, [leaguesById]);
 
   // Default to the top-tier league in the scout's home country
-  const homeCountry = gameState ? getScoutHomeCountry(gameState.scout) : "";
   const homeLeagueId = useMemo(() => {
     const home = leagues.find(
-      (l) => l.country.toLowerCase() === homeCountry.toLowerCase() && l.tier === 1,
+      (l) => l.country.toLowerCase() === (homeCountry ?? "").toLowerCase() && l.tier === 1,
     );
     return home?.id ?? leagues[0]?.id ?? "";
   }, [leagues, homeCountry]);
 
   // Determine which league to show: prefer selected, fall back to home league
-  const activeLeagueId = selectedLeagueId && gameState?.leagues[selectedLeagueId]
+  const activeLeagueId = selectedLeagueId && leaguesById?.[selectedLeagueId]
     ? selectedLeagueId
     : homeLeagueId;
 
-  const standings = getLeagueStandings(activeLeagueId);
-  const selectedLeague = gameState?.leagues[activeLeagueId];
+  const standings = useMemo(
+    () => fixtures ? getLeagueStandings(activeLeagueId) : [],
+    [activeLeagueId, fixtures, getLeagueStandings],
+  );
+  const selectedLeague = leaguesById?.[activeLeagueId];
 
-  if (!gameState || leagues.length === 0) return null;
+  if (!leaguesById || leagues.length === 0) return null;
 
   // Show top 5 + bottom 3 in compact mode, all in expanded mode
   const visibleStandings = expanded

@@ -89,6 +89,8 @@ const commands = [
   "npm run test:architecture",
   "npm run test:asset-provenance",
   "npm run test:unit",
+  "npm run test:coverage:critical",
+  "npm run test:coverage:retention",
   "npm run test:replayability",
   "npm run build:e2e",
   "npm run test:e2e:opening",

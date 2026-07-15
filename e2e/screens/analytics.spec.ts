@@ -1,6 +1,13 @@
 import { test, expect } from "../fixtures";
 
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
 test.describe("Analytics Screen", () => {
+  test.skip(
+    IS_YOUTH_EARLY_ACCESS,
+    "Analytics is exercised by the full-game build; Youth EA routes this legacy screen to Career.",
+  );
+
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectLateGameState("data"); // Tier 3+ required, data spec fits

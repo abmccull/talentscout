@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,13 +24,13 @@ import {
   getRivalOrganizationDefinition,
   getRivalOrganizationThreat,
   getRivalThreatLevel,
-  getSharedTargets,
 } from "@/engine/rivals";
-import type { RivalScout, RivalActivity, GameState, Scout } from "@/engine/core/types";
+import type { RivalScout, RivalActivity, Scout } from "@/engine/core/types";
 import type {
   RivalOrganization,
   RivalOrganizationOpportunity,
 } from "@/engine/rivals";
+import type { ConsequenceEngineState } from "@/engine/consequences/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { RivalOperationsNetwork } from "./rivals/RivalOperationsNetwork";
 import { buildStakeholderEcologyProfile } from "@/engine/consequences";
@@ -112,8 +114,13 @@ interface RivalCardProps {
   rival: RivalScout;
   getClubName: (clubId: string) => string;
   getPlayerName: (playerId: string) => string;
-  gameState: GameState;
   scout: Scout;
+  consequenceState: ConsequenceEngineState;
+  currentWeek: number;
+  currentSeason: number;
+  contactNamesById: Record<string, string>;
+  rivalNamesById: Record<string, string>;
+  sharedTargetIds: string[];
   onNavigateToPlayer: (playerId: string) => void;
   recentActivities: RivalActivity[];
 }
@@ -122,13 +129,17 @@ function RivalCard({
   rival,
   getClubName,
   getPlayerName,
-  gameState,
   scout,
+  consequenceState,
+  currentWeek,
+  currentSeason,
+  contactNamesById,
+  rivalNamesById,
+  sharedTargetIds,
   onNavigateToPlayer,
   recentActivities,
 }: RivalCardProps) {
   const threat = getRivalThreatLevel(rival, scout);
-  const sharedTargetIds = getSharedTargets(rival, gameState);
   const currentTargetName = rival.currentTarget
     ? getPlayerName(rival.currentTarget)
     : null;
@@ -136,16 +147,16 @@ function RivalCard({
     ? (rival.scoutingProgress?.[rival.currentTarget] ?? 0)
     : 0;
   const ecology = buildStakeholderEcologyProfile({
-    state: gameState.consequenceState,
+    state: consequenceState,
     stakeholder: { kind: "rival", id: rival.id },
-    now: { week: gameState.currentWeek, season: gameState.currentSeason },
+    now: { week: currentWeek, season: currentSeason },
     scoutId: scout.id,
     baseInfluence: rival.reputation,
     resolveEntityName: (entity) => {
       if (entity.kind === "player") return getPlayerName(entity.id);
       if (entity.kind === "club") return getClubName(entity.id);
-      if (entity.kind === "rival") return gameState.rivalScouts[entity.id]?.name;
-      if (entity.kind === "contact") return gameState.contacts[entity.id]?.name;
+      if (entity.kind === "rival") return rivalNamesById[entity.id];
+      if (entity.kind === "contact") return contactNamesById[entity.id];
       return undefined;
     },
   });
@@ -455,32 +466,124 @@ function OpportunityCard({
 
 export function RivalsScreen() {
   const {
-    gameState,
-    selectPlayer,
-    setScreen,
-    resolveRivalOrganizationOpportunity,
-  } = useGameStore();
-
-  if (!gameState) return null;
-
-  const {
     scout,
-    rivalScouts,
+    rivalScoutsById,
     rivalOrganizationState,
     clubs,
     players,
     rivalActivities,
-  } = gameState;
-  const rivalList = Object.values(rivalScouts ?? {});
-  const activities = rivalActivities ?? [];
-  const organizations = Object.values(rivalOrganizationState?.organizations ?? {})
-    .sort((left, right) =>
-      getRivalOrganizationThreat(right) - getRivalOrganizationThreat(left)
-      || left.name.localeCompare(right.name),
-    );
-  const openOpportunities = rivalOrganizationState
-    ? getOpenRivalOrganizationOpportunities(rivalOrganizationState)
-    : [];
+    observations,
+    reports,
+    unsignedYouth,
+    contactsById,
+    consequenceState,
+    currentWeek,
+    currentSeason,
+    selectPlayer,
+    setScreen,
+    resolveRivalOrganizationOpportunity,
+  } = useGameStore(
+    useShallow((state) => ({
+      scout: state.gameState?.scout,
+      rivalScoutsById: state.gameState?.rivalScouts,
+      rivalOrganizationState: state.gameState?.rivalOrganizationState,
+      clubs: state.gameState?.clubs,
+      players: state.gameState?.players,
+      rivalActivities: state.gameState?.rivalActivities,
+      observations: state.gameState?.observations,
+      reports: state.gameState?.reports,
+      unsignedYouth: state.gameState?.unsignedYouth,
+      contactsById: state.gameState?.contacts,
+      consequenceState: state.gameState?.consequenceState,
+      currentWeek: state.gameState?.currentWeek,
+      currentSeason: state.gameState?.currentSeason,
+      selectPlayer: state.selectPlayer,
+      setScreen: state.setScreen,
+      resolveRivalOrganizationOpportunity: state.resolveRivalOrganizationOpportunity,
+    })),
+  );
+
+  const rivalList = useMemo(
+    () => Object.values(rivalScoutsById ?? {}),
+    [rivalScoutsById],
+  );
+  const activities = useMemo(
+    () => rivalActivities ?? [],
+    [rivalActivities],
+  );
+  const organizations = useMemo(
+    () =>
+      Object.values(rivalOrganizationState?.organizations ?? {}).sort(
+        (left, right) =>
+          getRivalOrganizationThreat(right) - getRivalOrganizationThreat(left)
+          || left.name.localeCompare(right.name),
+      ),
+    [rivalOrganizationState],
+  );
+  const openOpportunities = useMemo(
+    () =>
+      rivalOrganizationState
+        ? getOpenRivalOrganizationOpportunities(rivalOrganizationState)
+        : [],
+    [rivalOrganizationState],
+  );
+
+  const scopedPlayerIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const observation of Object.values(observations ?? {})) {
+      ids.add(observation.playerId);
+    }
+    for (const report of Object.values(reports ?? {})) {
+      ids.add(report.playerId);
+    }
+    return ids;
+  }, [observations, reports]);
+
+  const recentActivitiesByRival = useMemo(() => {
+    const activityMap = new Map<string, RivalActivity[]>();
+    for (const activity of activities) {
+      const rivalEntries = activityMap.get(activity.rivalId);
+      if (rivalEntries) {
+        rivalEntries.push(activity);
+      } else {
+        activityMap.set(activity.rivalId, [activity]);
+      }
+    }
+
+    for (const [rivalId, rivalEntries] of activityMap) {
+      activityMap.set(rivalId, rivalEntries.slice(-5).reverse());
+    }
+
+    return activityMap;
+  }, [activities]);
+
+  const contactNamesById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(contactsById ?? {}).map((contact) => [contact.id, contact.name]),
+      ),
+    [contactsById],
+  );
+
+  const rivalNamesById = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.values(rivalScoutsById ?? {}).map((rival) => [rival.id, rival.name]),
+      ),
+    [rivalScoutsById],
+  );
+
+  if (
+    !scout
+    || !clubs
+    || !players
+    || !unsignedYouth
+    || !consequenceState
+    || currentWeek == null
+    || currentSeason == null
+  ) {
+    return null;
+  }
 
   const getClubName = (clubId: string) => clubs[clubId]?.name ?? "Unknown Club";
   const getPlayerName = (playerId: string) => {
@@ -488,17 +591,10 @@ export function RivalsScreen() {
     return p ? `${p.firstName} ${p.lastName}` : "Unknown Player";
   };
   const navigateToPlayer = (playerId: string) => {
-    if (!players[playerId] && !gameState.unsignedYouth[playerId]?.player) return;
+    if (!players[playerId] && !unsignedYouth[playerId]?.player) return;
     selectPlayer(playerId);
     setScreen("playerProfile");
   };
-
-  /** Get recent activities for a specific rival (last 5). */
-  const getRecentActivities = (rivalId: string) =>
-    activities
-      .filter((a) => a.rivalId === rivalId)
-      .slice(-5)
-      .reverse();
 
   if (rivalList.length === 0 && organizations.length === 0) {
     return (
@@ -564,7 +660,7 @@ export function RivalsScreen() {
           )}
         </div>
 
-        {openOpportunities.length > 0 && (
+        {rivalOrganizationState && openOpportunities.length > 0 && (
           <section aria-labelledby="rival-openings-heading" className="space-y-3">
             <div>
               <h2 id="rival-openings-heading" className="flex items-center gap-2 text-lg font-semibold text-white">
@@ -590,7 +686,7 @@ export function RivalsScreen() {
           </section>
         )}
 
-        {organizations.length > 0 && (
+        {rivalOrganizationState && organizations.length > 0 && (
           <section aria-labelledby="rival-organizations-heading" className="space-y-3">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
@@ -614,7 +710,7 @@ export function RivalsScreen() {
             </div>
             <RivalOperationsNetwork
               organizations={organizations}
-              rivals={rivalScouts ?? {}}
+              rivals={rivalScoutsById ?? {}}
               opportunities={openOpportunities}
               pressure={rivalOrganizationState.currentPressure}
               formatAction={(action) => ORGANIZATION_ACTION_LABELS[action] ?? action}
@@ -659,7 +755,7 @@ export function RivalsScreen() {
               </p>
             )}
             {(() => {
-              const shared = getSharedTargets(nemesis, gameState);
+              const shared = nemesis.targetPlayerIds.filter((playerId) => scopedPlayerIds.has(playerId));
               return shared.length > 0 ? (
                 <p className="mt-1 text-xs text-zinc-400">
                   {shared.length} shared target{shared.length !== 1 ? "s" : ""}
@@ -677,10 +773,15 @@ export function RivalsScreen() {
               rival={nemesis}
               getClubName={getClubName}
               getPlayerName={getPlayerName}
-              gameState={gameState}
               scout={scout}
+              consequenceState={consequenceState}
+              currentWeek={currentWeek}
+              currentSeason={currentSeason}
+              contactNamesById={contactNamesById}
+              rivalNamesById={rivalNamesById}
+              sharedTargetIds={nemesis.targetPlayerIds.filter((playerId) => scopedPlayerIds.has(playerId))}
               onNavigateToPlayer={navigateToPlayer}
-              recentActivities={getRecentActivities(nemesis.id)}
+              recentActivities={recentActivitiesByRival.get(nemesis.id) ?? []}
             />
           )}
           {nonNemesisRivals.map((rival) => (
@@ -689,10 +790,15 @@ export function RivalsScreen() {
               rival={rival}
               getClubName={getClubName}
               getPlayerName={getPlayerName}
-              gameState={gameState}
               scout={scout}
+              consequenceState={consequenceState}
+              currentWeek={currentWeek}
+              currentSeason={currentSeason}
+              contactNamesById={contactNamesById}
+              rivalNamesById={rivalNamesById}
+              sharedTargetIds={rival.targetPlayerIds.filter((playerId) => scopedPlayerIds.has(playerId))}
               onNavigateToPlayer={navigateToPlayer}
-              recentActivities={getRecentActivities(rival.id)}
+              recentActivities={recentActivitiesByRival.get(rival.id) ?? []}
             />
           ))}
         </div>

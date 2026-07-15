@@ -71,6 +71,12 @@ jobs:
       - name: Unit and migration tests
         run: npm run test:unit
 
+      - name: Critical simulation and persistence coverage gate
+        run: npm run test:coverage:critical
+
+      - name: Long-save retention coverage gate
+        run: npm run test:coverage:retention
+
       - name: Replayability divergence gate
         run: npm run test:replayability
 
@@ -126,6 +132,8 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            artifacts/coverage/critical/coverage-summary.json
+            artifacts/coverage/retention/coverage-summary.json
             artifacts/performance/low-end-emulation-profile.json
             artifacts/release/generated/replayability-release-summary.json
           if-no-files-found: ignore
@@ -140,7 +148,7 @@ jobs:
     needs: quality
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -439,6 +447,12 @@ jobs:
           name: candidate-core-evidence
           path: artifacts/release/generated
 
+      - name: Download critical coverage evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: quality-evidence
+          path: quality-evidence
+
       - name: Create exact-package manifest
         env:
           RELEASE_CANDIDATE_TAG: ${{ github.ref_name }}
@@ -472,10 +486,17 @@ jobs:
       - name: Stage immutable candidate evidence
         run: |
           mkdir -p candidate-bundle/artifacts/release/generated
+          mkdir -p candidate-bundle/artifacts/coverage/critical
           cp artifacts/release/candidate-package-manifest.json candidate-bundle/artifacts/release/
           cp artifacts/release/release-evidence-check.json candidate-bundle/artifacts/release/
           cp artifacts/release/generated/long-career-release-summary.json candidate-bundle/artifacts/release/generated/
           cp artifacts/release/generated/candidate-core-suites.json candidate-bundle/artifacts/release/generated/
+          coverage_summary="$(find quality-evidence -path '*/artifacts/coverage/critical/coverage-summary.json' -print -quit)"
+          if [ -z "$coverage_summary" ]; then
+            echo "::error::Critical coverage summary is missing from quality evidence"
+            exit 1
+          fi
+          cp "$coverage_summary" candidate-bundle/artifacts/coverage/critical/coverage-summary.json
 
       - name: Upload immutable candidate evidence
         uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0

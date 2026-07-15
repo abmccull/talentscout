@@ -1,5 +1,7 @@
 import { test, expect } from "../fixtures";
 
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
 test.describe("Specialization Perks", () => {
   test("perks array exists at tier 1", async ({ gamePage }) => {
     await gamePage.goto();
@@ -48,6 +50,10 @@ test.describe("Specialization Perks", () => {
   });
 
   test("all specializations can reach tier 4 without errors", async ({ gamePage }) => {
+    test.skip(
+      IS_YOUTH_EARLY_ACCESS,
+      "Only Youth Scout is playable in this Early Access build; other specialization coverage belongs to the full-game build.",
+    );
     test.setTimeout(120_000);
 
     for (const spec of ["youth", "firstTeam", "regional", "data"] as const) {

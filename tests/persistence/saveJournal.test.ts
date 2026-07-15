@@ -20,11 +20,16 @@ import {
   processSaveSyncTask,
   restoreSaveArchive,
   saveGame,
+  saveGameWithResult,
   setArchiveLogicalByteBudgetForTests,
   setPersistenceFaultInjectorForTests,
   type SaveRecord,
 } from "@/lib/db";
 import { createSaveEnvelope } from "@/lib/saveEnvelope";
+import {
+  clearSavePersistenceTelemetryForTests,
+  getRecentSavePersistenceTelemetry,
+} from "@/lib/saveTelemetry";
 
 const goldenV0Path = fileURLToPath(
   new URL("../fixtures/saves/v0-save-record.json", import.meta.url),
@@ -147,6 +152,39 @@ describe.sequential("transactional save journal", () => {
     expect(loaded?.record.savedAt).toBe(original.savedAt);
     expect(loaded?.state.currentWeek).toBe(7);
     expect(await listSaveArchives(1)).toHaveLength(0);
+  });
+
+  it("deduplicates timestamp-only autosaves without advancing the journal", async () => {
+    await deleteSave(1);
+    clearSavePersistenceTelemetryForTests();
+    const initialState = stateAt(7);
+
+    const first = await saveGameWithResult(1, "Autosave", initialState);
+    const duplicate = await saveGameWithResult(1, "Autosave", {
+      ...initialState,
+      lastSaved: initialState.lastSaved + 60_000,
+    });
+
+    expect(first.wrote).toBe(true);
+    expect(first.payloadBytes).toBeGreaterThan(0);
+    expect(first.record.state.lastSaved).toBe(first.record.savedAt);
+    expect(duplicate.wrote).toBe(false);
+    expect(duplicate.payloadBytes).toBeNull();
+    expect(duplicate.record.storageRevision).toBe(first.record.storageRevision);
+    expect(await listSaveArchives(1)).toHaveLength(0);
+
+    const advanced = await saveGameWithResult(1, "Autosave", stateAt(8));
+    expect(advanced.wrote).toBe(true);
+    expect(advanced.record.storageRevision).toBe(
+      (first.record.storageRevision ?? 0) + 1,
+    );
+    expect(await listSaveArchives(1)).toHaveLength(1);
+
+    expect(getRecentSavePersistenceTelemetry().slice(-3)).toMatchObject([
+      { disposition: "written", payloadBytes: expect.any(Number) },
+      { disposition: "deduplicated", payloadBytes: null, archivedBytes: 0 },
+      { disposition: "written", archivedBytes: expect.any(Number) },
+    ]);
   });
 
   it("falls back to the newest valid generation and reports the corruption", async () => {

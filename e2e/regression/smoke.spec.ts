@@ -87,7 +87,10 @@ test.describe("Smoke Test", () => {
 
   test("late-game state injection smoke test", async ({ gamePage }) => {
     await gamePage.goto();
-    await gamePage.injectLateGameState("data");
+    // The late-career surface is shipped for Youth Scout. Data Scout is a
+    // planned full-game mode and is intentionally rejected at the EA save
+    // boundary, so it must not be used as an EA smoke fixture.
+    await gamePage.injectLateGameState("youth");
 
     // Verify tier 4 state
     const tier = await gamePage.getScoutTier();
@@ -115,22 +118,15 @@ test.describe("Smoke Test", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("all 4 specializations initialize without error", async ({ gamePage }) => {
-    test.setTimeout(120_000); // 4 sequential goto() + inject cycles need extra time
-    for (const spec of ["youth", "firstTeam", "regional", "data"] as const) {
-      await gamePage.goto();
-      await gamePage.injectState({
-        currentWeek: 1,
-        scout: { careerTier: 1, primarySpecialization: spec },
-      });
+  test("the shipped Youth specialization initializes without error", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({
+      currentWeek: 1,
+      scout: { careerTier: 1, primarySpecialization: "youth" },
+    });
 
-      const screen = await gamePage.getCurrentScreen();
-      expect(screen).toBe("dashboard");
-
-      const actualSpec = await gamePage.getSpecialization();
-      expect(actualSpec).toBe(spec);
-
-      gamePage.clearConsoleErrors();
-    }
+    expect(await gamePage.getCurrentScreen()).toBe("dashboard");
+    expect(await gamePage.getSpecialization()).toBe("youth");
+    gamePage.expectNoConsoleErrors();
   });
 });

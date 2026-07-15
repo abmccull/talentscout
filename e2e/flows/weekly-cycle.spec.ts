@@ -40,15 +40,13 @@ test.describe("Weekly Cycle", () => {
     await gamePage.navigateTo("calendar");
     await gamePage.page.waitForTimeout(300);
 
-    // Calendar should be visible and contain week/day references
-    const content = await gamePage.page.innerText("body");
-    const hasCalendarContent =
-      content.includes("Mon") ||
-      content.includes("Tue") ||
-      content.includes("Empty") ||
-      content.includes("Fatigue") ||
-      content.includes("Slots");
-    expect(hasCalendarContent).toBe(true);
+    // The shipped Planner presents a strategic weekly agenda rather than the
+    // retired Mon/Tue slot grid. Assert the player-facing landmarks instead
+    // of copy from the old task-filling interface.
+    await expect(gamePage.page.getByRole("heading", { name: "Planner" })).toBeVisible();
+    await expect(
+      gamePage.page.getByRole("region", { name: "Set the week's intent" }),
+    ).toBeVisible();
   });
 
   test("week summary appears after advancing via UI", async ({ gamePage }) => {

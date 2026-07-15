@@ -39,6 +39,12 @@ jobs:
       - name: Architecture dependency gate
         run: npm run test:architecture
 
+      - name: Critical simulation and persistence coverage gate
+        run: npm run test:coverage:critical
+
+      - name: Long-save retention coverage gate
+        run: npm run test:coverage:retention
+
       - name: Replayability divergence gate
         run: npm run test:replayability
 

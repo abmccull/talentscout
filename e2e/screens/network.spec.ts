@@ -7,7 +7,7 @@ test.describe("Network Screen", () => {
   });
 
   test("network screen renders at tier 2", async ({ gamePage }) => {
-    await gamePage.navigateTo("network");
+    await gamePage.setScreen("network");
     await gamePage.page.waitForTimeout(500);
 
     const screen = await gamePage.getCurrentScreen();

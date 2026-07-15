@@ -8,6 +8,12 @@
 
 import type { RNG } from "@/engine/rng";
 import type { CareerPath, Player, Scout, Contact, Specialization } from "@/engine/core/types";
+import {
+  CONTENT_SCHEMA_VERSION,
+  defineContentPack,
+  hasNonBlankString,
+  type ContentValidationIssue,
+} from "@/engine/content/contracts";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
 import {
   HIDDEN_ATTRIBUTES,
@@ -17,9 +23,10 @@ import {
   TACTICAL_ATTRIBUTES,
 } from "@/engine/core/types";
 import type { ObservationSession, PlayerMoment } from "@/engine/observation/types";
-import type {
-  InsightActionId,
-  InsightActionResult,
+import {
+  INSIGHT_ACTIONS,
+  type InsightActionId,
+  type InsightActionResult,
 } from "@/engine/insight/types";
 
 // =============================================================================
@@ -82,9 +89,14 @@ function getSpecializationFlavor(spec: Specialization): string {
  * Catalogue of narrative templates keyed by action ID and specialization.
  * Each entry contains 2-3 variants; one is chosen at random by the handler.
  */
-const INSIGHT_NARRATIVES: Record<
+export type InsightNarrativeVariants = Record<
+  Specialization | "universal",
+  readonly string[]
+>;
+
+export const INSIGHT_NARRATIVES: Record<
   InsightActionId,
-  Record<Specialization | "universal", readonly string[]>
+  InsightNarrativeVariants
 > = {
   clarityOfVision: {
     universal: [
@@ -422,6 +434,59 @@ const INSIGHT_NARRATIVES: Record<
     ],
   },
 };
+
+interface InsightNarrativeDefinition {
+  id: InsightActionId;
+  variants: InsightNarrativeVariants;
+}
+
+const NARRATIVE_SPECIALIZATIONS: readonly (Specialization | "universal")[] = [
+  "universal",
+  "youth",
+  "firstTeam",
+  "regional",
+  "data",
+];
+
+const INSIGHT_NARRATIVE_ENTRIES: readonly InsightNarrativeDefinition[] =
+  INSIGHT_ACTIONS.map((action) => ({
+    id: action.id,
+    variants: INSIGHT_NARRATIVES[action.id],
+  }));
+
+function validateInsightNarrativeDefinition(
+  definition: InsightNarrativeDefinition,
+): readonly Omit<ContentValidationIssue, "packId" | "definitionId">[] {
+  const issues: Array<Omit<ContentValidationIssue, "packId" | "definitionId">> = [];
+  for (const specialization of NARRATIVE_SPECIALIZATIONS) {
+    const variants = definition.variants[specialization];
+    if (!Array.isArray(variants) || variants.length === 0) {
+      issues.push({ path: `variants.${specialization}`, message: "must contain at least one narrative line" });
+      continue;
+    }
+    if (variants.some((line) => !hasNonBlankString(line))) {
+      issues.push({ path: `variants.${specialization}`, message: "must contain only non-empty narrative lines" });
+    }
+  }
+  return issues;
+}
+
+/**
+ * The active insight-action prose is authored content, not an incidental UI
+ * string. Validate it alongside the action catalogue so every available
+ * action keeps a usable line for every specialization.
+ */
+export const INSIGHT_NARRATIVE_CONTENT_PACK = defineContentPack({
+  manifest: {
+    id: "talentscout.insight-narratives",
+    kind: "insight-narrative",
+    schemaVersion: CONTENT_SCHEMA_VERSION,
+    contentVersion: "insight-narratives.1",
+  },
+  entries: INSIGHT_NARRATIVE_ENTRIES,
+  getDefinitionId: (definition) => definition.id,
+  validateDefinition: validateInsightNarrativeDefinition,
+});
 
 /**
  * Selects a narrative string for an action, biased toward the scout's

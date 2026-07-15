@@ -20,6 +20,7 @@
         "artifacts/release/automated-core-suites.json",
         "artifacts/replayability/release-summary.json",
         "artifacts/architecture/module-graph.json",
+        "artifacts/coverage/critical/coverage-summary.json",
         "artifacts/performance/low-end-emulation-profile.json"
       ],
       "generatedEvidence": {

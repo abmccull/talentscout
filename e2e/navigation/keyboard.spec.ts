@@ -1,7 +1,13 @@
 import { test, expect } from "../fixtures";
 import { KEY_TO_SCREEN } from "../helpers/selectors";
 
-test.describe("Keyboard Shortcuts", () => {
+const IS_YOUTH_EARLY_ACCESS = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
+
+test.describe("Planned full-game keyboard shortcuts", () => {
+  test.skip(
+    IS_YOUTH_EARLY_ACCESS,
+    "The old numbered full-game shortcut map is not part of the six-workspace Youth Scout EA shell.",
+  );
   test.beforeEach(async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectMidGameState("youth");

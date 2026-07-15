@@ -11,7 +11,7 @@
  */
 
 import type { GameState, NewGameConfig, CareerTier } from "../core/types";
-import { SCENARIOS, type ScenarioDef } from "./scenarioDefinitions";
+import { getScenarioDefinition, type ScenarioDef } from "./scenarioDefinitions";
 
 // =============================================================================
 // PUBLIC API
@@ -25,7 +25,7 @@ import { SCENARIOS, type ScenarioDef } from "./scenarioDefinitions";
  * `scenarioSetup` without touching `scenarioEngine`.
  */
 export function getScenarioById(id: string): ScenarioDef | undefined {
-  return SCENARIOS.find((s) => s.id === id);
+  return getScenarioDefinition(id);
 }
 
 /**

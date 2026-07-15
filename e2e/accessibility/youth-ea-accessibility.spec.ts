@@ -236,7 +236,10 @@ test.describe("Youth Early Access accessibility", () => {
       currentWeek: 12,
       currentSeason: 1,
       scout: {
-        primarySpecialization: "firstTeam",
+        // Political leadership choices are part of the shipped Youth Scout
+        // career ceiling. First Team Scout is a planned mode and deliberately
+        // cannot be loaded in the Early Access save gate.
+        primarySpecialization: "youth",
         careerTier: 5,
         careerPath: "club",
         reputation: 62,

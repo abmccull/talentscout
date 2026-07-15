@@ -512,6 +512,12 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   ) {
     result.failures.push("soak evidence does not use one isolated process per seeded career");
   }
+  if (
+    evidence.profile?.kind !== "full-canonical-weekly-career"
+    || evidence.profile?.skippedOrdinaryWeeks !== false
+  ) {
+    result.failures.push("soak evidence must process every canonical week without skipping ordinary weeks");
+  }
 
   const runs = Array.isArray(evidence.runs) ? evidence.runs : [];
   if (!Number.isInteger(seedCount) || runs.length !== seedCount) {
@@ -526,6 +532,17 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     && runs.some((run) => !Number.isInteger(run?.reachedSeason) || run.reachedSeason < seasonCount + 1)
   ) {
     result.failures.push("one or more soak careers did not cross the required final season boundary");
+  }
+  if (
+    Number.isInteger(seasonCount)
+    && runs.some((run) => (
+      !Number.isInteger(run?.canonicalTicks)
+      || !Number.isInteger(run?.calendarWeeksSpanned)
+      || run.canonicalTicks !== run.calendarWeeksSpanned
+      || run.calendarWeeksSpanned < seasonCount * 30
+    ))
+  ) {
+    result.failures.push("one or more soak careers did not process a complete canonical weekly timeline");
   }
   if (policy.requireDeterministicReplay === true) {
     const firstRun = runs[0];

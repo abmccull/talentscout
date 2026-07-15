@@ -19,6 +19,7 @@ import {
   buildObservedMarketScatter,
   buildObservedPlayerRadar,
 } from "@/engine/scout/playerFacingIntel";
+import { gameStateFieldSelector } from "@/engine/core/gameStatePartitions";
 import {
   ScatterPlot,
   BarChart,
@@ -27,7 +28,7 @@ import {
   HeatMap,
   PositionLegend,
 } from "./DataVisualization";
-import type { ScoutPerformanceSnapshot, ScoutSkill, Player } from "@/engine/core/types";
+import type { GameState, ScoutPerformanceSnapshot, ScoutSkill, Player } from "@/engine/core/types";
 
 // ─── Skill labels ─────────────────────────────────────────────────────────────
 
@@ -93,18 +94,76 @@ function trendColor(direction: TrendDirection): string {
 
 type AnalyticsTab = "overview" | "visualizations";
 
+// Keep this data-heavy workspace insulated from unrelated world updates. The
+// selectors are module-scoped and return canonical field references, so they
+// remain stable when another system changes the schedule, inbox, or narrative.
+const selectCurrentSeason = gameStateFieldSelector("currentSeason");
+const selectCurrentWeek = gameStateFieldSelector("currentWeek");
+const selectPlayers = gameStateFieldSelector("players");
+const selectObservations = gameStateFieldSelector("observations");
+const selectAnomalyFlags = gameStateFieldSelector("anomalyFlags");
+const selectCountries = gameStateFieldSelector("countries");
+const selectLeagues = gameStateFieldSelector("leagues");
+const selectWatchlist = gameStateFieldSelector("watchlist");
+const selectStatisticalProfiles = gameStateFieldSelector("statisticalProfiles");
+const selectPerformanceHistory = gameStateFieldSelector("performanceHistory");
+
+const EMPTY_ANALYTICS_PLAYERS: GameState["players"] = {};
+const EMPTY_ANALYTICS_OBSERVATIONS: GameState["observations"] = {};
+const EMPTY_ANALYTICS_ANOMALIES: GameState["anomalyFlags"] = [];
+const EMPTY_ANALYTICS_COUNTRIES: GameState["countries"] = [];
+const EMPTY_ANALYTICS_LEAGUES: GameState["leagues"] = {};
+const EMPTY_ANALYTICS_WATCHLIST: GameState["watchlist"] = [];
+const EMPTY_ANALYTICS_PROFILES: GameState["statisticalProfiles"] = {};
+const EMPTY_ANALYTICS_HISTORY: GameState["performanceHistory"] = [];
+
 // ─── AnalyticsScreen ──────────────────────────────────────────────────────────
 
 export function AnalyticsScreen() {
-  const { gameState, getPerformanceHistory } = useGameStore();
+  const currentSeason = useGameStore(selectCurrentSeason);
+  const currentWeek = useGameStore(selectCurrentWeek);
+  const players = useGameStore(selectPlayers);
+  const observationsById = useGameStore(selectObservations);
+  const anomalyFlags = useGameStore(selectAnomalyFlags);
+  const countries = useGameStore(selectCountries);
+  const leagues = useGameStore(selectLeagues);
+  const watchlist = useGameStore(selectWatchlist);
+  const statisticalProfiles = useGameStore(selectStatisticalProfiles);
+  const history = useGameStore(selectPerformanceHistory);
   const [activeTab, setActiveTab] = useState<AnalyticsTab>("overview");
 
-  const history = getPerformanceHistory();
-  const overallRating = getOverallPerformanceRating(history);
+  const isGameReady = !(
+    currentSeason === null ||
+    currentWeek === null ||
+    players === null ||
+    observationsById === null ||
+    anomalyFlags === null ||
+    countries === null ||
+    leagues === null ||
+    watchlist === null ||
+    statisticalProfiles === null ||
+    history === null
+  );
+
+  // Hooks below must run on both the loading and loaded render. Empty values
+  // are only an inert calculation substrate; the screen still returns null
+  // until all canonical fields have hydrated.
+  const analyticsSeason = currentSeason ?? 1;
+  const analyticsWeek = currentWeek ?? 1;
+  const analyticsPlayers = players ?? EMPTY_ANALYTICS_PLAYERS;
+  const analyticsObservations = observationsById ?? EMPTY_ANALYTICS_OBSERVATIONS;
+  const analyticsAnomalyFlags = anomalyFlags ?? EMPTY_ANALYTICS_ANOMALIES;
+  const analyticsCountries = countries ?? EMPTY_ANALYTICS_COUNTRIES;
+  const analyticsLeagues = leagues ?? EMPTY_ANALYTICS_LEAGUES;
+  const analyticsWatchlist = watchlist ?? EMPTY_ANALYTICS_WATCHLIST;
+  const analyticsStatisticalProfiles = statisticalProfiles ?? EMPTY_ANALYTICS_PROFILES;
+  const analyticsHistory = history ?? EMPTY_ANALYTICS_HISTORY;
+
+  const overallRating = getOverallPerformanceRating(analyticsHistory);
 
   // Split into recent (last 4) and previous (4 before that) for trend comparison
-  const recent = history.slice(-4);
-  const previous = history.slice(-8, -4);
+  const recent = analyticsHistory.slice(-4);
+  const previous = analyticsHistory.slice(-8, -4);
   const trends = comparePerformancePeriods(recent, previous);
 
   const accuracyTrend = trendDirection(trends.accuracyChange);
@@ -113,45 +172,41 @@ export function AnalyticsScreen() {
 
   // Latest snapshot for current skill levels
   const latestSnapshot: ScoutPerformanceSnapshot | null =
-    history.length > 0 ? history[history.length - 1] : null;
+    analyticsHistory.length > 0 ? analyticsHistory[analyticsHistory.length - 1] : null;
 
   // ── Visualization data (memoized) ──────────────────────────────────────────
 
   const scatterData = useMemo(() => {
-    if (!gameState) return null;
     return buildObservedMarketScatter(
-      gameState.players,
-      Object.values(gameState.observations),
-      gameState.anomalyFlags,
+      analyticsPlayers,
+      Object.values(analyticsObservations),
+      analyticsAnomalyFlags,
     );
-  }, [gameState]);
+  }, [analyticsAnomalyFlags, analyticsObservations, analyticsPlayers]);
 
   const heatMapData = useMemo(() => {
-    if (!gameState) return null;
     return generateCoverageHeatMap(
-      gameState.observations,
-      gameState.players,
-      gameState.countries,
+      analyticsObservations,
+      analyticsPlayers,
+      analyticsCountries,
     );
-  }, [gameState]);
+  }, [analyticsCountries, analyticsObservations, analyticsPlayers]);
 
   const leagueComparisonData = useMemo(() => {
-    if (!gameState) return null;
     return buildObservedLeagueComparison(
-      gameState.players,
-      gameState.leagues,
-      Object.values(gameState.observations),
+      analyticsPlayers,
+      analyticsLeagues,
+      Object.values(analyticsObservations),
     );
-  }, [gameState]);
+  }, [analyticsLeagues, analyticsObservations, analyticsPlayers]);
 
   const trendLineData = useMemo(() => {
-    if (!gameState) return null;
-    const observations = Object.values(gameState.observations);
+    const observations = Object.values(analyticsObservations);
     // Pick up to four watchlist players, then fill from the most recently observed.
     const watchlistPlayers: Player[] = [];
-    if (gameState.watchlist.length > 0) {
-      for (const pid of gameState.watchlist.slice(0, 4)) {
-        const p = gameState.players[pid];
+    if (analyticsWatchlist.length > 0) {
+      for (const pid of analyticsWatchlist.slice(0, 4)) {
+        const p = analyticsPlayers[pid];
         if (p) watchlistPlayers.push(p);
       }
     }
@@ -162,7 +217,7 @@ export function AnalyticsScreen() {
     for (const observation of recentObservations) {
       if (watchlistPlayers.length >= 4) break;
       if (selectedIds.has(observation.playerId)) continue;
-      const player = gameState.players[observation.playerId];
+      const player = analyticsPlayers[observation.playerId];
       if (!player) continue;
       selectedIds.add(player.id);
       watchlistPlayers.push(player);
@@ -170,35 +225,40 @@ export function AnalyticsScreen() {
     return buildObservedDevelopmentTrends(
       watchlistPlayers,
       observations,
-      gameState.currentSeason,
+      analyticsSeason,
     );
-  }, [gameState]);
+  }, [analyticsObservations, analyticsPlayers, analyticsSeason, analyticsWatchlist]);
 
   // Radar chart for the first anomaly player or first watchlist player
   const radarData = useMemo(() => {
-    if (!gameState) return null;
-    const observations = Object.values(gameState.observations);
+    const observations = Object.values(analyticsObservations);
     const candidateIds = [
-      ...gameState.anomalyFlags.map((flag) => flag.playerId),
-      ...gameState.watchlist,
+      ...analyticsAnomalyFlags.map((flag) => flag.playerId),
+      ...analyticsWatchlist,
       ...[...observations]
         .sort((left, right) => right.season - left.season || right.week - left.week)
         .map((observation) => observation.playerId),
     ];
     for (const playerId of new Set(candidateIds)) {
-      const player = gameState.players[playerId];
+      const player = analyticsPlayers[playerId];
       if (!player) continue;
       const radar = buildObservedPlayerRadar(
         player,
         observations,
-        gameState.statisticalProfiles[player.id],
+        analyticsStatisticalProfiles[player.id],
       );
       if (radar) return radar;
     }
     return null;
-  }, [gameState]);
+  }, [
+    analyticsAnomalyFlags,
+    analyticsObservations,
+    analyticsPlayers,
+    analyticsStatisticalProfiles,
+    analyticsWatchlist,
+  ]);
 
-  if (!gameState) return null;
+  if (!isGameReady) return null;
 
   return (
     <GameLayout>
@@ -208,7 +268,7 @@ export function AnalyticsScreen() {
           <div>
             <h1 className="text-2xl font-bold">Performance Analytics</h1>
             <p className="text-sm text-zinc-400">
-              Season {gameState.currentSeason} — Week {gameState.currentWeek}
+              Season {analyticsSeason} — Week {analyticsWeek}
             </p>
           </div>
           {/* Tab switcher */}
@@ -243,7 +303,7 @@ export function AnalyticsScreen() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {history.length === 0 ? (
+                {analyticsHistory.length === 0 ? (
                   <p className="text-xs text-zinc-500">
                     No data yet. Advance weeks to generate snapshots.
                   </p>
@@ -265,8 +325,8 @@ export function AnalyticsScreen() {
                       />
                     </div>
                     <p className="text-center text-xs text-zinc-500">
-                      Based on last {Math.min(4, history.length)} snapshot
-                      {Math.min(4, history.length) !== 1 ? "s" : ""}
+                      Based on last {Math.min(4, analyticsHistory.length)} snapshot
+                      {Math.min(4, analyticsHistory.length) !== 1 ? "s" : ""}
                     </p>
                   </>
                 )}
@@ -279,7 +339,7 @@ export function AnalyticsScreen() {
                 <CardTitle className="text-sm">Trend Indicators</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {history.length < 2 ? (
+                {analyticsHistory.length < 2 ? (
                   <p className="text-xs text-zinc-500">
                     Need at least 2 snapshots to show trends.
                   </p>
@@ -342,7 +402,7 @@ export function AnalyticsScreen() {
                 <CardTitle className="text-sm">Monthly Snapshots</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                {history.length === 0 ? (
+                {analyticsHistory.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <p className="text-xs text-zinc-500">No snapshots yet.</p>
                     <p className="mt-1 text-[10px] text-zinc-600">
@@ -362,7 +422,7 @@ export function AnalyticsScreen() {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...history].reverse().slice(0, 12).map((snap, i) => (
+                        {[...analyticsHistory].reverse().slice(0, 12).map((snap, i) => (
                           <tr
                             key={i}
                             className="border-b border-[#27272a] transition hover:bg-[#141414]"
@@ -421,7 +481,7 @@ export function AnalyticsScreen() {
                     const currentLevel = latestSnapshot.skills[skill] ?? 0;
                     // Find earliest snapshot for this skill to show growth
                     const firstLevel =
-                      history.length > 0 ? history[0].skills[skill] ?? 0 : currentLevel;
+                      analyticsHistory.length > 0 ? analyticsHistory[0].skills[skill] ?? 0 : currentLevel;
                     const gain = currentLevel - firstLevel;
 
                     return (
@@ -591,14 +651,14 @@ export function AnalyticsScreen() {
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   {/* Anomaly list */}
                   <div>
-                    {gameState.anomalyFlags.length === 0 ? (
+                    {analyticsAnomalyFlags.length === 0 ? (
                       <p className="py-8 text-center text-xs text-zinc-500">
                         No anomalies flagged yet. Run data analyses to detect outliers.
                       </p>
                     ) : (
                       <div className="space-y-2">
-                        {gameState.anomalyFlags.slice(0, 6).map((anomaly) => {
-                          const player = gameState.players[anomaly.playerId];
+                        {analyticsAnomalyFlags.slice(0, 6).map((anomaly) => {
+                          const player = analyticsPlayers[anomaly.playerId];
                           const name = player
                             ? `${player.firstName} ${player.lastName}`
                             : "Unknown";

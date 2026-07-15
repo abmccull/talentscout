@@ -8,8 +8,13 @@
 import type { CountryData } from "@/data/types";
 import { ENGLAND_DATA } from "@/data/england";
 import { getModdedCountryData } from "@/lib/modLoader";
+import {
+  getCountryDataSync as getCachedCountryData,
+  registerCountryData,
+} from "@/data/countryRegistry";
 
 export type { ClubData, LeagueData, CountryData, NamePool, NationalityWeight } from "@/data/types";
+export { getCountryDataSync } from "@/data/countryRegistry";
 
 // ---------------------------------------------------------------------------
 // Country registry
@@ -41,11 +46,6 @@ const COUNTRY_LOADERS: Record<string, () => Promise<CountryData>> = {
   china: async () => (await import("@/data/china")).CHINA_DATA,
   australia: async () => (await import("@/data/australia")).AUSTRALIA_DATA,
   newzealand: async () => (await import("@/data/new-zealand")).NEW_ZEALAND_DATA,
-};
-
-/** Synchronous registry for countries that are always available. */
-const SYNC_REGISTRY: Record<string, CountryData> = {
-  england: ENGLAND_DATA,
 };
 
 // ---------------------------------------------------------------------------
@@ -85,14 +85,6 @@ const SECONDARY_METADATA: Record<string, { name: string; region: string; clubCou
 // ---------------------------------------------------------------------------
 
 /**
- * Get country data synchronously. Returns undefined if the country
- * hasn't been synchronously loaded yet. England is always available.
- */
-export function getCountryDataSync(key: string): CountryData | undefined {
-  return SYNC_REGISTRY[key];
-}
-
-/**
  * Load and cache country data. Returns the CountryData for the given key.
  * Checks for modded data first, then falls back to built-in data.
  * Throws if the country key is not registered.
@@ -101,11 +93,12 @@ export async function getCountryData(key: string): Promise<CountryData> {
   // Check for user-imported mod data first
   const modded = await getModdedCountryData(key);
   if (modded) {
-    SYNC_REGISTRY[key] = modded;
+    registerCountryData(key, modded);
     return modded;
   }
 
-  if (SYNC_REGISTRY[key]) return SYNC_REGISTRY[key];
+  const cached = getCachedCountryData(key);
+  if (cached) return cached;
 
   const loader = COUNTRY_LOADERS[key];
   if (!loader) {
@@ -113,7 +106,7 @@ export async function getCountryData(key: string): Promise<CountryData> {
   }
 
   const data = await loader();
-  SYNC_REGISTRY[key] = data; // Cache for future sync access
+  registerCountryData(key, data); // Cache for future sync access
   return data;
 }
 

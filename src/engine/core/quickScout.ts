@@ -6,7 +6,6 @@
  *
  * Key features:
  *  - autoScheduleWeek: intelligently fills empty calendar days
- *  - batchAdvanceWeeks: advances multiple weeks and returns a condensed summary
  *  - delegateScoutingTask: assigns an NPC scout to observe a specific player
  */
 
@@ -16,8 +15,6 @@ import type {
   Activity,
   WeekSchedule,
   QuickScoutPriorities,
-  BatchWeekSummary,
-  BatchAdvanceResult,
   DelegationResult,
   NPCDelegation,
   NPCScout,
@@ -32,11 +29,7 @@ import {
   canAddActivity,
   addActivity,
   getAvailableActivities,
-  processCompletedWeek,
-  applyWeekResults,
-  createWeekSchedule,
 } from "./calendar";
-import { processWeeklyTick, advanceWeek } from "./gameLoop";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
 import { addGameWeeks } from "./gameDate";
 import {
@@ -61,9 +54,6 @@ const CONTACT_DECAY_THRESHOLD = 40;
 
 /** Minimum observations before auto-scheduling a writeReport activity. */
 const MIN_OBS_FOR_REPORT = 3;
-
-/** Maximum weeks that can be batch-advanced at once. */
-const MAX_BATCH_WEEKS = 8;
 
 /** NPC fatigue threshold — delegation rejected if above this. */
 const NPC_DELEGATION_FATIGUE_LIMIT = 80;
@@ -315,150 +305,6 @@ function pickBestActivity(
 
 // ---------------------------------------------------------------------------
 // 2. Batch Advance Weeks
-// ---------------------------------------------------------------------------
-
-/**
- * Advance multiple weeks at once, auto-scheduling each one and processing
- * the game loop. Returns a condensed summary of all weeks.
- *
- * The batch stops early if:
- *  - An end-of-season transition occurs
- *  - The scout's fatigue reaches 100
- *  - The requested number of weeks is reached
- *
- * @param state  Current game state.
- * @param rng    Seeded RNG instance.
- * @param weeks  Number of weeks to advance (clamped to MAX_BATCH_WEEKS).
- * @param priorities  Auto-schedule priorities for filling empty days.
- * @returns The final game state and a BatchAdvanceResult summary.
- */
-export function batchAdvanceWeeks(
-  state: GameState,
-  rng: RNG,
-  weeks: number,
-  priorities: QuickScoutPriorities,
-): { state: GameState; result: BatchAdvanceResult } {
-  const clampedWeeks = Math.min(Math.max(1, weeks), MAX_BATCH_WEEKS);
-  const startingFatigue = state.scout.fatigue;
-
-  const weekSummaries: BatchWeekSummary[] = [];
-  const totalSkillXp: Record<string, number> = {};
-  const totalAttributeXp: Record<string, number> = {};
-  let totalNewMessages = 0;
-  let totalPlayersDiscovered = 0;
-  let totalObservationsGenerated = 0;
-  let seasonTransitionOccurred = false;
-
-  let currentState = state;
-
-  for (let i = 0; i < clampedWeeks; i++) {
-    const prevInboxCount = currentState.inbox.length;
-    const prevObsCount = Object.keys(currentState.observations).length;
-    const prevDiscoveryCount = currentState.discoveryRecords.length;
-    const processedWeek = currentState.currentWeek;
-    const processedSeason = currentState.currentSeason;
-
-    // Auto-schedule the current week
-    const scheduledWeek = autoScheduleWeek(currentState, priorities);
-    currentState = { ...currentState, schedule: scheduledWeek };
-
-    // Process the week's activities
-    const weekResult = processCompletedWeek(
-      currentState.schedule,
-      currentState.scout,
-      rng,
-    );
-    const updatedScout = applyWeekResults(currentState.scout, weekResult);
-    currentState = { ...currentState, scout: updatedScout };
-
-    // Run the game loop tick
-    const tickResult = processWeeklyTick(currentState, rng);
-    currentState = advanceWeek(currentState, tickResult);
-    const delegationResult = processNPCDelegations(currentState, rng);
-    currentState = delegationResult.state;
-
-    // Reset schedule for next week
-    currentState = {
-      ...currentState,
-      schedule: createWeekSchedule(currentState.currentWeek, currentState.currentSeason),
-    };
-
-    // Collect summary data
-    const newMessages = Math.max(0, currentState.inbox.length - prevInboxCount);
-    const newObs = Math.max(0, Object.keys(currentState.observations).length - prevObsCount);
-    const newDiscoveries = Math.max(0, currentState.discoveryRecords.length - prevDiscoveryCount);
-
-    const keyEvents: string[] = [];
-    if (tickResult.endOfSeasonTriggered) {
-      keyEvents.push(`Season ${currentState.currentSeason - 1} ended`);
-      seasonTransitionOccurred = true;
-    }
-    if (tickResult.transfers.length > 0) {
-      keyEvents.push(`${tickResult.transfers.length} transfer(s) completed`);
-    }
-    if (tickResult.npcScoutResults.length > 0) {
-      const totalReports = tickResult.npcScoutResults.reduce(
-        (sum, r) => sum + r.reportsGenerated.length, 0,
-      );
-      if (totalReports > 0) {
-        keyEvents.push(`${totalReports} NPC scout report(s) received`);
-      }
-    }
-    if (delegationResult.completedReports.length > 0) {
-      keyEvents.push(
-        `${delegationResult.completedReports.length} delegated report(s) delivered`,
-      );
-    }
-    if (newDiscoveries > 0) {
-      keyEvents.push(`${newDiscoveries} new player(s) discovered`);
-    }
-
-    const weekSummary: BatchWeekSummary = {
-      week: processedWeek,
-      season: processedSeason,
-      fatigueChange: weekResult.fatigueChange,
-      matchesAttended: weekResult.matchesAttended.length,
-      reportsWritten: weekResult.reportsWritten.length,
-      meetingsHeld: weekResult.meetingsHeld.length,
-      newMessages,
-      playersDiscovered: newDiscoveries,
-      observationsGenerated: newObs,
-      keyEvents,
-    };
-    weekSummaries.push(weekSummary);
-
-    // Accumulate totals
-    for (const [skill, xp] of Object.entries(weekResult.skillXpGained)) {
-      totalSkillXp[skill] = (totalSkillXp[skill] ?? 0) + (xp ?? 0);
-    }
-    for (const [attr, xp] of Object.entries(weekResult.attributeXpGained)) {
-      totalAttributeXp[attr] = (totalAttributeXp[attr] ?? 0) + (xp ?? 0);
-    }
-    totalNewMessages += newMessages;
-    totalPlayersDiscovered += newDiscoveries;
-    totalObservationsGenerated += newObs;
-
-    // Early exit conditions
-    if (seasonTransitionOccurred) break;
-    if (currentState.scout.fatigue >= 100) break;
-  }
-
-  const result: BatchAdvanceResult = {
-    weekSummaries,
-    weeksAdvanced: weekSummaries.length,
-    startingFatigue,
-    endingFatigue: currentState.scout.fatigue,
-    totalSkillXp,
-    totalAttributeXp,
-    totalNewMessages,
-    totalPlayersDiscovered,
-    totalObservationsGenerated,
-    seasonTransitionOccurred,
-  };
-
-  return { state: currentState, result };
-}
-
 // ---------------------------------------------------------------------------
 // 3. Delegate Scouting Task
 // ---------------------------------------------------------------------------

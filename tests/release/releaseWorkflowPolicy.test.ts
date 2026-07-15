@@ -17,8 +17,21 @@ describe("release workflow policy", () => {
     expect(build.match(/run: npm run electron:prepare/g)).toHaveLength(3);
     expect(build).toContain("run: npm run test:e2e:opening");
     expect(build).toContain("run: npm run test:e2e:performance");
+    expect(build).toContain("run: npm run test:coverage:critical");
+    expect(build).toContain("name: quality-evidence");
+    expect(build).toContain("Critical coverage summary is missing from quality evidence");
     expect(build).not.toContain("softprops/action-gh-release");
     expect(build).not.toContain("steamcmd +login");
+  });
+
+  it("runs the critical coverage floor in CI and a full browser suite nightly", () => {
+    const ci = workflow("ci.yml");
+    const nightly = workflow("nightly-soak.yml");
+
+    expect(ci).toContain("run: npm run test:coverage:critical");
+    expect(nightly).toContain("browser-regression:");
+    expect(nightly).toContain("name: Full Chromium browser regression");
+    expect(nightly).toMatch(/^\s*- run: npm run test:e2e\s*$/m);
   });
 
   it("certifies original-run artifacts and makes promotion explicitly manual", () => {

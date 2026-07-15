@@ -5,7 +5,14 @@ import type {
   PlayerMovementEvent,
 } from "@/engine/core/types";
 import { compactPlayerDevelopmentHistory } from "@/engine/world/developmentEnvironment";
-import type { PlayerSeasonHistory } from "@/engine/world/worldHistoryTypes";
+import {
+  sortPlayerMovementArchiveSummaries,
+  summarizePlayerMovement,
+} from "@/engine/world/worldHistoryTypes";
+import type {
+  PlayerMovementArchiveSummary,
+  PlayerSeasonHistory,
+} from "@/engine/world/worldHistoryTypes";
 
 /**
  * Keep a complete fixture schedule only for the active season. Completed
@@ -15,6 +22,12 @@ import type { PlayerSeasonHistory } from "@/engine/world/worldHistoryTypes";
 export const FIXTURE_DETAIL_RETENTION_SEASONS = 1;
 /** Global public archive rows per season, plus every scout-causal player. */
 export const WORLD_HISTORY_PLAYER_LIMIT = 500;
+/**
+ * Recent raw moves power the detailed dossier and consequence surfaces.
+ * Older non-causal movements remain visible through the compact season
+ * archive, not as an indefinitely growing world ledger.
+ */
+export const PLAYER_MOVEMENT_DETAIL_RETENTION_SEASONS = 3;
 
 export const SAVE_RETENTION_COLLECTION_KEYS = [
   "players",
@@ -116,6 +129,93 @@ function publishCompactionSample(
 /** Routine renewals are current contract state, not permanent narrative events. */
 export function isMaterialHistoricalMovement(movement: PlayerMovementEvent): boolean {
   return movement.type !== "contractRenewal";
+}
+
+type WorldHistoryState = NonNullable<GameState["worldHistory"]>;
+type WorldSeasonHistory = WorldHistoryState["seasons"][number];
+
+function isMaterialMovementSummary(summary: PlayerMovementArchiveSummary): boolean {
+  return summary.type !== "contractRenewal";
+}
+
+/**
+ * Legacy WorldHistory rows only retained ledger IDs. Rebuild the additive
+ * compact archive from the raw source while it exists, then preserve already
+ * projected summaries across all later saves. The projection includes every
+ * material movement for an archived season, even if its player was sampled
+ * out of the bounded public comparison rows.
+ */
+function projectWorldHistoryMovementSummaries(
+  history: WorldHistoryState | undefined,
+  movements: readonly PlayerMovementEvent[],
+): WorldHistoryState | undefined {
+  if (!history) return history;
+
+  const movementsById = new Map(movements.map((movement) => [movement.id, movement]));
+  const materialMovementsBySeason = new Map<number, PlayerMovementEvent[]>();
+  for (const movement of movements) {
+    if (!isMaterialHistoricalMovement(movement)) continue;
+    const seasonMovements = materialMovementsBySeason.get(movement.season) ?? [];
+    seasonMovements.push(movement);
+    materialMovementsBySeason.set(movement.season, seasonMovements);
+  }
+
+  const migrateSeason = (season: WorldSeasonHistory): WorldSeasonHistory => {
+    const summariesById = new Map<string, PlayerMovementArchiveSummary>();
+    for (const summary of season.playerMovementSummaries ?? []) {
+      if (!summary.id || !summary.playerId || !isMaterialMovementSummary(summary)) continue;
+      summariesById.set(summary.id, summary);
+    }
+
+    // Backfill a legacy ID-only player row. This is intentionally narrower
+    // than the all-movements pass below: its player/season checks stop a
+    // malformed ID from being reattached to the wrong archive row.
+    for (const player of season.players) {
+      for (const movementId of player.movementEventIds) {
+        const movement = movementsById.get(movementId);
+        if (
+          !movement
+          || movement.playerId !== player.playerId
+          || movement.season !== season.season
+          || !isMaterialHistoricalMovement(movement)
+        ) {
+          continue;
+        }
+        summariesById.set(movement.id, summarizePlayerMovement(movement));
+      }
+    }
+
+    // A summary must not depend on a player making the public top-500
+    // archive. This pass lets raw movement rows graduate safely regardless of
+    // comparison-row selection.
+    for (const movement of materialMovementsBySeason.get(season.season) ?? []) {
+      summariesById.set(movement.id, summarizePlayerMovement(movement));
+    }
+    const playerMovementSummaries = sortPlayerMovementArchiveSummaries(
+      [...summariesById.values()],
+    );
+    const projectedMovementIds = new Set(playerMovementSummaries.map((summary) => summary.id));
+    const seasonWithoutSummaries: WorldSeasonHistory = { ...season };
+    delete seasonWithoutSummaries.playerMovementSummaries;
+
+    return {
+      ...seasonWithoutSummaries,
+      players: season.players.map((player) => ({
+        ...player,
+        // Keep the established ID field as a compact compatibility pointer,
+        // but never let it retain an unresolved legacy ledger reference.
+        movementEventIds: player.movementEventIds.filter((id) => projectedMovementIds.has(id)),
+      })),
+      ...(playerMovementSummaries.length > 0
+        ? { playerMovementSummaries }
+        : {}),
+    };
+  };
+
+  return {
+    ...history,
+    seasons: history.seasons.map(migrateSeason),
+  };
 }
 
 function compactPlayerRecord(player: Player): Player {
@@ -421,8 +521,8 @@ export function resolvePlacementPlayerId(
 export function findSaveRetentionReferenceViolations(state: GameState): string[] {
   const failures: string[] = [];
   const fixtureIds = new Set(Object.keys(state.fixtures ?? {}));
-  const movementIds = new Set(
-    (state.playerMovementHistory ?? []).map((movement) => movement.id),
+  const movementsById = new Map(
+    (state.playerMovementHistory ?? []).map((movement) => [movement.id, movement]),
   );
   const requireFixture = (fixtureId: string | undefined, source: string): void => {
     if (fixtureId && !fixtureIds.has(fixtureId)) {
@@ -448,6 +548,22 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
   });
 
   for (const season of state.worldHistory?.seasons ?? []) {
+    const summaryById = new Map<string, PlayerMovementArchiveSummary>();
+    for (const summary of season.playerMovementSummaries ?? []) {
+      if (summaryById.has(summary.id)) {
+        failures.push(
+          `worldHistory:${season.season}:duplicate-movement-summary:${summary.id}`,
+        );
+        continue;
+      }
+      if (!summary.id || !summary.playerId || !isMaterialMovementSummary(summary)) {
+        failures.push(
+          `worldHistory:${season.season}:invalid-movement-summary:${summary.id || "unknown"}`,
+        );
+        continue;
+      }
+      summaryById.set(summary.id, summary);
+    }
     const seenPlayers = new Set<string>();
     for (const player of season.players) {
       if (seenPlayers.has(player.playerId)) {
@@ -455,9 +571,32 @@ export function findSaveRetentionReferenceViolations(state: GameState): string[]
       }
       seenPlayers.add(player.playerId);
       for (const movementId of player.movementEventIds) {
-        if (!movementIds.has(movementId)) {
+        const rawMovement = movementsById.get(movementId);
+        const archivedSummary = summaryById.get(movementId);
+        if (
+          !rawMovement
+          && !archivedSummary
+        ) {
           failures.push(
             `worldHistory:${season.season}:player:${player.playerId}:missing-movement:${movementId}`,
+          );
+          continue;
+        }
+        if (
+          rawMovement
+          && (
+            rawMovement.playerId !== player.playerId
+            || rawMovement.season !== season.season
+            || !isMaterialHistoricalMovement(rawMovement)
+          )
+        ) {
+          failures.push(
+            `worldHistory:${season.season}:player:${player.playerId}:invalid-raw-movement:${movementId}`,
+          );
+        }
+        if (archivedSummary && archivedSummary.playerId !== player.playerId) {
+          failures.push(
+            `worldHistory:${season.season}:player:${player.playerId}:invalid-archived-movement:${movementId}`,
           );
         }
       }
@@ -527,9 +666,11 @@ export function migrateHistoricalFixtureRetention(state: GameState): void {
  */
 export function compactLongCareerHistory(state: GameState): GameState {
   const publishTelemetry = saveRetentionObserver !== undefined;
-  const earliestArchivedSeason = state.worldHistory?.seasons[0]?.season
-    ?? Math.max(1, state.currentSeason - 1);
   const renewalDetailCutoff = Math.max(1, state.currentSeason - 1);
+  const movementDetailCutoff = Math.max(
+    1,
+    state.currentSeason - PLAYER_MOVEMENT_DETAIL_RETENTION_SEASONS + 1,
+  );
   const causalPlayerIds = collectCausallyReferencedPlayerIds(state);
   const referencedYouthIds = collectReferencedUnsignedYouthIds(state, causalPlayerIds);
   const unsignedYouth = Object.fromEntries(
@@ -562,15 +703,22 @@ export function compactLongCareerHistory(state: GameState): GameState {
   const retainedYouthPlayerIds = new Set(
     Object.values(unsignedYouth).map((youth) => youth.player.id),
   );
-  const materialMovementIds = new Set(
-    (state.playerMovementHistory ?? [])
-      .filter(isMaterialHistoricalMovement)
-      .map((movement) => movement.id),
+  // A removed terminal unsigned-youth opportunity has neither a live player
+  // dossier nor a durable causal record. Its movement row must not survive
+  // solely because an older save had not yet written a season archive.
+  const discardedYouthPlayerIds = new Set(
+    Object.entries(state.unsignedYouth ?? {})
+      .filter(([youthId]) => !unsignedYouth[youthId])
+      .map(([, youth]) => youth.player.id),
   );
-  let worldHistory = state.worldHistory
+  let worldHistory = projectWorldHistoryMovementSummaries(
+    state.worldHistory,
+    state.playerMovementHistory ?? [],
+  );
+  worldHistory = worldHistory
     ? {
-        ...state.worldHistory,
-        seasons: state.worldHistory.seasons.map((season) => ({
+        ...worldHistory,
+        seasons: worldHistory.seasons.map((season) => ({
           ...season,
           players: season.players
             .map((player) => {
@@ -584,7 +732,6 @@ export function compactLongCareerHistory(state: GameState): GameState {
                       nationality: player.nationality ?? identity.nationality,
                     }
                   : {}),
-                movementEventIds: player.movementEventIds.filter((id) => materialMovementIds.has(id)),
               };
             })
             .filter((player) =>
@@ -608,40 +755,36 @@ export function compactLongCareerHistory(state: GameState): GameState {
   }
   const archivedMovementIds = new Set(
     worldHistory?.seasons.flatMap((season) =>
-      season.players.flatMap((player) => player.movementEventIds),
+      season.playerMovementSummaries?.map((summary) => summary.id) ?? [],
     ) ?? [],
   );
   const playerMovementHistory = (state.playerMovementHistory ?? []).filter(
-    (movement) =>
-      (
-        movement.season >= earliestArchivedSeason
-        && (
-          movement.season >= renewalDetailCutoff
-          || archivedMovementIds.has(movement.id)
-        )
-      )
-      || (
+    (movement) => {
+      // Renewals do not enter the permanent archive. Their active-contract
+      // meaning remains useful only for the current and immediately previous
+      // season, matching the previous retention contract.
+      if (!isMaterialHistoricalMovement(movement)) {
+        return movement.season >= renewalDetailCutoff;
+      }
+
+      // A scout-authored relationship, active youth opportunity, or recent
+      // dossier still needs the exact raw event (including reason/loan data).
+      if (
         causalPlayerIds.has(movement.playerId)
-        && isMaterialHistoricalMovement(movement)
-      )
-      || (
-        retainedYouthPlayerIds.has(movement.playerId)
-        && isMaterialHistoricalMovement(movement)
-      ),
+        || retainedYouthPlayerIds.has(movement.playerId)
+        || movement.season >= movementDetailCutoff
+      ) {
+        return true;
+      }
+
+      if (discardedYouthPlayerIds.has(movement.playerId)) return false;
+
+      // Never release a raw row until an immutable archive summary exists.
+      // This makes a partial/legacy WorldHistory safe: unresolved movement
+      // rows retain their source rather than becoming dangling pointers.
+      return !archivedMovementIds.has(movement.id);
+    },
   );
-  const retainedMovementIds = new Set(playerMovementHistory.map((movement) => movement.id));
-  if (worldHistory) {
-    worldHistory = {
-      ...worldHistory,
-      seasons: worldHistory.seasons.map((season) => ({
-        ...season,
-        players: season.players.map((player) => ({
-          ...player,
-          movementEventIds: player.movementEventIds.filter((id) => retainedMovementIds.has(id)),
-        })),
-      })),
-    };
-  }
 
   const retainedRetiredPlayerIds = new Set(causalPlayerIds);
   for (const movement of state.playerMovementHistory ?? []) {
