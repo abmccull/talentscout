@@ -110,4 +110,49 @@ describe("weekly worker state delta", () => {
     expect(materialized.patch.gameState?.performanceHistory[0])
       .toBe(source.performanceHistory[0]);
   });
+
+  it("omits large structurally cloned branches when their values are unchanged", () => {
+    const source = {
+      seed: "large-equal-delta",
+      currentSeason: 4,
+      currentWeek: 12,
+      players: Object.fromEntries(
+        Array.from({ length: 250 }, (_, index) => [
+          `player-${index}`,
+          {
+            id: `player-${index}`,
+            attributes: { pace: 8 + (index % 11), vision: 7 + (index % 12) },
+            history: Array.from({ length: 4 }, (__, season) => ({ season, clubId: `club-${index % 20}` })),
+          },
+        ]),
+      ),
+      playerMovementHistory: Array.from({ length: 500 }, (_, index) => ({
+        id: `movement-${index}`,
+        playerId: `player-${index % 250}`,
+        season: 1 + (index % 4),
+      })),
+    } as unknown as GameState;
+    const structurallyEqual = structuredClone(source);
+
+    const compact = compactWeeklyWorkerCommit(source, {
+      patch: { gameState: structurallyEqual },
+      tutorialCommands: [],
+    }, 1);
+    const materialized = materializeWeeklyWorkerCommit(source, compact);
+
+    expect(compact.gameState).toEqual({
+      kind: "delta",
+      changedFields: {},
+      recordDeltas: {},
+      arrayDeltas: {},
+      removedFields: [],
+    });
+    expect(compact.metrics).toMatchObject({
+      changedFieldCount: 0,
+      changedEntryCount: 0,
+    });
+    expect(materialized.patch.gameState?.players).toBe(source.players);
+    expect(materialized.patch.gameState?.playerMovementHistory)
+      .toBe(source.playerMovementHistory);
+  });
 });

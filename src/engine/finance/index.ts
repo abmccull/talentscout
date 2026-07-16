@@ -72,6 +72,7 @@ export {
   getTransferContingentReserve,
   normalizeClubEconomics,
   normalizeClubEconomicsMap,
+  reapproveAnnualClubEconomics,
   settleRelegationClubObligations,
   settleTriggeredClubObligations,
   settleWeeklyClubObligations,

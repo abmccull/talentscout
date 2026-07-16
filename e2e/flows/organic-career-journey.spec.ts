@@ -298,6 +298,7 @@ test.describe("Organic career journey", () => {
       await store.getState().saveToSlot(4, "Organic career choice point");
     });
     await gamePage.setScreen("career");
+    await dismissCareerMomentOverlays(gamePage.page);
     await gamePage.page.getByRole("button", { name: "Club Scout" }).first().click();
     await expect.poll(() => gamePage.getGameStateValue("scout.careerPath")).toBe("club");
     expect(await gamePage.getGameStateValue("scout.currentClubId")).toBeTruthy();
@@ -310,6 +311,7 @@ test.describe("Organic career journey", () => {
     await expect.poll(() => gamePage.getGameStateValue("scout.careerPathChosen")).toBe(false);
     expect(await gamePage.getGameStateValue("scout.reportsSubmitted")).toBe(firstWork.reportCount);
     await gamePage.setScreen("career");
+    await dismissCareerMomentOverlays(gamePage.page);
     await gamePage.page.getByRole("button", { name: "Independent Scout" }).first().click();
     await expect.poll(() => gamePage.getGameStateValue("scout.careerPathChosen")).toBe(true);
     expect(await gamePage.getGameStateValue("scout.careerPath")).toBe("independent");
@@ -338,6 +340,32 @@ test.describe("Organic career journey", () => {
         status: "active",
       });
     });
+    await sellReportsToWorkingCapital(gamePage.page, 6_000);
+    const tierThreeRequirements = await gamePage.page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      return {
+        path: state.scout.careerPath,
+        pathChosen: state.scout.careerPathChosen,
+        independentTier: state.scout.independentTier,
+        reputation: state.scout.reputation,
+        reports: state.scout.reportsSubmitted,
+        balance: state.finances.balance,
+        retainers: state.finances.retainerContracts.filter(
+          (contract: any) => contract.status === "active",
+        ).length,
+      };
+    });
+    expect(tierThreeRequirements).toMatchObject({
+      path: "independent",
+      pathChosen: true,
+      independentTier: 2,
+      reputation: expect.any(Number),
+      reports: 51,
+      balance: expect.any(Number),
+      retainers: 1,
+    });
+    expect(tierThreeRequirements.reputation).toBeGreaterThanOrEqual(40);
+    expect(tierThreeRequirements.balance).toBeGreaterThanOrEqual(5_000);
     expect((await advanceCanonicalEmptyWeek(gamePage.page)).after.tier).toBe(3);
 
     const tierFourWork = await authorReportsToCount(gamePage.page, 55);

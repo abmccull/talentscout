@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-07-16T16:51:21.469Z",
+  "evidenceClass": "chromium-emulation-season-boundary-stress-not-physical-low-end-hardware",
+  "profile": "coherent-warmed-season-rollover",
+  "emulation": {
+    "cpuSlowdown": 4,
+    "networkLatencyMs": 80,
+    "downloadBitsPerSecond": 1500000,
+    "uploadBitsPerSecond": 750000
+  },
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "logicalCpuCount": 16,
+    "cpuModel": "12th Gen Intel(R) Core(TM) i5-12500H",
+    "totalMemoryBytes": 16869548032
+  },
+  "budgetMs": 15000,
+  "measured": {
+    "elapsedMs": 4126.7,
+    "weeklyWorker": {
+      "computeMs": 1337.0999999940395,
+      "changedFieldCount": 46,
+      "changedEntryCount": 10408,
+      "totalFieldCount": 98,
+      "responseBytes": 6775738,
+      "phaseTimings": [
+        {
+          "phase": "activity-resolution",
+          "elapsedMs": 70.2999999821186
+        },
+        {
+          "phase": "world-systems",
+          "elapsedMs": 27.400000005960464
+        },
+        {
+          "phase": "core-world-tick",
+          "elapsedMs": 1041.7000000178814
+        },
+        {
+          "phase": "post-tick-accountability",
+          "elapsedMs": 0.8999999761581421
+        },
+        {
+          "phase": "season-rollover",
+          "elapsedMs": 184
+        },
+        {
+          "phase": "finalize",
+          "elapsedMs": 0
+        }
+      ],
+      "payloadHotspots": [
+        {
+          "field": "players",
+          "strategy": "record-delta",
+          "bytes": 2234880
+        },
+        {
+          "field": "retiredPlayers",
+          "strategy": "replace",
+          "bytes": 1686240
+        },
+        {
+          "field": "worldHistory",
+          "strategy": "replace",
+          "bytes": 889147
+        },
+        {
+          "field": "fixtures",
+          "strategy": "replace",
+          "bytes": 843416
+        },
+        {
+          "field": "clubs",
+          "strategy": "record-delta",
+          "bytes": 367234
+        },
+        {
+          "field": "playerMovementHistory",
+          "strategy": "replace",
+          "bytes": 314086
+        },
+        {
+          "field": "unsignedYouth",
+          "strategy": "record-delta",
+          "bytes": 204489
+        },
+        {
+          "field": "inbox",
+          "strategy": "replace",
+          "bytes": 75330
+        }
+      ],
+      "route": "worker",
+      "roundTripMs": 3267.699999988079
+    }
+  },
+  "simulationContext": {
+    "before": {
+      "season": 1,
+      "week": 46,
+      "seasonLength": 46,
+      "fixtureCount": 3490
+    },
+    "after": {
+      "season": 2,
+      "week": 1,
+      "seasonLength": 46,
+      "fixtureCount": 3490
+    }
+  },
+  "status": "pass",
+  "limitation": "Chromium emulation is regression evidence only; physical minimum-hardware certification remains required. This is a coherent warmed boundary stress run, not a canonically played multi-season save."
+}

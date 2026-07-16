@@ -1,4 +1,5 @@
 import type { TutorialState } from "@/stores/tutorialStore";
+import { observeWeeklySimulationTelemetry } from "@/engine/core/weeklySimulationPipeline";
 import type { GameStoreState } from "../gameStoreTypes";
 import { createProgressionActions } from "./progressionActions";
 import type { GetState, SetState } from "./types";
@@ -62,6 +63,13 @@ export function runHeadlessWeeklyTransaction(
 ): WeeklyHeadlessCommit {
   const tutorialCommands: WeeklyTutorialCommand[] = [];
   const patch: WeeklyTransactionStorePatch = {};
+  let simulationPhases: WeeklyHeadlessCommit["simulationPhases"];
+  const stopObserving = observeWeeklySimulationTelemetry((telemetry) => {
+    simulationPhases = telemetry.phases.map(({ phase, elapsedMs }) => ({
+      phase,
+      elapsedMs,
+    }));
+  });
 
   let store = {
     gameState: input.gameState,
@@ -94,12 +102,20 @@ export function runHeadlessWeeklyTransaction(
     getPendingMatches: () => [],
   };
 
-  weeklyActions.advanceWeek();
+  try {
+    weeklyActions.advanceWeek();
+  } finally {
+    stopObserving();
+  }
   if (!Object.prototype.hasOwnProperty.call(patch, "gameState")) {
     throw new Error("Headless weekly transaction completed without a state commit.");
   }
 
-  return { patch, tutorialCommands };
+  return {
+    patch,
+    tutorialCommands,
+    ...(simulationPhases ? { simulationPhases } : {}),
+  };
 }
 
 function estimateResponseBytes(value: unknown): number {
@@ -213,6 +229,7 @@ export function compactWeeklyWorkerCommit(
 
       if (Array.isArray(sourceValue) && Array.isArray(nextValue)) {
         const valueDelta = createValueDelta(sourceValue, nextValue);
+        if (!valueDelta) continue;
         if (valueDelta?.kind === "array") {
           const delta = valueDelta.delta;
           Object.assign(arrayDeltas, { [key]: delta });
@@ -228,6 +245,7 @@ export function compactWeeklyWorkerCommit(
 
       if (isPlainRecord(sourceValue) && isPlainRecord(nextValue)) {
         const valueDelta = createValueDelta(sourceValue, nextValue);
+        if (!valueDelta) continue;
         const delta = valueDelta?.kind === "record" ? valueDelta.delta : null;
         if (!delta) {
           Object.assign(changedFields, { [key]: nextValue });
@@ -294,6 +312,7 @@ export function compactWeeklyWorkerCommit(
       changedEntryCount,
       totalFieldCount: Object.keys(sourceState).length,
       responseBytes: 0,
+      ...(commit.simulationPhases ? { phaseTimings: commit.simulationPhases } : {}),
       ...(payloadHotspots.length > 0 ? { payloadHotspots } : {}),
     },
   } satisfies WeeklyWorkerCommit;

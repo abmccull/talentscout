@@ -170,8 +170,12 @@ export async function injectLateGameState(
   specialization: string = "youth",
 ): Promise<void> {
   await injectGameState(page, {
-    currentWeek: 40,
-    currentSeason: 2,
+    // Keep the fixture internally coherent. This helper unlocks late-career
+    // surfaces; it does not fabricate a completed season. Patching a fresh
+    // Season 1 world to Season 2 previously caused save retention to prune its
+    // fixtures and made the next advance synthesize an orphaned rollover.
+    currentWeek: 20,
+    currentSeason: 1,
     countries: ["england", "spain", "germany"],
     scout: {
       firstName: "Test",

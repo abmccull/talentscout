@@ -130,6 +130,10 @@ export interface DevelopmentEnvironmentIndex {
   fitPositionCountByClub: ReadonlyMap<string, ReadonlyMap<Position, number>>;
   fitPlayerOccurrencesByClub: ReadonlyMap<string, ReadonlyMap<string, number>>;
   activeLoanByPlayerAndClub: ReadonlyMap<string, LoanDeal>;
+  recruitmentDoctrineByClub: ReadonlyMap<
+    string,
+    ReturnType<typeof deriveClubRecruitmentDoctrine>
+  >;
   worldContextByCountry: Map<string, CachedWorldConditionContext>;
 }
 
@@ -257,6 +261,19 @@ export function createDevelopmentEnvironmentIndex(
     }
   }
 
+  const recruitmentDoctrineByClub = new Map<
+    string,
+    ReturnType<typeof deriveClubRecruitmentDoctrine>
+  >();
+  for (const club of Object.values(state.clubs)) {
+    recruitmentDoctrineByClub.set(club.id, deriveClubRecruitmentDoctrine({
+      club,
+      seed: state.seed ?? `development:${club.id}`,
+      season: state.currentSeason,
+      manager: state.managerProfiles[club.id],
+    }));
+  }
+
   return {
     currentSeason: state.currentSeason,
     currentWeek: state.currentWeek,
@@ -266,6 +283,7 @@ export function createDevelopmentEnvironmentIndex(
     fitPositionCountByClub,
     fitPlayerOccurrencesByClub,
     activeLoanByPlayerAndClub,
+    recruitmentDoctrineByClub,
     worldContextByCountry: new Map<string, CachedWorldConditionContext>(),
   };
 }
@@ -398,6 +416,7 @@ function philosophyFactor(
   player: Player,
   club: Club | undefined,
   manager: ManagerProfile | undefined,
+  index?: DevelopmentEnvironmentIndex,
 ): FactorDraft {
   if (!club) {
     return makeFactor(
@@ -408,12 +427,13 @@ function philosophyFactor(
     );
   }
 
-  const doctrine = deriveClubRecruitmentDoctrine({
-    club,
-    seed: state.seed ?? `development:${club.id}`,
-    season: state.currentSeason,
-    manager,
-  });
+  const doctrine = index?.recruitmentDoctrineByClub.get(club.id)
+    ?? deriveClubRecruitmentDoctrine({
+      club,
+      seed: state.seed ?? `development:${club.id}`,
+      season: state.currentSeason,
+      manager,
+    });
   const developing = player.age <= doctrine.preferredSeniorAgeRange[1];
   const patienceContribution = developing
     ? Math.round((doctrine.pathwayPatience - 50) * 0.32)
@@ -752,7 +772,7 @@ export function evaluatePlayerDevelopmentEnvironment(
   const index = currentDevelopmentIndex(state, options.index);
   const factors: FactorDraft[] = [
     academyFactor(player, club),
-    philosophyFactor(state, player, club, manager),
+    philosophyFactor(state, player, club, manager, index),
     playingPathwayFactor(state, player, club, prospective, index),
     managerFactor(player, manager),
     competitionFactor(player, club, league?.tier),

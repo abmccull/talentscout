@@ -193,6 +193,10 @@ describe("match participation invariants", () => {
       formTrend: "stable",
       formLockWeeks: 0,
     };
+    const legacyPlayer = { ...player } as Player;
+    delete legacyPlayer.formMomentum;
+    delete legacyPlayer.formTrend;
+    delete legacyPlayer.formLockWeeks;
     const unchangedUpdate = {
       playerId: player.id,
       form: 0,
@@ -202,7 +206,8 @@ describe("match participation invariants", () => {
     };
 
     expect(isFormMomentumUpdateNoOp(normalizedPlayer, unchangedUpdate)).toBe(true);
-    expect(isFormMomentumUpdateNoOp(player, unchangedUpdate)).toBe(false);
+    expect(isFormMomentumUpdateNoOp(player, unchangedUpdate)).toBe(true);
+    expect(isFormMomentumUpdateNoOp(legacyPlayer, unchangedUpdate)).toBe(false);
     expect(isFormMomentumUpdateNoOp(
       { ...normalizedPlayer, form: 0.04 },
       { ...unchangedUpdate, form: 0.04 },

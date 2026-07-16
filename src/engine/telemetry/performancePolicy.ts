@@ -15,6 +15,10 @@ export const CHROMIUM_EMULATION_BUDGET = Object.freeze({
   domNodes: 18_000,
 });
 
+/** A season boundary is allowed more work than an ordinary week, but must not
+ * become an unbounded loading screen under the same repeatable CPU profile. */
+export const CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS = 15_000;
+
 export const PHYSICAL_MINIMUM_HARDWARE_BUDGET = Object.freeze({
   coldStartToMenuP95Ms: 12_000,
   newCareerToDeskP95Ms: 15_000,

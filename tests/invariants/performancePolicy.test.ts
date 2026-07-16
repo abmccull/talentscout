@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CHROMIUM_EMULATION_BUDGET,
+  CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS,
   evaluateChromiumEmulationBudget,
   PHYSICAL_MINIMUM_HARDWARE_BUDGET,
 } from "@/engine/telemetry/performancePolicy";
@@ -40,6 +41,16 @@ describe("performance policy", () => {
     );
     expect(PHYSICAL_MINIMUM_HARDWARE_BUDGET.ordinaryWeekAdvanceP95Ms).toBeLessThan(
       CHROMIUM_EMULATION_BUDGET.oneWeekAdvanceMs,
+    );
+  });
+
+  it("keeps season-boundary emulation finite and aligned with the physical target", () => {
+    expect(Number.isFinite(CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS)).toBe(true);
+    expect(CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS).toBeGreaterThan(
+      CHROMIUM_EMULATION_BUDGET.oneWeekAdvanceMs,
+    );
+    expect(CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS).toBe(
+      PHYSICAL_MINIMUM_HARDWARE_BUDGET.seasonRolloverP95Ms,
     );
   });
 });

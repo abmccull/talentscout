@@ -4,7 +4,10 @@ import {
   assessClubAffordability,
   buildTransferAddOnObligations,
   getTransferContingentReserve,
+  deriveClubScoutingBudget,
+  deriveClubWeeklyWageBudget,
   normalizeClubEconomics,
+  reapproveAnnualClubEconomics,
   settleRelegationClubObligations,
   settleTriggeredClubObligations,
   settleWeeklyClubObligations,
@@ -49,6 +52,37 @@ function club(
 }
 
 describe("club economics", () => {
+  it("bulk annual reapproval is formula-identical to per-club derivation", () => {
+    const players = Object.fromEntries(
+      Array.from({ length: 120 }, (_, index) => {
+        const clubId = ["a", "b", "c"][index % 3];
+        const id = `annual-${index}`;
+        return [id, player(id, clubId, 700 + index * 17)];
+      }),
+    );
+    const clubs = {
+      a: club("a", { scoutingBudget: 80_000, budget: 900_000 }),
+      b: club("b", { scoutingBudget: 0, budget: 4_000_000, reputation: 72 }),
+      c: club("c", { scoutingBudget: 500_000, budget: 12_000_000, youthAcademyRating: 18 }),
+      empty: club("empty", { scoutingBudget: 45_000, budget: 200_000 }),
+    };
+
+    const expected = Object.fromEntries(Object.entries(clubs).map(([clubId, candidate]) => {
+      const annualScoutingBudget = deriveClubScoutingBudget(candidate, players);
+      const carryover = Math.min(
+        Math.round(annualScoutingBudget * 0.2),
+        Math.max(0, candidate.scoutingBudget ?? 0),
+      );
+      return [clubId, {
+        ...candidate,
+        weeklyWageBudget: deriveClubWeeklyWageBudget(candidate, players),
+        scoutingBudget: annualScoutingBudget + carryover,
+      }];
+    }));
+
+    expect(reapproveAnnualClubEconomics(clubs, players)).toEqual(expected);
+  });
+
   it("derives legacy wage and scouting budgets from roster commitments and stays idempotent", () => {
     const players = {
       p1: player("p1", "a", 1_200),

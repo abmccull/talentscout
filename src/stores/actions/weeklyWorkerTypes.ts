@@ -61,6 +61,10 @@ export interface WeeklyTransactionStorePatch {
 export interface WeeklyHeadlessCommit {
   patch: WeeklyTransactionStorePatch;
   tutorialCommands: WeeklyTutorialCommand[];
+  simulationPhases?: Array<{
+    phase: string;
+    elapsedMs: number;
+  }>;
 }
 
 export type WeeklyGameStateCommit =

@@ -14,7 +14,10 @@ import type {
   FreeAgent,
   InboxMessage,
 } from "@/engine/core/types";
-import { assessClubAffordability } from "@/engine/finance/clubEconomics";
+import {
+  assessClubAffordabilityFromContext,
+  buildClubAffordabilityContext,
+} from "@/engine/finance/clubEconomics";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
@@ -88,6 +91,11 @@ export function processContractExpiries(
   const renewedPlayerIds: string[] = [];
   const renewals: ContractExpiryResult["renewals"] = [];
   const messages: InboxMessage[] = [];
+  const affordabilityContext = buildClubAffordabilityContext(
+    state.clubs,
+    state.players,
+    { currentWeek: state.currentWeek, currentSeason: state.currentSeason },
+  );
   const renewalPriorityByClub = new Map<string, Set<string>>();
   for (const club of Object.values(state.clubs)) {
     const ranked = (club.playerIds ?? [])
@@ -131,13 +139,15 @@ export function processContractExpiries(
       // Club renews: extend contract by 1-3 seasons
       const extension = rng.nextInt(1, 3);
       const renewedWage = Math.max(player.wage, Math.round(player.currentAbility * 60));
-      const affordability = assessClubAffordability({
-        club,
-        players: state.players,
+      const clubAffordability = affordabilityContext[ownerClubId];
+      const affordability = clubAffordability && assessClubAffordabilityFromContext(
+        clubAffordability,
+        {
         weeklyWageCommitment: renewedWage,
         releasedWeeklyCommitment: Math.max(0, player.wage),
-      });
-      if (!affordability.affordable) {
+        },
+      );
+      if (!affordability?.affordable) {
         // Fall through to release when the club cannot carry the next deal.
       } else {
         renewals.push({

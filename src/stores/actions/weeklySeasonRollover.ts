@@ -43,9 +43,8 @@ import {
   calculateDepartmentBonusPool,
   calculateGoldenParachute,
   calculatePerformanceBonusAmount,
-  deriveClubScoutingBudget,
-  deriveClubWeeklyWageBudget,
   processAnnualAwards,
+  reapproveAnnualClubEconomics,
 } from "@/engine/finance";
 import { generateAnalystCandidate, resolvePredictions } from "@/engine/data";
 import {
@@ -832,23 +831,7 @@ export function processWeeklySeasonRollover(
       // unused scouting budget to compound forever.
       newState = {
         ...newState,
-        clubs: Object.fromEntries(
-          Object.entries(newState.clubs).map(([clubId, club]) => {
-            const annualScoutingBudget = deriveClubScoutingBudget(club, newState.players);
-            const carryover = Math.min(
-              Math.round(annualScoutingBudget * 0.2),
-              Math.max(0, club.scoutingBudget ?? 0),
-            );
-            return [
-              clubId,
-              {
-                ...club,
-                weeklyWageBudget: deriveClubWeeklyWageBudget(club, newState.players),
-                scoutingBudget: annualScoutingBudget + carryover,
-              },
-            ];
-          }),
-        ),
+        clubs: reapproveAnnualClubEconomics(newState.clubs, newState.players),
       };
 
       // Generate new season fixtures for core leagues only (skip secondary talent pools)

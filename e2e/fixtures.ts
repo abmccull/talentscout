@@ -99,17 +99,23 @@ export class GamePage {
   }
 
   private async dismissBlockingDialogs(): Promise<void> {
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const dialog = this.page.getByRole("dialog").last();
-      if (!(await dialog.isVisible({ timeout: 500 }).catch(() => false))) return;
-
-      const dismissButton = dialog.getByRole("button", {
-        name: /^(Incredible!|Continue|Close week summary|Continue to promotion|Continue to milestone)$/,
-      });
-      if (!(await dismissButton.isVisible({ timeout: 500 }).catch(() => false))) return;
-
-      await dismissButton.click();
-      await this.page.waitForTimeout(150);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const dialogs = this.page.getByRole("dialog");
+      const dialogCount = await dialogs.count();
+      let dismissed = false;
+      for (let index = dialogCount - 1; index >= 0; index--) {
+        const dialog = dialogs.nth(index);
+        if (!(await dialog.isVisible({ timeout: 250 }).catch(() => false))) continue;
+        const dismissButton = dialog.getByRole("button", {
+          name: /^(Incredible!|Continue|Close week summary|Continue to promotion|Continue to milestone)$/,
+        });
+        if (!(await dismissButton.isVisible({ timeout: 250 }).catch(() => false))) continue;
+        await dismissButton.click();
+        await this.page.waitForTimeout(150);
+        dismissed = true;
+        break;
+      }
+      if (!dismissed) return;
     }
   }
 
@@ -303,8 +309,18 @@ export class GamePage {
           await this.page.waitForTimeout(250);
           continue;
         }
-        await viewCalendar.click();
-        break;
+        // The final simulation commit can replace this source control with the
+        // Planner and Week Summary between the visibility check and click.
+        // Reconcile that legitimate transition first, then keep the click
+        // bounded so a detached control cannot consume the entire test budget.
+        await this.page.waitForTimeout(100);
+        await this.dismissBlockingDialogs();
+        if (await this.getCurrentScreen() === "calendar") break;
+        const clicked = await viewCalendar.click({ timeout: 2_000 })
+          .then(() => true)
+          .catch(() => false);
+        if (clicked) break;
+        continue;
       }
 
       const completeWeek = this.page.getByRole("button", {

@@ -30,6 +30,10 @@ export interface WeeklyWorkerMetrics {
     strategy: "replace" | "record-delta" | "array-delta" | "remove";
     bytes: number;
   }>;
+  phaseTimings?: Array<{
+    phase: string;
+    elapsedMs: number;
+  }>;
 }
 
 export interface WeeklyWorkerTelemetry extends WeeklyWorkerMetrics {

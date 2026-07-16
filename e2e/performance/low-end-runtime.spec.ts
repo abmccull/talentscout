@@ -5,6 +5,7 @@ import { performance } from "node:perf_hooks";
 import type { Page } from "@playwright/test";
 import {
   CHROMIUM_EMULATION_BUDGET,
+  CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS,
   evaluateChromiumEmulationBudget,
   PHYSICAL_CERTIFICATION_LIMITATION,
 } from "@/engine/telemetry/performancePolicy";
@@ -14,6 +15,10 @@ import { navItem } from "../helpers/selectors";
 const outputPath = resolve(
   process.env.LOW_END_PROFILE_OUTPUT
     ?? "artifacts/performance/low-end-emulation-profile.json",
+);
+const rolloverOutputPath = resolve(
+  process.env.LOW_END_ROLLOVER_PROFILE_OUTPUT
+    ?? "artifacts/performance/season-rollover-emulation-profile.json",
 );
 
 const budgets = CHROMIUM_EMULATION_BUDGET;
@@ -123,6 +128,30 @@ async function measureSettledWeekAdvance(page: Page): Promise<{
   });
 }
 
+async function readSimulationDateContext(page: Page): Promise<{
+  season: number;
+  week: number;
+  seasonLength: number;
+  fixtureCount: number;
+}> {
+  return page.evaluate(() => {
+    const state = (window as any).__GAME_STORE__?.getState()?.gameState;
+    if (!state) throw new Error("Game state unavailable for date profile");
+    const currentFixtures = Object.values(state.fixtures ?? {})
+      .filter((fixture: any) => fixture.season === state.currentSeason);
+    const seasonLength = currentFixtures.reduce(
+      (maximum: number, fixture: any) => Math.max(maximum, fixture.week ?? 0),
+      38,
+    );
+    return {
+      season: state.currentSeason,
+      week: state.currentWeek,
+      seasonLength,
+      fixtureCount: currentFixtures.length,
+    };
+  });
+}
+
 test.describe("low-end runtime evidence", () => {
   test("core career journey stays inside the published emulation budgets", async ({ gamePage }) => {
     test.setTimeout(180_000);
@@ -144,12 +173,27 @@ test.describe("low-end runtime evidence", () => {
     await gamePage.injectLateGameState("youth");
     await waitForSettledScreen(gamePage.page, "dashboard");
 
+    const beforeWeek = await readSimulationDateContext(gamePage.page);
+    expect(beforeWeek.fixtureCount).toBeGreaterThan(0);
+    expect(beforeWeek.seasonLength).toBeGreaterThan(beforeWeek.week);
+
     const navigationDurationsMs: number[] = [];
     for (const screen of ["calendar", "career", "internationalView", "reportHistory", "dashboard"]) {
       navigationDurationsMs.push(await measureSettledNavigation(gamePage.page, screen));
     }
 
     const weekAdvance = await measureSettledWeekAdvance(gamePage.page);
+    const afterWeek = await readSimulationDateContext(gamePage.page);
+    expect(afterWeek).toMatchObject({
+      season: beforeWeek.season,
+      week: beforeWeek.week + 1,
+    });
+    const payloadHotspots = (
+      weekAdvance.workerTelemetry?.payloadHotspots as Array<{ field?: string }> | undefined
+    ) ?? [];
+    expect(payloadHotspots.map(({ field }) => field)).not.toEqual(
+      expect.arrayContaining(["retiredPlayers", "worldHistory", "playerMovementHistory"]),
+    );
 
     await cdp.send("HeapProfiler.collectGarbage");
     const rawMetrics = await cdp.send("Performance.getMetrics");
@@ -209,6 +253,11 @@ test.describe("low-end runtime evidence", () => {
       },
       budgets,
       measured,
+      simulationContext: {
+        profile: "coherent-mature-ordinary-week",
+        before: beforeWeek,
+        after: afterWeek,
+      },
       checks,
       status: Object.values(checks).every(Boolean) ? "pass" : "fail",
       limitation: PHYSICAL_CERTIFICATION_LIMITATION,
@@ -224,5 +273,92 @@ test.describe("low-end runtime evidence", () => {
       heap: true,
       domNodes: true,
     });
+  });
+
+  test("coherent season rollover stays inside its published boundary budget", async ({ gamePage }) => {
+    test.setTimeout(180_000);
+    const cdp = await gamePage.page.context().newCDPSession(gamePage.page);
+    await cdp.send("Performance.enable");
+    await cdp.send("Network.enable");
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+    await cdp.send("Network.emulateNetworkConditions", {
+      offline: false,
+      latency: 80,
+      downloadThroughput: 1_500_000 / 8,
+      uploadThroughput: 750_000 / 8,
+      connectionType: "cellular3g",
+    });
+
+    await gamePage.goto();
+    await gamePage.injectLateGameState("youth");
+    await waitForSettledScreen(gamePage.page, "dashboard");
+
+    // Exercise one coherent week first. A real player reaches the season
+    // boundary with the persistent simulation worker already compiled and hot.
+    await measureSettledWeekAdvance(gamePage.page);
+    const warmContext = await readSimulationDateContext(gamePage.page);
+    expect(warmContext.fixtureCount).toBeGreaterThan(0);
+    expect(warmContext.seasonLength).toBeGreaterThan(warmContext.week);
+
+    await gamePage.page.evaluate((finalWeek) => {
+      const store = (window as any).__GAME_STORE__;
+      const rootState = store?.getState();
+      if (!store || !rootState?.gameState) {
+        throw new Error("Game state unavailable for rollover profile");
+      }
+      store.setState({
+        gameState: { ...rootState.gameState, currentWeek: finalWeek },
+        weekSimulation: null,
+        lastWeekSummary: null,
+        weeklyTransactionError: null,
+      });
+    }, warmContext.seasonLength);
+    await gamePage.page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+
+    const before = await readSimulationDateContext(gamePage.page);
+    expect(before.week).toBe(before.seasonLength);
+    const rollover = await measureSettledWeekAdvance(gamePage.page);
+    const after = await readSimulationDateContext(gamePage.page);
+    expect(after.season).toBe(before.season + 1);
+    expect(after.week).toBe(1);
+    expect(after.fixtureCount).toBeGreaterThan(0);
+
+    const elapsedMs = Math.round(rollover.elapsedMs * 100) / 100;
+    const passed = elapsedMs <= CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS;
+    const report = {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      evidenceClass: "chromium-emulation-season-boundary-stress-not-physical-low-end-hardware",
+      profile: "coherent-warmed-season-rollover",
+      emulation: {
+        cpuSlowdown: 4,
+        networkLatencyMs: 80,
+        downloadBitsPerSecond: 1_500_000,
+        uploadBitsPerSecond: 750_000,
+      },
+      host: {
+        platform: platform(),
+        release: release(),
+        logicalCpuCount: cpus().length,
+        cpuModel: cpus()[0]?.model ?? "unknown",
+        totalMemoryBytes: totalmem(),
+      },
+      budgetMs: CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS,
+      measured: {
+        elapsedMs,
+        weeklyWorker: rollover.workerTelemetry,
+      },
+      simulationContext: { before, after },
+      status: passed ? "pass" : "fail",
+      limitation: `${PHYSICAL_CERTIFICATION_LIMITATION} This is a coherent warmed boundary stress run, not a canonically played multi-season save.`,
+    };
+    await mkdir(dirname(rolloverOutputPath), { recursive: true });
+    await writeFile(rolloverOutputPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+
+    expect(elapsedMs, JSON.stringify(report, null, 2)).toBeLessThanOrEqual(
+      CHROMIUM_EMULATION_SEASON_ROLLOVER_BUDGET_MS,
+    );
   });
 });

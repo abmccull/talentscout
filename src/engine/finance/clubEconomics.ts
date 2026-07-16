@@ -201,6 +201,33 @@ export function deriveClubScoutingBudget(
   );
 }
 
+/**
+ * Reapprove every club's annual recruitment envelope from one roster scan.
+ * The result is formula-identical to calling both public derivation helpers
+ * for each club, but avoids O(clubs * players) work at season rollover.
+ */
+export function reapproveAnnualClubEconomics(
+  clubs: Record<string, Club>,
+  players: Record<string, Player>,
+): Record<string, Club> {
+  const rosterEconomics = buildClubRosterEconomicsIndex(players);
+  const reapproved: Record<string, Club> = {};
+  for (const [clubId, club] of Object.entries(clubs)) {
+    const roster = rosterEconomics.get(clubId) ?? EMPTY_ROSTER_ECONOMICS;
+    const annualScoutingBudget = deriveClubScoutingBudgetFromRoster(club, roster);
+    const carryover = Math.min(
+      Math.round(annualScoutingBudget * 0.2),
+      Math.max(0, club.scoutingBudget ?? 0),
+    );
+    reapproved[clubId] = {
+      ...club,
+      weeklyWageBudget: deriveClubWeeklyWageBudgetFromRoster(club, roster),
+      scoutingBudget: annualScoutingBudget + carryover,
+    };
+  }
+  return reapproved;
+}
+
 function deriveClubScoutingBudgetFromRoster(
   club: Club,
   roster: ClubRosterEconomics,
