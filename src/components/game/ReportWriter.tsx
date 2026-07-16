@@ -58,6 +58,7 @@ import {
 import { EvidenceBoard } from "@/components/game/evidence";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
+import { getPendingInsightReportQualityEffect } from "@/engine/insight/effects";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
@@ -306,6 +307,15 @@ export function ReportWriter() {
       : 0,
     [gameState],
   );
+  const insightReportQualityEffect = useMemo(
+    () => gameState && canonicalPlayerId
+      ? getPendingInsightReportQualityEffect(
+          gameState.scout.insightState,
+          canonicalPlayerId,
+        )
+      : undefined,
+    [canonicalPlayerId, gameState],
+  );
   const unsignedYouth = useMemo(
     () => gameState && canonicalPlayerId
       ? Object.values(gameState.unsignedYouth).find((youth) => youth.player.id === canonicalPlayerId)
@@ -484,7 +494,9 @@ export function ReportWriter() {
     [activeBrief, isYouthCase, structuredInput],
   );
   const totalReportQualityBonus =
-    equipmentReportQualityBonus + infrastructureReportQualityBonus;
+    equipmentReportQualityBonus
+    + infrastructureReportQualityBonus
+    + (insightReportQualityEffect?.bonusPoints ?? 0) / 100;
 
   // The exact craft score stays authoritative for submission. The writer only
   // exposes a broad band so players improve the professional artifact instead
@@ -1971,9 +1983,14 @@ export function ReportWriter() {
                   </div>
                 )}
 
-                {totalReportQualityBonus > 0 && (
+                {equipmentReportQualityBonus + infrastructureReportQualityBonus > 0 && (
                   <p className="mt-2 text-[10px] text-emerald-500">
-                    +{Math.round(totalReportQualityBonus * 100)} points from infrastructure and equipment
+                    +{Math.round((equipmentReportQualityBonus + infrastructureReportQualityBonus) * 100)} points from infrastructure and equipment
+                  </p>
+                )}
+                {insightReportQualityEffect && (
+                  <p className="mt-1 text-[10px] text-amber-400">
+                    +{insightReportQualityEffect.bonusPoints} points from The Verdict; consumed when this report is submitted
                   </p>
                 )}
 

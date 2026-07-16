@@ -16,7 +16,7 @@ import type {
   InboxMessage,
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
-import { generateContactForType } from "./contacts";
+import { generateContactForType, isContactAccessSuspended } from "./contacts";
 
 // =============================================================================
 // Constants
@@ -124,8 +124,10 @@ export function generateReferralOpportunity(
   contact: Contact,
   state: GameState,
 ): { referredType: ContactType; description: string } | null {
+  const currentDate = { season: state.currentSeason, week: state.currentWeek };
   const trustLevel = contact.trustLevel ?? contact.relationship;
   if (trustLevel < MIN_TRUST_FOR_REFERRAL) return null;
+  if (contact.dormant || isContactAccessSuspended(contact, currentDate)) return null;
 
   // Check if the contact's referral network is full
   const referralNetwork = contact.referralNetwork ?? [];
@@ -186,7 +188,7 @@ export function processReferral(
     relationship: REFERRAL_BASE_RELATIONSHIP,
     trustLevel: REFERRAL_TRUST_BONUS,
     loyalty: 40 + rng.nextInt(0, 30), // 40-70 starting loyalty
-    lastInteractionWeek: state.currentWeek,
+    lastInteractionAt: { season: state.currentSeason, week: state.currentWeek },
     interactionHistory: [],
     gossipQueue: [],
     referralNetwork: [],
@@ -195,7 +197,7 @@ export function processReferral(
 
   // Update referring contact's referral network
   const interaction: ContactInteraction = {
-    week: state.currentWeek,
+    occurredAt: { season: state.currentSeason, week: state.currentWeek },
     type: "referral",
     trustDelta: 3,
   };
@@ -205,7 +207,7 @@ export function processReferral(
     referralNetwork: [...(referringContact.referralNetwork ?? []), enhancedContact.id],
     trustLevel: clamp((referringContact.trustLevel ?? referringContact.relationship) + 3, 0, 100),
     interactionHistory: [...(referringContact.interactionHistory ?? []), interaction],
-    lastInteractionWeek: state.currentWeek,
+    lastInteractionAt: { season: state.currentSeason, week: state.currentWeek },
   };
 
   return { newContact: enhancedContact, updatedReferringContact, interaction };

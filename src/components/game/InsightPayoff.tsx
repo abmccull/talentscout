@@ -155,8 +155,8 @@ function ResultsSection({ result }: { result: InsightActionResult }) {
     result.contactIntel.forEach((item) => {
       rows.push({
         icon: <Users size={14} />,
-        label: "Contact intel",
-        value: item.intel,
+        label: item.sourceName ? `Intel from ${item.sourceName}` : "Contact intel",
+        value: item.hint,
       });
     });
   }
@@ -166,7 +166,7 @@ function ResultsSection({ result }: { result: InsightActionResult }) {
     rows.push({
       icon: <TrendingUp size={14} />,
       label: "Confidence bonus (sub-region)",
-      value: `+${result.confidenceBonus}%`,
+      value: `+${Math.round(result.confidenceBonus * 100)}%`,
     });
   }
 
@@ -174,8 +174,8 @@ function ResultsSection({ result }: { result: InsightActionResult }) {
   if (result.queryAccuracyBonus !== undefined) {
     rows.push({
       icon: <BarChart2 size={14} />,
-      label: "Query accuracy multiplier",
-      value: `×${result.queryAccuracyBonus.toFixed(2)}`,
+      label: "Model noise removed (next query)",
+      value: `${Math.round(result.queryAccuracyBonus * 100)}%`,
     });
   }
 

@@ -43,7 +43,7 @@ import type {
   SessionFlaggedMoment,
 } from "@/engine/observation/types";
 import { MODE_FLAGGED_SHORT_LABEL } from "@/engine/observation/types";
-import type { InsightActionId, InsightState as EngineInsightState } from "@/engine/insight/types";
+import type { InsightActionId } from "@/engine/insight/types";
 import {
   createInsightState,
   getInsightActionAvailability,
@@ -1143,7 +1143,7 @@ export function ObservationScreen() {
     : false;
   const insightState = (
     gameState?.scout.insightState ?? createInsightState()
-  ) as EngineInsightState;
+  );
   const insightActions = gameState && activeSession
     ? getInsightActionAvailability(
         insightState,

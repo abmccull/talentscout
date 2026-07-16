@@ -13,7 +13,7 @@
  *  - All functions are pure: accept state + RNG in, return new data out.
  *  - No mutation of input objects.
  *  - Rivals are assigned only to clubs the player is NOT employed by.
- *  - High-CA players are preferentially targeted (represents realistic scouting).
+ *  - Rivals act on public signals and their own fallible evidence, never raw CA/PA.
  */
 
 import type { RNG } from "@/engine/rng";
@@ -32,23 +32,30 @@ import type {
 } from "@/engine/core/types";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
 import {
+  addGameWeeks,
+  getSeasonLength,
+  isGameDateAtOrAfter,
+  normalizeGameWeek,
+} from "@/engine/core/gameDate";
+import {
+  getDifficultyChallengeProfile,
+  getDifficultyModifiers,
+} from "@/engine/core/difficulty";
+import {
   resolvePlayerMovements,
   type LifecycleWorldState,
 } from "@/engine/world/playerLifecycle";
+import {
+  getRivalPlayerEvidence,
+  getRivalShortlistCapacity,
+  isRivalTargetEligible,
+  observePlayerForRival,
+  scoreRivalTargetCandidate,
+} from "./rivalEvidence";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
 // =============================================================================
-
-export interface RivalWeekResult {
-  updatedRivals: Record<string, RivalScout>;
-  /** Players the player-scout has reported on that a rival has now also targeted. */
-  poachWarnings: { rivalId: string; playerId: string }[];
-  /** New player targets a rival discovered this week. */
-  discoveries: { rivalId: string; playerId: string }[];
-  /** Rival signings of players the scout has previously reported on (poach events). */
-  poachSignings: { rivalId: string; playerId: string }[];
-}
 
 /**
  * Result of resolving a poach counter-bid.
@@ -100,6 +107,65 @@ function contextualPressure(
   return Number.isFinite(value) ? Math.min(1.5, Math.max(0.7, value)) : 1;
 }
 
+function setReportDeadline(
+  rival: RivalScout,
+  deadline: { season: number; week: number },
+): RivalScout {
+  return {
+    ...rival,
+    reportDeadline: deadline.week,
+    reportDeadlineSeason: deadline.season,
+  } as RivalScout;
+}
+
+function clearReportDeadline(rival: RivalScout): RivalScout {
+  return {
+    ...rival,
+    reportDeadline: undefined,
+    reportDeadlineSeason: undefined,
+  } as RivalScout;
+}
+
+/** Migrate legacy overflow weeks (for example week 40) onto the canonical rival fields. */
+function normalizeReportDeadline(rival: RivalScout, state: GameState): RivalScout {
+  if (rival.reportDeadline === undefined) return rival;
+  const seasonLength = getSeasonLength(state.fixtures, state.currentSeason);
+  const rawWeek = Math.max(1, Math.floor(rival.reportDeadline));
+  const normalizedWeek = normalizeGameWeek(rawWeek, seasonLength);
+  if (rival.reportDeadlineSeason !== undefined && rawWeek === normalizedWeek) {
+    return rival;
+  }
+
+  const overflowSeasons = Math.floor((rawWeek - 1) / seasonLength);
+  const looksNewlyAssignedThisSeason = overflowSeasons > 0
+    && rawWeek > state.currentWeek
+    && rawWeek - state.currentWeek <= SCOUTING_PROGRESS_MAX;
+  const inferredSeason = rival.reportDeadlineSeason !== undefined
+    ? rival.reportDeadlineSeason + overflowSeasons
+    : overflowSeasons === 0
+      ? state.currentSeason
+      : state.currentSeason + (
+          looksNewlyAssignedThisSeason
+            ? overflowSeasons
+            : Math.max(0, overflowSeasons - 1)
+        );
+  return setReportDeadline(rival, {
+    season: inferredSeason,
+    week: normalizedWeek,
+  });
+}
+
+function isReportDeadlineReached(rival: RivalScout, state: GameState): boolean {
+  if (rival.reportDeadline === undefined) return false;
+  return isGameDateAtOrAfter(
+    { season: state.currentSeason, week: state.currentWeek },
+    {
+      season: rival.reportDeadlineSeason ?? state.currentSeason,
+      week: rival.reportDeadline,
+    },
+  );
+}
+
 export interface RivalSigningResult {
   success: boolean;
   cost: number;
@@ -117,9 +183,9 @@ export interface PoachBidEligibility {
 /** Enhanced result from processRivalScoutWeek (F8). */
 export interface RivalScoutWeekResult {
   updatedRivals: Record<string, RivalScout>;
-  /** Poach warnings (same as RivalWeekResult). */
+  /** Players the player-scout has reported on that a rival has also targeted. */
   poachWarnings: { rivalId: string; playerId: string }[];
-  /** New discoveries (same as RivalWeekResult). */
+  /** New player targets discovered this week. */
   discoveries: { rivalId: string; playerId: string }[];
   /** New rival activities generated this week. */
   newActivities: RivalActivity[];
@@ -155,9 +221,6 @@ const REPUTATION_MAX = 60;
 const INITIAL_TARGETS_MIN = 2;
 const INITIAL_TARGETS_MAX = 4;
 
-/** Maximum concurrent target players a rival tracks. */
-const MAX_TARGET_PLAYERS = 8;
-
 /** Weekly probability a rival discovers a new player. */
 const DISCOVERY_CHANCE = 0.2;
 
@@ -189,21 +252,12 @@ const COUNTER_BID_BASE_SUCCESS = 0.4;
 /** Nemesis threshold — losses before the "nemesis" event triggers. */
 const NEMESIS_THRESHOLD = 3;
 
-/**
- * CA threshold for "high CA" targets.
- * Rivals preferentially target players above this threshold.
- */
-const HIGH_CA_THRESHOLD = 100;
-
 /** Scouting observations required to complete a report (min/max). */
 const SCOUTING_PROGRESS_MIN = 2;
 const SCOUTING_PROGRESS_MAX = 4;
 
 /** Progress needed to complete scouting on a target (observations required). */
 const SCOUTING_COMPLETION_THRESHOLD = 5;
-
-/** Probability that a completed rival report results in a signing (player lost). */
-const SIGNING_CHANCE = 0.25;
 
 /** Maximum rival activities to keep in history. */
 const MAX_ACTIVITY_HISTORY = 50;
@@ -279,6 +333,10 @@ export function generateRivalScouts(
 
   const rivals: Record<string, RivalScout> = {};
   const rivalIds: string[] = [];
+  const rivalIntelligence = getDifficultyModifiers(state.difficulty).rivalIntelligence;
+  const decisionSharpness = getDifficultyChallengeProfile(
+    state.difficulty,
+  ).rivalDecisionSharpness;
 
   for (let i = 0; i < count; i++) {
     const idSuffix = rng.nextInt(100_000, 999_999).toString(16);
@@ -292,19 +350,16 @@ export function generateRivalScouts(
     const reputation = rng.nextInt(REPUTATION_MIN, REPUTATION_MAX);
     const personality = rng.pick(ALL_PERSONALITIES);
 
-    const initialTargets = pickInitialTargets(rng, club, state);
-
     // Derive aggressiveness and budgetTier from personality and club
     const aggressiveness = deriveAggressiveness(rng, personality);
     const budgetTier = deriveBudgetTier(club, state);
-
-    rivals[id] = {
+    const baseRival: RivalScout = {
       id,
       name: `${firstName} ${lastName}`,
       quality,
       specialization: spec,
       clubId: club.id,
-      targetPlayerIds: initialTargets,
+      targetPlayerIds: [],
       reputation,
       personality,
       isNemesis: false,
@@ -314,6 +369,17 @@ export function generateRivalScouts(
       budgetTier,
       winsAgainstPlayer: 0,
       lossesToPlayer: 0,
+    };
+    rivals[id] = {
+      ...baseRival,
+      targetPlayerIds: pickInitialTargets(
+        rng,
+        baseRival,
+        club,
+        state,
+        rivalIntelligence,
+        decisionSharpness,
+      ),
     };
     rivalIds.push(id);
   }
@@ -360,99 +426,6 @@ export function generateRivalScouts(
  * @param state  Current game state.
  * @returns      Updated rivals, new poach warnings, and new discoveries.
  */
-export function processRivalWeek(
-  rng: RNG,
-  rivals: Record<string, RivalScout>,
-  state: GameState,
-): RivalWeekResult {
-  const updatedRivals: Record<string, RivalScout> = {};
-  const poachWarnings: { rivalId: string; playerId: string }[] = [];
-  const discoveries: { rivalId: string; playerId: string }[] = [];
-  const poachSignings: { rivalId: string; playerId: string }[] = [];
-
-  // Build the set of player IDs the scout has reported on (for poach logic)
-  const reportedPlayerIds = new Set<string>(
-    Object.values(state.reports).map((r) => r.playerId),
-  );
-
-  // Build the set of players the scout is actively tracking (observations + reports)
-  const scoutPlayerIds = new Set<string>();
-  for (const obs of Object.values(state.observations)) {
-    scoutPlayerIds.add(obs.playerId);
-  }
-  for (const report of Object.values(state.reports)) {
-    scoutPlayerIds.add(report.playerId);
-  }
-
-  for (const rival of Object.values(rivals)) {
-    let updatedRival = { ...rival, winsAgainstPlayer: rival.winsAgainstPlayer ?? 0, lossesToPlayer: rival.lossesToPlayer ?? 0 };
-
-    // Check if this rival shares any targets with the scout (for urgency boost)
-    const hasSharedTargets = updatedRival.targetPlayerIds.some((pid) =>
-      scoutPlayerIds.has(pid),
-    );
-
-    // --- Discovery (boosted by 10% if rival shares targets with scout) ---
-    const effectiveDiscoveryChance = hasSharedTargets
-      ? DISCOVERY_CHANCE + SHARED_TARGET_URGENCY_BOOST
-      : DISCOVERY_CHANCE;
-    if (rng.chance(effectiveDiscoveryChance)) {
-      const newTarget = discoverNewTarget(rng, rival, state);
-      if (newTarget !== null) {
-        const alreadyTracking = rival.targetPlayerIds.includes(newTarget);
-        if (
-          !alreadyTracking &&
-          rival.targetPlayerIds.length < MAX_TARGET_PLAYERS
-        ) {
-          updatedRival = {
-            ...updatedRival,
-            targetPlayerIds: [...updatedRival.targetPlayerIds, newTarget],
-          };
-          discoveries.push({ rivalId: rival.id, playerId: newTarget });
-        }
-      }
-    }
-
-    // --- Update competing players (shared targets) ---
-    const competingForPlayers = updatedRival.targetPlayerIds.filter((pid) =>
-      reportedPlayerIds.has(pid),
-    );
-    updatedRival = { ...updatedRival, competingForPlayers };
-
-    // --- Poach warning check ---
-    if (rng.chance(POACH_CHANCE)) {
-      if (competingForPlayers.length > 0) {
-        const targetId = rng.pick(competingForPlayers);
-        poachWarnings.push({ rivalId: rival.id, playerId: targetId });
-      }
-    }
-
-    // --- Poach signing check (rival completes a signing of a reported player) ---
-    const signingChance = hasSharedTargets
-      ? POACH_SIGNING_CHANCE + SHARED_TARGET_URGENCY_BOOST
-      : POACH_SIGNING_CHANCE;
-    if (rng.chance(signingChance)) {
-      const reportedSharedIds = updatedRival.targetPlayerIds.filter((pid) =>
-        reportedPlayerIds.has(pid),
-      );
-      if (reportedSharedIds.length > 0) {
-        const signedPlayerId = rng.pick(reportedSharedIds);
-        poachSignings.push({ rivalId: rival.id, playerId: signedPlayerId });
-      }
-    }
-
-    // --- Reputation gain ---
-    const repGain = rng.nextInt(REP_GAIN_MIN, REP_GAIN_MAX);
-    updatedRival = {
-      ...updatedRival,
-      reputation: clamp(updatedRival.reputation + repGain, 0, 100),
-    };
-
-    updatedRivals[rival.id] = updatedRival;
-  }
-
-  return { updatedRivals, poachWarnings, discoveries, poachSignings };
-}
 
 // =============================================================================
 // 2b. Process Rival Scout Week — Enhanced F8 version
@@ -462,8 +435,7 @@ export function processRivalWeek(
  * Enhanced weekly rival AI that includes scouting progress, report submission,
  * match attendance, contact intelligence, and player loss mechanics.
  *
- * This replaces processRivalWeek as the primary weekly tick for rivals when
- * F8 is active.
+ * This is the weekly tick authority for rival scouting.
  *
  * @param rng   Seeded RNG for this tick.
  * @param state Current game state.
@@ -482,6 +454,8 @@ export function processRivalScoutWeek(
   const newMessages: InboxMessage[] = [];
   const lostPlayerIds: string[] = [];
   const queuedPoachPlayerIds = new Set<string>();
+  const difficulty = getDifficultyModifiers(state.difficulty);
+  const challenge = getDifficultyChallengeProfile(state.difficulty);
 
   // Build the set of player IDs the scout has reported on (for poach logic)
   const reportedPlayerIds = new Set<string>(
@@ -507,28 +481,50 @@ export function processRivalScoutWeek(
   );
 
   for (const rival of Object.values(state.rivalScouts)) {
-    let updatedRival: RivalScout = {
+    let updatedRival = normalizeReportDeadline({
       ...rival,
       // Ensure new F8 fields exist (migration safety)
       scoutingProgress: rival.scoutingProgress ?? {},
       aggressiveness: rival.aggressiveness ?? deriveAggressiveness(rng, rival.personality),
       budgetTier: rival.budgetTier ?? "medium",
-    };
+    }, state);
+    const shortlistCapacity = getRivalShortlistCapacity(
+      updatedRival,
+      difficulty.rivalIntelligence,
+    );
+    updatedRival = pruneRivalShortlist(
+      updatedRival,
+      state,
+      shortlistCapacity,
+    );
 
     // --- 1. Target selection based on personality ---
     if (!updatedRival.currentTarget || !state.players[updatedRival.currentTarget]) {
-      const newTarget = selectTargetByPersonality(rng, updatedRival, state);
+      const newTarget = selectTargetByPersonality(
+        rng,
+        updatedRival,
+        state,
+        difficulty.rivalIntelligence,
+        challenge.rivalDecisionSharpness,
+      );
       if (newTarget) {
         updatedRival = { ...updatedRival, currentTarget: newTarget };
         // Set report deadline: 2-4 weeks from now based on aggressiveness
-        const deadlineWeeks = Math.round(
-          SCOUTING_PROGRESS_MIN + (1 - updatedRival.aggressiveness) *
-            (SCOUTING_PROGRESS_MAX - SCOUTING_PROGRESS_MIN),
+        const deadlineWeeks = Math.max(
+          2,
+          Math.round(
+            SCOUTING_PROGRESS_MIN + (1 - updatedRival.aggressiveness) *
+              (SCOUTING_PROGRESS_MAX - SCOUTING_PROGRESS_MIN),
+          ) + challenge.rivalDeadlineOffsetWeeks,
         );
-        updatedRival = {
-          ...updatedRival,
-          reportDeadline: state.currentWeek + deadlineWeeks,
-        };
+        updatedRival = setReportDeadline(
+          updatedRival,
+          addGameWeeks(
+            state.fixtures,
+            { season: state.currentSeason, week: state.currentWeek },
+            deadlineWeeks,
+          ),
+        );
         newActivities.push({
           rivalId: rival.id,
           type: "targetAcquired",
@@ -562,6 +558,14 @@ export function processRivalScoutWeek(
             season: state.currentSeason,
           });
 
+          updatedRival = observePlayerForRival(
+            rng,
+            updatedRival,
+            targetPlayer,
+            state,
+            difficulty.rivalIntelligence,
+          );
+
           // --- 3. Build scouting progress ---
           const targetId = updatedRival.currentTarget;
           const currentProgress =
@@ -587,9 +591,7 @@ export function processRivalScoutWeek(
     if (updatedRival.currentTarget) {
       const progress =
         updatedRival.scoutingProgress[updatedRival.currentTarget] ?? 0;
-      const deadlineReached =
-        updatedRival.reportDeadline !== undefined &&
-        state.currentWeek >= updatedRival.reportDeadline;
+      const deadlineReached = isReportDeadlineReached(updatedRival, state);
       const progressComplete = progress >= SCOUTING_COMPLETION_THRESHOLD;
 
       if (deadlineReached || progressComplete) {
@@ -608,7 +610,7 @@ export function processRivalScoutWeek(
           : "a player";
 
         newMessages.push({
-          id: `rival-report-${rival.id}-${updatedRival.currentTarget}-w${state.currentWeek}`,
+          id: `rival-report-${rival.id}-${updatedRival.currentTarget}-s${state.currentSeason}w${state.currentWeek}`,
           week: state.currentWeek,
           season: state.currentSeason,
           type: "event",
@@ -623,7 +625,13 @@ export function processRivalScoutWeek(
         // --- 5. Chance the rival's club makes a signing attempt ---
         // The weekly store resolves the resulting attempt through the
         // authoritative player lifecycle before any message claims a signing.
-        const signingChance = computeSigningChance(updatedRival, progress);
+        const signingChance = computeSigningChance(
+          updatedRival,
+          updatedRival.currentTarget,
+          progress,
+          state,
+          difficulty.rivalIntelligence,
+        );
         if (rng.chance(modifiedChance(
           signingChance,
           (modifiers.signingChanceMultiplier ?? 1)
@@ -642,11 +650,10 @@ export function processRivalScoutWeek(
         }
 
         // Clear current target and deadline after report submission
-        updatedRival = {
+        updatedRival = clearReportDeadline({
           ...updatedRival,
           currentTarget: undefined,
-          reportDeadline: undefined,
-        };
+        });
       }
     }
 
@@ -654,14 +661,21 @@ export function processRivalScoutWeek(
     if (rng.chance(modifiedChance(
       DISCOVERY_CHANCE,
       (modifiers.discoveryChanceMultiplier ?? 1)
+        * challenge.rivalDiscoveryPressure
         * contextualPressure(modifiers, updatedRival, updatedRival.currentTarget),
     ))) {
-      const newTarget = discoverNewTarget(rng, updatedRival, state);
+      const newTarget = discoverNewTarget(
+        rng,
+        updatedRival,
+        state,
+        difficulty.rivalIntelligence,
+        challenge.rivalDecisionSharpness,
+      );
       if (newTarget !== null) {
         const alreadyTracking = updatedRival.targetPlayerIds.includes(newTarget);
         if (
           !alreadyTracking &&
-          updatedRival.targetPlayerIds.length < MAX_TARGET_PLAYERS
+          updatedRival.targetPlayerIds.length < shortlistCapacity
         ) {
           updatedRival = {
             ...updatedRival,
@@ -697,20 +711,31 @@ export function processRivalScoutWeek(
     const signingChancePoach = hasSharedTargets
       ? POACH_SIGNING_CHANCE + SHARED_TARGET_URGENCY_BOOST
       : POACH_SIGNING_CHANCE;
-    if (rng.chance(modifiedChance(
-      signingChancePoach,
-      (modifiers.signingChanceMultiplier ?? 1)
-        * contextualPressure(
-          modifiers,
-          updatedRival,
-          updatedRival.targetPlayerIds.find((playerId) => reportedPlayerIds.has(playerId)),
-        ),
-    ))) {
-      const reportedSharedIds = updatedRival.targetPlayerIds.filter((pid) =>
-        reportedPlayerIds.has(pid),
+    const evidenceQualifiedSharedIds = updatedRival.targetPlayerIds.filter((playerId) => {
+      const evidence = getRivalPlayerEvidence(updatedRival, playerId);
+      return reportedPlayerIds.has(playerId)
+        && (evidence?.observations ?? 0) > 0
+        && (evidence?.confidence ?? 0) >= 0.2;
+    });
+    const pressurePlayerId = evidenceQualifiedSharedIds[0];
+    if (
+      pressurePlayerId
+      && rng.chance(modifiedChance(
+        signingChancePoach,
+        (modifiers.signingChanceMultiplier ?? 1)
+          * (0.85 + difficulty.rivalIntelligence * 0.15)
+          * contextualPressure(modifiers, updatedRival, pressurePlayerId),
+      ))
+    ) {
+      const signedPlayerId = pickWeightedTarget(
+        rng,
+        evidenceQualifiedSharedIds,
+        updatedRival,
+        state,
+        difficulty.rivalIntelligence,
+        challenge.rivalDecisionSharpness,
       );
-      if (reportedSharedIds.length > 0) {
-        const signedPlayerId = rng.pick(reportedSharedIds);
+      if (signedPlayerId) {
         if (!queuedPoachPlayerIds.has(signedPlayerId)) {
           queuedPoachPlayerIds.add(signedPlayerId);
           poachSignings.push({ rivalId: rival.id, playerId: signedPlayerId });
@@ -1177,87 +1202,108 @@ function deriveBudgetTier(
   return "low";
 }
 
-/**
- * Select a target player based on the rival's personality archetype.
- *
- * - aggressive: targets highest currentAbility players
- * - methodical: targets best value (high PA relative to CA, balanced profile)
- * - connected: targets high-CA players (similar to aggressive but with diversity)
- * - lucky: targets low CA / high PA players (hidden gems)
- */
+function pruneRivalShortlist(
+  rival: RivalScout,
+  state: GameState,
+  capacity: number,
+): RivalScout {
+  const orderedIds = rival.currentTarget
+    ? [rival.currentTarget, ...rival.targetPlayerIds]
+    : rival.targetPlayerIds;
+  const seen = new Set<string>();
+  const targetPlayerIds = orderedIds.filter((playerId) => {
+    if (seen.has(playerId)) return false;
+    seen.add(playerId);
+    const player = state.players[playerId];
+    if (!player || !isRivalTargetEligible(rival, player, state)) return false;
+    return playerId === rival.currentTarget
+      || (rival.scoutingProgress[playerId] ?? 0) < SCOUTING_COMPLETION_THRESHOLD;
+  }).slice(0, capacity);
+
+  if (rival.currentTarget && !targetPlayerIds.includes(rival.currentTarget)) {
+    return clearReportDeadline({
+      ...rival,
+      targetPlayerIds,
+      currentTarget: undefined,
+    });
+  }
+  return { ...rival, targetPlayerIds };
+}
+
+function pickWeightedTarget(
+  rng: RNG,
+  playerIds: readonly string[],
+  rival: RivalScout,
+  state: GameState,
+  rivalIntelligence: number,
+  decisionSharpness: number,
+): string | undefined {
+  const weighted = playerIds.flatMap((playerId) => {
+    const player = state.players[playerId];
+    if (!player || !isRivalTargetEligible(rival, player, state)) return [];
+    const score = scoreRivalTargetCandidate(
+      rival,
+      player,
+      state,
+      rivalIntelligence,
+    );
+    return [{
+      item: playerId,
+      weight: Math.pow(
+        Math.max(0.1, score / 20),
+        clamp(decisionSharpness, 0.75, 1.5),
+      ),
+    }];
+  });
+  return weighted.length > 0 ? rng.pickWeighted(weighted) : undefined;
+}
+
+/** Select from a bounded shortlist using personality, specialty and fallible evidence. */
 function selectTargetByPersonality(
   rng: RNG,
   rival: RivalScout,
   state: GameState,
+  rivalIntelligence: number,
+  decisionSharpness: number,
 ): string | undefined {
-  const targets = rival.targetPlayerIds;
-  if (targets.length === 0) return undefined;
-
-  // Filter to players that exist and haven't been fully scouted yet
-  const available = targets.filter((pid) => {
-    const player = state.players[pid];
-    if (!player) return false;
-    const progress = rival.scoutingProgress[pid] ?? 0;
-    return progress < SCOUTING_COMPLETION_THRESHOLD;
-  });
-
-  if (available.length === 0) return undefined;
-
-  switch (rival.personality) {
-    case "aggressive": {
-      // Target highest CA player
-      const sorted = available
-        .map((pid) => ({ pid, ca: state.players[pid]?.currentAbility ?? 0 }))
-        .sort((a, b) => b.ca - a.ca);
-      return sorted[0]?.pid;
-    }
-    case "methodical": {
-      // Target best value: highest PA-CA delta
-      const sorted = available
-        .map((pid) => {
-          const p = state.players[pid];
-          return {
-            pid,
-            value: p ? p.potentialAbility - p.currentAbility : 0,
-          };
-        })
-        .sort((a, b) => b.value - a.value);
-      return sorted[0]?.pid;
-    }
-    case "lucky": {
-      // Target hidden gems: low CA but high PA
-      const sorted = available
-        .map((pid) => {
-          const p = state.players[pid];
-          if (!p) return { pid, score: 0 };
-          // Favor low CA + high PA
-          const score = p.potentialAbility - p.currentAbility * 1.5;
-          return { pid, score };
-        })
-        .sort((a, b) => b.score - a.score);
-      return sorted[0]?.pid;
-    }
-    case "connected":
-    default: {
-      // Random pick weighted by CA
-      const weighted = available.map((pid) => ({
-        item: pid,
-        weight: Math.max(1, state.players[pid]?.currentAbility ?? 50),
-      }));
-      return rng.pickWeighted(weighted);
-    }
-  }
+  const available = rival.targetPlayerIds.filter((playerId) =>
+    (rival.scoutingProgress[playerId] ?? 0) < SCOUTING_COMPLETION_THRESHOLD
+  );
+  return pickWeightedTarget(
+    rng,
+    available,
+    rival,
+    state,
+    rivalIntelligence,
+    decisionSharpness,
+  );
 }
 
-/**
- * Compute the probability that a rival's completed report leads to a signing.
- * Higher progress and higher-quality rivals sign more often.
- */
-function computeSigningChance(rival: RivalScout, progress: number): number {
-  const qualityBonus = (rival.quality - 1) * 0.05; // 0 to 0.2
-  const progressBonus =
-    (progress / SCOUTING_COMPLETION_THRESHOLD) * 0.1; // 0 to 0.1
-  return clamp(SIGNING_CHANCE + qualityBonus + progressBonus, 0, 0.6);
+/** Signing intent now depends on what the rival actually believes and how sure they are. */
+function computeSigningChance(
+  rival: RivalScout,
+  playerId: string,
+  progress: number,
+  state: GameState,
+  rivalIntelligence: number,
+): number {
+  const player = state.players[playerId];
+  if (!player) return 0;
+  const evidence = getRivalPlayerEvidence(rival, playerId);
+  const qualityBonus = (clamp(rival.quality, 1, 5) - 1) * 0.03;
+  const progressBonus = clamp(progress / SCOUTING_COMPLETION_THRESHOLD, 0, 1) * 0.08;
+  const confidenceBonus = (evidence?.confidence ?? 0.05) * 0.16;
+  const targetFitBonus = scoreRivalTargetCandidate(
+    rival,
+    player,
+    state,
+    rivalIntelligence,
+  ) / 100 * 0.12;
+  return clamp(
+    0.08 + qualityBonus + progressBonus + confidenceBonus + targetFitBonus,
+    0.05,
+    0.55,
+  );
 }
 
 /** Helper to get a club name from state. */
@@ -1268,20 +1314,21 @@ function getClubName(clubId: string, state: GameState): string {
 /**
  * Pick initial target players for a newly created rival.
  *
- * Strategy:
- *  1. Gather all players in the same league as the rival's club.
- *  2. Sort by currentAbility descending so high-CA players are preferred.
- *  3. Shuffle the top half of that sorted list and pick 2-4 from it.
- *     If fewer candidates exist than needed, take as many as available.
- *
- * Falls back to any players in the world if the league lookup yields nothing.
+ * Uses public value, form, performance, contract, squad need and specialty
+ * signals. Hidden ability does not participate in initial discovery.
  */
 function pickInitialTargets(
   rng: RNG,
+  rival: RivalScout,
   club: Club,
   state: GameState,
+  rivalIntelligence: number,
+  decisionSharpness: number,
 ): string[] {
-  const count = rng.nextInt(INITIAL_TARGETS_MIN, INITIAL_TARGETS_MAX);
+  const count = Math.min(
+    rng.nextInt(INITIAL_TARGETS_MIN, INITIAL_TARGETS_MAX),
+    getRivalShortlistCapacity(rival, rivalIntelligence),
+  );
 
   // Resolve the rival club's leagueId
   const rivalLeagueId = club.leagueId;
@@ -1303,35 +1350,46 @@ function pickInitialTargets(
     candidates = Object.values(state.players);
   }
 
-  if (candidates.length === 0) return [];
-
-  // Sort by CA descending, then take the top half as the "scoutable" pool
-  const sorted = [...candidates].sort(
-    (a, b) => b.currentAbility - a.currentAbility,
+  candidates = candidates.filter((player) =>
+    isRivalTargetEligible(rival, player, state)
   );
-  const topHalfCount = Math.max(count, Math.ceil(sorted.length / 2));
-  const topPool = sorted.slice(0, topHalfCount).filter(
-    (p) => p.currentAbility >= HIGH_CA_THRESHOLD,
-  );
+  if (candidates.length === 0) {
+    candidates = Object.values(state.players).filter((player) =>
+      isRivalTargetEligible(rival, player, state)
+    );
+  }
 
-  // Fall back to the full sorted list if the high-CA pool is too small
-  const pool = topPool.length >= count ? topPool : sorted;
-
-  const shuffled = rng.shuffle(pool);
-  return shuffled.slice(0, Math.min(count, shuffled.length)).map((p) => p.id);
+  const selected: string[] = [];
+  const remaining = candidates.map((player) => player.id);
+  while (selected.length < count && remaining.length > 0) {
+    const playerId = pickWeightedTarget(
+      rng,
+      remaining,
+      rival,
+      state,
+      rivalIntelligence,
+      decisionSharpness,
+    );
+    if (!playerId) break;
+    selected.push(playerId);
+    remaining.splice(remaining.indexOf(playerId), 1);
+  }
+  return selected;
 }
 
 /**
  * Pick one new player target for a rival to "discover".
  *
- * Prefers players NOT already in the rival's target list.
- * Biases toward high-CA players in the rival's club's league.
+ * Prefers players not already on the shortlist and weights only public signals
+ * plus evidence the rival has legitimately accumulated.
  * Returns null if no new candidates are available.
  */
 function discoverNewTarget(
   rng: RNG,
   rival: RivalScout,
   state: GameState,
+  rivalIntelligence: number,
+  decisionSharpness: number,
 ): string | null {
   const existingSet = new Set(rival.targetPlayerIds);
 
@@ -1344,21 +1402,24 @@ function discoverNewTarget(
   if (league) {
     const clubIds = new Set(league.clubIds);
     candidates = Object.values(state.players).filter(
-      (p) => clubIds.has(p.clubId) && !existingSet.has(p.id),
+      (p) => clubIds.has(p.clubId)
+        && !existingSet.has(p.id)
+        && isRivalTargetEligible(rival, p, state),
     );
   } else {
     candidates = Object.values(state.players).filter(
-      (p) => !existingSet.has(p.id),
+      (p) => !existingSet.has(p.id) && isRivalTargetEligible(rival, p, state),
     );
   }
 
   if (candidates.length === 0) return null;
 
-  // Weighted pick: high-CA players are 3x more likely to be discovered
-  const weighted = candidates.map((p) => ({
-    item: p.id,
-    weight: p.currentAbility >= HIGH_CA_THRESHOLD ? 3 : 1,
-  }));
-
-  return rng.pickWeighted(weighted);
+  return pickWeightedTarget(
+    rng,
+    candidates.map((player) => player.id),
+    rival,
+    state,
+    rivalIntelligence,
+    decisionSharpness,
+  ) ?? null;
 }

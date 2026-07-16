@@ -3,7 +3,7 @@ import type { WeekProcessingResult } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import { createRNG } from "@/engine/rng";
 import { conductBoardMeeting, conductManagerMeeting } from "@/engine/career";
-import { meetContact } from "@/engine/network/contacts";
+import { isContactAccessSuspended, meetContact } from "@/engine/network/contacts";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import {
   getActiveEquipmentBonuses,
@@ -61,6 +61,11 @@ export function processWeeklyRelationshipActivities(
   for (const contactId of input.result.meetingsHeld) {
     const contact = contacts[contactId];
     if (!contact) continue;
+    const currentDate = {
+      season: input.sourceState.currentSeason,
+      week: input.sourceState.currentWeek,
+    };
+    if (isContactAccessSuspended(contact, currentDate)) continue;
     const rng = createRNG(
       `${input.sourceState.seed}-meeting-${contactId}-${input.sourceState.currentWeek}-${input.sourceState.currentSeason}`,
     );
@@ -86,14 +91,12 @@ export function processWeeklyRelationshipActivities(
       0,
       Math.min(100, (contact.trustLevel ?? contact.relationship) + (result.trustDelta ?? 0)),
     );
-    const interaction = result.interaction
-      ? { ...result.interaction, week: input.sourceState.currentWeek }
-      : undefined;
+    const interaction = result.interaction;
     contacts[contactId] = {
       ...contact,
       relationship,
       trustLevel: trust,
-      lastInteractionWeek: input.sourceState.currentWeek,
+      lastInteractionAt: currentDate,
       interactionHistory: interaction
         ? [...(contact.interactionHistory ?? []), interaction]
         : (contact.interactionHistory ?? []),

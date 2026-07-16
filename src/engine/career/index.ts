@@ -64,6 +64,13 @@ export {
   getIndependentTierRequirements,
   checkIndependentTierAdvancement,
   advanceIndependentTier,
+  attemptCareerTierAdvancement,
+} from './pathChoice';
+export type {
+  CareerTierAdvancementBlocker,
+  CareerTierAdvancementDecision,
+  CareerTierAdvancementResult,
+  CareerTierAdvancementSource,
 } from './pathChoice';
 export {
   ensureLeadershipDelegationTeam,

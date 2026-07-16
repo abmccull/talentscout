@@ -37,8 +37,7 @@ import {
   COURSE_CATALOG,
 } from "@/engine/career/courses";
 import {
-  checkIndependentTierAdvancement,
-  advanceIndependentTier,
+  attemptCareerTierAdvancement,
 } from "@/engine/career";
 import {
   updateMarketTemperature,
@@ -522,12 +521,14 @@ export function processWeeklyEconomy(
       };
     }
 
-    const nextTier = checkIndependentTierAdvancement(nextState.scout, econFinances);
-    if (nextTier) {
-      const { scout: advancedScout, finances: advancedFinances } =
-        advanceIndependentTier(nextState.scout, econFinances, nextTier);
-      nextState = { ...nextState, scout: advancedScout };
-      econFinances = advancedFinances;
+    const advancement = attemptCareerTierAdvancement(
+      nextState.scout,
+      econFinances,
+      "independentMilestone",
+    );
+    if (advancement.decision.eligible) {
+      nextState = { ...nextState, scout: advancement.scout };
+      econFinances = advancement.finances as typeof econFinances;
     }
   }
 

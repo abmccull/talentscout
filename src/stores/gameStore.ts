@@ -707,8 +707,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       regionalKnowledge: initialRegionalKnowledge,
       // Dynamic Board Expectations (F10)
       boardReactions: [],
-      // Gossip actions (A3)
-      gossipItems: [],
       // Board satisfaction tracking (A4)
       satisfactionHistory: [],
       // Interactive observation sessions

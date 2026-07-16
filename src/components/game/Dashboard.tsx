@@ -1142,7 +1142,7 @@ export function Dashboard() {
         {/* ── Insight Meter ─────────────────────────────────────────────────── */}
         {scout.insightState && scout.insightState.points > 0 && (
           <div className="mb-6">
-            <InsightMeter insightState={scout.insightState as any} compact />
+            <InsightMeter insightState={scout.insightState} compact />
           </div>
         )}
 

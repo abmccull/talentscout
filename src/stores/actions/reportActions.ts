@@ -16,7 +16,7 @@ import type {
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
-import { getDifficultyModifiers } from "@/engine/core/difficulty";
+import { scaleReputationChange } from "@/engine/core/difficulty";
 import { generateReportContent, prepareReportSubmission } from "@/engine/reports/reporting";
 import {
   ensureScoutingCaseForReport,
@@ -58,6 +58,10 @@ import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 import { getWorldConditionModifiers } from "@/engine/world/worldConditions";
+import {
+  consumeInsightReportQualityEffect,
+  getPendingInsightReportQualityEffect,
+} from "@/engine/insight/effects";
 
 export function resolveReportClientClubId(
   report: Pick<ScoutReport, "briefId" | "intendedClubId">,
@@ -191,7 +195,16 @@ export function createReportActions(get: GetState, set: SetState) {
       const submitEquipBonuses = gameState.finances?.equipment
         ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
         : undefined;
-      const totalReportQualityBonus = infraEffectsForReport.reportQualityBonus + (submitEquipBonuses?.reportQuality ?? 0);
+      const pendingInsightReportEffect = getPendingInsightReportQualityEffect(
+        gameState.scout.insightState,
+        canonicalPlayerId,
+      );
+      const insightReportQualityBonus = (
+        pendingInsightReportEffect?.bonusPoints ?? 0
+      ) / 100;
+      const totalReportQualityBonus = infraEffectsForReport.reportQualityBonus
+        + (submitEquipBonuses?.reportQuality ?? 0)
+        + insightReportQualityBonus;
       const prepared = prepareReportSubmission({
         draft,
         conviction,
@@ -291,11 +304,12 @@ export function createReportActions(get: GetState, set: SetState) {
             quality,
           })
         : gameState.scout;
-      // Apply difficulty reputation multiplier to the delta
+      // Difficulty is sign-aware: easier modes improve gains and soften
+      // losses, while harder modes do the reverse.
       const repDelta = baseUpdatedScout.reputation - gameState.scout.reputation;
-      const diffMods = getDifficultyModifiers(gameState.difficulty);
       const adjustedRep = Math.max(0, Math.min(100,
-        gameState.scout.reputation + Math.round(repDelta * diffMods.reputationMultiplier),
+        gameState.scout.reputation
+          + scaleReputationChange(repDelta, gameState.difficulty),
       ));
       const updatedScout = {
         ...baseUpdatedScout,
@@ -303,6 +317,14 @@ export function createReportActions(get: GetState, set: SetState) {
         reportsSubmitted: isNewCase
           ? baseUpdatedScout.reportsSubmitted + 1
           : baseUpdatedScout.reportsSubmitted,
+        ...(pendingInsightReportEffect && baseUpdatedScout.insightState
+          ? {
+              insightState: consumeInsightReportQualityEffect(
+                baseUpdatedScout.insightState,
+                pendingInsightReportEffect.id,
+              ),
+            }
+          : {}),
       };
       const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
       let scoredReport: ScoutReport = {
@@ -382,7 +404,7 @@ export function createReportActions(get: GetState, set: SetState) {
           const matchedDirective = directiveMatch
             ? gameState.managerDirectives.find((d) => d.id === directiveMatch.directiveId)
             : undefined;
-          let clubResponse = generateClubResponse(
+          const clubResponse = generateClubResponse(
             responseRng,
             scoredReport,
             responsePlayer,
@@ -396,25 +418,6 @@ export function createReportActions(get: GetState, set: SetState) {
               gameState.leagues[responseClub.leagueId]?.country,
             ).recruitmentScoreAdjustment,
           );
-
-          // First-outcome guarantee: the first report with conviction >= recommend
-          // gets at least genuine committee interest. This is deliberately an
-          // opening in the recruitment process, never a fabricated signing.
-          const GUARANTEED_CONVICTIONS = new Set(["recommend", "strongRecommend", "tablePound"]);
-          const hasNoPriorResponses = gameState.clubResponses.length === 0;
-          const NEGATIVE_RESPONSES = new Set(["ignored", "doesNotFit", "tooExpensive"]);
-          if (
-            hasNoPriorResponses &&
-            GUARANTEED_CONVICTIONS.has(conviction) &&
-            NEGATIVE_RESPONSES.has(clubResponse.response)
-          ) {
-            clubResponse = {
-              ...clubResponse,
-              response: "interested",
-              feedback: `The manager has added ${responsePlayer.firstName} ${responsePlayer.lastName} to the shortlist based on your report. Keep scouting — this is a promising start.`,
-              reputationDelta: Math.max(clubResponse.reputationDelta, 2),
-            };
-          }
 
           updatedClubResponses = [...gameState.clubResponses, clubResponse];
           const reportResponse = new Set(["interested", "trial"]).has(clubResponse.response)

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16T16:51:21.469Z",
+  "generatedAt": "2026-07-16T19:42:31.613Z",
   "evidenceClass": "chromium-emulation-season-boundary-stress-not-physical-low-end-hardware",
   "profile": "coherent-warmed-season-rollover",
   "emulation": {
@@ -18,33 +18,33 @@
   },
   "budgetMs": 15000,
   "measured": {
-    "elapsedMs": 4126.7,
+    "elapsedMs": 5103,
     "weeklyWorker": {
-      "computeMs": 1337.0999999940395,
+      "computeMs": 1778.699999988079,
       "changedFieldCount": 46,
       "changedEntryCount": 10408,
       "totalFieldCount": 98,
-      "responseBytes": 6775738,
+      "responseBytes": 6775734,
       "phaseTimings": [
         {
           "phase": "activity-resolution",
-          "elapsedMs": 70.2999999821186
+          "elapsedMs": 88.09999999403954
         },
         {
           "phase": "world-systems",
-          "elapsedMs": 27.400000005960464
+          "elapsedMs": 39.30000001192093
         },
         {
           "phase": "core-world-tick",
-          "elapsedMs": 1041.7000000178814
+          "elapsedMs": 1405.300000011921
         },
         {
           "phase": "post-tick-accountability",
-          "elapsedMs": 0.8999999761581421
+          "elapsedMs": 1
         },
         {
           "phase": "season-rollover",
-          "elapsedMs": 184
+          "elapsedMs": 228.59999999403954
         },
         {
           "phase": "finalize",
@@ -94,7 +94,7 @@
         }
       ],
       "route": "worker",
-      "roundTripMs": 3267.699999988079
+      "roundTripMs": 4130.5999999940395
     }
   },
   "simulationContext": {

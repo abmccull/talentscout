@@ -32,7 +32,10 @@ import type {
   ScoutReport,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
-import { rollActivityQuality } from "@/engine/core/activityQuality";
+import {
+  rollActivityQuality,
+  type ActivityQualityResult,
+} from "@/engine/core/activityQuality";
 import { calculateAccumulation } from "@/engine/insight/insight";
 import { getTournamentActivities } from "@/engine/youth/tournaments";
 import { getUnlockedPerks } from "@/engine/specializations/perks";
@@ -337,8 +340,20 @@ export const ACTIVITY_ATTRIBUTE_XP: Partial<Record<ActivityType, Partial<Record<
 
 const TOTAL_WEEK_SLOTS = 7;
 const MAX_FATIGUE = 100;
-const FORCED_REST_FATIGUE_THRESHOLD = 90;
+export const FORCED_REST_FATIGUE_THRESHOLD = 85;
 const ACCURACY_PENALTY_FATIGUE_THRESHOLD = 70;
+export const CONSECUTIVE_REST_WEEKS_METRIC = "calendar:consecutive-rest-weeks";
+export const REFRESHED_XP_MULTIPLIER = 1.1;
+
+const REPETITION_XP_MULTIPLIERS = [1, 0.75, 0.5] as const;
+const REPETITION_XP_FLOOR = 0.35;
+
+export interface WeekActivityXpOptions {
+  /** Quality multiplier resolved for each stable scheduled activity instance. */
+  qualityMultiplierByInstance?: ReadonlyMap<string, number>;
+  /** Two complete recovery weeks grant a modest learning bonus. */
+  refreshed?: boolean;
+}
 
 export interface ScheduledActivityInstance {
   /** Stable key for this scheduled instance (instanceId-backed or legacy chunk key). */
@@ -442,6 +457,168 @@ export function getScheduledActivityInstances(
   }
 
   return [...byKey.values()].sort((a, b) => a.dayIndex - b.dayIndex);
+}
+
+function activityRepetitionKey(activity: Activity): string {
+  return [
+    activity.type,
+    activity.targetId ?? "untargeted",
+    activity.destinationClubId ?? "no-destination",
+    activity.briefId ?? "no-brief",
+  ].join("|");
+}
+
+/**
+ * Repeating the same one-day task remains useful, but each repeat teaches less.
+ * Distinct targets and briefs keep their full value so normal casework is not
+ * punished for sharing an activity type.
+ */
+export function getActivityRepetitionXpMultiplier(repetitionIndex: number): number {
+  return REPETITION_XP_MULTIPLIERS[repetitionIndex] ?? REPETITION_XP_FLOOR;
+}
+
+/** Resolve XP per scheduled instance before combining skill totals. */
+export function resolveWeekActivityXp(
+  schedule: WeekSchedule,
+  scout: Scout,
+  options: WeekActivityXpOptions = {},
+): Pick<WeekProcessingResult, "skillXpGained" | "attributeXpGained"> {
+  const skillTotals: Partial<Record<ScoutSkill, number>> = {};
+  const attributeTotals: Partial<Record<ScoutAttribute, number>> = {};
+  const repetitionCounts = new Map<string, number>();
+  const fatigueMultiplier = scout.fatigue >= ACCURACY_PENALTY_FATIGUE_THRESHOLD
+    ? 0.7
+    : 1;
+  const refreshedMultiplier = options.refreshed ? REFRESHED_XP_MULTIPLIER : 1;
+
+  for (const instance of getScheduledActivityInstances(schedule)) {
+    const { activity } = instance;
+    const skillXp = ACTIVITY_SKILL_XP[activity.type];
+    const attributeXp = ACTIVITY_ATTRIBUTE_XP[activity.type];
+    if (!skillXp && !attributeXp) continue;
+
+    let repetitionMultiplier = 1;
+    if (activity.slots === 1) {
+      const repetitionKey = activityRepetitionKey(activity);
+      const repetitionIndex = repetitionCounts.get(repetitionKey) ?? 0;
+      repetitionCounts.set(repetitionKey, repetitionIndex + 1);
+      repetitionMultiplier = getActivityRepetitionXpMultiplier(repetitionIndex);
+    }
+
+    const qualityMultiplier = Math.max(
+      0,
+      options.qualityMultiplierByInstance?.get(instance.key) ?? 1,
+    );
+    const totalMultiplier = qualityMultiplier
+      * repetitionMultiplier
+      * fatigueMultiplier
+      * refreshedMultiplier;
+
+    if (skillXp) {
+      for (const [skill, xp] of Object.entries(skillXp) as [ScoutSkill, number][]) {
+        skillTotals[skill] = (skillTotals[skill] ?? 0) + xp * totalMultiplier;
+      }
+    }
+    if (attributeXp) {
+      for (const [attribute, xp] of Object.entries(attributeXp) as [ScoutAttribute, number][]) {
+        attributeTotals[attribute] = (attributeTotals[attribute] ?? 0) + xp * totalMultiplier;
+      }
+    }
+  }
+
+  const skillXpGained = Object.fromEntries(
+    Object.entries(skillTotals).map(([skill, xp]) => [skill, Math.round(xp ?? 0)]),
+  ) as Partial<Record<ScoutSkill, number>>;
+  const attributeXpGained = Object.fromEntries(
+    Object.entries(attributeTotals).map(([attribute, xp]) => [attribute, Math.round(xp ?? 0)]),
+  ) as Partial<Record<ScoutAttribute, number>>;
+
+  return { skillXpGained, attributeXpGained };
+}
+
+/** Cap tired work at a good outcome while keeping the roll deterministic. */
+export function capActivityQualityForFatigue(
+  result: ActivityQualityResult,
+  fatigue: number,
+): ActivityQualityResult {
+  if (
+    fatigue < ACCURACY_PENALTY_FATIGUE_THRESHOLD
+    || result.multiplier <= 1
+  ) {
+    return result;
+  }
+  return {
+    ...result,
+    tier: "good",
+    multiplier: 1,
+    discoveryModifier: Math.min(0, result.discoveryModifier),
+    narrative: "Fatigue limited the session to a solid standard; the sharper details did not hold up.",
+  };
+}
+
+export function isForcedRestRequired(fatigue: number): boolean {
+  return fatigue >= FORCED_REST_FATIGUE_THRESHOLD;
+}
+
+/** Placement authority used by every player-facing scheduling action. */
+export function canScheduleActivity(
+  schedule: WeekSchedule,
+  activity: Activity,
+  dayIndex: number,
+  scout: Pick<Scout, "fatigue">,
+): boolean {
+  if (isForcedRestRequired(scout.fatigue) && activity.type !== "rest") {
+    return false;
+  }
+  return canAddActivity(schedule, activity, dayIndex);
+}
+
+/**
+ * Fail closed at simulation time so stale saves or late fatigue changes cannot
+ * execute work during a mandatory recovery week.
+ */
+export function enforceForcedRestSchedule(
+  schedule: WeekSchedule,
+  fatigue: number,
+): WeekSchedule {
+  if (!isForcedRestRequired(fatigue)) return schedule;
+  if (
+    !schedule.completed
+    && schedule.activities.length === TOTAL_WEEK_SLOTS
+    && schedule.activities.every((activity) => activity?.type === "rest")
+  ) {
+    return schedule;
+  }
+  return {
+    ...schedule,
+    completed: false,
+    activities: Array.from({ length: TOTAL_WEEK_SLOTS }, (_, dayIndex) => ({
+      instanceId: `forced-rest-s${schedule.season}-w${schedule.week}-d${dayIndex}`,
+      type: "rest" as const,
+      slots: 1,
+      description: "Mandatory recovery day",
+    })),
+  };
+}
+
+export function readConsecutiveRestWeeks(
+  metrics: Record<string, number> | undefined,
+): number {
+  const value = metrics?.[CONSECUTIVE_REST_WEEKS_METRIC] ?? 0;
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+/** Empty weeks and rest-only weeks are both deliberate full recovery weeks. */
+export function isRecoveryWeek(schedule: WeekSchedule): boolean {
+  return getScheduledActivityInstances(schedule)
+    .every(({ activity }) => activity.type === "rest");
+}
+
+export function getNextConsecutiveRestWeeks(
+  schedule: WeekSchedule,
+  current: number,
+): number {
+  return isRecoveryWeek(schedule) ? Math.min(52, Math.max(0, current) + 1) : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -619,7 +796,7 @@ function getBestAbilityReading(
  *   (checked via unlockedPerks array)
  * - trainingVisit: always available
  * - watchVideo / writeReport / study / rest / travel: always available
- * - If fatigue > FORCED_REST_FATIGUE_THRESHOLD: only rest is available
+ * - If fatigue reaches FORCED_REST_FATIGUE_THRESHOLD: only rest is available
  *
  * Youth scouting venue gating:
  * - schoolMatch: always available
@@ -657,7 +834,7 @@ export function getAvailableActivities(
   );
 
   // Forced rest when exhausted
-  if (scout.fatigue > FORCED_REST_FATIGUE_THRESHOLD) {
+  if (isForcedRestRequired(scout.fatigue)) {
     activities.push({
       type: "rest",
       slots: 1,
@@ -1184,8 +1361,10 @@ export function processCompletedWeek(
   }
 
   const instances = getScheduledActivityInstances(schedule);
-  const skillXpGained: Partial<Record<ScoutSkill, number>> = {};
-  const attributeXpGained: Partial<Record<ScoutAttribute, number>> = {};
+  const { skillXpGained, attributeXpGained } = resolveWeekActivityXp(
+    schedule,
+    scout,
+  );
   const matchesAttended: string[] = [];
   const reportsWritten: string[] = [];
   const meetingsHeld: string[] = [];
@@ -1256,22 +1435,6 @@ export function processCompletedWeek(
     }
 
     fatigueChange += actualFatigueCost;
-
-    // Skill XP
-    const skillXp = ACTIVITY_SKILL_XP[activity.type];
-    if (skillXp) {
-      for (const [skill, xp] of Object.entries(skillXp) as [ScoutSkill, number][]) {
-        skillXpGained[skill] = (skillXpGained[skill] ?? 0) + xp;
-      }
-    }
-
-    // Attribute XP
-    const attrXp = ACTIVITY_ATTRIBUTE_XP[activity.type];
-    if (attrXp) {
-      for (const [attr, xp] of Object.entries(attrXp) as [ScoutAttribute, number][]) {
-        attributeXpGained[attr] = (attributeXpGained[attr] ?? 0) + xp;
-      }
-    }
 
     // Track what happened
     switch (activity.type) {
@@ -1428,19 +1591,6 @@ export function processCompletedWeek(
       const qualityResult = rollActivityQuality(rng, activity.type, scout, scout.careerPath);
       const ipResult = calculateAccumulation(ipSource, qualityResult.tier, scout);
       totalInsightPoints += ipResult.totalEarned;
-    }
-  }
-
-  // High fatigue suppresses skill XP gains (bad conditions, tired scouts).
-  // We check scout.fatigue (fatigue at the START of the week) so that scouts
-  // are not penalised for fatigue they haven't accumulated yet.
-  if (scout.fatigue > ACCURACY_PENALTY_FATIGUE_THRESHOLD) {
-    // Reduce all XP by 30 % when exhausted
-    for (const key of Object.keys(skillXpGained) as ScoutSkill[]) {
-      skillXpGained[key] = Math.round((skillXpGained[key] ?? 0) * 0.7);
-    }
-    for (const key of Object.keys(attributeXpGained) as ScoutAttribute[]) {
-      attributeXpGained[key] = Math.round((attributeXpGained[key] ?? 0) * 0.7);
     }
   }
 
@@ -1648,7 +1798,7 @@ export function evaluateFatigueConsequences(
       status: "burnout_risk",
     };
   }
-  if (fatigue >= 85) {
+  if (fatigue >= FORCED_REST_FATIGUE_THRESHOLD) {
     return {
       forcedRest: true,
       qualityCapped: true,

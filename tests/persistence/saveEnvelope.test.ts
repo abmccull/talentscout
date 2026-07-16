@@ -77,6 +77,84 @@ describe("save envelope migrations", () => {
     expect(migratedAgain).toEqual(migrated);
   });
 
+  it("migrates legacy network weeks and actionable gossip into contact queues", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const migrated = migrateSaveState({
+      ...legacy.state,
+      currentSeason: 2,
+      currentWeek: 2,
+      contacts: {
+        "contact-legacy": {
+          id: "contact-legacy",
+          name: "Marta Silva",
+          type: "academyCoach",
+          organization: "Academia Norte",
+          relationship: 70,
+          reliability: 80,
+          knownPlayerIds: ["player-legacy"],
+          lastInteractionWeek: 38,
+          interactionHistory: [
+            { week: 37, type: "meeting", trustDelta: 2 },
+          ],
+          gossipQueue: [
+            {
+              id: "contact-gossip",
+              type: "youthProspect",
+              playerId: "player-legacy",
+              reliability: 0.8,
+              revealedWeek: 36,
+              expiresWeek: 42,
+              content: "A well-placed source rates this prospect.",
+            },
+          ],
+          exclusiveWindow: {
+            playerId: "player-legacy",
+            expiresWeek: 40,
+          },
+        },
+      },
+      gossipItems: [
+        {
+          id: "actionable-gossip",
+          contactId: "contact-legacy",
+          subjectPlayerId: "player-legacy",
+          gossipType: "youthProspect",
+          description: "Act on this lead.",
+          week: 30,
+          season: 1,
+          dismissed: false,
+        },
+      ],
+    });
+
+    const migratedContact = migrated.contacts["contact-legacy"];
+    expect(migratedContact.lastInteractionAt).toEqual({ season: 1, week: 38 });
+    expect(migratedContact.interactionHistory).toEqual([
+      {
+        occurredAt: { season: 1, week: 37 },
+        type: "meeting",
+        trustDelta: 2,
+      },
+    ]);
+    expect(migratedContact.exclusiveWindow?.expiresAt).toEqual({ season: 2, week: 2 });
+    expect(migratedContact.gossipQueue).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "contact-gossip",
+        claimStatus: "ambiguous",
+        revealedAt: { season: 1, week: 36 },
+        expiresAt: { season: 2, week: 4 },
+      }),
+      expect.objectContaining({
+        id: "actionable-gossip",
+        playerId: "player-legacy",
+      }),
+    ]));
+    expect(migrated).not.toHaveProperty("gossipItems");
+    expect(migrateSaveState(migrated)).toEqual(migrated);
+  });
+
   it("normalizes required runtime collections at the canonical boundary", () => {
     const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
       state: Record<string, unknown>;
@@ -91,7 +169,6 @@ describe("save envelope migrations", () => {
     expect(migrated).toMatchObject({
       activeStorylines: [],
       eventChains: [],
-      gossipItems: [],
       satisfactionHistory: [],
       freeAgentNegotiations: [],
       freeAgentPool: { agents: [], lastRefreshSeason: 2 },

@@ -22,6 +22,10 @@ import {
   updateAnalystMorale,
 } from "@/engine/data";
 import { produceWeeklyPlayerObservation } from "./weeklyObservationProducer";
+import {
+  consumeInsightQueryAccuracyEffect,
+  getPendingInsightQueryAccuracyEffect,
+} from "@/engine/insight/effects";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -81,19 +85,25 @@ export function processWeeklyDataObservationActivities(
     const dbRng = createRNG(
       `${gameState.seed}-dbquery-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
+    const pendingQueryInsight = getPendingInsightQueryAccuracyEffect(
+      stateWithScheduleApplied.scout.insightState,
+    );
     let queryProfileMod = choiceProfileMod("databaseQuery") + (dbDataAccBonus > 0 ? Math.round(dbDataAccBonus * 5) : 0);
     const queryAnomalyMod = choiceAnomalyMod("databaseQuery");
     const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
     if (leagueIds.length > 0) {
-      const targetLeagueId = dbRng.pickWeighted(
-        leagueIds.map((leagueId) => ({
-          item: leagueId,
-          weight: deriveRegionalPresence(
-            stateWithScheduleApplied,
-            stateWithScheduleApplied.leagues[leagueId]?.country ?? "",
-          ).effects.opportunityMultiplier || 0.25,
-        })),
-      );
+      const targetLeagueId = pendingQueryInsight?.leagueId
+        && stateWithScheduleApplied.leagues[pendingQueryInsight.leagueId]
+        ? pendingQueryInsight.leagueId
+        : dbRng.pickWeighted(
+            leagueIds.map((leagueId) => ({
+              item: leagueId,
+              weight: deriveRegionalPresence(
+                stateWithScheduleApplied,
+                stateWithScheduleApplied.leagues[leagueId]?.country ?? "",
+              ).effects.opportunityMultiplier || 0.25,
+            })),
+          );
       const targetLeague = stateWithScheduleApplied.leagues[targetLeagueId];
       if (targetLeague) {
         const dataPresence = deriveRegionalPresence(
@@ -109,6 +119,7 @@ export function processWeeklyDataObservationActivities(
           {},
           stateWithScheduleApplied.currentSeason,
           stateWithScheduleApplied.currentWeek,
+          { accuracyBonus: pendingQueryInsight?.accuracyBonus },
         );
         let effectiveProfiles = [...queryResult.profiles];
         let effectivePlayerIds = [...queryResult.playerIds];
@@ -150,7 +161,10 @@ export function processWeeklyDataObservationActivities(
               countryId: dataPresence.countryId,
               confidence: Math.min(
                 1,
-                0.5 + dataPresence.effects.dataConfidenceBonus + dbDataAccBonus,
+                0.5
+                  + dataPresence.effects.dataConfidenceBonus
+                  + dbDataAccBonus
+                  + (pendingQueryInsight?.accuracyBonus ?? 0) * 0.5,
               ),
               accessTier: dataPresence.accessTier,
               explanation: dataPresence.summary,
@@ -185,6 +199,15 @@ export function processWeeklyDataObservationActivities(
           ...stateWithScheduleApplied,
           statisticalProfiles: updatedProfiles,
           anomalyFlags: nextAnomalyFlags,
+          scout: pendingQueryInsight && stateWithScheduleApplied.scout.insightState
+            ? {
+                ...stateWithScheduleApplied.scout,
+                insightState: consumeInsightQueryAccuracyEffect(
+                  stateWithScheduleApplied.scout.insightState,
+                  pendingQueryInsight.id,
+                ),
+              }
+            : stateWithScheduleApplied.scout,
         };
         const playerNames = effectivePlayerIds
           .slice(0, 5)
@@ -199,7 +222,7 @@ export function processWeeklyDataObservationActivities(
           season: stateWithScheduleApplied.currentSeason,
           type: "feedback" as const,
           title: `Database Query: ${targetLeague.name}`,
-          body: `Your database query returned ${effectivePlayerIds.length} player${effectivePlayerIds.length !== 1 ? "s" : ""} in ${targetLeague.name}. Statistical profiles generated. Key finds: ${playerNames || "none"}.${queryAnomalyMod > 0 ? ` Additional anomaly flags: +${Math.min(queryAnomalyMod, effectivePlayerIds.length)}.` : ""}`,
+          body: `Your database query returned ${effectivePlayerIds.length} player${effectivePlayerIds.length !== 1 ? "s" : ""} in ${targetLeague.name}. Statistical profiles generated. Key finds: ${playerNames || "none"}.${pendingQueryInsight ? ` Insight calibration removed ${Math.round(pendingQueryInsight.accuracyBonus * 100)}% of model noise.` : ""}${queryAnomalyMod > 0 ? ` Additional anomaly flags: +${Math.min(queryAnomalyMod, effectivePlayerIds.length)}.` : ""}`,
           read: false,
           actionRequired: false,
         });

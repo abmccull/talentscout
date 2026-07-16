@@ -53,7 +53,10 @@ import {
   createWorldConditionArcState,
   reconcileWorldConditionArcDecisions,
 } from "@/engine/world/index";
-import { addActivity, canAddActivity } from "@/engine/core/calendar";
+import {
+  addActivity,
+  canScheduleActivity,
+} from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import {
   resolveEventChoice,
@@ -81,6 +84,10 @@ import {
   getLifecycleWorld,
   withLifecycleWorld,
 } from "@/engine/world/playerLifecycle";
+import {
+  applyGossipAction,
+  getActionableGossipItems,
+} from "@/engine/network/gossip";
 import {
   activateInternationalAssignment,
   ensureInternationalAssignmentLiaison,
@@ -725,27 +732,23 @@ export function createProgressionActions(get: GetState, set: SetState) {
     handleGossipAction: (gossipId: string, action: GossipAction) => {
       const { gameState } = get();
       if (!gameState) return;
-      const gossipIndex = gameState.gossipItems.findIndex((g) => g.id === gossipId);
-      if (gossipIndex === -1) return;
-      const gossip = gameState.gossipItems[gossipIndex];
-      const updatedGossip: ActionableGossipItem = {
-        ...gossip,
-        actionTaken: action,
-        dismissed: action === "dismiss",
-      };
-      const updatedGossipItems = [...gameState.gossipItems];
-      updatedGossipItems[gossipIndex] = updatedGossip;
+      const result = applyGossipAction(gameState.contacts, gossipId, action);
+      if (!result) return;
 
       // If the scout chose to "act on" the gossip, add the subject to the watchlist
       let updatedWatchlist = gameState.watchlist;
-      if (action === "actOn" && gossip.subjectPlayerId && !gameState.watchlist.includes(gossip.subjectPlayerId)) {
-        updatedWatchlist = [...gameState.watchlist, gossip.subjectPlayerId];
+      if (
+        action === "actOn"
+        && result.item.playerId
+        && !gameState.watchlist.includes(result.item.playerId)
+      ) {
+        updatedWatchlist = [...gameState.watchlist, result.item.playerId];
       }
 
       set({
         gameState: {
           ...gameState,
-          gossipItems: updatedGossipItems,
+          contacts: result.updatedContacts,
           watchlist: updatedWatchlist,
         },
       });
@@ -754,7 +757,9 @@ export function createProgressionActions(get: GetState, set: SetState) {
     getActiveGossip: (): ActionableGossipItem[] => {
       const { gameState } = get();
       if (!gameState) return [];
-      return gameState.gossipItems.filter((g) => !g.dismissed && !g.actionTaken);
+      return getActionableGossipItems(gameState.contacts).filter(
+        (gossip) => !gossip.dismissed && !gossip.actionTaken,
+      );
     },
 
     // ── NPC Scout Management ──────────────────────────────────────────────────
@@ -885,7 +890,12 @@ export function createProgressionActions(get: GetState, set: SetState) {
         description: `Travel to ${country}`,
       };
       const travelStartIndex = gameState.schedule.activities.findIndex((_, dayIndex) =>
-        canAddActivity(gameState.schedule, travelActivity, dayIndex),
+        canScheduleActivity(
+          gameState.schedule,
+          travelActivity,
+          dayIndex,
+          gameState.scout,
+        ),
       );
       if (travelStartIndex < 0) return false;
       const updatedSchedule = addActivity(

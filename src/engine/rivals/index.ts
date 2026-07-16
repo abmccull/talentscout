@@ -1,6 +1,5 @@
 export {
   generateRivalScouts,
-  processRivalWeek,
   processRivalScoutWeek,
   getRivalThreatLevel,
   getSharedTargets,
@@ -13,7 +12,6 @@ export {
 } from "./rivalScouts";
 
 export type {
-  RivalWeekResult,
   RivalScoutWeekResult,
   PoachBidResult,
   PoachBidEligibility,

@@ -430,6 +430,94 @@ describe("report submission invariants", () => {
     expect(afterSale.scoutingCases[storedReport.caseId!].deliveryIds).toEqual([delivery.id]);
   });
 
+  it("preserves the club's first negative response instead of manufacturing interest", () => {
+    const player = makePlayer();
+    const scout = {
+      ...makeScout(),
+      primarySpecialization: "firstTeam" as const,
+      careerPath: "club" as const,
+      currentClubId: "club-home",
+    };
+    const observation = withDate(observePlayerLight(
+      new RNG("first-team-negative-response-observation"),
+      player,
+      scout,
+      "liveMatch",
+      [],
+    ), 0);
+    const draft = generateReportContent(player, [observation], scout);
+    const gameState = {
+      seed: "first-team-negative-response",
+      currentWeek: 1,
+      currentSeason: 1,
+      difficulty: "normal",
+      scout,
+      players: { [player.id]: player },
+      unsignedYouth: {},
+      retiredPlayers: {},
+      observations: { [observation.id]: observation },
+      reports: {},
+      scoutingCases: {},
+      discoveryRecords: [],
+      clubResponses: [],
+      systemFitCache: {},
+      predictions: [],
+      inbox: [],
+      clubs: {
+        "club-home": {
+          id: "club-home",
+          name: "Home United",
+          shortName: "HOM",
+          leagueId: "league-home",
+          scoutingPhilosophy: "academyFirst",
+          playerIds: [],
+        },
+      },
+      leagues: {
+        "league-home": { id: "league-home", country: "England" },
+      },
+      managerProfiles: {
+        "club-home": {
+          clubId: "club-home",
+          managerName: "Case Manager",
+          preference: "balanced",
+          reportInfluence: 0.5,
+          preferredFormation: "4-3-3",
+        },
+      },
+      managerDirectives: [],
+      youthRecruitmentBriefs: {},
+      scoutingInfrastructure: {
+        dataSubscription: "none",
+        travelBudget: "economy",
+        officeEquipment: "basic",
+        investmentCosts: { weekly: 0, oneTime: 0 },
+      },
+    } as unknown as GameState;
+    let store = {
+      gameState,
+      selectedPlayerId: player.id,
+      currentScreen: "reportWriter",
+      pendingListingReportId: null,
+    } as unknown as GameStoreState;
+    const get = (() => store) as GetState;
+    const set = ((partial) => {
+      const update = typeof partial === "function" ? partial(store) : partial;
+      store = { ...store, ...update };
+    }) as SetState;
+
+    createReportActions(get, set).submitReport(
+      "recommend",
+      "A recommendation submitted without an active manager directive.",
+      draft.suggestedStrengths.slice(0, 3),
+      draft.suggestedWeaknesses.slice(0, 2),
+    );
+
+    expect(store.gameState?.clubResponses).toHaveLength(1);
+    expect(store.gameState?.clubResponses[0].response).toBe("ignored");
+    expect(Object.values(store.gameState?.reports ?? {})[0].clubResponse).toBe("ignored");
+  });
+
   it("requires new evidence for revisions and never turns revisions into report-volume rewards", () => {
     const player = makePlayer();
     const scout = makeScout();

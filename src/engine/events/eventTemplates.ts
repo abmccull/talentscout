@@ -86,7 +86,6 @@ export interface EventTemplate {
 function accountableReports(state: GameState) {
   return selectLatestReportsByCase(Object.values(state.reports));
 }
-
 function firstReportPlayerName(state: GameState): string {
   const report = accountableReports(state)[0];
   if (!report) return "the player";
@@ -208,6 +207,18 @@ function firstAlumniPlayerName(state: GameState): string {
   return `${player.firstName} ${player.lastName}`;
 }
 
+function buildManagerDismissalDescription(
+  clubName: string,
+  detail: string,
+): string {
+  return (
+    `The manager at ${clubName} has been dismissed and the club has moved ` +
+    `immediately into transition. ${detail} Incoming coaches often review ` +
+    `recruitment priorities quickly, so your current recommendations may be ` +
+    `reframed before the next football decision is made.`
+  );
+}
+
 // =============================================================================
 // Template definitions — original 8
 // =============================================================================
@@ -238,12 +249,9 @@ const managerFiredTemplate: EventTemplate = {
   titleTemplate: "Manager Sacked",
   descriptionTemplate: (ctx) => {
     const club = ctx.clubName ?? "your club";
-    return (
-      `Breaking news: the manager at ${club} has been relieved of their duties ` +
-      `following a run of poor results. The board is searching for a replacement ` +
-      `and the scouting department faces an uncertain few weeks. Incoming managers ` +
-      `often conduct a full review of existing scouting priorities — your current ` +
-      `assignments may be reconsidered. Stay alert for further developments.`
+    return buildManagerDismissalDescription(
+      club,
+      "The dismissal follows a poor run of results and the board is already sounding out replacements.",
     );
   },
   prerequisites: (state) =>
@@ -533,11 +541,11 @@ const budgetCutTemplate: EventTemplate = {
   descriptionTemplate: (ctx) => {
     const club = ctx.clubName ?? "the club";
     return (
-      `Finance have sent word: the scouting department's travel and expenses ` +
-      `budget has been reduced as part of wider belt-tightening at ${club}. ` +
-      `Fewer away trips, lower mileage claims, and a push toward video analysis ` +
-      `over live attendance are the immediate consequences. For a scout who ` +
-      `believes nothing replaces being in the stands, it's a frustrating ` +
+      `Finance have confirmed a tighter operating budget at ${club}, and the ` +
+      `scouting department's travel and expenses envelope has been cut with it. ` +
+      `Fewer away trips, lower mileage claims, and a harder push toward video ` +
+      `analysis over live attendance are now confirmed consequences. For a scout ` +
+      `who believes nothing replaces being in the stands, it's a frustrating ` +
       `constraint — but working within limits is itself a form of mastery.`
     );
   },
@@ -599,13 +607,9 @@ const managerSackedTemplate: EventTemplate = {
   titleTemplate: "Club Manager Dismissed",
   descriptionTemplate: (ctx) => {
     const club = ctx.clubName ?? "your club";
-    return (
-      `It's been confirmed: the manager at ${club} has been dismissed with ` +
-      `immediate effect following a boardroom vote of no confidence. The timing ` +
-      `is brutal — mid-season, with several of your recommendations still under ` +
-      `active review. A caretaker has taken temporary charge, and an external ` +
-      `appointment is expected within weeks. Every incoming manager brings their ` +
-      `own ideas about what makes a scouting department valuable. Brace yourself.`
+    return buildManagerDismissalDescription(
+      club,
+      "A boardroom vote of no confidence forced the change in mid-season, with a caretaker now holding the line until an appointment is made.",
     );
   },
   prerequisites: (state) =>
@@ -622,11 +626,11 @@ const clubFinancialTroubleTemplate: EventTemplate = {
     return (
       `Concerning reports have emerged about the financial position of ` +
       `${club}. Outstanding creditor payments and wage deferrals are now ` +
-      `being discussed in the press, and the transfer budget for the coming ` +
-      `window is understood to be near zero. Your scouting work continues, but ` +
-      `the realistic prospect of any recommendation being acted upon has ` +
-      `dimmed considerably. Some scouts in this situation begin quietly ` +
-      `exploring their options elsewhere.`
+      `being discussed in the press, and directors have already moved to tighter ` +
+      `club spending and a reduced scouting budget while the situation is assessed. ` +
+      `Recruitment chatter around the club has cooled, even if the loudest transfer ` +
+      `rumours remain only rumours for now. Some scouts in this situation begin ` +
+      `quietly exploring their options elsewhere.`
     );
   },
   prerequisites: (state) => state.scout.currentClubId !== undefined,
@@ -971,15 +975,14 @@ const contactRetirementTemplate: EventTemplate = {
 
 const transferRuleChangeTemplate: EventTemplate = {
   type: "transferRuleChange",
-  titleTemplate: "New Transfer Regulations Announced",
+  titleTemplate: "Transfer Rule Changes Under Discussion",
   descriptionTemplate: (_ctx) =>
-    "Football's governing bodies have announced significant amendments to " +
-    "transfer regulations, tightening rules around youth player mobility and " +
-    "introducing new disclosure requirements for agent fees. The changes will " +
-    "reshape how clubs approach the market, with particular implications for " +
-    "the kind of cross-border youth scouting that has defined the modern game. " +
-    "Scouts who adapt their methods quickly will find opportunity where others " +
-    "see only bureaucratic headache.",
+    "Football's governing bodies are circulating draft amendments to " +
+    "transfer regulations, including tighter rules around youth player mobility " +
+    "and new disclosure requirements for agent fees. Nothing has been enacted " +
+    "yet, but clubs are already gaming out how those proposals could reshape " +
+    "cross-border scouting. Scouts who read the direction of travel early may " +
+    "find opportunity where others see only bureaucratic headache.",
   prerequisites: (state) => state.currentSeason >= 2,
   choices: undefined,
 };
@@ -1059,14 +1062,12 @@ const financialFairPlayImpactTemplate: EventTemplate = {
   type: "financialFairPlayImpact",
   titleTemplate: "Financial Fair Play Reshapes Transfer Market",
   descriptionTemplate: (_ctx) =>
-    "Stricter enforcement of financial sustainability rules has sent a " +
-    "tremor through the transfer market. Several clubs that were actively " +
-    "pursuing your recommended targets have quietly withdrawn from negotiations, " +
-    "citing compliance concerns. The domino effect is already visible: " +
-    "valuations are softening, contract extensions are being prioritised over " +
-    "acquisitions, and the appetite for unproven but high-potential players — " +
-    "exactly the kind you specialise in identifying — is actually increasing " +
-    "among the clubs with clean balance sheets.",
+    "Executives and trade reporters are increasingly framing the market around " +
+    "tougher financial sustainability enforcement. No universal freeze has been " +
+    "confirmed, but the tone of negotiations is shifting: valuations are being " +
+    "questioned harder, some clubs are talking up contract extensions over new " +
+    "fees, and balance-sheet discipline is becoming part of every scouting " +
+    "conversation. If that mood hardens into policy, adaptable scouts will feel it first.",
   prerequisites: (state) => state.currentSeason >= 2,
   choices: undefined,
 };

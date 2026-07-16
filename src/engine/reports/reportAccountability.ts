@@ -1,4 +1,17 @@
-import type { Observation, ScoutReport } from "@/engine/core/types";
+import type {
+  ConvictionLevel,
+  Observation,
+  ScoutReport,
+} from "@/engine/core/types";
+
+export const REPORT_VALIDATION_HORIZON_SEASONS = 2;
+
+const CONVICTION_EXPECTATION: Record<ConvictionLevel, number> = {
+  note: 35,
+  recommend: 55,
+  strongRecommend: 75,
+  tablePound: 90,
+};
 
 function compareReportDate(left: ScoutReport, right: ScoutReport): number {
   return left.submittedSeason - right.submittedSeason
@@ -192,4 +205,89 @@ export function groupReportRevisionsByCase(
       };
     })
     .sort((left, right) => left.caseKey.localeCompare(right.caseKey));
+}
+
+/**
+ * A report can support a retrospective outcome review when it contains an
+ * evidence-backed assessment. This deliberately includes monitor/no-deal
+ * cases: a transfer is an outcome, not a prerequisite for accountability.
+ */
+export function isReportOutcomeValidatable(report: ScoutReport): boolean {
+  return report.attributeAssessments.length > 0;
+}
+
+/**
+ * Select each scout-authored case once it has accumulated the standard amount
+ * of career evidence. Legacy reports without assessable evidence stay pending
+ * rather than receiving a fabricated zero rating.
+ */
+export function selectMatureReportCasesForValidation(
+  reports: Iterable<ScoutReport>,
+  completedSeason: number,
+  scoutId?: string,
+): ReportRevisionCase[] {
+  return groupReportRevisionsByCase(reports).filter((reportCase) => {
+    const report = reportCase.latestReport;
+    return report.postTransferRating === undefined
+      && (scoutId === undefined || report.scoutId === scoutId)
+      && isReportOutcomeValidatable(report)
+      && completedSeason - report.submittedSeason >= REPORT_VALIDATION_HORIZON_SEASONS;
+  });
+}
+
+export interface ReportAccountabilityMetrics {
+  validatedCases: number;
+  averageAccuracy?: number;
+  averageCalibration?: number;
+  averageDecisionValue?: number;
+}
+
+function average(values: number[]): number {
+  return values.length === 0
+    ? 0
+    : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function round(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * Summarize mature judgment without exposing hidden player truth. Accuracy is
+ * the persisted outcome rating; decision value also rewards matching the
+ * report's stated conviction to that eventual outcome.
+ */
+export function calculateReportAccountabilityMetrics(
+  reports: Iterable<ScoutReport>,
+  scoutId: string,
+): ReportAccountabilityMetrics {
+  const validatedReports = selectLatestReportsByCase(reports)
+    .filter((report) =>
+      report.scoutId === scoutId
+      && report.postTransferRating !== undefined
+    );
+  if (validatedReports.length === 0) return { validatedCases: 0 };
+
+  const accuracy = validatedReports.map(
+    (report) => report.postTransferRating as number,
+  );
+  const calibration = validatedReports.map((report) =>
+    Math.max(
+      0,
+      100 - Math.abs(
+        CONVICTION_EXPECTATION[report.conviction]
+          - (report.postTransferRating as number),
+      ),
+    )
+  );
+  const decisionValue = accuracy.map(
+    (rating, index) => rating * 0.65 + calibration[index] * 0.35,
+  );
+
+  return {
+    validatedCases: validatedReports.length,
+    averageAccuracy: round(average(accuracy)),
+    averageCalibration: round(average(calibration)),
+    averageDecisionValue: round(average(decisionValue)),
+  };
 }

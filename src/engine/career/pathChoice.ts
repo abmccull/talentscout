@@ -17,6 +17,7 @@ import {
   transitionToClubCareer,
   transitionToIndependentCareer,
 } from "./transitions";
+import { hasRequiredCoursesForTier } from "./courses";
 
 // ---------------------------------------------------------------------------
 // Independent tier requirements
@@ -28,7 +29,6 @@ interface IndependentTierRequirement {
   minReportsSubmitted: number;
   minRetainers?: number;
   minEmployees?: number;
-  requiredCourses?: string[];
 }
 
 const INDEPENDENT_TIER_REQUIREMENTS: Record<IndependentTier, IndependentTierRequirement> = {
@@ -110,6 +110,148 @@ export function chooseCareerPath(
 // Independent tier advancement
 // ---------------------------------------------------------------------------
 
+export type CareerTierAdvancementSource =
+  | "performanceReview"
+  | "independentMilestone";
+
+export type CareerTierAdvancementBlocker =
+  | "maxTier"
+  | "careerPath"
+  | "activeEmployer"
+  | "pathCommitment"
+  | "finances"
+  | "qualification"
+  | "reputation"
+  | "balance"
+  | "reports"
+  | "retainers"
+  | "employees";
+
+export interface CareerTierAdvancementDecision {
+  source: CareerTierAdvancementSource;
+  currentTier: CareerTier;
+  targetTier?: CareerTier;
+  eligible: boolean;
+  blockers: CareerTierAdvancementBlocker[];
+}
+
+export interface CareerTierAdvancementResult {
+  scout: Scout;
+  finances?: FinancialRecord;
+  decision: CareerTierAdvancementDecision;
+}
+
+function getAdvancementCurrentTier(
+  scout: Scout,
+  finances: FinancialRecord | undefined,
+  source: CareerTierAdvancementSource,
+): CareerTier {
+  if (source === "performanceReview") return scout.careerTier;
+  // Older saves may contain divergent mirrors after one promotion path wrote
+  // only one field. Never demote those saves while reconciling on advancement.
+  return Math.max(
+    scout.careerTier,
+    scout.independentTier ?? 1,
+    finances?.independentTier ?? 1,
+  ) as CareerTier;
+}
+
+/**
+ * The canonical career-tier authority. Review promotions and independent
+ * business milestones use one qualification gate and one state transition.
+ */
+export function attemptCareerTierAdvancement(
+  scout: Scout,
+  finances: FinancialRecord | undefined,
+  source: CareerTierAdvancementSource,
+): CareerTierAdvancementResult {
+  const currentTier = getAdvancementCurrentTier(scout, finances, source);
+  if (currentTier >= 5) {
+    return {
+      scout,
+      finances,
+      decision: {
+        source,
+        currentTier,
+        eligible: false,
+        blockers: ["maxTier"],
+      },
+    };
+  }
+
+  const targetTier = (currentTier + 1) as CareerTier;
+  const blockers: CareerTierAdvancementBlocker[] = [];
+
+  if (!hasRequiredCoursesForTier(
+    finances?.completedCourses ?? [],
+    targetTier,
+  )) {
+    blockers.push("qualification");
+  }
+
+  if (source === "performanceReview") {
+    if (scout.careerPath !== "club") blockers.push("careerPath");
+    if (!scout.currentClubId) blockers.push("activeEmployer");
+  } else {
+    if (scout.careerPath !== "independent") blockers.push("careerPath");
+    if (!finances) {
+      blockers.push("finances");
+    } else {
+      // Tier 2 is the shared choice threshold. Before the deliberate path
+      // decision, no further independent promotion may happen silently.
+      if (scout.careerPathChosen !== true && currentTier >= 2) {
+        blockers.push("pathCommitment");
+      }
+      const requirement = INDEPENDENT_TIER_REQUIREMENTS[targetTier as IndependentTier];
+      if (scout.reputation < requirement.minReputation) blockers.push("reputation");
+      if (finances.balance < requirement.minBalance) blockers.push("balance");
+      if (scout.reportsSubmitted < requirement.minReportsSubmitted) blockers.push("reports");
+      if (
+        requirement.minRetainers
+        && (finances.retainerContracts ?? []).filter((retainer) => retainer.status === "active").length
+          < requirement.minRetainers
+      ) {
+        blockers.push("retainers");
+      }
+      if (
+        requirement.minEmployees
+        && (finances.employees ?? []).length < requirement.minEmployees
+      ) {
+        blockers.push("employees");
+      }
+    }
+  }
+
+  const decision: CareerTierAdvancementDecision = {
+    source,
+    currentTier,
+    targetTier,
+    eligible: blockers.length === 0,
+    blockers,
+  };
+  if (!decision.eligible) return { scout, finances, decision };
+
+  const independentTier = targetTier as IndependentTier;
+  return {
+    scout: {
+      ...scout,
+      careerTier: targetTier,
+      ...(source === "independentMilestone"
+        ? { independentTier }
+        : {}),
+    },
+    finances: finances
+      ? {
+          ...finances,
+          ...(source === "independentMilestone"
+            ? { independentTier }
+            : {}),
+        }
+      : undefined,
+    decision,
+  };
+}
+
 /**
  * Get the requirements for a specific independent tier.
  */
@@ -127,30 +269,14 @@ export function checkIndependentTierAdvancement(
   scout: Scout,
   finances: FinancialRecord,
 ): IndependentTier | null {
-  if (scout.careerPath !== "independent") return null;
-
-  const currentTier = scout.independentTier ?? 1;
-  // Before the first explicit path decision, work may earn the common Tier-2
-  // threshold that unlocks the choice. It may not silently advance the player
-  // any further down the independent branch.
-  if (scout.careerPathChosen !== true && currentTier >= 2) return null;
-  const nextTier = (currentTier + 1) as IndependentTier;
-  if (nextTier > 5) return null;
-
-  const req = INDEPENDENT_TIER_REQUIREMENTS[nextTier];
-
-  if (scout.reputation < req.minReputation) return null;
-  if (finances.balance < req.minBalance) return null;
-  if (scout.reportsSubmitted < req.minReportsSubmitted) return null;
-  if (req.minRetainers && finances.retainerContracts.filter(r => r.status === "active").length < req.minRetainers) return null;
-  if (req.minEmployees && finances.employees.length < req.minEmployees) return null;
-  if (req.requiredCourses) {
-    for (const courseId of req.requiredCourses) {
-      if (!finances.completedCourses.includes(courseId)) return null;
-    }
-  }
-
-  return nextTier;
+  const result = attemptCareerTierAdvancement(
+    scout,
+    finances,
+    "independentMilestone",
+  );
+  return result.decision.eligible
+    ? result.decision.targetTier as IndependentTier
+    : null;
 }
 
 /**
@@ -161,19 +287,13 @@ export function advanceIndependentTier(
   finances: FinancialRecord,
   newTier: IndependentTier,
 ): { scout: Scout; finances: FinancialRecord } {
-  // Map independent tier to equivalent career tier for game systems
-  const equivalentCareerTier = newTier as CareerTier;
-
-  const updatedScout: Scout = {
-    ...scout,
-    independentTier: newTier,
-    careerTier: equivalentCareerTier,
-  };
-
-  const updatedFinances: FinancialRecord = {
-    ...finances,
-    independentTier: newTier,
-  };
-
-  return { scout: updatedScout, finances: updatedFinances };
+  const result = attemptCareerTierAdvancement(
+    scout,
+    finances,
+    "independentMilestone",
+  );
+  if (!result.decision.eligible || result.decision.targetTier !== newTier) {
+    return { scout, finances };
+  }
+  return { scout: result.scout, finances: result.finances as FinancialRecord };
 }

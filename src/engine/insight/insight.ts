@@ -28,6 +28,7 @@ import {
   type InsightState,
   type InsightAction,
   type InsightUseRecord,
+  createEmptyInsightPersistedEffects,
   INSIGHT_ACTIONS,
   INSIGHT_BASE_AMOUNTS,
   INSIGHT_QUALITY_MULTIPLIERS,
@@ -76,6 +77,7 @@ export function createInsightState(): InsightState {
     lifetimeEarned: 0,
     lastUsedWeek: 0,
     history: [],
+    persistedEffects: createEmptyInsightPersistedEffects(),
   };
 }
 
@@ -329,6 +331,15 @@ export function recordInsightUse(
   state: InsightState,
   record: InsightUseRecord,
 ): InsightState {
+  const alreadyRecorded = state.history.some(
+    (candidate) =>
+      candidate.actionId === record.actionId
+      && candidate.week === record.week
+      && candidate.season === record.season
+      && candidate.targetPlayerId === record.targetPlayerId
+      && candidate.narrative === record.narrative,
+  );
+  if (alreadyRecorded) return state;
   return {
     ...state,
     history: [...state.history, record],

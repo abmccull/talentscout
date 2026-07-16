@@ -208,9 +208,9 @@ describe("evidence board model", () => {
       reliability: 80,
       knownPlayerIds: ["player-1"],
       interactionHistory: [
-        { week: 1, type: "meeting" as const, trustDelta: 2 },
-        { week: 2, type: "meeting" as const, trustDelta: 2 },
-        { week: 3, type: "meeting" as const, trustDelta: 2 },
+        { occurredAt: { season: 1, week: 1 }, type: "meeting" as const, trustDelta: 2 },
+        { occurredAt: { season: 1, week: 2 }, type: "meeting" as const, trustDelta: 2 },
+        { occurredAt: { season: 1, week: 3 }, type: "meeting" as const, trustDelta: 2 },
       ],
     };
     const npcPerspective = {

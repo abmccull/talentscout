@@ -40,6 +40,7 @@ import {
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useShallow } from "zustand/react/shallow";
 import type { DecisionRecord } from "@/engine/consequences";
+import { getActionableGossipItems } from "@/engine/network/gossip";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -621,6 +622,8 @@ function MessageItem({
   const config = getMessageConfig(message.type);
   const Icon = config.icon;
   const requiresAction = message.actionRequired && !seasonEvent?.resolved;
+  const relatedPlayerId = gossipItem?.playerId
+    ?? (message.relatedEntityType === "player" ? message.relatedId : undefined);
   const MessageContainer = isExpanded ? "div" : "button";
   const collapsedMessageProps = isExpanded
     ? {}
@@ -695,13 +698,13 @@ function MessageItem({
               <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-line">
                 {message.body}
               </p>
-              {message.relatedId && message.relatedEntityType === "player" && (
+              {relatedPlayerId && (
                 <div className="mt-3 flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
                     className="text-xs h-7"
-                    onClick={(e) => { e.stopPropagation(); onViewPlayer?.(message.relatedId!); }}
+                    onClick={(e) => { e.stopPropagation(); onViewPlayer?.(relatedPlayerId); }}
                   >
                     View Player
                   </Button>
@@ -709,7 +712,7 @@ function MessageItem({
                     size="sm"
                     variant="secondary"
                     className="text-xs h-7"
-                    onClick={(e) => { e.stopPropagation(); onWriteReport?.(message.relatedId!); }}
+                    onClick={(e) => { e.stopPropagation(); onWriteReport?.(relatedPlayerId); }}
                   >
                     Write Report
                   </Button>
@@ -1004,7 +1007,7 @@ export function InboxScreen() {
 
   // A3: Build a lookup from gossip ID to gossip item for quick access
   const gossipById = new Map<string, ActionableGossipItem>();
-  for (const g of gameState.gossipItems ?? []) {
+  for (const g of getActionableGossipItems(gameState.contacts)) {
     gossipById.set(g.id, g);
   }
 

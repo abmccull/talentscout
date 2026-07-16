@@ -29,6 +29,7 @@ import type {
 import { adjustDirectiveDifficulty } from "./boardAI";
 import { calculateRoleSuitability, getBestRole, getCompatibleRoles } from "@/engine/players/roles";
 import { getPhilosophyPreferredAgeRange } from "@/engine/world/recruitmentIdentity";
+import { ADJACENT_POSITIONS, getFormationPositionCounts } from "./systemFit";
 
 // =============================================================================
 // CONSTANTS
@@ -232,6 +233,8 @@ interface PositionGap {
   avgCA: number;
   /** How many standard squad players occupy this slot. */
   playerCount: number;
+  requiredCount: number;
+  depthShortage: number;
   /** How far below squad average this position is. */
   caGap: number;
 }
@@ -243,31 +246,64 @@ interface PositionGap {
  *
  * Only positions listed in a standard formation are evaluated.
  */
-function identifyPositionGaps(squad: Player[], maxGaps: number): PositionGap[] {
+function coverageScore(player: Player, position: Position): number {
+  if (player.position === position) return 100;
+  if (player.secondaryPositions.includes(position)) return 70;
+  if (
+    ADJACENT_POSITIONS[player.position]?.includes(position)
+    || ADJACENT_POSITIONS[position]?.includes(player.position)
+  ) {
+    return 35;
+  }
+  return 0;
+}
+
+function identifyPositionGaps(
+  squad: Player[],
+  manager: ManagerProfile,
+  maxGaps: number,
+): PositionGap[] {
   const sqAvg = squadAverageCA(squad);
+  const formationCounts = getFormationPositionCounts(manager.preferredFormation);
 
-  const ALL_OUTFIELD_POSITIONS: Position[] = [
-    "GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST",
-  ];
-
-  const gaps: PositionGap[] = ALL_OUTFIELD_POSITIONS.map((pos) => {
-    const atPosition = squad.filter(
-      (p) => p.position === pos || p.secondaryPositions.includes(pos),
-    );
-    const avg = atPosition.length === 0 ? 0 : averageCAForPosition(squad, pos);
+  const gaps: PositionGap[] = [...formationCounts.entries()].map(([pos, requiredCount]) => {
+    const atPosition = squad
+      .map((player) => ({
+        player,
+        coverage: coverageScore(player, pos),
+      }))
+      .filter((entry) => entry.coverage > 0)
+      .sort((left, right) =>
+        right.coverage - left.coverage
+        || right.player.currentAbility - left.player.currentAbility
+        || right.player.form - left.player.form
+        || left.player.id.localeCompare(right.player.id));
+    const starters = atPosition.slice(0, requiredCount).map((entry) => entry.player);
+    const avg = requiredCount > 0
+      ? starters.reduce((sum, player) => sum + player.currentAbility, 0) / requiredCount
+      : 0;
+    const naturalDepth = atPosition.filter((entry) => entry.coverage >= 70).length;
+    const depthTarget = requiredCount + 1;
+    const starterShortage = Math.max(0, requiredCount - starters.length);
+    const depthShortage = Math.max(0, depthTarget - naturalDepth);
+    const qualityGap = Math.max(0, sqAvg - avg);
     return {
       position: pos,
       avgCA: avg,
-      playerCount: atPosition.length,
-      caGap: sqAvg - avg,
+      playerCount: naturalDepth,
+      requiredCount,
+      depthShortage,
+      caGap: qualityGap + starterShortage * 22 + depthShortage * 14,
     };
   });
 
-  // Sort by gap severity descending (most urgent first)
-  gaps.sort((a, b) => b.caGap - a.caGap);
+  gaps.sort((a, b) =>
+    b.caGap - a.caGap
+    || b.depthShortage - a.depthShortage
+    || b.requiredCount - a.requiredCount
+    || a.position.localeCompare(b.position));
 
-  // Return only meaningful gaps (positive gap) capped to maxGaps
-  return gaps.filter((g) => g.caGap > 0).slice(0, maxGaps);
+  return gaps.filter((g) => g.caGap > 0 || g.depthShortage > 0).slice(0, maxGaps);
 }
 
 // =============================================================================
@@ -307,7 +343,7 @@ export function generateDirectives(
 
   // Identify 2–4 gap positions (RNG decides between 2 and 4 for variety)
   const gapCount = rng.nextInt(2, 4);
-  const gaps = identifyPositionGaps(squad, gapCount);
+  const gaps = identifyPositionGaps(squad, manager, gapCount);
 
   const priorityOrder: ManagerDirective["priority"][] = ["critical", "high", "medium", "low"];
   const baseMinCAStars = minCAStarsForReputation(club.reputation);
@@ -366,7 +402,7 @@ export function generateDirectives(
     return {
       id,
       clubId: club.id,
-      managerId: manager.clubId, // ManagerProfile uses clubId as primary key
+      managerId: manager.managerId ?? manager.clubId,
       position: gap.position,
       priority,
       budgetAllocation,

@@ -8,6 +8,12 @@ import { RNG } from "@/engine/rng";
 import { createScout } from "@/engine/scout/creation";
 import { processWeeklyEconomy } from "@/stores/actions/weeklyEconomy";
 import { processWeeklyPostTickSystems } from "@/stores/actions/weeklyPostTickSystems";
+import {
+  addActivity,
+  CONSECUTIVE_REST_WEEKS_METRIC,
+  createWeekSchedule,
+} from "@/engine/core/calendar";
+import { createConsequenceEngineState } from "@/engine/consequences";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -73,6 +79,8 @@ function economyState(): GameState {
     contacts: {},
     performanceHistory: [],
     discoveryRecords: [],
+    schedule: createWeekSchedule(3, 1),
+    consequenceState: createConsequenceEngineState(),
   } as unknown as GameState;
 }
 
@@ -297,5 +305,53 @@ describe("weekly economy orchestration", () => {
     expect(replayed.finances?.transactions.filter(
       (transaction) => transaction.referenceId === referenceId,
     )).toHaveLength(1);
+  });
+
+  it("persists consecutive recovery weeks and consumes the refreshed streak on work", () => {
+    const firstSource = economyState();
+    const first = processWeeklyPostTickSystems({
+      beforeWeek: firstSource,
+      state: {
+        ...firstSource,
+        currentWeek: 4,
+        schedule: createWeekSchedule(4, 1),
+      },
+      alumniMilestones: [],
+    });
+    expect(first.consequenceState.metrics[CONSECUTIVE_REST_WEEKS_METRIC]).toBe(1);
+
+    const secondSource = {
+      ...first,
+      schedule: createWeekSchedule(4, 1),
+    };
+    const second = processWeeklyPostTickSystems({
+      beforeWeek: secondSource,
+      state: {
+        ...secondSource,
+        currentWeek: 5,
+        schedule: createWeekSchedule(5, 1),
+      },
+      alumniMilestones: [],
+    });
+    expect(second.consequenceState.metrics[CONSECUTIVE_REST_WEEKS_METRIC]).toBe(2);
+    expect(second.inbox.filter((message) => message.title === "Fully Refreshed"))
+      .toHaveLength(1);
+
+    const workSchedule = addActivity(
+      createWeekSchedule(5, 1),
+      { type: "study", slots: 1, description: "Return to study" },
+      0,
+    );
+    const workingSource = { ...second, schedule: workSchedule };
+    const working = processWeeklyPostTickSystems({
+      beforeWeek: workingSource,
+      state: {
+        ...workingSource,
+        currentWeek: 6,
+        schedule: createWeekSchedule(6, 1),
+      },
+      alumniMilestones: [],
+    });
+    expect(working.consequenceState.metrics[CONSECUTIVE_REST_WEEKS_METRIC]).toBe(0);
   });
 });

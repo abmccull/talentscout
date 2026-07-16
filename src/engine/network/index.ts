@@ -6,6 +6,7 @@ export {
   evaluateBetrayalRisk,
   generateExclusiveWindow,
   processExclusiveWindows,
+  isContactAccessSuspended,
   getExclusiveWindowChance,
   rollExclusiveWindow,
   getContactSpecializationBonus,
@@ -23,6 +24,8 @@ export {
   processGossipDecay,
   evaluateGossipAccuracy,
   processWeeklyGossip,
+  getActionableGossipItems,
+  applyGossipAction,
 } from "./gossip";
 
 export {

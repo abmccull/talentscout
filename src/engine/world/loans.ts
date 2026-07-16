@@ -21,10 +21,10 @@ import type {
   LoanOutcome,
   LoanRecommendation,
   InboxMessage,
+  PlayerMatchRating,
 } from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
-import { isFixtureInSeason } from "@/engine/world/fixtures";
 import { getWorldConditionModifiers } from "@/engine/world/worldConditions";
 import {
   addGameWeeksWithSeasonLength,
@@ -46,6 +46,45 @@ const AI_LOAN_PROBABILITY = 0.035;
 const MAX_REP_GAP = 40;
 /** Minimum reputation gap — loans go downhill. */
 const MIN_REP_GAP = 5;
+
+const PLAYING_TIME_SELECTION_BONUS: Record<
+  NonNullable<LoanDeal["agreedPlayingTime"]>,
+  number
+> = {
+  key: 14,
+  regular: 8,
+  rotation: 3,
+  prospect: 0,
+};
+
+export interface LoanSelectionPriority {
+  loanClubId: string;
+  bonus: number;
+}
+
+export interface AuthoritativeLoanFixture {
+  homeClubId: string;
+  awayClubId: string;
+  playerRatings?: Record<string, PlayerMatchRating>;
+}
+
+/**
+ * Translate promised playing time into a bounded lineup-selection preference.
+ * Ability, form, position, injuries, and suspensions still determine the XI.
+ */
+export function createLoanSelectionPriorityIndex(
+  activeLoans: readonly LoanDeal[],
+): ReadonlyMap<string, LoanSelectionPriority> {
+  const priorities = new Map<string, LoanSelectionPriority>();
+  for (const deal of activeLoans) {
+    if (deal.status !== "active") continue;
+    priorities.set(deal.playerId, {
+      loanClubId: deal.loanClubId,
+      bonus: PLAYING_TIME_SELECTION_BONUS[deal.agreedPlayingTime ?? "rotation"],
+    });
+  }
+  return priorities;
+}
 
 // =============================================================================
 // ID GENERATION
@@ -598,18 +637,33 @@ export function processLoanPerformance(
   state: GameState,
   week: number,
   season: number,
-  rng: RNG,
+  fixturesPlayed: readonly AuthoritativeLoanFixture[],
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): LoanDeal[] {
   const activeLoans = state.activeLoans ?? [];
   const updatedLoans: LoanDeal[] = [];
-  // Fixture availability is shared by every active loan. Index it once rather
-  // than scanning the complete world schedule separately for every deal.
   const clubsWithFixture = new Set<string>();
-  for (const fixture of Object.values(state.fixtures)) {
-    if (!isFixtureInSeason(fixture, season) || fixture.week !== week) continue;
+  const participationByClubAndPlayer = new Map<string, PlayerMatchRating[]>();
+
+  for (const fixture of fixturesPlayed) {
     clubsWithFixture.add(fixture.homeClubId);
     clubsWithFixture.add(fixture.awayClubId);
+
+    for (const [playerId, rating] of Object.entries(fixture.playerRatings ?? {})) {
+      const participant = state.players[playerId];
+      if (!participant) continue;
+      const participantClubId = participant.clubId;
+      if (
+        participantClubId !== fixture.homeClubId
+        && participantClubId !== fixture.awayClubId
+      ) {
+        continue;
+      }
+      const key = `${participantClubId}:${playerId}`;
+      const ratings = participationByClubAndPlayer.get(key) ?? [];
+      ratings.push(rating);
+      participationByClubAndPlayer.set(key, ratings);
+    }
   }
 
   for (const deal of activeLoans) {
@@ -634,32 +688,29 @@ export function processLoanPerformance(
       loanClubSatisfaction: 50,
     };
 
-    // Check if loan club has a fixture this week
     const loanClub = state.clubs[deal.loanClubId];
     const hasFixture = loanClub ? clubsWithFixture.has(loanClub.id) : false;
-
-    const playingTimeChance = {
-      key: 0.92,
-      regular: 0.78,
-      rotation: 0.55,
-      prospect: 0.35,
-    }[deal.agreedPlayingTime ?? "rotation"];
-    const appeared = hasFixture && !player.injured && rng.chance(playingTimeChance);
-
-    const newAppearances = perf.appearances + (appeared ? 1 : 0);
-    const newGoals = perf.goals + (appeared && rng.chance(0.08) ? 1 : 0);
-    const newAssists = perf.assists + (appeared && rng.chance(0.06) ? 1 : 0);
-
-    // Running average rating
-    let newAvgRating: number;
-    if (appeared) {
-      const matchRating = 5.5 + rng.nextFloat(0, 2.5) + player.form * 0.3;
-      const clampedRating = Math.max(4.0, Math.min(9.5, matchRating));
-      const totalRatingPoints = perf.avgRating * perf.appearances + clampedRating;
-      newAvgRating = newAppearances > 0 ? totalRatingPoints / newAppearances : 6.0;
-    } else {
-      newAvgRating = perf.avgRating;
-    }
+    const weeklyRatings = participationByClubAndPlayer.get(
+      `${deal.loanClubId}:${deal.playerId}`,
+    ) ?? [];
+    const appeared = weeklyRatings.length > 0;
+    const newAppearances = perf.appearances + weeklyRatings.length;
+    const newGoals = perf.goals + weeklyRatings.reduce(
+      (sum, rating) => sum + Math.max(0, rating.stats.goals ?? 0),
+      0,
+    );
+    const newAssists = perf.assists + weeklyRatings.reduce(
+      (sum, rating) => sum + Math.max(0, rating.stats.assists ?? 0),
+      0,
+    );
+    const weeklyRatingTotal = weeklyRatings.reduce(
+      (sum, rating) => sum + rating.rating,
+      0,
+    );
+    const totalRatingPoints = perf.avgRating * perf.appearances + weeklyRatingTotal;
+    const newAvgRating = newAppearances > 0
+      ? totalRatingPoints / newAppearances
+      : perf.avgRating;
 
     // Development is produced by the central player-development engine. Loans
     // measure that real change instead of inventing a second CA progression.
@@ -680,8 +731,9 @@ export function processLoanPerformance(
     const parentSatisfaction = Math.min(100, Math.max(0,
       50 + (appearanceRate > 0.5 ? 20 : -10) + newDevDelta * 5,
     ));
+    const appearanceSatisfaction = appeared ? 5 : hasFixture ? -3 : 0;
     const loanSatisfaction = Math.min(100, Math.max(0,
-      50 + (newAvgRating > 6.5 ? 15 : -10) + (appeared ? 5 : -3),
+      50 + (newAvgRating > 6.5 ? 15 : -10) + appearanceSatisfaction,
     ));
 
     updatedLoans.push({

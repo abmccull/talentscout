@@ -20,6 +20,8 @@ import type {
   NPCScout,
   NPCScoutReport,
   Contact,
+  Fixture,
+  GameDate,
   ScoutSkill,
   Player,
   ScoutSourcePerspective,
@@ -28,10 +30,12 @@ import {
   ACTIVITY_FATIGUE_COSTS,
   canAddActivity,
   addActivity,
+  enforceForcedRestSchedule,
   getAvailableActivities,
+  isForcedRestRequired,
 } from "./calendar";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
-import { addGameWeeks } from "./gameDate";
+import { addGameWeeks, gameWeeksBetween } from "./gameDate";
 import {
   adjustRecommendationForPerspective,
   buildNPCRecommendationEvidenceClaim,
@@ -82,6 +86,9 @@ export function autoScheduleWeek(
 ): WeekSchedule {
   let schedule = { ...state.schedule, activities: [...state.schedule.activities] };
   const { scout } = state;
+  if (isForcedRestRequired(scout.fatigue)) {
+    return enforceForcedRestSchedule(schedule, scout.fatigue);
+  }
 
   // Get engine-available activities for this week
   const available = getAvailableActivities(
@@ -704,10 +711,13 @@ export function getWeakestSkill(
  */
 export function getDecayingContacts(
   contacts: Record<string, Contact>,
-  currentWeek: number,
+  currentDate: GameDate,
+  fixtures: Record<string, Fixture>,
 ): Contact[] {
   return Object.values(contacts).filter((c) => {
-    const weeksWithoutContact = currentWeek - (c.lastInteractionWeek ?? 0);
+    const weeksWithoutContact = c.lastInteractionAt
+      ? Math.max(0, gameWeeksBetween(fixtures, c.lastInteractionAt, currentDate))
+      : Number.POSITIVE_INFINITY;
     return c.relationship < CONTACT_DECAY_THRESHOLD || weeksWithoutContact > 8;
   });
 }

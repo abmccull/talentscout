@@ -14,7 +14,15 @@
  *    effect is weaker or absent.
  */
 
-import type { Specialization } from "@/engine/core/types";
+import type {
+  HiddenIntel,
+  InsightPersistedEffects as CoreInsightPersistedEffects,
+  InsightState as CoreInsightState,
+  InsightUseRecord as CoreInsightUseRecord,
+  PendingInsightQueryAccuracyEffect as CorePendingInsightQueryAccuracyEffect,
+  PendingInsightReportQualityEffect as CorePendingInsightReportQualityEffect,
+  Specialization,
+} from "@/engine/core/types";
 import type { ObservationMode } from "@/engine/observation/types";
 
 // =============================================================================
@@ -60,21 +68,18 @@ export type InsightActionId =
  * `cooldownWeeksRemaining` counts down each week tick. When it reaches 0 the
  * scout may use another insight action.
  */
-export interface InsightState {
-  /** Current IP balance. Never exceeds `capacity`. */
-  points: number;
-  /** Maximum IP that can be stored. Derived from intuition stat. */
-  capacity: number;
-  /** Weeks until the scout may use another insight action (0 = ready). */
-  cooldownWeeksRemaining: number;
-  /** Total number of insight actions used across all time. */
-  lifetimeUsed: number;
-  /** Total IP earned across all time (before spending). */
-  lifetimeEarned: number;
-  /** Game week of the last insight action use (0 = never used). */
-  lastUsedWeek: number;
-  /** Chronological log of every insight action the scout has used. */
-  history: InsightUseRecord[];
+export type PendingInsightReportQualityEffect = CorePendingInsightReportQualityEffect;
+export type PendingInsightQueryAccuracyEffect = CorePendingInsightQueryAccuracyEffect;
+export type InsightPersistedEffects = CoreInsightPersistedEffects;
+
+/** Canonical alias to the core Insight state contract. */
+export type InsightState = CoreInsightState;
+
+export function createEmptyInsightPersistedEffects(): InsightPersistedEffects {
+  return {
+    pendingReportQuality: [],
+    pendingQueryAccuracy: [],
+  };
 }
 
 // =============================================================================
@@ -115,18 +120,8 @@ export interface InsightAction {
  * Serializable record of a single past insight action use.
  * Stored in `InsightState.history`.
  */
-export interface InsightUseRecord {
+export interface InsightUseRecord extends Omit<CoreInsightUseRecord, "actionId"> {
   actionId: InsightActionId;
-  /** Game week during which the action was used. */
-  week: number;
-  /** Season number during which the action was used. */
-  season: number;
-  /** ID of the primary player the action was applied to, if applicable. */
-  targetPlayerId?: string;
-  /** Qualitative outcome bucket for analytics and post-session review. */
-  outcome: "valuable" | "moderate" | "wasted";
-  /** Short narrative string describing what happened (shown in session recap). */
-  narrative: string;
 }
 
 /**
@@ -162,6 +157,8 @@ export interface InsightActionResult {
     playerId: string;
     attribute: string;
     trueValue: number;
+    /** Confidence to persist on the authoritative observation record. */
+    confidence?: number;
   }>;
 
   // --- hiddenNature ---
@@ -185,11 +182,8 @@ export interface InsightActionResult {
   systemFitData?: Record<string, number>;
 
   // --- networkPulse ---
-  /** Intel strings shared by contacts, bypassing relationship gates. */
-  contactIntel?: Array<{
-    contactId: string;
-    intel: string;
-  }>;
+  /** Structured contact evidence shared while bypassing relationship gates. */
+  contactIntel?: HiddenIntel[];
 
   // --- territoryMastery ---
   /** Percentage boost permanently added to confidence in the current sub-region. */
@@ -199,9 +193,20 @@ export interface InsightActionResult {
   /** Accuracy multiplier applied to the statistical query for this cycle. */
   queryAccuracyBonus?: number;
 
+  /** League whose data was in scope for this action, when resolvable. */
+  leagueId?: string;
+
   // --- marketBlindSpot ---
   /** Player IDs identified as undervalued in the queried league/position. */
   undervaluedPlayers?: string[];
+
+  // --- generationalWhisper ---
+  /** Structured instinct persisted into the scout's gut-feeling journal. */
+  wonderkidSignal?: {
+    playerId: string;
+    perceivedTier: "generational" | "worldClass" | "qualityPro" | "journeyman";
+    reliability: number;
+  };
 }
 
 // =============================================================================

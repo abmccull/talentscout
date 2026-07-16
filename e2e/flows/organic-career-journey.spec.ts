@@ -123,7 +123,10 @@ async function sellReportsToWorkingCapital(page: Page, targetBalance: number) {
       );
       if (!listing) continue;
 
-      const bidId = `organic_market_bid_${sales + 1}`;
+      // This helper runs more than once in the same career. Bid IDs are a
+      // global lookup key in the store, so include the listing identity rather
+      // than restarting a local counter and accidentally targeting an older bid.
+      const bidId = `organic_market_bid_${listing.id}_${sales + 1}`;
       const bid = {
         id: bidId,
         listingId: listing.id,

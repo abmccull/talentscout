@@ -1,5 +1,4 @@
 import type {
-  CareerTier,
   DiscoveryRecord,
   GameState,
   InboxMessage,
@@ -22,17 +21,21 @@ import {
   calculatePerformanceReview,
   generateContractRenewalOffer,
   generateJobOffers,
+  getPerformanceReviewReputationChange,
   updateReputation,
   type TierReviewContext,
 } from "@/engine/career/progression";
 import { deriveSeasonReviewMetrics } from "@/engine/career/seasonReviewContext";
-import { generateBoardDirectives, processSeasonDiscoveries } from "@/engine/career";
+import {
+  attemptCareerTierAdvancement,
+  generateBoardDirectives,
+  processSeasonDiscoveries,
+} from "@/engine/career";
 import { applyCareerPathTransition } from "@/engine/career/transitions";
 import {
   isCareerRecoveryBlockingOffers,
   openCareerSetback,
 } from "@/engine/career/recovery";
-import { hasRequiredCoursesForTier } from "@/engine/career/courses";
 import {
   applyScoutAccountability,
   generateDirectives,
@@ -48,8 +51,12 @@ import {
 } from "@/engine/finance";
 import { generateAnalystCandidate, resolvePredictions } from "@/engine/data";
 import {
-  groupReportRevisionsByCase,
+  calculateReportAccountabilityMetrics,
+  isReportOutcomeValidatable,
+  REPORT_VALIDATION_HORIZON_SEASONS,
+  selectMatureReportCasesForValidation,
   selectLatestReportsByCase,
+  selectLatestReportsByCaseOpenedInRange,
 } from "@/engine/reports/reportAccountability";
 import { trackPostTransfer } from "@/engine/reports/reporting";
 import { ensureSeasonFixtures } from "@/engine/world/fixtures";
@@ -113,6 +120,133 @@ function synchronizeDiscoveryAccuracyWithReports(
         : undefined,
     };
   });
+}
+
+export interface MatureReportValidationResult {
+  state: GameState;
+  messages: InboxMessage[];
+}
+
+/**
+ * Validate every mature, evidence-backed scouting case. Recruitment action is
+ * useful context but never an eligibility condition, so ignored, monitored,
+ * and no-deal recommendations remain professionally accountable.
+ */
+export function validateMatureReportCasesAtSeasonEnd(
+  state: GameState,
+  completedSeason: number,
+): MatureReportValidationResult {
+  const reportCases = selectMatureReportCasesForValidation(
+    Object.values(state.reports),
+    completedSeason,
+    state.scout.id,
+  );
+  if (reportCases.length === 0) return { state, messages: [] };
+
+  const alumniPlayerIds = new Set(
+    state.alumniRecords.map((record) => record.playerId),
+  );
+  const transferredReportIds = new Set(
+    state.transferRecords.map((record) => record.reportId),
+  );
+  const updatedReports = { ...state.reports };
+  let validationScout = state.scout;
+  const accuracyHistory = [...(validationScout.accuracyHistory ?? [])];
+  const messages: InboxMessage[] = [];
+
+  for (const reportCase of reportCases) {
+    const accountableReport = reportCase.latestReport;
+    const player = resolvePlayerEntity(state, accountableReport.playerId)?.player;
+    if (!player) continue;
+
+    const seasonsSinceReport = completedSeason - accountableReport.submittedSeason;
+    const accountableAccuracy = trackPostTransfer(
+      accountableReport,
+      player,
+      seasonsSinceReport,
+    );
+    const reputationBefore = validationScout.reputation;
+    if (!reportCase.wasPreviouslyValidated) {
+      validationScout = updateReputation(validationScout, {
+        type: "reportValidated",
+        accuracy: accountableAccuracy,
+      });
+    }
+    const accuracyReputationDelta = reportCase.wasPreviouslyValidated
+      ? 0
+      : +(validationScout.reputation - reputationBefore).toFixed(1);
+    const assessmentAverage = accountableReport.attributeAssessments.reduce(
+      (sum, assessment) => sum + assessment.estimatedValue,
+      0,
+    ) / accountableReport.attributeAssessments.length;
+    const predictedCA = accountableReport.perceivedCAStars !== undefined
+      ? starsToAbility(accountableReport.perceivedCAStars)
+      : Math.round((assessmentAverage / 20) * 200);
+    if (!reportCase.wasPreviouslyValidated) {
+      accuracyHistory.push({
+        week: state.currentWeek,
+        season: state.currentSeason,
+        predictedCA,
+        actualCA: player.currentAbility,
+      });
+    }
+
+    for (const report of reportCase.revisions) {
+      if (
+        report.postTransferRating !== undefined
+        || completedSeason - report.submittedSeason < REPORT_VALIDATION_HORIZON_SEASONS
+        || !isReportOutcomeValidatable(report)
+      ) {
+        continue;
+      }
+      updatedReports[report.id] = {
+        ...report,
+        postTransferRating: trackPostTransfer(
+          report,
+          player,
+          completedSeason - report.submittedSeason,
+        ),
+        accuracyReputationDelta:
+          report.id === accountableReport.id
+            ? accuracyReputationDelta
+            : 0,
+      };
+    }
+
+    const hadRecordedRecruitmentAction = alumniPlayerIds.has(player.id)
+      || reportCase.revisions.some((report) =>
+        report.clubResponse === "signed"
+        || transferredReportIds.has(report.id)
+      );
+    const outcomeContext = hadRecordedRecruitmentAction
+      ? "The recorded recruitment outcome and subsequent career evidence informed the review."
+      : "No signing or transfer was required; the original judgment was reviewed against the player's subsequent career evidence.";
+    messages.push({
+      id: `retro-${accountableReport.id}-s${completedSeason}`,
+      week: state.currentWeek,
+      season: state.currentSeason,
+      title: `Report Validated: ${player.firstName} ${player.lastName}`,
+      body: `Your active judgment on ${player.firstName} ${player.lastName} from season ${accountableReport.submittedSeason} has been validated after ${seasonsSinceReport} seasons. Accuracy: ${accountableAccuracy}/100. ${outcomeContext} This scouting case changed reputation ${accuracyReputationDelta >= 0 ? "+" : ""}${accuracyReputationDelta}; earlier revisions were reviewed without multiplying the reward.`,
+      type: "feedback",
+      read: false,
+      actionRequired: false,
+      relatedId: player.id,
+      relatedEntityType: "player",
+    });
+  }
+
+  if (messages.length === 0) return { state, messages };
+  return {
+    state: {
+      ...state,
+      reports: updatedReports,
+      scout: {
+        ...validationScout,
+        accuracyHistory: accuracyHistory.slice(-50),
+      },
+    },
+    messages,
+  };
 }
 
 function selectLateCareerDilemmaSubject(
@@ -241,14 +375,28 @@ export function processWeeklySeasonRollover(
       }
 
       const seasonEndMessages: InboxMessage[] = [];
+      const validation = validateMatureReportCasesAtSeasonEnd(
+        newState,
+        completedSeason,
+      );
+      newState = validation.state;
+      seasonEndMessages.push(...validation.messages);
+      const reportAccountability = calculateReportAccountabilityMetrics(
+        Object.values(newState.reports),
+        newState.scout.id,
+      );
       const seasonReviewMetrics = deriveSeasonReviewMetrics(
         newState,
         completedSeason,
       );
 
       // ── Issue 3: Performance review ──────────────────────────────────────
-      const seasonReports = Object.values(newState.reports).filter(
-        (r) => r.submittedSeason === completedSeason,
+      const seasonReports = selectLatestReportsByCaseOpenedInRange(
+        Object.values(newState.reports).filter(
+          (report) => report.scoutId === newState.scout.id,
+        ),
+        { submittedSeason: completedSeason, submittedWeek: Number.MIN_SAFE_INTEGER },
+        { submittedSeason: completedSeason, submittedWeek: Number.MAX_SAFE_INTEGER },
       );
       const tierContext: TierReviewContext = {
         countriesScoutedThisSeason:
@@ -267,7 +415,7 @@ export function processWeeklySeasonRollover(
       };
       const review = calculatePerformanceReview(
         newState.scout,
-        seasonReports,
+        Object.values(newState.reports),
         completedSeason,
         tierContext,
       );
@@ -283,7 +431,11 @@ export function processWeeklySeasonRollover(
         newState.scout.careerPath === "club" && newState.scout.currentClubId,
       );
       let effectiveReview = review.outcome === "fired" && !hasActiveEmployer
-        ? { ...review, outcome: "warning" as const }
+        ? {
+            ...review,
+            outcome: "warning" as const,
+            reputationChange: getPerformanceReviewReputationChange("warning"),
+          }
         : review;
       if (effectiveReview !== review) {
         newState = {
@@ -303,12 +455,21 @@ export function processWeeklySeasonRollover(
         return { state: newState, terminal: "ironman-fired" };
       }
 
-      // Enforce tier gate: block promotion if required courses not completed
-      if (review.outcome === "promoted" && newState.scout.careerTier < 5) {
-        const targetTier = (newState.scout.careerTier + 1) as CareerTier;
-        if (!hasRequiredCoursesForTier(newState.finances?.completedCourses ?? [], targetTier)) {
-          effectiveReview = { ...review, outcome: "retained" };
-          // Update the stored review with the blocked outcome
+      // Every path uses the same tier authority. Club scouts advance through
+      // performance review; independent scouts advance through business
+      // milestones, and neither route can bypass course qualifications.
+      if (effectiveReview.outcome === "promoted" && newState.scout.careerTier < 5) {
+        const advancement = attemptCareerTierAdvancement(
+          newState.scout,
+          newState.finances,
+          "performanceReview",
+        );
+        if (!advancement.decision.eligible) {
+          effectiveReview = {
+            ...effectiveReview,
+            outcome: "retained",
+            reputationChange: getPerformanceReviewReputationChange("retained"),
+          };
           newState = {
             ...newState,
             performanceReviews: [
@@ -316,13 +477,20 @@ export function processWeeklySeasonRollover(
               effectiveReview,
             ],
           };
+          const qualificationBlocked = advancement.decision.blockers.includes("qualification");
+          const independentCareer = advancement.decision.blockers.includes("careerPath")
+            && newState.scout.careerPath === "independent";
           seasonEndMessages.push({
             id: `promotion-blocked-s${completedSeason}`,
             week: newState.currentWeek,
             season: newState.currentSeason,
             type: "feedback" as const,
-            title: "Promotion Blocked",
-            body: "Your performance merited a promotion, but you lack the required course qualifications for the next tier. Complete the necessary courses to advance.",
+            title: qualificationBlocked ? "Promotion Blocked" : "Career Tier Unchanged",
+            body: qualificationBlocked
+              ? "Your performance merited a promotion, but you lack the required course qualifications for the next tier. Complete the necessary courses to advance."
+              : independentCareer
+                ? "Your annual review recognized promotion-level work. Independent career tiers advance through the agency's business milestones and qualification gate, so this review retained your current tier."
+                : "Your performance merited a promotion, but advancement requires an active club employer and the shared qualification gate.",
             read: false,
             actionRequired: false,
           });
@@ -338,13 +506,19 @@ export function processWeeklySeasonRollover(
 
       // If promoted, advance career tier
       if (effectiveReview.outcome === "promoted" && newState.scout.careerTier < 5) {
-        const newTier = (newState.scout.careerTier + 1) as CareerTier;
+        const advancement = attemptCareerTierAdvancement(
+          newState.scout,
+          newState.finances,
+          "performanceReview",
+        );
+        const newTier = advancement.decision.targetTier;
+        if (!advancement.decision.eligible || newTier === undefined) {
+          throw new Error("Career promotion gate changed during season review resolution.");
+        }
         newState = {
           ...newState,
-          scout: {
-            ...newState.scout,
-            careerTier: newTier,
-          },
+          scout: advancement.scout,
+          finances: advancement.finances,
           careerChronology: recordCareerTierReached(
             careerRollover.chronology,
             newTier,
@@ -376,7 +550,7 @@ export function processWeeklySeasonRollover(
         season: newState.currentSeason,
         type: "feedback" as const,
         title: `Season ${completedSeason} Performance Review`,
-        body: `Reports submitted: ${review.reportsSubmitted} | Avg quality: ${review.averageQuality}/100\nSuccessful recommendations: ${review.successfulRecommendations}\nReputation change: ${review.reputationChange >= 0 ? "+" : ""}${review.reputationChange}\n\n${reviewOutcomeText}`,
+        body: `Reports submitted: ${review.reportsSubmitted} | Avg craft: ${review.averageQuality}/100\nSuccessful recommendations: ${review.successfulRecommendations}\n${reportAccountability.validatedCases > 0 ? `Validated cases: ${reportAccountability.validatedCases} | Accuracy: ${reportAccountability.averageAccuracy}/100 | Decision value: ${reportAccountability.averageDecisionValue}/100` : "Validated cases: awaiting mature outcomes"}\nReputation change: ${effectiveReview.reputationChange >= 0 ? "+" : ""}${effectiveReview.reputationChange}\n\n${reviewOutcomeText}`,
         read: false,
         actionRequired: false,
       });
@@ -609,115 +783,6 @@ export function processWeeklySeasonRollover(
         }
       }
 
-      // ── Issue 8: Post-transfer retrospective accuracy ────────────────────
-      const alumniPlayerIds = new Set(
-        newState.alumniRecords.map((record) => record.playerId),
-      );
-      const transferredReportIds = new Set(
-        newState.transferRecords.map((record) => record.reportId),
-      );
-      const reportCases = groupReportRevisionsByCase(
-        Object.values(newState.reports),
-      );
-      const casesReadyForValidation = reportCases.filter((reportCase) =>
-        reportCase.latestReport.postTransferRating === undefined
-        && completedSeason - reportCase.latestReport.submittedSeason >= 2
-        && (
-          alumniPlayerIds.has(reportCase.latestReport.playerId)
-          || reportCase.revisions.some((report) =>
-            report.clubResponse === "signed"
-            || transferredReportIds.has(report.id)
-          )
-        )
-      );
-      if (casesReadyForValidation.length > 0) {
-        const updatedReports = { ...newState.reports };
-        let validationScout = newState.scout;
-        const accuracyHistory = [...(validationScout.accuracyHistory ?? [])];
-        for (const reportCase of casesReadyForValidation) {
-          const accountableReport = reportCase.latestReport;
-          const player = resolvePlayerEntity(
-            newState,
-            accountableReport.playerId,
-          )?.player;
-          if (!player) continue;
-          const seasonsSinceSigning = completedSeason - accountableReport.submittedSeason;
-          const accountableAccuracy = trackPostTransfer(
-            accountableReport,
-            player,
-            seasonsSinceSigning,
-          );
-          const reputationBefore = validationScout.reputation;
-          if (!reportCase.wasPreviouslyValidated) {
-            validationScout = updateReputation(validationScout, {
-              type: "reportValidated",
-              accuracy: accountableAccuracy,
-            });
-          }
-          const accuracyReputationDelta = reportCase.wasPreviouslyValidated
-            ? 0
-            : +(
-              validationScout.reputation - reputationBefore
-            ).toFixed(1);
-          const assessmentAverage = accountableReport.attributeAssessments.length > 0
-            ? accountableReport.attributeAssessments.reduce(
-                (sum, assessment) => sum + assessment.estimatedValue,
-                0,
-              ) / accountableReport.attributeAssessments.length
-            : 10;
-          const predictedCA = accountableReport.perceivedCAStars !== undefined
-            ? starsToAbility(accountableReport.perceivedCAStars)
-            : Math.round((assessmentAverage / 20) * 200);
-          if (!reportCase.wasPreviouslyValidated) {
-            accuracyHistory.push({
-              week: newState.currentWeek,
-              season: newState.currentSeason,
-              predictedCA,
-              actualCA: player.currentAbility,
-            });
-          }
-          for (const report of reportCase.revisions) {
-            if (
-              report.postTransferRating !== undefined
-              || completedSeason - report.submittedSeason < 2
-            ) {
-              continue;
-            }
-            updatedReports[report.id] = {
-              ...report,
-              postTransferRating: trackPostTransfer(
-                report,
-                player,
-                completedSeason - report.submittedSeason,
-              ),
-              accuracyReputationDelta:
-                report.id === accountableReport.id
-                  ? accuracyReputationDelta
-                  : 0,
-            };
-          }
-          seasonEndMessages.push({
-            id: `retro-${accountableReport.id}-s${completedSeason}`,
-            week: newState.currentWeek,
-            season: newState.currentSeason,
-            title: `Report Validated: ${player.firstName} ${player.lastName}`,
-            body: `Your active judgment on ${player.firstName} ${player.lastName} from season ${accountableReport.submittedSeason} has been validated after ${seasonsSinceSigning} seasons. Accuracy: ${accountableAccuracy}/100. This scouting case changed reputation ${accuracyReputationDelta >= 0 ? "+" : ""}${accuracyReputationDelta}; earlier revisions were reviewed without multiplying the reward.`,
-            type: "feedback" as const,
-            read: false,
-            actionRequired: false,
-            relatedId: player.id,
-            relatedEntityType: "player" as const,
-          });
-        }
-        newState = {
-          ...newState,
-          reports: updatedReports,
-          scout: {
-            ...validationScout,
-            accuracyHistory: accuracyHistory.slice(-50),
-          },
-        };
-      }
       newState = {
         ...newState,
         discoveryRecords: synchronizeDiscoveryAccuracyWithReports(

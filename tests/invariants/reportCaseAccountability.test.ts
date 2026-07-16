@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { GameState, Scout, ScoutReport } from "@/engine/core/types";
-import { calculatePerformanceReview } from "@/engine/career/progression";
+import {
+  calculatePerformanceReview,
+  updateReputation,
+} from "@/engine/career/progression";
 import { generatePerformancePulse } from "@/engine/career/performancePulse";
 import { hasSuccessfulSigningResponseThisWeek } from "@/engine/core/gameLoop";
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
@@ -9,10 +12,13 @@ import { EVENT_TEMPLATES } from "@/engine/events/eventTemplates";
 import { checkPlacementFeeEligibility } from "@/engine/finance/placementFees";
 import { getRemainingTablePounds } from "@/engine/reports/conviction";
 import {
+  calculateReportAccountabilityMetrics,
   groupReportRevisionsByCase,
+  selectMatureReportCasesForValidation,
   selectLatestReportsByCase,
   selectLatestReportsByCaseOpenedInRange,
 } from "@/engine/reports/reportAccountability";
+import { validateMatureReportCasesAtSeasonEnd } from "@/stores/actions/weeklySeasonRollover";
 
 function report(
   id: string,
@@ -282,5 +288,157 @@ describe("report case accountability", () => {
       currentWeek: 7,
       currentSeason: 1,
     })).toBe(false);
+  });
+
+  it("makes mature no-deal cases eligible for exact-once validation", () => {
+    const noDeal = {
+      ...report("no-deal", "no-deal-case", "player-no-deal", 4, 1, 80),
+      attributeAssessments: [{
+        attribute: "pace" as const,
+        estimatedValue: 15,
+        confidenceRange: [14, 16] as [number, number],
+        domain: "physical" as const,
+      }],
+      validationSnapshot: { pace: 15 },
+    };
+    const recent = {
+      ...noDeal,
+      id: "recent",
+      caseId: "recent-case",
+      submittedSeason: 2,
+    };
+    const legacyWithoutEvidence = report(
+      "legacy-empty",
+      "legacy-empty-case",
+      "player-no-deal",
+      5,
+      1,
+    );
+
+    expect(selectMatureReportCasesForValidation(
+      [noDeal, recent, legacyWithoutEvidence],
+      3,
+      "scout-1",
+    ).map((item) => item.caseKey)).toEqual(["no-deal-case"]);
+
+    const player = {
+      id: "player-no-deal",
+      firstName: "No",
+      lastName: "Deal",
+      currentAbility: 100,
+      attributes: { pace: 15 },
+    };
+    const state = {
+      currentWeek: 1,
+      currentSeason: 4,
+      scout: {
+        id: "scout-1",
+        reputation: 50,
+        accuracyHistory: [],
+      },
+      reports: { [noDeal.id]: noDeal },
+      players: { [player.id]: player },
+      retiredPlayers: {},
+      unsignedYouth: {},
+      alumniRecords: [],
+      transferRecords: [],
+    } as unknown as GameState;
+
+    const validated = validateMatureReportCasesAtSeasonEnd(state, 3);
+    expect(validated.state.reports[noDeal.id]).toMatchObject({
+      postTransferRating: 100,
+      accuracyReputationDelta: 3,
+    });
+    expect(validated.state.scout.reputation).toBe(53);
+    expect(validated.messages).toHaveLength(1);
+    expect(validated.messages[0].body).toContain("No signing or transfer was required");
+
+    const replay = validateMatureReportCasesAtSeasonEnd(validated.state, 3);
+    expect(replay.state.scout.reputation).toBe(53);
+    expect(replay.messages).toEqual([]);
+  });
+
+  it("weights mature accuracy and calibrated conviction above craft volume", () => {
+    const scout = {
+      id: "scout-1",
+      careerTier: 2,
+      careerPath: "club",
+      reputation: 50,
+      fatigue: 20,
+      salary: 1_000,
+      countryReputations: { england: 10 },
+    } as unknown as Scout;
+    const currentCases = Array.from({ length: 10 }, (_, index) => ({
+      ...report(`current-${index}`, `current-case-${index}`, `current-player-${index}`, index + 1, 1, 100),
+      submittedSeason: 3,
+      conviction: index === 0 ? "tablePound" as const : "recommend" as const,
+      clubResponse: "signed" as const,
+    }));
+    const craftOnly = calculatePerformanceReview(scout, currentCases, 3);
+    expect(craftOnly.outcome).toBe("retained");
+
+    const matureCases = Array.from({ length: 5 }, (_, index) => ({
+      ...report(`mature-${index}`, `mature-case-${index}`, `mature-player-${index}`, index + 1, 1, 75),
+      conviction: "strongRecommend" as const,
+      postTransferRating: 95,
+    }));
+    const accountable = calculatePerformanceReview(
+      scout,
+      [...currentCases, ...matureCases],
+      3,
+    );
+    expect(accountable.outcome).toBe("promoted");
+
+    const metrics = calculateReportAccountabilityMetrics(
+      [
+        { ...matureCases[0], postTransferRating: 90 },
+        {
+          ...matureCases[1],
+          conviction: "recommend",
+          postTransferRating: 70,
+        },
+      ],
+      scout.id,
+    );
+    expect(metrics).toEqual({
+      validatedCases: 2,
+      averageAccuracy: 80,
+      averageCalibration: 85,
+      averageDecisionValue: 81.8,
+    });
+  });
+
+  it("keeps opening credibility attainable but makes established craft secondary to truth", () => {
+    const openingScout = {
+      id: "scout-1",
+      reputation: 10,
+      reportsSubmitted: 0,
+    } as unknown as Scout;
+
+    let developingScout = openingScout;
+    for (let index = 0; index < 5; index += 1) {
+      developingScout = {
+        ...updateReputation(developingScout, {
+          type: "reportSubmitted",
+          quality: 100,
+        }),
+        reportsSubmitted: developingScout.reportsSubmitted + 1,
+      };
+    }
+    expect(developingScout.reputation).toBe(20);
+
+    const established = updateReputation(developingScout, {
+      type: "reportSubmitted",
+      quality: 100,
+    });
+    expect(established.reputation).toBe(20.5);
+    expect(updateReputation(established, {
+      type: "reportValidated",
+      accuracy: 100,
+    }).reputation).toBe(23.5);
+    expect(updateReputation(established, {
+      type: "reportValidated",
+      accuracy: 0,
+    }).reputation).toBe(17.5);
   });
 });

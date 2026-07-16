@@ -18,6 +18,7 @@ import {
   assessClubAffordabilityFromContext,
   buildClubAffordabilityContext,
 } from "@/engine/finance/clubEconomics";
+import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
@@ -125,29 +126,27 @@ export function processContractExpiries(
     const overCapacity = (club.playerIds?.length ?? 0) > SENIOR_SQUAD_RENEWAL_CAP;
     const retainedForSquadDepth = renewalPriorityByClub.get(ownerClubId)?.has(playerId) ?? false;
 
-    // Determine renewal probability
-    let renewalChance = getRenewalChance(player.currentAbility);
-    renewalChance += getClubReputationModifier(club.reputation);
-
-    // Form bonus: good form increases renewal chance
-    if (player.form > 0) renewalChance += 0.05 * player.form;
-
-    // Clamp to [0.05, 0.95]
-    renewalChance = Math.min(0.95, Math.max(0.05, renewalChance));
+    const renewalChance = calculateContractRenewalChance(player, club, state);
 
     if ((!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance)) {
-      // Club renews: extend contract by 1-3 seasons
-      const extension = rng.nextInt(1, 3);
-      const renewedWage = Math.max(player.wage, Math.round(player.currentAbility * 60));
+      const appearances = currentSeasonAppearances(player.id, club.id, state);
+      const extension = preferredRenewalLength(player, appearances, player.morale ?? 5);
+      const renewedWage = renewalWageExpectation(
+        player,
+        extension,
+        appearances,
+        player.morale ?? 5,
+      );
+      const playerAcceptance = playerRenewalAcceptanceChance(player, club, state);
       const clubAffordability = affordabilityContext[ownerClubId];
       const affordability = clubAffordability && assessClubAffordabilityFromContext(
         clubAffordability,
         {
-        weeklyWageCommitment: renewedWage,
-        releasedWeeklyCommitment: Math.max(0, player.wage),
+          weeklyWageCommitment: renewedWage,
+          releasedWeeklyCommitment: Math.max(0, player.wage),
         },
       );
-      if (!affordability?.affordable) {
+      if (!affordability?.affordable || !rng.chance(playerAcceptance)) {
         // Fall through to release when the club cannot carry the next deal.
       } else {
         renewals.push({
@@ -211,6 +210,174 @@ function getClubReputationModifier(reputation: number): number {
   if (reputation > 75) return HIGH_REP_RENEWAL_BOOST;
   if (reputation < 30) return LOW_REP_RENEWAL_PENALTY;
   return 0;
+}
+
+function currentSeasonAppearances(playerId: string, clubId: string, state: GameState): number {
+  let appearances = 0;
+  for (const [fixtureId, ratings] of Object.entries(state.matchRatings ?? {})) {
+    const fixture = state.fixtures[fixtureId];
+    if (
+      !fixture?.played
+      || fixture.season !== state.currentSeason
+      || (fixture.homeClubId !== clubId && fixture.awayClubId !== clubId)
+    ) continue;
+    const rating = ratings[playerId];
+    if (!rating) continue;
+    if (rating.minutesPlayed !== undefined ? rating.minutesPlayed > 0 : rating.started ?? true) {
+      appearances += 1;
+    }
+  }
+  return appearances;
+}
+
+function tacticalPositions(formation: string): ReadonlySet<Player["position"]> {
+  const parsed = parseFormation(formation);
+  return parsed
+    ? formationPositions(parsed.defenders, parsed.midfielders, parsed.forwards)
+    : new Set<Player["position"]>();
+}
+
+function positionCoverage(player: Player, club: Club, state: Pick<GameState, "players">): number {
+  return club.playerIds.reduce((coverage, playerId) => {
+    if (playerId === player.id) return coverage;
+    const teammate = state.players[playerId];
+    if (!teammate) return coverage;
+    if (teammate.position === player.position) return coverage + 1;
+    if (teammate.secondaryPositions?.includes(player.position)) return coverage + 0.35;
+    return coverage;
+  }, 0);
+}
+
+function preferredRenewalLength(
+  player: Player,
+  appearances: number,
+  morale: number,
+): number {
+  if (player.age <= 21) return appearances >= 6 && morale >= 5 ? 4 : 3;
+  if (player.age <= 24) return 3;
+  if (player.age <= 28) return appearances >= 12 && morale >= 6 ? 3 : 2;
+  if (player.age <= 31) return 2;
+  return 1;
+}
+
+function renewalWageExpectation(
+  player: Player,
+  contractLength: number,
+  appearances: number,
+  morale: number,
+): number {
+  const abilityBaseline = Math.round(player.currentAbility * 60);
+  const usageMultiplier = appearances >= 12 ? 1.12
+    : appearances >= 6 ? 1.05
+      : appearances === 0 ? 0.94
+        : 1;
+  const moraleMultiplier = morale >= 7 ? 1.05
+    : morale <= 3 ? 0.96
+      : 1;
+  const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
+  const personalityMultiplier = transferWillingness >= 0.75 ? 1.08
+    : transferWillingness <= 0.25 ? 0.96
+      : 1;
+  const ageMultiplier = player.age <= 21 ? 1.08
+    : player.age >= 33 ? 0.9
+      : player.age >= 30 ? 0.95
+        : 1;
+  const termMultiplier = contractLength >= 4 ? 1.04 : contractLength === 1 ? 0.94 : 1;
+
+  return Math.max(
+    100,
+    Math.round(
+      Math.max(player.wage, abilityBaseline)
+      * usageMultiplier
+      * moraleMultiplier
+      * personalityMultiplier
+      * ageMultiplier
+      * termMultiplier,
+    ),
+  );
+}
+
+function playerRenewalAcceptanceChance(
+  player: Player,
+  club: Club,
+  state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
+): number {
+  const morale = player.morale ?? 5;
+  const appearances = currentSeasonAppearances(player.id, club.id, state as GameState);
+  const coverage = positionCoverage(player, club, state);
+  const transferWillingness = player.personalityProfile?.transferWillingness ?? 0.5;
+  let chance = 0.48;
+
+  chance += Math.max(-0.15, Math.min(0.15, (morale - 5) * 0.05));
+  chance += appearances >= 12 ? 0.16
+    : appearances >= 6 ? 0.08
+      : appearances === 0 ? -0.16
+        : -0.04;
+  chance += coverage <= 1 ? 0.08 : coverage >= 4 ? -0.12 : 0;
+  chance += transferWillingness <= 0.25 ? 0.14
+    : transferWillingness >= 0.75 ? -0.14
+      : 0;
+
+  const manager = state.managerProfiles?.[club.id];
+  if (manager) {
+    const required = tacticalPositions(manager.preferredFormation);
+    if (required.has(player.position)) chance += 0.08;
+    else if (player.secondaryPositions?.some((position) => required.has(position))) chance += 0.02;
+    else chance -= 0.12;
+  }
+
+  const playerLevel = player.currentAbility / 2;
+  if (playerLevel > club.reputation + 15) chance -= 0.12;
+  else if (club.reputation > playerLevel + 20) chance += 0.04;
+
+  if (player.age >= 32) chance += 0.08;
+  if (player.age <= 21 && appearances >= 6) chance += 0.06;
+
+  return Math.min(0.96, Math.max(0.05, chance));
+}
+
+/**
+ * Contract decisions combine sporting value with role, morale, career stage,
+ * playing time and ambition. Affordability remains a separate hard gate so the
+ * score stays understandable rather than becoming an accounting simulation.
+ */
+export function calculateContractRenewalChance(
+  player: Player,
+  club: Club,
+  state: Pick<GameState, "players" | "fixtures" | "matchRatings" | "currentSeason" | "managerProfiles">,
+): number {
+  let chance = getRenewalChance(player.currentAbility);
+  chance += getClubReputationModifier(club.reputation);
+  chance += Math.max(-0.12, Math.min(0.12, player.form * 0.035));
+  chance += Math.max(-0.12, Math.min(0.12, ((player.morale ?? 5) - 5) * 0.025));
+
+  if (player.age <= 21) chance += 0.08;
+  else if (player.age >= 34) chance -= 0.2;
+  else if (player.age >= 31) chance -= 0.08;
+
+  const coverage = positionCoverage(player, club, state);
+  chance += coverage === 0 ? 0.12
+    : coverage <= 1.35 ? 0.05
+      : coverage >= 4 ? -0.12
+        : 0;
+
+  const appearances = currentSeasonAppearances(player.id, club.id, state as GameState);
+  if (appearances >= 12) chance += 0.1;
+  else if (appearances >= 6) chance += 0.04;
+  else if (appearances === 0 && player.age >= 23) chance -= 0.12;
+
+  const playerLevel = player.currentAbility / 2;
+  if (playerLevel > club.reputation + 15) chance -= 0.12;
+  else if (club.reputation > playerLevel + 20) chance += 0.04;
+
+  const manager = state.managerProfiles?.[club.id];
+  if (manager) {
+    const required = tacticalPositions(manager.preferredFormation);
+    if (required.has(player.position)) chance += 0.05;
+    else if (!(player.secondaryPositions ?? []).some((position) => required.has(position))) chance -= 0.08;
+  }
+
+  return Math.min(0.95, Math.max(0.03, chance));
 }
 
 function getMaxWeeksInPool(ca: number): number {

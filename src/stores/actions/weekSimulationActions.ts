@@ -24,6 +24,7 @@ import {
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
   EMPTY_DAY_FATIGUE_RECOVERY,
   createWeekSchedule,
+  enforceForcedRestSchedule,
   getScheduledActivityInstances,
 } from "@/engine/core/calendar";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
@@ -96,9 +97,22 @@ export function createWeekSimulationActions(
     // ── Day-by-day simulation actions ────────────────────────────────────────
 
   startWeekSimulation: () => {
-    const { gameState } = get();
-    if (!gameState) return;
+    const loadedGameState = get().gameState;
+    if (!loadedGameState) return;
+    let gameState = loadedGameState;
     if (hasRepresentedCareerCompletionState(gameState)) return;
+
+    const recoveryActive = isBankruptcyRecoveryActive(gameState.finances);
+    const fatigueSchedule = recoveryActive
+      ? gameState.schedule
+      : enforceForcedRestSchedule(
+          gameState.schedule,
+          gameState.scout?.fatigue ?? 0,
+        );
+    if (fatigueSchedule !== gameState.schedule) {
+      gameState = { ...gameState, schedule: fatigueSchedule };
+      set({ gameState, weekSimulation: null });
+    }
 
     // Advancing the deadline week consumes pending offers. Bankruptcy recovery
     // still advances time, but its schedule is forced empty so no work resolves.
@@ -107,7 +121,6 @@ export function createWeekSimulationActions(
       gameState.currentWeek,
       gameState.currentSeason,
     );
-    const recoveryActive = isBankruptcyRecoveryActive(gameState.finances);
     const hasScheduledWork = getScheduledActivityInstances(gameState.schedule).length > 0;
     if (offerExpiry.expired.length > 0 || (recoveryActive && hasScheduledWork)) {
       const expiredIds = new Set(offerExpiry.expired.map((offer) => offer.id));

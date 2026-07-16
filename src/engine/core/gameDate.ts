@@ -1,10 +1,8 @@
-import type { Fixture } from "./types";
+import type { Fixture, GameDate } from "./types";
 import { isFixtureInSeason } from "../world/fixtures";
 
-export interface SeasonWeek {
-  season: number;
-  week: number;
-}
+export type { GameDate } from "./types";
+export type SeasonWeek = GameDate;
 
 /**
  * Backward-compatible fallback for pure helpers that pre-date fixture-derived

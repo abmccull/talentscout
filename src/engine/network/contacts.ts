@@ -19,17 +19,24 @@ import type {
   YouthVenueType,
   UnsignedYouth,
   ContactInteraction,
+  Fixture,
+  GameDate,
   GameState,
   InboxMessage,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import {
+  addGameWeeks,
+  gameWeeksBetween,
+  isGameDateAtOrAfter,
+} from "@/engine/core/gameDate";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import {
   getCountryDisplayName as getSharedCountryDisplayName,
   normalizeCountryKey as normalizeSharedCountryKey,
 } from "@/lib/country";
 import { evaluateStakeholderMemoryPolicy } from "@/engine/consequences/stakeholderMemoryPolicy";
-import type { ConsequenceEngineState, GameDate } from "@/engine/consequences/types";
+import type { ConsequenceEngineState } from "@/engine/consequences/types";
 import {
   buildContactEvidenceClaim,
   deriveContactPerspective,
@@ -583,7 +590,7 @@ export function meetContact(
   rng: RNG,
   scout: Scout,
   contact: Contact,
-  memoryContext?: ContactMeetingMemoryContext,
+  memoryContext: ContactMeetingMemoryContext,
 ): ContactMeetingResult {
   // Networking attribute (1–20) provides a flat relationship bonus
   const networkingAttr = scout.attributes.networking;
@@ -591,8 +598,7 @@ export function meetContact(
 
   // Base relationship change: positive but modest (at least +1 per meeting)
   const baseChange = rng.nextInt(2, 8);
-  const stakeholderMemory = memoryContext
-    ? evaluateStakeholderMemoryPolicy({
+  const stakeholderMemory = evaluateStakeholderMemoryPolicy({
         memories: memoryContext.consequenceState.memories,
         obligations: memoryContext.consequenceState.obligations,
         stakeholder: { kind: "contact", id: contact.id },
@@ -600,8 +606,7 @@ export function meetContact(
         now: memoryContext.now,
         seasonLength: memoryContext.seasonLength,
         domain: "contactRelationship",
-      })
-    : undefined;
+      });
   const stakeholderMemoryAdjustment = stakeholderMemory
     ? clamp(Math.round(stakeholderMemory.scoreAdjustment * 0.25), -3, 3)
     : 0;
@@ -633,8 +638,8 @@ export function meetContact(
         reliability,
         sourceContactId: contact.id,
         sourceName: contact.name,
-        recordedWeek: memoryContext?.now.week,
-        recordedSeason: memoryContext?.now.season,
+        recordedWeek: memoryContext.now.week,
+        recordedSeason: memoryContext.now.season,
         evidenceClaim: buildContactEvidenceClaim({
           contact,
           playerId,
@@ -642,8 +647,8 @@ export function meetContact(
           hint,
           isHigh,
           reliability,
-          week: memoryContext?.now.week,
-          season: memoryContext?.now.season,
+          week: memoryContext.now.week,
+          season: memoryContext.now.season,
         }),
       });
     }
@@ -674,7 +679,7 @@ export function meetContact(
 
   // F3: Record the interaction for history
   const interaction: ContactInteraction = {
-    week: 0, // caller should set the actual week
+    occurredAt: memoryContext.now,
     type: "meeting",
     trustDelta,
   };
@@ -942,11 +947,14 @@ export function processVenueContactAcquisition(
  */
 export function processRelationshipDecay(
   contacts: Record<string, Contact>,
-  currentWeek: number,
+  currentDate: GameDate,
+  fixtures: Record<string, Fixture>,
 ): Record<string, Contact> {
   const result: Record<string, Contact> = {};
   for (const [id, contact] of Object.entries(contacts)) {
-    const weeksSinceInteraction = Math.max(0, currentWeek - (contact.lastInteractionWeek ?? currentWeek));
+    const weeksSinceInteraction = contact.lastInteractionAt
+      ? Math.max(0, gameWeeksBetween(fixtures, contact.lastInteractionAt, currentDate))
+      : 0;
     if (weeksSinceInteraction > 8 && contact.relationship > 5) {
       const decay = Math.min(3, contact.relationship - 5);
       result[id] = { ...contact, relationship: contact.relationship - decay };
@@ -1041,15 +1049,19 @@ export function processWeeklyContactDecay(
 ): { updatedContacts: Record<string, Contact>; betrayalMessages: InboxMessage[] } {
   const updatedContacts: Record<string, Contact> = {};
   const betrayalMessages: InboxMessage[] = [];
+  const currentDate = getCurrentGameDate(state);
 
   for (const [id, contact] of Object.entries(state.contacts)) {
     let updated = { ...contact };
+    const accessSuspended = isContactAccessSuspended(updated, currentDate);
+    if (updated.accessSuspendedUntil && !accessSuspended) {
+      updated = { ...updated, accessSuspendedUntil: undefined };
+    }
 
     // Trust decay: 1 point per week without interaction, after 4 weeks grace
-    const weeksSinceInteraction = Math.max(
-      0,
-      state.currentWeek - (contact.lastInteractionWeek ?? state.currentWeek),
-    );
+    const weeksSinceInteraction = contact.lastInteractionAt
+      ? Math.max(0, gameWeeksBetween(state.fixtures, contact.lastInteractionAt, currentDate))
+      : 0;
     const currentTrust = contact.trustLevel ?? contact.relationship;
 
     if (weeksSinceInteraction > 4 && currentTrust > 0) {
@@ -1074,7 +1086,7 @@ export function processWeeklyContactDecay(
     }
 
     // Reactivate if relationship recovers above 20
-    if (updated.relationship >= 20 && updated.dormant) {
+    if (updated.relationship >= 20 && updated.dormant && !accessSuspended) {
       updated = { ...updated, dormant: false };
     }
 
@@ -1085,25 +1097,40 @@ export function processWeeklyContactDecay(
     };
 
     // Expire exclusive windows
-    if (updated.exclusiveWindow && updated.exclusiveWindow.expiresWeek <= state.currentWeek) {
+    if (
+      updated.exclusiveWindow
+      && isGameDateAtOrAfter(currentDate, updated.exclusiveWindow.expiresAt)
+    ) {
       updated = { ...updated, exclusiveWindow: undefined };
     }
 
     // Evaluate betrayal: low-loyalty contacts may leak scout reports
-    const betrayalResult = evaluateBetrayalRisk(updated, state, rng);
+    const betrayalResult = accessSuspended
+      ? { betrayed: false, message: "", accessSuspensionWeeks: 0 }
+      : evaluateBetrayalRisk(updated, state, rng);
     if (betrayalResult.betrayed) {
       // Record the betrayal interaction
       const betrayalInteraction: ContactInteraction = {
-        week: state.currentWeek,
+        occurredAt: currentDate,
         type: "betrayal",
         trustDelta: -15,
       };
+      const accessSuspendedUntil = addGameWeeks(
+        state.fixtures,
+        currentDate,
+        betrayalResult.accessSuspensionWeeks,
+      );
       updated = {
         ...updated,
+        relationship: Math.max(0, updated.relationship - 10),
         trustLevel: Math.max(0, (updated.trustLevel ?? updated.relationship) - 15),
         loyalty: Math.max(0, (updated.loyalty ?? 50) - 10),
         interactionHistory: [...(updated.interactionHistory ?? []), betrayalInteraction],
         betrayalRisk: clamp((updated.betrayalRisk ?? 0) + 0.1, 0, 1),
+        gossipQueue: [],
+        exclusiveWindow: undefined,
+        accessSuspendedUntil,
+        dormant: true,
       };
 
       betrayalMessages.push({
@@ -1112,7 +1139,7 @@ export function processWeeklyContactDecay(
         season: state.currentSeason,
         type: "news",
         title: `Betrayal: ${contact.name}`,
-        body: betrayalResult.message,
+        body: `${betrayalResult.message} Existing tips and exclusive access have been withdrawn. The contact will not provide new intelligence until season ${accessSuspendedUntil.season}, week ${accessSuspendedUntil.week}.`,
         read: false,
         actionRequired: true,
         relatedId: contact.id,
@@ -1154,9 +1181,9 @@ function calculateBetrayalRisk(contact: Contact): number {
  */
 export function evaluateBetrayalRisk(
   contact: Contact,
-  state: GameState,
+  _state: GameState,
   rng: RNG,
-): { betrayed: boolean; message: string } {
+): { betrayed: boolean; message: string; accessSuspensionWeeks: number } {
   const betrayalRisk = contact.betrayalRisk ?? calculateBetrayalRisk(contact);
 
   // Weekly betrayal check: very low probability even for risky contacts
@@ -1164,19 +1191,20 @@ export function evaluateBetrayalRisk(
   const weeklyChance = betrayalRisk * 0.05;
 
   if (!rng.chance(weeklyChance)) {
-    return { betrayed: false, message: "" };
+    return { betrayed: false, message: "", accessSuspensionWeeks: 0 };
   }
 
-  // Pick a betrayal type
+  // Describe only consequences the engine can prove. Rival targeting and press
+  // publication have separate authorities and must not be invented here.
   const betrayalTypes = [
-    `${contact.name} has leaked one of your scouting reports to a rival club. Your assessment of a player has been shared with competitors.`,
-    `${contact.name} tipped off a rival scout about a prospect you've been tracking. You may face increased competition.`,
-    `${contact.name} shared confidential information about your transfer targets with a journalist. Your strategy has been compromised.`,
-    `${contact.name} provided misleading player information that wasted your time and resources.`,
+    `${contact.name} was caught circulating details from a private conversation. You can no longer treat the relationship as confidential.`,
+    `${contact.name} concealed a conflict of interest while asking for access to your scouting work.`,
+    `${contact.name} supplied information they could not substantiate and then refused to identify the source.`,
+    `${contact.name} used your relationship to seek information without honoring the access they promised in return.`,
   ];
 
   const message = rng.pick(betrayalTypes);
-  return { betrayed: true, message };
+  return { betrayed: true, message, accessSuspensionWeeks: 4 };
 }
 
 /**
@@ -1190,12 +1218,14 @@ export function generateExclusiveWindow(
   contact: Contact,
   state: GameState,
 ): { updatedContact: Contact; message: InboxMessage } | null {
+  const currentDate = getCurrentGameDate(state);
   const trustLevel = contact.trustLevel ?? contact.relationship;
 
   // Only high-trust insider contacts (clubStaff, academyCoach, sportingDirector, academyDirector)
   const insiderTypes = new Set(["clubStaff", "academyCoach", "sportingDirector", "academyDirector"]);
   if (!insiderTypes.has(contact.type)) return null;
   if (trustLevel < 75) return null;
+  if (contact.dormant || isContactAccessSuspended(contact, currentDate)) return null;
 
   // Already has an active exclusive window
   if (contact.exclusiveWindow) return null;
@@ -1212,15 +1242,15 @@ export function generateExclusiveWindow(
   if (knownPlayers.length === 0) return null;
 
   const player = rng.pick(knownPlayers);
-  const expiresWeek = state.currentWeek + 2; // 2-week window
+  const expiresAt = addGameWeeks(state.fixtures, currentDate, 2);
 
   const updatedContact: Contact = {
     ...contact,
     exclusiveWindow: {
       playerId: player.id,
-      expiresWeek,
+      expiresAt,
     },
-    lastInteractionWeek: state.currentWeek,
+    lastInteractionAt: currentDate,
   };
 
   const message: InboxMessage = {
@@ -1229,7 +1259,7 @@ export function generateExclusiveWindow(
     season: state.currentSeason,
     type: "news",
     title: `Exclusive Tip from ${contact.name}`,
-    body: `${contact.name} has given you a 2-week exclusive on ${player.firstName} ${player.lastName}. You have early access before other scouts are aware. This window expires in week ${expiresWeek}.`,
+    body: `${contact.name} has given you a 2-week exclusive on ${player.firstName} ${player.lastName}. You have early access before other scouts are aware. This window expires in season ${expiresAt.season}, week ${expiresAt.week}.`,
     read: false,
     actionRequired: true,
     relatedId: player.id,
@@ -1237,6 +1267,21 @@ export function generateExclusiveWindow(
   };
 
   return { updatedContact, message };
+}
+
+/** True while a betrayal-imposed access suspension is still in force. */
+export function isContactAccessSuspended(
+  contact: Pick<Contact, "accessSuspendedUntil">,
+  currentDate: GameDate,
+): boolean {
+  return !!contact.accessSuspendedUntil
+    && !isGameDateAtOrAfter(currentDate, contact.accessSuspendedUntil);
+}
+
+function getCurrentGameDate(
+  state: Pick<GameState, "currentSeason" | "currentWeek">,
+): GameDate {
+  return { season: state.currentSeason, week: state.currentWeek };
 }
 
 /**

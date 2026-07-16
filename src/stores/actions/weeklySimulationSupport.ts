@@ -18,7 +18,10 @@ import {
   type ActivityChoiceId,
   buildActivityInteractionState,
 } from "@/engine/core/activityInteractions";
-import { getScheduledActivityInstances } from "@/engine/core/calendar";
+import {
+  capActivityQualityForFatigue,
+  getScheduledActivityInstances,
+} from "@/engine/core/calendar";
 import { rollActivityQuality } from "@/engine/core/activityQuality";
 import { createRNG } from "@/engine/rng";
 import { checkScenarioObjectives } from "@/engine/scenarios";
@@ -192,7 +195,15 @@ export function rollDayActivityQuality(
   const qualityRng = createRNG(
     `${gameState.seed}-quality-${gameState.currentWeek}-${gameState.currentSeason}-${getQualityKey(activity, dayIndex)}`,
   );
-  return rollActivityQuality(qualityRng, activity.type, gameState.scout, gameState.scout.careerPath);
+  return capActivityQualityForFatigue(
+    rollActivityQuality(
+      qualityRng,
+      activity.type,
+      gameState.scout,
+      gameState.scout.careerPath,
+    ),
+    gameState.scout.fatigue,
+  );
 }
 
 export function deriveScenarioState(

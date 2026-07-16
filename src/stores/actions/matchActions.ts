@@ -93,11 +93,15 @@ export function createMatchActions(get: GetState, set: SetState) {
       homeClub,
       gameState.players,
       gameState.disciplinaryRecords,
+      undefined,
+      gameState.managerProfiles[homeClub.id],
     );
     const awayPlayers = selectStartingXI(
       awayClub,
       gameState.players,
       gameState.disciplinaryRecords,
+      undefined,
+      gameState.managerProfiles[awayClub.id],
     );
 
     const rng = createRNG(`${gameState.seed}-match-${fixtureId}`);
@@ -298,11 +302,15 @@ export function createMatchActions(get: GetState, set: SetState) {
       homeClub,
       gameState.players,
       gameState.disciplinaryRecords,
+      undefined,
+      gameState.managerProfiles[homeClub.id],
     );
     const awayPlayers = selectStartingXI(
       awayClub,
       gameState.players,
       gameState.disciplinaryRecords,
+      undefined,
+      gameState.managerProfiles[awayClub.id],
     );
     const resultRng = createRNG(`${gameState.seed}-result-${activeMatch.fixtureId}`);
     const result = simulateMatchResult(resultRng, homeClub, awayClub, homePlayers, awayPlayers);

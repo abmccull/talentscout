@@ -13,6 +13,7 @@ import type {
 } from "@/engine/core/types";
 import {
   advanceIndependentTier,
+  attemptCareerTierAdvancement,
   canChooseCareerPath,
   calculatePerformanceReview,
   checkIndependentTierAdvancement,
@@ -282,7 +283,15 @@ describe("organic career journey", () => {
       "independent",
     );
 
-    const leadershipWork = recordReportWork(committed.scout, 50);
+    let leadershipWork = recordReportWork(committed.scout, 50);
+    // Established craft is deliberately insufficient for senior promotion;
+    // mature, accurate outcomes build the remaining professional standing.
+    for (let index = 0; index < 6; index += 1) {
+      leadershipWork = updateReputation(leadershipWork, {
+        type: "reportValidated",
+        accuracy: 100,
+      });
+    }
     let leadershipFinances = applyBalanceTransaction(
       committed.finances!,
       25_000,
@@ -292,6 +301,10 @@ describe("organic career journey", () => {
     );
     leadershipFinances = {
       ...leadershipFinances,
+      completedCourses: [
+        ...leadershipFinances.completedCourses,
+        "fa_level_3",
+      ],
       retainerContracts: [activeRetainer(1), activeRetainer(2), activeRetainer(3)],
       employees: [agencyEmployee()],
     };
@@ -358,6 +371,93 @@ describe("organic career journey", () => {
       playerId: PLAYER.id,
       npcScoutId: bootstrapped.addedScoutIds[0],
     });
+  });
+
+  it("uses one qualification gate for independent milestones and club reviews", () => {
+    const created = createScout(CONFIG, new RNG("career-tier-authority"));
+    const independentScout = {
+      ...created,
+      careerPath: "independent" as const,
+      careerPathChosen: true,
+      careerTier: 3 as const,
+      independentTier: 3 as const,
+      reputation: 80,
+      reportsSubmitted: 100,
+    };
+    const baseFinances = initializeFinances(
+      independentScout,
+      "independent",
+      "normal",
+    );
+    const qualifiedBusiness = {
+      ...baseFinances,
+      balance: 50_000,
+      retainerContracts: [activeRetainer(1), activeRetainer(2), activeRetainer(3)],
+      employees: [agencyEmployee()],
+      completedCourses: [],
+    };
+
+    expect(checkIndependentTierAdvancement(
+      independentScout,
+      qualifiedBusiness,
+    )).toBeNull();
+    expect(advanceIndependentTier(
+      independentScout,
+      qualifiedBusiness,
+      4,
+    ).scout.careerTier).toBe(3);
+
+    const withQualification = {
+      ...qualifiedBusiness,
+      completedCourses: ["fa_level_3"],
+    };
+    const independentPromotion = attemptCareerTierAdvancement(
+      independentScout,
+      withQualification,
+      "independentMilestone",
+    );
+    expect(independentPromotion.decision).toMatchObject({
+      eligible: true,
+      targetTier: 4,
+    });
+    expect(independentPromotion.scout).toMatchObject({
+      careerTier: 4,
+      independentTier: 4,
+    });
+    expect(independentPromotion.finances?.independentTier).toBe(4);
+
+    const clubScout = {
+      ...independentScout,
+      careerPath: "club" as const,
+      independentTier: undefined,
+      currentClubId: "academy_fc",
+    };
+    const blockedClubReview = attemptCareerTierAdvancement(
+      clubScout,
+      qualifiedBusiness,
+      "performanceReview",
+    );
+    expect(blockedClubReview.decision.blockers).toContain("qualification");
+    expect(blockedClubReview.scout.careerTier).toBe(3);
+
+    const clubPromotion = attemptCareerTierAdvancement(
+      clubScout,
+      withQualification,
+      "performanceReview",
+    );
+    expect(clubPromotion.decision).toMatchObject({
+      eligible: true,
+      targetTier: 4,
+    });
+    expect(clubPromotion.scout.careerTier).toBe(4);
+
+    const reviewCannotAdvanceIndependent = attemptCareerTierAdvancement(
+      independentScout,
+      withQualification,
+      "performanceReview",
+    );
+    expect(reviewCannotAdvanceIndependent.decision.eligible).toBe(false);
+    expect(reviewCannotAdvanceIndependent.decision.blockers).toContain("careerPath");
   });
 
   it("preserves the career through firing, recovery, retirement, and New Game+ inheritance", () => {

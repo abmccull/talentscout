@@ -11,7 +11,11 @@
  */
 
 // Data activities — database queries, video analysis, stats briefings
-export type { DatabaseQueryFilters, StatsBriefingResult } from "./dataActivities";
+export type {
+  DatabaseQueryFilters,
+  DatabaseQueryOptions,
+  StatsBriefingResult,
+} from "./dataActivities";
 export {
   executeDatabaseQuery,
   executeDeepVideoAnalysis,

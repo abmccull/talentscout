@@ -2,7 +2,7 @@
  * Gossip system (F3) -- contact-driven intelligence with reliability and decay.
  *
  * Contacts generate gossip based on their type, trust level, and loyalty.
- * Gossip items have a limited lifespan (expiresWeek) and varying reliability.
+ * Gossip items have a canonical reveal/expiry date and varying reliability.
  * The scout must evaluate gossip accuracy over time to build trust with
  * reliable contacts and identify unreliable ones.
  *
@@ -10,15 +10,20 @@
  */
 
 import type {
+  ActionableGossipItem,
   GameState,
   Contact,
+  GameDate,
+  GossipAction,
+  GossipClaimStatus,
   GossipItem,
   Player,
   Club,
-  ContactInteraction,
   InboxMessage,
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
+import { addGameWeeks, isGameDateAtOrAfter } from "@/engine/core/gameDate";
+import { isContactAccessSuspended } from "./contacts";
 
 // =============================================================================
 // Constants
@@ -92,10 +97,10 @@ const GOSSIP_TEMPLATES: Record<GossipType, string[]> = {
 const CONTACT_GOSSIP_POOLS: Record<string, GossipType[]> = {
   agent:                ["transferRumor", "unhappyPlayer"],
   scout:                ["youthProspect", "transferRumor", "injuryNews"],
-  clubStaff:            ["injuryNews", "unhappyPlayer", "managerChange"],
-  journalist:           ["transferRumor", "managerChange", "unhappyPlayer"],
+  clubStaff:            ["injuryNews", "unhappyPlayer", "transferRumor"],
+  journalist:           ["transferRumor", "unhappyPlayer"],
   academyCoach:         ["youthProspect", "injuryNews"],
-  sportingDirector:     ["transferRumor", "managerChange", "unhappyPlayer"],
+  sportingDirector:     ["transferRumor", "unhappyPlayer"],
   grassrootsOrganizer:  ["youthProspect"],
   schoolCoach:          ["youthProspect"],
   youthAgent:           ["youthProspect", "transferRumor"],
@@ -131,8 +136,10 @@ export function generateGossip(
   contact: Contact,
   state: GameState,
 ): GossipItem | null {
+  const now = currentGameDate(state);
   const trustLevel = contact.trustLevel ?? contact.relationship;
   if (trustLevel < MIN_TRUST_FOR_GOSSIP) return null;
+  if (contact.dormant || isContactAccessSuspended(contact, now)) return null;
 
   // Queue full check
   const currentQueue = contact.gossipQueue ?? [];
@@ -145,20 +152,6 @@ export function generateGossip(
 
   if (!rng.chance(gossipChance)) return null;
 
-  // Pick gossip type based on contact type
-  const pool = CONTACT_GOSSIP_POOLS[contact.type] ?? ["transferRumor"];
-  const gossipType = rng.pick(pool);
-
-  // Pick a relevant player and club for the gossip content
-  const { player, club } = pickGossipSubject(rng, gossipType, contact, state);
-
-  // Build content string
-  const templates = GOSSIP_TEMPLATES[gossipType];
-  let content = rng.pick(templates);
-  const playerName = player ? `${player.firstName} ${player.lastName}` : "a player";
-  const clubName = club ? club.name : "a club";
-  content = content.replace("{player}", playerName).replace("{club}", clubName);
-
   // Reliability depends on contact's own reliability + loyalty
   const baseReliability = contact.reliability / 100;
   const loyaltyFactor = (contact.loyalty ?? 50) / 100;
@@ -168,15 +161,37 @@ export function generateGossip(
     0.95,
   );
 
+  // Reliability now determines whether the source supplies a supported,
+  // unsupported, or genuinely ambiguous claim before a subject is selected.
+  const intendedStatus = rollGossipClaimStatus(rng, reliability);
+  const pool = CONTACT_GOSSIP_POOLS[contact.type] ?? ["transferRumor"];
+  const gossipType = rng.pick(pool);
+  const { player, club, claimStatus } = pickGossipSubject(
+    rng,
+    gossipType,
+    intendedStatus,
+    contact,
+    state,
+  );
+  if (gossipType !== "managerChange" && !player) return null;
+
+  const templates = GOSSIP_TEMPLATES[gossipType];
+  let content = rng.pick(templates);
+  const playerName = player ? `${player.firstName} ${player.lastName}` : "a player";
+  const clubName = club ? club.name : "a club";
+  content = content.replace("{player}", playerName).replace("{club}", clubName);
+
   return {
     id: generateGossipId(rng),
     type: gossipType,
     playerId: player?.id,
     clubId: club?.id,
     reliability,
-    revealedWeek: state.currentWeek,
-    expiresWeek: state.currentWeek + GOSSIP_LIFESPAN_WEEKS,
+    claimStatus,
+    revealedAt: now,
+    expiresAt: addGameWeeks(state.fixtures, now, GOSSIP_LIFESPAN_WEEKS),
     content,
+    dismissed: false,
   };
 }
 
@@ -186,12 +201,14 @@ export function generateGossip(
  */
 export function processGossipDecay(
   contacts: Record<string, Contact>,
-  currentWeek: number,
+  currentDate: GameDate,
 ): Record<string, Contact> {
   const result: Record<string, Contact> = {};
   for (const [id, contact] of Object.entries(contacts)) {
     const queue = contact.gossipQueue ?? [];
-    const filteredQueue = queue.filter((g) => g.expiresWeek > currentWeek);
+    const filteredQueue = queue.filter(
+      (g) => !isGameDateAtOrAfter(currentDate, g.expiresAt),
+    );
     result[id] = {
       ...contact,
       gossipQueue: filteredQueue,
@@ -211,39 +228,10 @@ export function processGossipDecay(
  */
 export function evaluateGossipAccuracy(
   gossipItem: GossipItem,
-  state: GameState,
 ): number {
-  if (!gossipItem.playerId) return 0;
-
-  const player = state.players[gossipItem.playerId];
-  if (!player) return 0;
-
-  switch (gossipItem.type) {
-    case "transferRumor": {
-      // If the player's club changed since the gossip, it was accurate
-      const club = gossipItem.clubId ? state.clubs[gossipItem.clubId] : null;
-      if (club && player.clubId !== gossipItem.clubId) return 3; // confirmed transfer
-      return -1; // didn't happen (yet)
-    }
-    case "injuryNews": {
-      if (player.injured) return 3;
-      return -1;
-    }
-    case "unhappyPlayer": {
-      if (player.morale <= 4) return 3;
-      return -1;
-    }
-    case "youthProspect": {
-      // Youth prospect gossip is always considered neutral-positive
-      return 1;
-    }
-    case "managerChange": {
-      // Can't easily verify manager changes, treat as neutral
-      return 0;
-    }
-    default:
-      return 0;
-  }
+  if (gossipItem.claimStatus === "accurate") return 3;
+  if (gossipItem.claimStatus === "inaccurate") return -2;
+  return 0;
 }
 
 /**
@@ -260,15 +248,16 @@ export function processWeeklyGossip(
 ): { updatedContacts: Record<string, Contact>; gossipMessages: InboxMessage[] } {
   const updatedContacts: Record<string, Contact> = {};
   const gossipMessages: InboxMessage[] = [];
+  const currentDate = currentGameDate(state);
 
   // Phase 1: Evaluate accuracy of expiring gossip items and accumulate trust deltas.
-  // A gossip item expires when expiresWeek <= currentWeek.
+  // A gossip item expires when the current canonical date reaches expiresAt.
   const trustDeltaByContact: Record<string, number> = {};
   for (const [id, contact] of Object.entries(state.contacts)) {
     const queue = contact.gossipQueue ?? [];
     for (const item of queue) {
-      if (item.expiresWeek <= state.currentWeek) {
-        const delta = evaluateGossipAccuracy(item, state);
+      if (isGameDateAtOrAfter(currentDate, item.expiresAt)) {
+        const delta = evaluateGossipAccuracy(item);
         trustDeltaByContact[id] = (trustDeltaByContact[id] ?? 0) + delta;
       }
     }
@@ -288,7 +277,7 @@ export function processWeeklyGossip(
       contactsWithTrust[id] = contact;
     }
   }
-  const decayed = processGossipDecay(contactsWithTrust, state.currentWeek);
+  const decayed = processGossipDecay(contactsWithTrust, currentDate);
 
   // Phase 3: Generate new gossip for each contact.
   for (const [id, contact] of Object.entries(decayed)) {
@@ -301,18 +290,18 @@ export function processWeeklyGossip(
         gossipQueue: newQueue,
       };
 
-      // Create an inbox message for the gossip
+      // The contact queue is canonical; the inbox links to that exact item.
       gossipMessages.push({
         id: generateGossipMessageId(rng),
         week: state.currentWeek,
         season: state.currentSeason,
-        type: "news",
+        type: "gossip",
         title: `Gossip from ${contact.name}`,
         body: gossipItem.content,
         read: false,
         actionRequired: false,
-        relatedId: gossipItem.playerId,
-        relatedEntityType: gossipItem.playerId ? "player" : undefined,
+        relatedId: gossipItem.id,
+        relatedEntityType: "gossip",
       });
     } else {
       updatedContacts[id] = contact;
@@ -322,6 +311,48 @@ export function processWeeklyGossip(
   return { updatedContacts, gossipMessages };
 }
 
+/** Derive inbox/store action views without creating a second persisted ledger. */
+export function getActionableGossipItems(
+  contacts: Record<string, Contact>,
+): ActionableGossipItem[] {
+  return Object.entries(contacts).flatMap(([contactId, contact]) =>
+    (contact.gossipQueue ?? []).map((item) => ({ ...item, contactId })),
+  );
+}
+
+export interface ApplyGossipActionResult {
+  updatedContacts: Record<string, Contact>;
+  item: ActionableGossipItem;
+}
+
+/** Apply a player choice to the canonical item in its source contact queue. */
+export function applyGossipAction(
+  contacts: Record<string, Contact>,
+  gossipId: string,
+  action: GossipAction,
+): ApplyGossipActionResult | null {
+  for (const [contactId, contact] of Object.entries(contacts)) {
+    const itemIndex = (contact.gossipQueue ?? []).findIndex((item) => item.id === gossipId);
+    if (itemIndex < 0) continue;
+
+    const gossipQueue = [...(contact.gossipQueue ?? [])];
+    const item: GossipItem = {
+      ...gossipQueue[itemIndex],
+      actionTaken: action,
+      dismissed: action === "dismiss",
+    };
+    gossipQueue[itemIndex] = item;
+    return {
+      updatedContacts: {
+        ...contacts,
+        [contactId]: { ...contact, gossipQueue },
+      },
+      item: { ...item, contactId },
+    };
+  }
+  return null;
+}
+
 // =============================================================================
 // Internal helpers
 // =============================================================================
@@ -329,14 +360,15 @@ export function processWeeklyGossip(
 function pickGossipSubject(
   rng: RNG,
   gossipType: GossipType,
+  intendedStatus: GossipClaimStatus,
   contact: Contact,
   state: GameState,
-): { player: Player | null; club: Club | null } {
+): { player: Player | null; club: Club | null; claimStatus: GossipClaimStatus } {
   const players = Object.values(state.players);
   const clubs = Object.values(state.clubs);
 
   if (players.length === 0 || clubs.length === 0) {
-    return { player: null, club: null };
+    return { player: null, club: null, claimStatus: "ambiguous" };
   }
 
   // Prefer players the contact knows about
@@ -344,35 +376,106 @@ function pickGossipSubject(
     .map((id) => state.players[id])
     .filter((p): p is Player => !!p);
 
-  const candidatePlayers = knownPlayers.length > 0 ? knownPlayers : players;
+  const knownContractedPlayers = knownPlayers.filter((player) => !!state.clubs[player.clubId]);
+  const contractedPlayers = players.filter((player) => !!state.clubs[player.clubId]);
+  const candidatePlayers = knownContractedPlayers.length > 0
+    ? knownContractedPlayers
+    : contractedPlayers;
+  if (candidatePlayers.length === 0) {
+    return { player: null, club: null, claimStatus: "ambiguous" };
+  }
 
   switch (gossipType) {
-    case "transferRumor":
-    case "unhappyPlayer": {
-      const player = rng.pick(candidatePlayers);
+    case "transferRumor": {
+      const selection = pickPlayerForClaim(
+        rng,
+        candidatePlayers,
+        (player) => player.morale <= 4
+          || (player.contractExpiry > 0 && player.contractExpiry <= state.currentSeason + 1),
+        intendedStatus,
+      );
+      const player = selection.player;
       const club = state.clubs[player.clubId] ?? rng.pick(clubs);
-      return { player, club };
+      return { player, club, claimStatus: selection.claimStatus };
+    }
+    case "unhappyPlayer": {
+      const selection = pickPlayerForClaim(
+        rng,
+        candidatePlayers,
+        (player) => player.morale <= 4,
+        intendedStatus,
+      );
+      const player = selection.player;
+      const club = state.clubs[player.clubId] ?? rng.pick(clubs);
+      return { player, club, claimStatus: selection.claimStatus };
     }
     case "youthProspect": {
-      // Prefer younger players
       const youngPlayers = candidatePlayers.filter((p) => p.age <= 21);
       const pool = youngPlayers.length > 0 ? youngPlayers : candidatePlayers;
-      const player = rng.pick(pool);
+      const selection = pickPlayerForClaim(
+        rng,
+        pool,
+        (player) => player.age <= 21
+          && (player.potentialAbility >= 120
+            || player.potentialAbility - player.currentAbility >= 25),
+        intendedStatus,
+      );
+      const player = selection.player;
       const club = state.clubs[player.clubId] ?? rng.pick(clubs);
-      return { player, club };
+      return { player, club, claimStatus: selection.claimStatus };
     }
     case "managerChange": {
       const club = rng.pick(clubs);
-      return { player: null, club };
+      return { player: null, club, claimStatus: "ambiguous" };
     }
     case "injuryNews": {
-      const player = rng.pick(candidatePlayers);
+      const selection = pickPlayerForClaim(
+        rng,
+        candidatePlayers,
+        (player) => player.injured === true,
+        intendedStatus,
+      );
+      const player = selection.player;
       const club = state.clubs[player.clubId] ?? rng.pick(clubs);
-      return { player, club };
+      return { player, club, claimStatus: selection.claimStatus };
     }
     default:
-      return { player: rng.pick(players), club: rng.pick(clubs) };
+      return { player: rng.pick(candidatePlayers), club: rng.pick(clubs), claimStatus: "ambiguous" };
   }
+}
+
+function rollGossipClaimStatus(
+  rng: RNG,
+  reliability: number,
+): GossipClaimStatus {
+  const boundedReliability = clamp(reliability, 0, 1);
+  const roll = rng.next();
+  if (roll < boundedReliability) return "accurate";
+  const ambiguityCeiling = boundedReliability + (1 - boundedReliability) * 0.35;
+  return roll < ambiguityCeiling ? "ambiguous" : "inaccurate";
+}
+
+function pickPlayerForClaim(
+  rng: RNG,
+  candidates: Player[],
+  supportsClaim: (player: Player) => boolean,
+  intendedStatus: GossipClaimStatus,
+): { player: Player; claimStatus: GossipClaimStatus } {
+  if (intendedStatus === "ambiguous") {
+    return { player: rng.pick(candidates), claimStatus: "ambiguous" };
+  }
+
+  const eligible = candidates.filter((player) =>
+    intendedStatus === "accurate" ? supportsClaim(player) : !supportsClaim(player),
+  );
+  if (eligible.length === 0) {
+    return { player: rng.pick(candidates), claimStatus: "ambiguous" };
+  }
+  return { player: rng.pick(eligible), claimStatus: intendedStatus };
+}
+
+function currentGameDate(state: Pick<GameState, "currentSeason" | "currentWeek">): GameDate {
+  return { season: state.currentSeason, week: state.currentWeek };
 }
 
 function generateGossipMessageId(rng: RNG): string {

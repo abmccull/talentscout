@@ -25,7 +25,10 @@ import {
   getSeasonEndWindow,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
-import { selectLatestReportsByCaseOpenedInRange } from "@/engine/reports/reportAccountability";
+import {
+  calculateReportAccountabilityMetrics,
+  selectLatestReportsByCaseOpenedInRange,
+} from "@/engine/reports/reportAccountability";
 import { getPhilosophySpecializationAffinity } from "@/engine/world/recruitmentIdentity";
 
 // ---------------------------------------------------------------------------
@@ -44,7 +47,7 @@ export type ReputationEvent =
   | { type: "discoveryCredit"; wonderkidTier: WonderkidTier }
   | { type: "tablePoundSuccess" }
   | { type: "tablePoundFailure" }
-  | { type: "seasonEnd"; reviewOutcome: string }
+  | { type: "seasonEnd"; reviewOutcome: PerformanceReview["outcome"] }
   /**
    * A scout places an unsigned youth at a club.
    * Reputation gain scales with conviction level used on the placement report.
@@ -147,25 +150,51 @@ const DISCOVERY_DELTA: Record<WonderkidTier, number> = {
  * Reputation is clamped to [0, 100].
  */
 export function updateReputation(scout: Scout, event: ReputationEvent): Scout {
-  const delta = calculateReputationDelta(event);
+  const delta = event.type === "reportSubmitted"
+    ? calculateReportSubmissionDelta(event.quality, scout.reportsSubmitted)
+    : calculateReputationDelta(event);
   const newReputation = Math.max(0, Math.min(100, scout.reputation + delta));
   return { ...scout, reputation: newReputation };
+}
+
+function calculateReportSubmissionDelta(
+  quality: number,
+  reportsSubmitted: number,
+): number {
+  const normalised = Math.max(0, Math.min(100, quality)) / 100;
+  // The first five distinct cases establish professional credibility and keep
+  // the opening career-path choice attainable. Once established, craft alone
+  // is a small signal; mature accuracy carries the meaningful reputation risk.
+  return reportsSubmitted < 5
+    ? 0.5 + normalised * 1.5
+    : 0.1 + normalised * 0.4;
+}
+
+export function getPerformanceReviewReputationChange(
+  outcome: PerformanceReview["outcome"],
+): number {
+  switch (outcome) {
+    case "promoted": return 5;
+    case "retained": return 2;
+    case "warning": return 0;
+    case "fired": return -5;
+  }
 }
 
 function calculateReputationDelta(event: ReputationEvent): number {
   switch (event.type) {
     case "reportSubmitted": {
-      // quality 0–100 → +0.5 to +2
-      const normalised = Math.max(0, Math.min(100, event.quality)) / 100;
-      return 0.5 + normalised * 1.5;
+      return calculateReportSubmissionDelta(event.quality, Number.MAX_SAFE_INTEGER);
     }
 
     case "reportValidated": {
-      // Delayed truth is where accuracy affects a scout's standing. A 50/100
-      // validation is neutral; excellent calls build reputation while badly
-      // missed calls can cost it.
+      // Delayed truth dominates established craft rewards. A 60/100 review is
+      // neutral; excellent calls build standing while poor calls carry an
+      // equally meaningful downside.
       const accuracy = Math.max(0, Math.min(100, event.accuracy));
-      return ((accuracy - 50) / 50) * (accuracy >= 50 ? 3 : 2);
+      return accuracy >= 60
+        ? ((accuracy - 60) / 40) * 3
+        : ((accuracy - 60) / 60) * 3;
     }
 
     case "successfulSigning": {
@@ -187,15 +216,8 @@ function calculateReputationDelta(event: ReputationEvent): number {
     case "tablePoundFailure":
       return -10;
 
-    case "seasonEnd": {
-      switch (event.reviewOutcome) {
-        case "excellent":  return 5;
-        case "good":       return 2;
-        case "acceptable": return 0;
-        case "poor":       return -5;
-        default:           return 0;
-      }
-    }
+    case "seasonEnd":
+      return getPerformanceReviewReputationChange(event.reviewOutcome);
 
     case "youthPlacement": {
       // Reputation scales with conviction level used on the placement report
@@ -276,7 +298,8 @@ export interface TierReviewContext {
  *     outcome: "promoted" | "retained" | "warning" | "fired" }
  *
  * Tiers 3-5 receive additional scoring criteria via the optional
- * `tierContext` parameter. Tier 1-2 behaviour is unchanged.
+ * `tierContext` parameter. Every tier shares the same accountability-weighted
+ * foundation.
  */
 export function calculatePerformanceReview(
   scout: Scout,
@@ -316,10 +339,12 @@ export function calculatePerformanceReview(
 
   // ---------------------------------------------------------------------------
   // Base composite score (tiers 1–2, and foundation for tiers 3–5)
-  // Reports:      up to 25 pts (target = 10 reports)
-  // Quality:      up to 40 pts (target = avg quality 75)
-  // Signings:     up to 25 pts (target = 3 successful)
-  // Table pounds: up to 10 pts bonus
+  // Reports:       up to 10 pts
+  // Craft:         up to 15 pts
+  // Signings:      up to 20 pts
+  // Mature accuracy:      up to 35 pts
+  // Decision calibration: up to 15 pts
+  // Table pounds:          up to 5 pts bonus
   // ---------------------------------------------------------------------------
   const contractObjectives = scout.careerPath === "club"
     ? scout.employmentContract?.objectives
@@ -330,14 +355,34 @@ export function calculatePerformanceReview(
     1,
     contractObjectives?.successfulRecommendations ?? 3,
   );
-  const reportScore = Math.min(25, (reportsSubmitted / reportsTarget) * 25);
-  const qualityScore = Math.min(40, (averageQuality / qualityTarget) * 40);
+  const reportScore = Math.min(10, (reportsSubmitted / reportsTarget) * 10);
+  const qualityScore = Math.min(15, (averageQuality / qualityTarget) * 15);
   const signingScore = Math.min(
-    25,
-    (successfulRecommendations / recommendationsTarget) * 25,
+    20,
+    (successfulRecommendations / recommendationsTarget) * 20,
   );
-  const tablePoundBonus = tablePoundsSuccessful >= 1 ? 10 : 0;
-  let total = reportScore + qualityScore + signingScore + tablePoundBonus;
+  const accountability = calculateReportAccountabilityMetrics(
+    reports,
+    scout.id,
+  );
+  // Outcomes need time to mature. Active work receives a deliberately capped
+  // provisional baseline: enough for retention, never enough for craft and
+  // volume alone to manufacture a promotion.
+  const provisionalAccuracy = reportsSubmitted > 0
+    ? Math.min(50, averageQuality)
+    : 0;
+  const accuracyBasis = accountability.averageAccuracy ?? provisionalAccuracy;
+  const decisionValueBasis = accountability.averageDecisionValue
+    ?? (reportsSubmitted > 0 ? 50 : 0);
+  const accuracyScore = Math.min(35, (accuracyBasis / 100) * 35);
+  const decisionValueScore = Math.min(15, (decisionValueBasis / 100) * 15);
+  const tablePoundBonus = tablePoundsSuccessful >= 1 ? 5 : 0;
+  let total = reportScore
+    + qualityScore
+    + signingScore
+    + accuracyScore
+    + decisionValueScore
+    + tablePoundBonus;
 
   // ---------------------------------------------------------------------------
   // Tier 3 — Full-time scout
@@ -388,14 +433,7 @@ export function calculatePerformanceReview(
     total >= 30 ? "warning" :
     "fired";
 
-  const reputationChange = calculateReputationDelta({
-    type: "seasonEnd",
-    reviewOutcome:
-      outcome === "promoted" ? "excellent" :
-      outcome === "retained" ? "good" :
-      outcome === "warning"  ? "acceptable" :
-      "poor",
-  });
+  const reputationChange = getPerformanceReviewReputationChange(outcome);
 
   return {
     season,

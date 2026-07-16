@@ -1,12 +1,16 @@
 import type {
+  ActionableGossipItem,
   Contact,
+  ContactInteraction,
   FinancialRecord,
+  GameDate,
   GameState,
+  GossipItem,
   PersonalityArchetype,
   Player,
   RivalScout,
 } from "@/engine/core/types";
-import { getSeasonLength } from "@/engine/core/gameDate";
+import { addGameWeeks, getSeasonLength } from "@/engine/core/gameDate";
 import { generateSeasonEvents } from "@/engine/core/seasonEvents";
 import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import { migrateLegacyTransferParticipation } from "@/engine/firstTeam/transferTracker";
@@ -51,13 +55,64 @@ import {
 } from "@/engine/career/chronology";
 import { createCareerMomentState } from "@/engine/career/careerMoments";
 
-type LegacyContact = Contact & {
+type LegacyContactInteraction = Omit<ContactInteraction, "occurredAt"> & {
+  occurredAt?: GameDate;
+  week?: number;
+  season?: number;
+};
+
+type LegacyGossipItem = Omit<
+  GossipItem,
+  "claimStatus" | "revealedAt" | "expiresAt"
+> & {
+  claimStatus?: GossipItem["claimStatus"];
+  revealedAt?: GameDate;
+  expiresAt?: GameDate;
+  revealedWeek?: number;
+  revealedSeason?: number;
+  expiresWeek?: number;
+  expiresSeason?: number;
+};
+
+type LegacyContact = Omit<
+  Contact,
+  "lastInteractionAt" | "interactionHistory" | "gossipQueue" | "exclusiveWindow"
+> & {
   trustLevel?: number;
   loyalty?: number;
-  interactionHistory?: Contact["interactionHistory"];
-  gossipQueue?: Contact["gossipQueue"];
+  lastInteractionAt?: GameDate;
+  lastInteractionWeek?: number;
+  lastInteractionSeason?: number;
+  interactionHistory?: LegacyContactInteraction[];
+  gossipQueue?: LegacyGossipItem[];
+  exclusiveWindow?: {
+    playerId: string;
+    expiresAt?: GameDate;
+    expiresWeek?: number;
+    expiresSeason?: number;
+  };
   referralNetwork?: Contact["referralNetwork"];
   betrayalRisk?: number;
+};
+
+type LegacyActionableGossipItem = Omit<
+  ActionableGossipItem,
+  keyof GossipItem | "contactId"
+> & {
+  id: string;
+  contactId: string;
+  subjectPlayerId: string;
+  gossipType: GossipItem["type"];
+  description: string;
+  week: number;
+  season: number;
+  resolvedAccurate?: boolean;
+  actionTaken?: GossipItem["actionTaken"];
+  dismissed?: boolean;
+};
+
+type LegacyNetworkGameState = GameState & {
+  gossipItems?: LegacyActionableGossipItem[];
 };
 
 type LegacyRival = RivalScout & {
@@ -368,6 +423,210 @@ function migrateInternationalDestinationEligibility(state: GameState): void {
   };
 }
 
+function isGameDate(value: unknown): value is GameDate {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<GameDate>;
+  return Number.isInteger(candidate.season)
+    && (candidate.season ?? 0) >= 1
+    && Number.isInteger(candidate.week)
+    && (candidate.week ?? 0) >= 1;
+}
+
+function clampWeekToSeason(state: GameState, date: GameDate): GameDate {
+  const season = Math.max(1, Math.floor(date.season));
+  const seasonLength = getSeasonLength(state.fixtures, season);
+  if (date.week <= seasonLength) {
+    return { season, week: Math.max(1, Math.floor(date.week)) };
+  }
+  return addGameWeeks(
+    state.fixtures,
+    { season, week: 1 },
+    Math.max(0, Math.floor(date.week) - 1),
+  );
+}
+
+function inferLegacyPastDate(
+  state: GameState,
+  week: number | undefined,
+  season?: number,
+): GameDate | undefined {
+  if (!Number.isFinite(week)) return undefined;
+  const boundedWeek = Math.max(1, Math.floor(week!));
+  const inferredSeason = Number.isInteger(season) && (season ?? 0) >= 1
+    ? Math.floor(season!)
+    : boundedWeek > state.currentWeek && state.currentSeason > 1
+      ? state.currentSeason - 1
+      : state.currentSeason;
+  return clampWeekToSeason(state, { season: inferredSeason, week: boundedWeek });
+}
+
+function inferLegacyExpiryDate(
+  state: GameState,
+  week: number | undefined,
+  season?: number,
+): GameDate | undefined {
+  if (!Number.isFinite(week)) return undefined;
+  const boundedWeek = Math.max(1, Math.floor(week!));
+  const explicitSeason = Number.isInteger(season) && (season ?? 0) >= 1
+    ? Math.floor(season!)
+    : undefined;
+  if (explicitSeason !== undefined) {
+    return clampWeekToSeason(state, { season: explicitSeason, week: boundedWeek });
+  }
+
+  const currentSeasonLength = getSeasonLength(state.fixtures, state.currentSeason);
+  const baseSeason = boundedWeek > currentSeasonLength && state.currentSeason > 1
+    ? state.currentSeason - 1
+    : state.currentSeason;
+  return clampWeekToSeason(state, { season: baseSeason, week: boundedWeek });
+}
+
+function migrateContactInteraction(
+  state: GameState,
+  interaction: LegacyContactInteraction,
+): ContactInteraction | null {
+  const occurredAt = isGameDate(interaction.occurredAt)
+    ? clampWeekToSeason(state, interaction.occurredAt)
+    : inferLegacyPastDate(state, interaction.week, interaction.season);
+  if (!occurredAt) return null;
+  return {
+    occurredAt,
+    type: interaction.type,
+    trustDelta: Number.isFinite(interaction.trustDelta) ? interaction.trustDelta : 0,
+  };
+}
+
+function migrateContactGossip(
+  state: GameState,
+  gossip: LegacyGossipItem,
+): GossipItem | null {
+  const revealedAt = isGameDate(gossip.revealedAt)
+    ? clampWeekToSeason(state, gossip.revealedAt)
+    : inferLegacyPastDate(state, gossip.revealedWeek, gossip.revealedSeason);
+  if (!revealedAt) return null;
+
+  let expiresAt: GameDate;
+  if (isGameDate(gossip.expiresAt)) {
+    expiresAt = clampWeekToSeason(state, gossip.expiresAt);
+  } else if (
+    Number.isFinite(gossip.expiresWeek)
+    && Number.isFinite(gossip.revealedWeek)
+    && gossip.expiresSeason === undefined
+  ) {
+    expiresAt = addGameWeeks(
+      state.fixtures,
+      revealedAt,
+      Math.max(0, Math.floor(gossip.expiresWeek! - gossip.revealedWeek!)),
+    );
+  } else {
+    expiresAt = inferLegacyExpiryDate(
+      state,
+      gossip.expiresWeek,
+      gossip.expiresSeason,
+    ) ?? addGameWeeks(state.fixtures, revealedAt, 6);
+  }
+
+  const claimStatus = gossip.claimStatus === "accurate"
+    || gossip.claimStatus === "inaccurate"
+    || gossip.claimStatus === "ambiguous"
+      ? gossip.claimStatus
+      : "ambiguous";
+  return {
+    id: gossip.id,
+    type: gossip.type,
+    playerId: gossip.playerId,
+    clubId: gossip.clubId,
+    reliability: Number.isFinite(gossip.reliability)
+      ? Math.max(0, Math.min(1, gossip.reliability))
+      : 0.5,
+    claimStatus,
+    revealedAt,
+    expiresAt,
+    content: gossip.content,
+    actionTaken: gossip.actionTaken,
+    dismissed: gossip.dismissed ?? false,
+  };
+}
+
+function migrateContactNetworkDatesAndGossip(state: GameState): void {
+  const legacyState = state as LegacyNetworkGameState;
+  for (const [contactId, rawContact] of Object.entries(state.contacts) as Array<
+    [string, LegacyContact]
+  >) {
+    const lastInteractionAt = isGameDate(rawContact.lastInteractionAt)
+      ? clampWeekToSeason(state, rawContact.lastInteractionAt)
+      : inferLegacyPastDate(
+          state,
+          rawContact.lastInteractionWeek,
+          rawContact.lastInteractionSeason,
+        );
+    const interactionHistory = (rawContact.interactionHistory ?? [])
+      .map((interaction) => migrateContactInteraction(state, interaction))
+      .filter((interaction): interaction is ContactInteraction => interaction !== null);
+    const gossipQueue = (rawContact.gossipQueue ?? [])
+      .map((gossip) => migrateContactGossip(state, gossip))
+      .filter((gossip): gossip is GossipItem => gossip !== null);
+    const exclusiveExpiresAt = rawContact.exclusiveWindow
+      ? isGameDate(rawContact.exclusiveWindow.expiresAt)
+        ? clampWeekToSeason(state, rawContact.exclusiveWindow.expiresAt)
+        : inferLegacyExpiryDate(
+            state,
+            rawContact.exclusiveWindow.expiresWeek,
+            rawContact.exclusiveWindow.expiresSeason,
+          )
+      : undefined;
+
+    const migrated: Contact = {
+      ...rawContact,
+      lastInteractionAt,
+      interactionHistory,
+      gossipQueue,
+      exclusiveWindow: rawContact.exclusiveWindow && exclusiveExpiresAt
+        ? {
+            playerId: rawContact.exclusiveWindow.playerId,
+            expiresAt: exclusiveExpiresAt,
+          }
+        : undefined,
+      accessSuspendedUntil: isGameDate(rawContact.accessSuspendedUntil)
+        ? clampWeekToSeason(state, rawContact.accessSuspendedUntil)
+        : undefined,
+    };
+    const migratedRecord = migrated as unknown as Record<string, unknown>;
+    delete migratedRecord.lastInteractionWeek;
+    delete migratedRecord.lastInteractionSeason;
+    state.contacts[contactId] = migrated;
+  }
+
+  for (const legacyGossip of legacyState.gossipItems ?? []) {
+    const contact = state.contacts[legacyGossip.contactId];
+    if (!contact || (contact.gossipQueue ?? []).some((item) => item.id === legacyGossip.id)) {
+      continue;
+    }
+    const revealedAt = clampWeekToSeason(state, {
+      season: Math.max(1, legacyGossip.season),
+      week: Math.max(1, legacyGossip.week),
+    });
+    const migrated: GossipItem = {
+      id: legacyGossip.id,
+      type: legacyGossip.gossipType,
+      playerId: legacyGossip.subjectPlayerId,
+      reliability: Math.max(0, Math.min(1, contact.reliability / 100)),
+      claimStatus: legacyGossip.resolvedAccurate === true
+        ? "accurate"
+        : legacyGossip.resolvedAccurate === false
+          ? "inaccurate"
+          : "ambiguous",
+      revealedAt,
+      expiresAt: addGameWeeks(state.fixtures, revealedAt, 6),
+      content: legacyGossip.description,
+      actionTaken: legacyGossip.actionTaken,
+      dismissed: legacyGossip.dismissed ?? false,
+    };
+    contact.gossipQueue = [...(contact.gossipQueue ?? []), migrated];
+  }
+  delete legacyState.gossipItems;
+}
+
 function migrateRivalsContactsAndAlumni(state: GameState): void {
   state.rivalActivities ??= [];
   for (const rival of Object.values(state.rivalScouts) as LegacyRival[]) {
@@ -390,6 +649,7 @@ function migrateRivalsContactsAndAlumni(state: GameState): void {
     contact.referralNetwork ??= [];
     contact.betrayalRisk ??= 0;
   }
+  migrateContactNetworkDatesAndGossip(state);
   for (const record of state.alumniRecords) {
     record.careerUpdates ??= [];
     record.currentStatus ??= "academy";
@@ -410,7 +670,6 @@ function normalizeRequiredStateShape(state: GameState): void {
   state.schedule ??= createWeekSchedule(state.currentWeek, state.currentSeason);
   state.activeStorylines ??= [];
   state.eventChains ??= [];
-  state.gossipItems ??= [];
   state.satisfactionHistory ??= [];
   state.systemFitCache ??= {};
   state.freeAgentNegotiations ??= [];

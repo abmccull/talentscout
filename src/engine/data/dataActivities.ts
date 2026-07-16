@@ -321,6 +321,11 @@ export interface DatabaseQueryFilters {
   anomaliesOnly?: boolean;
 }
 
+export interface DatabaseQueryOptions {
+  /** Fraction of model noise removed for this query, clamped to 0-1. */
+  accuracyBonus?: number;
+}
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
@@ -341,6 +346,7 @@ export interface DatabaseQueryFilters {
  * @param filters    - Optional filters to narrow the query.
  * @param season     - Current season (for profile timestamping).
  * @param week       - Current week (for profile timestamping).
+ * @param options    - One-query modifiers such as an Insight accuracy bonus.
  */
 export function executeDatabaseQuery(
   rng: RNG,
@@ -350,9 +356,11 @@ export function executeDatabaseQuery(
   filters: DatabaseQueryFilters,
   season: number,
   week: number,
+  options: DatabaseQueryOptions = {},
 ): { playerIds: string[]; profiles: StatisticalProfile[] } {
   const skill = scout.skills.dataLiteracy;
-  const noiseFactor = noiseFactorFromSkill(skill);
+  const accuracyBonus = clamp(options.accuracyBonus ?? 0, 0, 1);
+  const noiseFactor = noiseFactorFromSkill(skill) * (1 - accuracyBonus);
 
   // Result count range by skill tier
   let minCount: number;

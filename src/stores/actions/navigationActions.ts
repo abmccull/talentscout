@@ -234,7 +234,10 @@ export function createNavigationActions(get: GetState, set: SetState) {
         updatedContacts[usedContactId] = {
           ...c,
           relationship: Math.max(0, c.relationship - 2),
-          lastInteractionWeek: state.gameState.currentWeek,
+          lastInteractionAt: {
+            season: state.gameState.currentSeason,
+            week: state.gameState.currentWeek,
+          },
         };
       }
 

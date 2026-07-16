@@ -4,7 +4,6 @@ import { dirname, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
-import { createWeekSchedule } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
   findSaveRetentionReferenceViolations,
@@ -19,6 +18,16 @@ import type {
   SaveRetentionFootprint,
 } from "@/engine/world/saveRetention";
 import { WORLD_HISTORY_MAX_SEASONS } from "@/engine/world/worldHistory";
+import {
+  collectAutonomousWorldHealth,
+  createAutonomousCareerTelemetry,
+  driveAutonomousYouthCareerWeek,
+  stabilizeAutonomousCareerState,
+} from "./autonomousYouthCareerDriver";
+import type {
+  AutonomousCareerTelemetry,
+  AutonomousWorldHealthSnapshot,
+} from "./autonomousYouthCareerDriver";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({
@@ -121,32 +130,9 @@ interface RunEvidence {
     max: number;
     mean: number;
   };
-  worldHealth: Array<{
-    season: number;
-    activePlayers: number;
-    unsignedYouth: number;
-    freeAgents: number;
-    activeLoans: number;
-    reports: number;
-    observations: number;
-    inboxMessages: number;
-    financialBalance: number | null;
-  }>;
+  worldHealth: AutonomousWorldHealthSnapshot[];
+  careerTelemetry: AutonomousCareerTelemetry;
   digest: string;
-}
-
-function collectWorldHealth(state: GameState): RunEvidence["worldHealth"][number] {
-  return {
-    season: state.currentSeason,
-    activePlayers: Object.keys(state.players).length,
-    unsignedYouth: Object.keys(state.unsignedYouth ?? {}).length,
-    freeAgents: state.freeAgentPool?.agents.length ?? 0,
-    activeLoans: state.activeLoans?.length ?? 0,
-    reports: Object.keys(state.reports).length,
-    observations: Object.keys(state.observations).length,
-    inboxMessages: state.inbox.length,
-    financialBalance: state.finances?.balance ?? null,
-  };
 }
 
 function percentile(values: readonly number[], fraction: number): number {
@@ -591,6 +577,71 @@ function assertReleaseInvariants(
   return retentionFootprint;
 }
 
+function assertAutonomousCareerHealth(
+  seed: string,
+  snapshots: readonly AutonomousWorldHealthSnapshot[],
+  telemetry: AutonomousCareerTelemetry,
+): void {
+  const final = snapshots.at(-1);
+  if (!final) return;
+  const maxBacklog = Math.max(...snapshots.map((snapshot) => snapshot.unresolvedActionBacklog));
+  const maxFreeAgentRatio = Math.max(...snapshots.map((snapshot) => snapshot.freeAgentRatio));
+  const maxActiveLoanRatio = Math.max(...snapshots.map((snapshot) => snapshot.activeLoanRatio));
+  const acceptedMarketplaceDecisions = (
+    telemetry.acceptedMarketplaceBids + telemetry.acceptedExclusiveUpgradeBids
+  );
+
+  if (DIAGNOSTIC_ONLY) {
+    const failures: string[] = [];
+    if (final.reports <= 0) failures.push("reports");
+    if (final.observations <= 0) failures.push("observations");
+    if (telemetry.authoredReports <= 0) failures.push("authoredReports");
+    if (telemetry.meaningfulDecisions <= 0) failures.push("meaningfulDecisions");
+    if (maxBacklog > 36) failures.push(`backlog:${maxBacklog}`);
+    if (maxFreeAgentRatio > 0.35) failures.push(`freeAgentRatio:${maxFreeAgentRatio}`);
+    if (maxActiveLoanRatio > 0.2) failures.push(`activeLoanRatio:${maxActiveLoanRatio}`);
+    if (acceptedMarketplaceDecisions <= 0) failures.push("marketplaceDecisions");
+    if (!final.careerPathChosen) failures.push("careerPathChosen");
+    if (final.careerTier < 2) failures.push(`careerTier:${final.careerTier}`);
+    if (final.completedCourses <= 0) failures.push("completedCourses");
+    if (failures.length > 0) {
+      console.info("LONG_CAREER_AUTONOMOUS_HEALTH_FAILURE", {
+        seed,
+        failures,
+        telemetry,
+        final,
+      });
+    }
+    return;
+  }
+
+  expect(final.reports, `seed ${seed} produced no reports`).toBeGreaterThan(0);
+  expect(final.observations, `seed ${seed} produced no observations`).toBeGreaterThan(0);
+  expect(telemetry.authoredReports, `seed ${seed} never authored a report via store actions`).toBeGreaterThan(0);
+  expect(telemetry.meaningfulDecisions, `seed ${seed} never resolved a meaningful decision`).toBeGreaterThan(0);
+  expect(maxBacklog, `seed ${seed} accumulated an unsafe unresolved-action backlog`).toBeLessThanOrEqual(36);
+  expect(maxFreeAgentRatio, `seed ${seed} overgrew the free-agent availability ratio`).toBeLessThanOrEqual(0.35);
+  expect(maxActiveLoanRatio, `seed ${seed} overgrew the active-loan ratio`).toBeLessThanOrEqual(0.2);
+  if (snapshots.length >= 5) {
+    expect(
+      snapshots.some((snapshot) => snapshot.freeAgents > 0),
+      `seed ${seed} never developed a visible free-agent pool`,
+    ).toBe(true);
+    expect(
+      snapshots.some((snapshot) => snapshot.activeLoans > 0),
+      `seed ${seed} never developed active loans`,
+    ).toBe(true);
+  }
+  expect(
+    acceptedMarketplaceDecisions,
+    `seed ${seed} never accepted an organically generated marketplace bid`,
+  ).toBeGreaterThan(0);
+  expect(final.careerPathChosen, `seed ${seed} never committed to a career path`).toBe(true);
+  expect(final.careerPath, `seed ${seed} diverged from the independent commercial path`).toBe("independent");
+  expect(final.careerTier, `seed ${seed} did not progress beyond the opening tier gates`).toBeGreaterThanOrEqual(2);
+  expect(final.completedCourses, `seed ${seed} never completed a course`).toBeGreaterThan(0);
+}
+
 async function simulateCareer(
   seed: string,
   seasonCount: number,
@@ -612,6 +663,7 @@ async function simulateCareer(
       playerJudgment: 2,
       potentialAssessment: 2,
     },
+    openingMode: "desk",
     originId: "academy-apprentice",
     flawId: "fragile-network",
     doctrineIds: ["evidence-first"],
@@ -635,40 +687,17 @@ async function simulateCareer(
   const pendingCompactionSamples: SaveRetentionCompactionSample[] = [];
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
   const worldHealth: RunEvidence["worldHealth"] = [];
+  const careerTelemetry = createAutonomousCareerTelemetry();
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
   });
 
   while ((useGameStore.getState().gameState?.currentSeason ?? 0) <= seasonCount) {
-    let before = useGameStore.getState().gameState;
+    const before = useGameStore.getState().gameState;
     if (!before) throw new Error(`Seed ${seed} lost game state`);
-
-    const seasonLength = getSeasonLength(before.fixtures, before.currentSeason);
-    const targetWeek = Math.min(before.currentWeek, seasonLength);
-    calendarWeeksSpanned += 1;
-    before = {
-      ...before,
-      currentWeek: targetWeek,
-      schedule: createWeekSchedule(targetWeek, before.currentSeason),
-    };
-    useGameStore.setState({ gameState: before });
-
-    if (before.scout.fatigue >= 95) {
-      useGameStore.setState({
-        gameState: { ...before, scout: { ...before.scout, fatigue: 20 } },
-      });
-    }
-
-    useGameStore.setState({
-      weekSimulation: {
-        dayResults: [],
-        currentDay: 7,
-        pendingWorldTick: true,
-      },
-    });
     const started = performance.now();
-    useGameStore.getState().advanceWeek();
+    await driveAutonomousYouthCareerWeek(careerTelemetry);
     const elapsed = performance.now() - started;
     // The real UI yields after every command. Without this yield, mocked
     // checkpoint/autosave promises retain every prior serialized state and the
@@ -687,21 +716,26 @@ async function simulateCareer(
       );
     }
     canonicalTicks++;
+    calendarWeeksSpanned += 1;
     weeklyLatency.push(elapsed);
     expect(elapsed, `seed ${seed} batch latency indicates a hang`).toBeLessThan(MAX_SINGLE_BATCH_MS);
 
     if (after.currentSeason !== lastCheckedSeason) {
-      const footprint = assertReleaseInvariants(after, initialBytes);
+      stabilizeAutonomousCareerState(careerTelemetry);
+      const stabilized = useGameStore.getState().gameState;
+      if (!stabilized) throw new Error(`Seed ${seed} lost stabilized state at season boundary`);
+      const footprint = assertReleaseInvariants(stabilized, initialBytes);
+      worldHealth.push(collectAutonomousWorldHealth(stabilized, careerTelemetry));
       expect(
-        serializedRoundTripDigest(after),
-        `seed ${seed} changed during the season ${after.currentSeason} save round trip`,
-      ).toBe(deterministicDigest(after));
+        serializedRoundTripDigest(stabilized),
+        `seed ${seed} changed during the season ${stabilized.currentSeason} save round trip`,
+      ).toBe(deterministicDigest(stabilized));
       expect(
-        Object.keys(after.players).length,
+        Object.keys(stabilized.players).length,
         `seed ${seed} exhausted the active player pool`,
       ).toBeGreaterThan(0);
       expect(
-        Object.keys(after.unsignedYouth ?? {}).length,
+        Object.keys(stabilized.unsignedYouth ?? {}).length,
         `seed ${seed} exhausted the unsigned youth pool`,
       ).toBeGreaterThan(0);
       const bytes = footprint.totalBytes;
@@ -723,16 +757,15 @@ async function simulateCareer(
       });
       lastBoundaryBytes = bytes;
       peakBytes = Math.max(peakBytes, bytes);
-      lastCheckedSeason = after.currentSeason;
-      const beforeCollection = collectMemorySample(after.currentSeason);
+      lastCheckedSeason = stabilized.currentSeason;
+      const beforeCollection = collectMemorySample(stabilized.currentSeason);
       peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, beforeCollection.rssBytes);
       requestGarbageCollection();
-      const afterCollection = collectMemorySample(after.currentSeason);
+      const afterCollection = collectMemorySample(stabilized.currentSeason);
       peakHeapUsedBytes = Math.max(peakHeapUsedBytes, afterCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, afterCollection.rssBytes);
       memorySamples.push(afterCollection);
-      worldHealth.push(collectWorldHealth(after));
 
     }
   }
@@ -740,9 +773,12 @@ async function simulateCareer(
 
   const finalState = useGameStore.getState().gameState;
   if (!finalState) throw new Error(`Seed ${seed} lost its final state`);
-  const finalBytes = assertReleaseInvariants(finalState, initialBytes).totalBytes;
+  stabilizeAutonomousCareerState(careerTelemetry);
+  const stabilizedFinalState = useGameStore.getState().gameState;
+  if (!stabilizedFinalState) throw new Error(`Seed ${seed} lost its stabilized final state`);
+  const finalBytes = assertReleaseInvariants(stabilizedFinalState, initialBytes).totalBytes;
   peakBytes = Math.max(peakBytes, finalBytes);
-  const history = finalState.worldHistory;
+  const history = stabilizedFinalState.worldHistory;
   expect(history, `seed ${seed} has no world history after ${seasonCount} seasons`).toBeDefined();
   expect(history?.latestRecordedSeason).toBe(seasonCount);
   expect(history?.seasons).toHaveLength(
@@ -754,16 +790,17 @@ async function simulateCareer(
       (_, index) => seasonCount - Math.min(seasonCount, WORLD_HISTORY_MAX_SEASONS) + index + 1,
     ),
   );
-  const finalDigest = deterministicDigest(finalState);
+  assertAutonomousCareerHealth(seed, worldHealth, careerTelemetry);
+  const finalDigest = deterministicDigest(stabilizedFinalState);
   expect(
-    serializedRoundTripDigest(finalState),
+    serializedRoundTripDigest(stabilizedFinalState),
     `seed ${seed} changed during JSON save round trip`,
   ).toBe(finalDigest);
-  const beforeFinalCollection = collectMemorySample(finalState.currentSeason);
+  const beforeFinalCollection = collectMemorySample(stabilizedFinalState.currentSeason);
   peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeFinalCollection.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, beforeFinalCollection.rssBytes);
   requestGarbageCollection();
-  const finalMemory = collectMemorySample(finalState.currentSeason);
+  const finalMemory = collectMemorySample(stabilizedFinalState.currentSeason);
   peakHeapUsedBytes = Math.max(peakHeapUsedBytes, finalMemory.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, finalMemory.rssBytes);
   expect(peakHeapUsedBytes, `seed ${seed} exceeded the heap release budget`).toBeLessThanOrEqual(
@@ -817,6 +854,7 @@ async function simulateCareer(
       mean: round(weeklyLatency.reduce((sum, value) => sum + value, 0) / weeklyLatency.length),
     },
     worldHealth,
+    careerTelemetry,
     digest: finalDigest,
   };
 }
@@ -870,6 +908,25 @@ describe("full canonical-week release soak", () => {
           (sum, run) => sum + run.compaction.totalRemovedBytes,
           0,
         ),
+        totalMeaningfulDecisions: runs.reduce(
+          (sum, run) => sum + run.careerTelemetry.meaningfulDecisions,
+          0,
+        ),
+        maxUnresolvedActionBacklog: Math.max(
+          ...runs.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.unresolvedActionBacklog)),
+        ),
+        maxFreeAgentRatio: round(Math.max(
+          ...runs.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.freeAgentRatio)),
+        ), 3),
+        maxActiveLoanRatio: round(Math.max(
+          ...runs.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.activeLoanRatio)),
+        ), 3),
+        seedsWithCareerPathChoice: runs.filter(
+          (run) => run.worldHealth.at(-1)?.careerPathChosen,
+        ).length,
+        seedsWithCompletedCourses: runs.filter(
+          (run) => (run.worldHealth.at(-1)?.completedCourses ?? 0) > 0,
+        ).length,
         compactionCollectionDeltas: Object.fromEntries(
           SAVE_RETENTION_COLLECTION_KEYS.map((key) => [
             key,

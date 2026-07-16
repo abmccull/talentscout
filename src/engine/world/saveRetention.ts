@@ -354,7 +354,6 @@ export function collectCausallyReferencedPlayerIds(state: GameState): Set<string
   Object.values(state.contacts ?? {}).forEach((contact) => {
     contact.gossipQueue?.forEach((item) => add(item.playerId));
   });
-  (state.gossipItems ?? []).forEach((item) => add(item.subjectPlayerId));
   Object.values(state.rivalScouts ?? {}).forEach((rival) => {
     rival.targetPlayerIds.forEach(add);
     rival.competingForPlayers.forEach(add);

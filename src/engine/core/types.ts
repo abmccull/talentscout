@@ -12,6 +12,12 @@
  *  - All types are plain data objects (no classes, no mutable state).
  */
 
+/** Canonical persisted game date. Week numbers are always scoped to a season. */
+export interface GameDate {
+  season: number;
+  week: number;
+}
+
 // =============================================================================
 // ATTRIBUTE SYSTEM
 // =============================================================================
@@ -754,6 +760,32 @@ export type ScoutAttribute =
  */
 export type CareerTier = 1 | 2 | 3 | 4 | 5;
 
+export interface PendingInsightReportQualityEffect {
+  id: string;
+  actionId: "theVerdict";
+  playerId?: string;
+  bonusPoints: number;
+  sourceSessionId: string;
+  createdWeek: number;
+  createdSeason: number;
+}
+
+export interface PendingInsightQueryAccuracyEffect {
+  id: string;
+  actionId: "algorithmicEpiphany";
+  leagueId?: string;
+  accuracyBonus: number;
+  sourceSessionId: string;
+  createdWeek: number;
+  createdSeason: number;
+}
+
+/** Deferred, single-use Insight effects that survive save/load. */
+export interface InsightPersistedEffects {
+  pendingReportQuality: PendingInsightReportQualityEffect[];
+  pendingQueryAccuracy: PendingInsightQueryAccuracyEffect[];
+}
+
 /** Insight Points state — tracks the scout's eureka-moment resource. */
 export interface InsightState {
   /** Current insight points. */
@@ -770,6 +802,8 @@ export interface InsightState {
   lastUsedWeek: number;
   /** History of insight uses. */
   history: InsightUseRecord[];
+  /** Deferred effects waiting for their matching report or data query. */
+  persistedEffects?: InsightPersistedEffects;
 }
 
 /** Record of a single insight action use. */
@@ -1457,11 +1491,8 @@ export interface Contact {
    * Used for youth scouting intel and contact introductions.
    */
   country?: string;
-  /**
-   * The game week of the last interaction with this contact.
-   * Used to calculate relationship decay over time.
-   */
-  lastInteractionWeek?: number;
+  /** Last interaction date, used to calculate relationship decay across seasons. */
+  lastInteractionAt?: GameDate;
 
   // --- F3: Contact Network Depth ---
 
@@ -1480,8 +1511,10 @@ export interface Contact {
   /** Timed exclusive access to a prospect via a high-trust insider. */
   exclusiveWindow?: {
     playerId: string;
-    expiresWeek: number;
+    expiresAt: GameDate;
   };
+  /** Betrayal temporarily blocks new gossip, referrals, and exclusive access. */
+  accessSuspendedUntil?: GameDate;
   /** Whether the contact is dormant (relationship too low to provide intel). */
   dormant?: boolean;
   /**
@@ -1816,7 +1849,7 @@ export type InboxMessageType =
   | "performance"
   | "health";
 
-export type InboxRelatedEntity = "player" | "report" | "contact" | "jobOffer" | "tool" | "narrative" | "directive" | "transfer" | "prediction" | "analyst" | "bid" | "seasonEvent" | "assignment";
+export type InboxRelatedEntity = "player" | "report" | "contact" | "jobOffer" | "tool" | "narrative" | "directive" | "transfer" | "prediction" | "analyst" | "bid" | "seasonEvent" | "assignment" | "gossip";
 
 export interface InboxMessage {
   id: string;
@@ -2351,11 +2384,6 @@ export interface GameState {
   boardProfile?: BoardProfile;
   /** History of board reactions (praise, warnings, budget changes, ultimatums). */
   boardReactions: BoardReaction[];
-
-  // --- Gossip Actions (F3 extension) ---
-
-  /** Actionable gossip items presented to the scout for decisions. */
-  gossipItems: ActionableGossipItem[];
 
   // --- Board Satisfaction Tracking ---
 
@@ -3523,6 +3551,19 @@ export type ExpenseType =
 
 export type RivalPersonality = "aggressive" | "methodical" | "connected" | "lucky";
 
+/** Fallible evidence gathered by a rival through its own observation process. */
+export interface RivalPlayerEvidence {
+  playerId: string;
+  estimatedCurrentAbility: number;
+  estimatedPotentialAbility: number;
+  confidence: number;
+  errorMargin: number;
+  observations: number;
+  specialtyFit: number;
+  lastObservedSeason: number;
+  lastObservedWeek: number;
+}
+
 export interface RivalScout {
   id: string;
   name: string;
@@ -3548,6 +3589,10 @@ export interface RivalScout {
   scoutingProgress: Record<string, number>;
   /** Week when the rival will submit their scouting report. */
   reportDeadline?: number;
+  /** Season containing the report deadline. */
+  reportDeadlineSeason?: number;
+  /** Rival-owned imperfect evidence, keyed by player ID. */
+  evidenceByPlayer?: Record<string, RivalPlayerEvidence>;
   /** The fixtureId where this rival was last spotted. */
   lastSeenAtFixture?: string;
   /** How quickly the rival moves on targets, 0–1. */
@@ -5311,10 +5356,12 @@ export interface LegacyProfile {
  * Stored in Contact.interactionHistory for trust/loyalty calculations.
  */
 export interface ContactInteraction {
-  week: number;
+  occurredAt: GameDate;
   type: "meeting" | "tip" | "referral" | "betrayal" | "favor";
   trustDelta: number;
 }
+
+export type GossipClaimStatus = "accurate" | "inaccurate" | "ambiguous";
 
 /**
  * A piece of gossip shared by a contact. Gossip items have a limited
@@ -5327,12 +5374,18 @@ export interface GossipItem {
   clubId?: string;
   /** 0-1: how reliable this gossip is (contact loyalty affects this). */
   reliability: number;
-  /** The week this gossip was revealed to the scout. */
-  revealedWeek: number;
-  /** The week after which this gossip becomes stale. */
-  expiresWeek: number;
+  /** Hidden source-of-truth chosen when the claim is generated. */
+  claimStatus: GossipClaimStatus;
+  /** Date this gossip was revealed to the scout. */
+  revealedAt: GameDate;
+  /** Date at which this gossip becomes stale. */
+  expiresAt: GameDate;
   /** Human-readable gossip content. */
   content: string;
+  /** Action the scout chose (undefined = no action taken yet). */
+  actionTaken?: GossipAction;
+  /** Whether this gossip has been dismissed from active view. */
+  dismissed?: boolean;
 }
 
 /**
@@ -5348,30 +5401,8 @@ export type GossipAction = "actOn" | "watchClosely" | "dismiss";
  * Generated from contact gossip and delivered via the inbox.
  * The scout can act on, watch, or dismiss each piece of gossip.
  */
-export interface ActionableGossipItem {
-  id: string;
-  /** The contact who provided this gossip. */
-  contactId: string;
-  /** The player this gossip is about. */
-  subjectPlayerId: string;
-  /** Category of gossip. */
-  gossipType: GossipItem["type"];
-  /** Human-readable gossip description. */
-  description: string;
-  /** Week when the gossip was received. */
-  week: number;
-  /** Season when the gossip was received. */
-  season: number;
-  /**
-   * Whether the gossip turns out to be true (resolved at season end).
-   * undefined = not yet evaluated.
-   */
-  resolvedAccurate?: boolean;
-  /** Action the scout chose (undefined = no action taken yet). */
-  actionTaken?: GossipAction;
-  /** Whether this gossip has been dismissed from active view. */
-  dismissed: boolean;
-}
+/** Derived actionable view over the canonical item stored in a contact queue. */
+export type ActionableGossipItem = GossipItem & { contactId: string };
 
 // =============================================================================
 // MATCH TACTICAL LAYER (F5)

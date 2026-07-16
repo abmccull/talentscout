@@ -26,6 +26,11 @@ import {
 } from "@/engine/finance/clubEconomics";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import { getScoutHomeCountry } from "@/engine/world/travel";
+import {
+  deriveClubRecruitmentDoctrine,
+  scoreDoctrineAgeFit,
+} from "@/engine/world/recruitmentIdentity";
+import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
 
 // =============================================================================
 // CONSTANTS
@@ -78,6 +83,69 @@ function resolveFreeAgentCountryKey(
     ?? getScoutHomeCountry(state.scout)
     ?? "england"
   );
+}
+
+function isTerminalStatus(status: FreeAgent["status"]): boolean {
+  return status === "signed" || status === "retired" || status === "droppedOut";
+}
+
+function tacticalPositions(formation: string): ReadonlySet<Player["position"]> {
+  const parsed = parseFormation(formation);
+  return parsed
+    ? formationPositions(parsed.defenders, parsed.midfielders, parsed.forwards)
+    : new Set<Player["position"]>();
+}
+
+function positionCoverage(
+  player: Pick<Player, "id" | "position">,
+  club: Club,
+  state: Pick<GameState, "players">,
+): number {
+  return club.playerIds.reduce((coverage, playerId) => {
+    const squadPlayer = state.players[playerId];
+    if (!squadPlayer || squadPlayer.id === player.id) return coverage;
+    if (squadPlayer.position === player.position) return coverage + 1;
+    if (squadPlayer.secondaryPositions?.includes(player.position)) return coverage + 0.35;
+    return coverage;
+  }, 0);
+}
+
+function clubCountryKey(
+  club: Club,
+  state: Pick<GameState, "leagues">,
+): string | undefined {
+  return normalizeCountryKey(state.leagues?.[club.leagueId]?.country);
+}
+
+function freeAgentCountryKey(
+  agent: Pick<FreeAgent, "country" | "nationality"> | undefined,
+): string | undefined {
+  if (!agent) return undefined;
+  return (
+    normalizeCountryKey(agent.country)
+    ?? countryKeyFromNationality(agent.country)
+    ?? countryKeyFromNationality(agent.nationality)
+    ?? normalizeCountryKey(agent.nationality)
+  );
+}
+
+function geographyFitMultiplier(
+  club: Club,
+  doctrine: ReturnType<typeof deriveClubRecruitmentDoctrine>,
+  state: Pick<GameState, "leagues">,
+  agent?: Pick<FreeAgent, "country" | "nationality">,
+): number {
+  const clubCountry = clubCountryKey(club, state);
+  const agentCountry = freeAgentCountryKey(agent);
+  if (!clubCountry || !agentCountry) return 1;
+  if (clubCountry === agentCountry) return 1.18;
+
+  let multiplier = 0.55 + doctrine.adaptationTolerance / 100 * 0.35;
+  if (doctrine.geographicReach === "global") multiplier += 0.22;
+  else if (doctrine.geographicReach === "international") multiplier += 0.12;
+  else if (doctrine.geographicReach === "regional") multiplier -= 0.06;
+  else multiplier -= 0.18;
+  return Math.max(0.35, Math.min(1.08, multiplier));
 }
 
 // =============================================================================
@@ -146,6 +214,10 @@ export function tickFreeAgentPool(
   const updatedAgents: FreeAgent[] = [];
 
   for (const agent of pool.agents) {
+    if (isTerminalStatus(agent.status)) {
+      continue;
+    }
+
     if (agent.status !== "available") {
       updatedAgents.push(agent);
       continue;
@@ -194,6 +266,7 @@ export function tickFreeAgentPool(
         const npcClub = findInterestedNPCClub(
           player,
           updated,
+          state,
           affordabilityContext,
           rng,
         );
@@ -315,6 +388,7 @@ export function tickFreeAgentPool(
 function findInterestedNPCClub(
   player: Player,
   agent: FreeAgent,
+  state: GameState,
   affordabilityContext: ClubAffordabilityContext,
   rng: RNG,
 ): Club | null {
@@ -330,9 +404,47 @@ function findInterestedNPCClub(
     // Reputation match: within 30 points
     const playerReputation = player.currentAbility / 2;
     const repDiff = Math.abs(club.reputation - playerReputation);
-    return repDiff <= 25 ? [club] : [];
+    if (repDiff > 25 || club.playerIds.length >= 30) return [];
+    const weight = scoreFreeAgentClubInterest(player, club, state, agent);
+    if (weight < 0.25) return [];
+    return [{
+      item: club,
+      weight,
+    }];
   });
 
   if (candidates.length === 0) return null;
-  return rng.pick(candidates);
+  return rng.pickWeighted(candidates);
+}
+
+/**
+ * Explainable NPC interest score. Affordability remains a hard gate above;
+ * this weight makes squad need and club doctrine decide among viable offers.
+ */
+export function scoreFreeAgentClubInterest(
+  player: Pick<Player, "age" | "position" | "currentAbility">,
+  club: Club,
+  state: Pick<GameState, "players" | "managerProfiles" | "seed" | "currentSeason" | "leagues">,
+  agent?: Pick<FreeAgent, "country" | "nationality">,
+): number {
+  const coverage = positionCoverage({ ...player, id: "__candidate__" }, club, state);
+  const squadNeed = coverage === 0 ? 2.35
+    : coverage <= 1.35 ? 1.65
+      : coverage <= 2.35 ? 0.95
+        : 0.35;
+  const doctrine = deriveClubRecruitmentDoctrine({
+    club,
+    seed: state.seed,
+    season: state.currentSeason,
+    manager: state.managerProfiles[club.id],
+  });
+  const ageFit = 0.65 + scoreDoctrineAgeFit(player.age, doctrine) / 100 * 0.7;
+  const targetReputation = player.currentAbility / 2;
+  const reputationFit = Math.max(0.35, 1 - Math.abs(club.reputation - targetReputation) / 35);
+  const geographyFit = geographyFitMultiplier(club, doctrine, state, agent);
+  const manager = state.managerProfiles[club.id];
+  const managerFit = !manager ? 1
+    : tacticalPositions(manager.preferredFormation).has(player.position) ? 1.12
+      : 0.6;
+  return Math.max(0.01, squadNeed * ageFit * reputationFit * geographyFit * managerFit);
 }

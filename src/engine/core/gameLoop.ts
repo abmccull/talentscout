@@ -24,7 +24,6 @@ import type {
   PhysicalAttribute,
   AttributeDeltas,
   Weather,
-  DevelopmentProfile,
   NPCScout,
   NPCScoutReport,
   BoardDirective,
@@ -47,9 +46,9 @@ import type {
   FreeAgentNegotiation,
   LoanRecommendation,
   LoanOutcome,
+  ManagerProfile,
 } from "./types";
-import { ALL_ATTRIBUTES } from "./types";
-import { getDifficultyModifiers } from "./difficulty";
+import { getDifficultyModifiers, scaleReputationChange } from "./difficulty";
 import {
   processNPCScoutingWeek,
   restNPCScout,
@@ -76,6 +75,12 @@ import {
   scoreDoctrineAgeFit,
   type ClubRecruitmentDoctrine,
 } from "../world/recruitmentIdentity";
+import {
+  deriveClubRecruitmentMemory,
+  scoreRecruitmentMemoryFit,
+  type ClubRecruitmentMemory,
+} from "../world/recruitmentMemory";
+import { calculateTransferMotivation } from "../world/transferMotivation";
 import {
   decrementSuspensions,
   clearSeasonCards,
@@ -107,6 +112,8 @@ import {
   processLoanPerformance,
   processLoanRecalls,
   evaluateLoanOutcome,
+  createLoanSelectionPriorityIndex,
+  type LoanSelectionPriority,
 } from "../world/loans";
 import { getActiveEquipmentBonuses } from "../finance/equipmentBonuses";
 import {
@@ -149,14 +156,21 @@ import {
   createPlayerDevelopmentHistoryEntry,
   evaluatePlayerDevelopmentEnvironment,
   type DevelopmentEnvironmentIndex,
-  type DevelopmentEnvironmentMechanics,
   type PlayerDevelopmentEnvironmentProjection,
 } from "../world/developmentEnvironment";
+import {
+  applyDevelopmentAbilityChange,
+  computeSemanticBreakthrough,
+  computeSemanticPlayerDevelopment,
+  hasSemanticImprovement,
+} from "../players/development";
 import { applyWorldConditionSeasonStart } from "../world/worldConditions";
 import {
   buildStandingsByLeague,
   type StandingsByLeague,
 } from "./standings";
+import { ADJACENT_POSITIONS, calculateSystemFit, getFormationSlots } from "../firstTeam/systemFit";
+import { getCompatibleRoles } from "../players/roles";
 
 export { getSeasonLength } from "./gameDate";
 
@@ -378,8 +392,6 @@ const MAX_FATIGUE = 100;
 /** Probability that any fit player gets injured in a given week. */
 const BASE_INJURY_PROBABILITY = 0.02;
 
-/** Baseline probability of an AI club completing a transfer in any week. */
-const AI_TRANSFER_PROBABILITY = 0.04;
 const MAX_RECRUITMENT_DRIVEN_TRANSFERS_PER_WEEK = 2;
 const ACTIONABLE_RECRUITMENT_OUTCOMES = new Set<RecruitmentOpportunityOutcome>([
   "delivered",
@@ -387,11 +399,14 @@ const ACTIONABLE_RECRUITMENT_OUTCOMES = new Set<RecruitmentOpportunityOutcome>([
   "accepted",
 ]);
 
-/** Weekly probability of a breakthrough event for an eligible young player. */
-const BREAKTHROUGH_CHANCE = 0.015;
-
 /** Minimum injury duration (weeks) to trigger a physical setback on recovery. */
 const SERIOUS_INJURY_THRESHOLD = 4;
+const SLOT_POSITION_FIT_SCORES = {
+  PRIMARY: 3,
+  SECONDARY: 2,
+  ADJACENT: 1,
+  NONE: 0,
+} as const;
 
 // =============================================================================
 // INTERNAL HELPERS
@@ -429,7 +444,16 @@ export function selectStartingXI(
   club: Club,
   players: Record<string, Player>,
   disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
+  loanSelectionPriorities?: ReadonlyMap<string, LoanSelectionPriority>,
+  manager?: ManagerProfile,
 ): Player[] {
+  const selectionScore = (player: Player): number => {
+    const loanPriority = loanSelectionPriorities?.get(player.id);
+    const promisedRoleBonus = loanPriority?.loanClubId === club.id
+      ? loanPriority.bonus
+      : 0;
+    return player.currentAbility + player.form * 2 + promisedRoleBonus;
+  };
   const eligible = club.playerIds
     .map((playerId) => players[playerId])
     .filter((player): player is Player => {
@@ -437,30 +461,123 @@ export function selectStartingXI(
       return (disciplinaryRecords[player.id]?.suspensionWeeksRemaining ?? 0) <= 0;
     })
     .sort((left, right) => {
-      const scoreDelta = (right.currentAbility + right.form * 2)
-        - (left.currentAbility + left.form * 2);
+      const scoreDelta = selectionScore(right) - selectionScore(left);
       return scoreDelta !== 0 ? scoreDelta : left.id.localeCompare(right.id);
     });
 
   if (eligible.length <= 11) return eligible;
 
-  const selected: Player[] = [];
-  const selectedIds = new Set<string>();
-  const take = (positions: Set<Position>, limit: number) => {
+  const managerProfile = manager ?? (club as Club & { manager?: ManagerProfile }).manager;
+  if (!managerProfile) {
+    const selected: Player[] = [];
+    const selectedIds = new Set<string>();
+    const take = (positions: Set<Position>, limit: number) => {
+      for (const player of eligible) {
+        if (selected.length >= 11 || limit <= 0) break;
+        if (!selectedIds.has(player.id) && positions.has(player.position)) {
+          selected.push(player);
+          selectedIds.add(player.id);
+          limit--;
+        }
+      }
+    };
+
+    take(new Set<Position>(["GK"]), 1);
+    take(new Set<Position>(["CB", "LB", "RB"]), 4);
+    take(new Set<Position>(["CDM", "CM", "CAM"]), 4);
+    take(new Set<Position>(["LW", "RW", "ST"]), 2);
+
     for (const player of eligible) {
-      if (selected.length >= 11 || limit <= 0) break;
-      if (!selectedIds.has(player.id) && positions.has(player.position)) {
+      if (selected.length >= 11) break;
+      if (!selectedIds.has(player.id)) {
         selected.push(player);
         selectedIds.add(player.id);
-        limit--;
       }
     }
+
+    return selected;
+  }
+
+  const tacticalFitCache = new Map<string, number>();
+  const positionFit = (player: Player, target: Position): number => {
+    if (player.position === target) return SLOT_POSITION_FIT_SCORES.PRIMARY;
+    if (player.secondaryPositions.includes(target)) return SLOT_POSITION_FIT_SCORES.SECONDARY;
+    if (
+      ADJACENT_POSITIONS[player.position]?.includes(target)
+      || ADJACENT_POSITIONS[target]?.includes(player.position)
+    ) {
+      return SLOT_POSITION_FIT_SCORES.ADJACENT;
+    }
+    return SLOT_POSITION_FIT_SCORES.NONE;
+  };
+  const tacticalFit = (player: Player): number => {
+    const cached = tacticalFitCache.get(player.id);
+    if (cached !== undefined) return cached;
+    const score = calculateSystemFit(
+      player,
+      club,
+      managerProfile,
+      players,
+      undefined,
+      0,
+    ).tacticalFit;
+    tacticalFitCache.set(player.id, score);
+    return score;
+  };
+  const slotScore = (player: Player, target: Position): number => {
+    const fit = positionFit(player, target);
+    if (fit === SLOT_POSITION_FIT_SCORES.NONE) return Number.NEGATIVE_INFINITY;
+    const roleFit = getCompatibleRoles(player, target)[0]?.suitability ?? 25;
+    const stamina = player.attributes.stamina ?? 10;
+    const fitAdjustment = fit === SLOT_POSITION_FIT_SCORES.PRIMARY
+      ? 24
+      : fit === SLOT_POSITION_FIT_SCORES.SECONDARY
+        ? 10
+        : -18;
+    return player.currentAbility
+      + Math.round(player.form * 6)
+      + Math.round((stamina - 10) * 3)
+      + fitAdjustment
+      + Math.round(roleFit * 0.15)
+      + Math.round(tacticalFit(player) * 0.17)
+      + (loanSelectionPriorities?.get(player.id)?.loanClubId === club.id
+        ? loanSelectionPriorities.get(player.id)!.bonus
+        : 0);
   };
 
-  take(new Set<Position>(["GK"]), 1);
-  take(new Set<Position>(["CB", "LB", "RB"]), 4);
-  take(new Set<Position>(["CDM", "CM", "CAM"]), 4);
-  take(new Set<Position>(["LW", "RW", "ST"]), 2);
+  const formationSlots = getFormationSlots(managerProfile.preferredFormation)
+    .map((position, index) => ({
+      index,
+      position,
+      candidateCount: eligible.filter((player) =>
+        positionFit(player, position) >= SLOT_POSITION_FIT_SCORES.SECONDARY).length,
+    }))
+    .sort((left, right) =>
+      left.candidateCount - right.candidateCount
+      || left.position.localeCompare(right.position)
+      || left.index - right.index);
+
+  const selected: Player[] = [];
+  const selectedIds = new Set<string>();
+  for (const slot of formationSlots) {
+    if (selected.length >= 11) break;
+    let bestPlayer: Player | undefined;
+    let bestScore = Number.NEGATIVE_INFINITY;
+    for (const player of eligible) {
+      if (selectedIds.has(player.id)) continue;
+      const score = slotScore(player, slot.position);
+      if (
+        score > bestScore
+        || (score === bestScore && bestPlayer && player.id.localeCompare(bestPlayer.id) < 0)
+      ) {
+        bestPlayer = player;
+        bestScore = score;
+      }
+    }
+    if (!bestPlayer || !Number.isFinite(bestScore)) continue;
+    selected.push(bestPlayer);
+    selectedIds.add(bestPlayer.id);
+  }
 
   for (const player of eligible) {
     if (selected.length >= 11) break;
@@ -477,8 +594,16 @@ function clubAverageAbility(
   club: Club,
   players: Record<string, Player>,
   disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
+  loanSelectionPriorities?: ReadonlyMap<string, LoanSelectionPriority>,
+  manager?: ManagerProfile,
 ): number {
-  const startingXI = selectStartingXI(club, players, disciplinaryRecords);
+  const startingXI = selectStartingXI(
+    club,
+    players,
+    disciplinaryRecords,
+    loanSelectionPriorities,
+    manager,
+  );
   if (startingXI.length === 0) return 100;
 
   return startingXI.reduce((sum, player) => sum + player.currentAbility, 0)
@@ -578,9 +703,11 @@ function pickScorers(
 function simulateFixture(
   fixture: Fixture,
   clubs: Record<string, Club>,
+  managerProfiles: Record<string, ManagerProfile>,
   players: Record<string, Player>,
   rng: RNG,
   disciplinaryRecords: Record<string, DisciplinaryRecord> = {},
+  loanSelectionPriorities?: ReadonlyMap<string, LoanSelectionPriority>,
 ): SimulatedFixture {
   const homeClub = clubs[fixture.homeClubId];
   const awayClub = clubs[fixture.awayClubId];
@@ -589,10 +716,22 @@ function simulateFixture(
   const weatherMod = weatherAbilityModifier(weather);
 
   const homeAbility = homeClub
-    ? clubAverageAbility(homeClub, players, disciplinaryRecords) * weatherMod
+    ? clubAverageAbility(
+        homeClub,
+        players,
+        disciplinaryRecords,
+        loanSelectionPriorities,
+        managerProfiles[homeClub.id],
+      ) * weatherMod
     : 100;
   const awayAbility = awayClub
-    ? clubAverageAbility(awayClub, players, disciplinaryRecords) * weatherMod
+    ? clubAverageAbility(
+        awayClub,
+        players,
+        disciplinaryRecords,
+        loanSelectionPriorities,
+        managerProfiles[awayClub.id],
+      ) * weatherMod
     : 100;
 
   // Calculate tactical matchup between the two clubs' styles
@@ -633,10 +772,22 @@ function simulateFixture(
 
   // Pick scorers for rating generation — exclude injured players
   const homePlayers = homeClub
-    ? selectStartingXI(homeClub, players, disciplinaryRecords)
+    ? selectStartingXI(
+        homeClub,
+        players,
+        disciplinaryRecords,
+        loanSelectionPriorities,
+        managerProfiles[homeClub.id],
+      )
     : [];
   const awayPlayers = awayClub
-    ? selectStartingXI(awayClub, players, disciplinaryRecords)
+    ? selectStartingXI(
+        awayClub,
+        players,
+        disciplinaryRecords,
+        loanSelectionPriorities,
+        managerProfiles[awayClub.id],
+      )
     : [];
   const scorers = pickScorers(rng, homePlayers, homeGoals, awayPlayers, awayGoals);
 
@@ -670,6 +821,9 @@ function simulateWeekFixtures(
 ): SimulatedFixture[] {
   const results: SimulatedFixture[] = [];
   const records = disciplinaryRecords ?? state.disciplinaryRecords ?? {};
+  const loanSelectionPriorities = createLoanSelectionPriorityIndex(
+    state.activeLoans ?? [],
+  );
 
   for (const fixture of Object.values(state.fixtures)) {
     if (
@@ -678,7 +832,15 @@ function simulateWeekFixtures(
       !fixture.played
     ) {
       results.push(
-        simulateFixture(fixture, state.clubs, state.players, rng, records),
+        simulateFixture(
+          fixture,
+          state.clubs,
+          state.managerProfiles,
+          state.players,
+          rng,
+          records,
+          loanSelectionPriorities,
+        ),
       );
     }
   }
@@ -930,180 +1092,6 @@ function processFormMomentum(
 // =============================================================================
 
 /**
- * Get the growth multiplier for a player based on age and development profile.
- * Positive = improving, negative = declining.
- */
-function developmentMultiplier(
-  age: number,
-  profile: DevelopmentProfile,
-  rng: RNG,
-): number {
-  // Base growth/decline curve (peaks around age 26 for steadyGrower)
-  const peakAge: Record<DevelopmentProfile, number> = {
-    earlyBloomer: 22,
-    lateBloomer: 29,
-    steadyGrower: 26,
-    volatile: 25,
-  };
-
-  const peak = peakAge[profile];
-  const yearsFromPeak = age - peak;
-
-  let base: number;
-  if (yearsFromPeak < 0) {
-    // Pre-peak: growing
-    // Growth is highest far from peak (young), tapering as player approaches peak.
-    base = Math.min(1.0, 0.4 + Math.abs(yearsFromPeak) * 0.08);
-  } else {
-    // Post-peak: declining
-    base = -yearsFromPeak * 0.02;
-  }
-
-  // Profile-specific modifiers
-  if (profile === "volatile") {
-    // Volatile players have extra noise
-    base += rng.gaussian(0, 0.4);
-  }
-  if (profile === "earlyBloomer") {
-    // Faster rise AND faster fall
-    base *= 1.3;
-  }
-  if (profile === "lateBloomer") {
-    // Slower rise up to peak, then very gradual decline
-    base *= age < peak ? 0.5 : 0.8;
-  }
-
-  return base;
-}
-
-/**
- * Compute attribute and ability changes for a single player for one week.
- *
- * Most weeks produce no visible change (development happens over months);
- * attribute changes accumulate gradually via small fractional nudges. We
- * store integer attributes so changes are applied probabilistically to
- * avoid floating-point drift in the persistent state.
- */
-function computePlayerDevelopment(
-  player: Player,
-  rng: RNG,
-  developmentRateModifier: number = 1.0,
-  environment?: DevelopmentEnvironmentMechanics,
-): PlayerDevelopmentResult {
-  const baseMult = developmentMultiplier(player.age, player.developmentProfile, rng);
-  // Difficulty and visible environment quality affect growth. A strong
-  // environment can soften age-driven decline, but it cannot erase it.
-  const mult = baseMult > 0
-    ? baseMult * developmentRateModifier * (environment?.growthQualityMultiplier ?? 1)
-    : baseMult * (environment?.declineRiskMultiplier ?? 1);
-
-  // Weekly development chance — form bonus: +3 → 20%, baseline 15%, -3 → 10%
-  const formBonus = player.form * 0.017;
-  let developmentChance = clamp(0.15 + formBonus, 0.05, 0.25);
-  // B7: Form momentum modifies development chance
-  const momentum = player.formMomentum ?? 0;
-  const trend = player.formTrend ?? "stable";
-  if (trend === "rising" && momentum > 0) {
-    developmentChance += Math.min(0.15, momentum * 0.03);
-  } else if (trend === "falling" && momentum > 0) {
-    developmentChance -= momentum * 0.02;
-  }
-  developmentChance *= baseMult > 0
-    ? (environment?.growthChanceMultiplier ?? 1)
-    : (environment?.declineRiskMultiplier ?? 1);
-  developmentChance = clamp(developmentChance, 0.01, 0.4);
-  if (!rng.chance(developmentChance)) {
-    return { playerId: player.id, changes: {}, abilityChange: 0 };
-  }
-
-  const changes: AttributeDeltas = {};
-  const allAttributes = Object.keys(player.attributes) as PlayerAttribute[];
-
-  // Pick 1–3 attributes to potentially change this tick
-  const shuffled = rng.shuffle(allAttributes);
-  const toConsider = shuffled.slice(0, rng.nextInt(1, 3));
-
-  for (const attr of toConsider) {
-    const currentValue = player.attributes[attr];
-    const delta = mult > 0 ? 1 : -1;
-
-    // Growth: probability driven by distance from ceiling (potentialAbility/20 ≈ attr ceiling)
-    // Decline: probability driven by how long past peak
-    const attrCeiling = Math.round((player.potentialAbility / 200) * 20);
-    const roomToGrow = attrCeiling - currentValue;
-
-    if (mult > 0 && roomToGrow > 0) {
-      // Growth probability: easier to grow when far from ceiling
-      const growProb = Math.min(0.4, (roomToGrow / 20) * Math.abs(mult));
-      if (rng.chance(growProb)) {
-        changes[attr] = delta;
-      }
-    } else if (mult < 0 && currentValue > 1) {
-      // Decline probability proportional to how far past peak
-      const declineProb = Math.min(0.25, Math.abs(mult) * 0.5);
-      if (rng.chance(declineProb)) {
-        changes[attr] = delta;
-      }
-    }
-  }
-
-  // Current ability nudge — small change aligned with attribute trend
-  const attributeChanges = Object.values(changes).reduce(
-    (sum, v) => sum + (v ?? 0),
-    0,
-  );
-  const abilityChange = attributeChanges > 0 ? 1 : attributeChanges < 0 ? -1 : 0;
-
-  return { playerId: player.id, changes, abilityChange };
-}
-
-/**
- * Check for a rare development breakthrough for a young, in-form player.
- *
- * Eligibility:
- *  - Age 17-25
- *  - form >= +1 (player is performing well)
- *  - 1.5% weekly chance (~once per season for a player in sustained good form)
- *
- * When triggered, 2-3 random attributes gain +2-3 points each (may exceed
- * the normal ceiling), and currentAbility increases by +3-5.
- */
-function computeBreakthroughDevelopment(
-  player: Player,
-  rng: RNG,
-  environmentMultiplier = 1,
-): BreakthroughResult | null {
-  // Eligibility gates
-  if (player.age < 17 || player.age > 25) return null;
-  if (player.form < 1) return null;
-  if (!rng.chance(clamp(BREAKTHROUGH_CHANCE * environmentMultiplier, 0, 0.04))) return null;
-
-  const changes: AttributeDeltas = {};
-  const improvedAttributes: PlayerAttribute[] = [];
-
-  // Pick 2-3 random attributes to boost
-  const shuffled = rng.shuffle([...ALL_ATTRIBUTES]);
-  const count = rng.nextInt(2, 3);
-  const selected = shuffled.slice(0, count);
-
-  for (const attr of selected) {
-    const boost = rng.nextInt(2, 3);
-    changes[attr] = boost;
-    improvedAttributes.push(attr);
-  }
-
-  // Current ability boost (+3-5)
-  const abilityChange = rng.nextInt(3, 5);
-
-  return {
-    playerId: player.id,
-    changes,
-    abilityChange,
-    improvedAttributes,
-  };
-}
-
-/**
  * When a player recovers from a serious injury (duration > 4 weeks),
  * reduce 1-2 physical attributes by 1 point. This creates meaningful
  * injury consequences for scouting decisions.
@@ -1190,13 +1178,15 @@ function processPlayerDevelopment(
     const environment = evaluatePlayerDevelopmentEnvironment(state, player, {
       index: environmentIndex,
     });
-    const result = computePlayerDevelopment(
-      player,
-      rng,
-      devRateMod,
-      environment.mechanics,
-    );
-    result.environment = environment.projection;
+    const result: PlayerDevelopmentResult = {
+      ...computeSemanticPlayerDevelopment(
+        player,
+        rng,
+        devRateMod,
+        environment.mechanics,
+      ),
+      environment: environment.projection,
+    };
 
     // Only include results that actually have changes
     const hasChanges =
@@ -1208,13 +1198,16 @@ function processPlayerDevelopment(
 
     // Breakthrough check — after normal development, young in-form players
     // have a rare chance to exceed their ceiling.
-    const breakthrough = computeBreakthroughDevelopment(
+    const semanticBreakthrough = computeSemanticBreakthrough(
       player,
       rng,
       environment.mechanics.breakthroughMultiplier,
     );
-    if (breakthrough) {
-      breakthrough.environment = environment.projection;
+    if (semanticBreakthrough) {
+      const breakthrough: BreakthroughResult = {
+        ...semanticBreakthrough,
+        environment: environment.projection,
+      };
       breakthroughs.push(breakthrough);
       breakthroughMessages.push(
         generateBreakthroughMessage(player, breakthrough, state, rng),
@@ -1228,13 +1221,15 @@ function processPlayerDevelopment(
     const environment = evaluatePlayerDevelopmentEnvironment(state, youth.player, {
       index: environmentIndex,
     });
-    const result = computePlayerDevelopment(
-      youth.player,
-      rng,
-      devRateMod * 0.75,
-      environment.mechanics,
-    );
-    result.environment = environment.projection;
+    const result: PlayerDevelopmentResult = {
+      ...computeSemanticPlayerDevelopment(
+        youth.player,
+        rng,
+        devRateMod * 0.75,
+        environment.mechanics,
+      ),
+      environment: environment.projection,
+    };
     if (Object.keys(result.changes).length > 0 || result.abilityChange !== 0) {
       unsignedYouthDevelopment.push(result);
     }
@@ -1480,18 +1475,6 @@ function generateSimulatedCards(
 // =============================================================================
 
 /**
- * Determine if a player is transfer-eligible: out of contract soon,
- * unhappy, or explicitly listed.
- */
-function isTransferEligible(player: Player, currentSeason: number): boolean {
-  if (player.injured || player.onLoan || player.age < 16) return false;
-  if (!(player.contractClubId ?? player.clubId)) return false;
-  const contractingExpiringSoon = player.contractExpiry <= currentSeason + 1;
-  const unhappy = player.morale <= 3;
-  return contractingExpiringSoon || unhappy;
-}
-
-/**
  * Find a suitable destination club for a player.
  * Simple heuristic: club with closest reputation to player's market value tier,
  * sufficient budget, and a different league (for variety).
@@ -1500,6 +1483,7 @@ export interface TransferDestinationIndex {
   clubs: readonly Club[];
   primaryPositionCountByClub: ReadonlyMap<string, ReadonlyMap<Position, number>>;
   doctrineByClub: ReadonlyMap<string, ClubRecruitmentDoctrine>;
+  recruitmentMemoryByClub: ReadonlyMap<string, ClubRecruitmentMemory>;
   /** Same-tick arrivals reserve capacity before authoritative movement commit. */
   reservedIncomingByClub: Map<string, number>;
 }
@@ -1509,6 +1493,7 @@ export function createTransferDestinationIndex(state: GameState): TransferDestin
   const clubs = Object.values(state.clubs);
   const primaryPositionCountByClub = new Map<string, ReadonlyMap<Position, number>>();
   const doctrineByClub = new Map<string, ClubRecruitmentDoctrine>();
+  const recruitmentMemoryByClub = new Map<string, ClubRecruitmentMemory>();
   for (const club of clubs) {
     const positionCounts = new Map<Position, number>();
     for (const playerId of club.playerIds) {
@@ -1523,11 +1508,16 @@ export function createTransferDestinationIndex(state: GameState): TransferDestin
       season: state.currentSeason,
       manager: state.managerProfiles?.[club.id],
     }));
+    recruitmentMemoryByClub.set(
+      club.id,
+      deriveClubRecruitmentMemory(state, club.id),
+    );
   }
   return {
     clubs,
     primaryPositionCountByClub,
     doctrineByClub,
+    recruitmentMemoryByClub,
     reservedIncomingByClub: new Map(),
   };
 }
@@ -1556,6 +1546,7 @@ export function findTransferDestination(
 
   const weighted = candidates.map((club) => {
     const country = state.leagues[club.leagueId]?.country ?? "";
+    const crossBorder = country !== fromCountry;
     const flowWeight = getTransferFlowProbability(fromCountry, country);
     const reputationFit = Math.max(
       0.2,
@@ -1575,7 +1566,7 @@ export function findTransferDestination(
         manager: state.managerProfiles?.[club.id],
       });
     const ageFit = 0.72 + scoreDoctrineAgeFit(player.age, doctrine) / 100 * 0.58;
-    const reachFit = country !== fromCountry
+    const reachFit = crossBorder
       ? doctrine.geographicReach === "global" ? 1.28
         : doctrine.geographicReach === "international" ? 1.12
           : 0.82
@@ -1587,10 +1578,20 @@ export function findTransferDestination(
       ? 0.9 + (100 - doctrine.pathwayPatience) / 500
       : 1;
     const philosophyFit = ageFit * reachFit * pathwayFit * readinessFit;
+    const recruitmentMemory = index?.recruitmentMemoryByClub.get(club.id)
+      ?? deriveClubRecruitmentMemory(state, club.id);
+    const memoryFit = scoreRecruitmentMemoryFit(
+      recruitmentMemory,
+      player,
+      crossBorder,
+    );
 
     return {
       item: club,
-      weight: Math.max(0.001, flowWeight * reputationFit * squadNeed * philosophyFit),
+      weight: Math.max(
+        0.001,
+        flowWeight * reputationFit * squadNeed * philosophyFit * memoryFit,
+      ),
     };
   });
 
@@ -1823,8 +1824,9 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
 
   for (const player of Object.values(state.players)) {
     if (reservedPlayerIds.has(player.id)) continue;
-    if (!isTransferEligible(player, state.currentSeason)) continue;
-    if (!rng.chance(AI_TRANSFER_PROBABILITY)) continue;
+    const motivation = calculateTransferMotivation(player, state);
+    if (!motivation.willingToMove) continue;
+    if (!rng.chance(motivation.weeklyMoveProbability)) continue;
 
     const ownerClubId = player.contractClubId ?? player.clubId;
     const fromClub = state.clubs[ownerClubId];
@@ -2642,7 +2644,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
     state,
     state.currentWeek,
     state.currentSeason,
-    rng,
+    fixturesPlayed,
     activeSeasonLength,
   );
   const loanState = { ...state, activeLoans: updatedActiveLoans };
@@ -3235,10 +3237,10 @@ export function advanceWeek(
     updatedPlayers[dev.playerId] = {
       ...player,
       attributes: updatedAttributes,
-      currentAbility: clamp(
-        player.currentAbility + dev.abilityChange,
-        1,
-        200,
+      currentAbility: applyDevelopmentAbilityChange(
+        player.currentAbility,
+        player.potentialAbility,
+        dev.abilityChange,
       ),
       developmentHistory: dev.environment
         ? appendPlayerDevelopmentHistory(
@@ -3247,7 +3249,7 @@ export function advanceWeek(
               player.id,
               state.currentSeason,
               state.currentWeek,
-              dev.abilityChange > 0 || Object.values(dev.changes).some((delta) => (delta ?? 0) > 0)
+              dev.abilityChange > 0 || hasSemanticImprovement(dev.changes)
                 ? "routine-growth"
                 : "decline",
               dev.environment,
@@ -3277,10 +3279,10 @@ export function advanceWeek(
     updatedPlayers[bt.playerId] = {
       ...player,
       attributes: updatedAttributes,
-      currentAbility: clamp(
-        player.currentAbility + bt.abilityChange,
-        1,
-        200,
+      currentAbility: applyDevelopmentAbilityChange(
+        player.currentAbility,
+        player.potentialAbility,
+        bt.abilityChange,
       ),
       developmentHistory: bt.environment
         ? appendPlayerDevelopmentHistory(
@@ -3548,10 +3550,10 @@ export function advanceWeek(
       player: {
         ...youth.player,
         attributes,
-        currentAbility: clamp(
-          youth.player.currentAbility + development.abilityChange,
-          1,
+        currentAbility: applyDevelopmentAbilityChange(
+          youth.player.currentAbility,
           youth.player.potentialAbility,
+          development.abilityChange,
         ),
         developmentHistory: development.environment
           ? appendPlayerDevelopmentHistory(
@@ -3561,7 +3563,7 @@ export function advanceWeek(
                 state.currentSeason,
                 state.currentWeek,
                 development.abilityChange > 0
-                  || Object.values(development.changes).some((delta) => (delta ?? 0) > 0)
+                  || hasSemanticImprovement(development.changes)
                   ? "routine-growth"
                   : "decline",
                 development.environment,
@@ -3867,12 +3869,12 @@ export function advanceWeek(
   // Board directive evaluation may add an additional reputation change (tier 5).
   // Note: fatigue recovery is handled by the calendar system (applyWeekResults),
   // so we only apply reputation changes here.
-  // Difficulty multiplier scales reputation gains/losses.
+  // Difficulty scaling is sign-aware so easier modes help gains without
+  // accidentally amplifying losses, and harder modes do the reverse.
   // Season event effects may also modify scout reputation and fatigue.
-  const diffMods = getDifficultyModifiers(state.difficulty);
   const boardReputationChange = tickResult.boardDirectiveResult?.reputationChange ?? 0;
   const rawRepChange = tickResult.reputationChange + boardReputationChange;
-  const scaledRepChange = Math.round(rawRepChange * diffMods.reputationMultiplier);
+  const scaledRepChange = scaleReputationChange(rawRepChange, state.difficulty);
   const seasonScout = tickResult.seasonEventState?.scout ?? state.scout;
   const reputationUpdatedScout = {
     ...seasonScout,

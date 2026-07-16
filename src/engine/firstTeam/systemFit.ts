@@ -55,6 +55,19 @@ const ADJACENT_POSITIONS: Record<Position, readonly Position[]> = {
   ST: ["CAM", "LW", "RW"],
 } as const;
 
+const FORMATION_SLOT_TEMPLATES: Record<string, readonly Position[]> = {
+  "4-4-2": ["GK", "LB", "CB", "CB", "RB", "LW", "CM", "CM", "RW", "ST", "ST"],
+  "4-3-3": ["GK", "LB", "CB", "CB", "RB", "CM", "CDM", "CM", "LW", "ST", "RW"],
+  "4-2-3-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "CDM", "LW", "CAM", "RW", "ST"],
+  "3-5-2": ["GK", "CB", "CB", "CB", "LB", "CM", "CDM", "CM", "RB", "ST", "ST"],
+  "3-4-3": ["GK", "CB", "CB", "CB", "LB", "CM", "CM", "RB", "LW", "ST", "RW"],
+  "4-5-1": ["GK", "LB", "CB", "CB", "RB", "LW", "CM", "CDM", "CM", "RW", "ST"],
+  "4-1-4-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "LW", "CM", "CM", "RW", "ST"],
+  "5-3-2": ["GK", "LB", "CB", "CB", "CB", "RB", "CM", "CDM", "CM", "ST", "ST"],
+  "4-3-2-1": ["GK", "LB", "CB", "CB", "RB", "CM", "CDM", "CM", "CAM", "CAM", "ST"],
+  "3-4-2-1": ["GK", "CB", "CB", "CB", "LB", "CM", "CM", "RB", "CAM", "CAM", "ST"],
+} as const;
+
 /**
  * Attributes valued by each tactical identity for tactical fit scoring.
  */
@@ -91,6 +104,96 @@ const TRAIT_IDENTITY_BONUSES: Partial<Record<TacticalIdentity, PlayerTrait[]>> =
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function buildFallbackFormationSlots(formation: string): Position[] {
+  const parts = formation
+    .split("-")
+    .map((part) => Number(part.trim()))
+    .filter((part) => Number.isFinite(part) && part > 0);
+
+  if (parts.length < 3) {
+    return [...FORMATION_SLOT_TEMPLATES["4-3-3"]];
+  }
+
+  const slots: Position[] = ["GK"];
+  const defenders = parts[0];
+  const forwards = parts[parts.length - 1];
+  const midfieldBands = parts.slice(1, -1);
+
+  if (defenders <= 3) {
+    slots.push("CB", "CB", "CB");
+  } else if (defenders === 4) {
+    slots.push("LB", "CB", "CB", "RB");
+  } else {
+    slots.push("LB", "CB", "CB", "CB", "RB");
+  }
+
+  if (midfieldBands.length === 1) {
+    const band = midfieldBands[0];
+    if (band <= 2) {
+      slots.push(...Array.from({ length: band }, () => "CM" as const));
+    } else if (band === 3) {
+      slots.push("CM", "CDM", "CM");
+    } else if (band === 4) {
+      slots.push("LW", "CM", "CM", "RW");
+    } else {
+      slots.push("LW", "CM", "CDM", "CM", "RW");
+    }
+  } else if (midfieldBands.length >= 2) {
+    const [deeperBand, ...rest] = midfieldBands;
+    const advancedBand = rest.pop() ?? 0;
+
+    if (deeperBand === 1) {
+      slots.push("CDM");
+    } else if (deeperBand === 2) {
+      slots.push("CDM", "CDM");
+    } else {
+      slots.push(...Array.from({ length: deeperBand }, (_, index) =>
+        index === Math.floor(deeperBand / 2) ? "CDM" as const : "CM" as const));
+    }
+
+    const centralBand = rest.reduce((sum, band) => sum + band, 0);
+    if (centralBand > 0) {
+      slots.push(...Array.from({ length: centralBand }, () => "CM" as const));
+    }
+
+    if (advancedBand === 1) {
+      slots.push("CAM");
+    } else if (advancedBand === 2) {
+      slots.push("CAM", "CAM");
+    } else if (advancedBand >= 3) {
+      slots.push("LW", "CAM", "RW");
+    }
+  }
+
+  if (forwards === 1) {
+    slots.push("ST");
+  } else if (forwards === 2) {
+    slots.push("ST", "ST");
+  } else {
+    slots.push("LW", "ST", "RW");
+  }
+
+  while (slots.length < 11) {
+    slots.push("CM");
+  }
+
+  return slots.slice(0, 11);
+}
+
+export function getFormationSlots(formation: string): Position[] {
+  const normalized = formation.trim();
+  const template = FORMATION_SLOT_TEMPLATES[normalized];
+  return template ? [...template] : buildFallbackFormationSlots(normalized);
+}
+
+export function getFormationPositionCounts(formation: string): ReadonlyMap<Position, number> {
+  const counts = new Map<Position, number>();
+  for (const position of getFormationSlots(formation)) {
+    counts.set(position, (counts.get(position) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function parseFormation(

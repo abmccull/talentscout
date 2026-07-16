@@ -94,7 +94,6 @@ export const SHARED_CAREER_STATE_KEYS = [
   "rivalActivities",
   "boardProfile",
   "boardReactions",
-  "gossipItems",
   "satisfactionHistory",
   "seasonAwardsData",
   // Fit assessments are player-facing, report/session-specific working

@@ -82,10 +82,14 @@ import {
   addActivity,
   removeActivity,
   canAddActivity,
+  canScheduleActivity,
   getAvailableActivities,
   getScheduledActivityInstances,
   processCompletedWeek,
   applyWeekResults,
+  evaluateFatigueConsequences,
+  readConsecutiveRestWeeks,
+  resolveWeekActivityXp,
   ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
 } from "@/engine/core/calendar";
@@ -137,6 +141,8 @@ import {
   resolvePlayerMovements,
   withLifecycleWorld,
 } from "@/engine/world/playerLifecycle";
+import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
+import { applyAcceptedNarrativeConsequences } from "@/engine/world/acceptedNarrativeConsequences";
 import {
   initializeFinances,
   processWeeklyFinances,
@@ -376,6 +382,14 @@ export function createWeeklyActions(
         effectiveActivity = { ...activity, slots: Math.max(1, activity.slots - slotReduction) };
       }
     }
+    if (!canScheduleActivity(
+      gameState.schedule,
+      effectiveActivity,
+      dayIndex,
+      gameState.scout,
+    )) {
+      return;
+    }
     const schedule = addActivity(gameState.schedule, effectiveActivity, dayIndex);
     set({
       gameState: { ...gameState, schedule },
@@ -597,25 +611,41 @@ export function createWeeklyActions(
       bucket.push(result);
       qualityBucketsByType.set(activity.type, bucket);
     }
-    const qualityRolls = qualityRollsByDay.map((entry) => entry.result);
     const qualityByType = new Map<Activity["type"], ActivityQualityResult>();
     for (const [activityType, rolls] of qualityBucketsByType.entries()) {
       qualityByType.set(activityType, aggregateQualityForType(activityType, rolls));
     }
 
-    // Apply blended XP multiplier from quality rolls
-    if (qualityRolls.length > 0) {
-      const avgMultiplier =
-        qualityRolls.reduce((sum, q) => sum + q.multiplier, 0) / qualityRolls.length;
-      for (const skill of Object.keys(weekResult.skillXpGained) as Array<keyof typeof weekResult.skillXpGained>) {
-        const val = weekResult.skillXpGained[skill];
-        if (val) weekResult.skillXpGained[skill] = Math.round(val * avgMultiplier);
-      }
-      for (const attr of Object.keys(weekResult.attributeXpGained) as Array<keyof typeof weekResult.attributeXpGained>) {
-        const val = weekResult.attributeXpGained[attr];
-        if (val) weekResult.attributeXpGained[attr] = Math.round(val * avgMultiplier);
-      }
+    // Each activity earns XP from its own quality roll. Multi-day work uses
+    // the mean of its occupied days; unrelated excellent work cannot inflate
+    // a poor session elsewhere in the week.
+    const qualityMultiplierByDay = new Map(
+      qualityRollsByDay.map(({ dayIndex, result }) => [dayIndex, result.multiplier]),
+    );
+    const qualityMultiplierByInstance = new Map<string, number>();
+    for (const instance of getScheduledActivityInstances(gameState.schedule)) {
+      const multipliers = instance.slotIndexes
+        .map((dayIndex) => qualityMultiplierByDay.get(dayIndex))
+        .filter((value): value is number => value !== undefined);
+      if (multipliers.length === 0) continue;
+      qualityMultiplierByInstance.set(
+        instance.key,
+        multipliers.reduce((sum, value) => sum + value, 0) / multipliers.length,
+      );
     }
+    const consecutiveRestWeeks = readConsecutiveRestWeeks(
+      gameState.consequenceState?.metrics,
+    );
+    const fatigueConsequences = evaluateFatigueConsequences(
+      gameState.scout.fatigue,
+      consecutiveRestWeeks,
+    );
+    const resolvedXp = resolveWeekActivityXp(gameState.schedule, gameState.scout, {
+      qualityMultiplierByInstance,
+      refreshed: fatigueConsequences.refreshedBuff,
+    });
+    weekResult.skillXpGained = resolvedXp.skillXpGained;
+    weekResult.attributeXpGained = resolvedXp.attributeXpGained;
 
     const choiceDiscoveryModifiers = new Map<Activity["type"], number>();
     const choiceProfileModifiers = new Map<Activity["type"], number>();
@@ -888,17 +918,17 @@ export function createWeeklyActions(
     if (currentInsightForTick) {
       updatedScout = {
         ...updatedScout,
-        insightState: tickCooldown(currentInsightForTick as any) as any,
+        insightState: tickCooldown(currentInsightForTick),
       };
     }
 
     // Accumulate Insight Points earned during the week
     if (weekResult.insightPointsEarned > 0) {
-      const insightForAccum = (updatedScout.insightState ?? createInsightState()) as any;
+      const insightForAccum = updatedScout.insightState ?? createInsightState();
       const ipCapacity = calculateCapacity(updatedScout.attributes.intuition);
       updatedScout = {
         ...updatedScout,
-        insightState: accumulateInsight(insightForAccum, weekResult.insightPointsEarned, ipCapacity) as any,
+        insightState: accumulateInsight(insightForAccum, weekResult.insightPointsEarned, ipCapacity),
       };
     }
 
@@ -1902,6 +1932,10 @@ export function createWeeklyActions(
     const acceptedNarrativeEvents = emissions
       .map(({ event }) => event)
       .filter((event) => acceptedEventIds.has(event.id));
+    stateWithPhase2 = applyAcceptedNarrativeConsequences(
+      stateWithPhase2,
+      acceptedNarrativeEvents,
+    ).state;
     const acceptedNewStoryline = Boolean(
       newStoryline
       && acceptedNarrativeEvents.some((event) => event.storylineId === newStoryline.id),
@@ -2060,6 +2094,11 @@ export function createWeeklyActions(
     );
     if (repairedNarrativeInbox !== newState.inbox) {
       newState = { ...newState, inbox: repairedNarrativeInbox };
+    }
+
+    const reconciledInbox = reconcileInboxActionRequirements(newState);
+    if (reconciledInbox !== newState.inbox) {
+      newState = { ...newState, inbox: reconciledInbox };
     }
 
     // Prune inbox to keep most recent messages, but never drop unread action-required ones (Fix #57)

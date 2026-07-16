@@ -10,7 +10,14 @@ import {
   generatePerformancePulse,
   shouldGeneratePulse,
 } from "@/engine/career/performancePulse";
-import { evaluateFatigueConsequences, rollBurnoutIllness } from "@/engine/core/calendar";
+import {
+  CONSECUTIVE_REST_WEEKS_METRIC,
+  evaluateFatigueConsequences,
+  getNextConsecutiveRestWeeks,
+  readConsecutiveRestWeeks,
+  rollBurnoutIllness,
+} from "@/engine/core/calendar";
+import { createConsequenceEngineState } from "@/engine/consequences";
 import { processMonthlyCredit } from "@/engine/finance/creditScore";
 import { processDistress } from "@/engine/finance/distress";
 
@@ -81,6 +88,40 @@ export function processWeeklyPostTickSystems(
     state = { ...state, inbox: [...state.inbox, ...decayWarnings] };
   }
 
+  const previousRestWeeks = readConsecutiveRestWeeks(
+    input.beforeWeek.consequenceState?.metrics,
+  );
+  const consecutiveRestWeeks = input.beforeWeek.schedule
+    ? getNextConsecutiveRestWeeks(input.beforeWeek.schedule, previousRestWeeks)
+    : 0;
+  const consequenceState = state.consequenceState ?? createConsequenceEngineState();
+  const earnedRefreshedBuff = previousRestWeeks < 2 && consecutiveRestWeeks >= 2;
+  const refreshedMessageId = `refreshed-s${state.currentSeason}w${state.currentWeek}`;
+  const refreshedMessage: InboxMessage | null = earnedRefreshedBuff
+    && !state.inbox.some((message) => message.id === refreshedMessageId)
+    ? {
+        id: refreshedMessageId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        type: "health",
+        title: "Fully Refreshed",
+        body: "Two recovery weeks have restored your edge. Your next working week earns 10% more skill and attribute XP.",
+        read: false,
+        actionRequired: false,
+      }
+    : null;
+  state = {
+    ...state,
+    consequenceState: {
+      ...consequenceState,
+      metrics: {
+        ...consequenceState.metrics,
+        [CONSECUTIVE_REST_WEEKS_METRIC]: consecutiveRestWeeks,
+      },
+    },
+    inbox: refreshedMessage ? [...state.inbox, refreshedMessage] : state.inbox,
+  };
+
   const snapshot = processMonthlySnapshot(state);
   if (snapshot) {
     state = {
@@ -131,7 +172,7 @@ export function processWeeklyPostTickSystems(
     messages.push(...result.messages);
   }
 
-  const fatigue = evaluateFatigueConsequences(scout.fatigue, 0);
+  const fatigue = evaluateFatigueConsequences(scout.fatigue, consecutiveRestWeeks);
   if (fatigue.burnoutRisk) {
     const rng = createRNG(
       `${input.beforeWeek.seed}-burnout-${state.currentWeek}-${state.currentSeason}`,

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16T16:50:50.437Z",
+  "generatedAt": "2026-07-16T19:41:56.523Z",
   "evidenceClass": "chromium-emulation-not-physical-low-end-hardware",
   "emulation": {
     "cpuSlowdown": 4,
@@ -30,46 +30,46 @@
     "domNodes": 18000
   },
   "measured": {
-    "coldLoadMs": 6094.88,
+    "coldLoadMs": 6216.04,
     "navigationDurationsMs": [
-      741.6,
-      502.2,
-      519,
-      397.5,
-      193.2
+      720.8,
+      655.6,
+      624.9,
+      495.9,
+      290.1
     ],
-    "navigationP95Ms": 741.6,
-    "oneWeekAdvanceMs": 2811.1,
+    "navigationP95Ms": 720.8,
+    "oneWeekAdvanceMs": 3410.3,
     "weeklyWorker": {
-      "computeMs": 577.9000000059605,
+      "computeMs": 729.1999999880791,
       "changedFieldCount": 34,
       "changedEntryCount": 2434,
       "totalFieldCount": 97,
-      "responseBytes": 2221282,
+      "responseBytes": 2221268,
       "phaseTimings": [
         {
           "phase": "activity-resolution",
-          "elapsedMs": 117.59999999403954
+          "elapsedMs": 138.80000001192093
         },
         {
           "phase": "world-systems",
-          "elapsedMs": 33.400000005960464
+          "elapsedMs": 45.900000005960464
         },
         {
           "phase": "core-world-tick",
-          "elapsedMs": 226.5
+          "elapsedMs": 296
         },
         {
           "phase": "post-tick-accountability",
-          "elapsedMs": 2.699999988079071
+          "elapsedMs": 2.7999999821186066
         },
         {
           "phase": "season-rollover",
-          "elapsedMs": 185.90000000596046
+          "elapsedMs": 229.5
         },
         {
           "phase": "finalize",
-          "elapsedMs": 0.29999998211860657
+          "elapsedMs": 0.20000001788139343
         }
       ],
       "payloadHotspots": [
@@ -115,13 +115,13 @@
         }
       ],
       "route": "worker",
-      "roundTripMs": 2151.199999988079
+      "roundTripMs": 2573.0999999940395
     },
-    "jsHeapUsedBytes": 42151932,
-    "jsHeapTotalBytes": 46104576,
+    "jsHeapUsedBytes": 42126008,
+    "jsHeapTotalBytes": 44269568,
     "domNodes": 4810,
     "documents": 2,
-    "layoutCount": 165
+    "layoutCount": 187
   },
   "simulationContext": {
     "profile": "coherent-mature-ordinary-week",

@@ -23,8 +23,21 @@ import {
   Lock,
   Clock,
 } from "lucide-react";
-import type { Contact, ContactType, Activity, HiddenIntel, GossipItem } from "@/engine/core/types";
-import { getHiddenAttributeIntel, getContactSpecializationBonus } from "@/engine/network/contacts";
+import type {
+  Activity,
+  Contact,
+  ContactType,
+  Fixture,
+  GameDate,
+  GossipItem,
+  HiddenIntel,
+} from "@/engine/core/types";
+import {
+  getContactSpecializationBonus,
+  getHiddenAttributeIntel,
+  isContactAccessSuspended,
+} from "@/engine/network/contacts";
+import { gameWeeksBetween, isGameDateAtOrAfter } from "@/engine/core/gameDate";
 import { RNG } from "@/engine/rng";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import {
@@ -95,6 +108,14 @@ function betrayalRiskLabel(risk: number): { label: string; color: string } {
   return { label: "Safe", color: "text-emerald-400" };
 }
 
+function formatGameDate(date: GameDate): string {
+  return `S${date.season}, W${date.week}`;
+}
+
+function isActiveBefore(date: GameDate, expiresAt: GameDate): boolean {
+  return !isGameDateAtOrAfter(date, expiresAt);
+}
+
 function gossipTypeLabel(type: GossipItem["type"]): string {
   const labels: Record<GossipItem["type"], string> = {
     transferRumor: "Transfer Rumor",
@@ -128,7 +149,8 @@ interface ContactDetailProps {
   identity?: StakeholderProfile;
   knownPlayerNames: string[];
   intelEntries: IntelEntry[];
-  currentWeek: number;
+  currentDate: GameDate;
+  fixtures: Record<string, Fixture>;
   onScheduleMeeting: () => void;
   onClose: () => void;
 }
@@ -163,20 +185,21 @@ function formatPlayerName(
   return player ? `${player.firstName} ${player.lastName}` : null;
 }
 
-function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
+function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntries, currentDate, fixtures, onScheduleMeeting, onClose }: ContactDetailProps) {
   const config = CONTACT_TYPE_CONFIG[contact.type];
   const Icon = config.icon;
   const trustLevel = contact.trustLevel ?? contact.relationship;
   const betrayalRisk = contact.betrayalRisk ?? 0;
   const gossipQueue = contact.gossipQueue ?? [];
-  const activeGossip = gossipQueue.filter((g) => g.expiresWeek > currentWeek);
+  const activeGossip = gossipQueue.filter((g) => isActiveBefore(currentDate, g.expiresAt));
   const referralCount = (contact.referralNetwork ?? []).length;
   const exclusiveWindow = contact.exclusiveWindow;
   const risk = betrayalRiskLabel(betrayalRisk);
-  const weeksSinceContact = contact.lastInteractionWeek != null
-    ? currentWeek - contact.lastInteractionWeek
+  const weeksSinceContact = contact.lastInteractionAt
+    ? Math.max(0, gameWeeksBetween(fixtures, contact.lastInteractionAt, currentDate))
     : null;
-  const isDormant = contact.dormant === true;
+  const accessSuspended = isContactAccessSuspended(contact, currentDate);
+  const isDormant = contact.dormant === true && !accessSuspended;
   const isRelationshipFading = contact.relationship < 30 && !isDormant;
 
   return (
@@ -348,6 +371,17 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
             </div>
           </div>
         )}
+        {accessSuspended && contact.accessSuspendedUntil && (
+          <div className="rounded-md border border-red-500/20 bg-red-500/5 p-2.5">
+            <div className="flex items-center gap-2 text-xs">
+              <Lock size={12} className="text-red-400" aria-hidden="true" />
+              <span className="font-medium text-red-400">Access Suspended</span>
+            </div>
+            <p className="mt-1 text-[10px] text-zinc-500">
+              This source will not provide gossip, referrals, or exclusive access until {formatGameDate(contact.accessSuspendedUntil)}.
+            </p>
+          </div>
+        )}
 
         {/* F3: Betrayal Risk Warning */}
         {betrayalRisk >= 0.05 && (
@@ -365,7 +399,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         )}
 
         {/* F3: Exclusive Window */}
-        {exclusiveWindow && exclusiveWindow.expiresWeek > currentWeek && (
+        {exclusiveWindow && isActiveBefore(currentDate, exclusiveWindow.expiresAt) && (
           <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5">
             <div className="flex items-center gap-2 text-xs">
               <Lock size={12} className="text-amber-400" aria-hidden="true" />
@@ -374,7 +408,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
               </span>
             </div>
             <p className="mt-1 text-[10px] text-zinc-400">
-              Early access to a prospect expires in week {exclusiveWindow.expiresWeek}.
+              Early access to a prospect expires {formatGameDate(exclusiveWindow.expiresAt)}.
             </p>
           </div>
         )}
@@ -397,7 +431,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
                       {gossipTypeLabel(item.type)}
                     </span>
                     <span className="text-[10px] text-zinc-600">
-                      Expires wk {item.expiresWeek}
+                      Expires {formatGameDate(item.expiresAt)}
                     </span>
                   </div>
                   <p className="text-zinc-400 leading-relaxed">{item.content}</p>
@@ -480,8 +514,13 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
           </div>
         )}
 
-        <Button size="sm" className="w-full" onClick={onScheduleMeeting}>
-          Schedule Meeting
+        <Button
+          size="sm"
+          className="w-full"
+          onClick={onScheduleMeeting}
+          disabled={accessSuspended}
+        >
+          {accessSuspended ? "Source Unavailable" : "Schedule Meeting"}
         </Button>
       </CardContent>
     </Card>
@@ -492,20 +531,23 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
 // Gossip Feed Panel — displays all active gossip across all contacts
 // =============================================================================
 
-function GossipFeedPanel({ contacts, currentWeek }: { contacts: Contact[]; currentWeek: number }) {
+function GossipFeedPanel({ contacts, currentDate }: { contacts: Contact[]; currentDate: GameDate }) {
   const allGossip = useMemo(() => {
     const items: Array<{ contact: Contact; gossip: GossipItem }> = [];
     for (const contact of contacts) {
       for (const g of contact.gossipQueue ?? []) {
-        if (g.expiresWeek > currentWeek) {
+        if (isActiveBefore(currentDate, g.expiresAt)) {
           items.push({ contact, gossip: g });
         }
       }
     }
     // Sort by most recent first
-    items.sort((a, b) => b.gossip.revealedWeek - a.gossip.revealedWeek);
+    items.sort((a, b) =>
+      b.gossip.revealedAt.season - a.gossip.revealedAt.season
+      || b.gossip.revealedAt.week - a.gossip.revealedAt.week,
+    );
     return items;
-  }, [contacts, currentWeek]);
+  }, [contacts, currentDate]);
 
   if (allGossip.length === 0) return null;
 
@@ -535,7 +577,7 @@ function GossipFeedPanel({ contacts, currentWeek }: { contacts: Contact[]; curre
                   <span className="text-zinc-600">via {contact.name}</span>
                 </div>
                 <span className="text-[10px] text-zinc-600 shrink-0">
-                  Wk {gossip.revealedWeek}
+                  {formatGameDate(gossip.revealedAt)}
                 </span>
               </div>
               <p className="text-zinc-400 leading-relaxed">{gossip.content}</p>
@@ -556,6 +598,7 @@ export function NetworkScreen() {
     contactsById,
     contactIntel,
     playersById,
+    fixturesById,
     clubsById,
     rivalScoutsById,
     consequenceState,
@@ -570,6 +613,7 @@ export function NetworkScreen() {
       contactsById: state.gameState?.contacts,
       contactIntel: state.gameState?.contactIntel,
       playersById: state.gameState?.players,
+      fixturesById: state.gameState?.fixtures,
       clubsById: state.gameState?.clubs,
       rivalScoutsById: state.gameState?.rivalScouts,
       consequenceState: state.gameState?.consequenceState,
@@ -695,13 +739,18 @@ export function NetworkScreen() {
   if (
     !contactsById
     || !playersById
+    || !fixturesById
     || !scheduledActivities
     || currentWeek == null
+    || currentSeason == null
   ) {
     return null;
   }
 
+  const currentDate = { season: currentSeason, week: currentWeek };
+
   const handleScheduleMeeting = (contact: Contact) => {
+    if (isContactAccessSuspended(contact, currentDate)) return;
     const activity: Activity = {
       type: "networkMeeting",
       slots: 1,
@@ -757,7 +806,7 @@ export function NetworkScreen() {
           <div className="space-y-6">
             {/* Gossip Feed — full-width intelligence summary */}
             <div data-tutorial-id="network-intel">
-              <GossipFeedPanel contacts={contacts} currentWeek={currentWeek} />
+              <GossipFeedPanel contacts={contacts} currentDate={currentDate} />
             </div>
 
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -772,15 +821,19 @@ export function NetworkScreen() {
                     const trust = contact.trustLevel ?? contact.relationship;
                     const bRisk = contact.betrayalRisk ?? 0;
                     const gossipCount = (contact.gossipQueue ?? []).filter(
-                      (g) => g.expiresWeek > currentWeek,
+                      (g) => isActiveBefore(currentDate, g.expiresAt),
                     ).length;
                     const hasExclusive =
                       contact.exclusiveWindow &&
-                      contact.exclusiveWindow.expiresWeek > currentWeek;
-                    const weeksSinceContact = contact.lastInteractionWeek != null
-                      ? currentWeek - contact.lastInteractionWeek
+                      isActiveBefore(currentDate, contact.exclusiveWindow.expiresAt);
+                    const weeksSinceContact = contact.lastInteractionAt
+                      ? Math.max(
+                          0,
+                          gameWeeksBetween(fixturesById, contact.lastInteractionAt, currentDate),
+                        )
                       : null;
-                    const isDormant = contact.dormant === true;
+                    const accessSuspended = isContactAccessSuspended(contact, currentDate);
+                    const isDormant = contact.dormant === true && !accessSuspended;
                     const isRelationshipFading = contact.relationship < 30 && !isDormant;
 
                     return (
@@ -870,6 +923,11 @@ export function NetworkScreen() {
                               Dormant
                             </Badge>
                           )}
+                          {accessSuspended && (
+                            <Badge variant="outline" className="text-[10px] border-red-500/40 bg-red-500/10 text-red-400">
+                              Access suspended
+                            </Badge>
+                          )}
                           {isRelationshipFading && (
                             <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-400">
                               Fading
@@ -914,7 +972,8 @@ export function NetworkScreen() {
                     identity={stakeholderProfiles?.profiles[`contact:${selectedContact.id}`]}
                     knownPlayerNames={getKnownPlayerNames(selectedContact)}
                     intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
-                    currentWeek={currentWeek}
+                    currentDate={currentDate}
+                    fixtures={fixturesById}
                     onScheduleMeeting={() => handleScheduleMeeting(selectedContact)}
                     onClose={() => setSelectedContactId(null)}
                   />

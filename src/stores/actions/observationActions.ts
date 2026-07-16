@@ -8,7 +8,8 @@
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
 import type { LensType, ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
-import type { InsightActionId, InsightState, InsightActionResult } from "@/engine/insight/types";
+import type { InsightActionId } from "@/engine/insight/types";
+import { INSIGHT_FATIGUE_COST } from "@/engine/insight/types";
 import type {
   ActivityType,
   AttributeDomain,
@@ -41,10 +42,13 @@ import { generateReflection, type ReflectionResult } from "@/engine/observation/
 import { applySessionEvidenceToHypotheses } from "@/engine/observation/evidence";
 import { createInsightState, accumulateInsight, calculateCapacity, canUseInsight, spendInsight } from "@/engine/insight/insight";
 import { executeInsightAction } from "@/engine/insight/actions";
+import {
+  applyInsightActionResult,
+  normalizeInsightState,
+} from "@/engine/insight/effects";
 import { createRNG } from "@/engine/rng";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import { ALL_PERKS } from "@/engine/specializations/perks";
-import { calculateSystemFit } from "@/engine/firstTeam";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { observePlayerLight } from "@/engine/scout/perception";
 import {
@@ -469,6 +473,106 @@ function buildReflectionJournalEntry(
   };
 }
 
+function buildInsightPlayerIndex(
+  gameState: GameState,
+  simulatedYouth?: Record<string, UnsignedYouth>,
+): Record<string, Player> {
+  const players: Record<string, Player> = { ...gameState.players };
+  const addYouth = (youth: UnsignedYouth) => {
+    players[youth.id] = youth.player;
+    players[youth.player.id] = youth.player;
+  };
+  Object.values(gameState.unsignedYouth).forEach(addYouth);
+  Object.values(simulatedYouth ?? {}).forEach(addYouth);
+  return players;
+}
+
+function resolveInsightTargetPlayerId(session: ObservationSession): string | undefined {
+  return session.focusTokens.allocations[0]?.playerId
+    ?? session.players.find((player) => player.isFocused)?.playerId
+    ?? session.players[0]?.playerId;
+}
+
+function resolveInsightLeagueContext(
+  gameState: GameState,
+  session: ObservationSession,
+  players: Record<string, Player>,
+  targetPlayerId?: string,
+): { leagueId?: string; leaguePlayers?: Player[] } {
+  const sessionPlayerIds = [
+    ...(targetPlayerId ? [targetPlayerId] : []),
+    ...session.players.map((player) => player.playerId),
+  ];
+  let leagueId = sessionPlayerIds
+    .map((playerId) => players[playerId])
+    .map((player) => player && gameState.clubs[player.clubId]?.leagueId)
+    .find((candidate): candidate is string => !!candidate && !!gameState.leagues[candidate]);
+
+  if (!leagueId && session.countryId) {
+    const countryId = normalizeCountryKey(session.countryId);
+    leagueId = Object.values(gameState.leagues)
+      .filter((league) => normalizeCountryKey(league.country) === countryId)
+      .sort((left, right) => left.tier - right.tier || left.id.localeCompare(right.id))[0]?.id;
+  }
+  if (!leagueId && session.mode === "analysis") {
+    leagueId = Object.values(gameState.leagues)
+      .sort((left, right) => left.tier - right.tier || left.id.localeCompare(right.id))[0]?.id;
+  }
+  if (!leagueId) return {};
+
+  const league = gameState.leagues[leagueId];
+  const clubIds = new Set(league.clubIds);
+  const leaguePlayers = Array.from(
+    new Map(
+      Object.values(players)
+        .filter((player) => clubIds.has(player.clubId))
+        .map((player) => [player.id, player] as const),
+    ).values(),
+  );
+  return { leagueId, leaguePlayers };
+}
+
+function resolveInsightSubRegionId(
+  gameState: GameState,
+  session: ObservationSession,
+  targetPlayerId?: string,
+): string | undefined {
+  const activityInstanceId = session.activityInstanceId?.replace(/:d\d+$/, "");
+  const scheduledActivity = activityInstanceId
+    ? gameState.schedule?.activities.find(
+        (activity) => activity?.instanceId === activityInstanceId,
+      )
+    : undefined;
+  const scheduledTargetId = scheduledActivity?.targetId;
+  if (scheduledTargetId && gameState.subRegions[scheduledTargetId]) {
+    return scheduledTargetId;
+  }
+  const tournamentSubRegionId = scheduledTargetId
+    ? gameState.youthTournaments[scheduledTargetId]?.subRegionId
+    : undefined;
+  if (tournamentSubRegionId && gameState.subRegions[tournamentSubRegionId]) {
+    return tournamentSubRegionId;
+  }
+
+  const targetYouth = Object.values(gameState.unsignedYouth).find(
+    (youth) =>
+      youth.id === targetPlayerId
+      || youth.player.id === targetPlayerId
+      || youth.id === scheduledTargetId
+      || youth.player.id === scheduledTargetId,
+  );
+  if (targetYouth?.regionId && gameState.subRegions[targetYouth.regionId]) {
+    return targetYouth.regionId;
+  }
+
+  const countryId = normalizeCountryKey(session.countryId);
+  return Object.values(gameState.subRegions)
+    .filter((subRegion) =>
+      normalizeCountryKey(subRegion.countryKey ?? subRegion.country) === countryId,
+    )
+    .sort((left, right) => right.familiarity - left.familiarity || left.id.localeCompare(right.id))[0]?.id;
+}
+
 export function createObservationActions(get: GetState, set: SetState) {
   return {
     startObservationSession: (
@@ -825,7 +929,9 @@ export function createObservationActions(get: GetState, set: SetState) {
 
       // Accumulate insight points
       const scout = gameState.scout;
-      const currentInsight = (scout.insightState ?? createInsightState()) as InsightState;
+      const currentInsight = normalizeInsightState(
+        scout.insightState ?? createInsightState(),
+      );
       const capacity = calculateCapacity(scout.attributes.intuition);
       // Incomplete sessions do not bank rewards. Otherwise the same scheduled
       // activity can be abandoned and relaunched to farm its early choices.
@@ -940,11 +1046,13 @@ export function createObservationActions(get: GetState, set: SetState) {
     // ═══════════════════════════════════════════════════════════════════════════
 
     useInsight: (actionId: InsightActionId) => {
-      const { activeSession, gameState } = get();
+      const { activeSession, gameState, weekSimulation } = get();
       if (!activeSession || !gameState) return false;
 
       const scout = gameState.scout;
-      const insightState = (scout.insightState ?? createInsightState()) as InsightState;
+      const insightState = normalizeInsightState(
+        scout.insightState ?? createInsightState(),
+      );
 
       // Check if can use
       const check = canUseInsight(insightState, actionId, scout, activeSession.mode);
@@ -957,63 +1065,63 @@ export function createObservationActions(get: GetState, set: SetState) {
         gameState.currentWeek, gameState.currentSeason, rng
       );
 
-      // Execute the action
+      const simulatedUnsignedYouth = weekSimulation?.youthVenueResults?.updatedUnsignedYouth;
+      const players = buildInsightPlayerIndex(gameState, simulatedUnsignedYouth);
+      const targetPlayerId = resolveInsightTargetPlayerId(activeSession);
+      const leagueContext = resolveInsightLeagueContext(
+        gameState,
+        activeSession,
+        players,
+        targetPlayerId,
+      );
+
+      // Execute the action against complete session, geography, and league context.
       const context = {
         scout,
         session: activeSession,
-        targetPlayerId: activeSession.focusTokens.allocations[0]?.playerId,
-        players: gameState.players,
+        targetPlayerId,
+        players,
         contacts: gameState.contacts,
+        subRegionId: resolveInsightSubRegionId(
+          gameState,
+          activeSession,
+          targetPlayerId,
+        ),
+        ...leagueContext,
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
       };
       const result = executeInsightAction(actionId, context, rng, fizzled);
 
-      // Update scout fatigue
-      const newFatigue = Math.min(100, scout.fatigue + 8);
-
-      // If "perfectFit" insight succeeded and scout is first-team with a club,
-      // calculate full system fit and populate cache
-      let updatedFitCache = gameState.systemFitCache;
-      if (
-        result.actionId === "perfectFit" &&
-        result.systemFitData &&
-        scout.primarySpecialization === "firstTeam" &&
-        scout.currentClubId &&
-        context.targetPlayerId
-      ) {
-        const targetPlayer = gameState.players[context.targetPlayerId];
-        const club = gameState.clubs[scout.currentClubId];
-        const manager = gameState.managerProfiles[scout.currentClubId];
-        if (targetPlayer && club && manager) {
-          const fitRng = createRNG(
-            `${gameState.seed}-sysfit-insight-${context.targetPlayerId}-${scout.currentClubId}`,
-          );
-          const equipBonuses = gameState.finances?.equipment
-            ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-            : undefined;
-          const fitResult = calculateSystemFit(
-            targetPlayer,
-            club,
-            manager,
-            gameState.players,
-            undefined,
-            equipBonuses?.systemFitAccuracy ?? 0,
-            fitRng,
-          );
-          const cacheKey = `${context.targetPlayerId}:${scout.currentClubId}`;
-          updatedFitCache = { ...updatedFitCache, [cacheKey]: fitResult };
-        }
-      }
+      const applied = applyInsightActionResult({
+        state: gameState,
+        session: activeSession,
+        context,
+        result,
+        insightState: newInsightState,
+        simulatedUnsignedYouth,
+      });
+      const nextGameState = {
+        ...applied.state,
+        scout: {
+          ...applied.state.scout,
+          fatigue: Math.min(100, scout.fatigue + INSIGHT_FATIGUE_COST),
+        },
+      };
+      const nextWeekSimulation = weekSimulation?.youthVenueResults
+        && applied.simulatedUnsignedYouth
+        ? {
+            ...weekSimulation,
+            youthVenueResults: {
+              ...weekSimulation.youthVenueResults,
+              updatedUnsignedYouth: applied.simulatedUnsignedYouth,
+            },
+          }
+        : weekSimulation;
 
       set({
-        gameState: {
-          ...gameState,
-          scout: {
-            ...scout,
-            fatigue: newFatigue,
-            insightState: newInsightState,
-          },
-          systemFitCache: updatedFitCache,
-        },
+        gameState: nextGameState,
+        weekSimulation: nextWeekSimulation,
         lastInsightResult: result,
       });
       return true;
@@ -1041,7 +1149,10 @@ export function createObservationActions(get: GetState, set: SetState) {
               ...sourceContact,
               relationship: selection.session.sourceRelationshipScore
                 ?? sourceContact.relationship,
-              lastInteractionWeek: gameState.currentWeek,
+              lastInteractionAt: {
+                season: gameState.currentSeason,
+                week: gameState.currentWeek,
+              },
               dormant: (selection.session.sourceRelationshipScore
                 ?? sourceContact.relationship) <= 20,
             },

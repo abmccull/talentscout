@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type {
   Club,
+  LoanDeal,
+  ManagerProfile,
   MatchPhase,
   Player,
   PlayerMatchRating,
@@ -16,6 +18,7 @@ import {
 import { calculateAttendedMatchRatings } from "@/engine/match/ratings";
 import { generatePlayer } from "@/engine/players/generation";
 import { RNG } from "@/engine/rng";
+import { createLoanSelectionPriorityIndex } from "@/engine/world/loans";
 
 describe("match participation invariants", () => {
   it("selects at most eleven eligible starters and leaves squad players without appearances", () => {
@@ -48,6 +51,155 @@ describe("match participation invariants", () => {
     expect(starters.every((player) => !player.injured)).toBe(true);
     expect(starters.some((player) => player.position === "GK")).toBe(true);
     expect(Object.keys(players).filter((id) => !starters.some((player) => player.id === id))).toHaveLength(4);
+  });
+
+  it("honors the manager formation instead of the old broad attacking bucket", () => {
+    const makePlayer = (
+      seed: string,
+      position: Position,
+      currentAbility: number,
+    ): Player => ({
+      ...(() => {
+        const player = generatePlayer(new RNG(seed), {
+          position,
+          ageRange: [24, 24],
+          abilityRange: [currentAbility, currentAbility],
+          nationality: "English",
+          clubId: "shape-club",
+        });
+        return {
+          ...player,
+          form: 0,
+          attributes: {
+            ...player.attributes,
+            stamina: 12,
+          },
+        };
+      })(),
+      secondaryPositions: [],
+    });
+    const squad = [
+      makePlayer("shape-gk", "GK", 100),
+      makePlayer("shape-lb", "LB", 101),
+      makePlayer("shape-cb-1", "CB", 103),
+      makePlayer("shape-cb-2", "CB", 102),
+      makePlayer("shape-rb", "RB", 101),
+      makePlayer("shape-cdm-1", "CDM", 104),
+      makePlayer("shape-cdm-2", "CDM", 103),
+      makePlayer("shape-cam", "CAM", 105),
+      makePlayer("shape-lw", "LW", 99),
+      makePlayer("shape-rw", "RW", 98),
+      makePlayer("shape-st", "ST", 106),
+      makePlayer("shape-st-bench", "ST", 110),
+    ];
+    const players = Object.fromEntries(squad.map((player) => [player.id, player]));
+    const club = {
+      id: "shape-club",
+      playerIds: squad.map((player) => player.id),
+      scoutingPhilosophy: "marketSmart",
+    } as Club;
+    const manager = {
+      clubId: club.id,
+      managerId: "shape-manager",
+      preferredFormation: "4-2-3-1",
+      preference: "balanced",
+    } as ManagerProfile;
+
+    const starters = selectStartingXI(club, players, {}, undefined, manager);
+    const positions = starters.map((player) => player.position);
+
+    expect(starters).toHaveLength(11);
+    expect(positions.filter((position) => position === "ST")).toHaveLength(1);
+    expect(positions.filter((position) => position === "CDM")).toHaveLength(2);
+    expect(positions).toContain("CAM");
+    expect(positions).toContain("LW");
+    expect(positions).toContain("RW");
+    expect(positions.filter((position) => position === "CB")).toHaveLength(2);
+    expect(positions.filter((position) => position === "LW" || position === "RW" || position === "CAM")).toHaveLength(3);
+  });
+
+  it("uses a promised loan role as a bounded preference inside canonical XI selection", () => {
+    const makePlayer = (
+      seed: string,
+      position: Position,
+      currentAbility: number,
+    ): Player => ({
+      ...(() => {
+        const player = generatePlayer(new RNG(seed), {
+          position,
+          ageRange: [22, 22],
+          abilityRange: [currentAbility, currentAbility],
+          nationality: "English",
+          clubId: "loan-club",
+        });
+        return {
+          ...player,
+          form: 0,
+          attributes: {
+            ...player.attributes,
+            stamina: 12,
+          },
+        };
+      })(),
+      secondaryPositions: [],
+    });
+    const rolePlayers = [
+      makePlayer("loan-lineup-gk", "GK", 100),
+      ...Array.from({ length: 4 }, (_, index) =>
+        makePlayer(`loan-lineup-defender-${index}`, "CB", 100 + index)),
+      makePlayer("loan-lineup-cm-1", "CM", 101),
+      makePlayer("loan-lineup-cdm", "CDM", 102),
+      makePlayer("loan-lineup-cm-2", "CM", 103),
+      makePlayer("loan-lineup-lw", "LW", 103),
+      makePlayer("loan-lineup-rw", "RW", 102),
+    ];
+    const strongerForward = makePlayer("loan-lineup-forward-strong", "ST", 105);
+    const secondForward = makePlayer("loan-lineup-forward-second", "ST", 104);
+    const loanForward = {
+      ...makePlayer("loan-lineup-forward-loan", "ST", 96),
+      onLoan: true,
+      loanParentClubId: "parent",
+      contractClubId: "parent",
+    };
+    const squad = [
+      ...rolePlayers,
+      strongerForward,
+      secondForward,
+      loanForward,
+    ];
+    const players = Object.fromEntries(squad.map((player) => [player.id, player]));
+    const club = {
+      id: "loan-club",
+      playerIds: squad.map((player) => player.id),
+      scoutingPhilosophy: "marketSmart",
+    } as Club;
+    const manager = {
+      clubId: club.id,
+      managerId: "loan-manager",
+      preferredFormation: "4-3-3",
+      preference: "balanced",
+    } as ManagerProfile;
+    const deal = {
+      id: "key-loan",
+      playerId: loanForward.id,
+      parentClubId: "parent",
+      loanClubId: club.id,
+      status: "active",
+      agreedPlayingTime: "key",
+    } as LoanDeal;
+
+    const withoutPromise = selectStartingXI(club, players, {}, undefined, manager);
+    const withPromise = selectStartingXI(
+      club,
+      players,
+      {},
+      createLoanSelectionPriorityIndex([deal]),
+      manager,
+    );
+
+    expect(withoutPromise.map((player) => player.id)).not.toContain(loanForward.id);
+    expect(withPromise.map((player) => player.id)).toContain(loanForward.id);
+    expect(withPromise).toHaveLength(11);
   });
 
   it("persists attended starts and only claims minutes supported by match events", () => {

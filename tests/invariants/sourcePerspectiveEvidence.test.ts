@@ -42,9 +42,9 @@ function contact(overrides: Partial<Contact> = {}): Contact {
     reliability: 76,
     knownPlayerIds: ["player-1"],
     interactionHistory: [
-      { week: 1, type: "meeting", trustDelta: 2 },
-      { week: 4, type: "meeting", trustDelta: 1 },
-      { week: 8, type: "meeting", trustDelta: 2 },
+      { occurredAt: { season: 1, week: 1 }, type: "meeting", trustDelta: 2 },
+      { occurredAt: { season: 1, week: 4 }, type: "meeting", trustDelta: 1 },
+      { occurredAt: { season: 1, week: 8 }, type: "meeting", trustDelta: 2 },
     ],
     ...overrides,
   };
