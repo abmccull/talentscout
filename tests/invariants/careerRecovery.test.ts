@@ -10,6 +10,7 @@ import type {
 import { createConsequenceEngineState } from "@/engine/consequences/decisionLedger";
 import {
   chooseCareerRecoveryPlan,
+  getCareerRecoveryPlanOptions,
   openCareerSetback,
   processCareerRecoveryWeek,
 } from "@/engine/career/recovery";
@@ -217,6 +218,57 @@ describe("career setback and recovery", () => {
     expect(secondWeek.scout.clubTrust).toBe(45);
     expect(secondWeek.scout.reputation).toBe(47);
     expect(secondWeek.jobOffers).toEqual([]);
+  });
+
+  it("grounds the recovery in its causal report and requires an affected contact", () => {
+    const opened = openCareerSetback(baseState({
+      contacts: {
+        affected: contact("affected"),
+        friendly: contact("friendly"),
+      },
+    }), {
+      kind: "firing",
+      previousTier: 3,
+      triggerDecisionId: "decision-public-recommendation",
+      triggerReportId: "report-costly-miss",
+      triggerPlayerId: "player-costly-miss",
+      triggerSummary: "the public recommendation that failed",
+      affectedStakeholders: [{ kind: "contact", id: "affected" }],
+    });
+    expect(opened.careerRecovery?.current).toMatchObject({
+      triggerDecisionId: "decision-public-recommendation",
+      triggerReportId: "report-costly-miss",
+      triggerPlayerId: "player-costly-miss",
+      triggerSummary: "the public recommendation that failed",
+    });
+    const networkOption = getCareerRecoveryPlanOptions(opened).find((option) =>
+      option.id === "rebuildTheNetwork",
+    );
+    expect(networkOption?.description).toContain("directly affected");
+
+    let selected = chooseCareerRecoveryPlan(opened, "rebuildTheNetwork").state;
+    selected = processCareerRecoveryWeek(
+      { ...selected, currentWeek: 2 },
+      schedule(1, [
+        { type: "networkMeeting", slots: 1, targetId: "friendly", description: "Friendly meeting" },
+        null, null, null, null, null, null,
+      ]),
+    );
+    expect(selected.careerRecovery?.current).toMatchObject({ progress: 1, status: "active" });
+
+    const completed = processCareerRecoveryWeek(
+      { ...selected, currentWeek: 3 },
+      schedule(2, [
+        { type: "networkMeeting", slots: 1, targetId: "affected", description: "Repair the affected relationship" },
+        null, null, null, null, null, null,
+      ]),
+    );
+    expect(completed.careerRecovery?.current?.status).toBe("completed");
+    expect(Object.values(completed.consequenceState.facts).at(-1)?.value).toMatchObject({
+      triggerReportId: "report-costly-miss",
+      triggerPlayerId: "player-costly-miss",
+      affectedStakeholderIds: ["affected"],
+    });
   });
 
   it("makes stepping back cost reputation and counts only genuinely quiet weeks", () => {

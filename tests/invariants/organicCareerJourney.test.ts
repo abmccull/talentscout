@@ -22,6 +22,7 @@ import {
   transitionToClubEmployment,
   updateReputation,
 } from "@/engine/career";
+import { monthlyEquivalentOfWeeklyAmount } from "@/engine/core/annualization";
 import {
   applyLegacyPerks,
   generateCompletedCareer,
@@ -261,7 +262,9 @@ describe("organic career journey", () => {
       reportsSubmitted: 5,
     });
     expect(employed.scout.salary).toBeGreaterThan(0);
-    expect(employed.finances?.monthlyIncome).toBe(employed.scout.salary * 4);
+    expect(employed.finances?.monthlyIncome).toBe(
+      monthlyEquivalentOfWeeklyAmount(employed.scout.salary),
+    );
     expect(employed.jobOffers).toEqual([]);
   });
 

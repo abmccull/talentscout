@@ -55,7 +55,10 @@ export interface StorylineStage {
    * Optional guard: if this returns false, the entire storyline is aborted
    * because the world has changed in a way that makes the story implausible.
    */
-  prerequisites?: (state: GameState) => boolean;
+  prerequisites?: (
+    state: GameState,
+    context: Record<string, unknown>,
+  ) => boolean;
 }
 
 /** Minimal RNG surface used by storylines (matches the engine RNG interface). */
@@ -104,6 +107,10 @@ function generateStoryEventId(rng: SimpleRNG): string {
  */
 function absoluteWeek(state: GameState, season: number, week: number): number {
   return (season - 1) * getSeasonLength(state.fixtures) + week;
+}
+
+function normalizeCountryKey(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /**
@@ -655,9 +662,20 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
   id: "internationalDiscovery",
   name: "The International Discovery",
 
-  canTrigger: (state) =>
-    state.countries.length >= 2 &&
-    state.scout.reputation > 40,
+  canTrigger: (state) => {
+    const homeCountry = normalizeCountryKey(getScoutHomeCountry(state.scout));
+    const foreignCountries = new Set(
+      state.countries
+        .map(normalizeCountryKey)
+        .filter((country) => country && country !== homeCountry),
+    );
+    return state.scout.reputation > 40
+      && Object.keys(state.contacts).length > 0
+      && Object.values(state.players).some((player) =>
+        player.age <= 23
+        && foreignCountries.has(normalizeCountryKey(player.nationality))
+      );
+  },
 
   initContext: (state, rng) => {
     const contacts = Object.values(state.contacts);
@@ -666,23 +684,33 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
       : null;
 
     const homeCountry = getScoutHomeCountry(state.scout);
-    const foreignCountries = state.countries.filter((country) => country !== homeCountry);
-    const rawCountry = foreignCountries.length > 0
-      ? foreignCountries[Math.floor(rng.next() * foreignCountries.length)]
-      : homeCountry;
+    const youngPlayers = Object.values(state.players).filter((player) =>
+      player.age <= 23
+      && normalizeCountryKey(player.nationality) !== normalizeCountryKey(homeCountry)
+      && state.countries.some((country) =>
+        normalizeCountryKey(country) === normalizeCountryKey(player.nationality)
+      )
+    );
+    const representedCountries = [...new Set(
+      youngPlayers.map((player) => normalizeCountryKey(player.nationality)),
+    )];
+    const rawCountry = representedCountries.length > 0
+      ? representedCountries[Math.floor(rng.next() * representedCountries.length)]
+      : normalizeCountryKey(homeCountry);
     const country = rawCountry.charAt(0).toUpperCase() + rawCountry.slice(1);
 
-    const youngPlayers = Object.values(state.players).filter(
-      (p) => p.age <= 23 && p.currentAbility < 130,
+    const countryPlayers = youngPlayers.filter((player) =>
+      normalizeCountryKey(player.nationality) === rawCountry
     );
-    const player = youngPlayers.length > 0
-      ? youngPlayers[Math.floor(rng.next() * youngPlayers.length)]
+    const player = countryPlayers.length > 0
+      ? countryPlayers[Math.floor(rng.next() * countryPlayers.length)]
       : null;
 
     return {
       contactId: contact?.id ?? "",
       contactName: contact?.name ?? "a contact overseas",
       country,
+      countryKey: rawCountry,
       playerId: player?.id ?? "",
       playerName: player
         ? `${player.firstName} ${player.lastName}`
@@ -701,7 +729,8 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
         season: state.currentSeason,
         title: "Unknown Talent in a Remote League",
         description:
-          `${ctx.contactName as string} has mentioned a name you've never encountered: ` +
+          `Unverified contact intelligence: ${ctx.contactName as string} has mentioned ` +
+          `a name you've never encountered: ` +
           `${ctx.playerName as string}, playing in a semi-professional setup in ` +
           `${ctx.country as string}. "I've been watching them for three months and ` +
           `I've never seen anything like it at this level," they said. The league ` +
@@ -717,7 +746,10 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
     },
     {
       weekDelay: 5,
-      prerequisites: (state) => state.countries.length >= 2,
+      prerequisites: (state, ctx) =>
+        Boolean(state.scout.travelBooking?.isAbroad)
+        && normalizeCountryKey(state.scout.travelBooking?.destinationCountry)
+          === normalizeCountryKey(ctx.countryKey as string | undefined),
       generateEvent: (ctx, state, rng): NarrativeEvent => ({
         id: generateStoryEventId(rng),
         type: "exclusiveAccess" as NarrativeEventType,
@@ -725,13 +757,11 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
         season: state.currentSeason,
         title: "The Scouting Trip",
         description:
-          `You've made the journey to ${ctx.country as string}. The facilities ` +
-          `are humble, the travel was long, and the local football is rawer ` +
-          `than what you're used to. But ${ctx.playerName as string} is ` +
-          `immediately visible — a presence on the pitch that stands out even ` +
-          `in this context. You spend three days observing, taking notes, ` +
-          `filming where permitted. Your notebook is filling with things ` +
-          `that could justify the trip many times over.`,
+          `Your active travel booking records you as present in ` +
+          `${ctx.country as string}. ${ctx.playerName as string} remains the ` +
+          `lead supplied by your contact, but the trip itself is not observation ` +
+          `evidence. Schedule or complete direct work before treating the source's ` +
+          `claims as your own assessment.`,
         relatedIds: ctx.playerId ? [ctx.playerId as string] : [],
         acknowledged: false,
         choices: undefined,
@@ -739,6 +769,10 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
     },
     {
       weekDelay: 5,
+      prerequisites: (state, ctx) =>
+        Object.values(state.observations).some((observation) =>
+          observation.playerId === ctx.playerId
+        ),
       generateEvent: (ctx, state, rng): NarrativeEvent => ({
         id: generateStoryEventId(rng),
         type: "networkExpansion" as NarrativeEventType,
@@ -746,9 +780,9 @@ const internationalDiscoveryTemplate: StorylineTemplate = {
         season: state.currentSeason,
         title: "The International Placement Decision",
         description:
-          `Your assessment of ${ctx.playerName as string} is complete. ` +
-          `The talent is genuine — probably worth two or three tiers higher ` +
-          `than their current environment. Now comes the harder question: ` +
+          `Your observation ledger now contains direct evidence on ` +
+          `${ctx.playerName as string}; it does not guarantee a particular ` +
+          `ability level or career outcome. Now comes the harder question: ` +
           `who do you recommend them to? Your own club would get the benefit, ` +
           `but a bigger club could transform the player's career. Or you could ` +
           `hold the information and wait for a clearer opportunity.`,
@@ -909,7 +943,7 @@ export function processActiveStorylines(
     }
 
     // Prerequisite guard
-    if (stage.prerequisites && !stage.prerequisites(state)) {
+    if (stage.prerequisites && !stage.prerequisites(state, storyline.context)) {
       updatedStorylines.push({ ...storyline, resolved: true });
       continue;
     }

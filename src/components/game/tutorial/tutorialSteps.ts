@@ -206,7 +206,7 @@ const firstTeamMission: TutorialStep[] = [
     targetSelector: "nav-inbox",
     title: "Club Responses",
     description:
-      "Check inbox after submitting reports. Club responds: interested, trial, signed, or passed. Signings boost [[reputation]] + bonuses.",
+      "Check inbox after submitting reports. A strong case can earn interest or a trial, but it cannot manufacture a signing. Deals must still be negotiated and registered before they affect careers, [[reputation]], or bonuses.",
     position: "bottom",
   },
 ];
@@ -313,15 +313,15 @@ const ahaMomentYouth: TutorialSequence = {
 
 const ahaMomentFirstTeam: TutorialSequence = {
   id: "ahaMoment:firstTeam",
-  name: "Club Signed Your Recommendation!",
+  name: "Your Report Changed the Conversation",
   steps: [
     {
       id: "aha-firstTeam",
       screen: "inbox",
       targetSelector: "inbox-latest",
-      title: "Club Signed Your Recommendation!",
+      title: "Your Report Changed the Conversation",
       description:
-        "The club acted on your report. [[reputation]] jumped, bonus earned. This is First Team scouting \u2014 shaping your club\u2019s squad.",
+        "The club put your recommendation into its recruitment process. You earned attention and a next step; now the trial, negotiation, and registered movement decide whether it becomes a signing. This is First Team scouting \u2014 influencing decisions without controlling the outcome.",
       position: "right",
     },
   ],

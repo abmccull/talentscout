@@ -76,7 +76,7 @@ const ACCOUNTABILITY_DELTAS: Record<
  * @param week            Week the transfer occurred.
  * @param season          Season the transfer occurred.
  * @param conviction      Conviction level from the scout's report.
- * @param reportId        The report that led to the transfer.
+ * @param reportId        The prior report whose prediction will be reviewed.
  * @param playerCA        Player's current ability at time of transfer.
  */
 export function createTransferRecord(
@@ -574,8 +574,9 @@ export function applyScoutAccountability(
  * submitted. If a transferred player has a scout report with conviction
  * "recommend" or higher and clubResponse "signed", create a TransferRecord.
  *
- * This function links the scout's reports to actual transfer activity so
- * that accountability can be tracked.
+ * This function links prior reports to later transfer activity so predictive
+ * accountability can be tracked. It does not award causal placement credit;
+ * that requires a destination-matching recruitment opportunity.
  */
 export function linkReportsToTransfers(
   rng: RNG,

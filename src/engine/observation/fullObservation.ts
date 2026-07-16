@@ -18,6 +18,10 @@ import {
   createVenueAtmosphere,
   generateAtmosphereEvent,
 } from "@/engine/observation/atmosphere";
+import {
+  applyAtmosphereToObservationSituation,
+  createObservationSituation,
+} from "@/engine/observation/situations";
 
 // =============================================================================
 // SEGMENT CLASSIFICATION
@@ -496,5 +500,18 @@ export function populateFullObservationPhases(
     ...session,
     phases: populatedPhases,
     venueAtmosphere: atmosphere,
+    situation: applyAtmosphereToObservationSituation(
+      session.situation ?? createObservationSituation({
+        activityType: session.activityType,
+        seed: session.id,
+        venueType,
+        countryId: session.countryId,
+        culturalInsights: session.culturalInsights,
+        travelPosture: session.travelPosture,
+      }),
+      atmosphere,
+      populatedPhases.flatMap((phase) => phase.atmosphereEvent ? [phase.atmosphereEvent] : []),
+      session.culturalInsights,
+    ),
   };
 }

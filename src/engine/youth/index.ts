@@ -54,3 +54,19 @@ export {
   scoreAcademyClubDecision,
 } from "./academyPlacementCase";
 export type { AcademyDecisionScore } from "./academyPlacementCase";
+
+// Evergreen professional cases — recurring judgment after the opening hook
+export {
+  YOUTH_CASE_COOLDOWN_WEEKS,
+  YOUTH_CASE_TRIGGER_CHANCE,
+  YOUTH_EVERGREEN_CASE_DEFINITIONS,
+  directWeeklyYouthProfessionalCase,
+  getProfessionalCaseApproach,
+  validateYouthEvergreenCaseDefinitions,
+} from "./evergreenCases";
+export type {
+  YouthCaseBlockedReason,
+  YouthCaseDirectionResult,
+  YouthEvergreenCaseDefinition,
+  YouthEvergreenCaseFamilyId,
+} from "./evergreenCases";

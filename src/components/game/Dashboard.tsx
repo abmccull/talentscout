@@ -38,7 +38,7 @@ import {
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { Tooltip } from "@/components/ui/tooltip";
-import { isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS, getSpecIncomeLabel, getSpecTier3Label } from "@/engine/finance";
+import { calculateMonthlyRunRate, isBroke, getEquipmentItem, ALL_EQUIPMENT_SLOTS, getSpecIncomeLabel, getSpecTier3Label } from "@/engine/finance";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
@@ -229,9 +229,11 @@ export function Dashboard() {
   // Phase 2: finances
   const { finances } = gameState;
   const broke = finances ? isBroke(finances) : false;
-  const totalExpenses = finances
-    ? Object.values(finances.expenses).reduce((s, v) => s + v, 0)
-    : 0;
+  const monthlyRunRate = finances
+    ? calculateMonthlyRunRate(finances, gameState.scout)
+    : undefined;
+  const totalExpenses = monthlyRunRate?.totalExpenses ?? 0;
+  const recurringMonthlyIncome = monthlyRunRate?.totalIncome ?? 0;
 
   // Career path
   const careerPath = scout.careerPath ?? "club";
@@ -1186,7 +1188,7 @@ export function Dashboard() {
                   <div>
                     <p className="text-xs text-zinc-400 mb-1">Monthly Income</p>
                     <p className="text-lg font-bold text-white">
-                      {formatMoney(finances.monthlyIncome)}
+                      {formatMoney(recurringMonthlyIncome)}
                     </p>
                   </div>
 
@@ -1204,7 +1206,7 @@ export function Dashboard() {
                     </p>
                     {expandedExpenses && (
                       <div className="mt-2 space-y-1">
-                        {Object.entries(finances.expenses)
+                        {Object.entries(monthlyRunRate?.expenseBreakdown ?? finances.expenses)
                           .filter(([, val]) => val > 0)
                           .map(([category, amount]) => (
                             <div

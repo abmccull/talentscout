@@ -7,3 +7,7 @@ export * from "./lifecycle";
 export * from "./stakeholderMemoryPolicy";
 export * from "./stakeholderEcology";
 export * from "./relationshipIdentities";
+export * from "./stakeholderProfiles";
+export * from "./authoredRelationshipConflicts";
+export * from "./careerStoryArchive";
+export * from "./relationshipConflictDirector";

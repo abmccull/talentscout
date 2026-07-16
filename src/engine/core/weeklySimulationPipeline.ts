@@ -1,5 +1,14 @@
-import type { GameState, Specialization } from "./types";
-import { getActiveGameMode } from "./gameStatePartitions";
+import type {
+  GameModeId,
+  GameState,
+  RunKind,
+  Specialization,
+} from "./types";
+import {
+  getActiveGameMode,
+  getActiveGameModeId,
+  getActiveRunKind,
+} from "./gameStatePartitions";
 import { compactLongCareerHistory } from "../world/saveRetention";
 import {
   createMainThreadWeeklyTransactionPlan,
@@ -57,6 +66,8 @@ export function evaluateWeekAdvancePreflight(
 
 export interface WeeklySimulationPipelineSnapshot {
   mode: Specialization;
+  gameModeId: GameModeId;
+  runKind: RunKind;
   sourceSeason: number;
   sourceWeek: number;
   completedPhases: readonly WeeklySimulationPhase[];
@@ -81,6 +92,8 @@ export interface WeeklySimulationTelemetry {
   sourceSeason: number;
   sourceWeek: number;
   mode: Specialization;
+  gameModeId: GameModeId;
+  runKind: RunKind;
   startedAtMs: number;
   completedAtMs: number;
   elapsedMs: number;
@@ -174,6 +187,8 @@ export function createWeeklySimulationPipeline(
   let nextPhaseIndex = 0;
   const completedPhases: WeeklySimulationPhase[] = [];
   const mode = getActiveGameMode(source);
+  const gameModeId = getActiveGameModeId(source);
+  const runKind = getActiveRunKind(source);
   const transaction = options.transaction ?? createWeeklyTransactionJob(source);
   const execution = options.execution ?? createMainThreadWeeklyTransactionPlan(transaction);
   const now = options.now ?? monotonicNow;
@@ -205,6 +220,8 @@ export function createWeeklySimulationPipeline(
 
   const snapshot = (): WeeklySimulationPipelineSnapshot => ({
     mode,
+    gameModeId,
+    runKind,
     sourceSeason: source.currentSeason,
     sourceWeek: source.currentWeek,
     completedPhases: [...completedPhases],
@@ -253,6 +270,8 @@ export function createWeeklySimulationPipeline(
           sourceSeason: source.currentSeason,
           sourceWeek: source.currentWeek,
           mode,
+          gameModeId,
+          runKind,
           startedAtMs,
           completedAtMs,
           elapsedMs: Math.max(0, completedAtMs - startedAtMs),

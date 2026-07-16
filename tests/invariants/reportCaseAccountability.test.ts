@@ -110,8 +110,43 @@ describe("report case accountability", () => {
       [revision.id]: revision,
     };
 
-    expect(checkPlacementFeeEligibility("player-a", reports, "scout-1")?.id)
-      .toBe(revision.id);
+    const transfer = {
+      playerId: "player-a",
+      fromClubId: "club-b",
+      toClubId: "club-a",
+      fee: 1_000_000,
+      week: 3,
+      season: 1,
+    };
+    const eligibility = checkPlacementFeeEligibility({
+      currentWeek: 3,
+      currentSeason: 1,
+      reports,
+      reportDeliveries: {
+        delivery: {
+          id: "delivery",
+          caseId: "fee-case",
+          reportId: revision.id,
+          clubId: "club-a",
+          channel: "marketplaceSale",
+          status: "delivered",
+          deliveredWeek: 2,
+          deliveredSeason: 1,
+        },
+      },
+      playerMovementHistory: [{
+        id: "movement",
+        playerId: "player-a",
+        type: "permanentTransfer",
+        fromClubId: "club-b",
+        toClubId: "club-a",
+        fee: transfer.fee,
+        week: transfer.week,
+        season: transfer.season,
+      }],
+    }, transfer, "scout-1");
+
+    expect(eligibility?.report.id).toBe(revision.id);
 
     const lateBlooming = EVENT_TEMPLATES.find(
       (template) => template.type === "lateBloomingSurprise",
@@ -203,7 +238,8 @@ describe("report case accountability", () => {
     expect(awards.stats.avgReportQuality).toBe(72);
   });
 
-  it("dates signing reputation to the club decision so it cannot repeat next week", () => {
+  it("requires a same-week authoritative movement before signing reputation can pay", () => {
+    const signedReport = report("signed-report", "signed-case", "player-1", 5, 1);
     const response = {
       reportId: "signed-report",
       response: "signed" as const,
@@ -212,13 +248,37 @@ describe("report case accountability", () => {
       week: 6,
       season: 1,
     };
-    expect(hasSuccessfulSigningResponseThisWeek({
+    const base = {
       clubResponses: [response],
+      reports: { [signedReport.id]: signedReport },
+      playerMovementHistory: [],
+    };
+    expect(hasSuccessfulSigningResponseThisWeek({
+      ...base,
+      currentWeek: 6,
+      currentSeason: 1,
+    })).toBe(false);
+
+    const withRegisteredMovement = {
+      ...base,
+      playerMovementHistory: [{
+        id: "movement-1",
+        playerId: "player-1",
+        type: "permanentTransfer" as const,
+        fromClubId: "club-a",
+        toClubId: "club-b",
+        fee: 1_000_000,
+        week: 6,
+        season: 1,
+      }],
+    };
+    expect(hasSuccessfulSigningResponseThisWeek({
+      ...withRegisteredMovement,
       currentWeek: 6,
       currentSeason: 1,
     })).toBe(true);
     expect(hasSuccessfulSigningResponseThisWeek({
-      clubResponses: [response],
+      ...withRegisteredMovement,
       currentWeek: 7,
       currentSeason: 1,
     })).toBe(false);

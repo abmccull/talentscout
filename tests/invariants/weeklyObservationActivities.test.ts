@@ -92,10 +92,20 @@ describe("weekly observation transaction", () => {
 
     const first = resolveObservationWeek(state);
     const second = resolveObservationWeek(state);
+    const sourceObservationIds = new Set(Object.keys(state.observations));
+    const generated = Object.values(first.state.observations).filter(
+      (observation) => !sourceObservationIds.has(observation.id),
+    );
 
     expect(first.observationsGenerated).toBeGreaterThan(0);
     expect(first.playersDiscovered).toBeGreaterThan(0);
     expect(first).toEqual(second);
+    expect(generated.length).toBe(first.observationsGenerated);
+    expect(generated.every((observation) => Boolean(
+      observation.situation?.id
+      && observation.situation.repetitionKey
+      && observation.situation.activityType === "schoolMatch",
+    ))).toBe(true);
     expect(JSON.stringify(state)).toBe(before);
   }, 30_000);
 
@@ -120,6 +130,38 @@ describe("weekly observation transaction", () => {
     expect(result.observationsGenerated).toBe(0);
     expect(result.playersDiscovered).toBe(0);
     expect(result.state.observations).toEqual(empty.observations);
+  }, 30_000);
+});
+
+describe("weekly travel fatigue authority", () => {
+  it("applies a trip posture multiplier inside calendar processing", async () => {
+    const state = await createObservationState("travel-fatigue-contract");
+    const activity: Activity = {
+      type: "internationalTravel",
+      slots: 1,
+      targetId: "brazil",
+      description: "Travel to Brazil",
+    };
+    const schedule = addActivity(
+      createWeekSchedule(state.currentWeek, state.currentSeason),
+      activity,
+      0,
+    );
+    const seed = `${state.seed}-week-${state.currentWeek}-${state.currentSeason}`;
+    const controlled = processCompletedWeek(
+      schedule,
+      state.scout,
+      createRNG(seed),
+      { internationalTravel: 0.9 },
+    );
+    const blitz = processCompletedWeek(
+      schedule,
+      state.scout,
+      createRNG(seed),
+      { internationalTravel: 1.25 },
+    );
+
+    expect(blitz.fatigueChange).toBeGreaterThan(controlled.fatigueChange);
   }, 30_000);
 });
 

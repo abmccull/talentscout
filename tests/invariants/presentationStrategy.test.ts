@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { YouthRecruitmentBrief } from "@/engine/core/types";
 import {
+  describePresentationRoom,
   evaluatePresentationStrategy,
   PRESENTATION_APPROACHES,
 } from "@/engine/reports/presentationStrategy";
@@ -113,5 +114,20 @@ describe("youth presentation strategy", () => {
       expect(impact.presentationScore).toBeGreaterThanOrEqual(20);
       expect(impact.presentationScore).toBeLessThanOrEqual(80);
     }
+  });
+
+  it("gives the player a qualitative room read instead of revealing exact modifiers", () => {
+    expect(describePresentationRoom(3)).toMatchObject({
+      label: "Room looks receptive",
+      sentiment: "positive",
+    });
+    expect(describePresentationRoom(0)).toMatchObject({
+      label: "Uncertain room",
+      sentiment: "mixed",
+    });
+    expect(describePresentationRoom(-3)).toMatchObject({
+      label: "Hard sell",
+      sentiment: "negative",
+    });
   });
 });

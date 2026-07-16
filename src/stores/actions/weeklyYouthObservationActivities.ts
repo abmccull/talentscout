@@ -4,7 +4,9 @@ import type {
   GutFeeling,
   InboxMessage,
   Observation,
+  ObservationContext,
   Scout,
+  TournamentEvent,
   UnsignedYouth,
   WeekSimulationState,
 } from "@/engine/core/types";
@@ -26,11 +28,11 @@ import {
   getYouthVenuePool,
   mapVenueTypeToContext,
   processParentCoachMeeting,
-  processVenueObservation,
 } from "@/engine/youth/venues";
 import { recordDiscovery } from "@/engine/career";
 import { buildScoutQualityDataForState } from "./weeklySimulationSupport";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
+import { produceWeeklyVenueObservation } from "./weeklyObservationProducer";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -96,6 +98,30 @@ export function processWeeklyYouthObservationActivities(
   const prioritizeFocusedYouth = input.prioritizeYouth;
   const simChoices = input.weekSimulation;
   const TIER_LABELS = input.tierLabels;
+
+  // Positional compatibility adapter for the existing youth handlers. It
+  // ensures fallback, focused, tournament, and post-simulation observations
+  // all receive the same persisted deterministic situation contract.
+  const processVenueObservation = (
+    observationRng: RNG,
+    scout: Scout,
+    youth: UnsignedYouth,
+    context: ObservationContext,
+    existingObservations: Observation[],
+    _week: number,
+    _season: number,
+    extraAttributes?: number,
+    tournament?: TournamentEvent,
+  ) => produceWeeklyVenueObservation({
+    state: stateWithScheduleApplied,
+    rng: observationRng,
+    scout,
+    youth,
+    context,
+    existingObservations,
+    extraAttributes,
+    tournament,
+  });
 
   // ── Youth-exclusive activity observation handlers ──────────────────────
   // These use the proper youth venue system (getYouthVenuePool + processVenueObservation)

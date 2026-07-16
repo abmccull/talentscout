@@ -55,6 +55,7 @@ import {
   getManagerMeetingEligibility,
 } from "@/engine/career/politicalMeetings";
 import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
+import { calculateMonthlyRunRate } from "@/engine/finance/dashboard";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import {
@@ -145,12 +146,6 @@ const CAREER_TAB_ITEMS: Array<{ value: CareerWorkspaceTab; label: string }> = [
 function formatSalary(salary: number): string {
   if (salary >= 1000) return `£${(salary / 1000).toFixed(1)}K/wk`;
   return `£${salary}/wk`;
-}
-
-function formatSavings(savings: number): string {
-  if (savings >= 1_000_000) return `£${(savings / 1_000_000).toFixed(2)}M`;
-  if (savings >= 1_000) return `£${(savings / 1_000).toFixed(0)}K`;
-  return `£${savings}`;
 }
 
 function formatBalance(n: number): string {
@@ -288,7 +283,10 @@ function JobOfferCard({ offer, clubName, onAccept, onDecline }: JobOfferCardProp
           <p className="font-semibold text-white">{clubName}</p>
           <p className="text-sm text-zinc-400">{offer.role}</p>
         </div>
-        <Badge variant="secondary">Tier {offer.tier}</Badge>
+        <div className="flex gap-1.5">
+          {offer.renewalOfContractId && <Badge variant="outline">Renewal</Badge>}
+          <Badge variant="secondary">Tier {offer.tier}</Badge>
+        </div>
       </div>
       <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
         <div>
@@ -312,6 +310,24 @@ function JobOfferCard({ offer, clubName, onAccept, onDecline }: JobOfferCardProp
           <span className="text-amber-400">Week {offer.expiresWeek}</span>
         </div>
       </div>
+      {offer.objectives && (
+        <div className="mb-3 rounded-md border border-white/10 bg-black/20 p-2.5">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            Success measures
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-[10px] text-zinc-300">
+            <span>{offer.objectives.reportsPerSeason} reports</span>
+            <span>{offer.objectives.minimumAverageQuality}+ quality</span>
+            <span>{offer.objectives.successfulRecommendations} signings</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+            {(offer.signingBonus ?? 0) > 0 && <span>{formatBalance(offer.signingBonus ?? 0)} signing bonus</span>}
+            <span>{Math.round((offer.performanceBonusRate ?? 0) * 100)}% performance upside</span>
+            <span>{offer.educationBudget ? `${formatBalance(offer.educationBudget)} education` : "No education budget"}</span>
+            <span>{offer.severanceWeeks ?? 0} weeks severance</span>
+          </div>
+        </div>
+      )}
       <div className="flex gap-2">
         <Button size="sm" className="flex-1" onClick={onAccept}>
           Accept
@@ -450,6 +466,10 @@ export function CareerScreen() {
     discoveryRecords: gameState.discoveryRecords,
     playerMovementHistory: gameState.playerMovementHistory,
     consequenceState: gameState.consequenceState,
+    careerStoryArchive: gameState.careerStoryArchive,
+    careerMoments: gameState.careerMoments?.history
+      .filter((delivery) => delivery.status === "presented")
+      .map((delivery) => delivery.moment),
   };
   const activeObligations = Object.values(gameState.consequenceState.obligations)
     .filter((obligation) => obligation.status === "active")
@@ -489,9 +509,11 @@ export function CareerScreen() {
     ? skillEntries.reduce((sum, [, value]) => sum + value, 0) / skillEntries.length
     : 0;
   const developmentPriority = [...skillEntries].sort((a, b) => a[1] - b[1])[0];
-  const monthlyExpenses = finances
-    ? Object.values(finances.expenses).reduce((sum, amount) => sum + amount, 0)
-    : 0;
+  const careerMonthlyRunRate = finances
+    ? calculateMonthlyRunRate(finances, scout)
+    : undefined;
+  const monthlyExpenses = careerMonthlyRunRate?.totalExpenses ?? 0;
+  const monthlyIncome = careerMonthlyRunRate?.totalIncome ?? 0;
   const currentBuildAchievementCount = ACHIEVEMENTS.filter(
     (achievement) =>
       isAchievementAvailableForBuild(achievement.id) &&
@@ -1095,9 +1117,13 @@ export function CareerScreen() {
                   <>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                       <CareerMetricTile label="Balance" value={formatBalance(finances.balance)} helper="Available cash" tone={finances.balance >= 0 ? "emerald" : "red"} />
-                      <CareerMetricTile label="Monthly Income" value={formatBalance(finances.monthlyIncome)} helper={scout.careerPath === "independent" ? "Reports and retainers" : "Salary and bonuses"} tone="emerald" />
+                      <CareerMetricTile label="Monthly Income" value={formatBalance(monthlyIncome)} helper={scout.careerPath === "independent" ? "Committed retainers" : "Contract salary"} tone="emerald" />
                       <CareerMetricTile label="Monthly Costs" value={formatBalance(monthlyExpenses)} helper="Lifestyle, travel, and tools" tone="red" />
-                      <CareerMetricTile label="Personal Savings" value={formatSavings(scout.savings)} helper={formatSalary(scout.salary)} />
+                      <CareerMetricTile
+                        label="Weekly Pay"
+                        value={scout.salary > 0 ? formatSalary(scout.salary) : "Freelance"}
+                        helper={scout.employmentContract?.role ?? "Independent practice"}
+                      />
                     </div>
                     <button
                       type="button"
@@ -1307,13 +1333,6 @@ export function CareerScreen() {
                     {scout.salary > 0 ? formatSalary(scout.salary) : "Freelance"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-500">Savings</span>
-                  <span className="text-white font-semibold text-sm">
-                    {formatSavings(scout.savings)}
-                  </span>
-                </div>
-                {/* Phase 2: finances balance */}
                 {finances && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-zinc-500">Balance</span>
@@ -1332,6 +1351,28 @@ export function CareerScreen() {
                     <span className="text-amber-400 text-sm">
                       Season {scout.contractEndSeason}
                     </span>
+                  </div>
+                )}
+                {scout.employmentContract && (
+                  <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Season target</span>
+                      <span className="text-zinc-200">
+                        {scout.employmentContract.objectives.reportsPerSeason} reports
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Quality floor</span>
+                      <span className="text-zinc-200">
+                        {scout.employmentContract.objectives.minimumAverageQuality}/100
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Education budget</span>
+                      <span className="text-emerald-300">
+                        {formatBalance(scout.employmentContract.educationBudget)}
+                      </span>
+                    </div>
                   </div>
                 )}
               </CardContent>
@@ -1996,6 +2037,11 @@ export function CareerScreen() {
                             {review.reputationChange}
                           </span>
                         </div>
+                        {review.contractSummary && (
+                          <p className={`mt-2 text-[10px] ${review.contractSummary.objectivesMet === review.contractSummary.objectivesTotal ? "text-emerald-300" : "text-amber-300"}`}>
+                            Contract objectives: {review.contractSummary.objectivesMet}/{review.contractSummary.objectivesTotal} met · targets {review.contractSummary.reportsTarget} reports, {review.contractSummary.qualityTarget} quality, {review.contractSummary.recommendationsTarget} signings
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>

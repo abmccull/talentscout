@@ -9,7 +9,11 @@ import type {
   Scout,
 } from "../core/types";
 import { transitionToBankruptcyRecovery } from "../career/transitions";
-import { DEFAULT_LOADOUT, DEFAULT_OWNED_ITEMS } from "./equipmentCatalog";
+import {
+  DEFAULT_LOADOUT,
+  DEFAULT_OWNED_ITEMS,
+  getEquipmentItem,
+} from "./equipmentCatalog";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -71,6 +75,34 @@ export interface DistressResult {
   forcedRest: boolean;
 }
 
+function getDistressWeekReferenceId(week: number, season: number): string {
+  return `distress-week:s${season}w${week}`;
+}
+
+function markDistressWeekProcessed(
+  finances: FinancialRecord,
+  week: number,
+  season: number,
+): FinancialRecord {
+  const referenceId = getDistressWeekReferenceId(week, season);
+  if ((finances.transactions ?? []).some((transaction) => transaction.referenceId === referenceId)) {
+    return finances;
+  }
+  return {
+    ...finances,
+    transactions: [
+      ...(finances.transactions ?? []),
+      {
+        week,
+        season,
+        amount: 0,
+        description: "Weekly financial distress review",
+        referenceId,
+      },
+    ],
+  };
+}
+
 /** True while bankruptcy recovery forbids normal scouting work. */
 export function isBankruptcyRecoveryActive(
   finances: FinancialRecord | undefined,
@@ -88,6 +120,16 @@ export function processDistress(
   week: number,
   season: number,
 ): DistressResult {
+  const referenceId = getDistressWeekReferenceId(week, season);
+  if ((finances.transactions ?? []).some((transaction) => transaction.referenceId === referenceId)) {
+    return {
+      finances,
+      scout,
+      messages: [],
+      forcedRest: isBankruptcyRecoveryActive(finances),
+    };
+  }
+
   const messages: InboxMessage[] = [];
   let updatedFinances = { ...finances };
   let updatedScout = { ...scout };
@@ -113,7 +155,7 @@ export function processDistress(
       weeksInDistress: weeksInDistress,
     };
     return {
-      finances: updatedFinances,
+      finances: markDistressWeekProcessed(updatedFinances, week, season),
       scout: updatedScout,
       messages,
       forcedRest: true,
@@ -168,6 +210,8 @@ export function processDistress(
     distressLevel: newLevel,
     weeksInDistress: weeksInDistress,
   };
+
+  updatedFinances = markDistressWeekProcessed(updatedFinances, week, season);
 
   return { finances: updatedFinances, scout: updatedScout, messages, forcedRest };
 }
@@ -353,14 +397,47 @@ function applyOngoingDistress(
  */
 export function sellEquipmentForCash(
   finances: FinancialRecord,
-  itemValue: number,
+  _itemValue: number,
   week: number,
   season: number,
 ): FinancialRecord {
-  const cashReceived = Math.round(itemValue * 0.4);
+  const referenceId = `equipment-liquidation:s${season}w${week}`;
+  if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+    return finances;
+  }
+
+  const inventory = finances.equipment;
+  if (!inventory) return finances;
+
+  const liquidatableItems = inventory.ownedItems.filter((itemId) => {
+    const item = getEquipmentItem(itemId);
+    return item && item.tier > 1 && item.purchaseCost > 0;
+  });
+  if (liquidatableItems.length === 0 && finances.equipmentLevel <= 1) {
+    return finances;
+  }
+
+  const actualPortfolioValue = liquidatableItems.reduce((sum, itemId) => {
+    const item = getEquipmentItem(itemId);
+    return sum + (item?.purchaseCost ?? 0);
+  }, 0);
+  const legacyPortfolioValue = actualPortfolioValue === 0 && finances.equipmentLevel > 1
+    ? finances.equipmentLevel * 750
+    : 0;
+  const liquidationBase = Math.max(actualPortfolioValue, legacyPortfolioValue, 0);
+  if (liquidationBase <= 0) {
+    return finances;
+  }
+
+  const cashReceived = Math.round(liquidationBase * 0.4);
   return {
     ...finances,
     balance: finances.balance + cashReceived,
+    equipmentLevel: 1,
+    equipment: {
+      ownedItems: [...DEFAULT_OWNED_ITEMS],
+      loadout: { ...DEFAULT_LOADOUT },
+    },
     transactions: [
       ...finances.transactions,
       {
@@ -368,6 +445,8 @@ export function sellEquipmentForCash(
         season,
         amount: cashReceived,
         description: "Equipment sold (emergency liquidation)",
+        referenceId,
+        category: "asset",
       },
     ],
   };

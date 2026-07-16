@@ -19,6 +19,12 @@ export interface AppSettings {
   // Accessibility
   colorblindMode: "none" | "protanopia" | "deuteranopia" | "tritanopia";
   reducedMotion: boolean;
+  /** Presentation intensity; never changes simulation outcomes. */
+  cinematicMoments: "full" | "reduced" | "off";
+  /** Optional non-semantic stingers for discoveries, failures, and callbacks. */
+  emotionalAudioCues: boolean;
+  /** Whether career-defining moments may open automatically after weekly resolution. */
+  autoOpenCareerDefiningMoments: boolean;
 
   // Gameplay
   autoAdvanceSpeed: "slow" | "normal" | "fast";
@@ -43,6 +49,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   fontSize: "medium",
   colorblindMode: "none",
   reducedMotion: false,
+  cinematicMoments: "full",
+  emotionalAudioCues: true,
+  autoOpenCareerDefiningMoments: true,
   autoAdvanceSpeed: "normal",
   confirmBeforeAdvance: false,
   notificationLevel: "all",
@@ -80,6 +89,20 @@ function readPersisted(): AppSettings {
         typeof parsed.reducedMotion === "boolean"
           ? parsed.reducedMotion
           : DEFAULT_SETTINGS.reducedMotion,
+      cinematicMoments:
+        parsed.cinematicMoments === "full" ||
+        parsed.cinematicMoments === "reduced" ||
+        parsed.cinematicMoments === "off"
+          ? parsed.cinematicMoments
+          : DEFAULT_SETTINGS.cinematicMoments,
+      emotionalAudioCues:
+        typeof parsed.emotionalAudioCues === "boolean"
+          ? parsed.emotionalAudioCues
+          : DEFAULT_SETTINGS.emotionalAudioCues,
+      autoOpenCareerDefiningMoments:
+        typeof parsed.autoOpenCareerDefiningMoments === "boolean"
+          ? parsed.autoOpenCareerDefiningMoments
+          : DEFAULT_SETTINGS.autoOpenCareerDefiningMoments,
       autoAdvanceSpeed:
         parsed.autoAdvanceSpeed === "slow" ||
         parsed.autoAdvanceSpeed === "normal" ||

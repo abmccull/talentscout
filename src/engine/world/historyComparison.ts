@@ -66,6 +66,15 @@ export interface ClubArchiveSeason {
   leagueMovement?: ClubLeagueMovement;
   nextLeagueId?: string;
   scoutingPhilosophy: string;
+  recruitmentDoctrine?: {
+    archetype: string;
+    seasonalObjective: string;
+    evidencePreference: string;
+    preferredSeniorAgeRange: [number, number];
+    pathwayPatience: number;
+    managerInfluence: number;
+    directorInfluence: number;
+  };
   tacticalIdentity?: string;
   manager?: {
     id: string;
@@ -243,6 +252,19 @@ export function buildClubArchiveTimelines(
         ...(club.leagueMovement ? { leagueMovement: club.leagueMovement } : {}),
         ...(club.nextLeagueId ? { nextLeagueId: club.nextLeagueId } : {}),
         scoutingPhilosophy: club.scoutingPhilosophy,
+        ...(club.recruitmentDoctrine
+          ? {
+              recruitmentDoctrine: {
+                archetype: club.recruitmentDoctrine.archetype,
+                seasonalObjective: club.recruitmentDoctrine.seasonalObjective,
+                evidencePreference: club.recruitmentDoctrine.evidencePreference,
+                preferredSeniorAgeRange: [...club.recruitmentDoctrine.preferredSeniorAgeRange],
+                pathwayPatience: club.recruitmentDoctrine.pathwayPatience,
+                managerInfluence: club.recruitmentDoctrine.managerInfluence,
+                directorInfluence: club.recruitmentDoctrine.directorInfluence,
+              },
+            }
+          : {}),
         ...(club.tacticalStyle?.tacticalIdentity
           ? { tacticalIdentity: club.tacticalStyle.tacticalIdentity }
           : {}),

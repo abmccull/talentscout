@@ -57,6 +57,7 @@ const statusDocument = JSON.parse(await readFile(statusPath, "utf8"));
 const packageDocument = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
 const productVersion = String(packageDocument.version ?? "").trim();
 const currentSha = (await git(["rev-parse", "HEAD"])).toLowerCase();
+const currentTreeSha = (await git(["rev-parse", "HEAD^{tree}"])).toLowerCase();
 const treeOutput = await git(["status", "--porcelain", "--untracked-files=all"]);
 const dirty = treeOutput.length > 0;
 const configuredSha =
@@ -488,6 +489,9 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   if (String(evidence.candidateCommitSha ?? "").toLowerCase() !== candidateSha) {
     result.failures.push("soak evidence does not describe the exact candidate commit");
   }
+  if (String(evidence.candidateTreeSha ?? "").toLowerCase() !== currentTreeSha) {
+    result.failures.push("soak evidence does not describe the exact candidate tree");
+  }
   if (evidence.status !== "Passed" || evidence.candidateBound !== true || evidence.sourceTreeClean !== true) {
     result.failures.push("soak evidence was not produced from a clean, passing candidate");
   }
@@ -496,6 +500,34 @@ async function validateGeneratedGateEvidence(gateId, policy) {
   const minimumSeasonCount = Number(policy.minimumSeasonCount);
   const seedCount = evidence.profile?.seedCount;
   const seasonCount = evidence.profile?.seasonCount;
+  const checkpoint = evidence.checkpoint;
+  const executionIdentity = checkpoint?.executionIdentity;
+  const calculatedIdentityHash = executionIdentity && typeof executionIdentity === "object"
+    ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
+    : null;
+  if (
+    checkpoint?.protocolVersion !== 1
+    || checkpoint?.determinismReplayExecuted !== true
+    || !hashPattern.test(String(checkpoint?.executionIdentityHash ?? ""))
+    || checkpoint?.executionIdentityHash !== calculatedIdentityHash
+    || executionIdentity?.candidateCommitSha !== candidateSha
+    || executionIdentity?.candidateTreeSha !== currentTreeSha
+    || executionIdentity?.seedCount !== seedCount
+    || executionIdentity?.seasonCount !== seasonCount
+    || executionIdentity?.profileKind !== "full-canonical-weekly-career"
+    || executionIdentity?.processIsolation !== "one-seeded-career-per-process"
+  ) {
+    result.failures.push("soak checkpoint identity is missing, inconsistent, or not candidate-bound");
+  }
+  if (
+    !Number.isInteger(checkpoint?.reusedSeedCount)
+    || !Number.isInteger(checkpoint?.executedSeedCount)
+    || checkpoint.reusedSeedCount < 0
+    || checkpoint.executedSeedCount < 0
+    || checkpoint.reusedSeedCount + checkpoint.executedSeedCount !== seedCount
+  ) {
+    result.failures.push("soak checkpoint accounting does not cover every requested seed");
+  }
   if (!Number.isInteger(minimumSeedCount) || minimumSeedCount <= 0) {
     result.failures.push("generated evidence policy has an invalid minimumSeedCount");
   } else if (!Number.isInteger(seedCount) || seedCount < minimumSeedCount) {

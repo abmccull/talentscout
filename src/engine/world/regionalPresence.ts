@@ -11,6 +11,7 @@ import type {
   GameState,
   Observation,
   Player,
+  TravelPosture,
 } from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
 import { getTravelEligibleCountryKeys } from "./countryAvailability";
@@ -18,6 +19,7 @@ import {
   getScoutHomeCountry,
   getTravelCost,
   getTravelDuration,
+  getTravelPostureEffects,
   getTravelSlots,
   isScoutAbroad,
 } from "./travel";
@@ -44,6 +46,19 @@ export interface RegionalPresenceSource {
     | "delegatedCoverage";
   label: string;
   score: number;
+  /** Which operational capabilities this source actually strengthens. */
+  dimensions?: Partial<RegionalPresenceDimensions>;
+}
+
+export interface RegionalPresenceDimensions {
+  /** Reach into venues, player pools, and local introductions. */
+  access: number;
+  /** Ability to interpret evidence in its local football context. */
+  intelligence: number;
+  /** Durable trust, favours, exclusives, and stakeholder reach. */
+  relationships: number;
+  /** Cost, fatigue, planning time, and delegated operating capacity. */
+  logistics: number;
 }
 
 export interface RegionalPresenceEffects {
@@ -69,6 +84,7 @@ export interface RegionalPresenceSnapshot {
   generatedWorldEligible: boolean;
   accessScore: number;
   accessTier: RegionalAccessTier;
+  dimensions: RegionalPresenceDimensions;
   isHomeBase: boolean;
   isActiveLocation: boolean;
   satelliteOfficeId?: string;
@@ -84,6 +100,7 @@ export interface RegionalPresenceSnapshot {
 export interface RegionalTravelQuote {
   fromCountry: string;
   toCountry: string;
+  posture?: TravelPosture;
   baseCost: number;
   cost: number;
   baseSlots: number;
@@ -224,17 +241,28 @@ export function deriveRegionalPresence(
 
   const sources: RegionalPresenceSource[] = [];
   if (isHomeBase) {
-    sources.push({ kind: "homeBase", label: "Permanent home base", score: 35 });
+    sources.push({
+      kind: "homeBase",
+      label: "Permanent home base",
+      score: 35,
+      dimensions: { access: 42, logistics: 45 },
+    });
   }
   if (isActiveLocation) {
     sources.push({
       kind: "activeTravel",
       label: isHomeBase ? "Active local presence" : "Currently working in country",
       score: isHomeBase ? 12 : 28,
+      dimensions: { access: 28, intelligence: 14, relationships: 8, logistics: 10 },
     });
   }
   if (office) {
-    sources.push({ kind: "satelliteOffice", label: "Satellite office", score: 22 });
+    sources.push({
+      kind: "satelliteOffice",
+      label: "Satellite office",
+      score: 22,
+      dimensions: { access: 18, intelligence: 5, relationships: 8, logistics: 35 },
+    });
   }
   if (assignedEmployees.length > 0) {
     const staffScore = clamp(
@@ -246,6 +274,18 @@ export function deriveRegionalPresence(
       kind: "assignedStaff",
       label: `${assignedEmployees.length} office staff on the ground`,
       score: staffScore,
+      dimensions: {
+        access: assignedEmployees.filter((employee) =>
+          employee.role === "scout" || employee.role === "mentee"
+        ).length * 10,
+        intelligence: assignedEmployees.reduce((sum, employee) =>
+          sum + (employee.role === "analyst" ? 12 : employee.role === "scout" ? 5 : 0), 0),
+        relationships: assignedEmployees.filter(
+          (employee) => employee.role === "relationshipManager",
+        ).length * 15,
+        logistics: assignedEmployees.reduce((sum, employee) =>
+          sum + 4 + (employee.role === "administrator" ? 18 : 0), 0),
+      },
     });
   }
   const delegatedCount = delegatedEmployees.length + delegatedAssistants.length + delegatedNpcScouts.length;
@@ -254,6 +294,7 @@ export function deriveRegionalPresence(
       kind: "delegatedCoverage",
       label: `${delegatedCount} delegated scout${delegatedCount === 1 ? "" : "s"} covering the country`,
       score: clamp(delegatedCount * 4, 0, 12),
+      dimensions: { access: delegatedCount * 5 },
     });
   }
   if (contacts.length > 0 || (knowledge?.localContacts.length ?? 0) > 0) {
@@ -265,6 +306,10 @@ export function deriveRegionalPresence(
       kind: "localContacts",
       label: `${contacts.length + (knowledge?.localContacts.length ?? 0)} local relationship${contacts.length + (knowledge?.localContacts.length ?? 0) === 1 ? "" : "s"}`,
       score: contactScore,
+      dimensions: {
+        access: relationshipWeight * 7 + (knowledge?.localContacts.length ?? 0) * 2,
+        relationships: relationshipWeight * 20 + (knowledge?.localContacts.length ?? 0) * 4,
+      },
     });
   }
   if (knowledgeLevel > 0) {
@@ -272,47 +317,90 @@ export function deriveRegionalPresence(
       kind: "regionalKnowledge",
       label: `${Math.round(knowledgeLevel)}/100 regional knowledge`,
       score: knowledgeLevel * 0.2,
+      dimensions: { intelligence: knowledgeLevel * 0.62, logistics: knowledgeLevel * 0.1 },
     });
   }
 
+  const analystCount = assignedEmployees.filter((employee) => employee.role === "analyst").length;
+  const scoutCount = assignedEmployees.filter((employee) =>
+    employee.role === "scout" || employee.role === "mentee"
+  ).length;
+  const administratorCount = assignedEmployees.filter(
+    (employee) => employee.role === "administrator",
+  ).length;
+  const relationshipManagerCount = assignedEmployees.filter(
+    (employee) => employee.role === "relationshipManager",
+  ).length;
+  const relationshipStrength = contacts.reduce((sum, contact) =>
+    sum + clamp((contact.relationship + (contact.trustLevel ?? contact.relationship)) / 200, 0.1, 1), 0);
+  const localContactCount = knowledge?.localContacts.length ?? 0;
+  const officeQuality = office?.qualityBonus ?? 0;
+
+  const dimensions: RegionalPresenceDimensions = generatedWorldEligible
+    ? {
+        access: Math.round(clamp(
+          (isHomeBase ? 42 : 0)
+            + (isActiveLocation ? 28 : 0)
+            + (office ? 18 : 0)
+            + scoutCount * 10
+            + delegatedCount * 5
+            + relationshipStrength * 7
+            + localContactCount * 2,
+          0,
+          100,
+        )),
+        intelligence: Math.round(clamp(
+          knowledgeLevel * 0.62
+            + (isActiveLocation ? 14 : 0)
+            + (office ? 5 : 0)
+            + scoutCount * 5
+            + analystCount * 12
+            + officeQuality * 25,
+          0,
+          100,
+        )),
+        relationships: Math.round(clamp(
+          relationshipStrength * 20
+            + localContactCount * 4
+            + relationshipManagerCount * 15
+            + (office ? 8 : 0)
+            + (isActiveLocation ? 8 : 0),
+          0,
+          100,
+        )),
+        logistics: Math.round(clamp(
+          (isHomeBase ? 45 : 0)
+            + (isActiveLocation ? 10 : 0)
+            + (office ? 35 : 0)
+            + administratorCount * 18
+            + assignedEmployees.length * 4
+            + knowledgeLevel * 0.1,
+          0,
+          100,
+        )),
+      }
+    : { access: 0, intelligence: 0, relationships: 0, logistics: 0 };
   const accessScore = generatedWorldEligible
-    ? Math.round(clamp(sources.reduce((sum, source) => sum + source.score, 0), 0, 100))
+    ? Math.round(
+        dimensions.access * 0.35
+        + dimensions.intelligence * 0.3
+        + dimensions.relationships * 0.2
+        + dimensions.logistics * 0.15,
+      )
     : 0;
   const tier = accessTier(accessScore);
-  const normalized = accessScore / 100;
-  const staffStrength = clamp(assignedEmployees.length / 3, 0, 1);
-  const officeQuality = office?.qualityBonus ?? 0;
   const activeBonus = isActiveLocation ? 0.025 : 0;
   const observationConfidenceBonus = generatedWorldEligible
-    ? clamp(normalized * 0.07 + activeBonus + officeQuality * 0.25, 0, 0.15)
+    ? clamp(dimensions.intelligence * 0.0013 + activeBonus, 0, 0.15)
     : 0;
-  const analystCount = assignedEmployees.filter((employee) => employee.role === "analyst").length;
   const dataConfidenceBonus = generatedWorldEligible
-    ? clamp(knowledgeLevel * 0.0006 + analystCount * 0.015 + (office ? 0.015 : 0), 0, 0.1)
+    ? clamp(dimensions.intelligence * 0.0009 + analystCount * 0.012, 0, 0.1)
     : 0;
-  const contactTravelReduction = contacts.length > 0 ? Math.min(0.08, contacts.length * 0.02) : 0;
-  const knowledgeTravelReduction = Math.min(0.1, knowledgeLevel / 1000);
   const travelCostMultiplier = generatedWorldEligible
-    ? clamp(
-      1
-        - (office ? 0.18 : 0)
-        - staffStrength * 0.09
-        - contactTravelReduction
-        - knowledgeTravelReduction,
-      0.55,
-      1,
-    )
+    ? clamp(1 - dimensions.logistics * 0.0045, 0.55, 1)
     : 1;
   const travelFatigueMultiplier = generatedWorldEligible
-    ? clamp(
-      1
-        - (office ? 0.16 : 0)
-        - staffStrength * 0.12
-        - (isHomeBase ? 0.12 : 0)
-        - Math.min(0.1, knowledgeLevel / 1000),
-      0.55,
-      1,
-    )
+    ? clamp(1 - dimensions.logistics * 0.004, 0.55, 1)
     : 1;
   const passiveKnowledgeGain = generatedWorldEligible
     ? clamp(
@@ -324,6 +412,11 @@ export function deriveRegionalPresence(
     )
     : 0;
   const conditionModifiers = getWorldConditionModifiers(state, countryId);
+  const activeTravelPosture = state.scout.travelBooking
+    && canonicalCountry(state.scout.travelBooking.destinationCountry) === countryId
+    && isScoutAbroad(state.scout, state.currentWeek)
+    ? getTravelPostureEffects(state.scout.travelBooking.posture)
+    : getTravelPostureEffects(undefined);
   const worldConditionNames = (state.worldConditionState?.active ?? [])
     .filter((condition) =>
       condition.scope === "global" || condition.countryId === countryId
@@ -336,7 +429,9 @@ export function deriveRegionalPresence(
   const effects: RegionalPresenceEffects = {
     discoveryMultiplier: generatedWorldEligible
       ? clamp(
-        (0.75 + normalized * 0.6) * conditionModifiers.discoveryMultiplier,
+        (0.82 + (dimensions.access / 100) * 0.65)
+          * conditionModifiers.discoveryMultiplier
+          * activeTravelPosture.discoveryMultiplier,
         0.55,
         1.7,
       )
@@ -355,7 +450,12 @@ export function deriveRegionalPresence(
     ),
     opportunityMultiplier: generatedWorldEligible
       ? clamp(
-        (0.75 + normalized * 0.7) * conditionModifiers.opportunityMultiplier,
+        (
+          0.82
+          + ((dimensions.access * 0.45 + dimensions.relationships * 0.55) / 100) * 0.7
+        )
+          * conditionModifiers.opportunityMultiplier
+          * activeTravelPosture.opportunityMultiplier,
         0.5,
         1.8,
       )
@@ -366,9 +466,11 @@ export function deriveRegionalPresence(
       1.75,
     ),
     travelFatigueMultiplier: clamp(
-      travelFatigueMultiplier * conditionModifiers.travelFatigueMultiplier,
+      travelFatigueMultiplier
+        * conditionModifiers.travelFatigueMultiplier
+        * activeTravelPosture.fatigueMultiplier,
       0.45,
-      1.65,
+      2,
     ),
     travelSlotReduction: office && assignedEmployees.length > 0 ? 1 : 0,
     passiveKnowledgeGain,
@@ -386,6 +488,7 @@ export function deriveRegionalPresence(
     generatedWorldEligible,
     accessScore,
     accessTier: tier,
+    dimensions,
     isHomeBase,
     isActiveLocation,
     satelliteOfficeId: office?.id,
@@ -413,6 +516,7 @@ export function deriveRegionalPresenceIndex(
 export function getRegionalTravelQuote(
   state: GameState,
   destinationCountry: string,
+  posture?: TravelPosture,
 ): RegionalTravelQuote {
   const fromCountry = getScoutHomeCountry(state.scout);
   const toCountry = canonicalCountry(destinationCountry) ?? destinationCountry;
@@ -423,12 +527,28 @@ export function getRegionalTravelQuote(
   const staffedOffice = presence.satelliteOfficeId && presence.assignedEmployeeIds.length > 0;
   const conditionModifiers = getWorldConditionModifiers(state, toCountry);
   const durationDelta = conditionModifiers.travelDurationDelta;
+  const postureEffects = getTravelPostureEffects(posture);
+  const activeBookingPosture = state.scout.travelBooking
+    && canonicalCountry(state.scout.travelBooking.destinationCountry) === toCountry
+    && isScoutAbroad(state.scout, state.currentWeek)
+      ? getTravelPostureEffects(state.scout.travelBooking.posture)
+      : getTravelPostureEffects(undefined);
+  // Presence exposes the effects of the trip currently being worked. A new
+  // quote must first remove that active posture or the chosen posture would be
+  // applied twice when booking/processing travel from an active location.
+  const basePresenceFatigueMultiplier = presence.effects.travelFatigueMultiplier
+    / activeBookingPosture.fatigueMultiplier;
 
   return {
     fromCountry,
     toCountry,
+    posture,
     baseCost,
-    cost: Math.round(baseCost * presence.effects.travelCostMultiplier),
+    cost: Math.round(
+      baseCost
+        * presence.effects.travelCostMultiplier
+        * postureEffects.costMultiplier,
+    ),
     baseSlots,
     slots: Math.max(
       baseSlots === 0 ? 0 : 1,
@@ -439,7 +559,11 @@ export function getRegionalTravelQuote(
       baseDuration === 0 ? 0 : 1,
       baseDuration - (staffedOffice ? 1 : 0) + durationDelta,
     ),
-    fatigueMultiplier: presence.effects.travelFatigueMultiplier,
+    fatigueMultiplier: clamp(
+      basePresenceFatigueMultiplier * postureEffects.fatigueMultiplier,
+      0.45,
+      2,
+    ),
     presence,
   };
 }

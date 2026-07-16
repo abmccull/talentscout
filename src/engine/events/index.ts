@@ -9,6 +9,21 @@
 // Templates and context helpers
 export type { EventTemplate, EventContext } from "./eventTemplates";
 export { EVENT_TEMPLATES, buildEventContext, extractRelatedIds } from "./eventTemplates";
+export type {
+  CommandNarrativeTruthContract,
+  FactualNarrativeTruthContract,
+  NarrativeEvidenceReference,
+  NarrativeEvidenceSource,
+  NarrativeTruthContract,
+  NarrativeTruthContext,
+  NarrativeTruthResolution,
+  RumorNarrativeTruthContract,
+} from "./narrativeTruth";
+export {
+  FACTUAL_NARRATIVE_TRUTH_CONTRACTS,
+  MATERIAL_FACTUAL_NARRATIVE_TYPES,
+  resolveNarrativeTruth,
+} from "./narrativeTruth";
 
 // Event generation and processing
 export type {
@@ -31,6 +46,7 @@ export type {
 export {
   createEventDirectorState,
   directWeeklyNarrativeEvent,
+  recordEventDirectorOutcome,
 } from "./eventDirector";
 export type {
   ScoutingSpecialEventCategory,
@@ -77,6 +93,9 @@ export type {
   ChainStartResult,
   ChainAdvanceResult,
 } from "./eventChains";
+
+export * from "./storyDirectorV2";
+export * from "./weeklyStoryDirectorAdapter";
 export {
   startChain,
   advanceChain,

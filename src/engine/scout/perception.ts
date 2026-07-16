@@ -24,6 +24,8 @@ import {
 import { generateAbilityReading } from "@/engine/scout/starRating";
 import { checkPersonalityReveal } from "@/engine/players/personalityReveal";
 import { progressivePersonalityReveal } from "@/engine/players/personalityEffects";
+import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
+import { getObservationSituationAttributeModifier } from "@/engine/observation/situations";
 
 // ---------------------------------------------------------------------------
 // Transaction-local evidence index
@@ -221,6 +223,10 @@ export function perceiveAttribute(
   scoutFatigue = 0,
   /** Breakthrough bonus from diverse contexts / focused lenses. Applied on top of the plateau. */
   breakthroughBonus = 0,
+  /** Visible session conditions such as weather, stakes, and competition level. */
+  situationNoiseMultiplier = 1,
+  /** Small explainable confidence adjustment from those conditions. */
+  situationConfidenceDelta = 0,
 ): { perceivedValue: number; confidence: number } {
   const skill = Math.max(1, Math.min(20, scoutSkill));
   const obsCount = Math.max(1, observationCount);
@@ -234,7 +240,12 @@ export function perceiveAttribute(
   // Fatigue widens error: above 50 fatigue adds up to 100% extra stddev
   const fatigueError = Math.max(0, (scoutFatigue - 50) / 100);
 
-  const stddev = (baseStddev / observationReduction) * diversityFactor * methodMultiplier * (1 + fatigueError);
+  const boundedSituationNoise = Math.max(0.65, Math.min(1.75, situationNoiseMultiplier));
+  const stddev = (baseStddev / observationReduction)
+    * diversityFactor
+    * methodMultiplier
+    * (1 + fatigueError)
+    * boundedSituationNoise;
 
   // Form shifts perception
   const formBias = playerForm * 1.5;
@@ -261,7 +272,10 @@ export function perceiveAttribute(
     context === "trainingGround" ? 0.02 : context === "videoAnalysis" ? -0.02 : 0;
 
   // Breakthrough bonus pushes beyond the 0.65 plateau
-  const rawConfidence = baseConfidence + contextBonus + breakthroughBonus;
+  const rawConfidence = baseConfidence
+    + contextBonus
+    + breakthroughBonus
+    + Math.max(-0.08, Math.min(0.08, situationConfidenceDelta));
 
   const confidence = Math.min(1, Math.max(0, rawConfidence));
 
@@ -405,6 +419,8 @@ export interface LightObservationEvidenceOptions {
   flaggedMoments?: FlaggedMoment[];
   sourceSessionId?: string;
   activityInstanceId?: string;
+  /** Persisted, player-visible situation that modifies evidence quality. */
+  situation?: ObservationSituationSnapshot;
 }
 
 /**
@@ -524,6 +540,10 @@ export function observePlayerLight(
     const passes = focusedEvidence
       ? Math.max(1, Math.min(3, evidenceOptions?.evidencePasses ?? 1))
       : 1;
+    const situationModifier = getObservationSituationAttributeModifier(
+      evidenceOptions?.situation,
+      attr,
+    );
     for (let pass = 0; pass < passes; pass++) {
       addReading(
         rng,
@@ -536,6 +556,9 @@ export function observePlayerLight(
         player.form,
         context,
         1.0,
+        0,
+        situationModifier.noiseMultiplier,
+        situationModifier.confidenceDelta,
       );
     }
   }
@@ -645,6 +668,7 @@ export function observePlayerLight(
     week: 0, // Set by caller
     season: 0, // Set by caller
     context,
+    situation: evidenceOptions?.situation,
     attributeReadings,
     notes,
     flaggedMoments: evidenceOptions?.flaggedMoments ?? [],
@@ -832,13 +856,27 @@ function addReading(
   context: ObservationContext,
   extraNoise: number,
   breakthroughBonus = 0,
+  situationNoiseMultiplier = 1,
+  situationConfidenceDelta = 0,
 ): void {
   const domain = ATTRIBUTE_DOMAINS[attr];
   const skillKey = DOMAIN_SKILL_MAP[domain] ?? "technicalEye";
   const skillLevel = scout.skills[skillKey as ScoutSkill];
   const effectiveSkill = extraNoise > 1 ? Math.max(1, skillLevel - Math.round((extraNoise - 1) * 5)) : skillLevel;
 
-  const { perceivedValue, confidence } = perceiveAttribute(rng, trueValue, effectiveSkill, priorCount + 1, contextDiversity, playerForm, context, scout.fatigue, breakthroughBonus);
+  const { perceivedValue, confidence } = perceiveAttribute(
+    rng,
+    trueValue,
+    effectiveSkill,
+    priorCount + 1,
+    contextDiversity,
+    playerForm,
+    context,
+    scout.fatigue,
+    breakthroughBonus,
+    situationNoiseMultiplier,
+    situationConfidenceDelta,
+  );
 
   const bucket = readings.get(attr) ?? { values: [], confidences: [] };
   bucket.values.push(perceivedValue);

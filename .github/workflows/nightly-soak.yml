@@ -81,6 +81,7 @@ jobs:
             test-results/
             artifacts/soak/
             artifacts/release/generated/long-career-release-summary.json
+            artifacts/release/generated/long-career-workers/
             artifacts/replayability/nightly-summary.json
           if-no-files-found: ignore
           retention-days: 30

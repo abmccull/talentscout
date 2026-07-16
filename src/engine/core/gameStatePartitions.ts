@@ -1,4 +1,10 @@
-import type { GameState, Specialization } from "./types";
+import type {
+  GameModeId,
+  GameState,
+  RunKind,
+  Specialization,
+} from "./types";
+import { getRunGameModeId, getRunKind } from "../run/runManifest";
 
 /**
  * The persisted GameState remains wire-compatible while the game grows beyond
@@ -21,6 +27,7 @@ export const SHARED_WORLD_STATE_KEYS = [
   "narrativeEvents",
   "activeStorylines",
   "eventDirector",
+  "storyDirectorV2",
   "consequenceState",
   "rivalScouts",
   "rivalOrganizationState",
@@ -41,6 +48,7 @@ export const SHARED_WORLD_STATE_KEYS = [
   "playerMovementHistory",
   "worldHistory",
   "worldConditionState",
+  "worldConditionArcState",
   "matchRatings",
   "disciplinaryRecords",
   "freeAgentPool",
@@ -55,6 +63,10 @@ export const SHARED_CAREER_STATE_KEYS = [
   "weeklyStrategy",
   "jobOffers",
   "performanceReviews",
+  "careerChronology",
+  "careerMoments",
+  "careerStoryArchive",
+  "stakeholderProfiles",
   "inbox",
   "npcScouts",
   "npcReports",
@@ -155,7 +167,7 @@ export interface GameStatePartitions<Mode extends Specialization = Specializatio
 /** Return a read-only ownership facade over the canonical persisted object. */
 export function partitionGameState<Mode extends Specialization>(
   state: GameState,
-  mode: Mode = state.scout.primarySpecialization as Mode,
+  mode: Mode = state.runManifest.specialization as Mode,
 ): GameStatePartitions<Mode> {
   return {
     sharedWorld: state,
@@ -165,9 +177,25 @@ export function partitionGameState<Mode extends Specialization>(
   };
 }
 
-/** The source of truth for active game mode remains the scout specialization. */
-export function getActiveGameMode(state: Pick<GameState, "scout">): Specialization {
-  return state.scout.primarySpecialization;
+/** Compatibility specialization derived from immutable run identity. */
+export function getActiveGameMode(
+  state: Pick<GameState, "runManifest">,
+): Specialization {
+  return state.runManifest.specialization;
+}
+
+/** Authoritative product mode used by capability and workspace routing. */
+export function getActiveGameModeId(
+  state: Pick<GameState, "runManifest">,
+): GameModeId {
+  return getRunGameModeId(state.runManifest);
+}
+
+/** Whether the host mode is an open career or a constrained challenge. */
+export function getActiveRunKind(
+  state: Pick<GameState, "runManifest">,
+): RunKind {
+  return getRunKind(state.runManifest);
 }
 
 /**

@@ -13,6 +13,7 @@ import {
   processSellOnClauses,
   triggerPlacementFee,
 } from "@/engine/finance";
+import { getRecruitmentOpportunityTransferReference } from "@/engine/recruitment";
 
 export interface WeeklyTransferAccountabilityInput {
   beforeTick: GameState;
@@ -61,8 +62,25 @@ export function processWeeklyTransferAccountability(
     existingTransferKeys,
   );
   if (newTransferRecords.length > 0) {
+    // Transfer records evaluate prior judgment against later observable
+    // outcomes. Only destination-matching delivered opportunities can claim
+    // the stronger player-facing "signed from this report" state.
+    const causallySignedReportIds = new Set(
+      appliedTransfers
+        .map((transfer) => checkPlacementFeeEligibility(state, transfer, state.scout.id))
+        .filter((eligibility) => Boolean(eligibility))
+        .map((eligibility) => eligibility!.report.id),
+    );
     state = {
       ...state,
+      reports: Object.fromEntries(
+        Object.entries(state.reports).map(([reportId, report]) => [
+          reportId,
+          causallySignedReportIds.has(reportId)
+            ? { ...report, clubResponse: "signed" as const }
+            : report,
+        ]),
+      ),
       transferRecords: [...state.transferRecords, ...newTransferRecords],
     };
   }
@@ -71,16 +89,29 @@ export function processWeeklyTransferAccountability(
     let finances = state.finances;
     const messages: InboxMessage[] = [];
     for (const transfer of appliedTransfers) {
-      const report = checkPlacementFeeEligibility(
-        transfer.playerId,
-        state.reports,
+      // Tick transfers carry the source date. `state` has already advanced to
+      // the following week, so replacing this date would sever the movement
+      // ledger link and make manual/batch attribution diverge at rollover.
+      const datedTransfer = transfer;
+      const eligibility = checkPlacementFeeEligibility(
+        state,
+        datedTransfer,
         state.scout.id,
       );
-      if (!report) continue;
+      if (!eligibility) continue;
+      const { report, opportunity } = eligibility;
+      const causalReference = getRecruitmentOpportunityTransferReference(
+        opportunity,
+        datedTransfer,
+      );
       const player = state.players[transfer.playerId];
       const playerName = player ? `${player.firstName} ${player.lastName}` : "a player";
 
       if (state.scout.careerPath === "club") {
+        const referenceId = `${causalReference}:discoveryBonus`;
+        if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+          continue;
+        }
         const bonus = calculateDiscoveryBonus(
           transfer.fee,
           state.scout.careerTier,
@@ -98,21 +129,28 @@ export function processWeeklyTransferAccountability(
                 season: state.currentSeason,
                 amount: bonus,
                 description: `Discovery bonus (${playerName})`,
+                referenceId,
+                category: "bonus",
+                counterpartyId: transfer.toClubId,
               },
             ],
           };
           messages.push({
-            id: `discovery-bonus-${transfer.playerId}-w${state.currentWeek}`,
+            id: `discovery-bonus-${opportunity.deliveryId}-w${state.currentWeek}`,
             week: state.currentWeek,
             season: state.currentSeason,
             type: "event",
             title: "Discovery Bonus",
-            body: `Your scouting report on ${playerName} contributed to a successful transfer (£${transfer.fee.toLocaleString()}). You've received a £${bonus.toLocaleString()} discovery bonus.`,
+            body: `Your report on ${playerName} reached ${state.clubs[opportunity.targetClubId]?.name ?? "the destination club"} before the £${transfer.fee.toLocaleString()} transfer, qualifying you for a £${bonus.toLocaleString()} discovery bonus.`,
             read: false,
             actionRequired: false,
           });
         }
       } else if (state.scout.careerPath === "independent") {
+        const referenceId = `${causalReference}:placementFee`;
+        if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+          continue;
+        }
         const weeksAgo = gameWeeksBetween(
           state.fixtures,
           { season: report.submittedSeason, week: report.submittedWeek },
@@ -123,8 +161,9 @@ export function processWeeklyTransferAccountability(
           report,
           state.scout,
           weeksAgo,
-          false,
+          opportunity.exclusivity === "exclusive",
         );
+        const firstPlacementBonusAvailable = !finances.starterBonus?.firstPlacementBonusUsed;
         const sellOnPercentage = player
           ? calculateSellOnPercentage(player.age, report.conviction)
           : 0;
@@ -137,14 +176,19 @@ export function processWeeklyTransferAccountability(
           sellOnPercentage,
           state.currentWeek,
           state.currentSeason,
+          referenceId,
         );
+        const welcomeBonus = firstPlacementBonusAvailable
+          && finances.starterBonus?.firstPlacementBonusUsed
+          ? Math.round(fee * 0.25)
+          : 0;
         messages.push({
-          id: `placement-fee-${transfer.playerId}-w${state.currentWeek}`,
+          id: `placement-fee-${opportunity.deliveryId}-w${state.currentWeek}`,
           week: state.currentWeek,
           season: state.currentSeason,
           type: "event",
           title: "Placement Fee Earned",
-          body: `Your scouting report on ${playerName} led to a transfer (£${transfer.fee.toLocaleString()}). You've earned a £${fee.toLocaleString()} placement fee.${sellOnPercentage > 0 ? ` A ${(sellOnPercentage * 100).toFixed(1)}% sell-on clause has been registered.` : ""}`,
+          body: `Your report on ${playerName} reached ${state.clubs[opportunity.targetClubId]?.name ?? "the destination club"} before the £${transfer.fee.toLocaleString()} transfer, qualifying you for a £${fee.toLocaleString()} placement fee.${welcomeBonus > 0 ? ` Your first placement also unlocked a £${welcomeBonus.toLocaleString()} welcome bonus.` : ""}${sellOnPercentage > 0 ? ` A ${(sellOnPercentage * 100).toFixed(1)}% sell-on clause has been registered.` : ""}`,
           read: false,
           actionRequired: false,
         });
@@ -163,6 +207,8 @@ export function processWeeklyTransferAccountability(
       appliedTransfers.map((transfer) => ({
         playerId: transfer.playerId,
         fee: transfer.fee,
+        fromClubId: transfer.fromClubId,
+        toClubId: transfer.toClubId,
       })),
       state.currentWeek,
       state.currentSeason,

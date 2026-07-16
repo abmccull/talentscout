@@ -1122,11 +1122,15 @@ function getInsightSource(
  *
  * Skill/attribute XP is accumulated from all activities performed.
  * Duplicate activities in multi-slot blocks are counted once only.
+ * Optional activity fatigue multipliers are resolved by the authoritative
+ * weekly caller from persisted trip and infrastructure choices. Supplying them
+ * here prevents a second post-processing path from drifting during fast-forward.
  */
 export function processCompletedWeek(
   schedule: WeekSchedule,
   scout: Scout,
   rng: RNG,
+  fatigueMultipliers: Partial<Record<ActivityType, number>> = {},
 ): WeekProcessingResult {
   // Guard against double-processing: if the schedule is already marked
   // completed, return a zero-effect result so XP and fatigue are not doubled.
@@ -1242,7 +1246,13 @@ export function processCompletedWeek(
     } else {
       // Endurance reduces fatigue cost: at endurance 40 (max practical) → 0
       const enduranceFactor = 1 - Math.min(0.75, endurance / 40);
-      actualFatigueCost = Math.round(rawFatigueCost * enduranceFactor);
+      const activityMultiplier = Math.max(
+        0,
+        fatigueMultipliers[activity.type] ?? 1,
+      );
+      actualFatigueCost = Math.round(
+        rawFatigueCost * enduranceFactor * activityMultiplier,
+      );
     }
 
     fatigueChange += actualFatigueCost;

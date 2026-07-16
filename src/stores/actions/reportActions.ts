@@ -8,9 +8,12 @@
 import type { GetState, SetState } from "./types";
 import type {
   ConvictionLevel,
+  FinancialRecord,
   InboxMessage,
+  Player,
   ScoutReport,
   StructuredReportInput,
+  YouthRecruitmentBrief,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
@@ -39,9 +42,13 @@ import {
 import {
   getActiveEquipmentBonuses,
   calculateInfrastructureEffects,
+  consumeAnalystReview,
+  getApplicableAnalystReview,
   recordRetainerDelivery,
   ensureClientRelationship,
   recordClientDelivery,
+  recordConsultingReportDelivery,
+  toAppliedAnalystReview,
 } from "@/engine/finance";
 import {
   createPrediction,
@@ -51,6 +58,28 @@ import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 import { getWorldConditionModifiers } from "@/engine/world/worldConditions";
+
+export function resolveReportClientClubId(
+  report: Pick<ScoutReport, "briefId" | "intendedClubId">,
+  youthRecruitmentBriefs: Record<string, YouthRecruitmentBrief>,
+  fallbackClubId?: string,
+): string | undefined {
+  if (report.intendedClubId) return report.intendedClubId;
+  if (report.briefId) {
+    const linkedBriefClubId = youthRecruitmentBriefs[report.briefId]?.clubId;
+    if (linkedBriefClubId) return linkedBriefClubId;
+  }
+  return fallbackClubId;
+}
+
+function recordRetainerReportDelivery(
+  finances: FinancialRecord,
+  clubId: string,
+  report: Pick<ScoutReport, "id" | "qualityScore">,
+  player: Pick<Player, "position" | "age">,
+): FinancialRecord {
+  return recordRetainerDelivery(finances, clubId, report, player);
+}
 
 export function createReportActions(get: GetState, set: SetState) {
   return {
@@ -147,6 +176,13 @@ export function createReportActions(get: GetState, set: SetState) {
         canonicalPlayerId,
         structured?.briefId,
       );
+      const analystReview = gameState.finances
+        ? getApplicableAnalystReview(
+            gameState.finances.analystReviews ?? [],
+            canonicalPlayerId,
+            previousReport,
+          )
+        : undefined;
       const freshObservationIds = getFreshReportObservationIds(observations, previousReport);
       const draft = generateReportContent(player, observations, gameState.scout);
       // F14: Include infrastructure + equipment report quality bonus. This
@@ -169,6 +205,7 @@ export function createReportActions(get: GetState, set: SetState) {
         observations,
         playerContext: player,
         reportQualityBonus: totalReportQualityBonus,
+        analystReviewBonus: analystReview?.craftQualityBonus,
       });
       let report = prepared.report;
       if (structured) {
@@ -189,6 +226,12 @@ export function createReportActions(get: GetState, set: SetState) {
           ...report,
           caseId: previousReport?.caseId
             ?? getScoutingCaseId(gameState.scout.id, canonicalPlayerId, structured.briefId),
+        };
+      }
+      if (analystReview) {
+        report = {
+          ...report,
+          analystReview: toAppliedAnalystReview(analystReview),
         };
       }
 
@@ -354,8 +397,9 @@ export function createReportActions(get: GetState, set: SetState) {
             ).recruitmentScoreAdjustment,
           );
 
-          // First-outcome guarantee: first report with conviction >= recommend
-          // always gets at least "interested" to ensure the aha moment fires early.
+          // First-outcome guarantee: the first report with conviction >= recommend
+          // gets at least genuine committee interest. This is deliberately an
+          // opening in the recruitment process, never a fabricated signing.
           const GUARANTEED_CONVICTIONS = new Set(["recommend", "strongRecommend", "tablePound"]);
           const hasNoPriorResponses = gameState.clubResponses.length === 0;
           const NEGATIVE_RESPONSES = new Set(["ignored", "doesNotFit", "tooExpensive"]);
@@ -373,15 +417,13 @@ export function createReportActions(get: GetState, set: SetState) {
           }
 
           updatedClubResponses = [...gameState.clubResponses, clubResponse];
-          const reportResponse = clubResponse.response === "signed"
-            ? "signed"
-            : new Set(["interested", "trial", "loanSigned"]).has(clubResponse.response)
-              ? "shortlisted"
-              : "ignored";
+          const reportResponse = new Set(["interested", "trial"]).has(clubResponse.response)
+            ? "shortlisted"
+            : "ignored";
           scoredReport = { ...scoredReport, clubResponse: reportResponse };
 
           // Check for first-team aha moment: first positive response
-          const POSITIVE_RESPONSES = new Set(["interested", "trial", "signed", "loanSigned"]);
+          const POSITIVE_RESPONSES = new Set(["interested", "trial"]);
           if (
             POSITIVE_RESPONSES.has(clubResponse.response) &&
             !gameState.clubResponses.some((r) => POSITIVE_RESPONSES.has(r.response))
@@ -446,31 +488,53 @@ export function createReportActions(get: GetState, set: SetState) {
 
       // W3a/W3b: Wire retainer and client delivery tracking
       let updatedFinances = gameState.finances;
-      if (isNewCase && updatedFinances && player.clubId) {
-        // W3a: Record retainer delivery if an active retainer matches the player's club
-        const hasActiveRetainer = updatedFinances.retainerContracts.some(
-          (c) => c.clubId === player.clubId && c.status === "active",
+      const intendedClientClubId = resolveReportClientClubId(
+        scoredReport,
+        gameState.youthRecruitmentBriefs,
+        player.clubId,
+      );
+      if (isNewCase && updatedFinances && intendedClientClubId) {
+        // W3a: record report-credit deliverables against the intended client,
+        // not the current registration of the player.
+        updatedFinances = recordRetainerReportDelivery(
+          updatedFinances,
+          intendedClientClubId,
+          scoredReport,
+          player,
         );
-        if (hasActiveRetainer) {
-          updatedFinances = recordRetainerDelivery(updatedFinances, player.clubId);
-        }
+        updatedFinances = recordConsultingReportDelivery(
+          updatedFinances,
+          intendedClientClubId,
+          scoredReport,
+          player,
+        );
 
-        // W3b: Record client delivery — ensure relationship exists then record
+        // W3b: authored delivery opens or strengthens the client relationship once.
         if (gameState.scout.careerPath === "independent") {
           updatedFinances = ensureClientRelationship(
             updatedFinances,
-            player.clubId,
+            intendedClientClubId,
             gameState.currentWeek,
             gameState.currentSeason,
           );
           updatedFinances = recordClientDelivery(
             updatedFinances,
-            player.clubId,
-            0, // revenue: report-based delivery, not directly monetized
+            intendedClientClubId,
+            0,
             gameState.currentWeek,
             gameState.currentSeason,
           );
         }
+      }
+
+      if (analystReview && updatedFinances) {
+        updatedFinances = consumeAnalystReview(
+          updatedFinances,
+          analystReview.id,
+          scoredReport.id,
+          gameState.currentWeek,
+          gameState.currentSeason,
+        );
       }
 
       // For independent scouts, flag the newly submitted report for the listing prompt
@@ -503,7 +567,8 @@ export function createReportActions(get: GetState, set: SetState) {
         tutorialAfterReport.completeMilestone("submittedReport");
       }
 
-      // First-team aha moment: first positive club response
+      // First-team aha moment: a first report earns a real next step. Transfer
+      // completion remains a separate, authoritative negotiation/world event.
       if (firstTeamAhaTriggered) {
         tutorialAfterReport.queueSequence("ahaMoment:firstTeam");
       }

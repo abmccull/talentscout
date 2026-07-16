@@ -12,6 +12,11 @@ import { getRecommendedOffer, getPersonalityDescription } from "@/engine/firstTe
 import { PlayerAvatar } from "@/components/game/PlayerAvatar";
 import { ClubCrest } from "@/components/game/ClubCrest";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import {
+  assessClubAffordability,
+  buildTransferAddOnObligations,
+  getTransferContingentReserve,
+} from "@/engine/finance/clubEconomics";
 
 // =============================================================================
 // HELPERS
@@ -282,6 +287,35 @@ export function NegotiationScreen() {
 
   const roundsRemaining = negotiation.maxRounds - negotiation.rounds.length;
   const weeksRemaining = negotiation.deadline - gameState.currentWeek;
+  const projectedWage = Math.max(
+    player.wage,
+    Math.round(player.wage * (1 + (negotiation.agentDemands?.wagePremium ?? 0.1))),
+  );
+  const signingBonus = negotiation.agentDemands?.signingBonus ?? 0;
+  const addOnObligations = buildTransferAddOnObligations({
+    playerId: player.id,
+    creditorClubId: fromClub.id,
+    addOns,
+    currentWeek: gameState.currentWeek,
+    currentSeason: gameState.currentSeason,
+  });
+  const scheduledAddOnCommitment = addOnObligations.reduce(
+    (total, obligation) => total + (obligation.weeklyAmount ?? 0),
+    0,
+  );
+  const contingentFaceValue = addOnObligations.reduce(
+    (total, obligation) => total + (obligation.amount ?? 0),
+    0,
+  );
+  const contingentReserve = getTransferContingentReserve(addOnObligations);
+  const affordability = assessClubAffordability({
+    club: toClub,
+    players: gameState.players,
+    upfrontCost: offerAmount + signingBonus,
+    weeklyWageCommitment: projectedWage,
+    weeklyObligationCommitment: scheduledAddOnCommitment,
+    contingentReserve,
+  });
 
   const handleSubmitOffer = () => {
     if (!activeNegotiationId || offerAmount <= 0) return;
@@ -518,27 +552,64 @@ export function NegotiationScreen() {
                       <span className="text-zinc-500">Base Offer</span>
                       <span className="text-white">{formatCurrency(offerAmount)}</span>
                     </div>
-                    {addOns.length > 0 && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Signing bonus</span>
+                      <span className="text-white">{formatCurrency(signingBonus)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">Projected wage</span>
+                      <span className="text-white">{formatCurrency(projectedWage)}/wk</span>
+                    </div>
+                    {scheduledAddOnCommitment > 0 && (
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-zinc-500">Add-Ons ({addOns.length})</span>
-                        <span className="text-blue-400">
-                          +{formatCurrency(addOns.reduce((s, a) => s + a.value, 0))}
-                        </span>
+                        <span className="text-zinc-500">Scheduled add-ons</span>
+                        <span className="text-blue-400">{formatCurrency(scheduledAddOnCommitment)}/wk</span>
+                      </div>
+                    )}
+                    {contingentFaceValue > 0 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Conditional add-ons</span>
+                        <span className="text-blue-400">{formatCurrency(contingentFaceValue)} face value</span>
+                      </div>
+                    )}
+                    {contingentReserve > 0 && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Risk reserve</span>
+                        <span className="text-amber-300">{formatCurrency(contingentReserve)}</span>
+                      </div>
+                    )}
+                    {addOns.find((addOn) => addOn.type === "sellOnClause") && (
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">Future sell-on</span>
+                        <span className="text-blue-400">{addOns.find((addOn) => addOn.type === "sellOnClause")!.value}%</span>
                       </div>
                     )}
                     <div className="border-t border-zinc-800 pt-1 flex items-center justify-between text-xs font-medium">
-                      <span className="text-zinc-400">Total Package</span>
+                      <span className="text-zinc-400">Cash due now</span>
                       <span className="text-emerald-400">
-                        {formatCurrency(offerAmount + addOns.reduce((s, a) => s + a.value, 0))}
+                        {formatCurrency(offerAmount + signingBonus)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="text-zinc-500">After deal</span>
+                      <span className={affordability.affordable ? "text-zinc-300" : "text-red-300"}>
+                        {formatCurrency(affordability.remainingBudgetAfterReserve)} after reserve · {formatCurrency(affordability.remainingWeeklyHeadroom)}/wk headroom
                       </span>
                     </div>
                   </div>
+
+                  {!affordability.affordable && (
+                    <p className="flex items-start gap-1.5 text-xs text-red-300">
+                      <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                      This structure exceeds the club&apos;s transfer cash, contingent-risk reserve, or weekly wage ceiling. Reduce the fee, wage exposure, or clauses.
+                    </p>
+                  )}
 
                   {/* Submit / Walk Away buttons */}
                   <div className="flex gap-2">
                     <Button
                       onClick={handleSubmitOffer}
-                      disabled={offerAmount <= 0}
+                      disabled={offerAmount <= 0 || !affordability.affordable}
                       className="flex-1"
                     >
                       <TrendingUp size={14} className="mr-2" />

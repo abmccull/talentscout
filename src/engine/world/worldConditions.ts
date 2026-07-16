@@ -7,27 +7,21 @@ import { createNamedRNG } from "@/engine/run";
 import { applyBalanceTransaction } from "@/engine/finance/expenses";
 import { normalizeCountryKey } from "@/lib/country";
 import { getScoutHomeCountry } from "./travel";
+import { getWorldConditionArcModifiers } from "./worldConditionArcs";
+import type {
+  WorldConditionInstance,
+  WorldConditionModifiers,
+  WorldConditionScope,
+} from "./worldConditionTypes";
+
+export type {
+  WorldConditionInstance,
+  WorldConditionModifiers,
+  WorldConditionScope,
+} from "./worldConditionTypes";
 
 export const WORLD_CONDITION_STATE_VERSION = 1 as const;
 export const WORLD_CONDITION_HISTORY_LIMIT = 24;
-
-export type WorldConditionScope = "global" | "regional";
-
-export interface WorldConditionModifiers {
-  discoveryMultiplier: number;
-  observationConfidenceMultiplier: number;
-  opportunityMultiplier: number;
-  developmentMultiplier: number;
-  breakthroughMultiplier: number;
-  recruitmentScoreAdjustment: number;
-  travelCostMultiplier: number;
-  travelDurationDelta: number;
-  travelFatigueMultiplier: number;
-  marketplaceValueMultiplier: number;
-  rivalPressureMultiplier: number;
-  /** Auditable one-off cash movement when the season opens. */
-  seasonalFinanceAdjustment: number;
-}
 
 export interface WorldConditionDefinition {
   id: string;
@@ -44,15 +38,6 @@ export interface WorldConditionDefinition {
  * This keeps an existing save mechanically stable if authored copy changes in
  * a future content update.
  */
-export interface WorldConditionInstance {
-  id: string;
-  definitionId: string;
-  scope: WorldConditionScope;
-  season: number;
-  countryId?: string;
-  modifiers: WorldConditionModifiers;
-}
-
 export interface WorldConditionSeasonRecord {
   season: number;
   conditions: WorldConditionInstance[];
@@ -648,12 +633,11 @@ export function advanceWorldConditionSeason(
   };
 }
 
-function combineModifiers(
-  instances: readonly WorldConditionInstance[],
+function combineModifierLayers(
+  layers: readonly WorldConditionModifiers[],
 ): WorldConditionModifiers {
   const result = { ...DEFAULT_MODIFIERS };
-  for (const instance of instances) {
-    const modifiers = instance.modifiers;
+  for (const modifiers of layers) {
     result.discoveryMultiplier *= modifiers.discoveryMultiplier;
     result.observationConfidenceMultiplier *= modifiers.observationConfidenceMultiplier;
     result.opportunityMultiplier *= modifiers.opportunityMultiplier;
@@ -683,17 +667,32 @@ function combineModifiers(
   };
 }
 
-/** Global conditions plus a matching regional condition, when a country is supplied. */
+function combineModifiers(
+  instances: readonly WorldConditionInstance[],
+): WorldConditionModifiers {
+  return combineModifierLayers(instances.map((instance) => instance.modifiers));
+}
+
+/**
+ * Canonical authority for base conditions and the live strategy chosen in an
+ * authored condition arc. All downstream systems consume this composition;
+ * no gameplay caller needs a parallel arc-specific calculation.
+ */
 export function getWorldConditionModifiers(
-  state: Pick<GameState, "worldConditionState">,
+  state: Pick<GameState, "worldConditionState" | "worldConditionArcState">,
   country?: string,
 ): WorldConditionModifiers {
   const countryId = country ? canonicalCountry(country) : undefined;
   const active = state.worldConditionState?.active ?? [];
-  return combineModifiers(active.filter((instance) =>
+  const base = combineModifiers(active.filter((instance) =>
     instance.scope === "global"
     || (countryId !== undefined && instance.countryId === countryId)
   ));
+  if (!state.worldConditionArcState) return base;
+  return combineModifierLayers([
+    base,
+    getWorldConditionArcModifiers(state.worldConditionArcState, countryId),
+  ]);
 }
 
 export function getWorldConditionDefinition(

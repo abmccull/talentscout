@@ -12,6 +12,7 @@ const valueAfter = (flag, fallback) => {
 const root = resolve(valueAfter("--dir", "out"));
 const port = Number(valueAfter("--port", process.env.PORT ?? "3000"));
 const host = valueAfter("--host", "127.0.0.1");
+const requireE2EBridge = args.includes("--require-e2e-bridge");
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error(`Invalid static server port: ${port}`);
@@ -19,6 +20,11 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 if (!existsSync(resolve(root, "play.html"))) {
   throw new Error(
     `Static export not found at ${root}. Run npm run build:e2e before Playwright.`,
+  );
+}
+if (requireE2EBridge && !existsSync(resolve(root, ".e2e-bridge.json"))) {
+  throw new Error(
+    `Instrumented E2E export not found at ${root}. Run npm run build:e2e before Playwright.`,
   );
 }
 

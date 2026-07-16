@@ -16,17 +16,29 @@ import type {
   StakeholderMemory,
   WorldFact,
 } from "@/engine/consequences/types";
+import type {
+  CareerMoment,
+  CareerMomentCategory,
+} from "@/engine/career/careerMoments";
+import type {
+  CareerStoryArchiveRecord,
+  CareerStoryArchiveState,
+} from "@/engine/consequences/careerStoryArchive";
 
 export type CareerStoryTemplate =
   | "matchProgramme"
   | "phoneCall"
   | "boardroom"
-  | "pressClipping";
+  | "pressClipping"
+  | "notebook"
+  | "voicemail"
+  | "farewellLetter";
 
 export type CareerStoryKind =
   | "recommendationReview"
   | "playerMovement"
-  | "resolvedDecision";
+  | "resolvedDecision"
+  | "careerMoment";
 
 export type CareerStoryTone = "positive" | "mixed" | "negative" | "neutral";
 
@@ -82,6 +94,7 @@ export interface CareerStory {
   obligations: CareerStoryObligation[];
   callbackLine: string;
   secondaryEvents: CareerStorySecondaryEvent[];
+  momentCategory?: CareerMomentCategory;
 }
 
 type NamedPlayer = Pick<Player, "id" | "firstName" | "lastName">;
@@ -101,12 +114,17 @@ export interface ConsequenceCinemaSource {
   discoveryRecords: DiscoveryRecord[];
   playerMovementHistory: PlayerMovementEvent[];
   consequenceState: ConsequenceEngineState;
+  /** Presented/suppressed moment archive; pending moments stay in the delivery queue. */
+  careerMoments?: readonly CareerMoment[];
+  /** Durable material decisions retained after the live consequence ledger compacts. */
+  careerStoryArchive?: CareerStoryArchiveState;
 }
 
 const TEMPLATE_OPTIONS: Record<CareerStoryKind, CareerStoryTemplate[]> = {
   recommendationReview: ["matchProgramme", "pressClipping", "boardroom"],
   playerMovement: ["pressClipping", "matchProgramme", "phoneCall"],
   resolvedDecision: ["boardroom", "phoneCall", "pressClipping"],
+  careerMoment: ["notebook", "voicemail", "farewellLetter", "pressClipping"],
 };
 
 const CALLBACK_LINES: Record<CareerStoryTone, readonly string[]> = {
@@ -136,6 +154,49 @@ const CALLBACK_LINES: Record<CareerStoryTone, readonly string[]> = {
   ],
 };
 
+const MOMENT_CALLBACK_LINES: Record<CareerMomentCategory, readonly string[]> = {
+  discovery: [
+    "The first clue looked ordinary until the rest of the career gave it meaning.",
+    "This was the moment a name became a responsibility.",
+    "The notebook still shows how little was known at the beginning.",
+  ],
+  conviction: [
+    "The strength of the language mattered as much as the verdict.",
+    "You could have hedged. The record shows that you did not.",
+    "Certainty spent here could not be reclaimed later.",
+  ],
+  vindication: [
+    "Time finally supplied the evidence the first report could only predict.",
+    "The people who doubted the call remember it differently now.",
+    "Vindication arrived late enough to feel earned.",
+  ],
+  failure: [
+    "The lesson survived because the original judgment was never erased.",
+    "The miss became part of the method that followed it.",
+    "A career is shaped as much by the calls it owns as the calls it celebrates.",
+  ],
+  betrayal: [
+    "Access returned eventually. Trust did not return in the same form.",
+    "The information was valuable; the price became clear later.",
+    "Every future conversation carried a trace of this one.",
+  ],
+  comeback: [
+    "The return mattered because the fall remained visible.",
+    "A closed door became a different route through the game.",
+    "The comeback changed what success meant afterward.",
+  ],
+  promotion: [
+    "The new title brought decisions that could no longer be solved alone.",
+    "Authority arrived with a longer list of people who could be disappointed.",
+    "The work changed here, not merely the number beside the title.",
+  ],
+  farewell: [
+    "The last page points back to names that once had no reputation at all.",
+    "The career ends; its recommendations continue moving through the world.",
+    "What remains is not a score, but a chain of people and consequences.",
+  ],
+};
+
 function stableHash(value: string): number {
   let hash = 2166136261;
   for (let index = 0; index < value.length; index++) {
@@ -160,9 +221,12 @@ export function selectCareerStoryCallback(
   storyId: string,
   kind: CareerStoryKind,
   tone: CareerStoryTone,
+  momentCategory?: CareerMomentCategory,
 ): string {
-  const options = CALLBACK_LINES[tone];
-  const index = stableHash(`career-story-callback:v1:${rootSeed}:${storyId}:${kind}:${tone}`) % options.length;
+  const options = momentCategory
+    ? MOMENT_CALLBACK_LINES[momentCategory]
+    : CALLBACK_LINES[tone];
+  const index = stableHash(`career-story-callback:v2:${rootSeed}:${storyId}:${kind}:${tone}:${momentCategory ?? "general"}`) % options.length;
   return options[index];
 }
 
@@ -727,6 +791,161 @@ function decisionStories(source: ConsequenceCinemaSource): CareerStory[] {
     });
 }
 
+function careerMomentTone(moment: CareerMoment): CareerStoryTone {
+  if (moment.tone === "positive") return "positive";
+  if (moment.tone === "negative") return "negative";
+  if (moment.tone === "tense") return "mixed";
+  return "neutral";
+}
+
+function careerMomentTemplate(
+  rootSeed: string,
+  moment: CareerMoment,
+): CareerStoryTemplate {
+  if (moment.category === "farewell") return "farewellLetter";
+  if (moment.category === "betrayal" || moment.category === "comeback") return "voicemail";
+  if (moment.category === "discovery" || moment.category === "conviction") return "notebook";
+  return selectCareerStoryTemplate(rootSeed, `career-moment:${moment.id}`, "careerMoment");
+}
+
+function careerMomentStories(source: ConsequenceCinemaSource): CareerStory[] {
+  return [...(source.careerMoments ?? [])].map((moment) => {
+    const tone = careerMomentTone(moment);
+    const stakeholder = moment.playerId
+      ? stakeholderRecords(source, relatedDecisionIds(source, moment.playerId), moment.playerId)
+      : { memories: [], obligations: [] };
+    return {
+      id: `career-moment:${moment.id}`,
+      kind: "careerMoment" as const,
+      template: careerMomentTemplate(source.rootSeed, moment),
+      tone,
+      season: moment.occurredAt.season,
+      week: moment.occurredAt.week,
+      eyebrow: humanize(moment.category),
+      title: moment.title,
+      subtitle: moment.summary,
+      playerId: moment.playerId,
+      reportId: moment.reportId,
+      momentCategory: moment.category,
+      original: {
+        label: "Causal record",
+        dateLabel: dateLabel(moment.occurredAt.season, moment.occurredAt.week),
+        headline: humanize(moment.source.kind),
+        body: `This presentation was generated from the persisted ${humanize(moment.source.kind).toLowerCase()} record, not from hidden simulation truth.`,
+        details: moment.tags.slice(0, 6).map(humanize),
+      },
+      outcome: {
+        label: moment.magnitude === "careerDefining" ? "Career-defining moment" : "Career moment",
+        dateLabel: dateLabel(moment.occurredAt.season, moment.occurredAt.week),
+        headline: moment.title,
+        body: moment.summary,
+        details: moment.stakeholderIds.length > 0
+          ? [`${moment.stakeholderIds.length} persistent stakeholder${moment.stakeholderIds.length === 1 ? "" : "s"} connected to this outcome.`]
+          : [],
+      },
+      callbackLine: selectCareerStoryCallback(
+        source.rootSeed,
+        moment.id,
+        "careerMoment",
+        tone,
+        moment.category,
+      ),
+      secondaryEvents: [],
+      ...stakeholder,
+    };
+  });
+}
+
+function archivedDecisionTone(record: CareerStoryArchiveRecord): CareerStoryTone {
+  const valence = record.stakeholderReactions.reduce(
+    (sum, reaction) => sum + reaction.valence,
+    0,
+  );
+  if (valence > 20) return "positive";
+  if (valence < -20) return "negative";
+  if (record.status === "expired" || record.obligations.some((item) => item.status === "breached")) {
+    return "mixed";
+  }
+  return "neutral";
+}
+
+function archivedDecisionStories(source: ConsequenceCinemaSource): CareerStory[] {
+  const archive = source.careerStoryArchive;
+  if (!archive) return [];
+  return archive.order.flatMap((recordId) => {
+    const record = archive.records[recordId];
+    if (!record || source.consequenceState.decisions[record.decisionId]) return [];
+    const tone = archivedDecisionTone(record);
+    const castName = (entity: EntityRef) => record.cast.find((item) =>
+      item.entity.kind === entity.kind && item.entity.id === entity.id,
+    )?.label ?? humanize(entity.kind);
+    return [{
+      id: `decision:${record.decisionId}`,
+      kind: "resolvedDecision" as const,
+      template: selectCareerStoryTemplate(
+        source.rootSeed,
+        `archive:${record.decisionId}`,
+        "resolvedDecision",
+      ),
+      tone,
+      season: record.terminalAt.season,
+      week: record.terminalAt.week,
+      eyebrow: record.selectionKind === "default" ? "Deadline decision" : "Career archive",
+      title: record.title,
+      subtitle: record.selectedOptionLabel
+        ? `${record.selectedOptionLabel} became part of your permanent record.`
+        : "This material decision remains part of your permanent record.",
+      playerId: record.playerId,
+      reportId: record.reportId,
+      original: {
+        label: "Original judgment",
+        dateLabel: dateLabel(record.offeredAt.season, record.offeredAt.week),
+        headline: record.selectedOptionLabel ?? record.title,
+        body: record.status === "expired"
+          ? "The deadline passed and the recorded default became the decision."
+          : "The selected course was recorded in the career consequence ledger.",
+        details: record.knownTradeoffs,
+      },
+      outcome: {
+        label: "Archived consequence",
+        dateLabel: dateLabel(record.terminalAt.season, record.terminalAt.week),
+        headline: record.outcomeFacts[0]
+          ? humanize(record.outcomeFacts[0].kind)
+          : record.status === "expired" ? "Decision expired" : "Decision resolved",
+        body: record.outcomeFacts.length > 0
+          ? `${record.outcomeFacts.length} player-safe outcome fact${record.outcomeFacts.length === 1 ? "" : "s"} and ${record.stakeholderReactions.length} stakeholder reaction${record.stakeholderReactions.length === 1 ? "" : "s"} were preserved.`
+          : "The decision and its relationship consequences were preserved before simulation compaction.",
+        details: record.obligations.map((item) => `${item.status}: ${item.terms}`).slice(0, 5),
+      },
+      memories: record.stakeholderReactions.map((reaction, index) => ({
+        id: `${record.id}:reaction:${index}`,
+        holder: castName(reaction.stakeholder),
+        summary: reaction.tags.map(humanize).join(" · ") || "Remembered the decision",
+        intensity: Math.min(100, Math.max(0, Math.abs(reaction.valence))),
+        salience: Math.min(100, Math.max(0, record.significance)),
+        tone: reaction.valence > 0 ? "positive" as const : reaction.valence < 0 ? "negative" as const : "neutral" as const,
+      })),
+      obligations: record.obligations.map((obligation) => ({
+        id: obligation.id,
+        parties: `${castName(obligation.debtor)} → ${castName(obligation.creditor)}`,
+        terms: obligation.terms,
+        status: obligation.status as Obligation["status"],
+        timing: obligation.resolvedAt
+          ? dateLabel(obligation.resolvedAt.season, obligation.resolvedAt.week)
+          : "Recorded",
+        resolution: obligation.resolutionNote,
+      })),
+      callbackLine: selectCareerStoryCallback(
+        source.rootSeed,
+        `archive:${record.decisionId}`,
+        "resolvedDecision",
+        tone,
+      ),
+      secondaryEvents: [],
+    }];
+  });
+}
+
 export function buildCareerStoryReel(
   source: ConsequenceCinemaSource,
   limit = 24,
@@ -735,6 +954,8 @@ export function buildCareerStoryReel(
     ...recommendationStories(source),
     ...movementStories(source),
     ...decisionStories(source),
+    ...archivedDecisionStories(source),
+    ...careerMomentStories(source),
   ]
     .sort((left, right) =>
       right.season - left.season

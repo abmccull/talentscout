@@ -344,6 +344,9 @@ describe("authoritative world history", () => {
     expect(
       recordCompletedSeasonWorldHistory(undefined, reordered, 1, relegationResult()),
     ).toEqual(first);
+    expect(first.seasons[0].clubs.every((club) => club.recruitmentDoctrine)).toBe(true);
+    expect(first.seasons[0].clubs[0].recruitmentDoctrine?.preferredSeniorAgeRange)
+      .toHaveLength(2);
   });
 
   it("owns its tactical snapshot and survives a JSON save round trip", () => {

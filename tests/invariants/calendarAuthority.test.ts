@@ -47,7 +47,12 @@ import {
 } from "@/engine/core/seasonEvents";
 import { generateJobOffers } from "@/engine/career/progression";
 import { bookTravel } from "@/engine/world/travel";
-import { annualizeMonthlyAmount } from "@/engine/core/annualization";
+import {
+  annualizeMonthlyAmount,
+  annualizeWeeklyAmount,
+  isFinancialPeriodClose,
+  monthlyEquivalentOfWeeklyAmount,
+} from "@/engine/core/annualization";
 import { createConsequenceEngineState } from "@/engine/consequences";
 
 const CALENDAR_LENGTHS = [38, 46, 50] as const;
@@ -213,6 +218,13 @@ describe.each(CALENDAR_LENGTHS)("calendar authority (%i-week season)", (seasonLe
   it("annualizes monthly salary independently of competition length", () => {
     expect(annualizeMonthlyAmount(1_000)).toBe(12_000);
     expect(annualizeMonthlyAmount(1_000, 3)).toBe(36_000);
+    expect(annualizeWeeklyAmount(1_000)).toBe(52_000);
+    expect(annualizeWeeklyAmount(1_000, 3)).toBe(156_000);
+    expect(monthlyEquivalentOfWeeklyAmount(1_000)).toBe(4_333);
+    expect(
+      Array.from({ length: seasonLength }, (_, index) => index + 1)
+        .filter((week) => isFinancialPeriodClose(week, seasonLength)),
+    ).toHaveLength(12);
   });
 
   it("normalizes free-agent and first-team negotiation deadlines", () => {
@@ -269,20 +281,27 @@ describe.each(CALENDAR_LENGTHS)("calendar authority (%i-week season)", (seasonLe
     );
     expect(listed.reportListings[0]).toMatchObject({
       biddingEndsSeason: 2,
-      biddingEndsWeek: 1,
+      biddingEndsWeek: 2,
     });
+
+    expect(expireOldListings(listed, 1, 2, seasonLength).reportListings[0].status)
+      .toBe("active");
+    expect(expireOldListings(listed, 2, 2, seasonLength).reportListings[0].status)
+      .toBe("expired");
 
     const aging = {
       ...listed,
       reportListings: [{
         ...listed.reportListings[0],
-        listedWeek: seasonLength - 3,
+        listedWeek: seasonLength - 1,
         listedSeason: 1,
+        biddingEndsWeek: Number.NaN,
+        biddingEndsSeason: Number.NaN,
       }],
     };
-    expect(expireOldListings(aging, 4, 2, seasonLength).reportListings[0].status)
+    expect(expireOldListings(aging, 2, 2, seasonLength).reportListings[0].status)
       .toBe("active");
-    expect(expireOldListings(aging, 5, 2, seasonLength).reportListings[0].status)
+    expect(expireOldListings(aging, 3, 2, seasonLength).reportListings[0].status)
       .toBe("expired");
   });
 
@@ -439,7 +458,7 @@ describe.each(CALENDAR_LENGTHS)("calendar authority (%i-week season)", (seasonLe
     expect(migratedAgain).toEqual(migrated);
     expect(migratedAgain.reportListings[0]).toMatchObject({
       biddingEndsSeason: 2,
-      biddingEndsWeek: 1,
+      biddingEndsWeek: 2,
     });
   });
 });

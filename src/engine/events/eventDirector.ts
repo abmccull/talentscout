@@ -103,6 +103,21 @@ function recordEvent(
   };
 }
 
+/** Reconcile legacy tension pacing after the unified story gate accepts a beat. */
+export function recordEventDirectorOutcome(
+  director: EventDirectorState,
+  event: NarrativeEvent | null,
+  special: boolean,
+  currentSeason: number,
+): EventDirectorState {
+  return recordEvent(
+    createEventDirectorState(director),
+    event,
+    special,
+    currentSeason,
+  );
+}
+
 /**
  * Deterministic pacing layer: quiet periods build pressure, unresolved choices
  * suppress overload, recent content is penalized, and rare turning points are

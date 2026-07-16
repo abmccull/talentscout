@@ -15,6 +15,7 @@ import {
   type WorldConditionModifiers,
 } from "@/engine/world/worldConditions";
 import { normalizeCountryKey } from "@/lib/country";
+import { deriveClubRecruitmentDoctrine } from "@/engine/world/recruitmentIdentity";
 
 export type DevelopmentEnvironmentBand =
   | "excellent"
@@ -106,7 +107,7 @@ type DevelopmentEnvironmentState = Pick<
   | "matchRatings"
   | "activeLoans"
   | "worldConditionState"
->;
+> & Partial<Pick<GameState, "seed">>;
 
 interface EvaluationOptions {
   /** Evaluate a proposed destination before the player has joined it. */
@@ -392,7 +393,12 @@ function academyFactor(player: Player, club: Club | undefined): FactorDraft {
   );
 }
 
-function philosophyFactor(player: Player, club: Club | undefined): FactorDraft {
+function philosophyFactor(
+  state: DevelopmentEnvironmentState,
+  player: Player,
+  club: Club | undefined,
+  manager: ManagerProfile | undefined,
+): FactorDraft {
   if (!club) {
     return makeFactor(
       "club-philosophy",
@@ -402,39 +408,23 @@ function philosophyFactor(player: Player, club: Club | undefined): FactorDraft {
     );
   }
 
-  const young = player.age <= 23;
-  switch (club.scoutingPhilosophy) {
-    case "academyFirst":
-      return makeFactor(
-        "club-philosophy",
-        "Club philosophy",
-        young ? 12 : 4,
-        `${club.name} is academy-first and is structurally more patient with developing players.`,
-      );
-    case "marketSmart":
-      return makeFactor(
-        "club-philosophy",
-        "Club philosophy",
-        player.age <= 25 ? 7 : 2,
-        `${club.name} develops players as assets, so progress and a credible resale pathway both matter.`,
-      );
-    case "globalRecruiter":
-      return makeFactor(
-        "club-philosophy",
-        "Club philosophy",
-        player.age <= 25 ? 4 : 1,
-        `${club.name} is accustomed to integrating players from varied backgrounds, though competition is broad.`,
-      );
-    case "winNow":
-      return makeFactor(
-        "club-philosophy",
-        "Club philosophy",
-        young ? -12 : player.age >= 29 ? -4 : 0,
-        young
-          ? `${club.name}'s win-now pressure leaves little patience for uneven early development.`
-          : `${club.name}'s win-now approach rewards immediate contribution more than long-term growth.`,
-      );
-  }
+  const doctrine = deriveClubRecruitmentDoctrine({
+    club,
+    seed: state.seed ?? `development:${club.id}`,
+    season: state.currentSeason,
+    manager,
+  });
+  const developing = player.age <= doctrine.preferredSeniorAgeRange[1];
+  const patienceContribution = developing
+    ? Math.round((doctrine.pathwayPatience - 50) * 0.32)
+    : Math.round((doctrine.pathwayPatience - 50) * 0.1);
+  const points = clamp(patienceContribution, -14, 14);
+  return makeFactor(
+    "club-philosophy",
+    "Recruitment doctrine",
+    points,
+    `${club.name}'s ${doctrine.pathwayPatience >= 70 ? "patient" : doctrine.pathwayPatience <= 35 ? "immediate-results" : "balanced"} pathway (${doctrine.pathwayPatience}/100) ${points >= 0 ? "supports" : "restricts"} this career stage; the club currently prioritises ${doctrine.seasonalObjective.replace(/([A-Z])/g, " $1").toLowerCase()}.`,
+  );
 }
 
 function playingPathwayFactor(
@@ -762,7 +752,7 @@ export function evaluatePlayerDevelopmentEnvironment(
   const index = currentDevelopmentIndex(state, options.index);
   const factors: FactorDraft[] = [
     academyFactor(player, club),
-    philosophyFactor(player, club),
+    philosophyFactor(state, player, club, manager),
     playingPathwayFactor(state, player, club, prospective, index),
     managerFactor(player, manager),
     competitionFactor(player, club, league?.tier),

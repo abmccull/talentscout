@@ -245,7 +245,14 @@ export function getAvailableCourses(
 // ---------------------------------------------------------------------------
 
 export type EnrollmentResult =
-  | { success: true; finances: FinancialRecord }
+  | {
+      success: true;
+      finances: FinancialRecord;
+      /** Amount paid directly by the scout's employer. */
+      educationBudgetUsed: number;
+      /** Amount paid from the scout's own cash balance. */
+      personalCost: number;
+    }
   | { success: false; reason: string };
 
 /**
@@ -260,6 +267,7 @@ export function enrollInCourse(
   season: number,
   scoutTier?: CareerTier,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+  educationBudgetAvailable = 0,
 ): EnrollmentResult {
   // Already enrolled in a course
   if (finances.activeEnrollment) {
@@ -296,11 +304,17 @@ export function enrollInCourse(
     };
   }
 
-  // Can't afford
-  if (finances.balance < course.cost) {
+  const educationBudgetUsed = Math.min(
+    course.cost,
+    Math.max(0, Math.floor(educationBudgetAvailable)),
+  );
+  const personalCost = course.cost - educationBudgetUsed;
+
+  // Can't afford the part not covered by the employer.
+  if (finances.balance < personalCost) {
     return {
       success: false,
-      reason: `Insufficient funds. Need £${course.cost}, have £${Math.floor(finances.balance)}.`,
+      reason: `Insufficient funds. Need £${personalCost}, have £${Math.floor(finances.balance)}.`,
     };
   }
 
@@ -319,17 +333,23 @@ export function enrollInCourse(
 
   return {
     success: true,
+    educationBudgetUsed,
+    personalCost,
     finances: {
       ...finances,
-      balance: finances.balance - course.cost,
+      balance: finances.balance - personalCost,
       activeEnrollment: enrollment,
       transactions: [
         ...finances.transactions,
         {
           week,
           season,
-          amount: -course.cost,
-          description: `Enrolled in ${course.name}`,
+          amount: -personalCost,
+          description: educationBudgetUsed > 0
+            ? `Enrolled in ${course.name} (employer funded £${educationBudgetUsed})`
+            : `Enrolled in ${course.name}`,
+          referenceId: `course-enrollment:${course.id}:s${season}w${week}`,
+          category: "operatingCost",
         },
       ],
     },

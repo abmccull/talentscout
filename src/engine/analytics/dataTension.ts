@@ -111,6 +111,7 @@ export function generateManagerProfile(rng: RNG, club: Club): ManagerProfile {
 
   return {
     clubId: club.id,
+    managerId: club.managerId,
     managerName,
     preference,
     reportInfluence,

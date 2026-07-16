@@ -24,11 +24,11 @@ import type {
   PlayerAttribute,
   PlayerRole,
   ScoutReport,
-  ScoutingPhilosophy,
   BoardProfile,
 } from "@/engine/core/types";
 import { adjustDirectiveDifficulty } from "./boardAI";
 import { calculateRoleSuitability, getBestRole, getCompatibleRoles } from "@/engine/players/roles";
+import { getPhilosophyPreferredAgeRange } from "@/engine/world/recruitmentIdentity";
 
 // =============================================================================
 // CONSTANTS
@@ -72,17 +72,6 @@ const POSITION_KEY_ATTRIBUTES: Record<Position, PlayerAttribute[]> = {
   LW: ["pace", "dribbling", "crossing", "agility", "finishing", "balance"],
   RW: ["pace", "dribbling", "crossing", "agility", "finishing", "balance"],
   ST: ["finishing", "heading", "pace", "composure", "offTheBall", "jumping"],
-} as const;
-
-/**
- * Preferred age ranges by club philosophy.
- * Each tuple is [minAge, maxAge].
- */
-const PHILOSOPHY_AGE_RANGES: Record<ScoutingPhilosophy, [number, number]> = {
-  winNow: [24, 31],
-  academyFirst: [17, 23],
-  marketSmart: [21, 27],
-  globalRecruiter: [19, 29],
 } as const;
 
 /**
@@ -322,7 +311,7 @@ export function generateDirectives(
 
   const priorityOrder: ManagerDirective["priority"][] = ["critical", "high", "medium", "low"];
   const baseMinCAStars = minCAStarsForReputation(club.reputation);
-  const baseAgeRange = PHILOSOPHY_AGE_RANGES[club.scoutingPhilosophy];
+  const baseAgeRange = getPhilosophyPreferredAgeRange(club.scoutingPhilosophy);
 
   // F10: Apply board difficulty scaling if board profile is available
   const effectiveBoardProfile = boardProfile ?? state?.boardProfile;

@@ -124,3 +124,8 @@ export type {
   CareerRecoveryState,
   CareerSetbackKind,
 } from './recovery';
+
+export * from "./chronology";
+export * from "./careerMoments";
+export * from "./lateCareerDilemmas";
+export * from "./lateCareerDilemmaMaterializer";

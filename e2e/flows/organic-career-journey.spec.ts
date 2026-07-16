@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "../fixtures";
+import { dismissCareerMomentOverlays, expect, test } from "../fixtures";
 
 async function authorReportsToCount(page: Page, targetCount: number) {
   return page.evaluate((target) => {
@@ -79,6 +79,108 @@ async function authorReportsToCount(page: Page, targetCount: number) {
   }, targetCount);
 }
 
+async function sellReportsToWorkingCapital(page: Page, targetBalance: number) {
+  return page.evaluate((target) => {
+    const store = (window as any).__GAME_STORE__;
+    if (!store?.getState()?.gameState) throw new Error("Game state not ready");
+
+    const openingState = store.getState().gameState;
+    const openingBalance = openingState.finances.balance;
+    const openingReportRevenue = openingState.finances.reportSalesRevenue;
+    const reportIds = Object.keys(openingState.reports).filter((reportId) =>
+      !openingState.finances.reportListings.some(
+        (listing: any) => listing.reportId === reportId && listing.status === "sold",
+      )
+    );
+    let sales = 0;
+
+    for (const reportId of reportIds) {
+      let state = store.getState().gameState;
+      if (state.finances.balance >= target) break;
+
+      const buyers = Object.values(state.clubs)
+        .map((club: any) => ({
+          club,
+          scoutingBudget: Math.max(
+            750,
+            Math.round(club.scoutingBudget ?? Math.min(club.budget * 0.08, 50_000)),
+          ),
+        }))
+        .sort((left: any, right: any) => right.scoutingBudget - left.scoutingBudget);
+      const buyer = buyers[0];
+      if (!buyer || buyer.scoutingBudget < 750) {
+        throw new Error("No club can fund a market-rate report bid");
+      }
+
+      // Recommend-level reports normally command roughly GBP800-GBP2,000
+      // when sold exclusively. Keep the controlled offer conservative while
+      // allowing clubs' ring-fenced scouting budgets to remain authoritative.
+      const amount = Math.min(1_400, buyer.scoutingBudget);
+      store.getState().listReportForSale(reportId, amount, true, buyer.club.id);
+      state = store.getState().gameState;
+      const listing = state.finances.reportListings.find(
+        (candidate: any) => candidate.reportId === reportId && candidate.status === "active",
+      );
+      if (!listing) continue;
+
+      const bidId = `organic_market_bid_${sales + 1}`;
+      const bid = {
+        id: bidId,
+        listingId: listing.id,
+        clubId: buyer.club.id,
+        amount,
+        placedWeek: state.currentWeek,
+        placedSeason: state.currentSeason,
+        expiryWeek: listing.biddingEndsWeek,
+        expirySeason: listing.biddingEndsSeason,
+        status: "pending",
+        needMatchScore: 75,
+        bidReason: "Strong youth evidence matches the club recruitment brief",
+      };
+      store.setState({
+        gameState: {
+          ...state,
+          finances: {
+            ...state.finances,
+            reportListings: state.finances.reportListings.map((candidate: any) =>
+              candidate.id === listing.id
+                ? { ...candidate, bids: [...candidate.bids, bid] }
+                : candidate
+            ),
+          },
+        },
+      });
+      store.getState().acceptMarketplaceBid(bidId);
+
+      const soldState = store.getState().gameState;
+      const saleRecorded = soldState.finances.transactions.some(
+        (transaction: any) =>
+          transaction.referenceId === `marketplace:${listing.id}:buyer:${buyer.club.id}`,
+      );
+      if (!saleRecorded) {
+        throw new Error(`Marketplace sale was not recorded for ${reportId}`);
+      }
+      sales += 1;
+    }
+
+    const finalState = store.getState().gameState;
+    if (finalState.finances.balance < target) {
+      throw new Error(
+        `Report sales raised balance from ${openingBalance} to ${finalState.finances.balance}; target was ${target}`,
+      );
+    }
+    return {
+      sales,
+      openingBalance,
+      balance: finalState.finances.balance,
+      reportRevenue:
+        finalState.finances.reportSalesRevenue - openingReportRevenue,
+      deliveries: Object.keys(finalState.reportDeliveries ?? {}).length,
+      firstSaleBonusUsed: finalState.finances.starterBonus.firstReportBonusUsed,
+    };
+  }, targetBalance);
+}
+
 async function advanceCanonicalEmptyWeek(page: Page) {
   const result = await page.evaluate(async () => {
     const store = (window as any).__GAME_STORE__;
@@ -129,6 +231,12 @@ async function advanceCanonicalEmptyWeek(page: Page) {
     }).click();
     await expect(celebration).toBeHidden();
   }
+
+  // Career moments deliberately outrank navigation and season controls. A
+  // long-form journey must acknowledge the persisted queue through the same
+  // rendered Continue action a player uses before interacting with the screen
+  // underneath it.
+  await dismissCareerMomentOverlays(page);
 
   if (result.after.season > result.before.season) {
     // Season Awards is a deliberately lazy late-career workspace. The store
@@ -216,7 +324,10 @@ test.describe("Organic career journey", () => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
       const clubIds = Object.keys(state.clubs);
-      store.getState().takeLoanAction("business", 20_000);
+      // The canonical lender caps a tier-2 agency below the old unrestricted
+      // £20k test facility. A £5k offer is within underwriting and still gives
+      // the business enough working capital for its tier-3 threshold.
+      store.getState().takeLoanAction("business", 5_000);
       store.getState().acceptRetainerContract({
         id: "organic_retainer_1",
         clubId: clubIds[0],
@@ -251,6 +362,16 @@ test.describe("Organic career journey", () => {
       store.getState().upgradeAgencyOffice("small");
       store.getState().hireAgencyEmployee("analyst");
     });
+    const marketplaceCapital = await sellReportsToWorkingCapital(
+      gamePage.page,
+      18_000,
+    );
+    expect(marketplaceCapital.sales).toBeGreaterThanOrEqual(5);
+    expect(marketplaceCapital.reportRevenue).toBeGreaterThanOrEqual(7_000);
+    expect(marketplaceCapital.deliveries).toBeGreaterThanOrEqual(
+      marketplaceCapital.sales,
+    );
+    expect(marketplaceCapital.firstSaleBonusUsed).toBe(true);
     const tierFourRequirements = await gamePage.page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;
       return {

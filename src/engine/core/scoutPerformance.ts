@@ -12,7 +12,7 @@ import type {
   DiscoveryRecord,
   PerformanceReview,
 } from "./types";
-import { annualizeMonthlyAmount } from "./annualization";
+import { annualizeWeeklyAmount } from "./annualization";
 import { getPlayerFacingDiscoverySummaries } from "@/engine/career/playerFacingDiscovery";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 import {
@@ -347,8 +347,8 @@ export function computeScoutPerformance(state: GameState): ScoutPerformanceData 
       });
     }
   } else {
-    // Salaries are monthly and accrue year-round, independent of league length.
-    lifetimeEarnings = annualizeMonthlyAmount(scout.salary, seasonsPlayed);
+    // Scout salary is weekly and accrues year-round, independent of league length.
+    lifetimeEarnings = annualizeWeeklyAmount(scout.salary, seasonsPlayed);
     lifetimeExpenses = lifetimeEarnings * 0.6; // rough estimate
   }
 

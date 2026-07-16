@@ -36,6 +36,10 @@ import {
   sortPlayerMovementArchiveSummaries,
   summarizePlayerMovement,
 } from "@/engine/world/worldHistoryTypes";
+import {
+  deriveClubRecruitmentDoctrine,
+  type ClubRecruitmentDoctrine,
+} from "@/engine/world/recruitmentIdentity";
 export type {
   PlayerCareerStatus,
   PlayerMovementArchiveSummary,
@@ -80,6 +84,23 @@ export interface ClubSeasonHistory {
   reputation: number;
   budget: number;
   scoutingPhilosophy: ScoutingPhilosophy;
+  /** Player-safe doctrine snapshot explains why this season's club acted differently. */
+  recruitmentDoctrine?: Pick<
+    ClubRecruitmentDoctrine,
+    | "version"
+    | "archetype"
+    | "preferredSeniorAgeRange"
+    | "evidencePreference"
+    | "riskTolerance"
+    | "geographicReach"
+    | "adaptationTolerance"
+    | "pathwayPatience"
+    | "tacticalRoleRigidity"
+    | "sellingPressure"
+    | "managerInfluence"
+    | "directorInfluence"
+    | "seasonalObjective"
+  >;
   tacticalStyle?: TacticalStyle;
   manager?: ManagerSeasonIdentity;
 }
@@ -121,6 +142,8 @@ export interface WorldHistoryState {
 
 /** Minimal authoritative snapshot needed to write a season record. */
 export interface WorldHistorySnapshot {
+  /** Optional on legacy/test snapshots; full GameState callers always provide it. */
+  seed?: string;
   totalWeeksPlayed: number;
   leagues: Record<string, League>;
   clubs: Record<string, Club>;
@@ -315,6 +338,12 @@ function buildSeasonRecord(
       const entry = index >= 0 ? standings[index] : undefined;
       const movement = clubMovement.get(club.id);
       const manager = snapshot.managerProfiles[club.id];
+      const doctrine = deriveClubRecruitmentDoctrine({
+        club,
+        seed: snapshot.seed ?? `world-history:${club.id}`,
+        season: completedSeason,
+        manager,
+      });
 
       return {
         clubId: club.id,
@@ -344,6 +373,21 @@ function buildSeasonRecord(
         reputation: club.reputation,
         budget: club.budget,
         scoutingPhilosophy: club.scoutingPhilosophy,
+        recruitmentDoctrine: {
+          version: doctrine.version,
+          archetype: doctrine.archetype,
+          preferredSeniorAgeRange: [...doctrine.preferredSeniorAgeRange],
+          evidencePreference: doctrine.evidencePreference,
+          riskTolerance: doctrine.riskTolerance,
+          geographicReach: doctrine.geographicReach,
+          adaptationTolerance: doctrine.adaptationTolerance,
+          pathwayPatience: doctrine.pathwayPatience,
+          tacticalRoleRigidity: doctrine.tacticalRoleRigidity,
+          sellingPressure: doctrine.sellingPressure,
+          managerInfluence: doctrine.managerInfluence,
+          directorInfluence: doctrine.directorInfluence,
+          seasonalObjective: doctrine.seasonalObjective,
+        },
         ...(club.tacticalStyle ? { tacticalStyle: cloneTacticalStyle(club.tacticalStyle) } : {}),
         ...(manager && manager.clubId === club.id
           ? {

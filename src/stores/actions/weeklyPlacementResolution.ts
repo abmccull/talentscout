@@ -26,12 +26,16 @@ import {
 } from "@/engine/world/playerLifecycle";
 import {
   createAlumniRecord,
-  fulfillYouthRecruitmentBrief,
   generatePlacementReport,
   getEligibleClubsForPlacement,
   processPlacementOutcome,
   scoreAcademyClubDecision,
 } from "@/engine/youth";
+import { settleYouthAgencyPlacement } from "@/engine/finance";
+import {
+  fulfillAcademyRecruitmentBrief,
+  type AcademyRecruitmentBrief,
+} from "@/engine/youth/recruitmentBriefs";
 import { scheduleAcademyRecommendationReviews } from "@/engine/youth/recommendationReviews";
 import { resolveUnsignedYouth } from "@/lib/playerResolution";
 import {
@@ -195,6 +199,7 @@ export function processWeeklyPlacementResolution(
       let updatedConsequenceState = stateWithScheduleApplied.consequenceState;
       let updatedRecruitmentBriefs = { ...stateWithScheduleApplied.youthRecruitmentBriefs };
       let updatedRecommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
+      let updatedFinances = stateWithScheduleApplied.finances;
       const placementMessages: InboxMessage[] = [];
       const currentScoutForPlacement = stateWithScheduleApplied.scout;
 
@@ -220,7 +225,7 @@ export function processWeeklyPlacementResolution(
           ? scoreAcademyClubDecision({
               rng: createRNG(`${stateWithScheduleApplied.seed}-academy-decision-${report.id}`),
               report: sourceReport,
-              brief,
+              brief: brief as AcademyRecruitmentBrief,
               player: youth.player,
               observations: Object.values(stateWithScheduleApplied.observations).filter(
                 (observation) => observation.playerId === youth.player.id,
@@ -263,6 +268,8 @@ export function processWeeklyPlacementResolution(
           : processPlacementOutcome(placementRng, report, 0, youth, club);
 
         let signedPlayerId: string | undefined;
+        let signedMovement = undefined;
+        let signingRejectionReason: string | undefined;
         if (outcome.success && outcome.newPlayer) {
           const detachedPlayer = {
             ...outcome.newPlayer,
@@ -297,6 +304,11 @@ export function processWeeklyPlacementResolution(
           if (resolution.applied.length > 0) {
             placementLifecycle = resolution.state;
             signedPlayerId = detachedPlayer.id;
+            signedMovement = resolution.applied.find((movement) =>
+              movement.playerId === detachedPlayer.id && movement.type === "youthSigning"
+            );
+          } else {
+            signingRejectionReason = resolution.rejected[0]?.reason;
           }
         }
 
@@ -356,14 +368,56 @@ export function processWeeklyPlacementResolution(
               alumniRecordId: alumniRecord.id,
             };
           }
-          if (brief && report.caseId) {
-            updatedRecruitmentBriefs[brief.id] = fulfillYouthRecruitmentBrief(
-              brief,
-              report.caseId,
-              youth.player.id,
-            );
-          }
           const placedCase = report.caseId ? updatedScoutingCases[report.caseId] : undefined;
+          const signedPlayer = signedPlayerId
+            ? placementLifecycle.players[signedPlayerId]
+            : undefined;
+          if (
+            brief
+            && placedCase
+            && sourceReport
+            && resolved.decision
+            && signedMovement
+            && signedPlayer
+          ) {
+            const fulfilled = fulfillAcademyRecruitmentBrief({
+              brief: brief as AcademyRecruitmentBrief,
+              player: signedPlayer,
+              scoutingCase: placedCase,
+              report: sourceReport,
+              placementReport: acceptedPlacement,
+              clubDecision: resolved.decision,
+              movementHistory: placementLifecycle.playerMovementHistory,
+              currentWeek: stateWithScheduleApplied.currentWeek,
+              currentSeason: stateWithScheduleApplied.currentSeason,
+              seasonLength: getSeasonLength(
+                stateWithScheduleApplied.fixtures,
+                stateWithScheduleApplied.currentSeason,
+              ),
+            });
+            updatedRecruitmentBriefs[brief.id] = fulfilled.fulfilled
+              ? { ...fulfilled.brief, fulfillmentFailures: undefined }
+              : { ...fulfilled.brief, fulfillmentFailures: fulfilled.failures };
+          }
+
+          let commercialOutcome = "Commercial outcome: no finance ledger was available to settle this placement.";
+          if (updatedFinances && sourceReport && signedMovement) {
+            const settlement = settleYouthAgencyPlacement({
+              finances: updatedFinances,
+              scout: stateWithScheduleApplied.scout,
+              report: sourceReport,
+              placementReport: acceptedPlacement,
+              club,
+              playerId: signedPlayerId,
+              playerAge: youth.player.age,
+              movementId: signedMovement.id,
+              week: stateWithScheduleApplied.currentWeek,
+              season: stateWithScheduleApplied.currentSeason,
+            });
+            updatedFinances = settlement.finances;
+            commercialOutcome = settlement.commercialOutcome;
+          }
+
           if (placedCase && sourceReport && resolved.decision) {
             const reviewSchedule = scheduleAcademyRecommendationReviews({
               scoutingCase: placedCase,
@@ -397,7 +451,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "event" as const,
             title: `Placement Accepted: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. You can track their career progress in your alumni records.`,
+            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. ${commercialOutcome} You can track their career progress in your alumni records.`,
             read: false,
             actionRequired: false,
             relatedId: signedPlayerId,
@@ -457,9 +511,12 @@ export function processWeeklyPlacementResolution(
             outcome: "rejected",
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,
-            reason: structuredDecision?.reasons.join(" ")
+            reason: signingRejectionReason
+              ?? structuredDecision?.reasons.join(" ")
               ?? "Club declined the youth placement recommendation",
-            reasons: structuredDecision?.reasons,
+            reasons: signingRejectionReason
+              ? [signingRejectionReason]
+              : structuredDecision?.reasons,
             scoreBreakdown: structuredDecision?.breakdown,
           });
           updatedScoutingCases = resolved.scoutingCases;
@@ -479,7 +536,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "event" as const,
             title: `Placement Declined: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} declined your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}. ${structuredDecision?.reasons.join(" ") ?? "Consider building more observations or targeting a different club."}`,
+            body: `${club.name} declined your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}. ${signingRejectionReason ?? structuredDecision?.reasons.join(" ") ?? "Consider building more observations or targeting a different club."}`,
             read: false,
             actionRequired: false,
             relatedId: youth.player.id,
@@ -510,6 +567,7 @@ export function processWeeklyPlacementResolution(
         consequenceState: updatedConsequenceState,
         youthRecruitmentBriefs: updatedRecruitmentBriefs,
         recommendationReviews: updatedRecommendationReviews,
+        finances: updatedFinances,
         inbox: [...stateWithScheduleApplied.inbox, ...placementMessages],
       };
     }

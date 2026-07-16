@@ -7,7 +7,7 @@
  * boundary when the corresponding engine exists.
  */
 
-import type { Specialization } from "@/engine/core/types";
+import type { GameModeId, Specialization } from "@/engine/core/types";
 import {
   CONTENT_SCHEMA_VERSION,
   defineContentPack,
@@ -16,11 +16,7 @@ import {
   type ContentValidationIssue,
 } from "./contracts";
 
-export type GameModeId =
-  | "youth-scout"
-  | "first-team-scout"
-  | "regional-expert"
-  | "data-scout";
+export type { GameModeId } from "@/engine/core/types";
 
 export type GameModeStatus = "available" | "internal" | "planned";
 

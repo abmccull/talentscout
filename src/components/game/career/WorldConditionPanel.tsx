@@ -6,6 +6,7 @@ import {
   Globe2,
   History,
   MapPinned,
+  Route,
 } from "lucide-react";
 import type { GameState } from "@/engine/core/types";
 import {
@@ -13,9 +14,13 @@ import {
   getWorldConditionDefinition,
   type WorldConditionInstance,
 } from "@/engine/world/worldConditions";
+import { getWorldConditionArcDefinitions } from "@/engine/world/worldConditionArcs";
 
 interface WorldConditionPanelProps {
-  state: Pick<GameState, "currentSeason" | "worldConditionState">;
+  state: Pick<
+    GameState,
+    "currentSeason" | "worldConditionState" | "worldConditionArcState"
+  >;
 }
 
 function ConditionCard({ condition }: { condition: WorldConditionInstance }) {
@@ -76,6 +81,11 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
   const archive = [...conditionState.history]
     .filter((record) => record.season !== conditionState.activeSeason)
     .sort((left, right) => right.season - left.season);
+  const arcDefinitions = new Map(
+    getWorldConditionArcDefinitions().map((definition) => [definition.id, definition]),
+  );
+  const activeArcs = Object.values(state.worldConditionArcState?.active ?? {})
+    .sort((left, right) => left.id.localeCompare(right.id));
 
   return (
     <section
@@ -105,6 +115,48 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
             What changed
           </p>
           <p className="mt-1 text-xs leading-5 text-zinc-300">{currentRecord.callback}</p>
+        </div>
+      )}
+
+      {activeArcs.length > 0 && (
+        <div className="grid gap-3 lg:grid-cols-2" aria-label="Active world-condition story arcs">
+          {activeArcs.map((arc) => {
+            const definition = arcDefinitions.get(arc.definitionId);
+            const selectedChoice = definition?.choices.find(
+              (choice) => choice.id === arc.selectedChoiceId,
+            );
+            if (!definition) return null;
+            return (
+              <article
+                key={arc.id}
+                className="rounded-xl border border-amber-300/20 bg-amber-300/[0.045] p-4"
+                data-testid={`world-condition-arc-${definition.id}`}
+              >
+                <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">
+                  <Route size={14} aria-hidden="true" />
+                  {selectedChoice ? "Your strategy is active" : "A world story is developing"}
+                </p>
+                <h4 className="mt-1 font-semibold text-white">{definition.title}</h4>
+                <p className="mt-2 text-xs leading-5 text-zinc-300">
+                  {selectedChoice
+                    ? selectedChoice.label
+                    : arc.phase === "decision"
+                      ? "A time-limited choice is waiting in your Desk inbox."
+                      : "Watch your Desk inbox as this condition develops."}
+                </p>
+                {selectedChoice && (
+                  <ul className="mt-2 space-y-1 text-xs leading-5 text-zinc-400">
+                    {selectedChoice.knownTradeoffs.map((tradeoff) => (
+                      <li key={tradeoff} className="flex gap-2">
+                        <span className="text-amber-300" aria-hidden="true">&bull;</span>
+                        <span>{tradeoff}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </article>
+            );
+          })}
         </div>
       )}
 

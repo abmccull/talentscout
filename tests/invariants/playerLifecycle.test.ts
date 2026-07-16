@@ -139,8 +139,16 @@ describe("authoritative player lifecycle", () => {
       loanParentClubId: "a",
       onLoan: true,
     });
-    expect(started.state.clubs.a.budget).toBe(106_000);
-    expect(started.state.clubs.b.budget).toBe(94_000);
+    expect(started.state.clubs.a.budget).toBe(101_000);
+    expect(started.state.clubs.b.budget).toBe(99_000);
+    expect(started.state.clubs.b.financialObligations?.[0]).toMatchObject({
+      type: "loanWageContribution",
+      creditorClubId: "a",
+      weeklyAmount: 500,
+      remainingWeeks: 10,
+      amount: 5_000,
+      status: "active",
+    });
     expect(started.state.clubs.a.loanedOutPlayerIds).toEqual(["p1"]);
     expect(started.state.clubs.b.loanedInPlayerIds).toEqual(["p1"]);
 
@@ -153,8 +161,8 @@ describe("authoritative player lifecycle", () => {
     expect(duplicateStart.applied).toEqual([]);
     expect(duplicateStart.rejected).toHaveLength(1);
     expect(duplicateStart.state.activeLoans).toHaveLength(1);
-    expect(duplicateStart.state.clubs.a.budget).toBe(106_000);
-    expect(duplicateStart.state.clubs.b.budget).toBe(94_000);
+    expect(duplicateStart.state.clubs.a.budget).toBe(101_000);
+    expect(duplicateStart.state.clubs.b.budget).toBe(99_000);
     expect(duplicateStart.state.playerMovementHistory).toHaveLength(1);
 
     const bought = resolvePlayerMovements(
@@ -174,8 +182,12 @@ describe("authoritative player lifecycle", () => {
       contractClubId: "b",
       onLoan: undefined,
     });
-    expect(bought.state.clubs.a.budget).toBe(126_000);
-    expect(bought.state.clubs.b.budget).toBe(74_000);
+    expect(bought.state.clubs.a.budget).toBe(121_000);
+    expect(bought.state.clubs.b.budget).toBe(79_000);
+    expect(bought.state.clubs.b.financialObligations?.[0]).toMatchObject({
+      type: "loanWageContribution",
+      status: "expired",
+    });
     expect(bought.state.activeLoans).toEqual([]);
     expect(bought.state.loanHistory[0].outcome).toBe("buy-option-exercised");
   });

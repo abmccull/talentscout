@@ -73,6 +73,14 @@ export function TrainingScreen() {
   const activeEnrollment = finances.activeEnrollment;
   const availableCourses = getAvailableCourses(scout, completedCourses);
   const availableIds = new Set(availableCourses.map((c) => c.id));
+  const educationBudgetAvailable = scout.careerPath === "club"
+    && scout.employmentContract?.status !== "terminated"
+    ? scout.employmentContract?.educationBudget ?? 0
+    : 0;
+  const personalCourseCost = (course: Course): number => Math.max(
+    0,
+    course.cost - educationBudgetAvailable,
+  );
 
   // Active course info
   const activeCourse = activeEnrollment
@@ -103,7 +111,7 @@ export function TrainingScreen() {
     if (activeEnrollment) return false;
     if (completedCourses.includes(course.id)) return false;
     if (!availableIds.has(course.id)) return false;
-    if (finances.balance < course.cost) return false;
+    if (finances.balance < personalCourseCost(course)) return false;
     return true;
   };
 
@@ -120,7 +128,7 @@ export function TrainingScreen() {
         .join(", ");
       return `Prerequisite: ${names}`;
     }
-    if (finances.balance < course.cost) return "Insufficient funds";
+    if (finances.balance < personalCourseCost(course)) return "Insufficient funds";
     return null;
   };
 
@@ -281,6 +289,8 @@ export function TrainingScreen() {
                     const hasTierGate = course.effects.some(
                       (e) => e.type === "tierGate",
                     );
+                    const employerFunding = Math.min(course.cost, educationBudgetAvailable);
+                    const personalCost = course.cost - employerFunding;
 
                     return (
                       <div
@@ -336,6 +346,11 @@ export function TrainingScreen() {
                             <DollarSign size={10} />
                             {formatCurrency(course.cost)}
                           </span>
+                          {employerFunding > 0 && (
+                            <span className="text-emerald-400">
+                              Club covers {formatCurrency(employerFunding)}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1">
                             <Clock size={10} />
                             {course.durationWeeks} weeks
@@ -405,7 +420,7 @@ export function TrainingScreen() {
                               onClick={() => enrollInCourse(course.id)}
                               className="h-7 text-xs"
                             >
-                              Enroll — {formatCurrency(course.cost)}
+                              Enroll — {personalCost > 0 ? formatCurrency(personalCost) : "Club funded"}
                             </Button>
                           )}
                         </div>

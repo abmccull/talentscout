@@ -1,4 +1,4 @@
-import { test, expect } from "../fixtures";
+import { dismissCareerMomentOverlays, test, expect } from "../fixtures";
 
 async function prepareYouthReportDraft(gamePage: import("../fixtures").GamePage) {
   await gamePage.goto();
@@ -250,6 +250,7 @@ test.describe("Delayed scout report validation regression", () => {
     const continueSeason = gamePage.page.getByRole("button", {
       name: "Continue to Next Season",
     });
+    await dismissCareerMomentOverlays(gamePage.page);
     await gamePage.setScreen("discoveries");
     if (await continueSeason.isVisible({ timeout: 3_000 }).catch(() => false)) {
       await continueSeason.click();

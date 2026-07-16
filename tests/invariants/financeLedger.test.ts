@@ -19,6 +19,10 @@ import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
 import { hireEmployee } from "@/engine/finance/agency";
 import { hireAssistantScout } from "@/engine/finance/assistantScouts";
 import {
+  annualizeWeeklyAmount,
+  monthlyEquivalentOfWeeklyAmount,
+} from "@/engine/core/annualization";
+import {
   closeSatelliteOffice,
   getHomeBaseRelocationQuote,
   openSatelliteOffice,
@@ -46,6 +50,33 @@ const CONFIG: NewGameConfig = {
 };
 
 describe("financial ledger invariants", () => {
+  it.each([38, 46, 50])(
+    "pays twelve equal financial periods in a %i-week competition",
+    (seasonLength) => {
+      const created = createScout(CONFIG, new RNG(`salary-periods-${seasonLength}`));
+      const scout = {
+        ...created,
+        careerPath: "club" as const,
+        salary: 1_000,
+      };
+      let finances = initializeFinances(scout, "club", "normal");
+      for (let week = 1; week <= seasonLength; week += 1) {
+        finances = processWeeklyFinances(finances, scout, week, 1, seasonLength);
+      }
+
+      const salaryTransactions = finances.transactions.filter((transaction) =>
+        transaction.referenceId?.endsWith(":scout-income")
+      );
+      const paidSalary = salaryTransactions.reduce(
+        (total, transaction) => total + transaction.amount,
+        0,
+      );
+      expect(salaryTransactions).toHaveLength(12);
+      expect(paidSalary).toBe(monthlyEquivalentOfWeeklyAmount(1_000) * 12);
+      expect(Math.abs(paidSalary - annualizeWeeklyAmount(1_000))).toBeLessThanOrEqual(6);
+    },
+  );
+
   it("starts new careers with an explicit opening-balance entry", () => {
     const scout = createScout(CONFIG, new RNG("ledger-opening"));
     const finances = initializeFinances(scout, "independent", "normal");
@@ -213,9 +244,11 @@ describe("financial ledger invariants", () => {
     const monthly = processWeeklyFinances(borrowed, scout, 4, 1);
     expect(monthly.activeLoan!.remainingBalance).toBe(outstandingBeforePayment);
 
-    const paid = processLoanPayment(monthly, 4, 1);
+    const notYetDue = processLoanPayment(monthly, 4, 1);
+    expect(notYetDue).toBe(monthly);
+    const paid = processLoanPayment(monthly, 5, 1);
     const payment = borrowed.activeLoan!.monthlyPayment;
-    const paymentReference = `loan:${borrowed.activeLoan!.id}:payment:s1w4`;
+    const paymentReference = `loan:${borrowed.activeLoan!.id}:payment:s1w5`;
     const operatingTransaction = paid.transactions.find(
       (transaction) => transaction.referenceId === "monthly-finance:s1w4:operating-expenses",
     );
@@ -242,13 +275,33 @@ describe("financial ledger invariants", () => {
       - paymentTransactions.reduce((total, transaction) => total + transaction.amount, 0);
     expect(chargedExpenseTotal).toBe(displayedExpenseTotal);
 
-    const replayed = processLoanPayment(paid, 4, 1);
+    const replayed = processLoanPayment(paid, 5, 1);
     expect(replayed).toBe(paid);
     expect(replayed.transactions.filter(
       (transaction) => transaction.referenceId === paymentReference,
     )).toHaveLength(1);
     expect(replayed.transactions.reduce((sum, transaction) => sum + transaction.amount, 0))
       .toBe(replayed.balance);
+  });
+
+  it("anchors the first loan payment four weeks after origination across season end", () => {
+    const scout = createScout(CONFIG, new RNG("ledger-loan-cross-season"));
+    const opened = {
+      ...initializeFinances(scout, "independent", "normal"),
+      balance: 10_000,
+    };
+    const borrowed = takeLoan(opened, "business", 1_000, 36, 1, 2, 38)!;
+    expect(borrowed.activeLoan).toMatchObject({
+      nextPaymentWeek: 2,
+      nextPaymentSeason: 2,
+    });
+    expect(processLoanPayment(borrowed, 38, 1, 38)).toBe(borrowed);
+    const paid = processLoanPayment(borrowed, 2, 2, 38);
+    expect(paid.activeLoan?.paymentsMade).toBe(1);
+    expect(paid.activeLoan).toMatchObject({
+      nextPaymentWeek: 6,
+      nextPaymentSeason: 2,
+    });
   });
 
   it("allocates unique deterministic IDs for repeated same-week hires", () => {

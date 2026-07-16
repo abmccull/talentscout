@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useAudio } from "@/lib/audio/useAudio";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 // =============================================================================
 // TYPES
@@ -169,7 +170,8 @@ function MinorCelebration({
   title,
   description,
   onDismiss,
-}: Omit<CelebrationProps, "tier">) {
+  reducedMotion,
+}: Omit<CelebrationProps, "tier"> & { reducedMotion: boolean }) {
   // Auto-dismiss after MINOR_AUTO_DISMISS_MS
   React.useEffect(() => {
     const id = setTimeout(onDismiss, MINOR_AUTO_DISMISS_MS);
@@ -185,7 +187,7 @@ function MinorCelebration({
     >
       <div
         className="flex items-center gap-3 rounded-2xl border border-emerald-500/40 bg-zinc-900 px-6 py-4 shadow-2xl"
-        style={{ animation: "minorPulse 1.2s ease-out 1" }}
+        style={reducedMotion ? undefined : { animation: "minorPulse 1.2s ease-out 1" }}
       >
         <span className="text-2xl" aria-hidden="true">
           ✓
@@ -204,11 +206,12 @@ function MajorCelebration({
   title,
   description,
   onDismiss,
-}: Omit<CelebrationProps, "tier">) {
+  reducedMotion,
+}: Omit<CelebrationProps, "tier"> & { reducedMotion: boolean }) {
   const dialogRef = useCelebrationDialogFocus(onDismiss);
   return (
     <>
-      <ConfettiOverlay count={24} slowFall={false} />
+      {!reducedMotion && <ConfettiOverlay count={24} slowFall={false} />}
 
       {/* Backdrop */}
       <div
@@ -250,11 +253,12 @@ function EpicCelebration({
   title,
   description,
   onDismiss,
-}: Omit<CelebrationProps, "tier">) {
+  reducedMotion,
+}: Omit<CelebrationProps, "tier"> & { reducedMotion: boolean }) {
   const dialogRef = useCelebrationDialogFocus(onDismiss);
   return (
     <>
-      <ConfettiOverlay count={48} slowFall={true} />
+      {!reducedMotion && <ConfettiOverlay count={48} slowFall={true} />}
 
       {/* Backdrop */}
       <div
@@ -267,7 +271,7 @@ function EpicCelebration({
           aria-modal="true"
           aria-label={`Epic achievement: ${title}`}
           className="relative mx-4 max-w-md rounded-3xl border border-amber-500/40 bg-zinc-900 p-10 text-center shadow-2xl"
-          style={{ animation: "epicReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}
+          style={reducedMotion ? undefined : { animation: "epicReveal 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards" }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Decorative glow */}
@@ -324,22 +328,24 @@ const CELEBRATION_SFX: Record<CelebrationTier, string> = {
 
 export function Celebration({ tier, title, description, onDismiss }: CelebrationProps) {
   const { playSFX } = useAudio();
+  const reducedMotion = useSettingsStore((state) => state.reducedMotion);
+  const emotionalAudioCues = useSettingsStore((state) => state.emotionalAudioCues);
 
   React.useEffect(() => {
-    playSFX(CELEBRATION_SFX[tier]);
-  }, [tier, playSFX]);
+    if (emotionalAudioCues) playSFX(CELEBRATION_SFX[tier]);
+  }, [emotionalAudioCues, tier, playSFX]);
 
   return (
     <>
       <style>{CONFETTI_KEYFRAMES}</style>
       {tier === "minor" && (
-        <MinorCelebration title={title} description={description} onDismiss={onDismiss} />
+        <MinorCelebration title={title} description={description} onDismiss={onDismiss} reducedMotion={reducedMotion} />
       )}
       {tier === "major" && (
-        <MajorCelebration title={title} description={description} onDismiss={onDismiss} />
+        <MajorCelebration title={title} description={description} onDismiss={onDismiss} reducedMotion={reducedMotion} />
       )}
       {tier === "epic" && (
-        <EpicCelebration title={title} description={description} onDismiss={onDismiss} />
+        <EpicCelebration title={title} description={description} onDismiss={onDismiss} reducedMotion={reducedMotion} />
       )}
     </>
   );

@@ -23,7 +23,7 @@
     "electron:build": "npm run build && npm run electron:prepare && electron-builder && npm run electron:assert-slim-package",
     "electron:dist": "npm run build && npm run electron:prepare && electron-builder --publish never && npm run electron:assert-slim-package",
     "test:e2e": "playwright test",
-    "e2e:serve": "node scripts/serve-static.mjs --dir out --port 3000",
+    "e2e:serve": "node scripts/serve-static.mjs --dir out-e2e --port 3000 --require-e2e-bridge",
     "test:unit": "vitest run",
     "test:coverage:critical": "vitest run --config vitest.critical-coverage.config.ts",
     "test:coverage:retention": "vitest run --config vitest.retention-coverage.config.ts",

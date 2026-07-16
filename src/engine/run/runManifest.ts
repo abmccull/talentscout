@@ -10,14 +10,16 @@
 import { createRNG, type RNG } from "@/engine/rng";
 import type {
   DifficultyLevel,
+  GameModeId,
   RunIntegrity,
+  RunKind,
   RunManifest,
   Specialization,
 } from "@/engine/core/types";
 
-export const RUN_MANIFEST_VERSION = 2 as const;
-export const RUN_RULES_VERSION = "youth-ea.3" as const;
-export const RUN_CONTENT_VERSION = "run-content.2" as const;
+export const RUN_MANIFEST_VERSION = 3 as const;
+export const RUN_RULES_VERSION = "youth-ea.4" as const;
+export const RUN_CONTENT_VERSION = "run-content.3" as const;
 export const NAMED_RNG_VERSION = "named-rng.1" as const;
 
 export type SeedScopePart = string | number | boolean | null;
@@ -25,6 +27,8 @@ export type SeedScopePart = string | number | boolean | null;
 export interface CreateRunManifestInput {
   rootSeed: string;
   specialization: Specialization;
+  gameModeId?: GameModeId;
+  runKind?: RunKind;
   difficulty: DifficultyLevel;
   selectedCountries: readonly string[];
   startingCountry?: string;
@@ -40,7 +44,32 @@ export interface CreateRunManifestInput {
   /** All IDs in the definition catalog that can influence this run. */
   contentDefinitionIds?: readonly string[];
   /** V1 is reserved for reconstructing an untouched pre-ledger career. */
-  manifestVersion?: 1 | 2;
+  manifestVersion?: 1 | 2 | 3;
+}
+
+const GAME_MODE_BY_SPECIALIZATION: Readonly<Record<Specialization, GameModeId>> = {
+  youth: "youth-scout",
+  firstTeam: "first-team-scout",
+  regional: "regional-expert",
+  data: "data-scout",
+};
+
+/** Stable bridge used by legacy manifests and creation-time validation. */
+export function deriveGameModeIdFromSpecialization(
+  specialization: Specialization,
+): GameModeId {
+  return GAME_MODE_BY_SPECIALIZATION[specialization];
+}
+
+/** Resolve a mode from immutable run identity, including V1/V2 careers. */
+export function getRunGameModeId(manifest: RunManifest): GameModeId {
+  return manifest.gameModeId
+    ?? deriveGameModeIdFromSpecialization(manifest.specialization);
+}
+
+/** Legacy careers were all open-ended careers rather than challenge overlays. */
+export function getRunKind(manifest: RunManifest): RunKind {
+  return manifest.runKind ?? "career";
 }
 
 type CanonicalValue =
@@ -218,6 +247,12 @@ export function createRunManifest(input: CreateRunManifestInput): RunManifest {
     "content definition ID",
   );
   const manifestVersion = input.manifestVersion ?? RUN_MANIFEST_VERSION;
+  const gameModeId = input.gameModeId
+    ?? deriveGameModeIdFromSpecialization(input.specialization);
+  if (gameModeId !== deriveGameModeIdFromSpecialization(input.specialization)) {
+    throw new RangeError("gameModeId must match specialization");
+  }
+  const runKind = input.runKind ?? "career";
   const contentFingerprint = createContentFingerprint(
     creationRulesVersion,
     contentVersion,
@@ -231,6 +266,7 @@ export function createRunManifest(input: CreateRunManifestInput): RunManifest {
     contentVersion,
     contentFingerprint,
     ...(manifestVersion >= 2 ? { contentDefinitionIds } : {}),
+    ...(manifestVersion >= 3 ? { gameModeId, runKind } : {}),
     specialization: input.specialization,
     difficulty: input.difficulty,
     selectedCountries,
@@ -280,6 +316,10 @@ function manifestIdentity(manifest: RunManifest): Omit<RunManifest, "runId" | "f
       "content definition ID",
     );
   }
+  if (manifest.manifestVersion >= 3) {
+    identity.gameModeId = manifest.gameModeId;
+    identity.runKind = manifest.runKind;
+  }
   return identity;
 }
 
@@ -297,7 +337,11 @@ export function validateRunManifest(
   expectedRootSeed?: string,
 ): string[] {
   const errors: string[] = [];
-  if (manifest.manifestVersion !== 1 && manifest.manifestVersion !== 2) {
+  if (
+    manifest.manifestVersion !== 1
+    && manifest.manifestVersion !== 2
+    && manifest.manifestVersion !== 3
+  ) {
     errors.push("run manifest version is unsupported");
   }
   if (manifest.manifestVersion >= 2 && !Array.isArray(manifest.contentDefinitionIds)) {
@@ -315,6 +359,19 @@ export function validateRunManifest(
       }
     } catch {
       errors.push("run manifest content definition ledger is invalid");
+    }
+  }
+  if (manifest.manifestVersion >= 3) {
+    if (!manifest.gameModeId) {
+      errors.push("run manifest V3 is missing its game mode");
+    } else if (
+      manifest.gameModeId
+      !== deriveGameModeIdFromSpecialization(manifest.specialization)
+    ) {
+      errors.push("run manifest game mode does not match its specialization");
+    }
+    if (manifest.runKind !== "career" && manifest.runKind !== "challenge") {
+      errors.push("run manifest V3 is missing a supported run kind");
     }
   }
   let fingerprint: string | undefined;
@@ -356,10 +413,19 @@ export function repairRunManifest(
       contentDefinitionIds = undefined;
     }
   }
-  const manifestVersion: 1 | 2 = manifest.manifestVersion === 2 && contentDefinitionIds
-    ? 2
-    : 1;
-  const repairedContentDefinitionIds = manifestVersion === 2
+  const hasValidV3Mode = manifest.gameModeId
+    === deriveGameModeIdFromSpecialization(manifest.specialization);
+  const hasValidV3Kind = manifest.runKind === "career" || manifest.runKind === "challenge";
+  const manifestVersion: 1 | 2 | 3 = manifest.manifestVersion === 3
+    && contentDefinitionIds
+    && hasValidV3Mode
+    && hasValidV3Kind
+    ? 3
+    : (manifest.manifestVersion === 2 || manifest.manifestVersion === 3)
+      && contentDefinitionIds
+      ? 2
+      : 1;
+  const repairedContentDefinitionIds = manifestVersion >= 2
     ? contentDefinitionIds
     : undefined;
   const contentFingerprint = repairedContentDefinitionIds
@@ -382,6 +448,8 @@ export function repairRunManifest(
     contentDefinitionIds: repairedContentDefinitionIds
       ? [...repairedContentDefinitionIds]
       : undefined,
+    gameModeId: manifestVersion >= 3 ? manifest.gameModeId : undefined,
+    runKind: manifestVersion >= 3 ? manifest.runKind : undefined,
     integrity: "legacy-import",
     runId: "",
     fingerprint: "",

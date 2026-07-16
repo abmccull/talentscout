@@ -6,7 +6,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import type { AppSettings } from "@/stores/settingsStore";
 import { GameLayout } from "./GameLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -162,6 +162,9 @@ export function SettingsScreen() {
       fontSize: state.fontSize,
       colorblindMode: state.colorblindMode,
       reducedMotion: state.reducedMotion,
+      cinematicMoments: state.cinematicMoments,
+      emotionalAudioCues: state.emotionalAudioCues,
+      autoOpenCareerDefiningMoments: state.autoOpenCareerDefiningMoments,
     })),
   );
 
@@ -278,10 +281,10 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <User size={18} className="text-emerald-500" aria-hidden="true" />
               Account
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-4">
             {!cloudAuthAvailable ? (
@@ -313,7 +316,7 @@ export function SettingsScreen() {
                     <p className="text-sm font-medium text-white">
                       {displayName}
                     </p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-zinc-400">
                       {cloudSaveEnabled
                         ? "Signed in with cloud saves enabled"
                         : "Signed in on this device"}
@@ -333,7 +336,7 @@ export function SettingsScreen() {
                 <div className="flex items-center justify-between gap-3 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
                   <div>
                     <p className="text-sm font-medium">Cloud Save Sync</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-xs text-zinc-400">
                       {cloudSaveEnabled
                         ? BETA_CLOUD_SAVES_MESSAGE
                         : "Saves stay local until you turn sync on for this device."}
@@ -412,7 +415,7 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               {volumes.muted ? (
                 <VolumeX
                   size={18}
@@ -427,7 +430,7 @@ export function SettingsScreen() {
                 />
               )}
               Audio
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
@@ -443,6 +446,52 @@ export function SettingsScreen() {
                 checked={volumes.muted}
                 onChange={() => toggleMute()}
                 label="Mute all audio"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="cinematic-moments" className="text-sm font-medium text-zinc-300">
+                Career moment presentation
+              </label>
+              <select
+                id="cinematic-moments"
+                value={settings.cinematicMoments}
+                onChange={(event) => setSetting(
+                  "cinematicMoments",
+                  event.target.value as AppSettings["cinematicMoments"],
+                )}
+                className="min-h-11 w-full rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                <option value="full">Full presentation</option>
+                <option value="reduced">Reduced effects</option>
+                <option value="off">Archive only</option>
+              </select>
+              <p className="text-xs leading-5 text-zinc-400">
+                Changes visual delivery only. Decisions, consequences, and the career archive remain identical.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+              <div>
+                <p className="text-sm font-medium">Emotional audio cues</p>
+                <p className="text-xs text-zinc-400">Optional stingers; all information is also shown in text</p>
+              </div>
+              <PillToggle
+                checked={settings.emotionalAudioCues}
+                onChange={(value) => setSetting("emotionalAudioCues", value)}
+                label="Toggle emotional audio cues"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
+              <div>
+                <p className="text-sm font-medium">Auto-open defining moments</p>
+                <p className="text-xs text-zinc-400">Turn off to keep every moment in the Career archive without an interruption</p>
+              </div>
+              <PillToggle
+                checked={settings.autoOpenCareerDefiningMoments}
+                onChange={(value) => setSetting("autoOpenCareerDefiningMoments", value)}
+                label="Toggle automatic career-defining moments"
               />
             </div>
 
@@ -506,10 +555,10 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <Monitor size={18} className="text-emerald-500" aria-hidden="true" />
               Display
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="space-y-2">
@@ -557,20 +606,20 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <Accessibility
                 size={18}
                 className="text-emerald-500"
                 aria-hidden="true"
               />
               Accessibility
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="flex items-center justify-between rounded-md border border-[#27272a] bg-[#0c0c0c] px-3 py-3">
               <div>
                 <p className="text-sm font-medium">Reduce Motion</p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-zinc-400">
                   Minimise animations and transitions
                 </p>
               </div>
@@ -613,7 +662,7 @@ export function SettingsScreen() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2.5 text-xs text-zinc-600">
+                <p className="mt-2.5 text-xs text-zinc-400">
                   Shortcuts are disabled while typing in any text field.
                 </p>
               </div>
@@ -623,13 +672,13 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <Download size={18} className="text-emerald-500" aria-hidden="true" />
               Data Mods
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-400">
               Export game data as JSON, edit club or league names and attributes,
               then re-import to play with custom data. Changes apply to new
               games only.
@@ -736,10 +785,10 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <Save size={18} className="text-emerald-500" aria-hidden="true" />
               Saves
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -785,7 +834,7 @@ export function SettingsScreen() {
               </div>
             )}
 
-            <p className="text-xs leading-relaxed text-zinc-500">
+            <p className="text-xs leading-relaxed text-zinc-400">
               Game autosaves every time you advance a week. Use Manage Saves for
               loading, deleting, and slot-by-slot save management across your{" "}
               {MAX_MANUAL_SLOTS} manual slots.
@@ -802,17 +851,17 @@ export function SettingsScreen() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
+            <h2 className="flex items-center gap-2 text-lg font-semibold leading-none tracking-tight">
               <MessageSquarePlus
                 size={18}
                 className="text-emerald-500"
                 aria-hidden="true"
               />
               Feedback &amp; Support
-            </CardTitle>
+            </h2>
           </CardHeader>
           <CardContent className="space-y-3">
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-zinc-400">
               {feedbackSubmissionAvailable
                 ? "Found a bug? Have a suggestion? We'd love to hear from you."
                 : "Offline mode opens a pre-filled email draft so feedback is never submitted to a dead endpoint."}
@@ -837,7 +886,7 @@ export function SettingsScreen() {
             >
               Quit to Main Menu
             </Button>
-            <p className="mt-2 text-center text-xs text-zinc-500">
+            <p className="mt-2 text-center text-xs text-zinc-400">
               Unsaved progress will be lost. The game autosaves each week.
             </p>
           </CardContent>

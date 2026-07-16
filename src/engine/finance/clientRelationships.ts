@@ -228,6 +228,7 @@ export function ensureClientRelationship(
     status: "prospect",
     lastInteractionWeek: week,
     lastInteractionSeason: season,
+    failedContracts: 0,
   };
 
   return {
@@ -282,6 +283,7 @@ export function processRetainerFailure(
   // Check if this triggers termination
   const relationship = updated.clientRelationships.find((cr) => cr.clubId === clubId);
   if (relationship && relationship.satisfaction < 25) {
+    const failedContracts = (relationship.failedContracts ?? 0) + 1;
     // Terminate the contract
     updated = {
       ...updated,
@@ -293,7 +295,9 @@ export function processRetainerFailure(
     updated = {
       ...updated,
       clientRelationships: updated.clientRelationships.map((cr) =>
-        cr.clubId === clubId ? { ...cr, status: "lost" as const } : cr,
+        cr.clubId === clubId
+          ? { ...cr, status: "lost" as const, failedContracts }
+          : cr,
       ),
     };
 
@@ -302,15 +306,9 @@ export function processRetainerFailure(
       body: `Your retainer contract has been terminated due to consistently missed deliverables. Reputation penalty applied. (-5 reputation)`,
     });
 
-    // Check for blacklist (3 failures with same club)
-    const failuresWithClub = (updated.clientRelationships.find((cr) => cr.clubId === clubId)?.totalReportsDelivered ?? 0) === 0
-      ? (updated.failedContractCount ?? 0)
-      : 0;
-
-    // Simple blacklist check: track in blacklistedClubs
     const existingBlacklist = updated.blacklistedClubs ?? [];
-    const clubFailures = existingBlacklist.filter((id) => id === clubId).length;
-    if (clubFailures >= 2) {
+    const clubFailures = failedContracts;
+    if (clubFailures >= 3 && !existingBlacklist.includes(clubId)) {
       // Third failure — permanent blacklist
       updated = {
         ...updated,
@@ -321,10 +319,9 @@ export function processRetainerFailure(
         body: "After three failed contracts, this club has permanently blacklisted you. You can no longer do business with them.",
       });
     } else {
-      // Track the failure for blacklist counting
       updated = {
         ...updated,
-        blacklistedClubs: [...existingBlacklist, clubId],
+        blacklistedClubs: existingBlacklist,
       };
     }
   } else {
@@ -338,43 +335,9 @@ export function processRetainerFailure(
 }
 
 /**
- * Check if a club is blacklisted (3+ entries in blacklistedClubs).
+ * Check if a club has reached permanent blacklist status.
  */
 export function isClubBlacklisted(finances: FinancialRecord, clubId: string): boolean {
   const blacklist = finances.blacklistedClubs ?? [];
-  return blacklist.filter((id) => id === clubId).length >= 3;
-}
-
-/**
- * Check retainer deliverables for all active contracts and process failures.
- * Called monthly (every 4 weeks).
- */
-export function checkRetainerDeliverables(
-  finances: FinancialRecord,
-  week: number,
-  season: number,
-): { finances: FinancialRecord; messages: { title: string; body: string }[] } {
-  if (week % 4 !== 0) return { finances, messages: [] };
-
-  let updated = finances;
-  const allMessages: { title: string; body: string }[] = [];
-
-  for (const contract of updated.retainerContracts) {
-    if (contract.reportsDeliveredThisMonth < contract.requiredReportsPerMonth) {
-      const result = processRetainerFailure(updated, contract.clubId, week, season);
-      updated = result.finances;
-      allMessages.push(...result.messages);
-    }
-  }
-
-  // Reset monthly report counts for surviving contracts
-  updated = {
-    ...updated,
-    retainerContracts: updated.retainerContracts.map((c) => ({
-      ...c,
-      reportsDeliveredThisMonth: 0,
-    })),
-  };
-
-  return { finances: updated, messages: allMessages };
+  return blacklist.includes(clubId);
 }

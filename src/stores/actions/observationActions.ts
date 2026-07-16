@@ -47,9 +47,14 @@ import { ALL_PERKS } from "@/engine/specializations/perks";
 import { calculateSystemFit } from "@/engine/firstTeam";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { observePlayerLight } from "@/engine/scout/perception";
-import { applyRegionalPresenceToObservation } from "@/engine/world/regionalPresence";
+import {
+  applyRegionalPresenceToObservation,
+  getPlayerScoutingCountry,
+} from "@/engine/world/regionalPresence";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
+import { isScoutAbroad } from "@/engine/world/travel";
+import { normalizeCountryKey } from "@/lib/country";
 import {
   claimOpeningDiscovery,
   isOpeningDiscoverySession,
@@ -277,7 +282,8 @@ function buildInteractiveObservationBatch(
   unsignedYouth: GameState["unsignedYouth"];
   simulatedYouth?: Record<string, UnsignedYouth>;
 } {
-  const context = getInteractiveObservationContext(session.activityType);
+  const context = session.situation?.observationContext
+    ?? getInteractiveObservationContext(session.activityType);
   const observations: Record<string, Observation> = {};
   const observationIds: string[] = [];
   const players = { ...gameState.players };
@@ -333,6 +339,7 @@ function buildInteractiveObservationBatch(
         flaggedMoments,
         sourceSessionId: session.id,
         activityInstanceId: session.activityInstanceId,
+        situation: session.situation,
       },
     );
     const observation = applyRegionalPresenceToObservation(gameState, {
@@ -522,6 +529,20 @@ export function createObservationActions(get: GetState, set: SetState) {
         targetId,
         options?.contactId,
       );
+      const countryId = targetId
+        ? getPlayerScoutingCountry(gameState, targetId)
+        : undefined;
+      const regionalKnowledge = countryId
+        ? gameState.regionalKnowledge[countryId]
+          ?? Object.values(gameState.regionalKnowledge).find(
+            (knowledge) => knowledge.countryId === countryId,
+          )
+        : undefined;
+      const activeTravelPosture = gameState.scout.travelBooking
+        && isScoutAbroad(gameState.scout, gameState.currentWeek)
+        && normalizeCountryKey(gameState.scout.travelBooking.destinationCountry) === countryId
+        ? gameState.scout.travelBooking.posture
+        : undefined;
 
       const config = {
         activityType: activityType as ActivityType,
@@ -533,6 +554,9 @@ export function createObservationActions(get: GetState, set: SetState) {
         seed: `${gameState.seed}-session-${seedKey}`,
         week: gameState.currentWeek,
         season: gameState.currentSeason,
+        countryId,
+        culturalInsights: regionalKnowledge?.culturalInsights,
+        travelPosture: activeTravelPosture,
         careerPath: gameState.scout.careerPath as "club" | "independent" | undefined,
         sourceContactId: sourceContact?.id,
         sourceContactName: sourceContact?.name,

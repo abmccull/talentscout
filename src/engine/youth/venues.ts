@@ -20,7 +20,10 @@ import type {
   YouthVenueType,
   TournamentEvent,
 } from "@/engine/core/types";
-import { observePlayerLight } from "@/engine/scout/perception";
+import {
+  observePlayerLight,
+  type LightObservationEvidenceOptions,
+} from "@/engine/scout/perception";
 import { isScoutAbroad } from "@/engine/world/travel";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
@@ -357,6 +360,7 @@ export function processVenueObservation(
   extraAttributes?: number,
   /** Tournament context — applies observation and buzz bonuses. */
   tournament?: TournamentEvent,
+  evidenceOptions?: LightObservationEvidenceOptions,
 ): {
   observation: Observation;
   buzzIncrease: number;
@@ -372,6 +376,7 @@ export function processVenueObservation(
     context,
     existingObservations,
     totalExtraAttributes > 0 ? totalExtraAttributes : undefined,
+    evidenceOptions,
   );
 
   // Stamp week and season (perception engine leaves these as 0)

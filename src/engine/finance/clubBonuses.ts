@@ -8,6 +8,7 @@ import type {
   ConvictionLevel,
   PerformanceReview,
   JobOffer,
+  ScoutEmploymentContract,
 } from "../core/types";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +22,31 @@ import type {
 export function calculatePerformanceBonusAmount(
   review: PerformanceReview,
   careerTier: CareerTier,
+  contract?: Pick<
+    ScoutEmploymentContract,
+    "weeklySalary" | "performanceBonusRate"
+  >,
 ): number {
+  if (contract && contract.performanceBonusRate > 0) {
+    const outcomeMultiplier: Record<PerformanceReview["outcome"], number> = {
+      promoted: 1,
+      retained: 0.6,
+      warning: 0,
+      fired: 0,
+    };
+    const objectives = review.contractSummary;
+    const objectiveCompletion = objectives && objectives.objectivesTotal > 0
+      ? objectives.objectivesMet / objectives.objectivesTotal
+      : 1;
+    return Math.round(
+      Math.max(0, contract.weeklySalary)
+      * 52
+      * Math.max(0, contract.performanceBonusRate)
+      * outcomeMultiplier[review.outcome]
+      * objectiveCompletion,
+    );
+  }
+
   if (careerTier < 2) return 0;
 
   const baseBonuses: Record<CareerTier, number> = {
@@ -55,6 +80,7 @@ export function calculatePerformanceBonusAmount(
  */
 export function calculateSigningBonus(offer: JobOffer): number {
   if (offer.tier < 3) return 0;
+  if (offer.signingBonus !== undefined) return Math.max(0, offer.signingBonus);
 
   const signingBonuses: Record<CareerTier, number> = {
     1: 0,
@@ -137,13 +163,18 @@ export function calculateDepartmentBonusPool(
 
 /**
  * Calculate the golden parachute payout when a tier 5 scout is fired.
- * Equal to contractLength * 4 * weekly salary.
+ * Uses the negotiated severance window, capped by time remaining.
  */
 export function calculateGoldenParachute(
   salary: number,
   contractRemainingSeasons: number,
+  contractedSeveranceWeeks?: number,
 ): number {
   if (contractRemainingSeasons <= 0) return 0;
-  // 4 monthly payments per remaining season
-  return contractRemainingSeasons * 4 * salary;
+  const remainingContractWeeks = contractRemainingSeasons * 52;
+  const severanceWeeks = Math.min(
+    remainingContractWeeks,
+    Math.max(0, contractedSeveranceWeeks ?? Math.min(26, contractRemainingSeasons * 8)),
+  );
+  return Math.round(severanceWeeks * Math.max(0, salary));
 }

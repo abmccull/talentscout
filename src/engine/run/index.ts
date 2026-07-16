@@ -4,7 +4,12 @@ export type {
   CreateRunManifestInput,
   SeedScopePart,
 } from "./runManifest";
-export type { RunIntegrity, RunManifest } from "@/engine/core/types";
+export type {
+  GameModeId,
+  RunIntegrity,
+  RunKind,
+  RunManifest,
+} from "@/engine/core/types";
 export type {
   RunSimulationModifiers,
   WorldTraitDefinition,
@@ -32,8 +37,11 @@ export {
   createDeterministicRunId,
   createNamedRNG,
   createRunManifest,
+  deriveGameModeIdFromSpecialization,
   deriveNamedSeed,
   formatRunFingerprint,
+  getRunGameModeId,
+  getRunKind,
   repairRunManifest,
   stableFingerprint,
   stableSerialize,

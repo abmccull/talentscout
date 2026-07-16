@@ -13,7 +13,11 @@ import {
   deriveRegionalPresence,
   getRegionalTravelQuote,
 } from "@/engine/world/regionalPresence";
-import { getScoutHomeCountry } from "@/engine/world/travel";
+import {
+  bookTravel,
+  getScoutHomeCountry,
+  getTravelPostureEffects,
+} from "@/engine/world/travel";
 import { processRegionalKnowledgeGrowth } from "@/engine/specializations/regionalKnowledge";
 import { assignEmployeeToSatellite } from "@/engine/finance/internationalExpansion";
 import { fireEmployee } from "@/engine/finance/agency";
@@ -196,6 +200,23 @@ function state(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("regional presence invariants", () => {
+  it("keeps legacy bookings neutral and persists a posture on every new trip", () => {
+    const neutralEffects = {
+      observationSignalMultiplier: 1,
+      observationUncertaintyMultiplier: 1,
+      regionalKnowledgeMultiplier: 1,
+      contactQualityMultiplier: 1,
+      discoveryMultiplier: 1,
+      opportunityMultiplier: 1,
+      costMultiplier: 1,
+      fatigueMultiplier: 1,
+    };
+    expect(getTravelPostureEffects(undefined)).toEqual(neutralEffects);
+    expect(getTravelPostureEffects("legacy-posture" as never)).toEqual(neutralEffects);
+    expect(bookTravel(scout(), "brazil", 9, 2).travelBooking?.posture)
+      .toBe("assignmentFirst");
+  });
+
   it("keeps the permanent home base stable when foreign familiarity overtakes it", () => {
     expect(getScoutHomeCountry(state().scout)).toBe("england");
   });
@@ -216,6 +237,10 @@ describe("regional presence invariants", () => {
 
     expect(established.generatedWorldEligible).toBe(true);
     expect(established.accessScore).toBeGreaterThan(remote.accessScore);
+    expect(established.dimensions.access).toBeGreaterThan(remote.dimensions.access);
+    expect(established.dimensions.intelligence).toBeGreaterThan(remote.dimensions.intelligence);
+    expect(established.dimensions.relationships).toBeGreaterThan(remote.dimensions.relationships);
+    expect(established.dimensions.logistics).toBeGreaterThan(remote.dimensions.logistics);
     expect(established.effects.discoveryMultiplier).toBeGreaterThan(1);
     expect(established.effects.observationConfidenceBonus).toBeGreaterThan(0);
     expect(established.effects.dataConfidenceBonus).toBeGreaterThan(0);
@@ -226,6 +251,26 @@ describe("regional presence invariants", () => {
     expect(established.effects.passiveKnowledgeGain).toBeGreaterThan(0);
   });
 
+  it("lets specialist staff improve the capability they actually provide", () => {
+    const analystRecord = finances();
+    analystRecord.employees = [employee("specialist", "analyst")];
+    analystRecord.satelliteOffices[0].employeeIds = ["specialist"];
+    const administratorRecord = finances();
+    administratorRecord.employees = [employee("specialist", "administrator")];
+    administratorRecord.satelliteOffices[0].employeeIds = ["specialist"];
+
+    const analystPresence = deriveRegionalPresence(state({ finances: analystRecord }), "brazil");
+    const administratorPresence = deriveRegionalPresence(
+      state({ finances: administratorRecord }),
+      "brazil",
+    );
+
+    expect(analystPresence.dimensions.intelligence)
+      .toBeGreaterThan(administratorPresence.dimensions.intelligence);
+    expect(administratorPresence.dimensions.logistics)
+      .toBeGreaterThan(analystPresence.dimensions.logistics);
+  });
+
   it("quotes a staffed route cheaper, shorter, and less fatiguing than base travel", () => {
     const quote = getRegionalTravelQuote(state(), "brazil");
 
@@ -233,6 +278,55 @@ describe("regional presence invariants", () => {
     expect(quote.slots).toBeLessThanOrEqual(quote.baseSlots);
     expect(quote.duration).toBeLessThanOrEqual(quote.baseDuration);
     expect(quote.fatigueMultiplier).toBeLessThan(1);
+  });
+
+  it("makes trip postures create real cost, fatigue, and opportunity tradeoffs", () => {
+    const assignmentQuote = getRegionalTravelQuote(state(), "brazil", "assignmentFirst");
+    const deepDiveQuote = getRegionalTravelQuote(state(), "brazil", "deepDive");
+    const blitzQuote = getRegionalTravelQuote(state(), "brazil", "opportunityBlitz");
+    const assignmentScout = scout();
+    assignmentScout.travelBooking = {
+      destinationCountry: "brazil",
+      departureWeek: 7,
+      returnWeek: 10,
+      cost: assignmentQuote.cost,
+      isAbroad: true,
+      posture: "assignmentFirst",
+    };
+    const blitzScout = {
+      ...assignmentScout,
+      travelBooking: {
+        ...assignmentScout.travelBooking,
+        cost: blitzQuote.cost,
+        posture: "opportunityBlitz" as const,
+      },
+    };
+    const assignmentPresence = deriveRegionalPresence(
+      state({ scout: assignmentScout }),
+      "brazil",
+    );
+    const blitzPresence = deriveRegionalPresence(state({ scout: blitzScout }), "brazil");
+
+    expect(deepDiveQuote.cost).toBeGreaterThan(assignmentQuote.cost);
+    expect(blitzQuote.cost).toBeGreaterThan(deepDiveQuote.cost);
+    expect(blitzQuote.fatigueMultiplier).toBeGreaterThan(deepDiveQuote.fatigueMultiplier);
+    expect(blitzPresence.effects.discoveryMultiplier)
+      .toBeGreaterThan(assignmentPresence.effects.discoveryMultiplier);
+    expect(blitzPresence.effects.opportunityMultiplier)
+      .toBeGreaterThan(assignmentPresence.effects.opportunityMultiplier);
+
+    const quoteFromControlledTrip = getRegionalTravelQuote(
+      state({ scout: assignmentScout }),
+      "brazil",
+      "deepDive",
+    );
+    const quoteFromBlitzTrip = getRegionalTravelQuote(
+      state({ scout: blitzScout }),
+      "brazil",
+      "deepDive",
+    );
+    expect(quoteFromBlitzTrip.fatigueMultiplier)
+      .toBeCloseTo(quoteFromControlledTrip.fatigueMultiplier, 8);
   });
 
   it("turns a seeded regional transport shock into real quote and explanation changes", () => {
@@ -370,6 +464,12 @@ describe("regional presence invariants", () => {
     const ghost = deriveRegionalPresence(state(), "spain");
     expect(ghost.generatedWorldEligible).toBe(false);
     expect(ghost.accessScore).toBe(0);
+    expect(ghost.dimensions).toEqual({
+      access: 0,
+      intelligence: 0,
+      relationships: 0,
+      logistics: 0,
+    });
     expect(ghost.effects.discoveryMultiplier).toBe(0);
     expect(ghost.effects.opportunityMultiplier).toBe(0);
   });

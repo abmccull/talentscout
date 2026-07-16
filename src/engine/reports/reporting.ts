@@ -617,7 +617,10 @@ export function estimateReportQuality(params: {
 
 export interface ReportCraftQualityDetailed {
   score: number;
-  breakdown: QualityBreakdown & { equipmentBonus: number };
+  breakdown: QualityBreakdown & {
+    equipmentBonus: number;
+    analystReviewBonus: number;
+  };
   hints: string[];
 }
 
@@ -632,6 +635,7 @@ export function calculateReportCraftQualityDetailed(
   scout: Scout,
   playerContext: Pick<Player, "age" | "position">,
   reportQualityBonus = 0,
+  analystReviewBonus = 0,
 ): ReportCraftQualityDetailed {
   const readings = observations.flatMap((observation) => observation.attributeReadings);
   const avgConfidence = readings.length > 0
@@ -657,12 +661,17 @@ export function calculateReportCraftQualityDetailed(
     perceivedPA,
   });
   const equipmentBonus = Math.max(0, reportQualityBonus) * 100;
+  const boundedAnalystReviewBonus = Math.max(0, Math.min(6, analystReviewBonus));
 
   return {
-    score: Math.round(Math.max(0, Math.min(100, preview.score + equipmentBonus))),
+    score: Math.round(Math.max(
+      0,
+      Math.min(100, preview.score + equipmentBonus + boundedAnalystReviewBonus),
+    )),
     breakdown: {
       ...preview.breakdown,
       equipmentBonus: Math.round(equipmentBonus * 10) / 10,
+      analystReviewBonus: Math.round(boundedAnalystReviewBonus * 10) / 10,
     },
     hints: preview.hints,
   };
@@ -681,6 +690,8 @@ export interface PrepareReportSubmissionInput {
   observations: Observation[];
   playerContext: Pick<Player, "age" | "position">;
   reportQualityBonus?: number;
+  /** Additive, player-visible craft points from one eligible analyst artifact. */
+  analystReviewBonus?: number;
 }
 
 /**
@@ -712,6 +723,7 @@ export function prepareReportSubmission(
       input.scout,
       input.playerContext,
       input.reportQualityBonus,
+      input.analystReviewBonus,
     ),
   };
 }

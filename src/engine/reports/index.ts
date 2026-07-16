@@ -47,11 +47,13 @@ export {
   validateStructuredReportInput,
 } from "./structuredYouthReport";
 export {
+  describePresentationRoom,
   evaluatePresentationStrategy,
   PRESENTATION_APPROACHES,
 } from "./presentationStrategy";
 export type {
   PresentationApproachDefinition,
+  PresentationRoomRead,
   PresentationStrategyImpact,
   PresentationStrategyInput,
 } from "./presentationStrategy";

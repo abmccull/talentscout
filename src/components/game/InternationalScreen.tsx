@@ -7,8 +7,12 @@ import { useAudio } from "@/lib/audio/useAudio";
 import { GameLayout } from "./GameLayout";
 import { Globe2, MapPin, Wallet, Plane, Search, X } from "lucide-react";
 import { getCountryOptions, getSecondaryCountryOptions } from "@/data/index";
-import type { CountryReputation, InternationalAssignment, TravelBooking } from "@/engine/core/types";
-import { getScoutHomeCountry, getContinentId } from "@/engine/world/travel";
+import type { CountryReputation, InternationalAssignment, TravelBooking, TravelPosture } from "@/engine/core/types";
+import {
+  getScoutHomeCountry,
+  getContinentId,
+  TRAVEL_POSTURE_DEFINITIONS,
+} from "@/engine/world/travel";
 import { deriveRegionalPresence, getRegionalTravelQuote } from "@/engine/world/regionalPresence";
 import { getAvailableAssignments } from "@/engine/world/international";
 import { WorldMap } from "@/components/game/WorldMap";
@@ -100,6 +104,7 @@ function LegendHUD() {
   return (
     <div
       className="absolute bottom-3 left-3 z-20 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md"
+      role="group"
       aria-label="Map legend"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -311,7 +316,11 @@ function CountryBrowser({
                   <button
                     type="button"
                     data-country-key={country.countryKey}
-                    onClick={(event) => onOpenCountry(country.countryKey, event.currentTarget)}
+                    onClick={(event) => {
+                      const dossierTrigger = triggerRef.current ?? event.currentTarget;
+                      setOpen(false);
+                      onOpenCountry(country.countryKey, dossierTrigger);
+                    }}
                     className="min-h-14 w-full rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2.5 text-left transition hover:border-blue-400/55 hover:bg-blue-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
                     aria-label={`${countryName}, ${contentTierLabel}, knowledge ${knowledge} of 100, operational presence ${presenceScores[country.countryKey] ?? 0} of 100. Open country dossier.`}
                   >
@@ -366,7 +375,7 @@ function BookingBanner({ booking, homeName }: { booking: TravelBooking; homeName
         {isAbroad ? (
           <>Scouting in <span className="font-semibold text-white">{destName}</span> · Returns Wk {booking.returnWeek}</>
         ) : (
-          <>Travel to <span className="font-semibold text-white">{destName}</span> · Dep: Wk {booking.departureWeek} · Ret: Wk {booking.returnWeek}</>
+          <>Travel to <span className="font-semibold text-white">{destName}</span> · {booking.posture ? TRAVEL_POSTURE_DEFINITIONS[booking.posture].label : "Legacy itinerary"} · Dep: Wk {booking.departureWeek} · Ret: Wk {booking.returnWeek}</>
         )}
       </span>
       <span className="text-xs text-zinc-500">· £{booking.cost.toLocaleString()}</span>
@@ -590,6 +599,7 @@ export function InternationalScreen() {
   const [popupPos, setPopupPos] = useState<{ x: number; y: number } | null>(null);
   const [popupAnchor, setPopupAnchor] = useState<"map" | "browser" | null>(null);
   const [justBooked, setJustBooked] = useState(false);
+  const [travelPosture, setTravelPosture] = useState<TravelPosture>("assignmentFirst");
 
   const rememberPopupTrigger = useCallback((candidate: Element | null) => {
     const container = containerRef.current;
@@ -686,7 +696,7 @@ export function InternationalScreen() {
       ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
       : undefined;
     const travelCost = Math.round(
-      getRegionalTravelQuote(gameState, selectedCountry).cost
+      getRegionalTravelQuote(gameState, selectedCountry, travelPosture).cost
         * (1 - (equipmentBonuses?.travelCostReduction ?? 0)),
     );
     if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
@@ -704,8 +714,9 @@ export function InternationalScreen() {
         ? {
             duration: selectedAssignment.duration,
             assignmentId: selectedAssignment.id,
+            posture: travelPosture,
           }
-        : undefined,
+        : { posture: travelPosture },
     );
     if (!booked) return;
     playSFX("travel");
@@ -715,7 +726,7 @@ export function InternationalScreen() {
     bookTimerRef.current = setTimeout(() => {
       handleClose();
     }, 1500);
-  }, [gameState, selectedCountry, playSFX, bookInternationalTravel, handleClose]);
+  }, [gameState, selectedCountry, travelPosture, playSFX, bookInternationalTravel, handleClose]);
 
   const handleAcceptAssignment = useCallback((assignmentId: string) => {
     if (!gameState) return;
@@ -728,7 +739,7 @@ export function InternationalScreen() {
       ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
       : undefined;
     const travelCost = Math.round(
-      getRegionalTravelQuote(gameState, assignment.country).cost
+      getRegionalTravelQuote(gameState, assignment.country, "assignmentFirst").cost
         * (1 - (equipmentBonuses?.travelCostReduction ?? 0)),
     );
     if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
@@ -736,6 +747,7 @@ export function InternationalScreen() {
     const booked = bookInternationalTravel(assignment.country, {
       duration: assignment.duration,
       assignmentId: assignment.id,
+      posture: "assignmentFirst",
     });
     if (!booked) return;
     playSFX("travel");
@@ -878,8 +890,13 @@ export function InternationalScreen() {
   const travelEquipmentBonuses = gameState.finances?.equipment
     ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
     : undefined;
-  const effectiveTravelQuoteFor = (country: string) => {
-    const quote = getRegionalTravelQuote(gameState, country);
+  const effectiveTravelQuoteFor = (
+    country: string,
+    posture: TravelPosture = country === selectedCountry
+      ? travelPosture
+      : "assignmentFirst",
+  ) => {
+    const quote = getRegionalTravelQuote(gameState, country, posture);
     return {
       ...quote,
       cost: Math.round(
@@ -1005,7 +1022,7 @@ export function InternationalScreen() {
           activeAssignment={activeAssignment}
           canAcceptAssignments={canAcceptAssignments}
           scoutBalance={scoutBalance}
-          travelCostFor={(country) => effectiveTravelQuoteFor(country).cost}
+          travelCostFor={(country) => effectiveTravelQuoteFor(country, "assignmentFirst").cost}
           canFitTravel={canFitTravel}
           onOpenAssignment={(country) => {
             const position = getCountryMapPosition(country);
@@ -1050,6 +1067,8 @@ export function InternationalScreen() {
             regionalKnowledge={selectedRegionalKnowledge}
             regionalPresence={selectedTravelQuote?.presence}
             discoveredHiddenLeagues={selectedHiddenLeagues}
+            travelPosture={travelPosture}
+            onTravelPostureChange={setTravelPosture}
             onBookTravel={handleBookTravel}
             onClose={handleClose}
           />

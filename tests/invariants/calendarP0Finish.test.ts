@@ -258,6 +258,15 @@ describe.each(CALENDAR_LENGTHS)("remaining calendar authority (%i-week season)",
       season: 1,
       week: seasonLength,
     });
+    const replayedAwards = processAnnualAwards(
+      alwaysRng,
+      awards.finances,
+      { ...scout(), reputation: 80, independentTier: 5 },
+      1,
+      seasonLength,
+    );
+    expect(replayedAwards.wonAwards).toEqual([]);
+    expect(replayedAwards.finances).toBe(awards.finances);
   });
 });
 

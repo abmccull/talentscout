@@ -677,8 +677,14 @@ interface SetupViewProps {
   onBegin: () => void;
 }
 
+function formatSituationLabel(value: string): string {
+  return value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase());
+}
+
 const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) {
-  const { venueAtmosphere, players, mode } = session;
+  const { venueAtmosphere, players, mode, situation } = session;
   const ModeIcon = MODE_ICONS[mode];
   const isOpeningDiscovery = isOpeningDiscoverySession(session);
   const veteranPrologue = useGameStore((state) => state.gameState?.veteranPrologue);
@@ -851,6 +857,36 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
                 </span>
               ))}
             </div>
+          )}
+        </div>
+      )}
+
+      {situation && (
+        <div className="mb-4 w-full max-w-sm rounded-lg border border-sky-500/20 bg-sky-500/5 p-4 text-left">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+            What this situation can reveal
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded bg-black/20 p-2">
+              <p className="text-[9px] text-zinc-500">Level</p>
+              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.competitionLevel)}</p>
+            </div>
+            <div className="rounded bg-black/20 p-2">
+              <p className="text-[9px] text-zinc-500">Stakes</p>
+              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.stakes)}</p>
+            </div>
+            <div className="rounded bg-black/20 p-2">
+              <p className="text-[9px] text-zinc-500">Tactical frame</p>
+              <p className="mt-0.5 text-[10px] font-medium text-white">{formatSituationLabel(situation.tacticalFrame)}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">
+            Evidence uncertainty ×{situation.uncertaintyMultiplier.toFixed(2)} · Misleading-sample risk {Math.round(situation.misleadingSignalRisk * 100)}%
+          </p>
+          {situation.biasWarnings[0] && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-amber-200/80">
+              Watch for: {situation.biasWarnings[0]}
+            </p>
           )}
         </div>
       )}
@@ -1345,6 +1381,9 @@ export function ObservationScreen() {
                 {activeSession.activityType.replace(/([A-Z])/g, " $1").trim()}
                 {mode === "fullObservation" && activeSession.venueAtmosphere?.weather
                   ? ` · ${activeSession.venueAtmosphere.weather}`
+                  : ""}
+                {activeSession.situation
+                  ? ` · ${formatSituationLabel(activeSession.situation.stakes)} stakes · ${formatSituationLabel(activeSession.situation.tacticalFrame)}`
                   : ""}
               </p>
             )}

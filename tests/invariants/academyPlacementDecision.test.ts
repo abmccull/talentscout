@@ -189,12 +189,139 @@ describe("academy placement decisions", () => {
     expect(strong.breakdown.total).toBeGreaterThan(weak.breakdown.total + 35);
     expect(strong.breakdown).toMatchObject({
       briefFit: 100,
-      affordability: 100,
-      conviction: 94,
+      affordability: 88,
+      conviction: 82,
+      calibration: 70,
     });
     expect(strong.breakdown.evidence).toBeGreaterThan(weak.breakdown.evidence);
-    expect(strong.breakdown.risk).toBeGreaterThan(weak.breakdown.risk);
     expect(strong.breakdown.competition).toBeGreaterThan(weak.breakdown.competition);
+    expect(strong.reasons.join(" ")).toContain("Declared confidence outruns");
+  });
+
+  it("caps unsupported confidence and penalizes certainty that outruns evidence", () => {
+    const oneContext = observations().slice(0, 1);
+    const medium = report({
+      conviction: "tablePound",
+      projectedRole: "boxToBox",
+      recommendedAction: "offerAcademyPlace",
+      estimatedWeeklyWage: 650,
+      riskFactors: ["Physical adaptation", "Character uncertainty"],
+      categoryVerdicts: {
+        potential: verdict("medium", "hyp-shared"),
+        roleFit: verdict("medium", "hyp-shared"),
+        characterRisk: verdict("medium", "hyp-shared"),
+      },
+    });
+    const high = report({
+      ...medium,
+      categoryVerdicts: {
+        potential: verdict("high", "hyp-shared"),
+        roleFit: verdict("high", "hyp-shared"),
+        characterRisk: verdict("high", "hyp-shared"),
+      },
+    });
+    const shared = {
+      brief: brief(),
+      player: visiblePlayer,
+      observations: oneContext,
+      scout: decisionScout,
+      club: club(),
+      relationshipScore: 35,
+    };
+    const mediumDecision = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("confidence-calibration"),
+      report: medium,
+    });
+    const highDecision = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("confidence-calibration"),
+      report: high,
+    });
+
+    expect(highDecision.breakdown.evidence).toBe(mediumDecision.breakdown.evidence);
+    expect(highDecision.breakdown.calibration).toBeLessThan(
+      mediumDecision.breakdown.calibration ?? 0,
+    );
+    expect(highDecision.breakdown.conviction).toBeLessThan(
+      mediumDecision.breakdown.conviction,
+    );
+    expect(highDecision.breakdown.total).toBeLessThan(mediumDecision.breakdown.total);
+  });
+
+  it("treats impossible wage estimates as uncertainty rather than free affordability", () => {
+    const shared = {
+      brief: brief(),
+      player: visiblePlayer,
+      observations: observations(),
+      scout: decisionScout,
+      club: club(),
+      relationshipScore: 50,
+    };
+    const zeroWage = report({
+      estimatedWeeklyWage: 0,
+      projectedRole: "boxToBox",
+      recommendedAction: "offerAcademyPlace",
+      categoryVerdicts: structuredInput().categoryVerdicts,
+    });
+    const credibleWage = { ...zeroWage, estimatedWeeklyWage: 650 };
+    const zeroDecision = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("wage-credibility"),
+      report: zeroWage,
+    });
+    const credibleDecision = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("wage-credibility"),
+      report: credibleWage,
+    });
+
+    expect(zeroDecision.breakdown.affordability).toBe(0);
+    expect(credibleDecision.breakdown.affordability).toBeGreaterThan(80);
+    expect(validateStructuredReportInput(
+      structuredInput({ estimatedWeeklyWage: 0 }),
+      brief(),
+    ).valid).toBe(false);
+  });
+
+  it("rewards honest, distinct risk disclosure instead of report-polishing omissions", () => {
+    const oneRisk = report({
+      estimatedWeeklyWage: 650,
+      projectedRole: "boxToBox",
+      recommendedAction: "offerAcademyPlace",
+      riskFactors: ["Physical adaptation"],
+      categoryVerdicts: structuredInput().categoryVerdicts,
+    });
+    const threeRisks = {
+      ...oneRisk,
+      riskFactors: [
+        "Physical adaptation",
+        "Family relocation",
+        "Education disruption",
+      ],
+    };
+    const shared = {
+      brief: brief(),
+      player: visiblePlayer,
+      observations: observations(),
+      scout: decisionScout,
+      club: club(),
+      relationshipScore: 50,
+    };
+    const oneRiskDecision = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("risk-disclosure"),
+      report: oneRisk,
+    });
+    const threeRiskDecision = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("risk-disclosure"),
+      report: threeRisks,
+    });
+
+    expect(threeRiskDecision.breakdown.risk).toBeGreaterThan(
+      oneRiskDecision.breakdown.risk,
+    );
   });
 
   it("is invariant to hidden current and potential ability values", () => {

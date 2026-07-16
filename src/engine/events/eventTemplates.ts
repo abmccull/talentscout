@@ -19,6 +19,11 @@ import {
 } from "@/engine/content/contracts";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
+import {
+  FACTUAL_NARRATIVE_TRUTH_CONTRACTS,
+  MATERIAL_FACTUAL_NARRATIVE_TYPES,
+  type NarrativeTruthContract,
+} from "./narrativeTruth";
 
 // =============================================================================
 // EventContext — fields extracted from GameState for template rendering
@@ -42,6 +47,10 @@ export interface EventContext {
   careerTier?: number;
   /** The scout's current reputation (0–100). */
   reputation?: number;
+  /** Name of an authoritative tournament record. */
+  tournamentName?: string;
+  /** Host country attached to an authoritative tournament record. */
+  countryName?: string;
 }
 
 // =============================================================================
@@ -60,6 +69,8 @@ export interface EventTemplate {
    * Called during weekly event generation to filter the eligible pool.
    */
   prerequisites: (state: GameState) => boolean;
+  /** Required for prose that asserts a material world fact. */
+  truth?: NarrativeTruthContract;
   /** Optional player-facing choices. Each item has a label and an effect tag. */
   choices?: ReadonlyArray<{
     label: string;
@@ -264,18 +275,19 @@ const exclusiveTipTemplate: EventTemplate = {
 
 const debutHatTrickTemplate: EventTemplate = {
   type: "debutHatTrick",
-  titleTemplate: "Your Target Scores Debut Hat-Trick",
+  titleTemplate: "Reported Player Records Debut Hat-Trick",
   descriptionTemplate: (ctx) => {
     const player = ctx.playerName ?? "a player you reported on";
     return (
-      `${player} marked their senior debut in spectacular fashion, netting a ` +
-      `hat-trick in front of a packed crowd. Your report on this player is now ` +
-      `being discussed in the boardroom with fresh urgency. Club executives who ` +
-      `initially filed the report away are re-reading every line. Your eye for ` +
-      `talent is under the spotlight — and the moment is yours to own.`
+      `The match record shows ${player} scored three goals in their first recorded ` +
+      `appearance. Your report predates that performance, giving you a useful ` +
+      `comparison between the evidence available then and what happened on the ` +
+      `pitch. One exceptional match is not a career verdict, but it is a real ` +
+      `reason to revisit the assessment.`
     );
   },
   prerequisites: (state) => Object.keys(state.reports).length > 0,
+  truth: FACTUAL_NARRATIVE_TRUTH_CONTRACTS.debutHatTrick,
   choices: undefined,
 };
 
@@ -285,14 +297,15 @@ const targetInjuredTemplate: EventTemplate = {
   descriptionTemplate: (ctx) => {
     const player = ctx.playerName ?? "one of your current targets";
     return (
-      `Unfortunate news: ${player} has picked up an injury during training and ` +
-      `is expected to be sidelined for several weeks. Your active observation ` +
-      `programme will need to be paused. Depending on the severity, this could ` +
-      `affect the player's form and market value. It may also be an opportunity ` +
-      `to assess their recovery professionalism and mental resilience.`
+      `${player} now has an active injury in the canonical medical record. ` +
+      `Immediate live-observation plans may need to change while the player is ` +
+      `unavailable. The injury does not by itself prove a long-term decline, but ` +
+      `the recovery process can become relevant evidence for availability and ` +
+      `professionalism.`
     );
   },
   prerequisites: (state) => Object.keys(state.observations).length > 0,
+  truth: FACTUAL_NARRATIVE_TRUTH_CONTRACTS.targetInjured,
   choices: undefined,
 };
 
@@ -391,8 +404,8 @@ const burnoutTemplate: EventTemplate = {
   type: "burnout",
   titleTemplate: "On the Edge of Burnout",
   descriptionTemplate: (_ctx) =>
-    "Weeks of relentless travel, late nights in damp stadiums, and the " +
-    "constant pressure of delivering results have finally caught up with you. " +
+    "Your accumulated workload and the constant pressure of delivering results " +
+    "have finally caught up with you. " +
     "Your concentration is slipping mid-match and your notes are getting " +
     "sloppy — telltale signs that your body and mind are crying out for rest. " +
     "Pushing through might cost you accuracy on your next report; stepping " +
@@ -479,15 +492,13 @@ const mediaInterviewTemplate: EventTemplate = {
 
 const healthScareTemplate: EventTemplate = {
   type: "healthScare",
-  titleTemplate: "Health Scare Grounds You",
+  titleTemplate: "Fatigue Warning",
   descriptionTemplate: (_ctx) =>
-    "A dizzy spell during a match observation — followed by a worrying " +
-    "conversation with your doctor — has forced a moment of honest " +
-    "self-reflection. The lifestyle of a working scout, with its erratic " +
-    "hours, poor diet, and chronic sleep debt, extracts a physical toll that " +
-    "is easy to ignore until it isn't. You've been cleared to continue, but " +
-    "the warning is clear: the body has limits, and ignoring them for long " +
-    "enough will eventually make the decision for you.",
+    "Your current fatigue level is affecting concentration and recovery. " +
+    "The lifestyle of a working scout, with its erratic hours and chronic " +
+    "sleep debt, extracts a physical toll that is easy to ignore. Nothing in " +
+    "the schedule has diagnosed a medical problem, but the workload warning " +
+    "is clear: rest now or accept a growing risk of poorer judgment.",
   prerequisites: (state) => state.scout.fatigue > 60,
   choices: undefined,
 };
@@ -670,22 +681,23 @@ const playerHomesickTemplate: EventTemplate = {
 
 const hiddenGemVindicationTemplate: EventTemplate = {
   type: "hiddenGemVindication",
-  titleTemplate: "Early Report Vindicated",
+  titleTemplate: "Early Report Gains New Relevance",
   descriptionTemplate: (ctx) => {
     const player = ctx.playerName ?? "a player you identified early";
+    const club = ctx.clubName ?? "a new club";
     return (
-      `${player}, a name you quietly flagged months ago when nobody else was ` +
-      `looking, has just signed for a top-flight club for a fee that makes ` +
-      `your original assessment look almost prophetic. The football world is ` +
-      `suddenly full of people who claim they always knew — but your report ` +
-      `carries a timestamp that tells the real story. Moments like this are ` +
-      `the reason you do this job.`
+      `${player} has completed a documented move to ${club} after your earlier ` +
+      `report. The transfer does not prove every part of your assessment, and ` +
+      `it does not establish that your report caused the move. It does put a ` +
+      `new timestamp on the player's career, giving you a meaningful future ` +
+      `checkpoint for the judgment you recorded before the move.`
     );
   },
   prerequisites: (state) => {
     const cutoff = state.currentWeek - 10;
     return Object.values(state.reports).some((r) => r.submittedWeek <= cutoff);
   },
+  truth: FACTUAL_NARRATIVE_TRUTH_CONTRACTS.hiddenGemVindication,
   choices: undefined,
 };
 
@@ -738,36 +750,36 @@ const injurySetbackTemplate: EventTemplate = {
   descriptionTemplate: (ctx) => {
     const player = ctx.playerName ?? "a player you recommended";
     return (
-      `${player}, a player you championed and whose signing is under active ` +
-      `consideration, has suffered a serious injury that will sideline them ` +
-      `for the foreseeable future. The club's interest has cooled immediately, ` +
-      `and your recommendation now feels uncomfortably exposed. It's an ` +
-      `occupational hazard of the job — players break down — but the timing ` +
-      `is painful and the politics around it will need careful management.`
+      `${player}, a player you recommended, now has a serious injury recorded. ` +
+      `That changes the evidence available after your report without proving ` +
+      `that the original judgment was careless. Reassess availability, timing, ` +
+      `and any injury-risk claims before deciding whether the recommendation ` +
+      `should remain unchanged.`
     );
   },
   prerequisites: (state) =>
     accountableReports(state).some(
       (r) => r.conviction === "recommend" || r.conviction === "strongRecommend" || r.conviction === "tablePound",
     ),
+  truth: FACTUAL_NARRATIVE_TRUTH_CONTRACTS.injurySetback,
   choices: undefined,
 };
 
 const debutBrillianceTemplate: EventTemplate = {
   type: "debutBrilliance",
-  titleTemplate: "Your Youth Find Shines on Debut",
+  titleTemplate: "Your Youth Find Reaches the First Team",
   descriptionTemplate: (ctx) => {
     const player = ctx.playerName ?? "one of your placed players";
     return (
-      `${player}, the young talent you identified and placed, has turned in a ` +
-      `debut performance that's being replayed across social media. The manager ` +
-      `called it one of the most assured first appearances they'd seen from a ` +
-      `youth prospect in years. Your feel for potential — the intangible sense ` +
-      `of what a player could become — has just been validated in the most ` +
-      `public way possible. The calls from other clubs will follow.`
+      `${player}, the young talent you identified and placed, has now recorded ` +
+      `a first-team debut. Reaching that milestone is meaningful, but it is not ` +
+      `yet proof that the original projection was correct. Their appearances, ` +
+      `role, development environment, and longer-term contribution will decide ` +
+      `how the recommendation should ultimately be judged.`
     );
   },
   prerequisites: (state) => state.alumniRecords.length > 0,
+  truth: FACTUAL_NARRATIVE_TRUTH_CONTRACTS.debutBrilliance,
   choices: undefined,
 };
 
@@ -1009,15 +1021,18 @@ const youthAcademyScandal: EventTemplate = {
 const internationalTournamentTemplate: EventTemplate = {
   type: "internationalTournament",
   titleTemplate: "International Tournament Creates Scouting Opportunity",
-  descriptionTemplate: (_ctx) =>
-    "A major international youth tournament is being held across multiple " +
-    "venues this month, drawing the best emerging talent from dozens of " +
-    "nations into one concentrated burst of competitive football. For a scout " +
-    "with your cross-border knowledge, it represents an extraordinary window: " +
-    "players who are difficult to see in their domestic environments are " +
-    "suddenly visible, under pressure, in high-stakes conditions that reveal " +
-    "character as much as technique. The fixture list alone is worth studying.",
+  descriptionTemplate: (ctx) => {
+    const tournament = ctx.tournamentName ?? "A discovered international tournament";
+    const country = ctx.countryName ? ` in ${ctx.countryName}` : "";
+    return (
+      `${tournament}${country} is on the generated tournament calendar and ` +
+      `falls within the current planning window. Its concentrated international ` +
+      `field can provide unusual comparison contexts, but only if you make room ` +
+      `for the travel, access, and observation work in your schedule.`
+    );
+  },
   prerequisites: (state) => state.countries.length > 1,
+  truth: FACTUAL_NARRATIVE_TRUTH_CONTRACTS.internationalTournament,
   choices: undefined,
 };
 
@@ -1122,6 +1137,17 @@ function validateEventTemplate(
   }
   if (typeof template.prerequisites !== "function") {
     issues.push({ path: "prerequisites", message: "must be a function" });
+  }
+  if (
+    MATERIAL_FACTUAL_NARRATIVE_TYPES.includes(
+      template.type as (typeof MATERIAL_FACTUAL_NARRATIVE_TYPES)[number],
+    )
+    && template.truth?.kind !== "fact"
+  ) {
+    issues.push({
+      path: "truth",
+      message: "material factual prose requires an authoritative evidence contract",
+    });
   }
   for (const [index, choice] of (template.choices ?? []).entries()) {
     if (!hasNonBlankString(choice.label)) {

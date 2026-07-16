@@ -111,6 +111,13 @@ export function hireAssistantScout(
     reportsCompleted: 0,
     morale: 70,
   };
+  const hireReferenceId = `assistant-hire:${assistant.id}`;
+  if (
+    currentAssistants.some((candidate) => candidate.id === assistant.id)
+    || state.finances.transactions.some((transaction) =>
+      transaction.referenceId === hireReferenceId
+    )
+  ) return state;
 
   // Deduct signing bonus (first week salary)
   const transaction = {
@@ -118,6 +125,8 @@ export function hireAssistantScout(
     season: state.currentSeason,
     amount: -salary,
     description: `Hired assistant scout: ${assistant.name}`,
+    referenceId: hireReferenceId,
+    category: "operatingCost" as const,
   };
 
   return {
@@ -217,6 +226,10 @@ export function processAssistantScoutWeek(
   const assistants = state.assistantScouts ?? [];
   if (assistants.length === 0) return state;
   if (!state.finances) return state;
+  const payrollReferenceId = `assistant-payroll:s${state.currentSeason}w${state.currentWeek}`;
+  if (state.finances.transactions.some((transaction) =>
+    transaction.referenceId === payrollReferenceId
+  )) return state;
 
   let totalSalary = 0;
   const newObservations: Record<string, Observation> = {};
@@ -344,6 +357,8 @@ export function processAssistantScoutWeek(
     season: state.currentSeason,
     amount: -totalSalary,
     description: `Assistant scout salaries (${assistants.length} scouts)`,
+    referenceId: payrollReferenceId,
+    category: "operatingCost" as const,
   };
 
   return {

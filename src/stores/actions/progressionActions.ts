@@ -18,6 +18,7 @@ import type {
   Activity,
   BoardMeetingApproach,
   ManagerMeetingApproach,
+  TravelPosture,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
 import {
@@ -28,7 +29,10 @@ import {
   conductManagerMeeting,
   canAcceptJobOffer,
 } from "@/engine/career/index";
-import { applyClubEmploymentTransition } from "@/engine/career/transitions";
+import {
+  applyCareerPathTransition,
+  applyClubEmploymentTransition,
+} from "@/engine/career/transitions";
 import {
   chooseCareerRecoveryPlan,
   isCareerRecoveryBlockingOffers,
@@ -46,6 +50,8 @@ import {
   isInternationalAssignmentEligibleCountry,
   isTravelEligibleCountry,
   getRegionalTravelQuote,
+  createWorldConditionArcState,
+  reconcileWorldConditionArcDecisions,
 } from "@/engine/world/index";
 import { addActivity, canAddActivity } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameLoop";
@@ -60,7 +66,10 @@ import {
   appendDecisionConsequence,
   narrativeDecisionId,
   processDueConsequences,
+  projectConsequenceMetrics,
+  selectDecisionOption,
   selectNarrativeDecision,
+  synchronizeConsequenceMetrics,
   type ConsequenceEffect,
 } from "@/engine/consequences";
 import {
@@ -77,6 +86,24 @@ import {
   ensureInternationalAssignmentLiaison,
 } from "@/engine/world/internationalDeliverables";
 import { normalizeCountryKey } from "@/lib/country";
+
+function consequenceFailureMessages(
+  state: GameState,
+  contextId: string,
+  errors: readonly string[],
+): InboxMessage[] {
+  return errors.map((error, index) => ({
+    id: `consequence-warning:${contextId}:s${state.currentSeason}w${state.currentWeek}:${index}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "warning" as const,
+    title: "A linked consequence could not be applied",
+    body: `Your decision was recorded. One unrelated or invalid follow-up was safely closed instead of blocking the choice. ${error}`,
+    read: false,
+    actionRequired: false,
+    relatedId: contextId,
+  }));
+}
 
 /**
  * Apply ChainConsequence[] to a GameState, returning a new GameState.
@@ -397,7 +424,6 @@ export function applyNarrativeRelationshipChoice(
     now,
     getSeasonLength(state.fixtures),
   );
-  if (processed.errors.length > 0) return state;
 
   const relationship = Math.round(processed.state.metrics[relationshipKey]);
   const trustLevel = Math.round(processed.state.metrics[trustKey]);
@@ -415,6 +441,10 @@ export function applyNarrativeRelationshipChoice(
         dormant: relationship <= 20,
       },
     },
+    inbox: [
+      ...state.inbox,
+      ...consequenceFailureMessages(state, decisionId, processed.errors),
+    ],
   };
 }
 
@@ -595,6 +625,9 @@ export function createProgressionActions(get: GetState, set: SetState) {
                 season: gameState.currentSeason,
                 amount: signingBonus,
                 description: `Signing bonus (${offer.role})`,
+                referenceId: `scout-signing-bonus:${offer.id}`,
+                category: "bonus",
+                counterpartyId: offer.clubId,
               },
             ],
           };
@@ -637,11 +670,27 @@ export function createProgressionActions(get: GetState, set: SetState) {
     declineJob: (offerId: string) => {
       const { gameState } = get();
       if (!gameState) return;
+      const declinedOffer = gameState.jobOffers.find((offer) => offer.id === offerId);
+      const endsCurrentEmployment = Boolean(
+        declinedOffer?.renewalOfContractId
+        && declinedOffer.clubId === gameState.scout.currentClubId
+        && (gameState.scout.contractEndSeason ?? Number.POSITIVE_INFINITY)
+          <= gameState.currentSeason
+        && gameState.finances
+      );
+      const withoutOffer = {
+        ...gameState,
+        jobOffers: gameState.jobOffers.filter((offer) => offer.id !== offerId),
+        inbox: gameState.inbox.map((message) =>
+          message.relatedId === offerId
+            ? { ...message, read: true, actionRequired: false }
+            : message,
+        ),
+      };
       set({
-        gameState: {
-          ...gameState,
-          jobOffers: gameState.jobOffers.filter((o) => o.id !== offerId),
-        },
+        gameState: endsCurrentEmployment
+          ? applyCareerPathTransition(withoutOffer, "independent")
+          : withoutOffer,
       });
     },
 
@@ -802,7 +851,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
 
     bookInternationalTravel: (
       country: string,
-      options?: { duration?: number; assignmentId?: string },
+      options?: { duration?: number; assignmentId?: string; posture?: TravelPosture },
     ) => {
       const { gameState } = get();
       if (!gameState) return false;
@@ -813,7 +862,8 @@ export function createProgressionActions(get: GetState, set: SetState) {
       if (!isTravelEligibleCountry(gameState, country)) return false;
 
       const homeCountry = getScoutHome(gameState.scout);
-      const regionalQuote = getRegionalTravelQuote(gameState, country);
+      const posture = options?.posture ?? "assignmentFirst";
+      const regionalQuote = getRegionalTravelQuote(gameState, country, posture);
       const duration = Math.max(
         1,
         options?.duration ?? regionalQuote.duration ?? getTravelDuration(homeCountry, country),
@@ -854,6 +904,7 @@ export function createProgressionActions(get: GetState, set: SetState) {
         duration,
         getSeasonLength(gameState.fixtures, gameState.currentSeason),
         quotedTravelCost,
+        posture,
       );
       const travelCost = updatedScout.travelBooking?.cost ?? 0;
       if ((gameState.finances?.balance ?? Infinity) < travelCost) return false;
@@ -938,6 +989,59 @@ export function createProgressionActions(get: GetState, set: SetState) {
         updatedState = applyConsequences(updatedState, event.consequences);
       }
       set({ gameState: updatedState });
+    },
+
+    resolveConsequenceDecision: (decisionId: string, optionId: string) => {
+      const gameState = get().gameState;
+      const decision = gameState?.consequenceState.decisions[decisionId];
+      if (!gameState || !decision || decision.status !== "offered") return;
+      if (!decision.options.some((option) => option.id === optionId)) return;
+
+      const now = { week: gameState.currentWeek, season: gameState.currentSeason };
+      const seasonLength = getSeasonLength(gameState.fixtures, gameState.currentSeason);
+      const synchronized = synchronizeConsequenceMetrics(
+        gameState,
+        gameState.consequenceState,
+      );
+      const selected = selectDecisionOption(
+        synchronized,
+        decisionId,
+        optionId,
+        now,
+        "player",
+        seasonLength,
+      );
+      if (selected.error || !selected.changed) return;
+      const processed = processDueConsequences(selected.state, now, seasonLength);
+
+      let projected = projectConsequenceMetrics(
+        { ...gameState, consequenceState: processed.state },
+        processed.state,
+      );
+      if (decision.source.kind === "worldConditionArc") {
+        projected = {
+          ...projected,
+          worldConditionArcState: reconcileWorldConditionArcDecisions({
+            state: createWorldConditionArcState(
+              projected.worldConditionArcState,
+              projected.countries,
+            ),
+            decisions: processed.state.decisions,
+            now,
+            seasonLength,
+          }),
+        };
+      }
+      set({
+        gameState: {
+          ...projected,
+          inbox: projected.inbox.map((message) =>
+            message.relatedId === decisionId
+              ? { ...message, read: true, actionRequired: false }
+              : message,
+          ).concat(consequenceFailureMessages(projected, decisionId, processed.errors)),
+        },
+      });
     },
 
     resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => {
@@ -1092,7 +1196,6 @@ export function createProgressionActions(get: GetState, set: SetState) {
         consequenceDate,
         getSeasonLength(gameState.fixtures),
       );
-      if (processedOutcome.errors.length > 0) return;
 
       const newReputation = Math.round(
         processedOutcome.state.metrics[reputationMetric],
@@ -1115,6 +1218,11 @@ export function createProgressionActions(get: GetState, set: SetState) {
         inbox: [
           ...gameState.inbox,
           ...(storylineMessage ? [storylineMessage] : result.messages),
+          ...consequenceFailureMessages(
+            gameState,
+            decisionSelection.decisionId,
+            processedOutcome.errors,
+          ),
         ],
       };
       // A5: Apply consequences if the resolved event has them

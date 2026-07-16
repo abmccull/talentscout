@@ -9,11 +9,13 @@ import type {
   PlayerMovementEvent,
   ScoutReport,
   ScoutingCase,
+  YouthRecruitmentBrief,
 } from "@/engine/core/types";
 import {
   expireAcademyRecruitmentBriefs,
   fulfillAcademyRecruitmentBrief,
   generateAcademyRecruitmentBriefs,
+  normalizeAcademyRecruitmentBrief,
   type AcademyRecruitmentBrief,
 } from "@/engine/youth/recruitmentBriefs";
 import {
@@ -311,6 +313,49 @@ describe("academy recruitment briefs", () => {
     expect(replay.brief).toEqual(fulfilled.brief);
   });
 
+  it("upgrades legacy broad briefs before strict causal fulfillment", () => {
+    const causal = causalPlacement();
+    const prospect = player();
+    const legacyBrief: YouthRecruitmentBrief = {
+      id: "academy-brief-1",
+      clubId: "club-academy",
+      type: "academyPlacement",
+      createdWeek: 1,
+      createdSeason: 1,
+      expiresWeek: 10,
+      expiresSeason: 1,
+      requiredPositions: ["CM"],
+      preferredRole: "boxToBox",
+      developmentPriority: "highCeiling",
+      maxAge: 16,
+      riskTolerance: "high",
+      weeklyWageBudget: 1_000,
+      competitionPressure: 45,
+      status: "open",
+    };
+
+    const normalized = normalizeAcademyRecruitmentBrief(legacyBrief, prospect);
+    expect(normalized).toMatchObject({
+      targetPosition: "CM",
+      ageRange: [14, 16],
+      issuedWeek: 1,
+      issuedSeason: 1,
+      minimumConviction: "note",
+      minimumReportQuality: 0,
+    });
+
+    const fulfilled = fulfillAcademyRecruitmentBrief({
+      brief: legacyBrief as AcademyRecruitmentBrief,
+      player: prospect,
+      ...causal,
+      movementHistory: [causal.placementMovement],
+      currentWeek: 5,
+      currentSeason: 1,
+    });
+    expect(fulfilled.fulfilled).toBe(true);
+    expect(fulfilled.brief.status).toBe("fulfilled");
+  });
+
   it("does not fulfill from a signing that occurs on the exclusive expiry date", () => {
     const causal = causalPlacement();
     const lateMovement = { ...causal.placementMovement, week: 10 };
@@ -324,6 +369,22 @@ describe("academy recruitment briefs", () => {
     });
     expect(result.fulfilled).toBe(false);
     expect(result.failures).toContain("briefExpired");
+  });
+
+  it("does not apply a second quality veto after the club accepted the case", () => {
+    const causal = causalPlacement();
+    const result = fulfillAcademyRecruitmentBrief({
+      brief: brief({ minimumReportQuality: 95, minimumConviction: "tablePound" }),
+      player: player(),
+      ...causal,
+      movementHistory: [causal.placementMovement],
+      currentWeek: 5,
+      currentSeason: 1,
+    });
+
+    expect(causal.report.qualityScore).toBeLessThan(95);
+    expect(causal.report.conviction).toBe("strongRecommend");
+    expect(result.fulfilled).toBe(true);
   });
 });
 

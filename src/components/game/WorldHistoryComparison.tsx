@@ -236,6 +236,11 @@ function ClubTimelinePanel({
               <div className="border-t border-zinc-800 px-3 py-3 text-xs text-zinc-300">
                 {season.standing && <p>{season.standing.won}W {season.standing.drawn}D {season.standing.lost}L · {season.standing.goalDifference >= 0 ? "+" : ""}{season.standing.goalDifference} GD</p>}
                 <p className="mt-1">{formatStatus(season.leagueMovement ?? "movement not recorded")} · {formatStatus(season.scoutingPhilosophy)}</p>
+                {season.recruitmentDoctrine && (
+                  <p className="mt-1 text-sky-200">
+                    {formatStatus(season.recruitmentDoctrine.archetype)} · {formatStatus(season.recruitmentDoctrine.seasonalObjective)} · {season.recruitmentDoctrine.evidencePreference} evidence · ages {season.recruitmentDoctrine.preferredSeniorAgeRange.join("-")}
+                  </p>
+                )}
                 {season.manager && <p className="mt-1">{season.manager.name} · {season.manager.preferredFormation}</p>}
                 <button
                   type="button"

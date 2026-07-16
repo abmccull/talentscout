@@ -14,8 +14,6 @@ export {
   purchaseEquipmentUpgrade,
   getEquipmentObservationBonus,
   isBroke,
-  takeBusinessLoan,
-  repayLoan,
   applyFirstReportBonus,
   applyFirstPlacementBonus,
   processStarterStipend,
@@ -61,6 +59,24 @@ export {
   reconcileFinancialLedger,
 } from "./saveMigration";
 export {
+  assessClubAffordability,
+  assessClubAffordabilityFromContext,
+  buildClubAffordabilityContext,
+  buildLoanWageContributionObligation,
+  buildTransferAddOnObligations,
+  deriveClubScoutingBudget,
+  deriveClubWeeklyWageBudget,
+  getClubWeeklyCommitmentTotal,
+  getClubWeeklyObligationCommitment,
+  getClubWeeklyWageCommitment,
+  getTransferContingentReserve,
+  normalizeClubEconomics,
+  normalizeClubEconomicsMap,
+  settleRelegationClubObligations,
+  settleTriggeredClubObligations,
+  settleWeeklyClubObligations,
+} from "./clubEconomics";
+export {
   ROLE_SKILL_NAMES,
   ROLE_SKILL_DESCRIPTIONS,
   generateEmployeeSkills,
@@ -96,10 +112,37 @@ export { LIFESTYLE_TIERS, getDefaultLifestyle, changeLifestyle, getLifestyleRepu
 export { calculatePerformanceBonusAmount, calculateSigningBonus, calculateDiscoveryBonus, calculateDepartmentBonusPool, calculateGoldenParachute } from "./clubBonuses";
 export { calculateReportPrice, estimateReportPriceRange, listReport, withdrawListing, expireOldListings, processMarketplaceBids, acceptBid, declineBid, acceptExclusiveUpgrade } from "./reportMarketplace";
 export { calculatePlacementFee, calculateSellOnPercentage, processSellOnClauses, checkPlacementFeeEligibility, triggerPlacementFee } from "./placementFees";
-export { generateRetainerOffers, acceptRetainer, cancelRetainer, processRetainerDeliveries, recordRetainerDelivery, processRetainerRenewals } from "./retainers";
+export {
+  generateRetainerOffers,
+  acceptRetainer,
+  cancelRetainer,
+  closeRetainerPeriod,
+  expireRetainerOffers,
+  getRetainerCloseReferenceId,
+  recordRetainerDelivery,
+  processRetainerRenewals,
+} from "./retainers";
+export type {
+  RetainerCloseEvent,
+  RetainerCloseOutcome,
+  RetainerPeriodCloseResult,
+} from "./retainers";
 export { OFFICE_TIERS, SALARY_BY_ROLE, upgradeOffice, hireEmployee, fireEmployee, processEmployeeWeek, calculateAgencyOverhead } from "./agency";
 export type { EmployeeWorkResult } from "./employeeWork";
 export { getEmployeeEfficiency, processEmployeeWork } from "./employeeWork";
+export {
+  MAX_ANALYST_CRAFT_BONUS,
+  MAX_ANALYST_REVIEW_HISTORY,
+  MAX_AVAILABLE_ANALYST_REVIEWS,
+  appendAnalystReview,
+  consumeAnalystReview,
+  createAnalystReviewArtifact,
+  formatAnalystEvidenceCategory,
+  formatAnalystReviewBias,
+  getApplicableAnalystReview,
+  normalizeAnalystReviewHistory,
+  toAppliedAnalystReview,
+} from "./analystReviews";
 export { updateClientSatisfaction, processClientRelationshipWeek, pitchToClub, negotiateRetainerTerms, ensureClientRelationship, recordClientDelivery } from "./clientRelationships";
 export { checkEmployeeEvents, resolveEmployeeEvent, expireEmployeeEvents } from "./employeeEvents";
 export {
@@ -118,8 +161,31 @@ export type {
 } from "./internationalExpansion";
 export { processAnnualAwards } from "./awards";
 export { getLoanEligibility, takeLoan, processLoanPayment, repayLoanEarly } from "./loans";
-export { generateConsultingOffers, acceptConsulting, processConsultingDeadline, completeConsulting } from "./consulting";
-export { calculateProfitAndLoss, forecastCashFlow, calculateRevenueBreakdown, calculateNetWorth } from "./dashboard";
+export {
+  canCompleteConsulting,
+  generateConsultingOffers,
+  acceptConsulting,
+  expireConsultingOffers,
+  recordConsultingReportDelivery,
+  processConsultingDeadline,
+  completeConsulting,
+} from "./consulting";
+export { settleYouthAgencyPlacement } from "./youthAgencySettlement";
+export {
+  calculateMonthlyRunRate,
+  calculateProfitAndLoss,
+  forecastCashFlow,
+  calculateRevenueBreakdown,
+  calculateNetWorth,
+  calculateAgencyHealth,
+} from "./dashboard";
+export type { AgencyHealthMetrics } from "./dashboard";
+export {
+  getAgencyCapacity,
+  canAcceptRetainerWork,
+  canAcceptConsultingWork,
+} from "./agencyCapacity";
+export type { AgencyCapacity } from "./agencyCapacity";
 export {
   getRecoverySuggestions,
   isBankruptcyRecoveryActive,

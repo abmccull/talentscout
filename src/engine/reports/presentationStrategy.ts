@@ -68,6 +68,55 @@ export interface PresentationStrategyImpact {
   legacyNeutral: boolean;
 }
 
+export interface PresentationRoomRead {
+  label: string;
+  description: string;
+  sentiment: "positive" | "mixed" | "negative";
+}
+
+/**
+ * Translate the deterministic score into an intentionally imprecise room read.
+ * The scout can reason from visible stakeholders and tradeoffs without being
+ * handed the exact modifier or an obviously dominant spreadsheet answer.
+ */
+export function describePresentationRoom(
+  alignmentAdjustment: number,
+): PresentationRoomRead {
+  if (alignmentAdjustment >= 2) {
+    return {
+      label: "Room looks receptive",
+      description: "Several visible signals support this framing, but the response is not guaranteed.",
+      sentiment: "positive",
+    };
+  }
+  if (alignmentAdjustment === 1) {
+    return {
+      label: "Some resonance",
+      description: "This should land with part of the room while leaving a meaningful tradeoff exposed.",
+      sentiment: "positive",
+    };
+  }
+  if (alignmentAdjustment === 0) {
+    return {
+      label: "Uncertain room",
+      description: "There is no clear framing advantage; the underlying report will carry the decision.",
+      sentiment: "mixed",
+    };
+  }
+  if (alignmentAdjustment === -1) {
+    return {
+      label: "Some resistance",
+      description: "One or more visible priorities conflict with this approach.",
+      sentiment: "mixed",
+    };
+  }
+  return {
+    label: "Hard sell",
+    description: "The room's visible priorities make this framing risky even if the recommendation is sound.",
+    sentiment: "negative",
+  };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(value)));
 }

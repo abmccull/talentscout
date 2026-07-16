@@ -15,13 +15,18 @@ import {
   Clock3,
   FileSearch,
   History,
+  Mail,
   Newspaper,
+  NotebookPen,
   PhoneCall,
   Quote,
   UserRoundSearch,
+  Voicemail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAudio } from "@/lib/audio/useAudio";
+import { careerMomentSfx } from "@/lib/audio/audioDirector";
+import { useSettingsStore } from "@/stores/settingsStore";
 import {
   buildCareerStoryReel,
   type CareerStory,
@@ -44,6 +49,9 @@ const TEMPLATE_LABELS: Record<CareerStoryTemplate, string> = {
   phoneCall: "Phone call",
   boardroom: "Boardroom",
   pressClipping: "Press clipping",
+  notebook: "Scout notebook",
+  voicemail: "Voicemail",
+  farewellLetter: "Farewell letter",
 };
 
 const TEMPLATE_ICONS: Record<CareerStoryTemplate, typeof Newspaper> = {
@@ -51,6 +59,9 @@ const TEMPLATE_ICONS: Record<CareerStoryTemplate, typeof Newspaper> = {
   phoneCall: PhoneCall,
   boardroom: BriefcaseBusiness,
   pressClipping: Newspaper,
+  notebook: NotebookPen,
+  voicemail: Voicemail,
+  farewellLetter: Mail,
 };
 
 function toneDot(story: CareerStory): string {
@@ -297,11 +308,95 @@ function PressClippingFrame({ story }: { story: CareerStory }) {
   );
 }
 
+function NotebookFrame({ story }: { story: CareerStory }) {
+  return (
+    <article className="overflow-hidden rounded-xl border border-[#9f8258]/45 bg-[#d8c39a] text-slate-950 shadow-[0_22px_55px_rgba(0,0,0,0.34)]">
+      <div className="flex items-center justify-between gap-3 border-b border-[#59452d]/35 bg-[#43301f] px-4 py-3 text-[#f4e7c6] sm:px-6">
+        <div className="flex items-center gap-2">
+          <NotebookPen size={18} aria-hidden="true" />
+          <span className="text-xs font-bold uppercase tracking-[0.16em]">Personal scouting notebook</span>
+        </div>
+        <span className="text-[10px] font-semibold">S{story.season} W{story.week}</span>
+      </div>
+      <div className="bg-[repeating-linear-gradient(to_bottom,transparent_0,transparent_31px,rgba(62,85,103,0.16)_32px)] px-4 py-5 sm:px-8 sm:py-7">
+        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-900">{story.eyebrow}</p>
+        <h3 className="mt-2 font-handwritten text-3xl font-bold leading-tight sm:text-4xl">{story.title}</h3>
+        <p className="mt-2 max-w-3xl border-b border-[#59452d]/25 pb-4 text-sm italic text-slate-700">{story.subtitle}</p>
+        <div className="grid gap-5 py-5 sm:grid-cols-2">
+          <ContextDetails context={story.original} />
+          <div className="border-t border-[#59452d]/25 pt-5 sm:border-l sm:border-t-0 sm:pl-5 sm:pt-0">
+            <ContextDetails context={story.outcome} />
+          </div>
+        </div>
+        <StakeholderRecords memories={story.memories} obligations={story.obligations} />
+      </div>
+    </article>
+  );
+}
+
+function VoicemailFrame({ story }: { story: CareerStory }) {
+  return (
+    <article className="rounded-xl border border-violet-300/15 bg-[radial-gradient(circle_at_top,rgba(167,139,250,0.15),transparent_40%),#090b13] p-3 shadow-[0_22px_55px_rgba(0,0,0,0.42)] sm:p-6">
+      <div className="mx-auto max-w-3xl overflow-hidden rounded-[1.6rem] border border-white/12 bg-[#11131d]">
+        <div className="border-b border-white/10 px-5 py-5 text-center">
+          <Voicemail size={24} className="mx-auto text-violet-300" aria-hidden="true" />
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-violet-200/70">Archived voicemail transcript</p>
+          <h3 className="mt-2 text-xl font-bold text-white">{story.title}</h3>
+          <p className="mt-1 text-sm text-zinc-400">{story.subtitle}</p>
+        </div>
+        <div className="space-y-4 p-4 sm:p-6">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+            <ContextDetails context={story.original} ink="light" />
+          </div>
+          <div className="rounded-2xl border border-violet-300/15 bg-violet-300/[0.06] p-4">
+            <ContextDetails context={story.outcome} ink="light" />
+          </div>
+          <StakeholderRecords memories={story.memories} obligations={story.obligations} ink="light" />
+        </div>
+        <div className="border-t border-white/10 px-5 py-3 text-center text-[10px] text-zinc-500">
+          Transcript only · no audio contains gameplay information
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function FarewellLetterFrame({ story }: { story: CareerStory }) {
+  return (
+    <article className="overflow-hidden rounded-sm border border-[#d2c7ae] bg-[#eee8da] text-slate-950 shadow-[0_24px_65px_rgba(0,0,0,0.38)]">
+      <div className="h-2 bg-[linear-gradient(90deg,#31563d_0_33%,#d7bd74_33%_66%,#713c32_66%)]" aria-hidden="true" />
+      <div className="mx-auto max-w-4xl px-5 py-7 sm:px-10 sm:py-10">
+        <div className="flex flex-col gap-3 border-b border-slate-900/20 pb-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-900">From the final notebook</p>
+            <h3 className="mt-2 font-serif text-3xl font-black leading-tight sm:text-4xl">{story.title}</h3>
+          </div>
+          <span className="text-xs font-semibold text-slate-600">Season {story.season}, Week {story.week}</span>
+        </div>
+        <p className="mt-5 font-serif text-base italic leading-7 text-slate-700">{story.subtitle}</p>
+        <div className="mt-6 grid gap-6 sm:grid-cols-2">
+          <ContextDetails context={story.original} />
+          <div className="border-t border-slate-900/20 pt-6 sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0">
+            <ContextDetails context={story.outcome} />
+          </div>
+        </div>
+        <div className="mt-6">
+          <StakeholderRecords memories={story.memories} obligations={story.obligations} />
+        </div>
+        <p className="mt-8 text-right font-handwritten text-2xl text-slate-800">The work continues in other hands.</p>
+      </div>
+    </article>
+  );
+}
+
 function StoryFrame({ story }: { story: CareerStory }) {
   switch (story.template) {
     case "phoneCall": return <PhoneCallFrame story={story} />;
     case "boardroom": return <BoardroomFrame story={story} />;
     case "pressClipping": return <PressClippingFrame story={story} />;
+    case "notebook": return <NotebookFrame story={story} />;
+    case "voicemail": return <VoicemailFrame story={story} />;
+    case "farewellLetter": return <FarewellLetterFrame story={story} />;
     default: return <MatchProgrammeFrame story={story} />;
   }
 }
@@ -312,6 +407,7 @@ export function ConsequenceCinema({
   onOpenReport,
 }: ConsequenceCinemaProps) {
   const { playSFX } = useAudio();
+  const emotionalAudioCues = useSettingsStore((state) => state.emotionalAudioCues);
   const stories = useMemo(() => buildCareerStoryReel(source), [source]);
   const [selectedStoryId, setSelectedStoryId] = useState<string | null>(stories[0]?.id ?? null);
   const selectorRef = useRef<HTMLUListElement>(null);
@@ -331,15 +427,19 @@ export function ConsequenceCinema({
   const selectStory = (story: CareerStory) => {
     if (story.id === selectedStoryId) return;
     setSelectedStoryId(story.id);
-    playSFX(
-      story.tone === "positive"
-        ? "discovery"
-        : story.tone === "negative"
-          ? "error"
-          : story.tone === "mixed"
-            ? "notification"
-            : "page-turn",
-    );
+    if (emotionalAudioCues) {
+      playSFX(
+        story.momentCategory
+          ? careerMomentSfx(story.momentCategory)
+          : story.tone === "positive"
+            ? "discovery"
+            : story.tone === "negative"
+              ? "error"
+              : story.tone === "mixed"
+                ? "notification"
+                : "page-turn",
+      );
+    }
   };
 
   const handleSelectorKeyDown = (

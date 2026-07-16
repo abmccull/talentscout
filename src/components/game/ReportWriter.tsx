@@ -21,6 +21,7 @@ import type {
 } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import {
+  describePresentationRoom,
   evaluatePresentationStrategy,
   generateReportContent,
   PRESENTATION_APPROACHES,
@@ -29,7 +30,10 @@ import {
 import {
   calculateInfrastructureEffects,
   estimateReportPriceRange,
+  formatAnalystEvidenceCategory,
+  formatAnalystReviewBias,
   getActiveEquipmentBonuses,
+  getApplicableAnalystReview,
 } from "@/engine/finance";
 import type { QualityBreakdown } from "@/engine/reports";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
@@ -79,6 +83,16 @@ function qualityScoreBorder(score: number): string {
   if (score >= 70) return "border-emerald-500/30";
   if (score >= 40) return "border-amber-500/30";
   return "border-red-500/30";
+}
+
+function describeReportCraft(score: number): {
+  label: string;
+  representativeScore: number;
+} {
+  if (score >= 85) return { label: "Boardroom ready", representativeScore: 90 };
+  if (score >= 70) return { label: "Credible", representativeScore: 77 };
+  if (score >= 40) return { label: "Developing", representativeScore: 55 };
+  return { label: "Fragile", representativeScore: 25 };
 }
 
 const BREAKDOWN_LABELS: Record<keyof QualityBreakdown, { label: string; max: number }> = {
@@ -342,6 +356,16 @@ export function ReportWriter() {
     () => getFreshReportObservationIds(observations, previousReport),
     [observations, previousReport],
   );
+  const analystReview = useMemo(
+    () => gameState?.finances && canonicalPlayerId
+      ? getApplicableAnalystReview(
+          gameState.finances.analystReviews ?? [],
+          canonicalPlayerId,
+          previousReport,
+        )
+      : undefined,
+    [canonicalPlayerId, gameState?.finances, previousReport],
+  );
   const compatibleRoles = useMemo(
     () => player
       ? ROLE_DEFINITIONS.filter((definition) => definition.positions.includes(player.position))
@@ -462,8 +486,9 @@ export function ReportWriter() {
   const totalReportQualityBonus =
     equipmentReportQualityBonus + infrastructureReportQualityBonus;
 
-  // Live quality preview uses the exact pure preparation path used by the
-  // submission action, including infrastructure and equipment bonuses.
+  // The exact craft score stays authoritative for submission. The writer only
+  // exposes a broad band so players improve the professional artifact instead
+  // of grinding individual inputs until a hidden formula moves by one point.
   const qualityPreview = useMemo(() => {
     if (!draft || !gameState || !player || !canonicalPlayerId) {
       return {
@@ -475,6 +500,7 @@ export function ReportWriter() {
           detail: 0,
           scoutSkill: 0,
           equipmentBonus: 0,
+          analystReviewBonus: 0,
         },
         hints: [] as string[],
       };
@@ -493,6 +519,7 @@ export function ReportWriter() {
       observations,
       playerContext: player,
       reportQualityBonus: totalReportQualityBonus,
+      analystReviewBonus: analystReview?.craftQualityBonus,
     }).quality;
   },
     [
@@ -506,8 +533,10 @@ export function ReportWriter() {
       selectedWeaknesses,
       observations,
       totalReportQualityBonus,
+      analystReview,
     ],
   );
+  const craftRead = describeReportCraft(qualityPreview.score);
 
   const strengthOptions = useMemo<DescriptorOption[]>(
     () => draft?.suggestedStrengthClaims ?? [],
@@ -551,11 +580,11 @@ export function ReportWriter() {
     if (!isIndependent || !gameState?.finances) return null;
     return estimateReportPriceRange(
       conviction,
-      qualityPreview.score,
+      craftRead.representativeScore,
       gameState.scout.reputation,
       gameState.finances.marketTemperature,
     );
-  }, [isIndependent, conviction, qualityPreview.score, gameState?.scout.reputation, gameState?.finances]);
+  }, [isIndependent, conviction, craftRead.representativeScore, gameState?.scout.reputation, gameState?.finances]);
 
   // Pre-populate form state from draft (one-shot) and auto-generate summary
   useEffect(() => {
@@ -874,6 +903,24 @@ export function ReportWriter() {
                         <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-300">
                           This club will weight {activeBrief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()} more heavily. Evidence, fit, price, and risk still matter; the same case can land differently in another recruitment room.
                         </p>
+                        <dl className="mt-3 flex flex-wrap gap-2 text-[11px] text-sky-100">
+                          <div className="rounded-full border border-sky-300/20 bg-black/20 px-2.5 py-1">
+                            <dt className="sr-only">Evidence preference</dt>
+                            <dd className="capitalize">{activeRecruitmentIdentity.doctrine.evidencePreference} evidence</dd>
+                          </div>
+                          <div className="rounded-full border border-sky-300/20 bg-black/20 px-2.5 py-1">
+                            <dt className="sr-only">Senior age window</dt>
+                            <dd>Ages {activeRecruitmentIdentity.doctrine.preferredSeniorAgeRange.join("-")}</dd>
+                          </div>
+                          <div className="rounded-full border border-sky-300/20 bg-black/20 px-2.5 py-1">
+                            <dt className="sr-only">Pathway patience</dt>
+                            <dd>Pathway patience {activeRecruitmentIdentity.doctrine.pathwayPatience}/100</dd>
+                          </div>
+                          <div className="rounded-full border border-sky-300/20 bg-black/20 px-2.5 py-1">
+                            <dt className="sr-only">Decision influence</dt>
+                            <dd>{activeRecruitmentIdentity.doctrine.managerInfluence >= activeRecruitmentIdentity.doctrine.directorInfluence ? "Manager-led" : "Recruitment-led"}</dd>
+                          </div>
+                        </dl>
                       </div>
                       <Badge variant="outline" className="w-fit shrink-0 text-[10px]">
                         One lens, not the verdict
@@ -1019,6 +1066,7 @@ export function ReportWriter() {
                           roleMatch: !activeBrief.preferredRole || activeBrief.preferredRole === projectedRole,
                         }) : null;
                         const alignment = preview?.alignmentAdjustment ?? 0;
+                        const roomRead = describePresentationRoom(alignment);
                         return (
                           <label
                             key={approach.id}
@@ -1045,13 +1093,13 @@ export function ReportWriter() {
                                 <span className="mt-1 block text-[11px] leading-4 text-zinc-400">{approach.roomLine}</span>
                               </span>
                               <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] ${
-                                alignment > 0
+                                roomRead.sentiment === "positive"
                                   ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
-                                  : alignment < 0
+                                  : roomRead.sentiment === "negative"
                                   ? "border-amber-400/30 bg-amber-400/10 text-amber-300"
                                   : "border-white/10 bg-white/5 text-zinc-400"
                               }`}>
-                                Room {alignment > 0 ? `+${alignment}` : alignment}
+                                {roomRead.label}
                               </span>
                             </span>
                             <span className="mt-4 block rounded-lg border border-emerald-400/15 bg-emerald-400/[0.05] p-2.5 text-[10px] leading-4 text-emerald-100/80">
@@ -1060,8 +1108,8 @@ export function ReportWriter() {
                             <span className="mt-2 block rounded-lg border border-amber-400/15 bg-amber-400/[0.04] p-2.5 text-[10px] leading-4 text-amber-100/75">
                               <strong className="text-amber-300">Tradeoff:</strong> {approach.tradeoff}
                             </span>
-                            <span className="mt-3 block text-[9px] uppercase tracking-[0.12em] text-zinc-500">
-                              Evidence {approach.adjustments.evidence >= 0 ? "+" : ""}{approach.adjustments.evidence} · Fit {approach.adjustments.briefFit >= 0 ? "+" : ""}{approach.adjustments.briefFit} · Risk {approach.adjustments.risk >= 0 ? "+" : ""}{approach.adjustments.risk} · Conviction {approach.adjustments.conviction >= 0 ? "+" : ""}{approach.adjustments.conviction}
+                            <span className="mt-3 block text-[10px] leading-4 text-zinc-500">
+                              {roomRead.description}
                             </span>
                           </label>
                         );
@@ -1077,11 +1125,14 @@ export function ReportWriter() {
                         riskFactorCount: riskInput.split("\n").map((risk) => risk.trim()).filter(Boolean).length,
                         roleMatch: !activeBrief.preferredRole || activeBrief.preferredRole === projectedRole,
                       });
+                      const selectedRoomRead = describePresentationRoom(
+                        selectedImpact.alignmentAdjustment,
+                      );
                       return (
                         <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4" aria-live="polite">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-xs font-semibold text-white">Room read: {selectedImpact.label}</p>
-                            <span className="text-xs font-bold tabular-nums text-cyan-200">Alignment {selectedImpact.presentationScore}/100</span>
+                            <span className="text-xs font-bold text-cyan-200">{selectedRoomRead.label}</span>
                           </div>
                           <ul className="mt-2 grid gap-1 text-[11px] leading-4 text-zinc-400 sm:grid-cols-2">
                             {selectedImpact.reasons.slice(0, 4).map((reason) => <li key={reason} className="flex gap-2"><span className="text-cyan-300">•</span><span>{reason}</span></li>)}
@@ -1241,6 +1292,33 @@ export function ReportWriter() {
             </p>
           </div>
         )}
+        {analystReview && (
+          <section
+            aria-labelledby="analyst-review-heading"
+            className="mb-6 rounded-xl border border-violet-400/30 bg-violet-400/10 p-4"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">
+                  Analyst review ready
+                </p>
+                <h2 id="analyst-review-heading" className="mt-1 text-sm font-bold text-white">
+                  {analystReview.analystName} · {formatAnalystEvidenceCategory(analystReview.evidenceCategory)}
+                </h2>
+              </div>
+              <Badge variant="outline" className="border-violet-300/30 text-violet-200">
+                +{analystReview.craftQualityBonus} craft · one use
+              </Badge>
+            </div>
+            <p className="mt-3 text-sm leading-6 text-violet-50/90">{analystReview.critique}</p>
+            <p className="mt-3 text-xs leading-5 text-violet-100/70">
+              Method bias — {formatAnalystReviewBias(analystReview.bias)}: {analystReview.biasDisclosure}
+            </p>
+            <p className="mt-2 text-[11px] text-zinc-400">
+              The visible craft band includes this review. It is consumed exactly once when this eligible report is filed.
+            </p>
+          </section>
+        )}
 
         <div className="space-y-6">
           <Card data-tutorial-id="report-conviction" className={`border ${qualityScoreBorder(qualityPreview.score)} bg-[#10151b]/98 shadow-2xl shadow-black/25 lg:sticky lg:top-4 lg:z-20`}>
@@ -1251,8 +1329,12 @@ export function ReportWriter() {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Your recommendation</p>
                     <h2 className="mt-1 text-xl font-bold text-white">State the call before the supporting detail</h2>
                   </div>
-                  <Badge variant="outline" className={`${qualityScoreBorder(qualityPreview.score)} ${qualityScoreColor(qualityPreview.score)}`}>
-                    Craft {qualityPreview.score}/100
+                  <Badge
+                    variant="outline"
+                    aria-label={`Craft assessment: ${craftRead.label}`}
+                    className={`${qualityScoreBorder(qualityPreview.score)} ${qualityScoreColor(qualityPreview.score)}`}
+                  >
+                    Craft: {craftRead.label}
                   </Badge>
                 </div>
                 <label htmlFor="report-summary" className="text-sm font-semibold text-zinc-200">

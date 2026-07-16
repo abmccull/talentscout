@@ -10,7 +10,6 @@ import type {
 import { processCompletedWeek } from "@/engine/core/calendar";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import { createRNG } from "@/engine/rng";
-import { observePlayerLight } from "@/engine/scout/perception";
 import {
   deriveRegionalPresence,
   getPlayerScoutingCountry,
@@ -22,6 +21,7 @@ import {
   generateStatsBriefing,
   updateAnalystMorale,
 } from "@/engine/data";
+import { produceWeeklyPlayerObservation } from "./weeklyObservationProducer";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -261,16 +261,17 @@ export function processWeeklyDataObservationActivities(
             }
           : deepProfile;
 
-        const obs = observePlayerLight(
-          deepVideoRng,
+        const obs = produceWeeklyPlayerObservation({
+          state: stateWithScheduleApplied,
+          rng: deepVideoRng,
           player,
-          currentScout,
-          "videoAnalysis",
-          playerEvidence(player.id),
-          extraAttrsPerSession,
-        );
-        obs.week = stateWithScheduleApplied.currentWeek;
-        obs.season = stateWithScheduleApplied.currentSeason;
+          scout: currentScout,
+          context: "deepVideoAnalysis",
+          activityType: "deepVideoAnalysis",
+          countryId: playerCountry,
+          existingObservations: playerEvidence(player.id),
+          extraAttributes: extraAttrsPerSession,
+        });
         // Apply equipment videoConfidence + dataAccuracy boost for deep video
         if (deepVideoConfBoost > 0 || deepDataAccBoost > 0) {
           obs.attributeReadings = obs.attributeReadings.map((r) => ({

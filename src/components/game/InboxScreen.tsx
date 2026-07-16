@@ -39,6 +39,7 @@ import {
 } from "@/engine/core/gameDate";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { useShallow } from "zustand/react/shallow";
+import type { DecisionRecord } from "@/engine/consequences";
 
 // ─── Message type config ──────────────────────────────────────────────────────
 
@@ -443,6 +444,82 @@ function NarrativeEventCard({
   );
 }
 
+function ConsequenceDecisionCard({
+  decision,
+  currentWeek,
+  currentSeason,
+  seasonLength,
+  onChoice,
+}: {
+  decision: DecisionRecord;
+  currentWeek: number;
+  currentSeason: number;
+  seasonLength: number;
+  onChoice: (optionId: string) => void;
+}) {
+  const metadataTitle = decision.metadata?.title;
+  const metadataPremise = decision.metadata?.premise;
+  const title = typeof metadataTitle === "string" ? metadataTitle : "Career decision";
+  const premise = typeof metadataPremise === "string"
+    ? metadataPremise
+    : "Two legitimate obligations are pulling your career in different directions. Your choice will be recorded.";
+  const decisionKindLabel = decision.source.kind === "lateCareerDilemma"
+    ? "Career crossroads"
+    : decision.source.kind === "worldConditionArc"
+      ? "World condition decision"
+      : decision.source.kind === "professionalCase"
+        ? "Scouting case"
+      : "Conflicting obligations";
+  const absoluteWeek = (season: number, week: number) => (season - 1) * seasonLength + week;
+  const weeksRemaining = Math.max(
+    0,
+    absoluteWeek(decision.deadlineAt.season, decision.deadlineAt.week)
+      - absoluteWeek(currentSeason, currentWeek),
+  );
+
+  return (
+    <article className="rounded-lg border border-amber-500/35 bg-amber-500/[0.06] p-4">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">
+            {decisionKindLabel}
+          </p>
+          <h3 className="mt-1 font-semibold text-white">{title}</h3>
+        </div>
+        <Badge variant="outline" className="border-amber-500/40 text-[10px] text-amber-300">
+          {weeksRemaining === 0 ? "Due now" : `${weeksRemaining}w remaining`}
+        </Badge>
+      </div>
+      <p className="mb-4 max-w-3xl text-sm leading-relaxed text-zinc-300">{premise}</p>
+      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3" role="list" aria-label={`Choices for ${title}`}>
+        {decision.options.map((option) => (
+          <div key={option.id} role="listitem" className="flex flex-col rounded-md border border-zinc-700 bg-zinc-950/70 p-3">
+            <p className="text-sm font-medium text-white">{option.label}</p>
+            {option.knownTradeoffs.length > 0 && (
+              <ul className="my-2 flex-1 space-y-1 text-xs leading-relaxed text-zinc-400">
+                {option.knownTradeoffs.map((tradeoff) => (
+                  <li key={tradeoff} className="flex gap-1.5">
+                    <span aria-hidden="true" className="text-amber-500">•</span>
+                    <span>{tradeoff}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2 min-h-10 w-full border-amber-500/35 text-xs hover:border-amber-400"
+              onClick={() => onChoice(option.id)}
+            >
+              Choose: {option.label}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 // ─── GossipActionButtons (A3) ────────────────────────────────────────────────
 
 interface GossipActionButtonsProps {
@@ -813,6 +890,7 @@ export function InboxScreen() {
     markAllRead,
     acknowledgeNarrativeEvent,
     resolveNarrativeEventChoice,
+    resolveConsequenceDecision,
     resolveSeasonEvent,
     handleGossipAction,
     acceptMarketplaceBid,
@@ -828,6 +906,7 @@ export function InboxScreen() {
       markAllRead: state.markAllRead,
       acknowledgeNarrativeEvent: state.acknowledgeNarrativeEvent,
       resolveNarrativeEventChoice: state.resolveNarrativeEventChoice,
+      resolveConsequenceDecision: state.resolveConsequenceDecision,
       resolveSeasonEvent: state.resolveSeasonEvent,
       handleGossipAction: state.handleGossipAction,
       acceptMarketplaceBid: state.acceptMarketplaceBid,
@@ -857,6 +936,22 @@ export function InboxScreen() {
   const activeNarrativeEvents = useMemo(
     () => (gameState?.narrativeEvents ?? []).filter((e) => !e.acknowledged),
     [gameState?.narrativeEvents],
+  );
+  const activeCareerDecisions = useMemo(
+    () => Object.values(gameState?.consequenceState.decisions ?? {})
+      .filter((decision) =>
+        decision.status === "offered"
+        && (decision.source.kind === "lateCareerDilemma"
+          || decision.source.kind === "relationshipConflict"
+          || decision.source.kind === "worldConditionArc"
+          || decision.source.kind === "professionalCase"),
+      )
+      .sort((left, right) =>
+        left.deadlineAt.season - right.deadlineAt.season
+        || left.deadlineAt.week - right.deadlineAt.week
+        || left.id.localeCompare(right.id),
+      ),
+    [gameState?.consequenceState.decisions],
   );
 
   // A7: Compute available seasons
@@ -963,6 +1058,28 @@ export function InboxScreen() {
             </button>
           )}
         </div>
+
+        {activeCareerDecisions.length > 0 && (
+          <section aria-label="Career decisions" className="mb-6">
+            <div className="mb-3 flex items-center gap-2">
+              <AlertTriangle size={14} className="text-amber-400" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-white">Decisions Requiring Judgment</h2>
+              <Badge className="text-[10px]">{activeCareerDecisions.length}</Badge>
+            </div>
+            <div className="space-y-3">
+              {activeCareerDecisions.map((decision) => (
+                <ConsequenceDecisionCard
+                  key={decision.id}
+                  decision={decision}
+                  currentWeek={currentWeek}
+                  currentSeason={currentSeason}
+                  seasonLength={seasonLength}
+                  onChoice={(optionId) => resolveConsequenceDecision(decision.id, optionId)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ── Narrative events at the top ──────────────────────────────── */}
         {activeNarrativeEvents.length > 0 && (

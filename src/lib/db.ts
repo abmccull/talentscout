@@ -23,6 +23,12 @@ import { createEventDirectorState } from "@/engine/events/eventDirector";
 import type { CountryData } from "@/data/types";
 import { reconcileFinancialLedger } from "@/engine/finance/saveMigration";
 import { migrateWorldConditionState } from "@/engine/world/worldConditions";
+import {
+  closeOrphanedWorldConditionArcDecisions,
+  createWorldConditionArcState,
+  reconcileWorldConditionArcDecisions,
+} from "@/engine/world/worldConditionArcs";
+import { getSeasonLength } from "@/engine/core/gameDate";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import {
   createSaveEnvelope,
@@ -1593,6 +1599,33 @@ export function migrateSaveState(raw: unknown): GameState {
     state.currentSeason,
   );
   state.consequenceState = createConsequenceEngineState(state.consequenceState);
+  const migratedWorldConditionArcs = createWorldConditionArcState(
+    state.worldConditionArcState,
+    state.countries,
+  );
+  const repairedWorldArcDecisions = closeOrphanedWorldConditionArcDecisions({
+    state: migratedWorldConditionArcs,
+    decisions: state.consequenceState.decisions,
+    now: { week: state.currentWeek, season: state.currentSeason },
+  });
+  if (repairedWorldArcDecisions.closedDecisionIds.length > 0) {
+    state.consequenceState = {
+      ...state.consequenceState,
+      decisions: repairedWorldArcDecisions.decisions,
+    };
+    const closed = new Set(repairedWorldArcDecisions.closedDecisionIds);
+    state.inbox = state.inbox.map((message) =>
+      message.relatedId && closed.has(message.relatedId)
+        ? { ...message, actionRequired: false }
+        : message,
+    );
+  }
+  state.worldConditionArcState = reconcileWorldConditionArcDecisions({
+    state: migratedWorldConditionArcs,
+    decisions: state.consequenceState.decisions,
+    now: { week: state.currentWeek, season: state.currentSeason },
+    seasonLength: getSeasonLength(state.fixtures, state.currentSeason),
+  });
   state.eventDirector = createEventDirectorState(state.eventDirector);
   state.weeklyStrategy = normalizeWeeklyStrategyState(
     state.weeklyStrategy,
@@ -1605,6 +1638,9 @@ export function migrateSaveState(raw: unknown): GameState {
   if (!state.rivalScouts) state.rivalScouts = {};
   if (!state.unlockedTools) state.unlockedTools = [];
   if (!state.managerProfiles) state.managerProfiles = {};
+  for (const [clubId, manager] of Object.entries(state.managerProfiles)) {
+    manager.managerId ??= state.clubs[clubId]?.managerId;
+  }
 
   // Phase 3 defaults — season events
   if (!state.seasonEvents) state.seasonEvents = [];

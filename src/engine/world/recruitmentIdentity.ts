@@ -10,9 +10,11 @@
 
 import type {
   Club,
+  ManagerProfile,
   Player,
   ScoutReport,
   ScoutingPhilosophy,
+  Specialization,
   YouthBriefPriority,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
@@ -30,6 +32,39 @@ export type ClubRecruitmentArchetype =
   | "immediateImpact"
   | "valueTrader"
   | "crossBorderNetwork";
+
+export type RecruitmentEvidencePreference = "live" | "data" | "network" | "balanced";
+export type RecruitmentRiskTolerance = "low" | "medium" | "high";
+export type RecruitmentReach = "local" | "regional" | "international" | "global";
+
+/**
+ * One authoritative, player-safe description of how a club recruits.
+ *
+ * Numeric traits are 0-100 and intentionally derive only from visible club,
+ * manager, region, season, and run-seed facts. Consumers must not recreate
+ * philosophy switches of their own; this contract keeps briefs, market bids,
+ * tactical fit, development patience, and career affinity explainable.
+ */
+export interface ClubRecruitmentDoctrine {
+  version: 1;
+  clubId: string;
+  archetype: ClubRecruitmentArchetype;
+  preferredSeniorAgeRange: [number, number];
+  academyIntakeAgeRange: [number, number];
+  evidencePreference: RecruitmentEvidencePreference;
+  riskTolerance: RecruitmentRiskTolerance;
+  geographicReach: RecruitmentReach;
+  adaptationTolerance: number;
+  pathwayPatience: number;
+  tacticalRoleRigidity: number;
+  sellingPressure: number;
+  managerInfluence: number;
+  directorInfluence: number;
+  minimumEvidenceQuality: number;
+  seasonalObjective: RecruitmentFocus;
+  specializationAffinity: Specialization[];
+  reasons: string[];
+}
 
 export interface RegionRecruitmentIdentity {
   regionId: string;
@@ -54,6 +89,7 @@ export interface ClubRecruitmentIdentity {
   primaryFocus: RecruitmentFocus;
   seasonalFocus: RecruitmentFocus;
   opportunityScore: number;
+  doctrine: ClubRecruitmentDoctrine;
   reasons: string[];
   region?: RegionRecruitmentIdentity;
 }
@@ -112,6 +148,75 @@ const PRIMARY_FOCUS_BY_PHILOSOPHY: Record<ScoutingPhilosophy, RecruitmentFocus> 
   globalRecruiter: "character",
 };
 
+interface DoctrineBase {
+  preferredSeniorAgeRange: [number, number];
+  academyIntakeAgeRange: [number, number];
+  evidencePreference: RecruitmentEvidencePreference;
+  riskTolerance: RecruitmentRiskTolerance;
+  geographicReach: RecruitmentReach;
+  adaptationTolerance: number;
+  pathwayPatience: number;
+  tacticalRoleRigidity: number;
+  sellingPressure: number;
+  managerInfluence: number;
+  specializationAffinity: Specialization[];
+}
+
+const DOCTRINE_BASES: Record<ScoutingPhilosophy, DoctrineBase> = {
+  academyFirst: {
+    preferredSeniorAgeRange: [17, 23],
+    academyIntakeAgeRange: [14, 16],
+    evidencePreference: "live",
+    riskTolerance: "high",
+    geographicReach: "regional",
+    adaptationTolerance: 62,
+    pathwayPatience: 86,
+    tacticalRoleRigidity: 38,
+    sellingPressure: 34,
+    managerInfluence: 44,
+    specializationAffinity: ["youth", "regional"],
+  },
+  winNow: {
+    preferredSeniorAgeRange: [24, 31],
+    academyIntakeAgeRange: [16, 17],
+    evidencePreference: "live",
+    riskTolerance: "low",
+    geographicReach: "international",
+    adaptationTolerance: 36,
+    pathwayPatience: 22,
+    tacticalRoleRigidity: 78,
+    sellingPressure: 18,
+    managerInfluence: 72,
+    specializationAffinity: ["firstTeam", "data"],
+  },
+  marketSmart: {
+    preferredSeniorAgeRange: [21, 27],
+    academyIntakeAgeRange: [15, 17],
+    evidencePreference: "data",
+    riskTolerance: "medium",
+    geographicReach: "international",
+    adaptationTolerance: 58,
+    pathwayPatience: 61,
+    tacticalRoleRigidity: 45,
+    sellingPressure: 88,
+    managerInfluence: 38,
+    specializationAffinity: ["data", "regional", "firstTeam"],
+  },
+  globalRecruiter: {
+    preferredSeniorAgeRange: [19, 29],
+    academyIntakeAgeRange: [14, 17],
+    evidencePreference: "network",
+    riskTolerance: "medium",
+    geographicReach: "global",
+    adaptationTolerance: 84,
+    pathwayPatience: 54,
+    tacticalRoleRigidity: 34,
+    sellingPressure: 55,
+    managerInfluence: 48,
+    specializationAffinity: ["regional", "data", "firstTeam"],
+  },
+};
+
 const CLUB_LABELS: Record<ClubRecruitmentArchetype, string> = {
   academyBuilder: "Academy builder",
   immediateImpact: "Immediate-impact recruiter",
@@ -151,6 +256,100 @@ function hashSeed(value: string): number {
 
 function seededUnit(seed: string): number {
   return hashSeed(seed) / 0x100000000;
+}
+
+function boundedSeasonalTrait(base: number, seed: string): number {
+  return clamp(base + (seededUnit(seed) * 2 - 1) * 7);
+}
+
+export function getPhilosophyPreferredAgeRange(
+  philosophy: ScoutingPhilosophy,
+): [number, number] {
+  return [...DOCTRINE_BASES[philosophy].preferredSeniorAgeRange];
+}
+
+export function getPhilosophyAcademyIntakeAgeRange(
+  philosophy: ScoutingPhilosophy,
+): [number, number] {
+  return [...DOCTRINE_BASES[philosophy].academyIntakeAgeRange];
+}
+
+export function getPhilosophySpecializationAffinity(
+  philosophy: ScoutingPhilosophy,
+): Specialization[] {
+  return [...DOCTRINE_BASES[philosophy].specializationAffinity];
+}
+
+/** Build the canonical recruitment doctrine used by every club-facing system. */
+export function deriveClubRecruitmentDoctrine(input: {
+  club: Club;
+  seed: string;
+  season: number;
+  region?: RegionRecruitmentIdentity;
+  manager?: ManagerProfile;
+  seasonalObjective?: RecruitmentFocus;
+}): ClubRecruitmentDoctrine {
+  const { club } = input;
+  const base = DOCTRINE_BASES[club.scoutingPhilosophy];
+  const seedPrefix = `${input.seed}:${club.id}:s${input.season}:doctrine`;
+  const seasonalObjective = input.seasonalObjective ?? weightedSeededPick(
+    `${seedPrefix}:objective`,
+    FOCUS_ORDER.map((focus) => ({
+      value: focus,
+      weight:
+        focus === PRIMARY_FOCUS_BY_PHILOSOPHY[club.scoutingPhilosophy] ? 5
+        : focus === input.region?.seasonalFocus ? 2.5
+        : 1,
+    })),
+  );
+  const managerSignal = input.manager
+    ? Math.round((input.manager.reportInfluence - 0.5) * 24)
+    : 0;
+  const managerInfluence = clamp(
+    boundedSeasonalTrait(base.managerInfluence, `${seedPrefix}:manager`) + managerSignal,
+  );
+  const directorInfluence = clamp(100 - managerInfluence);
+  const minimumEvidenceQuality = clamp(
+    38
+      + club.reputation * 0.22
+      + club.youthAcademyRating * 0.65
+      + (base.riskTolerance === "low" ? 8 : base.riskTolerance === "high" ? -4 : 2),
+    45,
+    82,
+  );
+
+  return {
+    version: 1,
+    clubId: club.id,
+    archetype: ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy],
+    preferredSeniorAgeRange: [...base.preferredSeniorAgeRange],
+    academyIntakeAgeRange: [...base.academyIntakeAgeRange],
+    evidencePreference: base.evidencePreference,
+    riskTolerance: base.riskTolerance,
+    geographicReach: base.geographicReach,
+    adaptationTolerance: boundedSeasonalTrait(base.adaptationTolerance, `${seedPrefix}:adaptation`),
+    pathwayPatience: boundedSeasonalTrait(base.pathwayPatience, `${seedPrefix}:patience`),
+    tacticalRoleRigidity: boundedSeasonalTrait(base.tacticalRoleRigidity, `${seedPrefix}:roles`),
+    sellingPressure: boundedSeasonalTrait(base.sellingPressure, `${seedPrefix}:selling`),
+    managerInfluence,
+    directorInfluence,
+    minimumEvidenceQuality,
+    seasonalObjective,
+    specializationAffinity: [...base.specializationAffinity],
+    reasons: [
+      `${CLUB_LABELS[ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy]]} doctrine favours ages ${base.preferredSeniorAgeRange[0]}-${base.preferredSeniorAgeRange[1]} and ${base.evidencePreference} evidence.`,
+      `${base.pathwayPatience >= 70 ? "Patient" : base.pathwayPatience <= 35 ? "Immediate" : "Balanced"} pathway expectations sit alongside ${base.geographicReach} recruitment reach.`,
+      `${managerInfluence >= directorInfluence ? "The manager" : "The recruitment leadership"} currently has the stronger voice; this season emphasises ${FOCUS_LABELS[seasonalObjective]}.`,
+    ],
+  };
+}
+
+/** 0-100 fit against the doctrine's preferred senior age window. */
+export function scoreDoctrineAgeFit(age: number, doctrine: ClubRecruitmentDoctrine): number {
+  const [minimum, maximum] = doctrine.preferredSeniorAgeRange;
+  if (age >= minimum && age <= maximum) return 100;
+  const yearsOutside = age < minimum ? minimum - age : age - maximum;
+  return clamp(100 - yearsOutside * 5);
 }
 
 function weightedSeededPick<T extends string>(
@@ -307,6 +506,7 @@ export function deriveClubRecruitmentIdentity(input: {
   seed: string;
   season: number;
   region?: RegionRecruitmentIdentity;
+  manager?: ManagerProfile;
 }): ClubRecruitmentIdentity {
   const { club, region } = input;
   const archetype = ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy];
@@ -345,6 +545,14 @@ export function deriveClubRecruitmentIdentity(input: {
     + regionAlignment * 0.12
     + seededUnit(`${input.seed}:${club.id}:s${input.season}:opportunity`) * 8,
   );
+  const doctrine = deriveClubRecruitmentDoctrine({
+    club,
+    seed: input.seed,
+    season: input.season,
+    region,
+    manager: input.manager,
+    seasonalObjective: seasonalFocus,
+  });
 
   return {
     clubId: club.id,
@@ -353,6 +561,7 @@ export function deriveClubRecruitmentIdentity(input: {
     primaryFocus,
     seasonalFocus,
     opportunityScore,
+    doctrine,
     region,
     reasons: [
       `${club.name} has ${youthCount} registered players aged 20 or younger and a ${club.youthAcademyRating}/20 academy.`,
@@ -372,6 +581,12 @@ export function deriveBriefRecruitmentIdentity(
   brief: YouthRecruitmentBrief,
 ): ClubRecruitmentIdentity {
   const archetype = ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy];
+  const doctrine = deriveClubRecruitmentDoctrine({
+    club,
+    seed: brief.id,
+    season: brief.createdSeason,
+    seasonalObjective: brief.developmentPriority,
+  });
   return {
     clubId: club.id,
     archetype,
@@ -379,6 +594,7 @@ export function deriveBriefRecruitmentIdentity(
     primaryFocus: PRIMARY_FOCUS_BY_PHILOSOPHY[club.scoutingPhilosophy],
     seasonalFocus: brief.developmentPriority,
     opportunityScore: 0,
+    doctrine,
     reasons: [
       `${CLUB_LABELS[archetype]} priorities are expressed in this brief through ${FOCUS_LABELS[brief.developmentPriority]}.`,
     ],
@@ -489,4 +705,3 @@ export function evaluateRecruitmentIdentityFit(input: {
     ],
   };
 }
-

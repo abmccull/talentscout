@@ -98,6 +98,7 @@ test.describe("Youth geography and travel", () => {
     await expect(nigeria).toBeVisible();
 
     await nigeria.click();
+    await expect(browser).toBeHidden();
     const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });
     await expect(dossier).toContainText("World coverage");
     await expect(dossier).toContainText("Talent pool");
@@ -114,7 +115,10 @@ test.describe("Youth geography and travel", () => {
     ).toEqual([]);
     await gamePage.page.keyboard.press("Escape");
     await expect(dossier).toBeHidden();
-    await expect(nigeria).toBeFocused();
+    const browserTrigger = gamePage.page.getByRole("button", { name: /Browse countries/i });
+    await expect(browserTrigger).toBeFocused();
+    await browserTrigger.click();
+    await expect(browser).toBeVisible();
 
     const search = browser.getByRole("textbox", { name: "Search generated countries" });
     await search.fill("england");
@@ -150,6 +154,7 @@ test.describe("Youth geography and travel", () => {
 
     const nigeria = browser.getByRole("button", { name: /Nigeria, Talent pool/i });
     await nigeria.click();
+    await expect(browser).toBeHidden();
     const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });
     await expect(dossier).toBeVisible();
     const dossierBox = await dossier.boundingBox();
@@ -160,7 +165,7 @@ test.describe("Youth geography and travel", () => {
 
     await gamePage.page.keyboard.press("Escape");
     await expect(dossier).toBeHidden();
-    await expect(nigeria).toBeFocused();
+    await expect(browserTrigger).toBeFocused();
     gamePage.expectNoConsoleErrors();
   });
 
@@ -323,13 +328,11 @@ test.describe("Youth geography and travel", () => {
     await gamePage.advanceWeeks(1);
     await gamePage.setScreen("internationalView");
     await expect(gamePage.page.getByTestId("active-international-objectives")).toContainText("0/2");
-
     await gamePage.advanceWeeks(1);
     const outcome = await gamePage.page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;
       const history = state.internationalAssignmentHistory ?? [];
       return {
-        reputation: state.scout.reputation,
         activeAssignment: state.activeInternationalAssignment,
         outcome: history.at(-1)?.outcome,
         completionMessage: state.inbox.find(
@@ -338,7 +341,6 @@ test.describe("Youth geography and travel", () => {
       };
     });
     expect(outcome.activeAssignment).toBeNull();
-    expect(outcome.reputation).toBe(39);
     expect(outcome.outcome).toMatchObject({
       grade: "failed",
       completionPercent: 0,
@@ -346,6 +348,7 @@ test.describe("Youth geography and travel", () => {
       familiarityDelta: 0,
     });
     expect(outcome.completionMessage).toContain("Travel alone earns no assignment credit");
+    expect(outcome.completionMessage).toContain("Reputation -1");
     gamePage.expectNoConsoleErrors();
   });
 });

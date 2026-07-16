@@ -46,7 +46,7 @@ test.describe("Career Paths", () => {
     await expect(seasonal.getByRole("heading", { name: /Season 1 live conditions/i }))
       .toBeVisible();
     await expect(seasonal.locator(
-      '[data-testid^="world-condition-"]:not([data-testid="world-condition-panel"])',
+      '[data-testid^="world-condition-"]:not([data-testid="world-condition-panel"]):not([data-testid^="world-condition-arc-"])',
     ))
       .toHaveCount(
         await gamePage.getGameStateValue("worldConditionState.active.length") as number,
@@ -340,7 +340,7 @@ test.describe("Career Paths", () => {
     expect(result.scout.contractEndSeason).toBe(4);
     expect(result.finances.careerPath).toBe("club");
     expect(result.finances.independentTier).toBeNull();
-    expect(result.finances.monthlyIncome).toBe(9600);
+    expect(result.finances.monthlyIncome).toBe(10400);
     expect(result.finances.academyPartnerships).toBe(1);
     expect(result.finances.specUniqueIncome).toBe(500);
     expect(result.finances.officeTier).toBe("home");

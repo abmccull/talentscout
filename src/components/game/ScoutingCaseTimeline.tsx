@@ -6,6 +6,7 @@ import type {
 const KIND_LABELS: Record<ScoutingCaseTimelineEntryKind, string> = {
   discovery: "Discovery",
   reflection: "Reflection",
+  judgment: "Judgment",
   report: "Report",
   delivery: "Delivery",
   decision: "Decision",
@@ -18,6 +19,7 @@ const KIND_LABELS: Record<ScoutingCaseTimelineEntryKind, string> = {
 const KIND_COLORS: Record<ScoutingCaseTimelineEntryKind, string> = {
   discovery: "bg-cyan-400",
   reflection: "bg-violet-400",
+  judgment: "bg-rose-400",
   report: "bg-sky-400",
   delivery: "bg-amber-400",
   decision: "bg-orange-400",

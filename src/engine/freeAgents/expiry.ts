@@ -14,6 +14,7 @@ import type {
   FreeAgent,
   InboxMessage,
 } from "@/engine/core/types";
+import { assessClubAffordability } from "@/engine/finance/clubEconomics";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 
 // =============================================================================
@@ -129,14 +130,25 @@ export function processContractExpiries(
     if ((!overCapacity || retainedForSquadDepth) && rng.chance(renewalChance)) {
       // Club renews: extend contract by 1-3 seasons
       const extension = rng.nextInt(1, 3);
-      renewals.push({
-        playerId,
-        clubId: ownerClubId,
-        contractLength: extension,
-        wage: Math.max(player.wage, Math.round(player.currentAbility * 60)),
+      const renewedWage = Math.max(player.wage, Math.round(player.currentAbility * 60));
+      const affordability = assessClubAffordability({
+        club,
+        players: state.players,
+        weeklyWageCommitment: renewedWage,
+        releasedWeeklyCommitment: Math.max(0, player.wage),
       });
-      renewedPlayerIds.push(playerId);
-      continue;
+      if (!affordability.affordable) {
+        // Fall through to release when the club cannot carry the next deal.
+      } else {
+        renewals.push({
+          playerId,
+          clubId: ownerClubId,
+          contractLength: extension,
+          wage: renewedWage,
+        });
+        renewedPlayerIds.push(playerId);
+        continue;
+      }
     }
 
     // Release to free agent pool

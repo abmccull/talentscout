@@ -26,6 +26,7 @@ import type {
 import type { AttributeDomain } from "@/engine/core/types";
 import { ACTIVITY_MODE_MAP, VENUE_PHASE_RANGES } from "@/engine/observation/types";
 import { getStrategicChoiceResolutions } from "@/engine/observation/quickInteraction";
+import { createObservationSituation } from "@/engine/observation/situations";
 
 // =============================================================================
 // CONSTANTS
@@ -205,6 +206,14 @@ export function createSession(
       ? `instance-${config.activityInstanceId}`
       : `session-${config.week}-${config.season}`;
   const sessionId = makeId(config.seed, identitySuffix);
+  const situation = createObservationSituation({
+    activityType: config.activityType,
+    seed: config.seed,
+    venueType: config.venueType,
+    countryId: config.countryId,
+    culturalInsights: config.culturalInsights,
+    travelPosture: config.travelPosture,
+  });
 
   return {
     id: sessionId,
@@ -229,6 +238,20 @@ export function createSession(
     insightPointsEarned: 0,
     reflectionNotes: [],
     venueAtmosphere: undefined,
+    situation,
+    countryId: config.countryId,
+    travelPosture: config.travelPosture,
+    culturalInsights: config.culturalInsights?.map((insight) => ({
+      ...insight,
+      effects: insight.effects
+        ? {
+            ...insight.effects,
+            signalByDomain: { ...insight.effects.signalByDomain },
+            contextTags: [...insight.effects.contextTags],
+            biasWarnings: [...insight.effects.biasWarnings],
+          }
+        : undefined,
+    })),
     players: buildSessionPlayers(config),
     startedAtWeek: config.week,
     startedAtSeason: config.season,

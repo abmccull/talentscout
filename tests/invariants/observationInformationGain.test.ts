@@ -10,6 +10,10 @@ import type {
   ObservationContext,
   PlayerAttribute,
 } from "@/engine/core/types";
+import {
+  createObservationSituation,
+  type ObservationSituationSnapshot,
+} from "@/engine/observation/situations";
 
 const PLAYER_ID = "player-1";
 
@@ -18,6 +22,7 @@ function observation(
   context: ObservationContext,
   sourceSessionId: string,
   attributes: readonly PlayerAttribute[] = ["firstTouch"],
+  situation?: ObservationSituationSnapshot,
 ): Observation {
   return {
     id,
@@ -35,6 +40,7 @@ function observation(
     })),
     notes: [],
     flaggedMoments: [],
+    situation,
   };
 }
 
@@ -133,6 +139,47 @@ describe("observation information gain", () => {
       contextIsNovel: false,
       sourceFamilyIsNovel: false,
     });
+  });
+
+  it("rewards a materially new situation without pretending the context itself is new", () => {
+    const repeated = createObservationSituation({
+      activityType: "trainingVisit",
+      seed: "known-training-situation",
+      venueType: "first-team-training",
+    });
+    const novel: ObservationSituationSnapshot = {
+      ...repeated,
+      weather: "heavy_rain",
+      repetitionKey: `${repeated.repetitionKey}:adverse`,
+    };
+    const observations = [
+      observation("obs-known", "trainingGround", "session-known", ["firstTouch"], repeated),
+    ];
+    const repeatedResult = getHighestValueNextContext({
+      observations,
+      playerId: PLAYER_ID,
+      candidateContexts: ["trainingGround"],
+      candidateSituations: { trainingGround: repeated },
+    });
+    const novelResult = getHighestValueNextContext({
+      observations,
+      playerId: PLAYER_ID,
+      candidateContexts: ["trainingGround"],
+      candidateSituations: { trainingGround: novel },
+    });
+
+    expect(repeatedResult).toMatchObject({
+      contextIsNovel: false,
+      situationIsNovel: false,
+    });
+    expect(novelResult).toMatchObject({
+      contextIsNovel: false,
+      situationIsNovel: true,
+    });
+    expect(novelResult?.score).toBeGreaterThan(repeatedResult?.score ?? Number.POSITIVE_INFINITY);
+    expect(novelResult?.reasons).toContain(
+      "Revisits a known context under materially different football conditions.",
+    );
   });
 
   it("prioritizes contexts that address the scout's selected information need", () => {

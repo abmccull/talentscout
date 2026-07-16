@@ -524,10 +524,13 @@ function validateEconomy(state: GameState): string[] {
   for (const [type, amount] of Object.entries(finances.expenses)) {
     if (amount < 0) failures.push(`finances:expense:${type}:negative:${amount}`);
   }
-  for (const loan of finances.loans ?? []) {
-    if (loan.principal < 0) failures.push(`business-loan:${loan.id}:negative-principal`);
-    if (loan.remainingBalance < 0) failures.push(`business-loan:${loan.id}:negative-balance`);
-    if (loan.remainingBalance > loan.principal * 100) failures.push(`business-loan:${loan.id}:runaway`);
+  const canonicalLoans = finances.activeLoan
+    ? [finances.activeLoan]
+    : finances.loans ?? [];
+  for (const loan of canonicalLoans) {
+    if (loan.principal < 0) failures.push(`loan:${loan.id}:negative-principal`);
+    if (loan.remainingBalance < 0) failures.push(`loan:${loan.id}:negative-balance`);
+    if (loan.remainingBalance > loan.principal * 100) failures.push(`loan:${loan.id}:runaway`);
   }
   if (Math.abs(finances.balance) > 1_000_000_000) {
     failures.push(`finances:runaway-balance:${finances.balance}`);

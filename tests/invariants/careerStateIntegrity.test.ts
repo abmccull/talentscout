@@ -27,6 +27,7 @@ import {
 } from "@/engine/finance/distress";
 import { initializeFinances } from "@/engine/finance/expenses";
 import { addActivity, createWeekSchedule } from "@/engine/core/calendar";
+import { monthlyEquivalentOfWeeklyAmount } from "@/engine/core/annualization";
 import { createScout } from "@/engine/scout/creation";
 import { RNG } from "@/engine/rng";
 import { createWeeklyActions } from "@/stores/actions/weeklyActions";
@@ -208,7 +209,9 @@ describe("career state integrity", () => {
     expect(transitioned.finances.office.tier).toBe("home");
     expect(transitioned.finances.retainerContracts[0]?.status).toBe("cancelled");
     expect(transitioned.finances.consultingContracts[0]?.status).toBe("expired");
-    expect(transitioned.finances.monthlyIncome).toBe(8_000);
+    expect(transitioned.finances.monthlyIncome).toBe(
+      monthlyEquivalentOfWeeklyAmount(2_000),
+    );
   });
 
   it("does not carry an employer's leadership portfolio into unemployment", () => {
@@ -373,6 +376,16 @@ describe("career state integrity", () => {
     expect(bankrupt.finances.office.tier).toBe("home");
     expect(isBankruptcyRecoveryActive(bankrupt.finances)).toBe(true);
 
+    const replayedBankruptcy = processDistress(
+      bankrupt.finances,
+      bankrupt.scout,
+      20,
+      2,
+    );
+    expect(replayedBankruptcy.finances).toEqual(bankrupt.finances);
+    expect(replayedBankruptcy.scout).toEqual(bankrupt.scout);
+    expect(replayedBankruptcy.messages).toEqual([]);
+
     const recoveryWeek = processDistress(
       bankrupt.finances,
       bankrupt.scout,
@@ -381,6 +394,15 @@ describe("career state integrity", () => {
     );
     expect(recoveryWeek.forcedRest).toBe(true);
     expect(recoveryWeek.finances.bankruptcyRecoveryCooldown).toBe(9);
+
+    const replayedRecovery = processDistress(
+      recoveryWeek.finances,
+      recoveryWeek.scout,
+      21,
+      2,
+    );
+    expect(replayedRecovery.finances).toEqual(recoveryWeek.finances);
+    expect(replayedRecovery.finances.bankruptcyRecoveryCooldown).toBe(9);
   });
 
   it("blocks scheduling and clears injected work throughout bankruptcy recovery", () => {

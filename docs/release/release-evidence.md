@@ -64,6 +64,29 @@ seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
 
+Completed seed workers are atomic checkpoints. Re-running the same command
+from the same clean commit resumes only workers whose commit tree, Node
+runtime, hardware profile, concurrency, release budgets, seed count, season
+count, and evidence shape match exactly. A dirty tree, changed commit, changed
+runtime, partial JSON, or legacy worker file is rejected and recomputed. Seed
+one is always executed again after all workers complete, even on a fully
+resumed run, so checkpoints cannot substitute for the determinism proof.
+
+Preview the execution plan without starting a worker:
+
+```powershell
+$env:SOAK_PLAN_ONLY = "true"
+npm run test:release-soak
+Remove-Item Env:SOAK_PLAN_ONLY
+```
+
+Progress is written to
+`artifacts/release/generated/long-career-workers/checkpoint.json`. Interrupting
+the job can lose the active seed processes, but completed seeds remain safe to
+resume. Mid-seed restoration is intentionally unsupported because restoring a
+season snapshot would change the full-career memory baseline and create a
+second simulation path.
+
 This is intentionally a multi-hour release job. Do not shorten it by jumping
 calendar weeks; use a smaller seed/season profile only for local development
 proof, where the resulting evidence remains supporting rather than certifying.

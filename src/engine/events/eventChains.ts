@@ -23,6 +23,7 @@ import type { RNG } from "@/engine/rng";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
+import type { RumorNarrativeTruthContract } from "./narrativeTruth";
 
 // =============================================================================
 // Constants
@@ -290,9 +291,9 @@ const transferSaga: ChainTemplate = {
       weekDelay: 0,
       escalationLevel: 0,
       generateEvent: (chain, state, rng) =>
-        buildChainEvent(rng, chain, state, "exclusiveTip",
+        buildRumorChainEvent(rng, chain, state, "exclusiveTip",
           "Transfer Whispers",
-          `Multiple sources confirm that ${chain.context.clubName} are quietly ` +
+          `Multiple sources claim that ${chain.context.clubName} are quietly ` +
           `exploring a move for ${chain.context.playerName}. No formal approach ` +
           `yet, but the player's agent has been spotted at meetings with the ` +
           `club's sporting director. If this progresses, your early intelligence ` +
@@ -303,12 +304,12 @@ const transferSaga: ChainTemplate = {
       weekDelay: 2,
       escalationLevel: 0,
       generateEvent: (chain, state, rng) =>
-        buildChainEvent(rng, chain, state, "exclusiveTip",
+        buildRumorChainEvent(rng, chain, state, "exclusiveTip",
           "Formal Interest Registered",
-          `${chain.context.clubName} have made an official enquiry about ` +
-          `${chain.context.playerName}. The asking price is reported to be ` +
-          `around ${chain.context.bidAmount}M. Your earlier intelligence has ` +
-          `been confirmed — the question now is whether the deal progresses ` +
+          `An intermediary claims ${chain.context.clubName} have asked about ` +
+          `${chain.context.playerName}. The asking price is rumoured to be ` +
+          `around ${chain.context.bidAmount}M. No enquiry or valuation exists in ` +
+          `the authoritative transfer state yet — the question is whether the talk progresses ` +
           `and what your role in it should be.`,
           0,
           [
@@ -321,17 +322,16 @@ const transferSaga: ChainTemplate = {
       escalationLevel: 1,
       generateEvent: (chain, state, rng) => {
         const chose = chain.choiceHistory[1];
-        return buildChainEvent(rng, chain, state, "rivalPoach",
-          "Bid On The Table",
+        return buildRumorChainEvent(rng, chain, state, "rivalPoach",
+          "Bid Talk Intensifies",
           chose === 0
             ? `Your assessment of ${chain.context.playerName} is now central to ` +
-              `the negotiation. ${chain.context.clubName} have tabled a ` +
-              `${chain.context.bidAmount}M bid and your report is being used ` +
-              `to evaluate the offer. The next 48 hours are critical.`
-            : `Despite your concerns, ${chain.context.clubName} have pressed ahead ` +
-              `with a ${chain.context.bidAmount}M bid for ${chain.context.playerName}. ` +
-              `Your warning is on record. If the deal goes through and the player ` +
-              `struggles, your foresight will be remembered.`,
+              `the discussion. A source believes ${chain.context.clubName} may prepare ` +
+              `an offer near ${chain.context.bidAmount}M and says your assessment is ` +
+              `being considered. No bid has been recorded yet.`
+            : `Despite your concerns, sources believe ${chain.context.clubName} may ` +
+              `prepare an offer near ${chain.context.bidAmount}M for ${chain.context.playerName}. ` +
+              `Your warning is on record, but no bid has been recorded yet.`,
           1,
           [
             { label: "Advocate for the deal", effect: "transferAdvocate" },
@@ -344,24 +344,22 @@ const transferSaga: ChainTemplate = {
       escalationLevel: 0,
       generateEvent: (chain, state, rng) => {
         const lastChoice = chain.choiceHistory[2];
-        const dealSuccess = rng.chance(lastChoice === 0 ? 0.7 : 0.3);
+        const talksPositive = rng.chance(lastChoice === 0 ? 0.7 : 0.3);
         let title: string;
         let description: string;
-        if (dealSuccess) {
-          title = "Transfer Completed";
-          description = `The deal for ${chain.context.playerName} is done. ` +
-            `${chain.context.clubName} completed the signing at ${chain.context.bidAmount}M. ` +
-            `Your involvement throughout the saga has been noted by all parties. ` +
-            `The player's performance in the coming months will be the ultimate ` +
-            `verdict on everyone's judgment — including yours.`;
+        if (talksPositive) {
+          title = "Talks Reportedly Progressing";
+          description = `Sources expect discussions about ${chain.context.playerName} ` +
+            `to continue, with ${chain.context.clubName} still interested near the ` +
+            `reported ${chain.context.bidAmount}M figure. Only an authoritative movement ` +
+            `record can confirm whether a signing ultimately happens.`;
         } else {
-          title = "Transfer Collapses";
-          description = `The ${chain.context.playerName} deal has fallen through at ` +
-            `the last moment. ${chain.context.clubName} and the selling club could not ` +
-            `agree on personal terms. The saga is over — for now. Your intelligence ` +
-            `throughout the process has demonstrated your value regardless of the outcome.`;
+          title = "Talks Reportedly Cooling";
+          description = `Sources now doubt that discussions about ` +
+            `${chain.context.playerName} will progress. No cause has been confirmed and ` +
+            `no authoritative transfer outcome has been recorded.`;
         }
-        return buildChainEvent(rng, chain, state, "transferRuleChange", title, description, 0);
+        return buildRumorChainEvent(rng, chain, state, "transferRuleChange", title, description, 0);
       },
     },
   ],
@@ -635,22 +633,21 @@ const injuryComeback: ChainTemplate = {
       weekDelay: 0,
       escalationLevel: 0,
       generateEvent: (chain, state, rng) =>
-        buildChainEvent(rng, chain, state, "injurySetback",
-          "Major Injury News",
-          `${chain.context.playerName} has suffered a serious ${chain.context.injuryType} ` +
-          `injury. The initial prognosis is 4-6 months out. This is a player ` +
-          `you've been tracking closely — the question now is whether the injury ` +
-          `fundamentally changes their trajectory or whether they can come back ` +
-          `as strong as before.`,
+        buildRumorChainEvent(rng, chain, state, "injurySetback",
+          "Possible Injury Concern",
+          `A source claims ${chain.context.playerName} is being assessed for a ` +
+          `${chain.context.injuryType} problem. The medical detail and recovery ` +
+          `timeline are unconfirmed; rely on the player's canonical injury record ` +
+          `before changing a formal assessment.`,
           0),
     },
     {
       weekDelay: 4,
       escalationLevel: 0,
       generateEvent: (chain, state, rng) =>
-        buildChainEvent(rng, chain, state, "injurySetback",
-          "Rehab Progress Report",
-          `Sources close to ${chain.context.playerName}'s rehabilitation report ` +
+        buildRumorChainEvent(rng, chain, state, "injurySetback",
+          "Unverified Rehab Update",
+          `Sources close to ${chain.context.playerName} report ` +
           `mixed signals. The physical recovery is on schedule, but there are ` +
           `concerns about the player's confidence in the affected area. They've ` +
           `been avoiding certain movements in training. The next few weeks will ` +
@@ -667,34 +664,28 @@ const injuryComeback: ChainTemplate = {
       escalationLevel: 0,
       generateEvent: (chain, state, rng) => {
         const choice = chain.choiceHistory[1];
-        const fullRecovery = rng.chance(0.5);
+        const optimisticReport = rng.chance(0.5);
         let title: string;
         let description: string;
-        if (fullRecovery) {
-          title = "Full Recovery Confirmed";
+        if (optimisticReport) {
+          title = "Sources Sound Optimistic";
           description = choice === 0
-            ? `Your faith in ${chain.context.playerName} has been vindicated. ` +
-              `The player returned to full training this week and looked ` +
-              `sharp in a reserve fixture. The ${chain.context.injuryType} ` +
-              `injury is behind them. Your assessment held firm when others wavered.`
-            : `${chain.context.playerName} has made a full recovery, looking ` +
-              `as dynamic as ever in training. Your downgraded assessment now ` +
-              `looks overly cautious — the player proved more resilient than ` +
-              `expected. A reminder that injury recovery is never straightforward.`;
+            ? `A source says ${chain.context.playerName}'s work is progressing well. ` +
+              `That supports your patience, but it does not confirm a return or ` +
+              `validate the original assessment.`
+            : `A source says ${chain.context.playerName}'s work is progressing well. ` +
+              `Your cautious assessment can be revisited when an authoritative ` +
+              `injury status or match appearance supports it.`;
         } else {
-          title = "Recovery Setback";
+          title = "Sources Report Continued Concern";
           description = choice === 0
-            ? `Bad news: ${chain.context.playerName} suffered a setback in ` +
-              `training. The ${chain.context.injuryType} hasn't healed as ` +
-              `expected and further surgery may be required. Your optimistic ` +
-              `assessment will need revision. Injury prognosis is an imprecise ` +
-              `science.`
-            : `Your caution was warranted. ${chain.context.playerName}'s ` +
-              `recovery has hit complications and the player faces additional ` +
-              `time on the sidelines. Your downgraded assessment protected the ` +
-              `club from a potentially costly misjudgment.`;
+            ? `A source says ${chain.context.playerName}'s recovery remains uncertain. ` +
+              `Your optimistic position now needs verified medical or match evidence, ` +
+              `not another anonymous update.`
+            : `A source says ${chain.context.playerName}'s recovery remains uncertain. ` +
+              `The caution may prove appropriate, but no outcome is confirmed yet.`;
         }
-        return buildChainEvent(rng, chain, state, "injurySetback", title, description, 0);
+        return buildRumorChainEvent(rng, chain, state, "injurySetback", title, description, 0);
       },
     },
   ],
@@ -982,26 +973,24 @@ const youthBreakthrough: ChainTemplate = {
       weekDelay: 0,
       escalationLevel: 0,
       generateEvent: (chain, state, rng) =>
-        buildChainEvent(rng, chain, state, "debutBrilliance",
-          "Youth Player Shows Promise",
-          `${chain.context.playerName} has been turning heads in ` +
-          `${chain.context.clubName}'s youth setup. Two consecutive ` +
-          `man-of-the-match performances in the youth league have people ` +
-          `talking. At this stage it's potential rather than proof, but ` +
-          `the raw materials are clearly there.`,
+        buildRumorChainEvent(rng, chain, state, "debutBrilliance",
+          "Youth Player Drawing Attention",
+          `A youth-football source says ${chain.context.playerName} has been ` +
+          `drawing attention around ${chain.context.clubName}. No match-rating ` +
+          `record has been cited, so treat the account as a lead to investigate ` +
+          `rather than performance evidence.`,
           0),
     },
     {
       weekDelay: 3,
       escalationLevel: 0,
       generateEvent: (chain, state, rng) =>
-        buildChainEvent(rng, chain, state, "debutBrilliance",
-          "Breakthrough Match",
-          `${chain.context.playerName} was handed a surprise first-team debut ` +
-          `for ${chain.context.clubName} and didn't disappoint. A composed ` +
-          `performance well beyond their years has generated significant ` +
-          `excitement. Multiple clubs are now making enquiries. Your early ` +
-          `awareness of this talent gives you an advantage.`,
+        buildRumorChainEvent(rng, chain, state, "debutBrilliance",
+          "Possible First-Team Opportunity",
+          `A club source believes ${chain.context.playerName} may be close to ` +
+          `senior involvement at ${chain.context.clubName}. No debut milestone ` +
+          `or recruitment enquiry is recorded yet. Your early awareness gives ` +
+          `you time to seek direct evidence.`,
           0,
           [
             { label: "File a comprehensive report now", effect: "youthReportNow" },
@@ -1013,36 +1002,28 @@ const youthBreakthrough: ChainTemplate = {
       escalationLevel: 0,
       generateEvent: (chain, state, rng) => {
         const choice = chain.choiceHistory[1];
-        const starPerformance = rng.chance(0.5);
+        const positiveChatter = rng.chance(0.5);
         let title: string;
         let description: string;
-        if (starPerformance) {
-          title = "Star in the Making";
+        if (positiveChatter) {
+          title = "Positive Chatter Continues";
           description = choice === 0
-            ? `Your early report on ${chain.context.playerName} has proved ` +
-              `prescient. The player has cemented a first-team place at ` +
-              `${chain.context.clubName} and is being talked about as one of ` +
-              `the most exciting young talents in the league. Your early call ` +
-              `looks increasingly impressive.`
-            : `${chain.context.playerName} has established themselves in ` +
-              `${chain.context.clubName}'s first team. You waited for more data ` +
-              `and the picture is now clear — genuine star quality. Other scouts ` +
-              `got their reports in first, but you now have the most complete ` +
-              `assessment available.`;
+            ? `Sources remain enthusiastic about ${chain.context.playerName}. ` +
+              `Your early report has gained attention, but no first-team place or ` +
+              `star trajectory is established by this update.`
+            : `Sources remain enthusiastic about ${chain.context.playerName}. ` +
+              `Waiting preserved your evidence standard; the next direct observation ` +
+              `or recorded senior appearance should decide what you write.`;
         } else {
-          title = "Youth Talent Fades";
+          title = "Early Chatter Cools";
           description = choice === 0
-            ? `${chain.context.playerName}'s early promise has not been ` +
-              `sustained. After the debut, subsequent performances have been ` +
-              `underwhelming. Your early report may have been premature — ` +
-              `the sample size was always thin. A reminder of the volatility ` +
-              `of youth assessment.`
-            : `Your caution was warranted. ${chain.context.playerName} has ` +
-              `struggled to build on the breakthrough performance. The player ` +
-              `has been returned to the youth setup for further development. ` +
-              `Patience in scouting is never wasted.`;
+            ? `Sources are now less certain about ${chain.context.playerName}. ` +
+              `That does not prove the report wrong, but it exposes how little ` +
+              `verified evidence supported the original rush.`
+            : `Sources are now less certain about ${chain.context.playerName}. ` +
+              `Your caution avoided turning unverified enthusiasm into a formal claim.`;
         }
-        return buildChainEvent(rng, chain, state, "debutBrilliance", title, description, 0);
+        return buildRumorChainEvent(rng, chain, state, "debutBrilliance", title, description, 0);
       },
     },
   ],
@@ -1281,6 +1262,36 @@ export function resolveChainChoice(
 }
 
 /**
+ * Chains without an authoritative world command may still carry useful market
+ * intelligence, but they must never masquerade as completed simulation facts.
+ */
+function buildRumorChainEvent(
+  rng: RNG,
+  chain: EventChain,
+  state: GameState,
+  type: NarrativeEventType,
+  title: string,
+  description: string,
+  escalationLevel: number,
+  choices?: { label: string; effect: string }[],
+): NarrativeEvent {
+  const truth = {
+    kind: "rumor",
+    sourceLabel: "unverified football source",
+  } satisfies RumorNarrativeTruthContract;
+  return buildChainEvent(
+    rng,
+    chain,
+    state,
+    type,
+    `Rumour: ${title}`,
+    `This is ${truth.sourceLabel} intelligence, not an authoritative world-state update. ${description}`,
+    escalationLevel,
+    choices,
+  );
+}
+
+/**
  * Mark a chain as resolved with final effects.
  *
  * @param state   - Current game state.
@@ -1324,6 +1335,68 @@ export function tryTriggerChain(
   return startChain(rng, state, template.key);
 }
 
+type ChainChoiceEffects = Readonly<{
+  reputationChange: number;
+  fatigueChange: number;
+}>;
+
+/**
+ * Authored immediate stakes for every shipped chain choice. The delayed chain
+ * outcomes still decide whether the judgment was correct; these values price
+ * what the scout commits immediately (political capital, effort, or restraint).
+ */
+const CHAIN_CHOICE_EFFECTS: Readonly<Record<string, readonly ChainChoiceEffects[]>> = {
+  "dressingRoomConflict:1": [
+    { reputationChange: 3, fatigueChange: 4 },
+    { reputationChange: 1, fatigueChange: 1 },
+    { reputationChange: 0, fatigueChange: -2 },
+  ],
+  "transferSaga:1": [
+    { reputationChange: 2, fatigueChange: 3 },
+    { reputationChange: 1, fatigueChange: 1 },
+  ],
+  "transferSaga:2": [
+    { reputationChange: 4, fatigueChange: 4 },
+    { reputationChange: 2, fatigueChange: 1 },
+  ],
+  "wonderkidPressure:1": [
+    { reputationChange: 3, fatigueChange: 3 },
+    { reputationChange: 2, fatigueChange: 2 },
+    { reputationChange: 1, fatigueChange: 0 },
+  ],
+  "boardUltimatum:1": [
+    { reputationChange: 4, fatigueChange: 4 },
+    { reputationChange: 3, fatigueChange: 5 },
+    { reputationChange: 0, fatigueChange: -2 },
+  ],
+  "rivalPoaching:1": [
+    { reputationChange: 3, fatigueChange: 7 },
+    { reputationChange: 2, fatigueChange: 4 },
+    { reputationChange: 0, fatigueChange: -2 },
+  ],
+  "injuryComeback:1": [
+    { reputationChange: 2, fatigueChange: 1 },
+    { reputationChange: 1, fatigueChange: 0 },
+  ],
+  "contactBetrayal:0": [
+    { reputationChange: 2, fatigueChange: 3 },
+    { reputationChange: 0, fatigueChange: 4 },
+  ],
+  "scoutingScandal:0": [
+    { reputationChange: 4, fatigueChange: 5 },
+    { reputationChange: 1, fatigueChange: 2 },
+  ],
+  "managerFallout:1": [
+    { reputationChange: 3, fatigueChange: 3 },
+    { reputationChange: 1, fatigueChange: 5 },
+    { reputationChange: 4, fatigueChange: 7 },
+  ],
+  "youthBreakthrough:1": [
+    { reputationChange: 3, fatigueChange: 4 },
+    { reputationChange: 1, fatigueChange: -1 },
+  ],
+};
+
 /**
  * Compute reputation and fatigue changes for a chain event choice.
  * This is called when a player resolves a choice on a chain event.
@@ -1339,14 +1412,15 @@ export function computeChainChoiceEffects(
   rng: RNG,
   choiceStepIndex?: number,
 ): { reputationChange: number; fatigueChange: number } {
-  // Default: moderate rep change based on choice index
-  // First choices tend to be proactive (higher reward/risk),
-  // last choices tend to be cautious (lower reward/risk)
   const stepIndex = choiceStepIndex ??
     chain.awaitingChoice?.stepIndex ??
     chain.currentStep - 1;
   const template = findChainTemplate(chain.templateKey);
   if (!template) return { reputationChange: 0, fatigueChange: 0 };
+
+  const authoredEffects = CHAIN_CHOICE_EFFECTS[`${chain.templateKey}:${stepIndex}`];
+  const authoredChoice = authoredEffects?.[choiceIndex];
+  if (authoredChoice) return { ...authoredChoice };
 
   const step = template.steps[stepIndex];
   const escalation = step?.escalationLevel ?? 0;

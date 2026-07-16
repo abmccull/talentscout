@@ -6,6 +6,8 @@ import {
   findUnpartitionedGameStateKeys,
   gameStateFieldSelector,
   getActiveGameMode,
+  getActiveGameModeId,
+  getActiveRunKind,
   partitionGameState,
 } from "@/engine/core/gameStatePartitions";
 import { migrateSaveState } from "@/lib/db";
@@ -31,11 +33,24 @@ describe("GameState ownership partitions", () => {
     const state = migratedState();
     const partitions = partitionGameState(state, "youth");
 
-    expect(getActiveGameMode(state)).toBe(state.scout.primarySpecialization);
+    expect(getActiveGameMode(state)).toBe(state.runManifest.specialization);
+    expect(getActiveGameModeId(state)).toBe("youth-scout");
+    expect(getActiveRunKind(state)).toBe("career");
     expect(partitions.sharedWorld.players).toBe(state.players);
     expect(partitions.sharedCareer.reports).toBe(state.reports);
     expect(partitions.mode.unsignedYouth).toBe(state.unsignedYouth);
     expect(partitions.sharedCareer.systemFitCache).toBe(state.systemFitCache);
+  });
+
+  it("does not let mutable scout specialization replace immutable run identity", () => {
+    const state = migratedState();
+    const inconsistent = {
+      ...state,
+      scout: { ...state.scout, primarySpecialization: "data" as const },
+    };
+
+    expect(getActiveGameMode(inconsistent)).toBe(state.runManifest.specialization);
+    expect(getActiveGameModeId(inconsistent)).toBe("youth-scout");
   });
 
   it("builds narrow selectors that tolerate the loading state", () => {

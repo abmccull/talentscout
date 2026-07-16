@@ -17,11 +17,18 @@ import type {
   CountryReputation,
   Scout,
   SubRegion,
+  ActivityType,
+  Contact,
+  RegionalKnowledgeLedgerEntry,
+  RegionalKnowledgeProcessedMetrics,
 } from "@/engine/core/types";
 import { discoverHiddenLeague } from "@/engine/world/hiddenLeagues";
-import { isScoutAbroad } from "@/engine/world/travel";
+import { getTravelPostureEffects, isScoutAbroad } from "@/engine/world/travel";
 import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
+import { getScheduledActivityInstances } from "@/engine/core/calendar";
+import { generateContactForType } from "@/engine/network/contacts";
+import { hydrateCulturalInsight } from "@/engine/world/footballCulture";
 
 // =============================================================================
 // CONSTANTS
@@ -113,6 +120,38 @@ const DEFAULT_INSIGHT_POOL: CulturalInsight[] = [
  * One insight is given per threshold crossed.
  */
 const INSIGHT_THRESHOLDS = [10, 25, 45, 70];
+const MAX_KNOWLEDGE_LEDGER_ENTRIES = 64;
+
+/** Activities that create first-hand or relationship-backed local knowledge. */
+const ACTIVITY_KNOWLEDGE_GAIN: Partial<Record<ActivityType, number>> = {
+  attendMatch: 1.25,
+  trainingVisit: 1.25,
+  academyVisit: 1.25,
+  youthTournament: 1.5,
+  schoolMatch: 1.25,
+  grassrootsTournament: 1.5,
+  streetFootball: 1.5,
+  academyTrialDay: 1.25,
+  youthFestival: 1.5,
+  followUpSession: 1,
+  parentCoachMeeting: 1,
+  reserveMatch: 1.25,
+  scoutingMission: 1.5,
+  agentShowcase: 1,
+  trialMatch: 1.25,
+  contractNegotiation: 0.75,
+  networkMeeting: 1,
+  freeAgentOutreach: 0.75,
+  loanMonitoring: 0.75,
+};
+
+const RELATIONSHIP_KNOWLEDGE_ACTIVITIES = new Set<ActivityType>([
+  "parentCoachMeeting",
+  "contractNegotiation",
+  "networkMeeting",
+  "freeAgentOutreach",
+  "agentShowcase",
+]);
 
 function canonicalizeCountry(value?: string): string | undefined {
   return normalizeCountryKey(value);
@@ -185,6 +224,148 @@ function resolveScoutEffectiveCountry(state: GameState): string | undefined {
       .map((countryId) => canonicalizeCountry(countryId))
       .find((countryId): countryId is string => !!countryId)
   );
+}
+
+function travelPostureForCountry(state: GameState, countryId: string) {
+  const booking = state.scout.travelBooking;
+  if (
+    !booking
+    || !isScoutAbroad(state.scout, state.currentWeek)
+    || canonicalizeCountry(booking.destinationCountry) !== countryId
+  ) {
+    return getTravelPostureEffects(undefined);
+  }
+  return getTravelPostureEffects(booking.posture);
+}
+
+function currentMetrics(rep: CountryReputation | undefined): RegionalKnowledgeProcessedMetrics {
+  return {
+    reportsSubmitted: Math.max(0, rep?.reportsSubmitted ?? 0),
+    successfulFinds: Math.max(0, rep?.successfulFinds ?? 0),
+    contactCount: Math.max(0, rep?.contactCount ?? 0),
+  };
+}
+
+function metricDelta(
+  current: RegionalKnowledgeProcessedMetrics,
+  previous: RegionalKnowledgeProcessedMetrics,
+  key: keyof RegionalKnowledgeProcessedMetrics,
+): number {
+  return Math.max(0, current[key] - previous[key]);
+}
+
+function makeLedgerEntry(input: {
+  countryId: string;
+  week: number;
+  season: number;
+  source: RegionalKnowledgeLedgerEntry["source"];
+  amount: number;
+  summary: string;
+  sourceId?: string;
+  activityType?: ActivityType;
+}): RegionalKnowledgeLedgerEntry {
+  const sourceKey = input.sourceId ?? input.activityType ?? input.source;
+  return {
+    id: `regional:${input.countryId}:s${input.season}:w${input.week}:${input.source}:${sourceKey}`,
+    week: input.week,
+    season: input.season,
+    source: input.source,
+    amount: Math.round(input.amount * 100) / 100,
+    summary: input.summary,
+    sourceId: input.sourceId,
+    activityType: input.activityType,
+  };
+}
+
+function getScheduledKnowledgeEntries(
+  state: GameState,
+  countryId: string,
+  effectiveCountry: string | undefined,
+): RegionalKnowledgeLedgerEntry[] {
+  if (!state.schedule) return [];
+  const activePosture = state.scout.travelBooking
+    && isScoutAbroad(state.scout, state.currentWeek)
+    && canonicalizeCountry(state.scout.travelBooking.destinationCountry) === countryId
+    ? state.scout.travelBooking.posture
+    : undefined;
+  const postureEffects = travelPostureForCountry(state, countryId);
+  return getScheduledActivityInstances(state.schedule).flatMap((instance) => {
+    const activity = instance.activity;
+    if (activity.type === "internationalTravel") {
+      const destination = canonicalizeCountry(activity.targetId);
+      if (destination !== countryId) return [];
+      return [makeLedgerEntry({
+        countryId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        source: "fieldActivity",
+        amount: 0.5,
+        summary: `Route preparation and arrival work added initial context for ${countryId}.`,
+        sourceId: instance.key,
+        activityType: activity.type,
+      })];
+    }
+
+    const amount = ACTIVITY_KNOWLEDGE_GAIN[activity.type];
+    if (!amount || effectiveCountry !== countryId) return [];
+    const specializationMultiplier = state.scout.primarySpecialization === "regional"
+      ? 1.2
+      : 1;
+    const relationshipMultiplier = RELATIONSHIP_KNOWLEDGE_ACTIVITIES.has(activity.type)
+      ? Math.sqrt(postureEffects.contactQualityMultiplier)
+      : 1;
+    return [makeLedgerEntry({
+      countryId,
+      week: state.currentWeek,
+      season: state.currentSeason,
+      source: "fieldActivity",
+      amount: amount
+        * specializationMultiplier
+        * postureEffects.regionalKnowledgeMultiplier
+        * relationshipMultiplier,
+      summary: `${activity.description || activity.type} produced first-hand regional knowledge${activePosture ? ` under a ${activePosture} trip posture` : ""}.`,
+      sourceId: instance.key,
+      activityType: activity.type,
+    })];
+  });
+}
+
+function appendKnowledgeLedger(
+  existing: readonly RegionalKnowledgeLedgerEntry[] | undefined,
+  additions: readonly RegionalKnowledgeLedgerEntry[],
+): RegionalKnowledgeLedgerEntry[] {
+  const byId = new Map<string, RegionalKnowledgeLedgerEntry>();
+  for (const entry of [...(existing ?? []), ...additions]) byId.set(entry.id, entry);
+  return [...byId.values()].slice(-MAX_KNOWLEDGE_LEDGER_ENTRIES);
+}
+
+function materializeLocalContact(
+  rng: RNG,
+  state: GameState,
+  countryId: string,
+  contactId: string,
+): Contact {
+  const generatedContact = generateContactForType(
+    rng,
+    "localScout",
+    "Local football network",
+    countryId,
+  );
+  const postureEffects = travelPostureForCountry(state, countryId);
+  return {
+    ...generatedContact,
+    id: contactId,
+    country: countryId,
+    region: countryId,
+    relationship: Math.max(
+      15,
+      Math.min(70, Math.round(generatedContact.relationship * postureEffects.contactQualityMultiplier)),
+    ),
+    trustLevel: Math.max(
+      15,
+      Math.min(70, Math.round((generatedContact.trustLevel ?? 0) * postureEffects.contactQualityMultiplier)),
+    ),
+  };
 }
 
 // =============================================================================
@@ -360,11 +541,9 @@ export function synchronizeRegionalFamiliarity(
 /**
  * Process weekly regional knowledge growth based on the scout's activity.
  *
- * Knowledge grows from:
- *   - Being present in a country (travel): +2 per week
- *   - Submitting reports from a country: +1 per report
- *   - Having contacts in a country: +0.5 per contact (per week, passive)
- *   - Successful finds in a country: +3 per find
+ * Knowledge grows from completed field work, newly recorded reports/finds/
+ * contacts, and maintained local infrastructure. Mere idle presence no longer
+ * produces mastery. Every gain is retained in a bounded audit ledger.
  *
  * Also handles hidden league discovery, cultural insight generation,
  * and local contact auto-generation at thresholds.
@@ -380,55 +559,122 @@ export function processRegionalKnowledgeGrowth(
   regionalKnowledge: Record<string, RegionalKnowledge>;
   newDiscoveries: Array<{ countryId: string; leagueId: string; leagueName: string }>;
   newInsights: Array<{ countryId: string; insight: CulturalInsight }>;
-  newContacts: Array<{ countryId: string; contactId: string }>;
+  newContacts: Array<{ countryId: string; contactId: string; contact: Contact }>;
 } {
   const knowledge = { ...state.regionalKnowledge };
   const newDiscoveries: Array<{ countryId: string; leagueId: string; leagueName: string }> = [];
   const newInsights: Array<{ countryId: string; insight: CulturalInsight }> = [];
-  const newContacts: Array<{ countryId: string; contactId: string }> = [];
+  const newContacts: Array<{ countryId: string; contactId: string; contact: Contact }> = [];
+  const materializedContactIds = new Set(Object.keys(state.contacts ?? {}));
   const currentCountry = resolveScoutEffectiveCountry(state);
 
   for (const [countryId, prev] of Object.entries(knowledge)) {
 
+    // Old saves could persist only a regional contact id. Reconcile those ids
+    // into real relationship entities once, without requiring a threshold to
+    // be crossed again.
+    for (const contactId of prev.localContacts) {
+      if (materializedContactIds.has(contactId)) continue;
+      const contact = materializeLocalContact(rng, state, countryId, contactId);
+      newContacts.push({ countryId, contactId, contact });
+      materializedContactIds.add(contactId);
+    }
+
     const rep: CountryReputation | undefined =
       getCountryReputationByCountry(state.scout.countryReputations, countryId);
 
-    let knowledgeGain = 0;
+    const metrics = currentMetrics(rep);
+    // A missing legacy watermark initializes at current values. This prevents
+    // old career totals from being paid again on the first migrated tick.
+    const previousMetrics = prev.processedMetrics ?? metrics;
+    const ledgerEntries = getScheduledKnowledgeEntries(state, countryId, currentCountry);
 
-    // Active presence bonus
-    if (countryId === currentCountry) {
-      knowledgeGain += 2;
+    const reportDelta = metricDelta(metrics, previousMetrics, "reportsSubmitted");
+    if (reportDelta > 0) {
+      ledgerEntries.push(makeLedgerEntry({
+        countryId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        source: "report",
+        amount: reportDelta,
+        summary: `${reportDelta} newly filed regional report${reportDelta === 1 ? "" : "s"} consolidated local knowledge.`,
+        sourceId: `reports:${metrics.reportsSubmitted}`,
+      }));
     }
 
-    // Maintained offices and delegated local coverage continue building a
-    // bounded institutional knowledge base even while the player is away.
-    knowledgeGain += deriveRegionalPresence(state, countryId).effects.passiveKnowledgeGain;
-
-    // Passive contact knowledge (0.5 per contact, weekly drip)
-    if (rep && rep.contactCount > 0) {
-      knowledgeGain += Math.min(2, rep.contactCount * 0.5);
+    const successDelta = metricDelta(metrics, previousMetrics, "successfulFinds");
+    if (successDelta > 0) {
+      ledgerEntries.push(makeLedgerEntry({
+        countryId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        source: "successfulFind",
+        amount: successDelta * 3,
+        summary: `${successDelta} successful regional find${successDelta === 1 ? "" : "s"} validated the scout's market model.`,
+        sourceId: `finds:${metrics.successfulFinds}`,
+      }));
     }
 
-    // Regional specialist gets a passive +1 to home country knowledge
-    if (
-      state.scout.primarySpecialization === "regional" &&
-      countryId === currentCountry
-    ) {
-      knowledgeGain += 1;
+    const contactDelta = metricDelta(metrics, previousMetrics, "contactCount");
+    if (contactDelta > 0) {
+      ledgerEntries.push(makeLedgerEntry({
+        countryId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        source: "contact",
+        amount: contactDelta,
+        summary: `${contactDelta} new local relationship${contactDelta === 1 ? "" : "s"} added independent context.`,
+        sourceId: `contacts:${metrics.contactCount}`,
+      }));
     }
 
-    // Equipment familiarity bonus (only for the active country)
-    if (familiarityGainBonus > 0 && countryId === currentCountry) {
-      knowledgeGain += familiarityGainBonus;
+    const passiveKnowledgeGain = deriveRegionalPresence(
+      state,
+      countryId,
+    ).effects.passiveKnowledgeGain;
+    if (passiveKnowledgeGain > 0) {
+      ledgerEntries.push(makeLedgerEntry({
+        countryId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        source: "infrastructure",
+        amount: passiveKnowledgeGain,
+        summary: "Maintained office or delegated coverage consolidated institutional knowledge.",
+        sourceId: "maintained-presence",
+      }));
     }
 
-    if (knowledgeGain === 0) continue;
+    const hasFirstHandWork = ledgerEntries.some((entry) => entry.source === "fieldActivity");
+    if (familiarityGainBonus > 0 && hasFirstHandWork) {
+      ledgerEntries.push(makeLedgerEntry({
+        countryId,
+        week: state.currentWeek,
+        season: state.currentSeason,
+        source: "equipment",
+        amount: familiarityGainBonus,
+        summary: "Active regional tools preserved more context from this week's field work.",
+        sourceId: "familiarity-equipment",
+      }));
+    }
+
+    const existingLedgerIds = new Set((prev.knowledgeLedger ?? []).map((entry) => entry.id));
+    const novelLedgerEntries = ledgerEntries.filter((entry) => !existingLedgerIds.has(entry.id));
+    const knowledgeGain = novelLedgerEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const baseUpdated: RegionalKnowledge = {
+      ...prev,
+      processedMetrics: metrics,
+      knowledgeLedger: appendKnowledgeLedger(prev.knowledgeLedger, novelLedgerEntries),
+    };
+    if (knowledgeGain <= 0) {
+      knowledge[countryId] = baseUpdated;
+      continue;
+    }
 
     const oldLevel = prev.knowledgeLevel;
     const newLevel = Math.min(100, oldLevel + knowledgeGain);
 
     let updated: RegionalKnowledge = {
-      ...prev,
+      ...baseUpdated,
       knowledgeLevel: newLevel,
       scoutingEfficiency: calculateScoutingEfficiency(newLevel),
     };
@@ -450,7 +696,9 @@ export function processRegionalKnowledgeGrowth(
         ...updated,
         localContacts: [...updated.localContacts, contact],
       };
-      newContacts.push({ countryId, contactId: contact });
+      const materializedContact = materializeLocalContact(rng, state, countryId, contact);
+      newContacts.push({ countryId, contactId: contact, contact: materializedContact });
+      materializedContactIds.add(contact);
     }
 
     // Check hidden league discovery
@@ -514,7 +762,7 @@ export function generateCulturalInsight(
     ? thresholdIndex
     : rng.nextInt(0, available.length - 1);
 
-  return { ...available[idx] };
+  return hydrateCulturalInsight(countryId, { ...available[idx] });
 }
 
 // =============================================================================

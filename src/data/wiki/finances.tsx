@@ -22,7 +22,7 @@ export const financesArticles: WikiArticle[] = [
     summary:
       "Earn money through salary, report marketplace sales, retainer contracts, placement fees, consulting, and specialization bonuses.",
     searchText:
-      "Income arrives from multiple sources depending on your career path. Club scouts receive a weekly salary paid monthly (every 4 weeks). Salary bands by tier: Tier 1 0, Tier 2 500-1500, Tier 3 1500-4000, Tier 4 4000-10000, Tier 5 10000-25000 per week. Independent scouts sell reports on the marketplace, earn retainer fees from clubs, collect placement fees when recommended players transfer, and take consulting contracts. Report marketplace prices are based on conviction level: Note 100-200, Recommend 400-800, Strong Recommend 1200-2000, Table Pound 3000-5000. Prices are further modified by quality score, club tier, exclusivity (1.5x premium), market temperature (cold 0.7x to deadline 1.8x), and scout reputation. Placement fees are 2% of transfer fee base rate multiplied by conviction level (0.5x for Note up to 2x for Table Pound). Retainer contracts pay monthly fees: Basic 500-1000 for 2 reports, Standard 1500-3000 for 3 reports, Premium 4000-8000 for 5 reports, Elite 10000-20000 for 7 reports. Consulting contracts include Transfer Advisory 5000-25000 for 4 weeks, Youth Audit 3000-10000 for 6 weeks, Data Package 2000-8000 for 3 weeks, Talent Workshop 4000-15000 for 2 weeks. First report sale gets a 50% bonus. First placement fee gets a 25% bonus. New scouts receive a starter stipend for the first 4 weeks: 500 on casual, 300 on normal, 200 on hard, 150 on ironman. Starting cash: 4000 casual, 2000 for all other difficulties.",
+      "Income arrives from multiple sources depending on your career path. Club scouts receive a weekly salary converted to its calendar-month equivalent; the economy closes 12 financial periods distributed across each competition season. Salary bands by tier: Tier 1 0, Tier 2 500-1500, Tier 3 1500-4000, Tier 4 4000-10000, Tier 5 10000-25000 per week. Independent scouts sell reports on the marketplace, earn retainer fees from clubs, collect placement fees when recommended players transfer, and take consulting contracts. Report marketplace prices are based on conviction level: Note 100-200, Recommend 400-800, Strong Recommend 1200-2000, Table Pound 3000-5000. Prices are further modified by quality score, club tier, exclusivity (1.5x premium), market temperature (cold 0.7x to deadline 1.8x), and scout reputation. Placement fees are 2% of transfer fee base rate multiplied by conviction level (0.5x for Note up to 2x for Table Pound). Retainer contracts pay monthly fees: Basic 500-1000 for 2 reports, Standard 1500-3000 for 3 reports, Premium 4000-8000 for 5 reports, Elite 10000-20000 for 7 reports. Consulting contracts include Transfer Advisory 5000-25000 for 4 weeks, Youth Audit 3000-10000 for 6 weeks, Data Package 2000-8000 for 3 weeks, Talent Workshop 4000-15000 for 2 weeks. First report sale gets a 50% bonus. First placement fee gets a 25% bonus. New scouts receive a starter stipend for the first 4 weeks: 500 on casual, 300 on normal, 200 on hard, 150 on ironman. Starting cash: 4000 casual, 2000 for all other difficulties.",
     content: (
       <SectionBlock>
         <Para>
@@ -43,7 +43,8 @@ export const financesArticles: WikiArticle[] = [
           ]}
         />
         <Para>
-          Salary is paid monthly (every 4 weeks), totalling weekly rate times 4.
+          Weekly salary is converted to a calendar-month equivalent. Twelve
+          financial periods are distributed across each competition season.
         </Para>
 
         <Subheading>Report Marketplace (Independent)</Subheading>
@@ -129,13 +130,14 @@ export const financesArticles: WikiArticle[] = [
     summary:
       "Monthly costs include rent, travel, subscriptions, lifestyle, office, employee salaries, loan payments, and insurance.",
     searchText:
-      "Expenses are deducted monthly every 4 weeks alongside salary. Rent by tier: Tier 1 100, Tier 2 350, Tier 3 500, Tier 4 650, Tier 5 800. Travel base by tier: Tier 1 50, Tier 2 175, Tier 3 250, Tier 4 325, Tier 5 400. International travel adds 100 surcharge. Subscriptions are based on equipment loadout monthly total. Lifestyle costs: Level 1 Budget 200, Level 2 Comfortable 500, Level 3 Professional 1000, Level 4 Upscale 2000, Level 5 Luxury 5000. Higher lifestyle provides networking bonuses up to 20% and salary offer bonuses up to 15% but Luxury level carries a 10 point credit score penalty. Office costs: Home 0, Coworking 200, Small 500, Professional 1500, HQ 4000 monthly. Employee salaries vary by role: Scout 500-2000, Analyst 400-1500, Administrator 300-1000, Relationship Manager 600-2500, Mentee 200-600. Insurance costs 50 per employee per month. Loan payments are deducted based on active loan terms. NPC scout salaries at Tier 4 cost 500 each, Tier 5 costs 2000 each. Other incidentals: 35 at Tier 1, 50 at higher tiers.",
+      "Expenses are deducted at the same 12 financial-period closes distributed across each competition season. Rent by tier: Tier 1 100, Tier 2 350, Tier 3 500, Tier 4 650, Tier 5 800. Travel base by tier: Tier 1 50, Tier 2 175, Tier 3 250, Tier 4 325, Tier 5 400. International travel adds 100 surcharge. Subscriptions are based on equipment loadout monthly total. Lifestyle costs: Level 1 Budget 200, Level 2 Comfortable 500, Level 3 Professional 1000, Level 4 Upscale 2000, Level 5 Luxury 5000. Higher lifestyle provides networking bonuses up to 20% and salary offer bonuses up to 15% but Luxury level carries a 10 point credit score penalty. Office costs: Home 0, Coworking 200, Small 500, Professional 1500, HQ 4000 monthly. Employee salaries vary by role: Scout 500-2000, Analyst 400-1500, Administrator 300-1000, Relationship Manager 600-2500, Mentee 200-600. Insurance costs 50 per employee per month. Loan payments are deducted based on active loan terms. NPC scout salaries at Tier 4 cost 500 each, Tier 5 costs 2000 each. Other incidentals: 35 at Tier 1, 50 at higher tiers.",
     content: (
       <SectionBlock>
         <Para>
-          Expenses are deducted monthly (every 4 weeks) alongside your income.
-          As you advance through career tiers and expand your agency, costs
-          naturally increase.
+          Expenses are deducted alongside income at the same 12 financial
+          period closes distributed across the competition season. As you
+          advance through career tiers and expand your agency, costs naturally
+          increase.
         </Para>
 
         <Subheading>Fixed Expenses by Tier</Subheading>

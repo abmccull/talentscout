@@ -24,7 +24,11 @@ import {
   OUTCOME_REASON_COLORS,
   OUTCOME_REASON_SHORT_LABELS,
 } from "@/engine/firstTeam";
-import { calculateReportPrice } from "@/engine/finance";
+import {
+  calculateReportPrice,
+  formatAnalystEvidenceCategory,
+  formatAnalystReviewBias,
+} from "@/engine/finance";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -35,6 +39,11 @@ import {
   type ScoutingCaseTimeline,
 } from "@/engine/reports/scoutingCaseTimeline";
 import { ScoutingCaseTimelineView } from "./ScoutingCaseTimeline";
+import { ReportOpportunityHistoryPanel } from "./ReportOpportunityHistoryPanel";
+import {
+  buildReportOpportunityHistory,
+  type ReportOpportunityHistorySummary,
+} from "./reportHistoryOpportunityModel";
 
 const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
   note: "Note",
@@ -74,6 +83,7 @@ interface ReportDetailModalProps {
   reviews: RecommendationReview[];
   clubName?: string;
   caseTimeline?: ScoutingCaseTimeline;
+  opportunityHistory?: ReportOpportunityHistorySummary;
   onClose: () => void;
 }
 
@@ -86,6 +96,7 @@ function ReportDetailModal({
   reviews,
   clubName,
   caseTimeline,
+  opportunityHistory,
   onClose,
 }: ReportDetailModalProps) {
   return (
@@ -154,6 +165,9 @@ function ReportDetailModal({
                 {report.craftBreakdown.equipmentBonus > 0 && (
                   <div className="flex justify-between"><span>Equipment bonus</span><span>+{Math.round(report.craftBreakdown.equipmentBonus)}</span></div>
                 )}
+                {(report.craftBreakdown.analystReviewBonus ?? 0) > 0 && (
+                  <div className="flex justify-between"><span>Analyst review</span><span>+{Math.round(report.craftBreakdown.analystReviewBonus ?? 0)}</span></div>
+                )}
               </div>
             )}
             {report.qualityBreakdown && (
@@ -182,6 +196,26 @@ function ReportDetailModal({
               </Badge>
             )}
           </div>
+
+          {report.analystReview && (
+            <section className="rounded-xl border border-violet-400/20 bg-violet-400/[0.05] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">Analyst review incorporated</p>
+                  <h3 className="mt-1 text-sm font-bold text-white">
+                    {report.analystReview.analystName} · {formatAnalystEvidenceCategory(report.analystReview.evidenceCategory)}
+                  </h3>
+                </div>
+                <Badge variant="outline" className="border-violet-300/30 text-violet-200">
+                  +{report.analystReview.craftQualityBonus} craft
+                </Badge>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-zinc-300">{report.analystReview.critique}</p>
+              <p className="mt-3 text-xs leading-5 text-zinc-400">
+                Method bias — {formatAnalystReviewBias(report.analystReview.bias)}: {report.analystReview.biasDisclosure}
+              </p>
+            </section>
+          )}
 
           {report.briefId && (
             <section className="rounded-xl border border-sky-400/20 bg-sky-400/[0.05] p-4" aria-labelledby="professional-artifact-heading">
@@ -242,6 +276,10 @@ function ReportDetailModal({
                 </div>
               )}
             </section>
+          )}
+
+          {opportunityHistory && (
+            <ReportOpportunityHistoryPanel summary={opportunityHistory} />
           )}
 
           {caseTimeline && <ScoutingCaseTimelineView timeline={caseTimeline} />}
@@ -736,6 +774,22 @@ export function ReportHistory() {
     : undefined;
   const selectedCaseTimeline = selectedCaseId
     ? buildScoutingCaseTimeline(gameState, selectedCaseId) ?? undefined
+    : undefined;
+  const selectedOpportunityHistory = selectedReport
+    ? buildReportOpportunityHistory({
+        currentWeek: gameState.currentWeek,
+        currentSeason: gameState.currentSeason,
+        reports: gameState.reports,
+        scoutingCases: gameState.scoutingCases,
+        reportDeliveries: gameState.reportDeliveries,
+        clubDecisions: gameState.clubDecisions,
+        playerMovementHistory: gameState.playerMovementHistory,
+        finances: gameState.finances
+          ? { reportListings: gameState.finances.reportListings }
+          : undefined,
+        transferRecords: gameState.transferRecords,
+        clubs: gameState.clubs,
+      }, selectedReport)
     : undefined;
 
   const listingPlayerName = listingReport
@@ -1804,6 +1858,7 @@ export function ReportHistory() {
           reviews={selectedReviews}
           clubName={selectedAudienceClubName}
           caseTimeline={selectedCaseTimeline}
+          opportunityHistory={selectedOpportunityHistory}
           onClose={() => setSelectedReport(null)}
         />
       )}

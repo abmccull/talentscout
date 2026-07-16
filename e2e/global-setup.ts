@@ -18,6 +18,11 @@ async function globalSetup(config: FullConfig) {
       state: "visible",
       timeout: 120_000,
     });
+    await page.waitForFunction(
+      () => Boolean((window as typeof window & { __GAME_STORE__?: unknown }).__GAME_STORE__),
+      undefined,
+      { timeout: 120_000 },
+    );
   } catch (e) {
     console.error("[global-setup] Production export failed to hydrate:", e);
     throw e;

@@ -3,19 +3,24 @@ import type {
   GameState,
   InboxMessage,
   Observation,
+  ObservationContext,
   Player,
   Scout,
+  TournamentEvent,
   UnsignedYouth,
 } from "@/engine/core/types";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
 import { createRNG, type RNG } from "@/engine/rng";
-import { observePlayerLight } from "@/engine/scout/perception";
 import { getScheduledActivityInstances, processCompletedWeek } from "@/engine/core/calendar";
-import { getYouthVenuePool, processVenueObservation } from "@/engine/youth/venues";
+import { getYouthVenuePool } from "@/engine/youth/venues";
 import { processTrialOutcome } from "@/engine/firstTeam";
 import { recordDiscovery } from "@/engine/career";
 import { buildScoutQualityDataForState } from "./weeklySimulationSupport";
+import {
+  produceWeeklyPlayerObservation,
+  produceWeeklyVenueObservation,
+} from "./weeklyObservationProducer";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -87,6 +92,46 @@ export function processWeeklyProfessionalObservationActivities(
   const prioritizeFocusedYouth = input.prioritizeYouth;
   const prioritizeFocusedPlayers = input.prioritizePlayers;
   const TIER_LABELS = input.tierLabels;
+
+  // Every automatic observation is routed through the shared deterministic
+  // situation producer before perception runs. Keep these positional adapters
+  // local so the mature activity handlers below cannot accidentally bypass it.
+  const observePlayerLight = (
+    observationRng: RNG,
+    player: Player,
+    scout: Scout,
+    context: ObservationContext,
+    existingObservations: Observation[],
+    extraAttributes?: number,
+  ): Observation => produceWeeklyPlayerObservation({
+    state: stateWithScheduleApplied,
+    rng: observationRng,
+    player,
+    scout,
+    context,
+    existingObservations,
+    extraAttributes,
+  });
+  const processVenueObservation = (
+    observationRng: RNG,
+    scout: Scout,
+    youth: UnsignedYouth,
+    context: ObservationContext,
+    existingObservations: Observation[],
+    _week: number,
+    _season: number,
+    extraAttributes?: number,
+    tournament?: TournamentEvent,
+  ) => produceWeeklyVenueObservation({
+    state: stateWithScheduleApplied,
+    rng: observationRng,
+    scout,
+    youth,
+    context,
+    existingObservations,
+    extraAttributes,
+    tournament,
+  });
 
   // --- Academy Visit: base 2-3, modified by quality ---
   // Youth scouts use the proper youth venue system to draw from unsignedYouth.

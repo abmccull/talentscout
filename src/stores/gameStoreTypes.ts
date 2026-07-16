@@ -42,6 +42,7 @@ import type {
   StructuredReportInput,
   Territory,
   TravelBudgetTier,
+  TravelPosture,
   WeekSimulationState,
 } from "@/engine/core/types";
 import type { WeeklyWorkerTelemetry } from "@/engine/core/weeklyTransactionProtocol";
@@ -226,6 +227,9 @@ export interface GameStoreState {
     description: string;
   } | null;
   dismissCelebration: () => void;
+  acknowledgeCareerMoment: (momentId: string) => void;
+  suppressCareerMoments: (reason?: string) => void;
+  suppressCareerMoment: (momentId: string, reason?: string) => void;
   dismissSeasonAwards: () => void;
 
   startNewGame: (config: NewGameConfig) => Promise<void>;
@@ -350,11 +354,12 @@ export interface GameStoreState {
 
   bookInternationalTravel: (
     country: string,
-    options?: { duration?: number; assignmentId?: string },
+    options?: { duration?: number; assignmentId?: string; posture?: TravelPosture },
   ) => boolean;
 
   acknowledgeNarrativeEvent: (eventId: string) => void;
   resolveNarrativeEventChoice: (eventId: string, choiceIndex: number) => void;
+  resolveConsequenceDecision: (decisionId: string, optionId: string) => void;
   resolveRivalOrganizationOpportunity: (
     opportunityId: string,
     response: "exploit" | "decline",

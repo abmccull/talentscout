@@ -7,7 +7,7 @@ import { AudioEngine } from "./audioEngine";
 import { directAudioScene, type AudioDirectorInput } from "./audioDirector";
 
 export function useScreenMusic(input: AudioDirectorInput): void {
-  const { screen, weather, narrativeMoment, isTraveling } = input;
+  const { screen, weather, narrativeMoment, careerMomentCue, isTraveling } = input;
 
   useEffect(() => {
     const audio = AudioEngine.getInstance();
@@ -15,6 +15,7 @@ export function useScreenMusic(input: AudioDirectorInput): void {
       screen,
       weather,
       narrativeMoment,
+      careerMomentCue,
       isTraveling,
     });
 
@@ -30,5 +31,5 @@ export function useScreenMusic(input: AudioDirectorInput): void {
 
     if (directed.ambience === null) audio.stopAmbience();
     else if (directed.ambience !== undefined) audio.playAmbience(directed.ambience);
-  }, [screen, weather, narrativeMoment, isTraveling]);
+  }, [screen, weather, narrativeMoment, careerMomentCue, isTraveling]);
 }

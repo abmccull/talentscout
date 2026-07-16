@@ -16,7 +16,7 @@ import type {
   ScoutReport,
 } from "./types";
 import { deriveSeasonReviewMetrics } from "../career/seasonReviewContext";
-import { annualizeMonthlyAmount } from "./annualization";
+import { annualizeWeeklyAmount } from "./annualization";
 import { selectLatestReportsByCaseOpenedInRange } from "../reports/reportAccountability";
 
 // =============================================================================
@@ -127,7 +127,7 @@ function computeSeasonStats(
     ? finances.transactions
         .filter((t) => t.kind !== "openingBalance" && t.season === season && t.amount > 0)
         .reduce((sum, t) => sum + t.amount, 0)
-    : annualizeMonthlyAmount(state.scout.salary);
+    : annualizeWeeklyAmount(state.scout.salary);
   const expenses = finances
     ? finances.transactions
         .filter((t) => t.kind !== "openingBalance" && t.season === season && t.amount < 0)

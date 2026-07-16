@@ -10,7 +10,10 @@ import type {
   ConsultingType,
   Scout,
   Club,
+  ScoutReport,
+  Player,
 } from "../core/types";
+import { canAcceptConsultingWork } from "./agencyCapacity";
 import {
   addGameWeeksWithSeasonLength,
   isGameDateAtOrAfter,
@@ -31,6 +34,27 @@ const CONSULTING_CONFIGS: Record<ConsultingType, ConsultingConfig> = {
   youthAudit: { feeRange: [3000, 10000], durationWeeks: 6 },
   dataPackage: { feeRange: [2000, 8000], durationWeeks: 3 },
   talentWorkshop: { feeRange: [4000, 15000], durationWeeks: 2 },
+};
+
+const CONSULTING_DELIVERABLES: Record<ConsultingType, ConsultingContract["deliverables"]> = {
+  transferAdvisory: [
+    { type: "reports", description: "Two decision-ready target reports", required: 2, delivered: 0 },
+    { type: "analysis", description: "Comparative shortlist analysis", required: 1, delivered: 0 },
+    { type: "presentation", description: "Final recruitment meeting", required: 1, delivered: 0 },
+  ],
+  youthAudit: [
+    { type: "reports", description: "Three academy pathway reports", required: 3, delivered: 0 },
+    { type: "analysis", description: "Academy pipeline audit", required: 1, delivered: 0 },
+    { type: "presentation", description: "Academy findings presentation", required: 1, delivered: 0 },
+  ],
+  dataPackage: [
+    { type: "reports", description: "Two evidence-backed player reports", required: 2, delivered: 0 },
+    { type: "analysis", description: "Two comparative data notes", required: 2, delivered: 0 },
+  ],
+  talentWorkshop: [
+    { type: "analysis", description: "Workshop case study", required: 1, delivered: 0 },
+    { type: "presentation", description: "Deliver the talent workshop", required: 1, delivered: 0 },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -59,7 +83,16 @@ export function generateConsultingOffers(
   const clubList = Object.values(clubs);
   if (clubList.length === 0) return [];
 
-  const club = rng.pick(clubList);
+  const unavailableClubIds = new Set([
+    ...finances.consultingContracts
+      .filter((contract) => contract.status === "active")
+      .map((contract) => contract.clubId),
+    ...(finances.pendingConsultingOffers ?? []).map((contract) => contract.clubId),
+    ...(finances.blacklistedClubs ?? []),
+  ]);
+  const availableClubs = clubList.filter((club) => !unavailableClubIds.has(club.id));
+  if (availableClubs.length === 0) return [];
+  const club = rng.pick(availableClubs);
   const types: ConsultingType[] = ["transferAdvisory", "youthAudit", "dataPackage", "talentWorkshop"];
   const type = rng.pick(types);
 
@@ -71,6 +104,11 @@ export function generateConsultingOffers(
     config.durationWeeks,
     seasonLength,
   );
+  const offerExpiry = addGameWeeksWithSeasonLength(
+    { season, week },
+    2,
+    seasonLength,
+  );
 
   const contract: ConsultingContract = {
     id: `consult_${club.id}_${week}_${season}`,
@@ -80,6 +118,14 @@ export function generateConsultingOffers(
     deadline: deadline.week,
     deadlineSeason: deadline.season,
     status: "active",
+    deliverables: (CONSULTING_DELIVERABLES[type] ?? []).map((deliverable) => ({
+      ...deliverable,
+    })),
+    offeredWeek: week,
+    offeredSeason: season,
+    offerExpiresWeek: offerExpiry.week,
+    offerExpiresSeason: offerExpiry.season,
+    deliveredReportIds: [],
   };
 
   return [contract];
@@ -95,11 +141,92 @@ export function generateConsultingOffers(
 export function acceptConsulting(
   finances: FinancialRecord,
   contract: ConsultingContract,
+  scout?: Scout,
+  week?: number,
+  season?: number,
+): FinancialRecord {
+  if (
+    finances.consultingContracts.some((candidate) =>
+      candidate.clubId === contract.clubId && candidate.status === "active"
+    )
+    || (finances.blacklistedClubs ?? []).includes(contract.clubId)
+    || (scout && !canAcceptConsultingWork(finances, scout, contract))
+  ) return finances;
+  return {
+    ...finances,
+    consultingContracts: [
+      ...finances.consultingContracts,
+      {
+        ...contract,
+        acceptedWeek: week ?? contract.offeredWeek,
+        acceptedSeason: season ?? contract.offeredSeason,
+        deliveredReportIds: contract.deliveredReportIds ?? [],
+      },
+    ],
+  };
+}
+
+export function expireConsultingOffers(
+  finances: FinancialRecord,
+  week: number,
+  season: number,
 ): FinancialRecord {
   return {
     ...finances,
-    consultingContracts: [...finances.consultingContracts, contract],
+    pendingConsultingOffers: (finances.pendingConsultingOffers ?? []).filter((offer) =>
+      offer.offerExpiresWeek === undefined
+      || offer.offerExpiresSeason === undefined
+      || !isGameDateAtOrAfter(
+        { week, season },
+        { week: offer.offerExpiresWeek, season: offer.offerExpiresSeason },
+      )
+    ),
   };
+}
+
+/**
+ * A submitted client report advances matching consulting work once. Analysis
+ * advances alongside a qualifying report so the player makes scouting
+ * decisions, not bookkeeping clicks.
+ */
+export function recordConsultingReportDelivery(
+  finances: FinancialRecord,
+  clubId: string,
+  report: Pick<ScoutReport, "id" | "qualityScore">,
+  _player?: Pick<Player, "position" | "age">,
+): FinancialRecord {
+  return {
+    ...finances,
+    consultingContracts: finances.consultingContracts.map((contract) => {
+      if (
+        contract.clubId !== clubId
+        || contract.status !== "active"
+        || (contract.deliveredReportIds ?? []).includes(report.id)
+        || report.qualityScore < 50
+      ) return contract;
+      return {
+        ...contract,
+        deliveredReportIds: [...(contract.deliveredReportIds ?? []), report.id],
+        deliverables: (contract.deliverables ?? []).map((deliverable) => {
+          if (deliverable.type !== "reports" && deliverable.type !== "analysis") {
+            return deliverable;
+          }
+          return {
+            ...deliverable,
+            delivered: Math.min(deliverable.required, deliverable.delivered + 1),
+          };
+        }),
+      };
+    }),
+  };
+}
+
+export function canCompleteConsulting(
+  contract: ConsultingContract,
+): boolean {
+  return contract.status === "active" && (contract.deliverables ?? []).every((deliverable) =>
+    deliverable.type === "presentation" || deliverable.delivered >= deliverable.required
+  );
 }
 
 /**
@@ -111,20 +238,54 @@ export function processConsultingDeadline(
   season: number,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
-  const updated = finances.consultingContracts.map((c) => {
-    if (c.status !== "active") return c;
+  let updated = finances;
+  for (const contract of finances.consultingContracts) {
+    if (contract.status !== "active") continue;
     const deadline = addGameWeeksWithSeasonLength(
-      { season: c.deadlineSeason, week: 1 },
-      Math.max(0, c.deadline - 1),
+      { season: contract.deadlineSeason, week: 1 },
+      Math.max(0, contract.deadline - 1),
       seasonLength,
     );
-    if (isGameDateAtOrAfter({ season, week }, deadline)) {
-      return { ...c, status: "failed" as const };
+    if (!isGameDateAtOrAfter({ season, week }, deadline)) continue;
+    const referenceId = `consulting:${contract.id}:failed`;
+    if (updated.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+      continue;
     }
-    return c;
-  });
+    updated = {
+      ...updated,
+      failedContractCount: (updated.failedContractCount ?? 0) + 1,
+      consultingContracts: updated.consultingContracts.map((candidate) =>
+        candidate.id === contract.id
+          ? { ...candidate, status: "failed" as const }
+          : candidate,
+      ),
+      clientRelationships: (updated.clientRelationships ?? []).map((relationship) =>
+        relationship.clubId === contract.clubId
+          ? {
+              ...relationship,
+              satisfaction: Math.max(0, relationship.satisfaction - 12),
+              status: relationship.satisfaction - 12 < 25 ? "cooling" as const : relationship.status,
+              lastInteractionWeek: week,
+              lastInteractionSeason: season,
+            }
+          : relationship,
+      ),
+      transactions: [
+        ...updated.transactions,
+        {
+          week,
+          season,
+          amount: 0,
+          description: `Consulting contract failed (${contract.type})`,
+          referenceId,
+          category: "clientRevenue",
+          counterpartyId: contract.clubId,
+        },
+      ],
+    };
+  }
 
-  return { ...finances, consultingContracts: updated };
+  return updated;
 }
 
 /**
@@ -137,14 +298,39 @@ export function completeConsulting(
   season: number,
 ): FinancialRecord {
   const contract = finances.consultingContracts.find((c) => c.id === contractId);
-  if (!contract || contract.status !== "active") return finances;
+  if (!contract || !canCompleteConsulting(contract)) return finances;
+  const referenceId = `consulting:${contract.id}:completion`;
+  if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+    return finances;
+  }
 
   return {
     ...finances,
     balance: finances.balance + contract.fee,
     consultingRevenue: finances.consultingRevenue + contract.fee,
     consultingContracts: finances.consultingContracts.map((c) =>
-      c.id === contractId ? { ...c, status: "completed" as const } : c,
+      c.id === contractId
+        ? {
+            ...c,
+            status: "completed" as const,
+            deliverables: (c.deliverables ?? []).map((deliverable) => ({
+              ...deliverable,
+              delivered: deliverable.required,
+            })),
+          }
+        : c,
+    ),
+    clientRelationships: (finances.clientRelationships ?? []).map((relationship) =>
+      relationship.clubId === contract.clubId
+        ? {
+            ...relationship,
+            totalRevenue: relationship.totalRevenue + contract.fee,
+            satisfaction: Math.min(100, relationship.satisfaction + 6),
+            status: "active" as const,
+            lastInteractionWeek: week,
+            lastInteractionSeason: season,
+          }
+        : relationship,
     ),
     transactions: [
       ...finances.transactions,
@@ -153,6 +339,9 @@ export function completeConsulting(
         season,
         amount: contract.fee,
         description: `Consulting fee received (${contract.type})`,
+        referenceId,
+        category: "clientRevenue",
+        counterpartyId: contract.clubId,
       },
     ],
   };

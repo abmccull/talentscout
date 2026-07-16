@@ -37,7 +37,7 @@ export function validateStructuredReportInput(
   }
   if (!input.projectedRole) errors.push("Choose a projected tactical role.");
   if (!input.recommendedAction) errors.push("Choose a recommended next action.");
-  if (!Number.isFinite(input.estimatedWeeklyWage) || input.estimatedWeeklyWage < 0) {
+  if (!Number.isFinite(input.estimatedWeeklyWage) || input.estimatedWeeklyWage <= 0) {
     errors.push("Enter a valid wage estimate.");
   }
   if (input.riskFactors.length === 0 || input.riskFactors.some((risk) => !risk.trim())) {

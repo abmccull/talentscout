@@ -34,9 +34,18 @@ export function processAnnualAwards(
   }
 
   const awards: AwardRecord[] = [];
+  const existingAwardTypes = new Set(
+    finances.awards
+      .filter((award) => award.season === season)
+      .map((award) => award.type),
+  );
 
   // Scout of the Year
-  if (scout.reputation >= 70 && rng.chance(0.3)) {
+  if (
+    !existingAwardTypes.has("scoutOfYear")
+    && scout.reputation >= 70
+    && rng.chance(0.3)
+  ) {
     awards.push({
       season,
       type: "scoutOfYear",
@@ -53,7 +62,12 @@ export function processAnnualAwards(
         finances.clientRelationships.length
       : 0;
 
-  if (avgSatisfaction >= 70 && finances.employees.length >= 3 && rng.chance(0.25)) {
+  if (
+    !existingAwardTypes.has("bestAgency")
+    && avgSatisfaction >= 70
+    && finances.employees.length >= 3
+    && rng.chance(0.25)
+  ) {
     awards.push({
       season,
       type: "bestAgency",
@@ -64,7 +78,7 @@ export function processAnnualAwards(
   }
 
   // Discovery of the Year
-  if (rng.chance(0.15)) {
+  if (!existingAwardTypes.has("discoveryOfYear") && rng.chance(0.15)) {
     awards.push({
       season,
       type: "discoveryOfYear",
@@ -77,6 +91,10 @@ export function processAnnualAwards(
   // Apply all awards to finances
   let updated = finances;
   for (const award of awards) {
+    const referenceId = `industry-award:${award.type}:s${season}`;
+    if (updated.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+      continue;
+    }
     updated = {
       ...updated,
       balance: updated.balance + award.cashBonus,
@@ -84,7 +102,14 @@ export function processAnnualAwards(
       awards: [...updated.awards, award],
       transactions: [
         ...updated.transactions,
-        { week: awardWeek, season, amount: award.cashBonus, description: `Award: ${award.title}` },
+        {
+          week: awardWeek,
+          season,
+          amount: award.cashBonus,
+          description: `Award: ${award.title}`,
+          referenceId,
+          category: "bonus",
+        },
       ],
     };
   }

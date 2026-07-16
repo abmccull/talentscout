@@ -101,6 +101,13 @@ export const TRIP_QUALITY_PRESETS: Record<TripQualityLevel, TripQuality> = {
   premium: { level: "premium", costMultiplier: 1.8, fatigueMultiplier: 0.6, observationBonus: 0.15 },
 };
 
+export function getInfrastructureMaintenanceReferenceId(
+  week: number,
+  season: number,
+): string {
+  return `infrastructure-maintenance:s${season}w${week}`;
+}
+
 // =============================================================================
 // DEFAULT INFRASTRUCTURE
 // =============================================================================
@@ -309,12 +316,29 @@ export function processWeeklyInfrastructureCosts(
 
   const effects = calculateInfrastructureEffects(infra);
   if (effects.weeklyCost <= 0) return state;
+  const referenceId = getInfrastructureMaintenanceReferenceId(
+    state.currentWeek,
+    state.currentSeason,
+  );
+  if (state.finances.transactions.some((transaction) =>
+    transaction.referenceId === referenceId
+    || (
+      transaction.referenceId === undefined
+      && transaction.week === state.currentWeek
+      && transaction.season === state.currentSeason
+      && transaction.amount === -effects.weeklyCost
+      && transaction.description === "Infrastructure maintenance"
+    )
+  )) {
+    return state;
+  }
 
   const transaction = {
     week: state.currentWeek,
     season: state.currentSeason,
     amount: -effects.weeklyCost,
     description: "Infrastructure maintenance",
+    referenceId,
   };
 
   return {

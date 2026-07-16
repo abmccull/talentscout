@@ -12,13 +12,20 @@ import type {
   Office,
   CareerTier,
   Scout,
+  Loan,
+  BusinessLoan,
+  RetainerContract,
+  ConsultingContract,
+  ClientRelationship,
 } from "../core/types";
 import type { RNG } from "../rng/index";
 import { ensureEmployeeSkills } from "./employeeSkills";
+import { normalizeAnalystReviewHistory } from "./analystReviews";
 import {
   addGameWeeksWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "../core/gameDate";
+import { monthlyEquivalentOfWeeklyAmount } from "../core/annualization";
 
 /**
  * Default lifestyle config for a given career tier.
@@ -41,6 +48,202 @@ const DEFAULT_OFFICE: Office = {
   qualityBonus: 0,
   maxEmployees: 0,
 };
+
+function normalizeRetainerContract(contract: RetainerContract): RetainerContract {
+  return {
+    ...contract,
+    deliveredReportIds: Array.isArray(contract.deliveredReportIds)
+      ? [...new Set(contract.deliveredReportIds)]
+      : [],
+    averageDeliveredQuality: contract.averageDeliveredQuality ?? 0,
+    consecutivePeriodsMet: contract.consecutivePeriodsMet ?? 0,
+    consecutivePeriodsMissed: contract.consecutivePeriodsMissed ?? 0,
+    termMonths: contract.termMonths ?? 3,
+  };
+}
+
+function normalizeConsultingContract(contract: ConsultingContract): ConsultingContract {
+  return {
+    ...contract,
+    deliveredReportIds: Array.isArray(contract.deliveredReportIds)
+      ? [...new Set(contract.deliveredReportIds)]
+      : [],
+    deliverables: Array.isArray(contract.deliverables)
+      ? contract.deliverables.map((deliverable) => ({ ...deliverable }))
+      : contract.status === "active"
+        ? [{
+            type: "presentation",
+            description: "Deliver the final client presentation",
+            required: 1,
+            delivered: 0,
+          }]
+        : [],
+  };
+}
+
+function normalizeClientRelationship(
+  relationship: ClientRelationship,
+): ClientRelationship {
+  return {
+    ...relationship,
+    failedContracts: relationship.failedContracts ?? 0,
+  };
+}
+
+const LEGACY_LOAN_TERM_MONTHS = 12;
+const DEFAULT_LOAN_STATUS: Loan["status"] = "active";
+
+function inferLegacyLoanMonthlyPayment(loan: BusinessLoan): number {
+  return Math.max(1, Math.round(Math.max(loan.remainingBalance, 0) / LEGACY_LOAN_TERM_MONTHS));
+}
+
+function getLoanStatusSeverity(status: Loan["status"] | undefined): number {
+  switch (status) {
+    case "defaulted":
+      return 2;
+    case "delinquent":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function consolidateLegacyLoans(
+  activeLoan: Loan | undefined,
+  legacyLoans: BusinessLoan[],
+): Loan | undefined {
+  if (!activeLoan && legacyLoans.length === 0) {
+    return undefined;
+  }
+
+  if (legacyLoans.length === 0) {
+    if (!activeLoan) {
+      return undefined;
+    }
+
+    const normalizedLoan: Loan = {
+      ...activeLoan,
+      termMonths: activeLoan.termMonths ?? LEGACY_LOAN_TERM_MONTHS,
+      paymentsMade: activeLoan.paymentsMade ?? 0,
+      missedPayments: activeLoan.missedPayments ?? 0,
+      arrears: activeLoan.arrears ?? 0,
+      status: activeLoan.status ?? DEFAULT_LOAN_STATUS,
+    };
+
+    return normalizedLoan.termMonths === activeLoan.termMonths
+      && normalizedLoan.paymentsMade === activeLoan.paymentsMade
+      && normalizedLoan.missedPayments === activeLoan.missedPayments
+      && normalizedLoan.arrears === activeLoan.arrears
+      && normalizedLoan.status === activeLoan.status
+      ? activeLoan
+      : normalizedLoan;
+  }
+
+  const legacyPrincipal = legacyLoans.reduce(
+    (sum, loan) => sum + (Number.isFinite(loan.principal) ? loan.principal : 0),
+    0,
+  );
+  const legacyRemaining = legacyLoans.reduce(
+    (sum, loan) => sum + (Number.isFinite(loan.remainingBalance) ? loan.remainingBalance : 0),
+    0,
+  );
+  const weightedLegacyInterest = legacyLoans.reduce(
+    (sum, loan) => sum
+      + (Number.isFinite(loan.remainingBalance) ? loan.remainingBalance : 0)
+      * (Number.isFinite(loan.monthlyInterestRate) ? loan.monthlyInterestRate : 0),
+    0,
+  );
+  const legacyMonthlyPayment = legacyLoans.reduce(
+    (sum, loan) => sum + inferLegacyLoanMonthlyPayment(loan),
+    0,
+  );
+  const earliestLegacy = legacyLoans.reduce(
+    (earliest, loan) => {
+      if (!earliest) {
+        return { week: loan.originWeek, season: loan.originSeason };
+      }
+      if (loan.originSeason < earliest.season) return { week: loan.originWeek, season: loan.originSeason };
+      if (loan.originSeason === earliest.season && loan.originWeek < earliest.week) {
+        return { week: loan.originWeek, season: loan.originSeason };
+      }
+      return earliest;
+    },
+    undefined as { week: number; season: number } | undefined,
+  );
+
+  if (!activeLoan) {
+    return {
+      id: legacyLoans.length === 1 ? legacyLoans[0].id : "loan_legacy_consolidated",
+      type: "business",
+      principal: legacyPrincipal,
+      monthlyInterestRate: legacyRemaining > 0 ? weightedLegacyInterest / legacyRemaining : 0,
+      remainingBalance: legacyRemaining,
+      monthlyPayment: legacyMonthlyPayment,
+      startWeek: earliestLegacy?.week ?? 1,
+      startSeason: earliestLegacy?.season ?? 1,
+      termMonths: LEGACY_LOAN_TERM_MONTHS,
+      paymentsMade: 0,
+      missedPayments: 0,
+      arrears: 0,
+      status: DEFAULT_LOAN_STATUS,
+    };
+  }
+
+  const combinedRemaining = activeLoan.remainingBalance + legacyRemaining;
+  const combinedPrincipal = activeLoan.principal + legacyPrincipal;
+  const weightedActiveInterest = activeLoan.remainingBalance * activeLoan.monthlyInterestRate;
+  const consolidatedStatus = getLoanStatusSeverity(activeLoan.status) >= 1
+    ? activeLoan.status
+    : DEFAULT_LOAN_STATUS;
+
+  return {
+    ...activeLoan,
+    principal: combinedPrincipal,
+    remainingBalance: combinedRemaining,
+    monthlyInterestRate: combinedRemaining > 0
+      ? (weightedActiveInterest + weightedLegacyInterest) / combinedRemaining
+      : activeLoan.monthlyInterestRate,
+    monthlyPayment: activeLoan.monthlyPayment + legacyMonthlyPayment,
+    startSeason: earliestLegacy && earliestLegacy.season < activeLoan.startSeason
+      ? earliestLegacy.season
+      : activeLoan.startSeason,
+    startWeek: earliestLegacy
+      && (
+        earliestLegacy.season < activeLoan.startSeason
+        || (earliestLegacy.season === activeLoan.startSeason && earliestLegacy.week < activeLoan.startWeek)
+      )
+      ? earliestLegacy.week
+      : activeLoan.startWeek,
+    termMonths: activeLoan.termMonths ?? LEGACY_LOAN_TERM_MONTHS,
+    paymentsMade: activeLoan.paymentsMade ?? 0,
+    missedPayments: activeLoan.missedPayments ?? 0,
+    arrears: activeLoan.arrears ?? 0,
+    status: consolidatedStatus,
+  };
+}
+
+/**
+ * Canonicalize debt storage so `activeLoan` is the sole debt authority.
+ * Legacy `loans[]` entries are consolidated once, then cleared permanently.
+ */
+export function normalizeCanonicalLoanState(
+  finances: FinancialRecord,
+): FinancialRecord {
+  const legacyLoans = Array.isArray(finances.loans) ? finances.loans : [];
+  const normalizedActiveLoan = consolidateLegacyLoans(finances.activeLoan, legacyLoans);
+
+  const needsActiveLoanNormalization = normalizedActiveLoan !== finances.activeLoan;
+  const needsLegacyClear = legacyLoans.length > 0;
+  if (!needsActiveLoanNormalization && !needsLegacyClear) {
+    return finances;
+  }
+
+  return {
+    ...finances,
+    activeLoan: normalizedActiveLoan,
+    loans: [],
+  };
+}
 
 /**
  * Add the one legacy opening entry needed to reconcile cash to its ledger.
@@ -94,11 +297,14 @@ export function migrateFinancialRecord(
     Array.isArray(value) ? value : [];
   const finite = (value: number | undefined, fallback = 0): number =>
     Number.isFinite(value) ? value! : fallback;
+  const careerPath = legacy.careerPath ?? scout.careerPath ?? "club";
 
-  return reconcileFinancialLedger({
+  return reconcileFinancialLedger(normalizeCanonicalLoanState({
     ...legacy,
     balance: finite(legacy.balance),
-    monthlyIncome: finite(legacy.monthlyIncome),
+    monthlyIncome: careerPath === "club"
+      ? monthlyEquivalentOfWeeklyAmount(scout.salary)
+      : 0,
     equipmentLevel: finite(legacy.equipmentLevel, 1),
     transactions: array(legacy.transactions),
     expenses: {
@@ -111,7 +317,7 @@ export function migrateFinancialRecord(
       courseFees: finite(expenses.courseFees),
       insurance: finite(expenses.insurance),
     },
-    careerPath: legacy.careerPath ?? scout.careerPath ?? "club",
+    careerPath,
     independentTier: legacy.independentTier,
     reportSalesRevenue: finite(legacy.reportSalesRevenue),
     placementFeeRevenue: finite(legacy.placementFeeRevenue),
@@ -119,22 +325,23 @@ export function migrateFinancialRecord(
     consultingRevenue: finite(legacy.consultingRevenue),
     sellOnRevenue: finite(legacy.sellOnRevenue),
     bonusRevenue: finite(legacy.bonusRevenue),
-    retainerContracts: array(legacy.retainerContracts),
+    retainerContracts: array(legacy.retainerContracts).map(normalizeRetainerContract),
     activeLoan: legacy.activeLoan,
     placementFeeRecords: array(legacy.placementFeeRecords),
     reportListings: array(legacy.reportListings),
-    consultingContracts: array(legacy.consultingContracts),
+    consultingContracts: array(legacy.consultingContracts).map(normalizeConsultingContract),
     office: legacy.office ?? DEFAULT_OFFICE,
     employees: array(legacy.employees),
+    analystReviews: normalizeAnalystReviewHistory(array(legacy.analystReviews)),
     lifestyle: legacy.lifestyle ?? defaultLifestyle(scout.careerTier ?? 1),
     completedCourses: array(legacy.completedCourses),
     activeEnrollment: legacy.activeEnrollment,
     ownedVehicle: legacy.ownedVehicle,
-    pendingRetainerOffers: array(legacy.pendingRetainerOffers),
-    pendingConsultingOffers: array(legacy.pendingConsultingOffers),
+    pendingRetainerOffers: array(legacy.pendingRetainerOffers).map(normalizeRetainerContract),
+    pendingConsultingOffers: array(legacy.pendingConsultingOffers).map(normalizeConsultingContract),
     marketTemperature: legacy.marketTemperature ?? "normal",
     activeEconomicEvents: array(legacy.activeEconomicEvents),
-    clientRelationships: array(legacy.clientRelationships),
+    clientRelationships: array(legacy.clientRelationships).map(normalizeClientRelationship),
     pendingEmployeeEvents: array(legacy.pendingEmployeeEvents),
     satelliteOffices: array(legacy.satelliteOffices),
     awards: array(legacy.awards),
@@ -144,7 +351,7 @@ export function migrateFinancialRecord(
       firstPlacementBonusUsed: false,
       starterStipendWeeksRemaining: 0,
     },
-  } as FinancialRecord);
+  } as FinancialRecord));
 }
 
 /**
@@ -167,7 +374,7 @@ export function migrateReportListingBids(
     reportListings: finances.reportListings.map((l) => {
       const biddingEnds = addGameWeeksWithSeasonLength(
         { week: l.listedWeek, season: l.listedSeason },
-        2,
+        3,
         seasonLength,
       );
       return {

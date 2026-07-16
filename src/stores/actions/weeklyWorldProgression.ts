@@ -10,6 +10,7 @@ import type { RNG } from "@/engine/rng";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 import { processInternationalTravelLifecycle } from "./weeklySimulationSupport";
 import { processWeeklyConsequenceLifecycle } from "./weeklyNarrativeConsequences";
+import { emitProfessionalCaseCallbacks } from "./weeklyProfessionalCaseCallbacks";
 
 export interface WeeklyWorldProgressionInput {
   state: GameState;
@@ -42,8 +43,9 @@ export function processWeeklyWorldProgression(
       input.dayResults,
     ),
   };
+  state = processWeeklyConsequenceLifecycle(state);
   return {
-    state: processWeeklyConsequenceLifecycle(state),
+    state: emitProfessionalCaseCallbacks(state),
     tick,
   };
 }

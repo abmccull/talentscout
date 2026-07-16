@@ -72,6 +72,11 @@ import {
   synchronizeRegionalFamiliarity,
 } from "../specializations/regionalKnowledge";
 import {
+  deriveClubRecruitmentDoctrine,
+  scoreDoctrineAgeFit,
+  type ClubRecruitmentDoctrine,
+} from "../world/recruitmentIdentity";
+import {
   decrementSuspensions,
   clearSeasonCards,
   processCardAccumulation,
@@ -104,6 +109,14 @@ import {
   evaluateLoanOutcome,
 } from "../world/loans";
 import { getActiveEquipmentBonuses } from "../finance/equipmentBonuses";
+import {
+  assessClubAffordability,
+  assessClubAffordabilityFromContext,
+  buildClubAffordabilityContext,
+  settleRelegationClubObligations,
+  settleTriggeredClubObligations,
+  settleWeeklyClubObligations,
+} from "../finance/clubEconomics";
 import { calculateMarketValue } from "../players/generation";
 import { getScoutHomeCountry } from "../world/travel";
 import { getTransferFlowProbability } from "../world/transfers";
@@ -112,6 +125,11 @@ import {
   resolvePlayerMovements,
   type PlayerMovementIntent,
 } from "../world/playerLifecycle";
+import {
+  deriveRecruitmentOpportunities,
+  type RecruitmentOpportunity,
+  type RecruitmentOpportunityOutcome,
+} from "../recruitment";
 import { processLoanOutcomeReputation } from "../firstTeam/loanIntegration";
 import { applyScoutSkillXp } from "../scout/progression";
 import {
@@ -273,7 +291,7 @@ export interface TickResult {
     regionalKnowledge: Record<string, RegionalKnowledge>;
     newDiscoveries: Array<{ countryId: string; leagueId: string; leagueName: string }>;
     newInsights: Array<{ countryId: string; insight: CulturalInsight }>;
-    newContacts: Array<{ countryId: string; contactId: string }>;
+    newContacts: Array<{ countryId: string; contactId: string; contact: Contact }>;
   };
   /** Season event effects applied this tick (state changes from active events). */
   seasonEventState?: GameState;
@@ -362,6 +380,12 @@ const BASE_INJURY_PROBABILITY = 0.02;
 
 /** Baseline probability of an AI club completing a transfer in any week. */
 const AI_TRANSFER_PROBABILITY = 0.04;
+const MAX_RECRUITMENT_DRIVEN_TRANSFERS_PER_WEEK = 2;
+const ACTIONABLE_RECRUITMENT_OUTCOMES = new Set<RecruitmentOpportunityOutcome>([
+  "delivered",
+  "trial",
+  "accepted",
+]);
 
 /** Weekly probability of a breakthrough event for an eligible young player. */
 const BREAKTHROUGH_CHANCE = 0.015;
@@ -1475,6 +1499,7 @@ function isTransferEligible(player: Player, currentSeason: number): boolean {
 export interface TransferDestinationIndex {
   clubs: readonly Club[];
   primaryPositionCountByClub: ReadonlyMap<string, ReadonlyMap<Position, number>>;
+  doctrineByClub: ReadonlyMap<string, ClubRecruitmentDoctrine>;
   /** Same-tick arrivals reserve capacity before authoritative movement commit. */
   reservedIncomingByClub: Map<string, number>;
 }
@@ -1483,6 +1508,7 @@ export interface TransferDestinationIndex {
 export function createTransferDestinationIndex(state: GameState): TransferDestinationIndex {
   const clubs = Object.values(state.clubs);
   const primaryPositionCountByClub = new Map<string, ReadonlyMap<Position, number>>();
+  const doctrineByClub = new Map<string, ClubRecruitmentDoctrine>();
   for (const club of clubs) {
     const positionCounts = new Map<Position, number>();
     for (const playerId of club.playerIds) {
@@ -1491,8 +1517,19 @@ export function createTransferDestinationIndex(state: GameState): TransferDestin
       positionCounts.set(position, (positionCounts.get(position) ?? 0) + 1);
     }
     primaryPositionCountByClub.set(club.id, positionCounts);
+    doctrineByClub.set(club.id, deriveClubRecruitmentDoctrine({
+      club,
+      seed: state.seed,
+      season: state.currentSeason,
+      manager: state.managerProfiles?.[club.id],
+    }));
   }
-  return { clubs, primaryPositionCountByClub, reservedIncomingByClub: new Map() };
+  return {
+    clubs,
+    primaryPositionCountByClub,
+    doctrineByClub,
+    reservedIncomingByClub: new Map(),
+  };
 }
 
 export function findTransferDestination(
@@ -1530,14 +1567,26 @@ export function findTransferDestination(
           state.players[playerId]?.position === player.position ? count + 1 : count
         ), 0);
     const squadNeed = samePositionCount === 0 ? 2.2 : samePositionCount === 1 ? 1.5 : 0.75;
-    const philosophyFit =
-      club.scoutingPhilosophy === "globalRecruiter" && country !== fromCountry
-        ? 1.4
-        : club.scoutingPhilosophy === "academyFirst" && player.age <= 23
-          ? 1.3
-          : club.scoutingPhilosophy === "winNow" && player.currentAbility >= 120
-            ? 1.25
-            : 1;
+    const doctrine = index?.doctrineByClub.get(club.id)
+      ?? deriveClubRecruitmentDoctrine({
+        club,
+        seed: state.seed,
+        season: state.currentSeason,
+        manager: state.managerProfiles?.[club.id],
+      });
+    const ageFit = 0.72 + scoreDoctrineAgeFit(player.age, doctrine) / 100 * 0.58;
+    const reachFit = country !== fromCountry
+      ? doctrine.geographicReach === "global" ? 1.28
+        : doctrine.geographicReach === "international" ? 1.12
+          : 0.82
+      : 1.08;
+    const pathwayFit = player.age <= 23
+      ? 0.8 + doctrine.pathwayPatience / 250
+      : 1;
+    const readinessFit = player.currentAbility >= 120
+      ? 0.9 + (100 - doctrine.pathwayPatience) / 500
+      : 1;
+    const philosophyFit = ageFit * reachFit * pathwayFit * readinessFit;
 
     return {
       item: club,
@@ -1546,6 +1595,205 @@ export function findTransferDestination(
   });
 
   return rng.pickWeighted(weighted);
+}
+
+function estimateAITransferFee(
+  player: Player,
+  ownerClubId: string,
+  state: GameState,
+  rng: RNG,
+  standingsByLeague: StandingsByLeague,
+): number {
+  const feeVariance = rng.nextFloat(0.8, 1.2);
+  const standingsModifier = getStandingsPriceModifier(
+    ownerClubId,
+    state,
+    standingsByLeague,
+  );
+  const contractYearsRemaining = Math.max(0, player.contractExpiry - state.currentSeason);
+  const contractModifier = contractYearsRemaining === 0 ? 0.35 : contractYearsRemaining === 1 ? 0.7 : 1;
+  return Math.max(
+    0,
+    Math.round(player.marketValue * feeVariance * standingsModifier * contractModifier),
+  );
+}
+
+function isOpportunityDrivenTransferEligible(player: Player): boolean {
+  if (player.injured || player.onLoan || player.age < 16) return false;
+  return Boolean(player.contractClubId ?? player.clubId);
+}
+
+function getOpportunityConvictionFactor(
+  conviction: "note" | "recommend" | "strongRecommend" | "tablePound",
+): number {
+  switch (conviction) {
+    case "tablePound": return 1.18;
+    case "strongRecommend": return 1.08;
+    case "recommend": return 0.98;
+    case "note":
+    default:
+      return 0.75;
+  }
+}
+
+function getOpportunityFreshnessFactor(
+  opportunity: RecruitmentOpportunity,
+  state: GameState,
+): number {
+  const seasonLength = getSeasonLength(state.fixtures, opportunity.deliveredSeason);
+  const deliveredOrdinal = opportunity.deliveredSeason * seasonLength + opportunity.deliveredWeek;
+  const currentOrdinal = state.currentSeason * seasonLength + state.currentWeek;
+  const weeksSinceDelivery = Math.max(0, currentOrdinal - deliveredOrdinal);
+  if (weeksSinceDelivery <= 1) return 1.18;
+  if (weeksSinceDelivery <= 4) return 1.08;
+  if (weeksSinceDelivery <= 8) return 0.96;
+  return 0.82;
+}
+
+function scoreOpportunityDrivenTransfer(
+  player: Player,
+  destination: Club,
+  opportunity: RecruitmentOpportunity,
+  state: GameState,
+  index: TransferDestinationIndex,
+  fee: number,
+): number {
+  const report = state.reports[opportunity.reportId];
+  const doctrine = index.doctrineByClub.get(destination.id)
+    ?? deriveClubRecruitmentDoctrine({
+      club: destination,
+      seed: state.seed,
+      season: state.currentSeason,
+      manager: state.managerProfiles?.[destination.id],
+    });
+  const samePositionCount = index.primaryPositionCountByClub.get(destination.id)?.get(player.position) ?? 0;
+  const squadNeed = samePositionCount === 0 ? 1.22 : samePositionCount === 1 ? 1.1 : 0.88;
+  const ageFit = 0.76 + scoreDoctrineAgeFit(player.age, doctrine) / 100 * 0.48;
+  const qualityFit = 0.82 + Math.min(100, report?.qualityScore ?? 0) / 500;
+  const convictionFit = getOpportunityConvictionFactor(report?.conviction ?? "note");
+  const exclusivityFit = opportunity.exclusivity === "exclusive" ? 1.1
+    : opportunity.exclusivity === "direct" ? 1.06
+      : 0.96;
+  const freshnessFit = getOpportunityFreshnessFactor(opportunity, state);
+  const affordabilityFit = fee <= 0
+    ? 0
+    : clamp((destination.budget / fee) / 3.5, 0.6, 1.22);
+  return squadNeed * ageFit * qualityFit * convictionFit * exclusivityFit * freshnessFit * affordabilityFit;
+}
+
+export interface OpportunityDrivenTransferSelectionOptions {
+  index?: TransferDestinationIndex;
+  spentBudget?: Map<string, number>;
+  standingsByLeague?: StandingsByLeague;
+  maxTransfers?: number;
+}
+
+/**
+ * Delivered recommendations can influence real club action, but only within a
+ * bounded lane and never by bypassing the authoritative lifecycle.
+ */
+export function selectOpportunityDrivenTransfers(
+  state: GameState,
+  rng: RNG,
+  options: OpportunityDrivenTransferSelectionOptions = {},
+): Transfer[] {
+  const index = options.index ?? createTransferDestinationIndex(state);
+  const spentBudget = options.spentBudget ?? new Map<string, number>();
+  const standingsByLeague = options.standingsByLeague ?? buildStandingsByLeague(
+    state.fixtures,
+    state.clubs,
+    state.currentSeason,
+  );
+  const candidateKeys = new Set<string>();
+  const candidates: Array<{ transfer: Transfer; score: number }> = [];
+
+  for (const opportunity of deriveRecruitmentOpportunities(state)) {
+    if (!ACTIONABLE_RECRUITMENT_OUTCOMES.has(opportunity.outcome)) continue;
+    const report = state.reports[opportunity.reportId];
+    if (!report || report.conviction === "note") continue;
+    const player = state.players[opportunity.playerId];
+    if (!player || !isOpportunityDrivenTransferEligible(player)) continue;
+    const ownerClubId = player.contractClubId ?? player.clubId;
+    if (!ownerClubId) continue;
+    const fromClub = state.clubs[ownerClubId];
+    const destination = state.clubs[opportunity.targetClubId];
+    if (!fromClub || !destination || fromClub.id === destination.id) continue;
+    const reservedIncoming = index.reservedIncomingByClub.get(destination.id) ?? 0;
+    if (destination.playerIds.length + reservedIncoming >= 30) continue;
+    const candidateKey = `${player.id}:${destination.id}`;
+    if (candidateKeys.has(candidateKey)) continue;
+
+    const fee = estimateAITransferFee(
+      player,
+      ownerClubId,
+      state,
+      rng,
+      standingsByLeague,
+    );
+    const alreadySpent = spentBudget.get(destination.id) ?? 0;
+    if (fee <= 0 || destination.budget - alreadySpent < fee) continue;
+
+    const score = scoreOpportunityDrivenTransfer(
+      player,
+      destination,
+      opportunity,
+      state,
+      index,
+      fee,
+    );
+    if (score < 0.9) continue;
+    // A credible recommendation changes the odds; it never guarantees a deal.
+    // This keeps transfer stories seed-distinct while the shared weekly RNG
+    // preserves save/reload and manual/batch determinism.
+    const actionProbability = clamp(
+      0.12 + (score - 0.9) * 0.32,
+      0.08,
+      0.48,
+    );
+    if (!rng.chance(actionProbability)) continue;
+
+    candidateKeys.add(candidateKey);
+    candidates.push({
+      transfer: {
+        playerId: player.id,
+        fromClubId: fromClub.id,
+        toClubId: destination.id,
+        fee,
+        week: state.currentWeek,
+        season: state.currentSeason,
+      },
+      score,
+    });
+  }
+
+  candidates.sort((left, right) =>
+    right.score - left.score
+    || right.transfer.fee - left.transfer.fee
+    || left.transfer.playerId.localeCompare(right.transfer.playerId)
+  );
+
+  const selected: Transfer[] = [];
+  const usedPlayers = new Set<string>();
+  const usedDestinations = new Set<string>();
+  const maxTransfers = options.maxTransfers ?? MAX_RECRUITMENT_DRIVEN_TRANSFERS_PER_WEEK;
+
+  for (const { transfer } of candidates) {
+    if (selected.length >= maxTransfers) break;
+    if (usedPlayers.has(transfer.playerId) || usedDestinations.has(transfer.toClubId)) continue;
+    const destination = state.clubs[transfer.toClubId];
+    const alreadySpent = spentBudget.get(transfer.toClubId) ?? 0;
+    if (!destination || destination.budget - alreadySpent < transfer.fee) continue;
+    spentBudget.set(transfer.toClubId, alreadySpent + transfer.fee);
+    index.reservedIncomingByClub.set(
+      transfer.toClubId,
+      (index.reservedIncomingByClub.get(transfer.toClubId) ?? 0) + 1,
+    );
+    usedPlayers.add(transfer.playerId);
+    usedDestinations.add(transfer.toClubId);
+    selected.push(transfer);
+  }
+
+  return selected;
 }
 
 /**
@@ -1557,10 +1805,24 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
   const transfers: Transfer[] = [];
   // Track cumulative spending per club to prevent budget overspending
   const spentBudget = new Map<string, number>();
-  let standingsByLeague: StandingsByLeague | undefined;
-  let destinationIndex: TransferDestinationIndex | undefined;
+  const standingsByLeague = buildStandingsByLeague(
+    state.fixtures,
+    state.clubs,
+    state.currentSeason,
+  );
+  const destinationIndex = createTransferDestinationIndex(state);
+  const recruitmentDrivenTransfers = selectOpportunityDrivenTransfers(state, rng, {
+    index: destinationIndex,
+    spentBudget,
+    standingsByLeague,
+  });
+  transfers.push(...recruitmentDrivenTransfers);
+  const reservedPlayerIds = new Set(
+    recruitmentDrivenTransfers.map((transfer) => transfer.playerId),
+  );
 
   for (const player of Object.values(state.players)) {
+    if (reservedPlayerIds.has(player.id)) continue;
     if (!isTransferEligible(player, state.currentSeason)) continue;
     if (!rng.chance(AI_TRANSFER_PROBABILITY)) continue;
 
@@ -1568,7 +1830,6 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     const fromClub = state.clubs[ownerClubId];
     if (!fromClub) continue;
 
-    destinationIndex ??= createTransferDestinationIndex(state);
     const destination = findTransferDestination(
       player,
       fromClub,
@@ -1580,22 +1841,12 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
 
     // Transfer fee: market value with ±20% variance, adjusted by standings position.
     // Bottom 5 clubs sell at -10%, top 3 clubs sell at +10%.
-    const feeVariance = rng.nextFloat(0.8, 1.2);
-    standingsByLeague ??= buildStandingsByLeague(
-      state.fixtures,
-      state.clubs,
-      state.currentSeason,
-    );
-    const standingsModifier = getStandingsPriceModifier(
+    const fee = estimateAITransferFee(
+      player,
       ownerClubId,
       state,
+      rng,
       standingsByLeague,
-    );
-    const contractYearsRemaining = Math.max(0, player.contractExpiry - state.currentSeason);
-    const contractModifier = contractYearsRemaining === 0 ? 0.35 : contractYearsRemaining === 1 ? 0.7 : 1;
-    const fee = Math.max(
-      0,
-      Math.round(player.marketValue * feeVariance * standingsModifier * contractModifier),
     );
 
     // Destination must still have budget (accounting for other transfers this tick)
@@ -2026,14 +2277,38 @@ function generateEndOfSeasonMessage(
  * at the end of season performance review. Weekly changes are small.
  */
 export function hasSuccessfulSigningResponseThisWeek(
-  state: Pick<GameState, "clubResponses" | "currentWeek" | "currentSeason">,
+  state: Pick<
+    GameState,
+    | "clubResponses"
+    | "reports"
+    | "playerMovementHistory"
+    | "currentWeek"
+    | "currentSeason"
+  >,
 ): boolean {
-  return state.clubResponses.some(
-    (response) =>
-      response.response === "signed"
-      && response.week === state.currentWeek
-      && response.season === state.currentSeason,
-  );
+  const signingMovementTypes = new Set([
+    "permanentTransfer",
+    "freeAgentSigning",
+    "youthSigning",
+    "loanBuyOption",
+  ]);
+  return state.clubResponses.some((response) => {
+    if (
+      response.response !== "signed"
+      || response.week !== state.currentWeek
+      || response.season !== state.currentSeason
+    ) {
+      return false;
+    }
+    const report = state.reports[response.reportId];
+    if (!report) return false;
+    return state.playerMovementHistory.some((movement) =>
+      movement.playerId === report.playerId
+      && movement.week === response.week
+      && movement.season === response.season
+      && signingMovementTypes.has(movement.type),
+    );
+  });
 }
 
 function computeReputationChangeDetailed(
@@ -2092,9 +2367,9 @@ function computeReputationChangeDetailed(
   }
 
   // ── Successful signing: a report led to a "signed" club response ────────
-  // Report dates describe when the opinion was filed, not when the club made
-  // its decision. Reward the dated decision event so a sliding report window
-  // cannot pay the same signing on consecutive weekly ticks.
+  // A response flag alone is never enough to award reputation. The same player
+  // must have a canonical signing movement in the dated week, preventing a
+  // report submission, legacy flag, or trial roll from fabricating success.
   if (hasSuccessfulSigningResponseThisWeek(state)) {
     deltas.push({
       reason: `Successful signing recommendation`,
@@ -2551,14 +2826,36 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   }
 
   // 11. Unsigned-youth decisions are annual, not repeated every week.
-  const youthAgingResult = endOfSeasonTriggered
-    ? processYouthAging(
-        rng,
-        state.unsignedYouth,
-        state.clubs,
-        state.currentSeason,
-      )
-    : undefined;
+  let youthAgingResult: ReturnType<typeof processYouthAging> | undefined;
+  if (endOfSeasonTriggered) {
+    const youthAffordability = buildClubAffordabilityContext(
+      state.clubs,
+      state.players,
+      { currentWeek: state.currentWeek, currentSeason: state.currentSeason },
+    );
+    const youthWeeklyWage = (youth: UnsignedYouth) =>
+      Math.max(100, Math.round(youth.player.currentAbility * 50));
+    youthAgingResult = processYouthAging(
+      rng,
+      state.unsignedYouth,
+      state.clubs,
+      state.currentSeason,
+      {
+        canClubSign: (youth, club) => {
+          const context = youthAffordability[club.id];
+          return context
+            ? assessClubAffordabilityFromContext(context, {
+                weeklyWageCommitment: youthWeeklyWage(youth),
+              }).affordable
+            : false;
+        },
+        reserveClubSigning: (youth, club) => {
+          const context = youthAffordability[club.id];
+          if (context) context.currentWeeklyCommitment += youthWeeklyWage(youth);
+        },
+      },
+    );
+  }
 
   // 12. Player retirement (season-end only)
   const playerRetirements = endOfSeasonTriggered
@@ -3145,6 +3442,7 @@ export function advanceWeek(
 
   // ---- Youth aging: auto-signed youth become regular players ----
   const youthSigningIdentityCollisions = new Set<string>();
+  const stagedYouthSigningPlayerIds = new Set<string>();
   const causallyLinkedYouthExitPlayerIds = new Set<string>();
   if (tickResult.youthAgingResult) {
     const causallyReferencedPlayerIds = collectCausallyReferencedPlayerIds(state);
@@ -3166,6 +3464,7 @@ export function advanceWeek(
           contractExpiry: 0,
         };
         updatedPlayers[player.id] = player;
+        stagedYouthSigningPlayerIds.add(player.id);
         void clubId;
       }
     }
@@ -3273,6 +3572,20 @@ export function advanceWeek(
     };
   }
 
+  const obligationSettlement = settleWeeklyClubObligations(
+    updatedClubs,
+    state.currentWeek,
+    state.currentSeason,
+  );
+  updatedClubs = obligationSettlement.clubs;
+  const triggeredObligations = settleTriggeredClubObligations(
+    updatedClubs,
+    tickResult.fixturesPlayed,
+    state.currentWeek,
+    state.currentSeason,
+  );
+  updatedClubs = triggeredObligations.clubs;
+
   // ---- Authoritative player lifecycle resolution ----
   const movementIntents: PlayerMovementIntent[] = [];
 
@@ -3305,14 +3618,38 @@ export function advanceWeek(
 
   for (const deal of tickResult.loanReturns ?? []) {
     const loanClub = updatedClubs[deal.loanClubId];
+    const releasedLoanContribution = (loanClub?.financialObligations ?? []).reduce((sum, obligation) => {
+      if (
+        obligation.status !== "active"
+        || obligation.type !== "loanWageContribution"
+        || obligation.playerId !== deal.playerId
+      ) {
+        return sum;
+      }
+      return sum + Math.max(0, obligation.weeklyAmount ?? 0);
+    }, 0);
     const evaluatedOutcome = deal.outcome ?? evaluateLoanOutcome(
       deal,
       getSeasonLength(state.fixtures, deal.startSeason),
     );
+    const projectedBuyWage = Math.max(
+      100,
+      updatedPlayers[deal.playerId]?.wage
+        ?? Math.round((updatedPlayers[deal.playerId]?.currentAbility ?? 0) * 60),
+    );
+    const buyOptionAffordability = loanClub
+      ? assessClubAffordability({
+          club: loanClub,
+          players: updatedPlayers,
+          upfrontCost: deal.buyOptionFee ?? 0,
+          weeklyWageCommitment: projectedBuyWage,
+          releasedWeeklyCommitment: releasedLoanContribution,
+        })
+      : null;
     const exerciseBuyOption =
       evaluatedOutcome === "buy-option-exercised" &&
       deal.buyOptionFee !== undefined &&
-      (loanClub?.budget ?? 0) >= deal.buyOptionFee;
+      Boolean(buyOptionAffordability?.affordable);
     movementIntents.push({
       type: "loanEnd",
       playerId: deal.playerId,
@@ -3432,6 +3769,23 @@ export function advanceWeek(
   let updatedRetiredPlayerIds = lifecycleResolution.state.retiredPlayerIds;
   const updatedPlayerMovementHistory = lifecycleResolution.state.playerMovementHistory;
   let lifecycleFreeAgentPool = lifecycleResolution.state.freeAgentPool;
+  const committedYouthSigningPlayerIds = new Set(
+    lifecycleResolution.applied
+      .filter((movement) => movement.type === "youthSigning")
+      .map((movement) => movement.playerId),
+  );
+  const rejectedStagedYouthPlayerIds = [...stagedYouthSigningPlayerIds].filter(
+    (playerId) => !committedYouthSigningPlayerIds.has(playerId),
+  );
+  if (rejectedStagedYouthPlayerIds.length > 0) {
+    updatedPlayers = { ...updatedPlayers };
+    for (const playerId of rejectedStagedYouthPlayerIds) {
+      // The unsigned dossier remains authoritative when financial or roster
+      // approval rejects the proposed signing. Do not leave the temporary
+      // detached Player in the active world under the same identity.
+      delete updatedPlayers[playerId];
+    }
+  }
   youthPool = reconcileYouthSigningPlacements(
     youthPool,
     tickResult.youthAgingResult?.autoSigned ?? [],
@@ -3595,6 +3949,15 @@ export function advanceWeek(
   let nextWeek = state.currentWeek + 1;
   let nextSeason = state.currentSeason;
 
+  for (const regionalContact of tickResult.regionalKnowledgeResult?.newContacts ?? []) {
+    // Materialize threshold-earned contacts before either return branch. The
+    // final week of a season must not leave a knowledge ledger pointing at a
+    // contact that only appears after a later reconciliation tick.
+    if (!updatedContacts[regionalContact.contact.id]) {
+      updatedContacts[regionalContact.contact.id] = regionalContact.contact;
+    }
+  }
+
   if (tickResult.endOfSeasonTriggered) {
     nextWeek = 1;
     nextSeason = state.currentSeason + 1;
@@ -3651,6 +4014,16 @@ export function advanceWeek(
       updatedClubs = { ...updatedClubs, ...relegationChanges.clubs };
       updatedPlayers = { ...updatedPlayers, ...relegationChanges.players };
       updatedLeagues = relegationChanges.leagues;
+      updatedClubs = settleRelegationClubObligations(
+        updatedClubs,
+        new Set(
+          tickResult.relegationResult.events
+            .filter((event) => event.type === "relegated")
+            .map((event) => event.clubId),
+        ),
+        state.currentWeek,
+        state.currentSeason,
+      ).clubs;
     }
 
     // Reprice the market once per season from current ability, potential, age,
@@ -3756,7 +4129,6 @@ export function advanceWeek(
     };
     return applyWorldConditionSeasonStart(seasonStartState);
   }
-
   const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);
 
   return {

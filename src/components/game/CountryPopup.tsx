@@ -3,8 +3,9 @@
 import * as React from "react";
 import { X, Plane, MapPin, FileText, Star, Building2, Trophy, Check, BookOpen, Eye, Users, Globe2 } from "lucide-react";
 import { getTierColors } from "@/components/game/WorldMap";
-import type { CountryReputation, TravelBooking, RegionalKnowledge, HiddenLeague } from "@/engine/core/types";
+import type { CountryReputation, TravelBooking, RegionalKnowledge, HiddenLeague, TravelPosture } from "@/engine/core/types";
 import type { RegionalPresenceSnapshot } from "@/engine/world/regionalPresence";
+import { TRAVEL_POSTURE_DEFINITIONS } from "@/engine/world/travel";
 import { Tooltip } from "@/components/ui/tooltip";
 
 // =============================================================================
@@ -48,6 +49,8 @@ export interface CountryPopupProps {
   regionalPresence?: RegionalPresenceSnapshot;
   /** Hidden leagues discovered in this country (F13). */
   discoveredHiddenLeagues?: HiddenLeague[];
+  travelPosture: TravelPosture;
+  onTravelPostureChange: (posture: TravelPosture) => void;
   onBookTravel: () => void;
   onClose: () => void;
 }
@@ -129,6 +132,8 @@ export function CountryPopup({
   regionalKnowledge,
   regionalPresence,
   discoveredHiddenLeagues,
+  travelPosture,
+  onTravelPostureChange,
   onBookTravel,
   onClose,
 }: CountryPopupProps) {
@@ -387,7 +392,7 @@ export function CountryPopup({
                   <Tooltip key={`${insight.type}:${insight.description}`} content="Recorded regional context contributes to the country-level evidence confidence shown below." side="bottom">
                   <div className="flex items-start gap-1.5 rounded bg-purple-500/5 border border-purple-500/10 px-2 py-1">
                     <Eye size={9} className="text-purple-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-[9px] text-purple-300 leading-tight">{insight.description}</p>
+                    <p className="text-[10px] text-purple-300 leading-tight">{insight.description}</p>
                   </div>
                   </Tooltip>
                 ))}
@@ -398,9 +403,27 @@ export function CountryPopup({
             {localContacts.length > 0 && (
               <div className="mt-1.5 flex items-center gap-1">
                 <Users size={9} className="text-purple-400" />
-                <span className="text-[9px] text-purple-300">
+                <span className="text-[10px] text-purple-300">
                   {localContacts.length} local contact{localContacts.length !== 1 ? "s" : ""}
                 </span>
+              </div>
+            )}
+            {(regionalKnowledge.knowledgeLedger?.length ?? 0) > 0 && (
+              <div className="mt-2 border-t border-purple-500/10 pt-2">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+                  Recent knowledge earned
+                </p>
+                <ul className="space-y-1" aria-label="Recent regional knowledge ledger">
+                  {regionalKnowledge.knowledgeLedger!
+                    .slice(-3)
+                    .reverse()
+                    .map((entry) => (
+                      <li key={entry.id} className="flex items-start justify-between gap-2 text-[10px] leading-relaxed text-zinc-500">
+                        <span>{entry.summary}</span>
+                        <span className="shrink-0 font-mono text-purple-300">+{entry.amount.toFixed(1)}</span>
+                      </li>
+                    ))}
+                </ul>
               </div>
             )}
           </div>
@@ -419,7 +442,15 @@ export function CountryPopup({
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">
               {regionalPresence.summary}
             </p>
-            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[9px]">
+            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
+              {Object.entries(regionalPresence.dimensions).map(([dimension, score]) => (
+                <div key={dimension} className="rounded bg-cyan-950/25 px-2 py-1 text-zinc-400">
+                  <span className="capitalize">{dimension}</span>{" "}
+                  <span className="font-medium text-cyan-200">{score}/100</span>
+                </div>
+              ))}
+            </div>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5 text-[10px]">
               <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
                 Discovery <span className="font-medium text-cyan-200">×{regionalPresence.effects.discoveryMultiplier.toFixed(2)}</span>
               </div>
@@ -440,7 +471,7 @@ export function CountryPopup({
                   .sort((left, right) => right.score - left.score)
                   .slice(0, 4)
                   .map((source) => (
-                    <li key={source.kind} className="flex items-center justify-between gap-2 text-[9px] text-zinc-500">
+                    <li key={source.kind} className="flex items-center justify-between gap-2 text-[10px] text-zinc-500">
                       <span>{source.label}</span>
                       <span className="font-mono text-cyan-300">+{Math.round(source.score)}</span>
                     </li>
@@ -458,8 +489,8 @@ export function CountryPopup({
               {discoveredHiddenLeagues.map((league) => (
                 <Tooltip key={league.id} content={`Tier ${league.tier} local competition newly accessible through your regional network.`} side="bottom">
                 <div className="flex items-center justify-between rounded bg-indigo-500/5 border border-indigo-500/10 px-2 py-1">
-                  <span className="text-[9px] text-indigo-300">{league.name}</span>
-                  <span className="text-[8px] text-indigo-400 font-mono">T{league.tier}</span>
+                  <span className="text-[10px] text-indigo-300">{league.name}</span>
+                  <span className="text-[10px] text-indigo-400 font-mono">T{league.tier}</span>
                 </div>
                 </Tooltip>
               ))}
@@ -475,6 +506,43 @@ export function CountryPopup({
         {/* ── Travel section ─────────────────────────────────────── */}
         {!isCurrentLocation && !justBooked && (
           <div className="px-4 pt-3 pb-4" data-tutorial-id="travel-booking-section">
+            <fieldset className="mb-3">
+              <legend className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+                Trip posture
+              </legend>
+              <div className="grid grid-cols-2 gap-1.5">
+                {Object.values(TRAVEL_POSTURE_DEFINITIONS).map((definition) => {
+                  const selected = travelPosture === definition.id;
+                  return (
+                    <button
+                      key={definition.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => onTravelPostureChange(definition.id)}
+                      className={`min-h-9 rounded-md border px-2 py-1.5 text-left text-[10px] font-medium transition ${
+                        selected
+                          ? "border-blue-400/60 bg-blue-500/15 text-blue-100"
+                          : "border-zinc-700 bg-zinc-900/70 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                      }`}
+                    >
+                      {definition.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 rounded-md border border-blue-500/15 bg-blue-500/5 px-2.5 py-2">
+                <p className="text-[10px] leading-relaxed text-zinc-300">
+                  {TRAVEL_POSTURE_DEFINITIONS[travelPosture].summary}
+                </p>
+                <p className="mt-1 text-[10px] leading-relaxed text-emerald-300/80">
+                  {TRAVEL_POSTURE_DEFINITIONS[travelPosture].upside}
+                </p>
+                <p className="mt-0.5 text-[10px] leading-relaxed text-amber-300/75">
+                  Cost: {TRAVEL_POSTURE_DEFINITIONS[travelPosture].tradeoff}
+                </p>
+              </div>
+            </fieldset>
             <div className="grid grid-cols-3 gap-2 mb-3 text-center">
               <Tooltip content="Travel cost after earned local-office, staff, contact, knowledge, and equipment reductions. Deducted when you book." side="bottom">
               <div>
@@ -499,7 +567,7 @@ export function CountryPopup({
                   {travelDuration > 0 ? durationLabel : "—"}
                 </p>
                 {travelDuration > 0 && (
-                  <p className="text-[9px] text-zinc-600 mt-0.5">
+                  <p className="text-[10px] text-zinc-600 mt-0.5">
                     Wk {departureWeek}–{returnWeek}
                   </p>
                 )}

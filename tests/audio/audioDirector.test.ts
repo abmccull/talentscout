@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { NarrativeEvent, NarrativeEventType } from "@/engine/core/types";
-import { classifyNarrativeAudioMoment, directAudioScene } from "@/lib/audio/audioDirector";
+import {
+  careerMomentSfx,
+  classifyNarrativeAudioMoment,
+  directAudioScene,
+} from "@/lib/audio/audioDirector";
 
 function event(type: NarrativeEventType, overrides: Partial<NarrativeEvent> = {}): NarrativeEvent {
   return {
@@ -59,6 +63,24 @@ describe("audio director", () => {
       ambience: null,
     });
   });
+
+  it("gives an exact career moment priority over ambient unacknowledged events", () => {
+    expect(directAudioScene({
+      screen: "career",
+      narrativeMoment: "politicalTension",
+      careerMomentCue: "farewell",
+    })).toMatchObject({
+      context: "farewell",
+      music: "season-review",
+      ambience: null,
+    });
+  });
+
+  it("maps optional emotional stingers without making them semantic", () => {
+    expect(careerMomentSfx("failure")).toBe("error");
+    expect(careerMomentSfx("comeback")).toBe("level-up");
+    expect(careerMomentSfx("farewell")).toBe("season-end-whistle");
+  });
 });
 
 describe("narrative audio classification", () => {
@@ -78,5 +100,9 @@ describe("narrative audio classification", () => {
   it("distinguishes discovery from later vindication", () => {
     expect(classifyNarrativeAudioMoment([event("exclusiveTip")])).toBe("discovery");
     expect(classifyNarrativeAudioMoment([event("debutBrilliance")])).toBe("vindication");
+  });
+
+  it("gives betrayal its own emotional vocabulary", () => {
+    expect(classifyNarrativeAudioMoment([event("contactBetrayal")])).toBe("betrayal");
   });
 });

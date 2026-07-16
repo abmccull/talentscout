@@ -1,9 +1,11 @@
 /**
  * Club response pipeline — how the club reacts to submitted scout reports.
  *
- * The pipeline converts a first-team scout report into a structured club
- * decision (ignored, interested, trial, signed, etc.) with an associated
- * reputation delta and feedback message.
+ * The pipeline converts a first-team scout report into a structured review
+ * response (ignored, interested, trial, etc.) with an associated reputation
+ * delta and feedback message. Submitting a report can create interest or a
+ * next step; it can never create a completed transfer or loan. Those terminal
+ * states belong to the authoritative player-movement pipeline.
  *
  * Design notes:
  *  - Pure functions: no side effects, no mutation of inputs.
@@ -36,8 +38,11 @@ const REPUTATION_DELTAS: Record<ClubResponseType, number> = {
   trial: 5,
   doesNotFit: 0,
   tooExpensive: 1,
-  signed: 10,
-  loanSigned: 7,
+  // Terminal values remain in the save type for legacy compatibility. This
+  // report-time engine never emits them and therefore never awards their old
+  // instant-signing reputation.
+  signed: 0,
+  loanSigned: 0,
 } as const;
 
 /**
@@ -47,12 +52,12 @@ const REPUTATION_DELTAS: Record<ClubResponseType, number> = {
 const BASE_WEIGHTS: Record<ClubResponseType, number> = {
   interested: 60,
   trial: 25,
-  signed: 10,
+  signed: 0,
   doesNotFit: 5,
   // These outcomes are resolved via pre-checks before the weighted pick:
   ignored: 0,
   tooExpensive: 0,
-  loanSigned: 8,
+  loanSigned: 0,
 } as const;
 
 // =============================================================================
@@ -65,35 +70,35 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Compute the persuasion bonus to "signed" and "trial" weights from the
+ * Compute the persuasion bonus to "interest" and "trial" weights from the
  * scout's persuasion attribute (1–20 scale).
  * The modifier is +2% per point above 10 (baseline), so:
  *   persuasion 10 → 0 bonus
  *   persuasion 20 → +20 bonus (percentage points added to the weight)
  */
-function persuasionBonus(scout: Scout, outcome: "signed" | "trial"): number {
+function persuasionBonus(scout: Scout): number {
   const excess = Math.max(0, scout.attributes.persuasion - 10);
-  // Distribute: +2 per point excess applies equally to signed and trial
+  // +2 per point excess applies equally to interest and trial.
   return excess * 2;
 }
 
 /**
  * Adjust the weight map for a conviction level boost.
- * "tablePound" → +20 to signed, +15 to trial.
- * "strongRecommend" → +10 to signed, +8 to trial.
+ * "tablePound" → +20 to interest, +15 to trial.
+ * "strongRecommend" → +10 to interest, +8 to trial.
  */
 function convictionAdjustments(
   report: ScoutReport,
-): { signedBonus: number; trialBonus: number } {
+): { interestBonus: number; trialBonus: number } {
   switch (report.conviction) {
     case "tablePound":
-      return { signedBonus: 20, trialBonus: 15 };
+      return { interestBonus: 20, trialBonus: 15 };
     case "strongRecommend":
-      return { signedBonus: 10, trialBonus: 8 };
+      return { interestBonus: 10, trialBonus: 8 };
     case "recommend":
-      return { signedBonus: 5, trialBonus: 4 };
+      return { interestBonus: 5, trialBonus: 4 };
     default:
-      return { signedBonus: 0, trialBonus: 0 };
+      return { interestBonus: 0, trialBonus: 0 };
   }
 }
 
@@ -167,9 +172,9 @@ function buildFeedbackText(
 
   switch (response) {
     case "signed":
-      return `${club.shortName} has agreed a deal to sign ${name}. Excellent recommendation — the manager is delighted.`;
+      return `${club.shortName} has completed the signing of ${name}. The registered movement now confirms the outcome.`;
     case "loanSigned":
-      return `${club.shortName} has signed ${name} on loan. The manager sees this as a good short-term solution.`;
+      return `${club.shortName} has completed the loan signing of ${name}. The registered movement now confirms the outcome.`;
     case "trial":
       return `${club.shortName} want to see ${name} in a trial match before making a decision.${tacticalDetail ? `${tacticalDetail} — they want to see how he adapts.` : ""} Arrange the session.`;
     case "interested":
@@ -194,12 +199,14 @@ function buildFeedbackText(
  *  1. No directive match → "ignored" with a small negative rep delta.
  *  2. Player market value > budgetAllocation × 1.5 → "tooExpensive".
  *  3. Formation mismatch with manager's preferred system → "doesNotFit".
- *  4. Otherwise, run a weighted probability pick over the remaining outcomes
- *     (interested / trial / signed / doesNotFit), adjusted for:
+ *  4. Otherwise, run a weighted probability pick over the remaining review
+ *     outcomes (interested / trial / doesNotFit), adjusted for:
  *       - Scout persuasion attribute (+2 per point above 10)
- *       - tablePound conviction (+20 signed, +15 trial)
- *       - strongRecommend conviction (+10 signed, +8 trial)
- *       - Report quality bonus: qualityScore > 70 → +10 to signed weight
+ *       - conviction, which strengthens interest and trial consideration
+ *       - report quality, which strengthens interest
+ *
+ * A positive response is committee intent, not a transfer receipt. Only a
+ * later PlayerMovementEvent may mark the report as a completed signing.
  *
  * @param rng       - Seeded PRNG instance.
  * @param report    - The submitted scout report.
@@ -279,40 +286,25 @@ export function generateClubResponse(
   // -------------------------------------------------------------------------
   // 4. Weighted probability pick for remaining outcomes
   // -------------------------------------------------------------------------
-  const { signedBonus, trialBonus } = convictionAdjustments(report);
-
-  // Adjust loanSigned weight: boost for young or fringe players
-  let loanSignedBonus = 0;
-  if (player.age < 21) loanSignedBonus += 5;
-  if (player.age < 23) loanSignedBonus += 2;
-  // Fringe player: CA below club squad average
-  const squadPlayers = club.playerIds
-    .map((id) => ({ ca: 0 })) // placeholder — we only need count for the check below
-    .length;
-  void squadPlayers;
-  // If the player's market value is modest relative to budget, loan is more attractive
-  if (player.marketValue < directive.budgetAllocation * 0.5) loanSignedBonus += 3;
+  const { interestBonus, trialBonus } = convictionAdjustments(report);
 
   const weights: Record<ClubResponseType, number> = {
     ...BASE_WEIGHTS,
-    signed: clamp(
-      BASE_WEIGHTS.signed +
-        signedBonus +
-        persuasionBonus(scout, "signed") +
-        (report.qualityScore > 70 ? 10 : 0),
+    interested: clamp(
+      BASE_WEIGHTS.interested +
+        Math.round(
+          (interestBonus + persuasionBonus(scout) + (report.qualityScore > 70 ? 10 : 0)) * 0.75,
+        ),
       0,
       100,
     ),
+    signed: 0,
     trial: clamp(
-      BASE_WEIGHTS.trial + trialBonus + persuasionBonus(scout, "trial"),
+      BASE_WEIGHTS.trial + trialBonus + persuasionBonus(scout),
       0,
       100,
     ),
-    loanSigned: clamp(
-      BASE_WEIGHTS.loanSigned + loanSignedBonus,
-      0,
-      100,
-    ),
+    loanSigned: 0,
   };
 
   // -------------------------------------------------------------------------
@@ -320,7 +312,7 @@ export function generateClubResponse(
   //     High fit boosts positive outcomes; poor fit penalises them.
   // -------------------------------------------------------------------------
   if (systemFitScore !== undefined) {
-    const POSITIVE_OUTCOMES: ClubResponseType[] = ["signed", "trial", "interested", "loanSigned"];
+    const POSITIVE_OUTCOMES: ClubResponseType[] = ["trial", "interested"];
     let fitMultiplier = 1.0;
     if (systemFitScore >= 80) fitMultiplier = 1.2;
     else if (systemFitScore >= 60) fitMultiplier = 1.05;
@@ -343,7 +335,7 @@ export function generateClubResponse(
       0.6,
       1.4,
     );
-    for (const outcome of ["signed", "trial", "interested", "loanSigned"] as const) {
+    for (const outcome of ["trial", "interested"] as const) {
       weights[outcome] = clamp(
         Math.round(weights[outcome] * climateMultiplier),
         0,
@@ -358,7 +350,7 @@ export function generateClubResponse(
   }
 
   // Build only the live outcomes (filter zero-weight items)
-  const liveOutcomes: ClubResponseType[] = ["interested", "trial", "signed", "doesNotFit", "loanSigned"];
+  const liveOutcomes: ClubResponseType[] = ["interested", "trial", "doesNotFit"];
   const weightedItems = liveOutcomes
     .filter((o) => weights[o] > 0)
     .map((o) => ({ item: o, weight: weights[o] }));
@@ -397,14 +389,14 @@ export function generateClubResponse(
  * Resolve the outcome of a trial match.
  *
  * Probability breakdown (base):
- *  - 60% "signed"     — player impressed during trial
- *  - 25% "interested" — good showing but club wants more time
+ *  - 60% "interested" — player impressed and remains in the recruitment process
+ *  - 25% "interested" — good showing but the club still wants more diligence
  *  - 15% "doesNotFit" — trial did not convince the manager
  *
  * Modifiers:
- *  - Player form modifier (form is [-3, 3]): each positive point adds +3% to signed
+ *  - Player form modifier (form is [-3, 3]): each positive point adds +3% to interest
  *    and subtracts from doesNotFit; each negative point does the reverse.
- *  - CA relative to squad average: if player CA > squadAvg → +5% to signed,
+ *  - CA relative to squad average: if player CA > squadAvg → +5% to interest,
  *    if player CA < squadAvg * 0.8 → +10% to doesNotFit.
  *
  * @param rng     - Seeded PRNG instance.
@@ -425,31 +417,29 @@ export function processTrialOutcome(
       : squad.reduce((sum, p) => sum + p.currentAbility, 0) / squad.length;
 
   // Base weights
-  let signedWeight = 60;
-  let interestedWeight = 25;
+  let impressedInterestWeight = 60;
+  const cautiousInterestWeight = 25;
   let doesNotFitWeight = 15;
 
   // Form modifier: form range is [-3, 3], each unit shifts weights by 3
   const formEffect = player.form * 3;
-  signedWeight += formEffect;
+  impressedInterestWeight += formEffect;
   doesNotFitWeight -= formEffect;
 
   // CA vs squad average modifier
   if (player.currentAbility > squadAvgCA) {
-    signedWeight += 5;
+    impressedInterestWeight += 5;
   } else if (player.currentAbility < squadAvgCA * 0.8) {
     doesNotFitWeight += 10;
-    signedWeight -= 5;
+    impressedInterestWeight -= 5;
   }
 
   // Clamp all weights to minimum 0 to avoid negative weight errors
-  signedWeight = clamp(signedWeight, 0, 100);
-  interestedWeight = clamp(interestedWeight, 0, 100);
+  impressedInterestWeight = clamp(impressedInterestWeight, 0, 100);
   doesNotFitWeight = clamp(doesNotFitWeight, 0, 100);
 
   const items: Array<{ item: ClubResponseType; weight: number }> = [
-    { item: "signed", weight: signedWeight },
-    { item: "interested", weight: interestedWeight },
+    { item: "interested", weight: impressedInterestWeight + cautiousInterestWeight },
     { item: "doesNotFit", weight: doesNotFitWeight },
   ];
 
@@ -467,8 +457,8 @@ export function processTrialOutcome(
 // =============================================================================
 
 /**
- * Determine if a "signed" club response should be routed through the
- * negotiation system instead of being an instant transfer.
+ * Determine if a positive report-time response can open the negotiation
+ * system. The response itself never means a deal has been completed.
  *
  * Player-initiated transfers (from scout reports) go through negotiation;
  * AI background transfers remain instant.
@@ -481,8 +471,7 @@ export function shouldRouteToNegotiation(
   response: ClubResponseType,
   isPlayerAction: boolean,
 ): boolean {
-  // Only "signed" and "loanSigned" responses can be negotiated
-  if (response !== "signed" && response !== "loanSigned") return false;
+  if (response !== "interested") return false;
   // Only player-initiated transfers go through negotiation
   return isPlayerAction;
 }

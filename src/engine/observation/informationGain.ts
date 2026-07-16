@@ -12,6 +12,7 @@ import {
   type Observation,
   type ObservationContext,
 } from "@/engine/core/types";
+import type { ObservationSituationSnapshot } from "./situations";
 
 export type ObservationSourceFamily =
   | "live"
@@ -67,6 +68,7 @@ export interface ObservationKnowledgeSummary {
   uniqueContextCount: number;
   uniqueSourceFamilyCount: number;
   independentSourcesByContext: Partial<Record<ObservationContext, number>>;
+  independentSourcesBySituation: Record<string, number>;
   independentSourcesByDomain: Record<AttributeDomain, number>;
 }
 
@@ -76,6 +78,8 @@ export interface ObservationInformationGainRequest {
   candidateContexts: readonly ObservationContext[];
   /** Optional question the scout is trying to answer. */
   targetDomains?: readonly AttributeDomain[];
+  /** Optional concrete situations for context choices currently available. */
+  candidateSituations?: Partial<Record<ObservationContext, ObservationSituationSnapshot>>;
 }
 
 export interface ObservationContextInformationGain {
@@ -87,6 +91,8 @@ export interface ObservationContextInformationGain {
   rawSameContextObservations: number;
   repetitionMultiplier: number;
   contextIsNovel: boolean;
+  situationIsNovel: boolean;
+  repetitionKey: string;
   sourceFamilyIsNovel: boolean;
   domainNeed: number;
   targetAlignment: number;
@@ -134,6 +140,7 @@ export function summarizeObservationKnowledge(
   const contexts = new Set<ObservationContext>();
   const families = new Set<ObservationSourceFamily>();
   const contextSources = new Map<ObservationContext, Set<string>>();
+  const situationSources = new Map<string, Set<string>>();
   const domainSources = new Map<AttributeDomain, Set<string>>(
     ALL_DOMAINS.map((domain) => [domain, new Set<string>()]),
   );
@@ -147,6 +154,11 @@ export function summarizeObservationKnowledge(
     const sourcesForContext = contextSources.get(observation.context) ?? new Set<string>();
     sourcesForContext.add(sourceKey);
     contextSources.set(observation.context, sourcesForContext);
+    const repetitionKey = observation.situation?.repetitionKey
+      ?? `context:${observation.context}`;
+    const sourcesForSituation = situationSources.get(repetitionKey) ?? new Set<string>();
+    sourcesForSituation.add(sourceKey);
+    situationSources.set(repetitionKey, sourcesForSituation);
 
     for (const domain of domainsActuallyObserved(observation)) {
       domainSources.get(domain)?.add(sourceKey);
@@ -161,6 +173,9 @@ export function summarizeObservationKnowledge(
     uniqueSourceFamilyCount: families.size,
     independentSourcesByContext: Object.fromEntries(
       [...contextSources].map(([context, sources]) => [context, sources.size]),
+    ),
+    independentSourcesBySituation: Object.fromEntries(
+      [...situationSources].map(([key, sources]) => [key, sources.size]),
     ),
     independentSourcesByDomain: Object.fromEntries(
       ALL_DOMAINS.map((domain) => [domain, domainSources.get(domain)?.size ?? 0]),
@@ -192,8 +207,15 @@ function scoreContext(
 
   // Strong diminishing returns after each independent source in the same
   // context. Duplicate records from one source do not increase saturation.
-  const repetitionMultiplier = 1 / (1 + sameContextIndependentSources * 0.55);
+  const candidateSituation = request.candidateSituations?.[context];
+  const repetitionKey = candidateSituation?.repetitionKey ?? `context:${context}`;
+  const sameSituationIndependentSources = summary.independentSourcesBySituation[repetitionKey] ?? 0;
+  const repetitionSources = candidateSituation
+    ? sameSituationIndependentSources
+    : sameContextIndependentSources;
+  const repetitionMultiplier = 1 / (1 + repetitionSources * 0.55);
   const contextIsNovel = sameContextIndependentSources === 0;
+  const situationIsNovel = sameSituationIndependentSources === 0;
   const seenFamilies = new Set(
     playerObservations.map((observation) => getObservationSourceFamily(observation.context)),
   );
@@ -217,11 +239,14 @@ function scoreContext(
     repetitionMultiplier * 25
     + domainNeed * 30
     + targetAlignment * 20
-    + (contextIsNovel ? 15 : 0)
+    + (contextIsNovel ? 15 : situationIsNovel && candidateSituation ? 8 : 0)
     + (sourceFamilyIsNovel ? 10 : 0),
   )));
   const reasons: string[] = [];
   if (contextIsNovel) reasons.push("Adds an unseen observation context.");
+  else if (situationIsNovel && candidateSituation) {
+    reasons.push("Revisits a known context under materially different football conditions.");
+  }
   if (sourceFamilyIsNovel) reasons.push("Adds an independent evidence family.");
   if (sameContextIndependentSources > 0) {
     reasons.push(
@@ -246,6 +271,8 @@ function scoreContext(
     rawSameContextObservations,
     repetitionMultiplier: roundHundredth(clamp01(repetitionMultiplier)),
     contextIsNovel,
+    situationIsNovel,
+    repetitionKey,
     sourceFamilyIsNovel,
     domainNeed: roundHundredth(clamp01(domainNeed)),
     targetAlignment: roundHundredth(clamp01(targetAlignment)),
@@ -269,4 +296,3 @@ export function getHighestValueNextContext(
 ): ObservationContextInformationGain | null {
   return rankNextObservationContexts(request)[0] ?? null;
 }
-

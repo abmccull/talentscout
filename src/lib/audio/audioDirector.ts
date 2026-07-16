@@ -1,12 +1,23 @@
 import type { NarrativeEvent, NarrativeEventType } from "@/engine/core/types";
 import type { GameScreen } from "@/stores/gameStore";
+import type { CareerMomentCue } from "@/engine/career/careerMoments";
 
-export type NarrativeAudioMoment = "politicalTension" | "discovery" | "vindication";
+export type NarrativeAudioMoment =
+  | "politicalTension"
+  | "discovery"
+  | "vindication"
+  | "failure"
+  | "betrayal"
+  | "comeback"
+  | "promotion"
+  | "farewell"
+  | "conviction";
 
 export interface AudioDirectorInput {
   screen: GameScreen;
   weather?: string;
   narrativeMoment?: NarrativeAudioMoment;
+  careerMomentCue?: CareerMomentCue;
   isTraveling?: boolean;
 }
 
@@ -19,7 +30,13 @@ export interface AudioScene {
     | "reportRoom"
     | "politicalTension"
     | "discovery"
-    | "vindication"
+     | "vindication"
+    | "failure"
+    | "betrayal"
+    | "comeback"
+    | "promotion"
+    | "farewell"
+    | "conviction"
     | "travel"
     | "seasonReflection"
     | "career"
@@ -45,6 +62,10 @@ const POLITICAL_TENSION_TYPES = new Set<NarrativeEventType>([
   "confidentialityDilemma",
 ]);
 
+const BETRAYAL_TYPES = new Set<NarrativeEventType>([
+  "contactBetrayal", "agentDoubleDealing", "agentDeception", "journalistExpose",
+]);
+
 const VINDICATION_TYPES = new Set<NarrativeEventType>([
   "debutHatTrick", "reportCitedInBoardMeeting", "hiddenGemVindication",
   "debutBrilliance", "lateBloomingSurprise", "scoutingAwardNomination",
@@ -63,6 +84,9 @@ export function classifyNarrativeAudioMoment(
   events: readonly NarrativeEvent[] | undefined,
 ): NarrativeAudioMoment | undefined {
   const active = (events ?? []).filter((event) => !event.acknowledged);
+  if (active.some((event) => BETRAYAL_TYPES.has(event.type))) {
+    return "betrayal";
+  }
   if (active.some((event) => POLITICAL_TENSION_TYPES.has(event.type))) {
     return "politicalTension";
   }
@@ -106,7 +130,7 @@ function scene(
 
 /** Pure, deterministic mapping from game meaning to an adaptive audio scene. */
 export function directAudioScene(input: AudioDirectorInput): AudioScene {
-  const { screen, weather, narrativeMoment, isTraveling = false } = input;
+  const { screen, weather, narrativeMoment, careerMomentCue, isTraveling = false } = input;
 
   if (screen === "settings") return scene("preserve", undefined, undefined);
   if (screen === "matchSummary") return scene("preserve", undefined, null);
@@ -141,14 +165,33 @@ export function directAudioScene(input: AudioDirectorInput): AudioScene {
   }
 
   if (MOMENT_SCREENS.has(screen)) {
-    if (narrativeMoment === "politicalTension") {
+    const moment = careerMomentCue ?? narrativeMoment;
+    if (moment === "politicalTension") {
       return scene("politicalTension", "transfer-pressure", "office", 0.68, 0.24);
     }
-    if (narrativeMoment === "vindication") {
+    if (moment === "vindication") {
       return scene("vindication", "wonderkid", null, 0.72, 0);
     }
-    if (narrativeMoment === "discovery") {
+    if (moment === "discovery") {
       return scene("discovery", "wonderkid", null, 0.6, 0);
+    }
+    if (moment === "failure") {
+      return scene("failure", "transfer-pressure", "office", 0.46, 0.18);
+    }
+    if (moment === "betrayal") {
+      return scene("betrayal", "transfer-pressure", null, 0.62, 0);
+    }
+    if (moment === "comeback") {
+      return scene("comeback", "career-hub", null, 0.66, 0);
+    }
+    if (moment === "promotion") {
+      return scene("promotion", "wonderkid", "office", 0.7, 0.16);
+    }
+    if (moment === "farewell") {
+      return scene("farewell", "season-review", null, 0.6, 0);
+    }
+    if (moment === "conviction") {
+      return scene("conviction", "report-writing", "office", 0.56, 0.2);
     }
   }
 
@@ -168,4 +211,18 @@ export function directAudioScene(input: AudioDirectorInput): AudioScene {
     return scene("readingRoom", null, "office", 0, 0.34);
   }
   return scene("desk", "youth-scouting", "office", 0.5, 0.32);
+}
+
+/** Text remains authoritative; these are optional, non-semantic stingers. */
+export function careerMomentSfx(cue: CareerMomentCue): string {
+  switch (cue) {
+    case "conviction": return "report-submit";
+    case "vindication": return "discovery";
+    case "failure": return "error";
+    case "betrayal": return "notification";
+    case "comeback": return "level-up";
+    case "promotion": return "promotion";
+    case "farewell": return "season-end-whistle";
+    default: return "discovery";
+  }
 }

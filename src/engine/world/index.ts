@@ -11,11 +11,17 @@ export {
   getTravelCost,
   getTravelSlots,
   getTravelDuration,
+  getTravelPostureEffects,
+  TRAVEL_POSTURE_DEFINITIONS,
   bookTravel,
   isScoutAbroad,
   getAccessibleFixtures,
   getForeignScoutingPenalty,
   updateCountryReputation,
+} from './travel';
+export type {
+  TravelPostureDefinition,
+  TravelPostureEffects,
 } from './travel';
 
 export {
@@ -31,8 +37,13 @@ export {
 export {
   deriveRegionRecruitmentIdentity,
   deriveClubRecruitmentIdentity,
+  deriveClubRecruitmentDoctrine,
   deriveBriefRecruitmentIdentity,
   evaluateRecruitmentIdentityFit,
+  getPhilosophyPreferredAgeRange,
+  getPhilosophyAcademyIntakeAgeRange,
+  getPhilosophySpecializationAffinity,
+  scoreDoctrineAgeFit,
 } from './recruitmentIdentity';
 export type {
   RecruitmentFocus,
@@ -40,6 +51,10 @@ export type {
   ClubRecruitmentArchetype,
   RegionRecruitmentIdentity,
   ClubRecruitmentIdentity,
+  ClubRecruitmentDoctrine,
+  RecruitmentEvidencePreference,
+  RecruitmentRiskTolerance,
+  RecruitmentReach,
   RecruitmentIdentityFit,
 } from './recruitmentIdentity';
 export type {
@@ -81,6 +96,7 @@ export {
 export type {
   RegionalAccessTier,
   RegionalPresenceEffects,
+  RegionalPresenceDimensions,
   RegionalPresenceSnapshot,
   RegionalPresenceSource,
   RegionalTravelQuote,
@@ -132,6 +148,28 @@ export type {
 } from './worldConditions';
 
 export {
+  WORLD_CONDITION_ARC_COMPLETED_LIMIT,
+  createWorldConditionArcState,
+  startWorldConditionArcs,
+  getDueWorldConditionArcBeats,
+  recordWorldConditionArcBeat,
+  applyWorldConditionArcDecision,
+  reconcileWorldConditionArcDecisions,
+  closeOrphanedWorldConditionArcDecisions,
+  getWorldConditionArcModifiers,
+  getWorldConditionArcDefinitions,
+  getWorldConditionArcContentDefinitionIds,
+} from './worldConditionArcs';
+export type {
+  WorldConditionArcPhase,
+  WorldConditionArcChoiceDefinition,
+  WorldConditionArcDefinition,
+  WorldConditionArcInstance,
+  WorldConditionArcState,
+  DueWorldConditionArcBeat,
+} from './worldConditionArcs';
+
+export {
   processRelegationPromotion,
   applyRelegationResult,
   getStandingsPriceModifier,
@@ -149,3 +187,5 @@ export {
   findLoanDestination,
   calculateLoanTerms,
 } from './loans';
+
+export * from './footballCulture';

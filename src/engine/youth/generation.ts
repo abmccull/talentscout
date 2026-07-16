@@ -607,6 +607,10 @@ export function processYouthAging(
   unsignedYouth: Record<string, UnsignedYouth>,
   clubs: Record<string, Club>,
   currentSeason: number,
+  signingOptions: {
+    canClubSign?: (youth: UnsignedYouth, club: Club) => boolean;
+    reserveClubSigning?: (youth: UnsignedYouth, club: Club) => void;
+  } = {},
 ): {
   updated: Record<string, UnsignedYouth>;
   autoSigned: Array<{ youthId: string; clubId: string }>;
@@ -620,6 +624,15 @@ export function processYouthAging(
   const updated: Record<string, UnsignedYouth> = { ...unsignedYouth };
   const autoSigned: Array<{ youthId: string; clubId: string }> = [];
   const retired: string[] = [];
+  const selectSigningClub = (youth: UnsignedYouth): Club | undefined => {
+    const affordableClubs = signingOptions.canClubSign
+      ? npcEligibleClubs.filter((club) => signingOptions.canClubSign!(youth, club))
+      : npcEligibleClubs;
+    if (affordableClubs.length === 0) return undefined;
+    const club = rng.pick(affordableClubs);
+    signingOptions.reserveClubSigning?.(youth, club);
+    return club;
+  };
 
   for (const youth of Object.values(unsignedYouth)) {
     // Skip already resolved youth
@@ -640,32 +653,36 @@ export function processYouthAging(
     if (age >= 18) {
       if (rng.chance(0.5) && npcEligibleClubs.length > 0) {
         // NPC minor club signs them
-        const club = rng.pick(npcEligibleClubs);
-        updated[youth.id] = {
-          ...youth,
-          placed: true,
-          placedClubId: club.id,
-        };
-        autoSigned.push({ youthId: youth.id, clubId: club.id });
-      } else {
-        // Leave football
-        updated[youth.id] = { ...youth, retired: true };
-        retired.push(youth.id);
+        const club = selectSigningClub(youth);
+        if (club) {
+          updated[youth.id] = {
+            ...youth,
+            placed: true,
+            placedClubId: club.id,
+          };
+          autoSigned.push({ youthId: youth.id, clubId: club.id });
+          continue;
+        }
       }
+      // Leave football when no offer arrives or no eligible club can fund it.
+      updated[youth.id] = { ...youth, retired: true };
+      retired.push(youth.id);
       continue;
     }
 
     // --- Age 17+ with buzz >= 60: 30% NPC interest ---
     if (age >= 17 && youth.buzzLevel >= 60 && npcEligibleClubs.length > 0) {
       if (rng.chance(0.3)) {
-        const club = rng.pick(npcEligibleClubs);
-        updated[youth.id] = {
-          ...youth,
-          placed: true,
-          placedClubId: club.id,
-        };
-        autoSigned.push({ youthId: youth.id, clubId: club.id });
-        continue;
+        const club = selectSigningClub(youth);
+        if (club) {
+          updated[youth.id] = {
+            ...youth,
+            placed: true,
+            placedClubId: club.id,
+          };
+          autoSigned.push({ youthId: youth.id, clubId: club.id });
+          continue;
+        }
       }
       // If chance fails, youth stays unsigned — no retirement at 17
     }

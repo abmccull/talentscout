@@ -4,6 +4,7 @@ import type {
   GameState,
   MarketplaceBid,
   PlacementReport,
+  ProfessionalCaseContext,
   ReportDelivery,
   ReportListing,
   ScoutReport,
@@ -65,6 +66,13 @@ function normalizeCase(record: ScoutingCase): ScoutingCase {
     placementReportIds: record.placementReportIds ?? [],
     hypothesisIds: record.hypothesisIds ?? [],
     reviewIds: record.reviewIds ?? [],
+    professionalContext: record.professionalContext
+      ? {
+          ...record.professionalContext,
+          stakeholderRefs: record.professionalContext.stakeholderRefs ?? [],
+          judgmentDecisionIds: record.professionalContext.judgmentDecisionIds ?? [],
+        }
+      : undefined,
   };
 }
 
@@ -93,6 +101,61 @@ function createCase(
     hypothesisIds: [],
     reviewIds: [],
     ...(legacyUnlinked ? { legacyUnlinked: true } : {}),
+  };
+}
+
+export interface OpenProfessionalScoutingCaseInput {
+  scoutingCases: Record<string, ScoutingCase>;
+  scoutId: string;
+  playerId: string;
+  week: number;
+  season: number;
+  context: ProfessionalCaseContext;
+  briefId?: string;
+}
+
+/**
+ * Open or enrich a case before a report exists. This lets discovery dilemmas,
+ * evidence plans and stakeholder choices become part of the same causal case
+ * that later owns the report, delivery and outcome.
+ */
+export function openProfessionalScoutingCase(
+  input: OpenProfessionalScoutingCaseInput,
+): { scoutingCases: Record<string, ScoutingCase>; scoutingCase: ScoutingCase } {
+  const id = getScoutingCaseId(input.scoutId, input.playerId, input.briefId);
+  const base = normalizeCase(
+    input.scoutingCases[id]
+      ?? createCase(id, input.scoutId, input.playerId, input.week, input.season),
+  );
+  const touched = laterDate(
+    { week: base.lastUpdatedWeek, season: base.lastUpdatedSeason },
+    { week: input.week, season: input.season },
+  );
+  const priorContext = base.professionalContext;
+  const scoutingCase: ScoutingCase = {
+    ...base,
+    briefId: input.briefId ?? base.briefId,
+    professionalContext: {
+      ...input.context,
+      stakeholderRefs: [
+        ...new Set([
+          ...(priorContext?.stakeholderRefs ?? []),
+          ...input.context.stakeholderRefs,
+        ]),
+      ],
+      judgmentDecisionIds: [
+        ...new Set([
+          ...(priorContext?.judgmentDecisionIds ?? []),
+          ...input.context.judgmentDecisionIds,
+        ]),
+      ],
+    },
+    lastUpdatedWeek: touched.week,
+    lastUpdatedSeason: touched.season,
+  };
+  return {
+    scoutingCases: { ...input.scoutingCases, [id]: scoutingCase },
+    scoutingCase,
   };
 }
 

@@ -252,9 +252,30 @@ export function createScout(config: NewGameConfig, rng: RNG): Scout {
     specializationReputation: 5,
 
     currentClubId: startingClubId,
-    contractEndSeason: undefined,
+    contractEndSeason: startingClubId ? 2 : undefined,
     salary,
-    savings: 5000,
+    employmentContract: startingClubId
+      ? {
+          id: `starting-contract:${startingClubId}`,
+          clubId: startingClubId,
+          role: specialization === "youth" ? "Youth Scout" : "Club Scout",
+          tier: 2,
+          weeklySalary: salary,
+          startSeason: 1,
+          endSeason: 2,
+          status: "active",
+          objectives: {
+            reportsPerSeason: 20,
+            minimumAverageQuality: 56,
+            successfulRecommendations: 1,
+          },
+          signingBonus: 0,
+          performanceBonusRate: 0.09,
+          severanceWeeks: 4,
+          educationBudget: 1_500,
+        }
+      : undefined,
+    savings: 0,
 
     reportsSubmitted: 0,
     successfulFinds: 0,

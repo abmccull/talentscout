@@ -9,12 +9,137 @@
  *    learning a foreign market can never silently relocate the scout.
  */
 
-import type { Scout, TravelBooking, CountryReputation, Fixture, Territory } from "@/engine/core/types";
+import type {
+  Scout,
+  TravelBooking,
+  TravelPosture,
+  CountryReputation,
+  Fixture,
+  Territory,
+} from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
 import {
   LEGACY_SEASON_LENGTH_WEEKS,
   normalizeGameWeek,
 } from "@/engine/core/gameDate";
+
+// =============================================================================
+// TRIP POSTURE
+// =============================================================================
+
+export interface TravelPostureEffects {
+  observationSignalMultiplier: number;
+  observationUncertaintyMultiplier: number;
+  regionalKnowledgeMultiplier: number;
+  contactQualityMultiplier: number;
+  discoveryMultiplier: number;
+  opportunityMultiplier: number;
+  costMultiplier: number;
+  fatigueMultiplier: number;
+}
+
+export interface TravelPostureDefinition {
+  id: TravelPosture;
+  label: string;
+  summary: string;
+  upside: string;
+  tradeoff: string;
+  effects: TravelPostureEffects;
+}
+
+const NEUTRAL_TRAVEL_POSTURE_EFFECTS: TravelPostureEffects = {
+  observationSignalMultiplier: 1,
+  observationUncertaintyMultiplier: 1,
+  regionalKnowledgeMultiplier: 1,
+  contactQualityMultiplier: 1,
+  discoveryMultiplier: 1,
+  opportunityMultiplier: 1,
+  costMultiplier: 1,
+  fatigueMultiplier: 1,
+};
+
+export const TRAVEL_POSTURE_DEFINITIONS: Record<TravelPosture, TravelPostureDefinition> = {
+  deepDive: {
+    id: "deepDive",
+    label: "Deep dive",
+    summary: "Stay narrow, revisit evidence, and build an informed regional model.",
+    upside: "Clearer observation evidence and substantially more regional knowledge.",
+    tradeoff: "Higher cost and fatigue, fewer speculative leads, and weaker networking.",
+    effects: {
+      observationSignalMultiplier: 1.1,
+      observationUncertaintyMultiplier: 0.9,
+      regionalKnowledgeMultiplier: 1.35,
+      contactQualityMultiplier: 0.8,
+      discoveryMultiplier: 0.82,
+      opportunityMultiplier: 0.8,
+      costMultiplier: 1.12,
+      fatigueMultiplier: 1.12,
+    },
+  },
+  networkBuild: {
+    id: "networkBuild",
+    label: "Build the network",
+    summary: "Prioritize introductions, trust, and future access over this week's sample depth.",
+    upside: "Stronger local contacts and more relationship-led opportunities.",
+    tradeoff: "Slightly noisier observation evidence and a more expensive itinerary.",
+    effects: {
+      observationSignalMultiplier: 0.94,
+      observationUncertaintyMultiplier: 1.06,
+      regionalKnowledgeMultiplier: 1.08,
+      contactQualityMultiplier: 1.55,
+      discoveryMultiplier: 0.92,
+      opportunityMultiplier: 1.18,
+      costMultiplier: 1.08,
+      fatigueMultiplier: 0.96,
+    },
+  },
+  opportunityBlitz: {
+    id: "opportunityBlitz",
+    label: "Opportunity blitz",
+    summary: "Cover as many venues and live leads as possible before the market moves.",
+    upside: "Many more speculative discoveries and time-sensitive opportunities.",
+    tradeoff: "Shallower evidence, weaker relationships, higher cost, and much more fatigue.",
+    effects: {
+      observationSignalMultiplier: 0.88,
+      observationUncertaintyMultiplier: 1.16,
+      regionalKnowledgeMultiplier: 0.75,
+      contactQualityMultiplier: 0.7,
+      discoveryMultiplier: 1.45,
+      opportunityMultiplier: 1.35,
+      costMultiplier: 1.18,
+      fatigueMultiplier: 1.25,
+    },
+  },
+  assignmentFirst: {
+    id: "assignmentFirst",
+    label: "Assignment first",
+    summary: "Protect the commissioned brief and avoid work that does not advance it.",
+    upside: "A controlled, lower-fatigue trip with dependable evidence for the assigned brief.",
+    tradeoff: "Far fewer speculative discoveries and relationship detours.",
+    effects: {
+      observationSignalMultiplier: 1,
+      observationUncertaintyMultiplier: 1,
+      regionalKnowledgeMultiplier: 1,
+      contactQualityMultiplier: 1,
+      discoveryMultiplier: 0.82,
+      opportunityMultiplier: 0.82,
+      costMultiplier: 1,
+      fatigueMultiplier: 0.9,
+    },
+  },
+};
+
+/**
+ * Legacy bookings have no posture and remain exactly neutral. All newly booked
+ * trips persist an explicit posture, so loading an old save cannot silently
+ * rebalance a trip already in progress.
+ */
+export function getTravelPostureEffects(
+  posture: TravelPosture | undefined,
+): TravelPostureEffects {
+  const definition = posture ? TRAVEL_POSTURE_DEFINITIONS[posture] : undefined;
+  return definition?.effects ?? NEUTRAL_TRAVEL_POSTURE_EFFECTS;
+}
 
 // =============================================================================
 // CONTINENT CLASSIFICATION
@@ -356,6 +481,7 @@ export function bookTravel(
   duration: number,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
   quotedCost?: number,
+  posture: TravelPosture = "assignmentFirst",
 ): Scout {
   const homeCountry = getScoutHomeCountry(scout);
   const normalisedDepartureWeek = normalizeGameWeek(departureWeek, seasonLength);
@@ -364,14 +490,16 @@ export function bookTravel(
     seasonLength,
   );
 
+  const postureEffects = getTravelPostureEffects(posture);
   const booking: TravelBooking = {
     destinationCountry,
     departureWeek: normalisedDepartureWeek,
     returnWeek: normalisedReturnWeek,
     cost: quotedCost === undefined
-      ? getTravelCost(homeCountry, destinationCountry)
+      ? Math.round(getTravelCost(homeCountry, destinationCountry) * postureEffects.costMultiplier)
       : Math.max(0, Math.round(quotedCost)),
     isAbroad: false,
+    posture,
   };
 
   return { ...scout, travelBooking: booking };

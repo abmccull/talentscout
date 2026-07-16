@@ -63,9 +63,14 @@ import {
   assignAssistantScout,
   unassignAssistantScout,
   renegotiateEmployeeSalary,
+  assessClubAffordability,
+  buildTransferAddOnObligations,
+  getTransferContingentReserve,
 } from "@/engine/finance";
 import { creditForLoanRepayment } from "@/engine/finance/creditScore";
 import { sellEquipmentForCash as sellEquipmentForCashEngine } from "@/engine/finance/distress";
+import { canCompleteConsulting } from "@/engine/finance/consulting";
+import { getClubScoutingBudget } from "@/engine/finance/reportMarketplace";
 import { canChooseCareerPath } from "@/engine/career/pathChoice";
 import {
   applyCareerPathTransition,
@@ -251,13 +256,20 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const report = gameState.reports[reportId];
       if (!report) return;
       const linked = ensureScoutingCaseForReport(gameState.scoutingCases ?? {}, report);
+      const existingListingIds = new Set(
+        gameState.finances.reportListings.map((listing) => listing.id),
+      );
       const updated = listReport(
         gameState.finances, reportId, price, isExclusive,
         targetClubId, gameState.currentWeek, gameState.currentSeason,
         linked.scoutingCase.id,
         getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
-      const listingId = `listing_${reportId}_${gameState.currentWeek}_${gameState.currentSeason}`;
+      const addedListing = updated.reportListings.find((listing) =>
+        listing.reportId === reportId && !existingListingIds.has(listing.id)
+      );
+      if (!addedListing) return;
+      const listingId = addedListing.id;
       const scoutingCases = attachListingToCase(
         linked.scoutingCases,
         linked.scoutingCase.id,
@@ -293,17 +305,46 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!listing) return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending") return;
+      const buyer = gameState.clubs[bid.clubId];
+      if (!buyer || getClubScoutingBudget(buyer) < bid.amount) return;
       const updated = acceptBid(
         gameState.finances, listing.id, bidId,
         gameState.currentWeek, gameState.currentSeason,
       );
+      if (!updated.reportListings.some((candidate) =>
+        candidate.id === listing.id
+        && candidate.bids.some((candidateBid) =>
+          candidateBid.id === bidId && candidateBid.status === "accepted"
+        )
+      )) return;
+      const clubs = {
+        ...gameState.clubs,
+        [buyer.id]: {
+          ...buyer,
+          scoutingBudget: getClubScoutingBudget(buyer) - bid.amount,
+        },
+      };
       // Mark related inbox message as read
-      const updatedInbox = gameState.inbox.map((m) =>
-        m.relatedId === bidId ? { ...m, read: true, actionRequired: false } : m,
-      );
+      const firstReportBonusEarned = !gameState.finances.starterBonus?.firstReportBonusUsed
+        && updated.starterBonus?.firstReportBonusUsed;
+      const updatedInbox = [
+        ...gameState.inbox.map((m) =>
+          m.relatedId === bidId ? { ...m, read: true, actionRequired: false } : m,
+        ),
+        ...(firstReportBonusEarned ? [{
+          id: `welcome-first-report-${listing.id}`,
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+          type: "financial" as const,
+          title: "First Sale Bonus",
+          body: `Your first report sale unlocked the scout-network welcome package: an extra £${Math.round(bid.amount * 0.5).toLocaleString()}.`,
+          read: false,
+          actionRequired: false,
+        }] : []),
+      ];
       const report = gameState.reports[listing.reportId];
       if (!report) {
-        set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+        set({ gameState: { ...gameState, clubs, finances: updated, inbox: updatedInbox } });
         return;
       }
       const recorded = recordMarketplaceDelivery({
@@ -332,6 +373,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       set({
         gameState: {
           ...gameState,
+          clubs,
           finances,
           inbox: updatedInbox,
           reports: { ...gameState.reports, [report.id]: recorded.report },
@@ -364,10 +406,25 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (!listing) return;
       const bid = listing.bids.find((candidate) => candidate.id === bidId);
       if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return;
+      const buyer = gameState.clubs[bid.clubId];
+      if (!buyer || getClubScoutingBudget(buyer) < bid.amount) return;
       const updated = acceptExclusiveUpgrade(
         gameState.finances, listing.id, bidId,
         gameState.currentWeek, gameState.currentSeason,
       );
+      if (!updated.reportListings.some((candidate) =>
+        candidate.id === listing.id
+        && candidate.bids.some((candidateBid) =>
+          candidateBid.id === bidId && candidateBid.status === "accepted"
+        )
+      )) return;
+      const clubs = {
+        ...gameState.clubs,
+        [buyer.id]: {
+          ...buyer,
+          scoutingBudget: getClubScoutingBudget(buyer) - bid.amount,
+        },
+      };
       // Mark related inbox messages as read for all declined bids + this accepted bid
       const declinedBidIds = listing.bids
         .filter((b) => b.status === "pending" && b.id !== bidId)
@@ -380,7 +437,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       );
       const report = gameState.reports[listing.reportId];
       if (!report) {
-        set({ gameState: { ...gameState, finances: updated, inbox: updatedInbox } });
+        set({ gameState: { ...gameState, clubs, finances: updated, inbox: updatedInbox } });
         return;
       }
       const recorded = recordMarketplaceDelivery({
@@ -409,6 +466,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
       set({
         gameState: {
           ...gameState,
+          clubs,
           finances,
           inbox: updatedInbox,
           reports: { ...gameState.reports, [report.id]: recorded.report },
@@ -421,13 +479,29 @@ export function createFinanceActions(get: GetState, set: SetState) {
     acceptRetainerContract: (contract: RetainerContract) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
-      const updated = acceptRetainer(gameState.finances, contract, gameState.scout);
+      const updated = acceptRetainer(
+        gameState.finances,
+        contract,
+        gameState.scout,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
+      );
       if (updated) {
         // Remove from pending offers
         const pendingRetainers = (updated.pendingRetainerOffers ?? []).filter(
           (r) => r.id !== contract.id,
         );
-        set({ gameState: { ...gameState, finances: { ...updated, pendingRetainerOffers: pendingRetainers } } });
+        const withRelationship = ensureClientRelationship(
+          updated,
+          contract.clubId,
+          gameState.currentWeek,
+          gameState.currentSeason,
+        );
+        set({
+          gameState: {
+            ...gameState,
+            finances: { ...withRelationship, pendingRetainerOffers: pendingRetainers },
+          },
+        });
       }
     },
 
@@ -441,14 +515,32 @@ export function createFinanceActions(get: GetState, set: SetState) {
     enrollInCourse: (courseId: string) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
+      const educationBudgetAvailable = gameState.scout.careerPath === "club"
+        && gameState.scout.employmentContract?.status !== "terminated"
+        ? gameState.scout.employmentContract?.educationBudget ?? 0
+        : 0;
       const result = enrollInCourse(
         gameState.finances, courseId,
         gameState.currentWeek, gameState.currentSeason,
         gameState.scout.careerTier,
         getSeasonLength(gameState.fixtures, gameState.currentSeason),
+        educationBudgetAvailable,
       );
       if (result.success) {
-        set({ gameState: { ...gameState, finances: result.finances } });
+        const employmentContract = gameState.scout.employmentContract;
+        const scout = result.educationBudgetUsed > 0 && employmentContract
+          ? {
+              ...gameState.scout,
+              employmentContract: {
+                ...employmentContract,
+                educationBudget: Math.max(
+                  0,
+                  employmentContract.educationBudget - result.educationBudgetUsed,
+                ),
+              },
+            }
+          : gameState.scout;
+        set({ gameState: { ...gameState, scout, finances: result.finances } });
       } else {
         // Send inbox message with the failure reason
         const msg: InboxMessage = {
@@ -711,6 +803,8 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const updated = takeLoan(
         gameState.finances, type, amount,
         gameState.currentWeek, gameState.currentSeason,
+        gameState.scout.careerTier,
+        getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );
       if (updated) {
         set({ gameState: { ...gameState, finances: updated } });
@@ -742,12 +836,30 @@ export function createFinanceActions(get: GetState, set: SetState) {
     acceptConsultingContract: (contract: ConsultingContract) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
-      const updated = acceptConsulting(gameState.finances, contract);
+      const updated = acceptConsulting(
+        gameState.finances,
+        contract,
+        gameState.scout,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      if (updated === gameState.finances) return;
       // Remove from pending offers
       const pendingConsulting = (updated.pendingConsultingOffers ?? []).filter(
         (c) => c.id !== contract.id,
       );
-      set({ gameState: { ...gameState, finances: { ...updated, pendingConsultingOffers: pendingConsulting } } });
+      const withRelationship = ensureClientRelationship(
+        updated,
+        contract.clubId,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          finances: { ...withRelationship, pendingConsultingOffers: pendingConsulting },
+        },
+      });
     },
 
     declineRetainerOffer: (contractId: string) => {
@@ -775,13 +887,14 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const contract = gameState.finances.consultingContracts.find(
         (c) => c.id === contractId && c.status === "active",
       );
-      if (!contract) return;
+      if (!contract || !canCompleteConsulting(contract)) return;
       const updated = completeConsulting(
         gameState.finances,
         contractId,
         gameState.currentWeek,
         gameState.currentSeason,
       );
+      if (updated === gameState.finances) return;
       set({
         gameState: {
           ...gameState,
@@ -912,14 +1025,38 @@ export function createFinanceActions(get: GetState, set: SetState) {
       if (neg.phase === "completed" || neg.phase === "collapsed") return;
       const buyingClub = gameState.clubs[neg.toClubId];
       const signingBonus = neg.agentDemands?.signingBonus ?? 0;
-      if (!buyingClub || amount < 0 || amount + signingBonus > buyingClub.budget) return;
+      const player = gameState.players[neg.playerId];
+      if (!buyingClub || !player || amount < 0) return;
+      const projectedWage = Math.max(
+        player.wage,
+        Math.round(player.wage * (1 + (neg.agentDemands?.wagePremium ?? 0.1))),
+      );
+      const projectedAddOnObligations = buildTransferAddOnObligations({
+        playerId: player.id,
+        creditorClubId: neg.fromClubId,
+        addOns: addOns ?? [],
+        currentWeek: gameState.currentWeek,
+        currentSeason: gameState.currentSeason,
+      });
+      const projectedAddOnCommitment = projectedAddOnObligations.reduce(
+        (total, obligation) => total + (obligation.weeklyAmount ?? 0),
+        0,
+      );
+      if (!assessClubAffordability({
+        club: buyingClub,
+        players: gameState.players,
+        upfrontCost: amount + signingBonus,
+        weeklyWageCommitment: projectedWage,
+        weeklyObligationCommitment: projectedAddOnCommitment,
+        contingentReserve: getTransferContingentReserve(projectedAddOnObligations),
+      }).affordable) return;
       const rng = createRNG(`${gameState.seed}-neg-offer-${negotiationId}-${neg.rounds.length}`);
       const updated = negotiationEngine.submitOffer(rng, neg, amount, addOns, gameState);
       const updatedNegotiations = [...negotiations];
       updatedNegotiations[negIndex] = updated;
       const lastRound = updated.rounds[updated.rounds.length - 1];
-      const player = gameState.players[updated.playerId];
-      const playerName = player ? `${player.firstName} ${player.lastName}` : "Unknown";
+      const playerNameRecord = gameState.players[updated.playerId];
+      const playerName = playerNameRecord ? `${playerNameRecord.firstName} ${playerNameRecord.lastName}` : "Unknown";
       const fromClub = gameState.clubs[updated.fromClubId];
       const fmtAmt = (v: number) => v >= 1_000_000 ? `\u00A3${(v / 1_000_000).toFixed(1)}M` : `\u00A3${(v / 1_000).toFixed(0)}K`;
       let messageBody: string;
@@ -984,6 +1121,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
           fee: transferFee,
           signingBonus,
           wage: agreedWage,
+          addOns: lastRound?.addOns ?? [],
           contractLength: player.age >= 32 ? 2 : 4,
           reason: "Scout-led transfer negotiation completed",
         }],
@@ -1041,7 +1179,7 @@ export function createFinanceActions(get: GetState, set: SetState) {
         season: gameState.currentSeason,
         type: "transferUpdate",
         title: `Transfer Complete: ${player.firstName} ${player.lastName}`,
-        body: `${player.firstName} ${player.lastName} has joined ${toClub.name} from ${fromClub.name} for ${feeLabel}. A ${player.age >= 32 ? 2 : 4}-year contract was registered at £${agreedWage.toLocaleString()}/week${signingBonus > 0 ? ` with a £${signingBonus.toLocaleString()} signing bonus` : ""}.`,
+        body: `${player.firstName} ${player.lastName} has joined ${toClub.name} from ${fromClub.name} for ${feeLabel}. A ${player.age >= 32 ? 2 : 4}-year contract was registered at £${agreedWage.toLocaleString()}/week${signingBonus > 0 ? ` with a £${signingBonus.toLocaleString()} signing bonus` : ""}.${(lastRound?.addOns?.length ?? 0) > 0 ? ` ${lastRound!.addOns!.length} negotiated add-on${lastRound!.addOns!.length === 1 ? "" : "s"} now sit in the club's future obligations.` : ""}`,
         read: false,
         actionRequired: false,
         relatedId: player.id,
@@ -1091,6 +1229,33 @@ export function createFinanceActions(get: GetState, set: SetState) {
       const club = gameState.clubs[gameState.scout.currentClubId];
       if (!club) return;
       if (wage < 100 || bonus < 0 || bonus > club.budget || contractLength < 1) return;
+      const affordability = assessClubAffordability({
+        club,
+        players: gameState.players,
+        upfrontCost: bonus,
+        weeklyWageCommitment: wage,
+      });
+      if (!affordability.affordable) {
+        set({
+          gameState: {
+            ...gameState,
+            inbox: [
+              ...gameState.inbox,
+              {
+                id: `fa_budget_reject_${playerId}_${gameState.currentSeason}_${gameState.currentWeek}`,
+                week: gameState.currentWeek,
+                season: gameState.currentSeason,
+                type: "financial",
+                title: "Package Exceeds Club Budget",
+                body: `This offer would leave ${club.name} with ${Math.max(0, affordability.remainingWeeklyHeadroom).toLocaleString()} in weekly wage headroom and ${Math.max(0, affordability.remainingBudget).toLocaleString()} in transfer cash. Reduce the wage or bonus before opening talks.`,
+                read: false,
+                actionRequired: false,
+              },
+            ],
+          },
+        });
+        return;
+      }
 
       // Check club acceptance first (conviction-based)
       const observations = Object.values(gameState.observations).filter((o) => o.playerId === playerId);

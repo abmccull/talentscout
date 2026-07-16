@@ -20,6 +20,7 @@ import { createRNG } from "@/engine/rng";
 import { getRunSimulationModifiers } from "@/engine/run";
 import {
   calculatePerformanceReview,
+  generateContractRenewalOffer,
   generateJobOffers,
   updateReputation,
   type TierReviewContext,
@@ -42,6 +43,9 @@ import {
   calculateDepartmentBonusPool,
   calculateGoldenParachute,
   calculatePerformanceBonusAmount,
+  deriveClubScoutingBudget,
+  deriveClubWeeklyWageBudget,
+  processAnnualAwards,
 } from "@/engine/finance";
 import { generateAnalystCandidate, resolvePredictions } from "@/engine/data";
 import {
@@ -61,6 +65,18 @@ import { getCountryDataSync, getSecondaryCountries } from "@/data";
 import { normalizeCountryKey } from "@/lib/country";
 import { resolvePlayerEntity } from "@/lib/playerResolution";
 import { starsToAbility } from "@/engine/scout/starRating";
+import {
+  createCareerChronologyState,
+  getFinalChapterEligibility,
+  processCareerSeasonRollover,
+  recordCareerTierReached,
+} from "@/engine/career/chronology";
+import { selectLateCareerDilemma } from "@/engine/career/lateCareerDilemmas";
+import {
+  getSeenLateCareerDilemmaIds,
+  offerLateCareerDilemma,
+} from "@/engine/career/lateCareerDilemmaMaterializer";
+import { getManagerStakeholderRef } from "@/engine/consequences/stakeholderProfiles";
 
 export interface WeeklySeasonRolloverInput {
   state: GameState;
@@ -100,6 +116,47 @@ function synchronizeDiscoveryAccuracyWithReports(
   });
 }
 
+function selectLateCareerDilemmaSubject(
+  state: GameState,
+  dilemmaId: string,
+): string | undefined {
+  const reportPlayerIds = Object.values(state.reports)
+    .slice()
+    .sort((left, right) =>
+      right.submittedSeason - left.submittedSeason
+      || right.submittedWeek - left.submittedWeek
+      || left.id.localeCompare(right.id),
+    )
+    .map((report) => report.playerId);
+  const alumniPlayerIds = state.alumniRecords
+    .slice()
+    .sort((left, right) =>
+      right.placedSeason - left.placedSeason
+      || right.placedWeek - left.placedWeek
+      || left.id.localeCompare(right.id),
+    )
+    .map((record) => record.playerId);
+  const unsignedPlayerIds = Object.values(state.unsignedYouth)
+    .map((candidate) => candidate.player.id)
+    .sort();
+  const candidates = [...new Set([
+    ...reportPlayerIds,
+    ...state.watchlist,
+    ...alumniPlayerIds,
+    ...unsignedPlayerIds,
+  ])]
+    .map((playerId) => {
+      const resolved = resolvePlayerEntity(state, playerId);
+      return resolved ? { playerId, player: resolved.player } : null;
+    })
+    .filter((candidate): candidate is { playerId: string; player: Player } => candidate !== null);
+  if (dilemmaId === "youthGuardianship") {
+    return candidates.find(({ player }) => player.age <= 21)?.playerId
+      ?? candidates[0]?.playerId;
+  }
+  return candidates[0]?.playerId;
+}
+
 /** Resolve season-end simulation while reporting store-level terminal outcomes. */
 export function processWeeklySeasonRollover(
   input: WeeklySeasonRolloverInput,
@@ -111,6 +168,20 @@ export function processWeeklySeasonRollover(
   const weekEquipBonuses = { predictionAccuracy: input.predictionAccuracyBonus };
     if (tickResult.endOfSeasonTriggered) {
       const completedSeason = stateWithPhase2.currentSeason;
+      const careerRollover = processCareerSeasonRollover({
+        scout: newState.scout,
+        chronology: createCareerChronologyState({
+          currentSeason: completedSeason,
+          careerTier: newState.scout.careerTier,
+          partial: newState.careerChronology,
+        }),
+        nextSeason: newState.currentSeason,
+      });
+      newState = {
+        ...newState,
+        scout: careerRollover.scout,
+        careerChronology: careerRollover.chronology,
+      };
       if (newState.scout.managerRelationship) {
         newState = {
           ...newState,
@@ -275,6 +346,11 @@ export function processWeeklySeasonRollover(
             ...newState.scout,
             careerTier: newTier,
           },
+          careerChronology: recordCareerTierReached(
+            careerRollover.chronology,
+            newTier,
+            { week: newState.currentWeek, season: newState.currentSeason },
+          ),
         };
 
         // F10: Generate board profile on promotion to tier 5
@@ -311,8 +387,13 @@ export function processWeeklySeasonRollover(
         const perfBonus = calculatePerformanceBonusAmount(
           effectiveReview,
           newState.scout.careerTier,
+          newState.scout.employmentContract,
         );
-        if (perfBonus > 0) {
+        const perfBonusReferenceId = `performance-bonus:${newState.scout.employmentContract?.id ?? newState.scout.id}:s${completedSeason}`;
+        const performanceBonusAlreadyPaid = newState.finances.transactions.some(
+          (transaction) => transaction.referenceId === perfBonusReferenceId,
+        );
+        if (perfBonus > 0 && !performanceBonusAlreadyPaid) {
           newState = {
             ...newState,
             finances: {
@@ -326,6 +407,9 @@ export function processWeeklySeasonRollover(
                   season: newState.currentSeason,
                   amount: perfBonus,
                   description: `Performance bonus (${effectiveReview.outcome})`,
+                  referenceId: perfBonusReferenceId,
+                  category: "bonus",
+                  counterpartyId: newState.scout.currentClubId,
                 },
               ],
             },
@@ -357,8 +441,13 @@ export function processWeeklySeasonRollover(
         const parachute = calculateGoldenParachute(
           newState.scout.salary,
           remainingSeasons,
+          newState.scout.employmentContract?.severanceWeeks,
         );
-        if (parachute > 0) {
+        const severanceReferenceId = `scout-severance:${newState.scout.employmentContract?.id ?? newState.scout.id}:s${completedSeason}`;
+        const severanceAlreadyPaid = newState.finances.transactions.some(
+          (transaction) => transaction.referenceId === severanceReferenceId,
+        );
+        if (parachute > 0 && !severanceAlreadyPaid) {
           newState = {
             ...newState,
             finances: {
@@ -372,6 +461,9 @@ export function processWeeklySeasonRollover(
                   season: newState.currentSeason,
                   amount: parachute,
                   description: "Golden parachute severance",
+                  referenceId: severanceReferenceId,
+                  category: "bonus",
+                  counterpartyId: newState.scout.currentClubId,
                 },
               ],
             },
@@ -393,6 +485,25 @@ export function processWeeklySeasonRollover(
       // A normal-mode firing is an atomic employment transition, not only a
       // narrative outcome. Preserve lifetime career statistics while clearing
       // every field that would otherwise leave the scout employed on paper.
+      const recoveryTriggerReport = seasonReports
+        .slice()
+        .sort((left, right) =>
+          (left.postTransferRating ?? left.qualityScore)
+            - (right.postTransferRating ?? right.qualityScore)
+          || left.id.localeCompare(right.id),
+        )[0];
+      const recoveryClubId = newState.scout.currentClubId;
+      const recoveryManager = getManagerStakeholderRef(newState, recoveryClubId);
+      const recoveryTrigger = {
+        triggerReportId: recoveryTriggerReport?.id,
+        triggerPlayerId: recoveryTriggerReport?.playerId,
+        triggerSummary: `the Season ${completedSeason} review (${effectiveReview.outcome} after ${effectiveReview.reportsSubmitted} reports at ${effectiveReview.averageQuality}/100 average quality)`,
+        affectedStakeholders: [
+          ...(recoveryClubId ? [{ kind: "board" as const, id: recoveryClubId }] : []),
+          ...(recoveryManager ? [recoveryManager] : []),
+        ],
+      };
+
       if (
         effectiveReview.outcome === "fired"
         && newState.scout.careerPath === "club"
@@ -405,6 +516,7 @@ export function processWeeklySeasonRollover(
           kind: "firing",
           previousTier,
           previousClubId,
+          ...recoveryTrigger,
         });
         seasonEndMessages.push({
           id: `employment-ended-s${completedSeason}`,
@@ -428,10 +540,48 @@ export function processWeeklySeasonRollover(
           kind: "warning",
           previousTier: newState.scout.careerTier,
           previousClubId: newState.scout.currentClubId,
+          ...recoveryTrigger,
         });
       }
 
       const seasonEndRng = createRNG(`${gameState.seed}-seasonend-${completedSeason}`);
+      const renewalOffer = generateContractRenewalOffer(
+        seasonEndRng,
+        newState.scout,
+        newState.scout.currentClubId
+          ? newState.clubs[newState.scout.currentClubId]
+          : undefined,
+        effectiveReview,
+        newState.currentSeason,
+        getSeasonLength(newState.fixtures, newState.currentSeason),
+      );
+      if (renewalOffer) {
+        newState = {
+          ...newState,
+          scout: newState.scout.employmentContract
+            ? {
+                ...newState.scout,
+                employmentContract: {
+                  ...newState.scout.employmentContract,
+                  status: "expiring",
+                },
+              }
+            : newState.scout,
+          jobOffers: [...newState.jobOffers, renewalOffer],
+        };
+        seasonEndMessages.push({
+          id: `job-offer-${renewalOffer.id}`,
+          week: newState.currentWeek,
+          season: newState.currentSeason,
+          title: `Contract Renewal: ${newState.clubs[renewalOffer.clubId]?.name ?? "Current Club"}`,
+          body: `Your club has offered £${renewalOffer.salary.toLocaleString()}/week for ${renewalOffer.contractLength} season${renewalOffer.contractLength === 1 ? "" : "s"}. The new targets are ${renewalOffer.objectives?.reportsPerSeason} reports at ${renewalOffer.objectives?.minimumAverageQuality}+ average quality. Decide by week ${renewalOffer.expiresWeek}.`,
+          type: "jobOffer" as const,
+          read: false,
+          actionRequired: true,
+          relatedId: renewalOffer.id,
+          relatedEntityType: "jobOffer" as const,
+        });
+      }
       const offers = isCareerRecoveryBlockingOffers(newState)
         ? []
         : generateJobOffers(
@@ -450,7 +600,7 @@ export function processWeeklySeasonRollover(
             week: newState.currentWeek,
             season: newState.currentSeason,
             title: `Job Offer: ${club?.name ?? "Unknown"}`,
-            body: `You've been offered a ${offer.role} position. Salary: £${offer.salary}/month. Contract: ${offer.contractLength} season${offer.contractLength !== 1 ? "s" : ""}. Expires week ${offer.expiresWeek}.`,
+            body: `You've been offered a ${offer.role} position. Salary: £${offer.salary.toLocaleString()}/week. Contract: ${offer.contractLength} season${offer.contractLength !== 1 ? "s" : ""}. Targets: ${offer.objectives?.reportsPerSeason ?? "—"} reports at ${offer.objectives?.minimumAverageQuality ?? "—"}+ quality. Expires week ${offer.expiresWeek}.`,
             type: "jobOffer" as const,
             read: false,
             actionRequired: true,
@@ -594,7 +744,11 @@ export function processWeeklySeasonRollover(
           seasonSuccesses,
           newState.scout.careerTier,
         );
-        if (deptBonus > 0) {
+        const departmentBonusReferenceId = `department-bonus:${newState.scout.id}:s${completedSeason}`;
+        const departmentBonusAlreadyPaid = newState.finances.transactions.some(
+          (transaction) => transaction.referenceId === departmentBonusReferenceId,
+        );
+        if (deptBonus > 0 && !departmentBonusAlreadyPaid) {
           newState = {
             ...newState,
             finances: {
@@ -608,6 +762,9 @@ export function processWeeklySeasonRollover(
                   season: newState.currentSeason,
                   amount: deptBonus,
                   description: `Department bonus pool (${seasonSuccesses} successful signings)`,
+                  referenceId: departmentBonusReferenceId,
+                  category: "bonus",
+                  counterpartyId: newState.scout.currentClubId,
                 },
               ],
             },
@@ -625,6 +782,42 @@ export function processWeeklySeasonRollover(
         }
       }
 
+      // Agency awards now pay through the same season-end authority as other
+      // career rewards. The award engine guards each season/type exactly once.
+      if (newState.scout.careerPath === "independent" && newState.finances) {
+        const industryAwards = processAnnualAwards(
+          createRNG(`${newState.seed}-industry-awards-s${completedSeason}`),
+          newState.finances,
+          newState.scout,
+          completedSeason,
+          getSeasonLength(newState.fixtures, completedSeason),
+        );
+        if (industryAwards.wonAwards.length > 0) {
+          const reputationBonus = industryAwards.wonAwards.reduce(
+            (total, award) => total + award.reputationBonus,
+            0,
+          );
+          newState = {
+            ...newState,
+            finances: industryAwards.finances,
+            scout: {
+              ...newState.scout,
+              reputation: Math.min(100, newState.scout.reputation + reputationBonus),
+            },
+          };
+          seasonEndMessages.push(...industryAwards.wonAwards.map((award) => ({
+            id: `industry-award-${award.type}-s${completedSeason}`,
+            week: newState.currentWeek,
+            season: newState.currentSeason,
+            type: "event" as const,
+            title: award.title,
+            body: `Your agency won ${award.title}, earning £${award.cashBonus.toLocaleString()} and +${award.reputationBonus} reputation.`,
+            read: false,
+            actionRequired: false,
+          })));
+        }
+      }
+
       // A8: Generate season awards data before transitioning
       const seasonAwardsData = generateSeasonAwardsData(newState, completedSeason);
       newState = { ...newState, seasonAwardsData };
@@ -633,6 +826,30 @@ export function processWeeklySeasonRollover(
       if (seasonEndMessages.length > 0) {
         newState = { ...newState, inbox: [...newState.inbox, ...seasonEndMessages] };
       }
+
+      // Reapprove the annual recruitment envelope from the live roster and
+      // club stature. A small carryover rewards restraint without allowing an
+      // unused scouting budget to compound forever.
+      newState = {
+        ...newState,
+        clubs: Object.fromEntries(
+          Object.entries(newState.clubs).map(([clubId, club]) => {
+            const annualScoutingBudget = deriveClubScoutingBudget(club, newState.players);
+            const carryover = Math.min(
+              Math.round(annualScoutingBudget * 0.2),
+              Math.max(0, club.scoutingBudget ?? 0),
+            );
+            return [
+              clubId,
+              {
+                ...club,
+                weeklyWageBudget: deriveClubWeeklyWageBudget(club, newState.players),
+                scoutingBudget: annualScoutingBudget + carryover,
+              },
+            ];
+          }),
+        ),
+      };
 
       // Generate new season fixtures for core leagues only (skip secondary talent pools)
       const fixtureRng = createRNG(`${gameState.seed}-fixtures-s${newState.currentSeason}`);
@@ -895,6 +1112,66 @@ export function processWeeklySeasonRollover(
           ...newState,
           inbox: [...newState.inbox, candidateMsg],
         };
+      }
+
+      const chronology = newState.careerChronology;
+      const unresolvedCareerChoices = Object.values(newState.consequenceState.decisions)
+        .filter((decision) => decision.status === "offered").length;
+      if (
+        chronology
+        && unresolvedCareerChoices < 2
+        && getFinalChapterEligibility(
+          newState.scout,
+          chronology,
+          { week: newState.currentWeek, season: newState.currentSeason },
+        ).eligible
+      ) {
+        const seenDilemmaIds = getSeenLateCareerDilemmaIds(newState);
+        const managerProfile = newState.scout.currentClubId
+          ? newState.managerProfiles[newState.scout.currentClubId]
+          : undefined;
+        const dilemma = selectLateCareerDilemma({
+          rootSeed: newState.runManifest.rootSeed,
+          season: newState.currentSeason,
+          week: newState.currentWeek,
+          seenIds: seenDilemmaIds,
+          context: {
+            careerTier: newState.scout.careerTier,
+            careerPath: newState.scout.careerPath,
+            specialization: newState.scout.primarySpecialization,
+            staffCount: (newState.finances?.employees.length ?? 0)
+              + Object.keys(newState.npcScouts).length,
+            seasonsCompleted: chronology.completedSeasons,
+            boardPersonality: newState.boardProfile?.personality,
+            managerPreference: managerProfile?.preference,
+          },
+        });
+        if (dilemma) {
+          const subjectPlayerId = dilemma.stakeholders.includes("family")
+            ? selectLateCareerDilemmaSubject(newState, dilemma.id)
+            : undefined;
+          const offered = offerLateCareerDilemma(newState, dilemma, { subjectPlayerId });
+          if (offered.changed && offered.decision) {
+            newState = {
+              ...offered.state,
+              inbox: [
+                ...offered.state.inbox,
+                {
+                  id: `late-career-offer-${offered.decision.id}`,
+                  week: newState.currentWeek,
+                  season: newState.currentSeason,
+                  type: "event",
+                  title: dilemma.title,
+                  body: dilemma.premise,
+                  read: false,
+                  actionRequired: true,
+                  relatedId: offered.decision.id,
+                  relatedEntityType: "narrative",
+                },
+              ],
+            };
+          }
+        }
       }
 
     } else {

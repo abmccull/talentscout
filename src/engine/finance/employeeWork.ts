@@ -14,8 +14,17 @@ import type {
   ScoutReport,
   AttributeAssessment,
   PlayerAttribute,
+  Position,
 } from "../core/types";
 import { ATTRIBUTE_DOMAINS } from "../core/types";
+import {
+  appendAnalystReview,
+  createAnalystReviewArtifact,
+  formatAnalystEvidenceCategory,
+  formatAnalystReviewBias,
+  MAX_AVAILABLE_ANALYST_REVIEWS,
+} from "./analystReviews";
+import { addGameWeeksWithSeasonLength } from "../core/gameDate";
 
 // ---------------------------------------------------------------------------
 // Public result type
@@ -88,6 +97,20 @@ function processScoutWork(
   // We use nationality as a proxy for region since Player has no explicit region field.
   const assignment = emp.currentAssignment;
   const targetRegion = assignment?.targetRegion ?? emp.regionSpecialization;
+  const activeClient = assignment?.targetClubId
+    ? result.finances.retainerContracts.find((contract) =>
+        contract.clubId === assignment.targetClubId && contract.status === "active"
+      )
+    : result.finances.retainerContracts
+        .filter((contract) =>
+          contract.status === "active"
+          && contract.reportsDeliveredThisMonth < contract.requiredReportsPerMonth
+        )
+        .sort((left, right) =>
+          (right.requiredReportsPerMonth - right.reportsDeliveredThisMonth)
+          - (left.requiredReportsPerMonth - left.reportsDeliveredThisMonth)
+          || left.id.localeCompare(right.id)
+        )[0];
 
   // Pick a candidate player
   const playerList = Object.values(players);
@@ -107,6 +130,18 @@ function processScoutWork(
     candidates = specific ? [specific] : playerList;
   } else {
     candidates = playerList;
+  }
+
+  if (activeClient) {
+    const briefMatches = candidates.filter((player) => {
+      const ownerClubId = player.contractClubId ?? player.clubId;
+      if (ownerClubId === activeClient.clubId) return false;
+      if (!activeClient.brief) return true;
+      return activeClient.brief.targetPositions.includes(player.position)
+        && player.age >= activeClient.brief.ageRange[0]
+        && player.age <= activeClient.brief.ageRange[1];
+    });
+    if (briefMatches.length > 0) candidates = briefMatches;
   }
 
   // Report generation chance scales with coverage skill (skill1) + efficiency
@@ -163,6 +198,8 @@ function processScoutWork(
     summary: `Employee scout report on ${target.firstName} ${target.lastName} filed by ${emp.name}.`,
     estimatedValue: target.marketValue,
     qualityScore,
+    intendedClubId: activeClient?.clubId ?? assignment?.targetClubId,
+    intendedAudience: activeClient ? "client" : undefined,
   };
 
   result.generatedReports.push(report);
@@ -189,35 +226,57 @@ function processScoutWork(
 // ---------------------------------------------------------------------------
 
 function processAnalystWork(
-  rng: RNG,
   emp: AgencyEmployee,
   efficiency: number,
   result: EmployeeWorkResult,
+  reports: Record<string, ScoutReport>,
+  scoutId: string,
   week: number,
   season: number,
 ): void {
-  // Analysts review existing pending reports and add quality to one of them.
-  // Since we don't have direct access to the full report store here, we produce
-  // an inbox message noting that the analyst has completed analysis work, and
-  // record a quality improvement hint the caller can apply.
-  const insightDepth = emp.skills?.skill1 ?? emp.quality;
-  const qualityBoost = Math.round(insightDepth * 2 * efficiency);
+  const review = createAnalystReviewArtifact({
+    employee: emp,
+    efficiency,
+    reports,
+    scoutId,
+    existingReviews: result.finances.analystReviews,
+    week,
+    season,
+  });
 
-  if (qualityBoost <= 0) {
-    result.logEntries.push({ week, season, action: `${emp.name} reviewed reports but found little to improve.` });
+  if (!review) {
+    const availableCount = result.finances.analystReviews.filter(
+      (candidate) => candidate.status === "available",
+    ).length;
+    const resultCopy = availableCount >= MAX_AVAILABLE_ANALYST_REVIEWS
+      ? `Review queue full (${availableCount}/${MAX_AVAILABLE_ANALYST_REVIEWS})`
+      : "This week's review is already recorded";
+    result.logEntries.push({
+      week,
+      season,
+      action: `${emp.name} could not add another analyst review.`,
+      result: resultCopy,
+    });
     return;
   }
+
+  result.finances = appendAnalystReview(result.finances, review);
+  const category = formatAnalystEvidenceCategory(review.evidenceCategory);
+  const bias = formatAnalystReviewBias(review.bias);
+  const target = review.scope === "reportRevision"
+    ? `revision ${review.sourceReportId}`
+    : "the next eligible report";
 
   result.logEntries.push({
     week,
     season,
-    action: `${emp.name} completed analysis work, improving report quality.`,
-    result: `+${qualityBoost} quality boost available`,
+    action: `${emp.name} completed an evidence review for ${target}.`,
+    result: `${category}; +${review.craftQualityBonus} craft points available`,
   });
 
   result.inboxMessages.push({
-    title: "Analyst Work Complete",
-    body: `${emp.name} has completed their analysis this week and can boost one report quality by up to ${qualityBoost} points.`,
+    title: `Analyst Review Ready: ${category}`,
+    body: `${emp.name} reviewed ${target}.\n\nCritique: ${review.critique}\n\nMethod bias — ${bias}: ${review.biasDisclosure}\n\nThis review adds ${review.craftQualityBonus} craft points to one eligible report and is consumed when that report is filed.`,
   });
 }
 
@@ -238,14 +297,27 @@ function processAdminWork(
   const costControl = emp.skills?.skill1 ?? emp.quality;
   const savingPercent = costControl * 0.5 * efficiency; // up to ~37.5% at cost control 15, efficiency 1
   const overheadCredit = Math.round((result.finances.office.monthlyCost * savingPercent) / 100 / 4); // weekly fraction
+  const referenceId = `admin-saving:${emp.id}:s${season}w${week}`;
 
-  if (overheadCredit > 0) {
+  if (
+    overheadCredit > 0
+    && !result.finances.transactions.some((transaction) =>
+      transaction.referenceId === referenceId
+    )
+  ) {
     result.finances = {
       ...result.finances,
       balance: result.finances.balance + overheadCredit,
       transactions: [
         ...result.finances.transactions,
-        { week, season, amount: overheadCredit, description: `Admin efficiency saving (${emp.name})` },
+        {
+          week,
+          season,
+          amount: overheadCredit,
+          description: `Admin efficiency saving (${emp.name})`,
+          referenceId,
+          category: "operatingCost",
+        },
       ],
     };
 
@@ -269,6 +341,7 @@ function processRelationshipManagerWork(
   emp: AgencyEmployee,
   efficiency: number,
   clubs: Record<string, Club>,
+  players: Record<string, Player>,
   scout: Scout,
   result: EmployeeWorkResult,
   week: number,
@@ -294,8 +367,21 @@ function processRelationshipManagerWork(
   );
   const pendingClubIds = new Set(result.finances.pendingRetainerOffers.map((r) => r.clubId));
 
-  const available = clubList.filter((c) => !activeClubIds.has(c.id) && !pendingClubIds.has(c.id));
-  const prospect = available.length > 0 ? rng.pick(available) : rng.pick(clubList);
+  const blacklistedClubIds = new Set(result.finances.blacklistedClubs ?? []);
+  const available = clubList.filter((c) =>
+    !activeClubIds.has(c.id)
+    && !pendingClubIds.has(c.id)
+    && !blacklistedClubIds.has(c.id)
+  );
+  if (available.length === 0) {
+    result.logEntries.push({
+      week,
+      season,
+      action: `${emp.name} worked the market, but every suitable club is already covered.`,
+    });
+    return;
+  }
+  const prospect = rng.pick(available);
 
   const tier = prospect.reputation >= 75 ? 3 : prospect.reputation >= 40 ? 2 : 1;
   const feeRanges: Record<number, [number, number]> = {
@@ -310,6 +396,15 @@ function processRelationshipManagerWork(
   const feeRoll = rng.nextInt(minFee, maxFee);
   const negotiationBonus = Math.round((maxFee - minFee) * (negotiation / 20) * 0.3);
   const monthlyFee = Math.min(maxFee, feeRoll + negotiationBonus);
+  const offerExpiry = addGameWeeksWithSeasonLength({ week, season }, 3);
+  const positions: Position[] = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
+  const roster = prospect.playerIds.map((playerId) => players[playerId]).filter(Boolean);
+  const targetPosition = positions
+    .map((position) => ({
+      position,
+      count: roster.filter((player) => player.position === position).length,
+    }))
+    .sort((left, right) => left.count - right.count || left.position.localeCompare(right.position))[0].position;
 
   const offer = {
     id: `retainer_${prospect.id}_rm_${week}_${season}`,
@@ -319,6 +414,22 @@ function processRelationshipManagerWork(
     requiredReportsPerMonth: tier + 1,
     reportsDeliveredThisMonth: 0,
     status: "active" as const,
+    brief: {
+      focus: prospect.scoutingPhilosophy === "academyFirst" ? "academy" as const : "firstTeam" as const,
+      targetPositions: [targetPosition],
+      ageRange: prospect.scoutingPhilosophy === "academyFirst" ? [15, 20] as [number, number] : [18, 27] as [number, number],
+      minimumReportQuality: 48 + tier * 6,
+      description: `${prospect.name} wants decision-ready intelligence at ${targetPosition}.`,
+    },
+    offeredWeek: week,
+    offeredSeason: season,
+    offerExpiresWeek: offerExpiry.week,
+    offerExpiresSeason: offerExpiry.season,
+    termMonths: 3,
+    deliveredReportIds: [],
+    averageDeliveredQuality: 0,
+    consecutivePeriodsMet: 0,
+    consecutivePeriodsMissed: 0,
   };
 
   result.finances = {
@@ -353,11 +464,15 @@ export function processEmployeeWork(
   players: Record<string, Player>,
   clubs: Record<string, Club>,
   scout: Scout,
+  reports: Record<string, ScoutReport>,
   week: number,
   season: number,
 ): EmployeeWorkResult {
   const result: EmployeeWorkResult = {
-    finances: { ...finances },
+    finances: {
+      ...finances,
+      analystReviews: finances.analystReviews ?? [],
+    },
     generatedReports: [],
     logEntries: [],
     inboxMessages: [],
@@ -386,13 +501,31 @@ export function processEmployeeWork(
         processScoutWork(rng, emp, efficiency, players, clubs, result, week, season);
         break;
       case "analyst":
-        processAnalystWork(rng, emp, efficiency, result, week, season);
+        processAnalystWork(
+          emp,
+          efficiency,
+          result,
+          reports,
+          scout.id,
+          week,
+          season,
+        );
         break;
       case "administrator":
         processAdminWork(rng, emp, efficiency, result, week, season);
         break;
       case "relationshipManager":
-        processRelationshipManagerWork(rng, emp, efficiency, clubs, scout, result, week, season);
+        processRelationshipManagerWork(
+          rng,
+          emp,
+          efficiency,
+          clubs,
+          players,
+          scout,
+          result,
+          week,
+          season,
+        );
         break;
     }
 

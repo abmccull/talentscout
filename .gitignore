@@ -4,6 +4,7 @@ node_modules/
 # next.js
 .next/
 out/
+out-e2e/
 
 # build
 tsconfig.tsbuildinfo
@@ -40,6 +41,9 @@ libsteam_api.so
 # Playwright
 playwright-report/
 test-results/
+
+# Local review servers emit transient diagnostics during rendered audits.
+artifacts/review-dev-server*.log
 
 # Generated coverage reports are CI artifacts, not source.
 artifacts/coverage/

@@ -3,12 +3,15 @@
 import { useGameStore } from "@/stores/gameStore";
 import { useScreenMusic } from "@/lib/audio/useScreenMusic";
 import { classifyNarrativeAudioMoment } from "@/lib/audio/audioDirector";
+import { selectNextCareerMoment } from "@/engine/career/careerMoments";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 /**
  * Keeps non-visual audio orchestration out of the route shell. Audio assets
  * remain lazy inside AudioEngine and screen changes still update ambience.
  */
 export function ScreenMusicRuntime() {
+  const cinematicMoments = useSettingsStore((state) => state.cinematicMoments);
   const currentScreen = useGameStore((state) => state.currentScreen);
   const matchWeather = useGameStore((state) => {
     if (state.currentScreen !== "match" || !state.activeMatch || !state.gameState) {
@@ -23,11 +26,19 @@ export function ScreenMusicRuntime() {
   const isTraveling = useGameStore((state) =>
     Boolean(state.gameState?.scout.travelBooking?.isAbroad),
   );
+  const careerMomentCue = useGameStore((state) => {
+    if (state.lastWeekSummary || state.pendingCelebration) return undefined;
+    return selectNextCareerMoment(state.gameState?.careerMoments, {
+      cinematicMoments,
+      allowMinor: cinematicMoments === "full",
+    })?.cue;
+  });
 
   useScreenMusic({
     screen: currentScreen,
     weather: matchWeather,
     narrativeMoment,
+    careerMomentCue,
     isTraveling,
   });
   return null;

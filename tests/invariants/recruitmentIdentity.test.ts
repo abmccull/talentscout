@@ -8,6 +8,7 @@ import type {
 } from "@/engine/core/types";
 import {
   deriveBriefRecruitmentIdentity,
+  deriveClubRecruitmentDoctrine,
   deriveClubRecruitmentIdentity,
   deriveRegionRecruitmentIdentity,
   evaluateRecruitmentIdentityFit,
@@ -121,6 +122,58 @@ const candidate = {
 };
 
 describe("recruitment identity invariants", () => {
+  it("gives every philosophy a recognizable doctrine without a second mutable state path", () => {
+    const doctrines = {
+      academy: deriveClubRecruitmentDoctrine({
+        club: club("academy-doctrine", "academyFirst"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+      urgent: deriveClubRecruitmentDoctrine({
+        club: club("urgent-doctrine", "winNow"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+      market: deriveClubRecruitmentDoctrine({
+        club: club("market-doctrine", "marketSmart"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+      global: deriveClubRecruitmentDoctrine({
+        club: club("global-doctrine", "globalRecruiter"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+    };
+
+    expect(doctrines.academy.pathwayPatience).toBeGreaterThan(doctrines.urgent.pathwayPatience);
+    expect(doctrines.market.sellingPressure).toBeGreaterThan(doctrines.academy.sellingPressure);
+    expect(doctrines.global.geographicReach).toBe("global");
+    expect(doctrines.market.evidencePreference).toBe("data");
+    expect(doctrines).toEqual({
+      academy: deriveClubRecruitmentDoctrine({
+        club: club("academy-doctrine", "academyFirst"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+      urgent: deriveClubRecruitmentDoctrine({
+        club: club("urgent-doctrine", "winNow"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+      market: deriveClubRecruitmentDoctrine({
+        club: club("market-doctrine", "marketSmart"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+      global: deriveClubRecruitmentDoctrine({
+        club: club("global-doctrine", "globalRecruiter"),
+        seed: "doctrine-world",
+        season: 4,
+      }),
+    });
+  });
+
   it("derives regional identity deterministically and independently of club order", () => {
     const clubs = [
       club("academy-a", "academyFirst", { youthAcademyRating: 18 }),

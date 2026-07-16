@@ -1,6 +1,6 @@
 /**
  * Report Marketplace — independent scouts list reports for sale. AI clubs
- * place bids over a 1-2 week window, and the scout decides which to accept.
+ * place bids over a three-week window, and the scout decides which to accept.
  *
  * All functions are pure: (state, rng) => newState.
  */
@@ -25,12 +25,14 @@ import {
   ensureClientRelationship,
   recordClientDelivery,
 } from "./clientRelationships";
+import { applyFirstReportBonus } from "./expenses";
 import {
   addGameWeeksWithSeasonLength,
   gameWeeksBetweenWithSeasonLength,
   isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "../core/gameDate";
+import { getPhilosophyPreferredAgeRange } from "../world/recruitmentIdentity";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,11 +46,19 @@ const BASE_PRICES: Record<ConvictionLevel, [number, number]> = {
   tablePound: [3000, 5000],
 };
 
-/** Maximum weeks a listing stays active before expiring */
-const MAX_LISTING_AGE_WEEKS = 8;
+/** Maximum fallback age for legacy listings without an explicit deadline. */
+const MAX_LISTING_AGE_WEEKS = 4;
 
 /** Base probability per club per listing of generating a bid */
 const BASE_BID_PROBABILITY = 0.20;
+
+/** Legacy clubs derive a ring-fenced procurement budget until saves persist one. */
+export function getClubScoutingBudget(club: Club): number {
+  return Math.max(
+    750,
+    Math.round(club.scoutingBudget ?? Math.min(club.budget * 0.08, 50_000)),
+  );
+}
 
 /** Priority multipliers for bid amounts */
 const PRIORITY_MULTIPLIERS: Record<string, number> = {
@@ -237,16 +247,16 @@ function calculateNeedMatchScore(
     score += adjacentCount <= 2 ? 10 : 5;
   }
 
-  // 4. Age fit for club philosophy (0-15 pts)
-  if (club.scoutingPhilosophy === "academyFirst" && player.age <= 21) {
-    score += 15;
-  } else if (club.scoutingPhilosophy === "marketSmart" && player.age <= 25) {
-    score += 12;
-  } else if (club.scoutingPhilosophy === "globalRecruiter") {
-    score += 10;
-  } else if (player.age >= 18 && player.age <= 30) {
-    score += 8;
-  }
+  // 4. Age fit uses the same doctrine window as briefs and tactical fit.
+  const [minimumAge, maximumAge] = getPhilosophyPreferredAgeRange(
+    club.scoutingPhilosophy,
+  );
+  const yearsOutside = player.age < minimumAge
+    ? minimumAge - player.age
+    : player.age > maximumAge
+      ? player.age - maximumAge
+      : 0;
+  score += yearsOutside === 0 ? 15 : yearsOutside <= 2 ? 10 : 5;
 
   // 5. Budget-appropriate (0-10 pts)
   const repTier = club.reputation > 70 ? "top" : club.reputation > 40 ? "mid" : "low";
@@ -290,13 +300,23 @@ export function listReport(
   caseId?: string,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
+  if (!Number.isFinite(price) || price < 50) return finances;
+  const hasOpenListing = finances.reportListings.some((listing) =>
+    listing.reportId === reportId && listing.status === "active"
+  );
+  const wasSoldExclusively = finances.reportListings.some((listing) =>
+    listing.reportId === reportId && listing.isExclusive && listing.status === "sold"
+  );
+  if (hasOpenListing || wasSoldExclusively) return finances;
+
   const biddingEnds = addGameWeeksWithSeasonLength(
     { week, season },
-    2,
+    3,
     seasonLength,
   );
+  const actionSequence = (finances.actionSequence ?? 0) + 1;
   const listing: ReportListing = {
-    id: `listing_${reportId}_${week}_${season}`,
+    id: `listing_${reportId}_s${season}w${week}_a${actionSequence}`,
     reportId,
     caseId,
     price,
@@ -312,6 +332,7 @@ export function listReport(
 
   return {
     ...finances,
+    actionSequence,
     reportListings: [...finances.reportListings, listing],
   };
 }
@@ -353,14 +374,21 @@ export function expireOldListings(
   const updated = finances.reportListings.map((listing) => {
     if (listing.status !== "active") return listing;
 
-    // Calculate age — simplified: same-season only for now
+    // Calculate age against the canonical competition calendar, including
+    // cross-season listings.
     const age = gameWeeksBetweenWithSeasonLength(
       { week: listing.listedWeek, season: listing.listedSeason },
       { week: currentWeek, season: currentSeason },
       seasonLength,
     );
 
-    if (age >= MAX_LISTING_AGE_WEEKS) {
+    const reachedDeadline = Number.isInteger(listing.biddingEndsWeek)
+      && Number.isInteger(listing.biddingEndsSeason)
+      && isGameDateAtOrAfter(
+        { week: currentWeek, season: currentSeason },
+        { week: listing.biddingEndsWeek, season: listing.biddingEndsSeason },
+      );
+    if (reachedDeadline || age >= MAX_LISTING_AGE_WEEKS) {
       return {
         ...listing,
         status: "expired" as const,
@@ -398,6 +426,7 @@ function generateBidsForListing(
     valueMultiplier: number;
     demandMultiplier: number;
   } = { valueMultiplier: 1, demandMultiplier: 1 },
+  marketTemperature: MarketTemperature = "normal",
 ): { bids: MarketplaceBid[]; inboxMessages: InboxMessage[] } {
   const newBids: MarketplaceBid[] = [];
   const messages: InboxMessage[] = [];
@@ -411,7 +440,12 @@ function generateBidsForListing(
   // Determine candidate clubs
   const candidateClubs = listing.targetClubId
     ? [clubs[listing.targetClubId]].filter(Boolean) as Club[]
-    : Object.values(clubs).filter((c) => c.budget >= listing.price * 0.5);
+    : Object.values(clubs).filter((c) => getClubScoutingBudget(c) >= listing.price * 0.5);
+  const previousBuyerIds = new Set(
+    listing.bids
+      .filter((bid) => bid.status === "accepted")
+      .map((bid) => bid.clubId),
+  );
 
   const scoredCandidates = candidateClubs.map((club) => ({
     club,
@@ -435,6 +469,7 @@ function generateBidsForListing(
   const listingAgeFactor = listingAge <= 1 ? 0.7 : 1.0;
 
   for (const { club, needMatchScore } of scoredCandidates) {
+    if (previousBuyerIds.has(club.id)) continue;
     // The onboarding guarantee is intentionally one clear decision, not an
     // inbox flood. Normal probabilistic competition resumes next week.
     if (guaranteedClubId && club.id !== guaranteedClubId) continue;
@@ -451,12 +486,11 @@ function generateBidsForListing(
     if (needMatchScore <= 40 && !isGuaranteedFirstBid) continue;
 
     // Bid probability
-    const affordability = Math.min(1, club.budget / (listing.price * 10));
+    const availableScoutingBudget = getClubScoutingBudget(club);
+    const affordability = Math.min(1, availableScoutingBudget / (listing.price * 5));
     const scoutRep = Math.max(0.1, scout.reputation / 100);
     const marketTemp = scout.careerPath === "independent"
-      ? ({ hot: 1.3, normal: 1.0, cold: 0.7, deadline: 1.5 } as Record<MarketTemperature, number>)[
-          "normal" // Use listing's market temperature if available
-        ]
+      ? ({ hot: 1.3, normal: 1.0, cold: 0.7, deadline: 1.5 } as Record<MarketTemperature, number>)[marketTemperature]
       : 1.0;
 
     const probability =
@@ -474,7 +508,7 @@ function generateBidsForListing(
     const priority = derivePriority(needMatchScore);
     const priorityMult = PRIORITY_MULTIPLIERS[priority] ?? 1.0;
     const needMult = 0.7 + (needMatchScore / 110) * 0.6; // 0.7-1.3
-    const budgetMult = 0.8 + Math.min(0.4, (club.budget / 100000) * 0.4); // 0.8-1.2
+    const budgetMult = 0.8 + Math.min(0.4, (availableScoutingBudget / 50_000) * 0.4); // 0.8-1.2
     const competitionMult = 1.0 + listing.bids.filter((b) => b.status === "pending").length * 0.1;
     const noise = 1.0 + rng.gaussian(0, 0.08);
 
@@ -491,6 +525,8 @@ function generateBidsForListing(
       Math.round(listing.price * 0.6 * marketContext.valueMultiplier),
       Math.min(Math.round(listing.price * 2.5 * marketContext.valueMultiplier), amount),
     );
+    amount = Math.min(availableScoutingBudget, amount);
+    if (amount < 50) continue;
 
     const bidDurationWeeks = rng.nextInt(2, 3);
     const bidExpiry = addGameWeeksWithSeasonLength(
@@ -516,7 +552,7 @@ function generateBidsForListing(
     const bidReason = reasons.join(" · ");
 
     const bid: MarketplaceBid = {
-      id: `bid_${listing.id}_${club.id}_${week}`,
+      id: `bid_${listing.id}_${club.id}_s${season}w${week}`,
       listingId: listing.id,
       clubId: club.id,
       amount,
@@ -557,6 +593,7 @@ function generateBidsForListing(
 
     if (hasCompetition) {
       for (const club of candidateClubs) {
+        if (previousBuyerIds.has(club.id)) continue;
         // Skip if club already has a pending bid (including upgrade bids)
         const hasPending = [...listing.bids, ...newBids].some(
           (b) => b.clubId === club.id && b.status === "pending",
@@ -571,9 +608,10 @@ function generateBidsForListing(
 
         // Upgrade price: 2-3x the listing price
         const upgradeMult = 2.0 + rng.next(); // 2.0 - 3.0
-        const upgradeAmount = Math.round(
+        const upgradeAmount = Math.min(getClubScoutingBudget(club), Math.round(
           listing.price * upgradeMult * marketContext.valueMultiplier,
-        );
+        ));
+        if (upgradeAmount < 50) continue;
         const bidDurationWeeks = rng.nextInt(2, 3);
         const bidExpiry = addGameWeeksWithSeasonLength(
           { week, season },
@@ -659,6 +697,10 @@ export function processMarketplaceBids(
   for (const listing of activeListings) {
     const report = reports[listing.reportId];
     if (!report) continue;
+    if (isGameDateAtOrAfter(
+      { week, season },
+      { week: listing.biddingEndsWeek, season: listing.biddingEndsSeason },
+    )) continue;
 
     // Generate new bids
     const { bids: newBids, inboxMessages } = generateBidsForListing(
@@ -667,6 +709,7 @@ export function processMarketplaceBids(
       firstBidGuaranteeAvailable,
       seasonLength,
       marketContext,
+      updatedFinances.marketTemperature,
     );
 
     if (newBids.length > 0) {
@@ -740,6 +783,12 @@ export function acceptBid(
 
   const bid = listing.bids.find((b) => b.id === bidId);
   if (!bid || bid.status !== "pending") return finances;
+  if (finances.transactions.some((transaction) =>
+    transaction.referenceId === `marketplace:${listingId}:buyer:${bid.clubId}`
+  )) return finances;
+  if (listing.bids.some((candidate) =>
+    candidate.clubId === bid.clubId && candidate.status === "accepted"
+  )) return finances;
 
   // Complete the sale with the bid amount
   let updated = completeSale(finances, listingId, bid.clubId, bid.amount, week, season);
@@ -814,6 +863,9 @@ export function acceptExclusiveUpgrade(
 
   const bid = listing.bids.find((b) => b.id === bidId);
   if (!bid || bid.status !== "pending" || !bid.isExclusiveUpgrade) return finances;
+  if (finances.transactions.some((transaction) =>
+    transaction.referenceId === `marketplace:${listingId}:buyer:${bid.clubId}`
+  )) return finances;
 
   // Record the sale revenue
   let updated = completeSale(finances, listingId, bid.clubId, bid.amount, week, season);
@@ -857,8 +909,12 @@ function completeSale(
 ): FinancialRecord {
   const listing = finances.reportListings.find((l) => l.id === listingId);
   if (!listing) return finances;
+  const referenceId = `marketplace:${listingId}:buyer:${buyerClubId}`;
+  if (finances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+    return finances;
+  }
 
-  return {
+  const sold: FinancialRecord = {
     ...finances,
     balance: finances.balance + salePrice,
     reportSalesRevenue: finances.reportSalesRevenue + salePrice,
@@ -874,7 +930,11 @@ function completeSale(
         season,
         amount: salePrice,
         description: `Report sold to club`,
+        referenceId,
+        category: "clientRevenue",
+        counterpartyId: buyerClubId,
       },
     ],
   };
+  return applyFirstReportBonus(sold, salePrice, week, season);
 }

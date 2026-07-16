@@ -8,6 +8,7 @@ import type {
 export type ScoutingCaseTimelineEntryKind =
   | "discovery"
   | "reflection"
+  | "judgment"
   | "report"
   | "delivery"
   | "decision"
@@ -29,6 +30,7 @@ export interface ScoutingCaseTimelineEntry {
   alumniRecordId?: string;
   movementId?: string;
   reflectionId?: string;
+  decisionId?: string;
 }
 
 export interface ScoutingCaseTimeline {
@@ -43,13 +45,14 @@ export interface ScoutingCaseTimeline {
 const ENTRY_ORDER: Record<ScoutingCaseTimelineEntryKind, number> = {
   discovery: 0,
   reflection: 1,
-  report: 2,
-  delivery: 3,
-  decision: 4,
-  alumni: 5,
-  movement: 6,
-  review: 7,
-  milestone: 8,
+  judgment: 2,
+  report: 3,
+  delivery: 4,
+  decision: 5,
+  alumni: 6,
+  movement: 7,
+  review: 8,
+  milestone: 9,
 };
 
 function humanize(value: string): string {
@@ -169,6 +172,71 @@ export function buildScoutingCaseTimeline(
       title: `${humanize(reflection.activityType)} reflection`,
       description: summary,
       reflectionId: reflection.id,
+    });
+  }
+
+  for (const decision of Object.values(state.consequenceState?.decisions ?? {})) {
+    if (
+      decision.source.kind !== "professionalCase"
+      || decision.metadata?.caseId !== caseId
+    ) continue;
+    const selected = decision.options.find((option) =>
+      option.id === decision.selectedOptionId,
+    );
+    entries.push({
+      id: `judgment:${decision.id}`,
+      kind: "judgment",
+      week: decision.selectedAt?.week ?? decision.offeredAt.week,
+      season: decision.selectedAt?.season ?? decision.offeredAt.season,
+      title: selected
+        ? `Case approach · ${selected.label}`
+        : "Professional judgment opened",
+      description: selected
+        ? selected.knownTradeoffs.join(" ")
+        : typeof decision.metadata?.centralQuestion === "string"
+          ? decision.metadata.centralQuestion
+          : "The case required a deliberate choice between competing professional priorities.",
+      decisionId: decision.id,
+    });
+  }
+  for (const history of state.consequenceState?.history ?? []) {
+    if (
+      history.source.kind !== "professionalCase"
+      || history.metadata?.caseId !== caseId
+      || entries.some((entry) => entry.id === `judgment:${history.decisionId}`)
+    ) continue;
+    entries.push({
+      id: `judgment:${history.decisionId}`,
+      kind: "judgment",
+      week: history.terminalAt.week,
+      season: history.terminalAt.season,
+      title: history.selectedOptionId
+        ? `Case approach · ${humanize(history.selectedOptionId)}`
+        : "Professional judgment expired",
+      description: typeof history.metadata?.centralQuestion === "string"
+        ? history.metadata.centralQuestion
+        : "The case decision became part of the scout's permanent record.",
+      decisionId: history.decisionId,
+    });
+  }
+
+  for (const fact of Object.values(state.consequenceState?.facts ?? {})) {
+    if (
+      fact.kind !== "professionalCaseCallback"
+      || fact.metadata?.caseId !== caseId
+    ) continue;
+    entries.push({
+      id: `case-callback:${fact.id}`,
+      kind: "milestone",
+      week: fact.observedAt.week,
+      season: fact.observedAt.season,
+      title: fact.metadata?.outcome === "setback" || fact.value === "setback"
+        ? "The accepted risk came due"
+        : "The chosen approach created an opening",
+      description: typeof fact.metadata?.detail === "string"
+        ? fact.metadata.detail
+        : "A delayed consequence from your earlier case judgment entered the career record.",
+      decisionId: fact.sourceDecisionId,
     });
   }
 

@@ -583,6 +583,45 @@ export type ScoutingPhilosophy =
   | "marketSmart"
   | "globalRecruiter";
 
+export type ClubFinancialObligationType =
+  | "loanWageContribution"
+  | "appearanceBonus"
+  | "performanceBonus"
+  | "relegationClause"
+  | "sellOnClause";
+
+/**
+ * A future club commitment created by a completed player transaction.
+ * These stay deliberately compact: the game models meaningful affordability
+ * and consequences without asking the player to manage an accounting ledger.
+ */
+export interface ClubFinancialObligation {
+  id: string;
+  type: ClubFinancialObligationType;
+  playerId: string;
+  creditorClubId?: string;
+  amount?: number;
+  percentage?: number;
+  weeklyAmount?: number;
+  remainingWeeks?: number;
+  createdWeek: number;
+  createdSeason: number;
+  status: "active" | "settled" | "expired";
+  trigger?: string;
+  triggeredWeek?: number;
+  triggeredSeason?: number;
+  lastProcessedWeek?: number;
+  lastProcessedSeason?: number;
+  appearanceThreshold?: number;
+  goalThreshold?: number;
+  assistThreshold?: number;
+  appearancesRecorded?: number;
+  goalsRecorded?: number;
+  assistsRecorded?: number;
+  lastTriggerEvaluationWeek?: number;
+  lastTriggerEvaluationSeason?: number;
+}
+
 export interface Club {
   id: string;
   name: string;
@@ -593,6 +632,12 @@ export interface Club {
   reputation: number;
   /** Available transfer budget in game currency. */
   budget: number;
+  /** Weekly first-team wage ceiling. Missing legacy values are derived. */
+  weeklyWageBudget?: number;
+  /** Ring-fenced annual budget for reports and external scouting services. */
+  scoutingBudget?: number;
+  /** Deferred transfer and loan commitments created by canonical movements. */
+  financialObligations?: ClubFinancialObligation[];
   scoutingPhilosophy: ScoutingPhilosophy;
   managerId: string;
   playerIds: string[];
@@ -804,8 +849,11 @@ export interface Scout {
 
   currentClubId?: string;
   contractEndSeason?: number;
-  /** Monthly employment salary. */
+  /** Weekly employment salary, following UK football convention. */
   salary: number;
+  /** Current employment terms. Legacy saves may only have the fields above. */
+  employmentContract?: ScoutEmploymentContract;
+  /** @deprecated Liquid cash is owned by `FinancialRecord.balance`. */
   savings: number;
 
   // Lifetime career statistics
@@ -923,6 +971,11 @@ export interface Observation {
   focusLens?: "technical" | "physical" | "mental" | "tactical";
   /** Explainable, idempotent regional context applied when evidence was filed. */
   regionalContext?: import("../world/regionalPresence").RegionalObservationContext;
+  /**
+   * Persisted, player-visible conditions that shaped this evidence. Optional
+   * for legacy saves and deliberately contains no hidden player truth.
+   */
+  situation?: import("../observation/situations").ObservationSituationSnapshot;
   abilityReading?: AbilityReading;
   /**
    * A personality trait uncovered during this observation session.
@@ -1073,7 +1126,11 @@ export interface ScoutReport {
     detail: number;
     scoutSkill: number;
     equipmentBonus: number;
+    /** Bounded craft contribution from one consumed, player-visible analyst review. */
+    analystReviewBonus?: number;
   };
+  /** Immutable snapshot of the analyst advice incorporated into this revision. */
+  analystReview?: AppliedAnalystReview;
   /**
    * Engine-only truth snapshot for the attributes assessed when the report was
    * submitted. It is never rendered; delayed validation uses it so natural
@@ -1090,6 +1147,17 @@ export type ScoutingCaseStatus =
   | "placed"
   | "closed";
 
+/** Player-visible professional question that gives a scouting case its shape. */
+export interface ProfessionalCaseContext {
+  modeId: GameModeId;
+  familyId: string;
+  title: string;
+  premise: string;
+  centralQuestion: string;
+  stakeholderRefs: string[];
+  judgmentDecisionIds: string[];
+}
+
 export interface ScoutingCase {
   id: string;
   playerId: string;
@@ -1099,6 +1167,8 @@ export interface ScoutingCase {
   lastUpdatedWeek: number;
   lastUpdatedSeason: number;
   status: ScoutingCaseStatus;
+  /** Optional for legacy cases; new evergreen cases persist their authored frame. */
+  professionalContext?: ProfessionalCaseContext;
   /** Club need that opened this case. */
   briefId?: string;
   /** Durable journal hypothesis ids considered in this case. */
@@ -1166,6 +1236,8 @@ export interface ClubDecision {
     competition: number;
     /** Audience-and-brief alignment of the chosen report-room strategy. Optional for legacy decisions. */
     presentation?: number;
+    /** Evidence-supported confidence rather than the scout's declared confidence alone. */
+    calibration?: number;
     total: number;
   };
   requestedEvidenceCategory?: JudgmentCategory;
@@ -1236,6 +1308,8 @@ export interface YouthRecruitmentBrief {
   status: "open" | "fulfilled" | "expired";
   assignedCaseId?: string;
   fulfilledByPlayerId?: string;
+  /** Last strict settlement checks that prevented this accepted case from closing the brief. */
+  fulfillmentFailures?: string[];
 }
 
 export type RecommendationReviewCheckpoint = "oneSeason" | "twoSeasons";
@@ -1270,17 +1344,49 @@ export interface RecommendationReview {
 // CAREER
 // =============================================================================
 
+export interface ScoutContractObjectives {
+  reportsPerSeason: number;
+  minimumAverageQuality: number;
+  successfulRecommendations: number;
+}
+
+export interface ScoutEmploymentContract {
+  id: string;
+  clubId: string;
+  role: string;
+  tier: CareerTier;
+  /** Weekly gross salary. */
+  weeklySalary: number;
+  startSeason: number;
+  endSeason: number;
+  status: "active" | "expiring" | "expired" | "terminated";
+  objectives: ScoutContractObjectives;
+  signingBonus: number;
+  performanceBonusRate: number;
+  severanceWeeks: number;
+  educationBudget: number;
+  territory?: string;
+}
+
 export interface JobOffer {
   id: string;
   clubId: string;
   tier: CareerTier;
   /** Human-readable role title, e.g. "Youth Scout", "Head of Scouting". */
   role: string;
+  /** Weekly gross salary. */
   salary: number;
   /** Contract duration in seasons. */
   contractLength: number;
   /** Geographic territory assigned (relevant for regional roles). */
   territory?: string;
+  objectives?: ScoutContractObjectives;
+  signingBonus?: number;
+  performanceBonusRate?: number;
+  severanceWeeks?: number;
+  educationBudget?: number;
+  /** Marks a renewal offer from the scout's current employer. */
+  renewalOfContractId?: string;
   /** Offer expires at end of this week; must accept/reject before then. */
   expiresWeek: number;
 }
@@ -1294,6 +1400,13 @@ export interface PerformanceReview {
   tablePoundsSuccessful: number;
   reputationChange: number;
   outcome: "promoted" | "retained" | "warning" | "fired";
+  contractSummary?: {
+    objectivesMet: number;
+    objectivesTotal: number;
+    reportsTarget: number;
+    qualityTarget: number;
+    recommendationsTarget: number;
+  };
   coverageSummary?: {
     countriesScouted: number;
     regionsScouted: number;
@@ -1911,6 +2024,12 @@ export interface PlayerMovementEvent {
   fee?: number;
   loanDealId?: string;
   reason?: string;
+  financialSettlements?: Array<{
+    type: ClubFinancialObligationType;
+    amount: number;
+    creditorClubId?: string;
+    obligationId: string;
+  }>;
 }
 
 // =============================================================================
@@ -1919,6 +2038,16 @@ export interface PlayerMovementEvent {
 
 export type RunIntegrity = "standard" | "ironman" | "legacy-import";
 
+/** Immutable product mode selected for the career. */
+export type GameModeId =
+  | "youth-scout"
+  | "first-team-scout"
+  | "regional-expert"
+  | "data-scout";
+
+/** A challenge layers enforceable mutators over a host career mode. */
+export type RunKind = "career" | "challenge";
+
 /** Immutable creation-time identity used to replay and compare a career. */
 export interface RunManifest {
   /**
@@ -1926,7 +2055,7 @@ export interface RunManifest {
    * the immutable definition ledger used to produce it, so content migrations
    * can explain a mismatch instead of treating it as an opaque hash.
    */
-  manifestVersion: 1 | 2;
+  manifestVersion: 1 | 2 | 3;
   rootSeed: string;
   runId: string;
   fingerprint: string;
@@ -1935,6 +2064,13 @@ export interface RunManifest {
   contentFingerprint: string;
   /** Present for V2 runs; intentionally absent on untouched V1 careers. */
   contentDefinitionIds?: string[];
+  /**
+   * Authoritative product mode for V3 careers. Older manifests derive this
+   * from their immutable specialization through the run-identity helpers.
+   */
+  gameModeId?: GameModeId;
+  /** Whether the career is an open-ended run or a constrained challenge. */
+  runKind?: RunKind;
   specialization: Specialization;
   difficulty: DifficultyLevel;
   selectedCountries: string[];
@@ -2037,8 +2173,14 @@ export interface GameState {
   activeStorylines: StorylineState[];
   /** Persistent narrative pacing, novelty, and turning-point state. */
   eventDirector: import("../events/eventDirector").EventDirectorState;
+  /** Unified novelty, cast, topic, and callback pacing across every story source. */
+  storyDirectorV2?: import("../events/storyDirectorV2").StoryDirectorStateV2;
   /** Auditable decisions, delayed effects, memories, obligations, and facts. */
   consequenceState: import("../consequences/types").ConsequenceEngineState;
+  /** Stable recurring identities layered over authoritative relationship meters. */
+  stakeholderProfiles?: import("../consequences/stakeholderProfiles").StakeholderProfileRegistry;
+  /** Permanent material-decision archive retained before consequence compaction. */
+  careerStoryArchive?: import("../consequences/careerStoryArchive").CareerStoryArchiveState;
   /** Rival scouts competing with the player. */
   rivalScouts: Record<string, RivalScout>;
   /** Persistent organizations backing rival scouts and advancing rival agendas. */
@@ -2070,6 +2212,10 @@ export interface GameState {
   discoveryRecords: DiscoveryRecord[];
   /** Historical performance snapshots for analytics. */
   performanceHistory: ScoutPerformanceSnapshot[];
+  /** Exact-once age, tenure, peak-tier, and final-chapter chronology. */
+  careerChronology?: import("../career/chronology").CareerChronologyState;
+  /** Bounded queue and archive of emotionally significant career moments. */
+  careerMoments?: import("../career/careerMoments").CareerMomentState;
 
   /**
    * Fixture IDs that the player has completed interactively via the MatchScreen.
@@ -2125,6 +2271,8 @@ export interface GameState {
   worldHistory?: import("../world/worldHistory").WorldHistoryState;
   /** Seeded seasonal and regional conditions that alter the live football world. */
   worldConditionState?: import("../world/worldConditions").WorldConditionState;
+  /** Persistent signal, choice, and aftermath arcs spawned by world conditions. */
+  worldConditionArcState?: import("../world/worldConditionArcs").WorldConditionArcState;
 
   // --- First-Team Scouting System ---
 
@@ -2586,6 +2734,12 @@ export interface BoardDirective {
 /**
  * An active travel booking for international scouting.
  */
+export type TravelPosture =
+  | "deepDive"
+  | "networkBuild"
+  | "opportunityBlitz"
+  | "assignmentFirst";
+
 export interface TravelBooking {
   /** Destination country. */
   destinationCountry: string;
@@ -2597,6 +2751,8 @@ export interface TravelBooking {
   cost: number;
   /** Whether the scout is currently abroad. */
   isAbroad: boolean;
+  /** Strategic purpose of the trip. Missing legacy values resolve safely. */
+  posture?: TravelPosture;
 }
 
 /**
@@ -2719,6 +2875,15 @@ export interface PlacementFeeRecord {
 
 export type RetainerStatus = "active" | "suspended" | "cancelled";
 
+export interface RetainerBrief {
+  focus: "academy" | "firstTeam" | "data" | "open";
+  targetPositions: Position[];
+  ageRange: [number, number];
+  minimumReportQuality: number;
+  country?: string;
+  description: string;
+}
+
 export interface RetainerContract {
   id: string;
   clubId: string;
@@ -2727,6 +2892,24 @@ export interface RetainerContract {
   requiredReportsPerMonth: number;
   reportsDeliveredThisMonth: number;
   status: RetainerStatus;
+  brief?: RetainerBrief;
+  offeredWeek?: number;
+  offeredSeason?: number;
+  offerExpiresWeek?: number;
+  offerExpiresSeason?: number;
+  startWeek?: number;
+  startSeason?: number;
+  termMonths?: number;
+  /** Next four-week invoice/quota settlement for this specific contract. */
+  nextSettlementWeek?: number;
+  nextSettlementSeason?: number;
+  /** End of the current commercial term, when renewal is evaluated. */
+  termEndsWeek?: number;
+  termEndsSeason?: number;
+  deliveredReportIds?: string[];
+  averageDeliveredQuality?: number;
+  consecutivePeriodsMet?: number;
+  consecutivePeriodsMissed?: number;
 }
 
 export type AgencyEmployeeRole = "scout" | "analyst" | "administrator" | "relationshipManager" | "mentee";
@@ -2805,6 +2988,61 @@ export interface EmployeeLogEntry {
   reportId?: string;
 }
 
+export type AnalystEvidenceCategory =
+  | "attributeCoverage"
+  | "confidenceDiscipline"
+  | "riskFraming"
+  | "roleFit"
+  | "marketContext";
+
+export type AnalystReviewBias =
+  | "coverageFirst"
+  | "skeptical"
+  | "roleSpecialist"
+  | "marketPragmatist"
+  | "balanced";
+
+/**
+ * A bounded piece of analyst work waiting to be incorporated into a report.
+ * It contains only conclusions drawn from player-visible report evidence.
+ */
+export interface AnalystReviewArtifact {
+  id: string;
+  analystEmployeeId: string;
+  analystName: string;
+  createdWeek: number;
+  createdSeason: number;
+  status: "available" | "consumed";
+  scope: "reportRevision" | "nextEligibleReport";
+  /** Existing immutable revision that the analyst reviewed. */
+  sourceReportId?: string;
+  targetPlayerId?: string;
+  targetCaseId?: string;
+  targetBriefId?: string;
+  evidenceCategory: AnalystEvidenceCategory;
+  bias: AnalystReviewBias;
+  biasDisclosure: string;
+  critique: string;
+  /** Additive report-craft points. Always bounded by the analyst review engine. */
+  craftQualityBonus: number;
+  consumedByReportId?: string;
+  consumedWeek?: number;
+  consumedSeason?: number;
+}
+
+/** Self-contained audit snapshot retained on the report after token consumption. */
+export interface AppliedAnalystReview {
+  artifactId: string;
+  analystEmployeeId: string;
+  analystName: string;
+  sourceReportId?: string;
+  evidenceCategory: AnalystEvidenceCategory;
+  bias: AnalystReviewBias;
+  biasDisclosure: string;
+  critique: string;
+  craftQualityBonus: number;
+}
+
 export interface EmployeeEvent {
   id: string;
   type: "poaching" | "trainingRequest" | "personalIssue" | "breakthrough";
@@ -2834,6 +3072,7 @@ export interface ClientRelationship {
   status: "prospect" | "active" | "cooling" | "lost";
   lastInteractionWeek: number;
   lastInteractionSeason: number;
+  failedContracts?: number;
 }
 
 export type ClientPreference = "youth" | "firstTeam" | "data" | "physical" | "technical" | "specificPosition";
@@ -2925,6 +3164,13 @@ export interface Loan {
   monthlyPayment: number;
   startWeek: number;
   startSeason: number;
+  termMonths?: number;
+  nextPaymentWeek?: number;
+  nextPaymentSeason?: number;
+  paymentsMade?: number;
+  missedPayments?: number;
+  arrears?: number;
+  status?: "active" | "delinquent" | "defaulted";
 }
 
 export type ConsultingType = "transferAdvisory" | "youthAudit" | "dataPackage" | "talentWorkshop";
@@ -2939,6 +3185,13 @@ export interface ConsultingContract {
   deadlineSeason: number;
   status: ConsultingStatus;
   deliverables?: ConsultingDeliverable[];
+  offeredWeek?: number;
+  offeredSeason?: number;
+  offerExpiresWeek?: number;
+  offerExpiresSeason?: number;
+  acceptedWeek?: number;
+  acceptedSeason?: number;
+  deliveredReportIds?: string[];
 }
 
 export type EconomicEventType = "marketCrash" | "tvDealBonanza" | "ffpInvestigation" | "newOwnership" | "wageCap";
@@ -3112,6 +3365,9 @@ export interface FinancialRecord {
     kind?: "openingBalance";
     /** Stable audit/idempotency key for movements and zero-value contract events. */
     referenceId?: string;
+    /** Player-facing classification used by summaries and audit checks. */
+    category?: "salary" | "clientRevenue" | "placement" | "operatingCost" | "debt" | "asset" | "bonus" | "opening";
+    counterpartyId?: string;
   }[];
   /**
    * Monotonic ordinal for player-triggered financial actions. It is persisted
@@ -3146,6 +3402,8 @@ export interface FinancialRecord {
   // Assets
   office: Office;
   employees: AgencyEmployee[];
+  /** Bounded review queue and recent consumption audit for agency analysts. */
+  analystReviews: AnalystReviewArtifact[];
   /** Last employee lifecycle tick, preventing duplicate manual/batch processing. */
   lastEmployeeEconomicsWeek?: { week: number; season: number };
   lifestyle: LifestyleConfig;
@@ -3168,7 +3426,7 @@ export interface FinancialRecord {
   awards: AwardRecord[];
 
   // --- B2: Economy / Loans ---
-  /** Active business loans. */
+  /** @deprecated Legacy debt collection migrated into `activeLoan`. */
   loans: BusinessLoan[];
   /** Starter bonus tracking for new career onboarding. */
   starterBonus: StarterBonus;
@@ -3315,6 +3573,8 @@ export type ToolId =
 
 export interface ManagerProfile {
   clubId: string;
+  /** Stable person identity. Legacy profiles may be backfilled during migration. */
+  managerId?: string;
   managerName: string;
   preference: ScoutingPreference;
   /** How much weight the manager gives to scouting reports, 0–1. */
@@ -3762,7 +4022,9 @@ export interface ManagerDirective {
 }
 
 /**
- * Club response to a submitted scout report, part of the first-team pipeline.
+ * Club review state for a first-team report. Report submission may create only
+ * the non-terminal review states. `signed` and `loanSigned` are retained for
+ * legacy saves and may be written only after an authoritative movement event.
  */
 export type ClubResponseType =
   | "ignored"        // Report doesn't match any directive
@@ -3770,8 +4032,8 @@ export type ClubResponseType =
   | "trial"          // Club arranges a trial match
   | "doesNotFit"     // Tactical mismatch
   | "tooExpensive"   // Over budget
-  | "signed"         // Transfer completed
-  | "loanSigned";    // Loan deal completed
+  | "signed"         // Authoritative transfer movement completed
+  | "loanSigned";    // Authoritative loan-start movement completed
 
 export interface ClubResponse {
   reportId: string;
@@ -3883,7 +4145,7 @@ export interface TransferRecord {
   transferSeason: number;
   /** The conviction level from the scout's original report. */
   scoutConviction: ConvictionLevel;
-  /** The report ID that led to this transfer. */
+  /** Report followed for predictive accountability; this alone does not prove it caused the transfer. */
   reportId: string;
   /** Player's CA at the time of transfer. */
   caAtTransfer: number;
@@ -4330,6 +4592,35 @@ export interface RegionalKnowledge {
   localContacts: string[];
   /** Scouting efficiency multiplier derived from knowledge level (0.5–1.5). */
   scoutingEfficiency: number;
+  /** Bounded, player-auditable record of why knowledge changed. */
+  knowledgeLedger?: RegionalKnowledgeLedgerEntry[];
+  /** Counter watermark that prevents historical rewards being paid twice. */
+  processedMetrics?: RegionalKnowledgeProcessedMetrics;
+}
+
+export type RegionalKnowledgeSource =
+  | "fieldActivity"
+  | "report"
+  | "successfulFind"
+  | "contact"
+  | "infrastructure"
+  | "equipment";
+
+export interface RegionalKnowledgeLedgerEntry {
+  id: string;
+  week: number;
+  season: number;
+  source: RegionalKnowledgeSource;
+  amount: number;
+  summary: string;
+  sourceId?: string;
+  activityType?: ActivityType;
+}
+
+export interface RegionalKnowledgeProcessedMetrics {
+  reportsSubmitted: number;
+  successfulFinds: number;
+  contactCount: number;
 }
 
 /**
@@ -4337,12 +4628,16 @@ export interface RegionalKnowledge {
  * Provides thematic flavor and minor gameplay effects.
  */
 export interface CulturalInsight {
+  /** Stable executable-content identity. Optional only on legacy saves. */
+  id?: string;
   /** Category of the insight. */
   type: "playingStyle" | "developmentCulture" | "mentalityPattern" | "physicalTrait";
   /** Human-readable description of the insight. */
   description: string;
   /** What the insight unlocks or reveals for the player. */
   gameplayEffect: string;
+  /** Typed interpretation effects. Legacy saves resolve these by type/country. */
+  effects?: import("../world/footballCulture").FootballCultureInsightEffects;
 }
 
 /**
@@ -4969,7 +5264,7 @@ export interface CompletedCareer {
   seasonsPlayed: number;
   /** Total player discoveries recorded. */
   totalDiscoveries: number;
-  /** Hit rate: fraction of reports that led to successful finds (0-1). */
+  /** Predictive hit rate: fraction of tracked reports whose players later met success criteria (0-1). */
   hitRate: number;
   /** Primary specialization used in this career. */
   specialization: Specialization;

@@ -9,6 +9,8 @@ import { SettingsApplier } from "@/components/game/SettingsApplier";
 import { useKeyboardNav, setFeedbackOpenHandler } from "@/lib/useKeyboardNav";
 import { ScreenErrorBoundary } from "@/components/game/ScreenErrorBoundary";
 import { warmWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
+import { useSettingsStore } from "@/stores/settingsStore";
+import { selectNextCareerMoment } from "@/engine/career/careerMoments";
 
 function GameScreenLoading() {
   return (
@@ -68,6 +70,11 @@ const ScreenMusicRuntime = dynamic(
 );
 const Celebration = dynamic(
   () => import("@/components/game/effects/Celebration").then((module) => module.Celebration),
+  { ssr: false, loading: DialogLoading },
+);
+const CareerMomentOverlay = dynamic(
+  () => import("@/components/game/consequence-cinema/CareerMomentOverlay")
+    .then((module) => module.CareerMomentOverlay),
   { ssr: false, loading: DialogLoading },
 );
 const InsightPayoff = dynamic(
@@ -383,11 +390,47 @@ export default function Home() {
   const pendingCelebration = useGameStore((s) => s.pendingCelebration);
   const hasWeekSummary = useGameStore((s) => s.lastWeekSummary !== null);
   const dismissCelebration = useGameStore((s) => s.dismissCelebration);
+  const careerMoments = useGameStore((s) => s.gameState?.careerMoments);
+  const acknowledgeCareerMoment = useGameStore((s) => s.acknowledgeCareerMoment);
+  const suppressCareerMoments = useGameStore((s) => s.suppressCareerMoments);
+  const suppressCareerMoment = useGameStore((s) => s.suppressCareerMoment);
   const lastInsightResult = useGameStore((s) => s.lastInsightResult);
   const dismissInsightResult = useGameStore((s) => s.dismissInsightResult);
   const hasScenarioOutcome = useGameStore(
     (s) => s.scenarioOutcome !== null && s.scenarioOutcomeScenarioId !== null,
   );
+  const cinematicMoments = useSettingsStore((s) => s.cinematicMoments);
+  const autoOpenCareerDefiningMoments = useSettingsStore(
+    (s) => s.autoOpenCareerDefiningMoments,
+  );
+  const nextCareerMoment = selectNextCareerMoment(careerMoments, {
+    cinematicMoments,
+    allowMinor: cinematicMoments === "full",
+  });
+
+  useEffect(() => {
+    if (cinematicMoments === "off" && careerMoments?.pending.length) {
+      suppressCareerMoments("Cinematic moments are disabled in settings.");
+      return;
+    }
+    if (
+      nextCareerMoment?.magnitude === "careerDefining"
+      && !autoOpenCareerDefiningMoments
+    ) {
+      suppressCareerMoment(
+        nextCareerMoment.id,
+        "Automatic career-defining moments are disabled in settings.",
+      );
+    }
+  }, [
+    autoOpenCareerDefiningMoments,
+    careerMoments?.pending.length,
+    cinematicMoments,
+    nextCareerMoment?.id,
+    nextCareerMoment?.magnitude,
+    suppressCareerMoment,
+    suppressCareerMoments,
+  ]);
 
   // Feedback modal state (opened via F1 or Settings)
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
@@ -428,6 +471,34 @@ export default function Home() {
   // Called here — at the root — so the listener is active on every screen.
   useKeyboardNav();
 
+  // A single modal owner prevents competing focus traps. Lower-priority
+  // moments remain queued and present after the active layer closes.
+  const showCelebration = Boolean(pendingCelebration && !hasWeekSummary);
+  const showInsight = Boolean(lastInsightResult && !hasWeekSummary && !showCelebration);
+  const showScenario = Boolean(
+    activeCareerId
+    && hasScenarioOutcome
+    && !hasWeekSummary
+    && !showCelebration
+    && !showInsight,
+  );
+  const showFeedback = Boolean(
+    isFeedbackOpen
+    && !hasWeekSummary
+    && !showCelebration
+    && !showInsight
+    && !showScenario,
+  );
+  const showCareerMoment = Boolean(
+    nextCareerMoment
+    && !hasWeekSummary
+    && !showCelebration
+    && !showInsight
+    && !showScenario
+    && !isFeedbackOpen
+    && (nextCareerMoment.magnitude !== "careerDefining" || autoOpenCareerDefiningMoments),
+  );
+
   return (
     <>
       {/* Auth is optional gameplay infrastructure. Initialize it after the
@@ -453,7 +524,7 @@ export default function Home() {
           modal layers. Keep the celebration queued until the player closes the
           week summary so a late-loaded celebration cannot intercept that
           summary's controls or expose two aria-modal dialogs at once. */}
-      {pendingCelebration && !hasWeekSummary && (
+      {showCelebration && pendingCelebration && (
         <Celebration
           tier={pendingCelebration.tier}
           title={pendingCelebration.title}
@@ -462,7 +533,7 @@ export default function Home() {
         />
       )}
       {/* Insight payoff overlay — shows result after using an Insight action. */}
-      {lastInsightResult && (
+      {showInsight && lastInsightResult && (
         <InsightPayoff
           result={lastInsightResult}
           actionName={lastInsightResult.actionId?.replace(/([A-Z])/g, " $1").trim() ?? "Insight"}
@@ -470,14 +541,24 @@ export default function Home() {
         />
       )}
       {/* Load the scenario overlay only after an outcome has been latched. */}
-      {activeCareerId && hasScenarioOutcome && <ScenarioOutcomeOverlay />}
+      {showScenario && <ScenarioOutcomeOverlay />}
       {/* Feedback modal — opened via F1 shortcut or Settings screen */}
-      {isFeedbackOpen && (
+      {showFeedback && (
         <FeedbackModal
           isOpen
           onClose={() => setIsFeedbackOpen(false)}
         />
       )}
+      {showCareerMoment && nextCareerMoment && (
+          <CareerMomentOverlay
+            moment={nextCareerMoment}
+            onDismiss={() => acknowledgeCareerMoment(nextCareerMoment.id)}
+            onOpenArchive={() => {
+              acknowledgeCareerMoment(nextCareerMoment.id);
+              setScreen("career");
+            }}
+          />
+        )}
     </>
   );
 }

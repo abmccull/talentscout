@@ -3,6 +3,7 @@ import { getSeasonLength } from "@/engine/core/gameLoop";
 import { createRNG } from "@/engine/rng";
 import {
   appendDecisionConsequence,
+  archiveMaterialCareerStories,
   ensureNarrativeDecision,
   expireDueDecisions,
   maintainConsequenceLifecycle,
@@ -10,18 +11,27 @@ import {
   projectConsequenceMetrics,
   synchronizeConsequenceMetrics,
 } from "@/engine/consequences";
+import type { EntityRef } from "@/engine/consequences";
+import { resolveManagerStakeholderName } from "@/engine/consequences/stakeholderProfiles";
 import {
   computeChainChoiceEffects,
   resolveChainChoice,
   resolveEventChoice,
   resolveStorylineChoice,
 } from "@/engine/events";
-import { clearTerminalNarrativeInboxActions } from "./narrativeInboxState";
+import {
+  clearTerminalConsequenceInboxActions,
+  clearTerminalNarrativeInboxActions,
+} from "./narrativeInboxState";
 import {
   applyConsequences,
   applyNarrativeRelationshipChoice,
   applyRivalPoachBidConcession,
 } from "./progressionActions";
+import {
+  createWorldConditionArcState,
+  reconcileWorldConditionArcDecisions,
+} from "@/engine/world/worldConditionArcs";
 
 export function registerNarrativeDecisions(
   state: GameState,
@@ -31,6 +41,31 @@ export function registerNarrativeDecisions(
     (current, event) => ensureNarrativeDecision(current, event),
     state,
   );
+}
+
+function resolveArchivedEntityName(state: GameState, entity: EntityRef): string | undefined {
+  const player = state.players[entity.id]
+    ?? state.retiredPlayers[entity.id]
+    ?? state.unsignedYouth[entity.id]?.player;
+  if (player) {
+    const name = `${player.firstName ?? ""} ${player.lastName ?? ""}`.trim();
+    return entity.kind === "family" ? `${name || "Player"}'s family` : name || undefined;
+  }
+  if (state.contacts[entity.id]) return state.contacts[entity.id].name;
+  if (state.clubs[entity.id]) return state.clubs[entity.id].name;
+  if (state.rivalScouts[entity.id]) return state.rivalScouts[entity.id].name;
+  const employee = state.finances?.employees.find((candidate) => candidate.id === entity.id);
+  if (employee) return employee.name;
+  const npcScout = state.npcScouts[entity.id];
+  if (npcScout) return `${npcScout.firstName} ${npcScout.lastName}`;
+  if (entity.kind === "manager") {
+    const managerName = resolveManagerStakeholderName(state, entity.id);
+    if (managerName) return managerName;
+  }
+  if (entity.kind === "scout" && entity.id === state.scout.id) {
+    return `${state.scout.firstName} ${state.scout.lastName}`.trim();
+  }
+  return undefined;
 }
 
 /** Apply deadline-selected narrative defaults through the manual-choice domains. */
@@ -189,7 +224,6 @@ export function projectExpiredNarrativeDefaults(
       now,
       getSeasonLength(updated.fixtures, updated.currentSeason),
     );
-    if (processed.errors.length > 0) continue;
 
     updated = {
       ...updated,
@@ -207,6 +241,17 @@ export function projectExpiredNarrativeDefaults(
       inbox: [
         ...updated.inbox,
         ...(storylineMessage ? [storylineMessage] : eventResult.messages),
+        ...processed.errors.map((error, index) => ({
+          id: `consequence-warning:${decisionId}:s${updated.currentSeason}w${updated.currentWeek}:${index}`,
+          week: updated.currentWeek,
+          season: updated.currentSeason,
+          type: "warning" as const,
+          title: "A linked consequence could not be applied",
+          body: `The deadline choice was recorded. One invalid follow-up was safely closed instead of blocking the result. ${error}`,
+          read: false,
+          actionRequired: false,
+          relatedId: decisionId,
+        })),
       ],
     };
     if (eventResult.updatedEvent.consequences?.length) {
@@ -242,11 +287,29 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
     { ...state, consequenceState: expiredDecisionState },
     expiredDecisions.expiredDecisionIds,
   );
+  updated = {
+    ...updated,
+    worldConditionArcState: reconcileWorldConditionArcDecisions({
+      state: createWorldConditionArcState(
+        updated.worldConditionArcState,
+        updated.countries,
+      ),
+      decisions: updated.consequenceState.decisions,
+      now: date,
+      seasonLength,
+    }),
+  };
   const synchronized = synchronizeConsequenceMetrics(
     updated,
     updated.consequenceState,
   );
   const processed = processDueConsequences(synchronized, date, seasonLength);
+  const archived = archiveMaterialCareerStories({
+    state: processed.state,
+    archive: updated.careerStoryArchive,
+    rootSeed: updated.runManifest.rootSeed,
+    resolveEntityName: (entity) => resolveArchivedEntityName(updated, entity),
+  });
   const maintained = maintainConsequenceLifecycle(
     processed.state,
     date,
@@ -288,6 +351,7 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
 
   updated = {
     ...updated,
+    careerStoryArchive: archived.archive,
     consequenceState: maintained.state,
     inbox: errors.length === 0 && outcomeMessages.length === 0
       ? updated.inbox
@@ -306,5 +370,30 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
           })),
         ],
   };
-  return projectConsequenceMetrics(updated, maintained.state);
+  const terminalDecisionIds = new Set(
+    [
+      ...archived.archivedDecisionIds,
+      ...Object.values(maintained.state.decisions)
+        .filter((decision) => decision.status !== "offered")
+        .map((decision) => decision.id),
+    ],
+  );
+  if (terminalDecisionIds.size > 0) {
+    updated = {
+      ...updated,
+      inbox: updated.inbox.map((message) =>
+        message.relatedId && terminalDecisionIds.has(message.relatedId)
+          ? { ...message, actionRequired: false }
+          : message,
+      ),
+    };
+  }
+  const projected = projectConsequenceMetrics(updated, maintained.state);
+  const repairedInbox = clearTerminalConsequenceInboxActions(
+    projected.inbox,
+    maintained.state,
+  );
+  return repairedInbox === projected.inbox
+    ? projected
+    : { ...projected, inbox: repairedInbox };
 }

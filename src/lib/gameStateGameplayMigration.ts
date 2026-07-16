@@ -15,6 +15,7 @@ import {
   migrateEquipmentLevel,
   migrateFinancialRecord,
   migrateReportListingBids,
+  normalizeClubEconomicsMap,
   normalizeEmployeeContractsInRecord,
 } from "@/engine/finance";
 import { migratePoliticalMeetingState } from "@/engine/career/politicalMeetings";
@@ -41,6 +42,14 @@ import { generateSubRegions } from "@/engine/youth/generation";
 import { reconcileScenarioAuthority } from "@/engine/scenarios/scenarioAuthority";
 import { getCountryDisplayName, normalizeCountryKey } from "@/lib/country";
 import { resetRebuildableGameStateCaches } from "@/engine/core/gameStatePartitions";
+import { createStoryDirectorStateV2 } from "@/engine/events/storyDirectorV2";
+import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
+import { createCareerStoryArchiveState } from "@/engine/consequences/careerStoryArchive";
+import {
+  createCareerChronologyState,
+  inferLegacyCareerChronology,
+} from "@/engine/career/chronology";
+import { createCareerMomentState } from "@/engine/career/careerMoments";
 
 type LegacyContact = Contact & {
   trustLevel?: number;
@@ -424,6 +433,40 @@ function normalizeRequiredStateShape(state: GameState): void {
   }
 }
 
+function migrateScoutEmploymentContract(state: GameState): void {
+  const scout = state.scout;
+  if (
+    scout.employmentContract
+    || scout.careerPath !== "club"
+    || !scout.currentClubId
+  ) return;
+
+  const endSeason = Math.max(
+    state.currentSeason,
+    scout.contractEndSeason ?? state.currentSeason + 1,
+  );
+  scout.contractEndSeason = endSeason;
+  scout.employmentContract = {
+    id: `legacy-scout-contract:${scout.currentClubId}:s${endSeason}`,
+    clubId: scout.currentClubId,
+    role: scout.careerTier >= 4 ? "Head of Scouting" : "Club Scout",
+    tier: scout.careerTier,
+    weeklySalary: Math.max(0, scout.salary),
+    startSeason: Math.max(1, endSeason - 1),
+    endSeason,
+    status: endSeason <= state.currentSeason ? "expiring" : "active",
+    objectives: {
+      reportsPerSeason: 10 + scout.careerTier * 5,
+      minimumAverageQuality: 42 + scout.careerTier * 7,
+      successfulRecommendations: Math.max(1, scout.careerTier - 1),
+    },
+    signingBonus: 0,
+    performanceBonusRate: 0.05 + scout.careerTier * 0.02,
+    severanceWeeks: scout.careerTier >= 5 ? 16 : scout.careerTier >= 4 ? 10 : 4,
+    educationBudget: scout.careerTier * 750,
+  };
+}
+
 /**
  * Gameplay-specific compatibility repairs. This owns every persisted-state
  * mutation that used to happen inside the Zustand load action, so local,
@@ -432,6 +475,7 @@ function normalizeRequiredStateShape(state: GameState): void {
  */
 export function applyGameplaySaveMigrations(state: GameState): GameState {
   normalizeRequiredStateShape(state);
+  migrateScoutEmploymentContract(state);
   if (state.finances && !state.finances.equipment) {
     state.finances.equipment = migrateEquipmentLevel(state.finances.equipmentLevel);
   }
@@ -539,6 +583,27 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
   state.activeLoans ??= [];
   state.loanHistory ??= [];
   state.loanRecommendations ??= [];
+  state.storyDirectorV2 = createStoryDirectorStateV2(state.storyDirectorV2);
+  state.careerChronology = state.careerChronology
+    ? createCareerChronologyState({
+        currentSeason: state.currentSeason,
+        careerTier: state.scout.careerTier,
+        partial: state.careerChronology,
+      })
+    : inferLegacyCareerChronology({
+        currentSeason: state.currentSeason,
+        careerTier: state.scout.careerTier,
+        legacyCompletedSeasons: state.legacyScore?.totalSeasons,
+        legacyPeakTier: state.legacyScore?.careerHighTier,
+        performanceReviewSeasons: (state.performanceReviews ?? []).map((review) => review.season),
+        performanceSnapshotSeasons: (state.performanceHistory ?? []).map((snapshot) => snapshot.season),
+      });
+  state.careerMoments = createCareerMomentState(state.careerMoments);
+  state.careerStoryArchive = createCareerStoryArchiveState(state.careerStoryArchive);
+  state.stakeholderProfiles = createStakeholderProfileRegistry(
+    state,
+    state.stakeholderProfiles,
+  );
   for (const club of Object.values(state.clubs)) {
     club.loanedOutPlayerIds ??= [];
     club.loanedInPlayerIds ??= [];
@@ -547,6 +612,14 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
 
   const compacted = reconcileScenarioAuthority(
     migratePoliticalMeetingState(compactLongCareerHistory(resetRebuildableGameStateCaches(state))),
+  );
+  compacted.clubs = normalizeClubEconomicsMap(
+    compacted.clubs,
+    compacted.players,
+    {
+      currentWeek: compacted.currentWeek,
+      currentSeason: compacted.currentSeason,
+    },
   );
   const serializedSession = compacted.activeObservationSession
     ? migrateObservationSessionInteractions(compacted.activeObservationSession)

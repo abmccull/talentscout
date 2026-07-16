@@ -5,7 +5,8 @@
  * solvency state. All functions are pure — no mutation, no I/O.
  *
  * Currency unit: game currency (integer-precision; no floating-point cash).
- * "Monthly" cycle: every 4 weeks a paycheck arrives and expenses are deducted.
+ * Twelve financial periods are distributed across each competition season so
+ * league length cannot alter annual salary or operating costs.
  */
 
 import type {
@@ -16,7 +17,6 @@ import type {
   CareerPath,
   LifestyleConfig,
   Office,
-  BusinessLoan,
   DifficultyLevel,
 } from "../core/types";
 import { getEquipmentMonthlyTotal } from "./equipmentBonuses";
@@ -30,6 +30,16 @@ import {
   normalizeEmployeeContract,
   normalizeEmployeeContractsInRecord,
 } from "./employeeEconomics";
+import {
+  getSatelliteOfficeCostReferenceId,
+  getSatelliteOfficeMonthlyCostTotal,
+} from "./internationalExpansion";
+import { normalizeCanonicalLoanState } from "./saveMigration";
+import {
+  isFinancialPeriodClose,
+  monthlyEquivalentOfWeeklyAmount,
+} from "../core/annualization";
+import { LEGACY_SEASON_LENGTH_WEEKS } from "../core/gameDate";
 
 // =============================================================================
 // CONSTANTS
@@ -177,7 +187,7 @@ const STARTER_STIPEND: Record<DifficultyLevel, number> = {
  * populated with initial estimates for the first month.
  */
 export function initializeFinances(scout: Scout, careerPath?: CareerPath, difficulty?: DifficultyLevel): FinancialRecord {
-  const monthlyIncome = scout.salary * 4; // weekly salary × 4 weeks
+  const monthlyIncome = monthlyEquivalentOfWeeklyAmount(scout.salary);
   const path = careerPath ?? scout.careerPath ?? "club";
   const startingCash = STARTING_CASH[difficulty ?? "normal"];
 
@@ -218,6 +228,7 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath, diffic
     consultingContracts: [],
     office,
     employees: [],
+    analystReviews: [],
     lifestyle,
     completedCourses: [],
     activeEnrollment: undefined,
@@ -351,7 +362,7 @@ export function calculateMonthlyExpenses(
   const tier = scout.careerTier;
 
   // --- Rent ---
-  const rent = TIER_RENT[tier];
+  const rent = finances.lifestyle ? 0 : TIER_RENT[tier];
 
   // --- Travel ---
   // Extra travel cost when the scout has an active international booking.
@@ -385,7 +396,8 @@ export function calculateMonthlyExpenses(
   const lifestyle = finances.lifestyle ? finances.lifestyle.monthlyCost : 0;
 
   // --- Office cost (independent path) ---
-  const officeCost = finances.office ? finances.office.monthlyCost : 0;
+  const officeCost = (finances.office ? finances.office.monthlyCost : 0)
+    + getSatelliteOfficeMonthlyCostTotal(finances);
 
   // --- Employee salaries (agency) ---
   const employeeSalaries = finances.employees
@@ -432,7 +444,7 @@ export function calculateMonthlyExpenses(
 /**
  * Process one week of financial activity.
  *
- * On weeks that are a multiple of 4 (i.e. end of month):
+ * At each of the season's twelve financial period closes:
  *  - The scout receives their monthly salary (income).
  *  - Total monthly expenses are deducted.
  *  - Both are recorded as transactions.
@@ -444,14 +456,16 @@ export function processWeeklyFinances(
   scout: Scout,
   currentWeek: number,
   currentSeason: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
 ): FinancialRecord {
-  // Only process on a 4-week cycle (monthly paycheck + bills).
-  if (currentWeek % 4 !== 0) {
-    return finances;
+  const canonicalFinances = normalizeCanonicalLoanState(finances);
+
+  if (!isFinancialPeriodClose(currentWeek, seasonLength)) {
+    return canonicalFinances;
   }
 
   const payrollReference = `monthly-finance:s${currentSeason}w${currentWeek}`;
-  const currentCycleTransactions = finances.transactions.filter(
+  const currentCycleTransactions = canonicalFinances.transactions.filter(
     (transaction) => transaction.week === currentWeek
       && transaction.season === currentSeason,
   );
@@ -462,11 +476,11 @@ export function processWeeklyFinances(
     && currentCycleTransactions.some((transaction) => transaction.description === "Monthly expenses")
   );
   if (alreadyProcessed) {
-    return finances;
+    return canonicalFinances;
   }
 
   const normalizedFinances = normalizeEmployeeContractsInRecord(
-    finances,
+    canonicalFinances,
     scout.reputation,
     currentWeek,
     currentSeason,
@@ -479,12 +493,22 @@ export function processWeeklyFinances(
   // principal. Keeping it out of this operating-cost pass prevents one loan
   // instalment from being deducted twice.
   const totalOperatingExpenses = sumOperatingExpenses(currentExpenses);
-  const operatingExpenses = totalOperatingExpenses - currentExpenses.employeeSalaries;
-  const monthlyIncome = scout.salary * 4;
+  const alreadyChargedSatelliteCost = normalizedFinances.transactions.some(
+    (transaction) => transaction.referenceId === getSatelliteOfficeCostReferenceId(
+      currentWeek,
+      currentSeason,
+    ),
+  )
+    ? getSatelliteOfficeMonthlyCostTotal(normalizedFinances)
+    : 0;
+  const operatingExpenses = totalOperatingExpenses
+    - currentExpenses.employeeSalaries
+    - alreadyChargedSatelliteCost;
+  const monthlyIncome = monthlyEquivalentOfWeeklyAmount(scout.salary);
 
   // Specialization income bonus/penalty (B9: lock income sources by spec)
   const specBonus = calculateSpecMonthlyBonus(scout);
-  const specUniqueIncome = calculateSpecUniqueIncome(scout, finances);
+  const specUniqueIncome = calculateSpecUniqueIncome(scout, canonicalFinances);
   const totalSpecIncome = specBonus + specUniqueIncome;
 
   const transactions: FinancialRecord["transactions"] = [];
@@ -527,20 +551,19 @@ export function processWeeklyFinances(
     });
   }
 
-  let result: FinancialRecord = {
+  return {
     ...normalizedFinances,
-    balance: normalizedFinances.balance + monthlyIncome + totalSpecIncome - totalOperatingExpenses,
+    balance: normalizedFinances.balance
+      + monthlyIncome
+      + totalSpecIncome
+      - operatingExpenses
+      - currentExpenses.employeeSalaries,
     monthlyIncome,
     expenses: currentExpenses,
     specBonusApplied: specBonus,
     specUniqueIncome,
     transactions: [...normalizedFinances.transactions, ...transactions],
   };
-
-  // Process monthly loan interest accrual
-  result = processLoanInterest(result, currentWeek, currentSeason);
-
-  return result;
 }
 
 /**
@@ -622,129 +645,6 @@ export function isBroke(finances: FinancialRecord): boolean {
 }
 
 // =============================================================================
-// BUSINESS LOANS
-// =============================================================================
-
-/** Default monthly interest rate for business loans (3%). */
-const DEFAULT_LOAN_INTEREST_RATE = 0.03;
-
-/**
- * Take out a new business loan. The principal is added to the scout's balance
- * and the loan is tracked for monthly interest + repayment processing.
- *
- * Returns an updated FinancialRecord with the loan proceeds credited.
- */
-export function takeBusinessLoan(
-  finances: FinancialRecord,
-  principal: number,
-  currentWeek: number,
-  currentSeason: number,
-): FinancialRecord {
-  const loan: BusinessLoan = {
-    id: `loan_w${currentWeek}_s${currentSeason}_${finances.loans.length}`,
-    principal,
-    remainingBalance: principal,
-    monthlyInterestRate: DEFAULT_LOAN_INTEREST_RATE,
-    originWeek: currentWeek,
-    originSeason: currentSeason,
-  };
-
-  const loanTransaction: FinancialRecord["transactions"][number] = {
-    week: currentWeek,
-    season: currentSeason,
-    amount: principal,
-    description: `Business loan received (${principal} at ${DEFAULT_LOAN_INTEREST_RATE * 100}% monthly)`,
-  };
-
-  return {
-    ...finances,
-    balance: finances.balance + principal,
-    loans: [...finances.loans, loan],
-    transactions: [...finances.transactions, loanTransaction],
-  };
-}
-
-/**
- * Make a payment toward a specific loan. Deducts from balance and reduces
- * the loan's remaining balance. Returns null if insufficient funds.
- */
-export function repayLoan(
-  finances: FinancialRecord,
-  loanId: string,
-  amount: number,
-  currentWeek: number,
-  currentSeason: number,
-): FinancialRecord | null {
-  if (!canAfford(finances, amount)) return null;
-
-  const loanIndex = finances.loans.findIndex((l) => l.id === loanId);
-  if (loanIndex === -1) return null;
-
-  const loan = finances.loans[loanIndex];
-  const paymentAmount = Math.min(amount, loan.remainingBalance);
-  const updatedLoan: BusinessLoan = {
-    ...loan,
-    remainingBalance: loan.remainingBalance - paymentAmount,
-  };
-
-  // Remove fully repaid loans
-  const updatedLoans =
-    updatedLoan.remainingBalance <= 0
-      ? finances.loans.filter((_, i) => i !== loanIndex)
-      : finances.loans.map((l, i) => (i === loanIndex ? updatedLoan : l));
-
-  const repayTransaction: FinancialRecord["transactions"][number] = {
-    week: currentWeek,
-    season: currentSeason,
-    amount: -paymentAmount,
-    description: `Loan repayment`,
-  };
-
-  return {
-    ...finances,
-    balance: finances.balance - paymentAmount,
-    loans: updatedLoans,
-    transactions: [...finances.transactions, repayTransaction],
-  };
-}
-
-/**
- * Process monthly interest accrual on all active loans.
- * Called internally by processWeeklyFinances on the monthly cycle.
- * Interest is added to each loan's remaining balance (compounding).
- */
-function processLoanInterest(
-  finances: FinancialRecord,
-  currentWeek: number,
-  currentSeason: number,
-): FinancialRecord {
-  if (finances.loans.length === 0) return finances;
-
-  let totalInterest = 0;
-  const updatedLoans = finances.loans.map((loan) => {
-    const interest = Math.round(loan.remainingBalance * loan.monthlyInterestRate);
-    totalInterest += interest;
-    return { ...loan, remainingBalance: loan.remainingBalance + interest };
-  });
-
-  if (totalInterest === 0) return finances;
-
-  const interestTransaction: FinancialRecord["transactions"][number] = {
-    week: currentWeek,
-    season: currentSeason,
-    amount: -totalInterest,
-    description: "Loan interest",
-  };
-
-  return {
-    ...finances,
-    balance: finances.balance - totalInterest,
-    loans: updatedLoans,
-    transactions: [...finances.transactions, interestTransaction],
-  };
-}
-
-// =============================================================================
 // STARTER BONUS
 // =============================================================================
 
@@ -767,7 +667,12 @@ export function applyFirstReportBonus(
   currentWeek: number,
   currentSeason: number,
 ): FinancialRecord {
-  if (finances.starterBonus.firstReportBonusUsed) return finances;
+  if (finances.starterBonus?.firstReportBonusUsed) return finances;
+  const starterBonus = finances.starterBonus ?? {
+    firstReportBonusUsed: false,
+    firstPlacementBonusUsed: false,
+    starterStipendWeeksRemaining: 0,
+  };
 
   const bonus = Math.round(basePayment * FIRST_REPORT_BONUS_MULTIPLIER);
 
@@ -776,12 +681,15 @@ export function applyFirstReportBonus(
     season: currentSeason,
     amount: bonus,
     description: "Welcome Package: first report bonus (+50%)",
+    referenceId: `welcome:first-report:s${currentSeason}w${currentWeek}`,
+    category: "bonus",
   };
 
   return {
     ...finances,
     balance: finances.balance + bonus,
-    starterBonus: { ...finances.starterBonus, firstReportBonusUsed: true },
+    bonusRevenue: (finances.bonusRevenue ?? 0) + bonus,
+    starterBonus: { ...starterBonus, firstReportBonusUsed: true },
     transactions: [...finances.transactions, bonusTransaction],
   };
 }
@@ -799,7 +707,12 @@ export function applyFirstPlacementBonus(
   currentWeek: number,
   currentSeason: number,
 ): FinancialRecord {
-  if (finances.starterBonus.firstPlacementBonusUsed) return finances;
+  if (finances.starterBonus?.firstPlacementBonusUsed) return finances;
+  const starterBonus = finances.starterBonus ?? {
+    firstReportBonusUsed: false,
+    firstPlacementBonusUsed: false,
+    starterStipendWeeksRemaining: 0,
+  };
 
   const bonus = Math.round(baseFee * FIRST_PLACEMENT_BONUS_MULTIPLIER);
 
@@ -808,12 +721,15 @@ export function applyFirstPlacementBonus(
     season: currentSeason,
     amount: bonus,
     description: "Welcome Package: first placement bonus (+25%)",
+    referenceId: `welcome:first-placement:s${currentSeason}w${currentWeek}`,
+    category: "bonus",
   };
 
   return {
     ...finances,
     balance: finances.balance + bonus,
-    starterBonus: { ...finances.starterBonus, firstPlacementBonusUsed: true },
+    bonusRevenue: (finances.bonusRevenue ?? 0) + bonus,
+    starterBonus: { ...starterBonus, firstPlacementBonusUsed: true },
     transactions: [...finances.transactions, bonusTransaction],
   };
 }

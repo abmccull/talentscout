@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T22:54:09.103Z",
+  "generatedAt": "2026-07-16T03:21:11.012Z",
   "evidenceClass": "chromium-emulation-not-physical-low-end-hardware",
   "emulation": {
     "cpuSlowdown": 4,
@@ -30,32 +30,37 @@
     "domNodes": 18000
   },
   "measured": {
-    "coldLoadMs": 5351.31,
+    "coldLoadMs": 5578.4,
     "navigationDurationsMs": [
-      568,
-      447.4,
-      439.2,
-      372.7,
-      197.2
+      587.8,
+      521.2,
+      491.9,
+      393.1,
+      185
     ],
-    "navigationP95Ms": 568,
-    "oneWeekAdvanceMs": 3016,
+    "navigationP95Ms": 587.8,
+    "oneWeekAdvanceMs": 3150.6,
     "weeklyWorker": {
-      "computeMs": 569.5999999940395,
-      "changedFieldCount": 65,
-      "changedEntryCount": 10434,
-      "totalFieldCount": 91,
-      "responseBytes": 8153452,
+      "computeMs": 589.1999999880791,
+      "changedFieldCount": 70,
+      "changedEntryCount": 10456,
+      "totalFieldCount": 97,
+      "responseBytes": 8435316,
       "payloadHotspots": [
         {
           "field": "players",
           "strategy": "record-delta",
-          "bytes": 3248227
+          "bytes": 3240076
         },
         {
           "field": "retiredPlayers",
           "strategy": "replace",
-          "bytes": 1578225
+          "bytes": 1549899
+        },
+        {
+          "field": "worldHistory",
+          "strategy": "replace",
+          "bytes": 947664
         },
         {
           "field": "fixtures",
@@ -63,39 +68,34 @@
           "bytes": 830264
         },
         {
-          "field": "worldHistory",
-          "strategy": "replace",
-          "bytes": 824897
-        },
-        {
           "field": "playerMovementHistory",
           "strategy": "replace",
-          "bytes": 722371
+          "bytes": 725821
         },
         {
           "field": "clubs",
           "strategy": "record-delta",
-          "bytes": 330106
+          "bytes": 336098
         },
         {
           "field": "freeAgentPool",
           "strategy": "replace",
-          "bytes": 265457
+          "bytes": 259298
         },
         {
           "field": "unsignedYouth",
           "strategy": "record-delta",
-          "bytes": 205795
+          "bytes": 205818
         }
       ],
       "route": "worker",
-      "roundTripMs": 2270.7999999970198
+      "roundTripMs": 2367.300000011921
     },
-    "jsHeapUsedBytes": 47303428,
-    "jsHeapTotalBytes": 50036736,
-    "domNodes": 4654,
+    "jsHeapUsedBytes": 48289044,
+    "jsHeapTotalBytes": 51085312,
+    "domNodes": 4677,
     "documents": 2,
-    "layoutCount": 168
+    "layoutCount": 169
   },
   "checks": {
     "coldLoad": true,

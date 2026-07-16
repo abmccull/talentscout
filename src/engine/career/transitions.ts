@@ -19,6 +19,7 @@ import {
   calculateSpecUniqueIncome,
 } from "../finance/specializationIncome";
 import { acceptJobOffer, endClubEmployment } from "./progression";
+import { monthlyEquivalentOfWeeklyAmount } from "../core/annualization";
 
 const CLOSED_OFFICE = {
   tier: "home",
@@ -68,7 +69,9 @@ function finalizeFinancesForScout(
 ): FinancialRecord {
   const withIncome: FinancialRecord = {
     ...finances,
-    monthlyIncome: scout.careerPath === "club" ? scout.salary * 4 : 0,
+    monthlyIncome: scout.careerPath === "club"
+      ? monthlyEquivalentOfWeeklyAmount(scout.salary)
+      : 0,
   };
 
   return {
@@ -122,7 +125,7 @@ export function transitionToClubCareer(
     ...closedFinances,
     careerPath: "club",
     independentTier: undefined,
-    monthlyIncome: transitionedScout.salary * 4,
+    monthlyIncome: monthlyEquivalentOfWeeklyAmount(transitionedScout.salary),
     academyPartnerships:
       transitionedScout.careerTier >= 3 &&
       transitionedScout.primarySpecialization === "youth"
@@ -222,6 +225,23 @@ export function applyClubEmploymentTransition(
     state.countries,
   );
   const openOfferIds = new Set(state.jobOffers.map((candidate) => candidate.id));
+  const isCurrentClubRenewal = Boolean(
+    offer.renewalOfContractId && state.scout.currentClubId === offer.clubId,
+  );
+
+  if (isCurrentClubRenewal) {
+    return {
+      ...state,
+      scout: transition.scout,
+      finances: transition.finances,
+      jobOffers: [],
+      inbox: state.inbox.map((message) =>
+        message.relatedId && openOfferIds.has(message.relatedId)
+          ? { ...message, read: true, actionRequired: false }
+          : message,
+      ),
+    };
+  }
 
   return {
     ...state,

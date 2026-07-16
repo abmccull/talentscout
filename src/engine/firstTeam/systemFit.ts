@@ -21,12 +21,15 @@ import type {
   PlayerRole,
   PlayerTrait,
   Position,
-  ScoutingPhilosophy,
   SystemFitResult,
   TacticalIdentity,
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import { calculateRoleSuitability, getBestRole } from "@/engine/players/roles";
+import {
+  deriveClubRecruitmentDoctrine,
+  getPhilosophyPreferredAgeRange,
+} from "@/engine/world/recruitmentIdentity";
 
 // =============================================================================
 // CONSTANTS
@@ -81,13 +84,6 @@ const TRAIT_IDENTITY_BONUSES: Partial<Record<TacticalIdentity, PlayerTrait[]>> =
   directPlay: ["holdsUpBall", "playsWithBackToGoal"],
   wingPlay: ["driftsWide", "runsWithBall", "cutsInside"],
 };
-
-const PHILOSOPHY_AGE_RANGES: Record<ScoutingPhilosophy, [number, number]> = {
-  winNow: [24, 31],
-  academyFirst: [17, 23],
-  marketSmart: [21, 27],
-  globalRecruiter: [19, 29],
-} as const;
 
 // =============================================================================
 // HELPERS
@@ -221,7 +217,7 @@ function scoreTacticalFit(player: Player, club: Club): number {
  * Score age fit (0-100).
  */
 function scoreAgeFit(player: Player, club: Club): number {
-  const [minAge, maxAge] = PHILOSOPHY_AGE_RANGES[club.scoutingPhilosophy];
+  const [minAge, maxAge] = getPhilosophyPreferredAgeRange(club.scoutingPhilosophy);
 
   if (player.age >= minAge && player.age <= maxAge) return 100;
 
@@ -313,7 +309,12 @@ function buildFitWeaknesses(
     weaknesses.push("Injury history concerns — high injury proneness rating.");
   }
 
-  if (club.scoutingPhilosophy === "winNow" && player.attributes.consistency <= 8) {
+  const doctrine = deriveClubRecruitmentDoctrine({
+    club,
+    seed: `system-fit:${club.id}`,
+    season: 0,
+  });
+  if (doctrine.tacticalRoleRigidity >= 70 && player.attributes.consistency <= 8) {
     weaknesses.push("Inconsistent performer — a risk for a club chasing immediate results.");
   }
 

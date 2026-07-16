@@ -11,6 +11,7 @@ import {
   selectDecisionOption,
   compareGameDates,
 } from "../consequences/decisionLedger";
+import type { EntityRef } from "../consequences/types";
 import { createRNG } from "../rng";
 import { generateJobOffersForTier } from "./progression";
 import {
@@ -35,6 +36,13 @@ export interface CareerRecoveryEpisode {
   kind: CareerSetbackKind;
   previousTier: CareerTier;
   previousClubId?: string;
+  /** Causal record that explains why this recovery exists. */
+  triggerDecisionId?: string;
+  triggerReportId?: string;
+  triggerPlayerId?: string;
+  triggerSummary?: string;
+  /** Persistent identities whose trust or expectations were involved. */
+  affectedStakeholders?: EntityRef[];
   triggeredWeek: number;
   triggeredSeason: number;
   choiceDueWeek: number;
@@ -80,6 +88,11 @@ export interface OpenCareerSetbackInput {
   kind: CareerSetbackKind;
   previousTier?: CareerTier;
   previousClubId?: string;
+  triggerDecisionId?: string;
+  triggerReportId?: string;
+  triggerPlayerId?: string;
+  triggerSummary?: string;
+  affectedStakeholders?: EntityRef[];
 }
 
 export interface ChooseCareerRecoveryResult {
@@ -168,12 +181,18 @@ export function getCareerRecoveryPlanOptions(
   const contactCount = Object.keys(state.contacts ?? {}).length;
   const networkTarget = Math.min(lateCareer ? 3 : 2, contactCount);
   const quietWeekTarget = lateCareer ? 6 : 4;
+  const affectedContactIds = (episode.affectedStakeholders ?? [])
+    .filter((stakeholder) => stakeholder.kind === "contact")
+    .map((stakeholder) => stakeholder.id);
+  const triggerContext = episode.triggerSummary?.trim()
+    || (episode.triggerPlayerId ? "the player case attached to the setback" : undefined)
+    || (episode.triggerReportId ? "the report attached to the setback" : undefined);
 
   return [
     {
       id: "proveTheWork",
       label: lateCareer ? "Put your judgment on trial" : "Prove the work",
-      description: `File ${evidenceTarget} high-quality reports on different players. Only new, accountable work scoring ${QUALIFYING_REPORT_SCORE}+ counts.`,
+      description: `File ${evidenceTarget} high-quality reports on different players. Only new, accountable work scoring ${QUALIFYING_REPORT_SCORE}+ counts.${triggerContext ? ` This is your answer to ${triggerContext}.` : ""}`,
       tradeoffs: [
         "Fastest route back to the level you lost",
         "Consumes observation and report-writing time",
@@ -187,7 +206,7 @@ export function getCareerRecoveryPlanOptions(
       id: "rebuildTheNetwork",
       label: "Rebuild through relationships",
       description: networkTarget > 0
-        ? `Hold substantive meetings with ${networkTarget} different contacts. Repeating the same friendly conversation does not count twice.`
+        ? `Hold substantive meetings with ${networkTarget} different contacts. Repeating the same friendly conversation does not count twice.${affectedContactIds.length > 0 ? " At least one contact directly affected by the setback must be among them." : ""}`
         : "Use trusted contacts to rebuild access and credibility.",
       tradeoffs: [
         "Slower reputation recovery but a safer employment tier",
@@ -202,7 +221,7 @@ export function getCareerRecoveryPlanOptions(
     {
       id: "stepBack",
       label: lateCareer ? "Take a real sabbatical" : "Reduce the scope",
-      description: `Complete ${quietWeekTarget} quiet weeks containing only rest or no scheduled work. Working through the break does not advance it.`,
+      description: `Complete ${quietWeekTarget} quiet weeks containing only rest or no scheduled work. Working through the break does not advance it.${triggerContext ? ` The record will preserve that this followed ${triggerContext}.` : ""}`,
       tradeoffs: [
         "Guaranteed fatigue recovery and no craft target",
         "Costs 3 reputation immediately",
@@ -249,6 +268,11 @@ export function openCareerSetback(
     kind: input.kind,
     previousTier,
     previousClubId: input.previousClubId,
+    triggerDecisionId: input.triggerDecisionId,
+    triggerReportId: input.triggerReportId,
+    triggerPlayerId: input.triggerPlayerId,
+    triggerSummary: input.triggerSummary?.trim() || undefined,
+    affectedStakeholders: input.affectedStakeholders?.map((stakeholder) => ({ ...stakeholder })),
     triggeredWeek: state.currentWeek,
     triggeredSeason: state.currentSeason,
     choiceDueWeek: choiceDue.week,
@@ -267,9 +291,11 @@ export function openCareerSetback(
     offeredAt: { week: state.currentWeek, season: state.currentSeason },
     deadlineAt: choiceDue,
     visibility: input.kind === "warning" ? "stakeholders" : "public",
-    stakeholders: input.previousClubId
-      ? [{ kind: "club", id: input.previousClubId }]
-      : [],
+    stakeholders: input.affectedStakeholders?.length
+      ? input.affectedStakeholders.map((stakeholder) => ({ ...stakeholder }))
+      : input.previousClubId
+        ? [{ kind: "club", id: input.previousClubId }]
+        : [],
     options: options.map((option) => ({
       id: option.id,
       label: option.label,
@@ -283,6 +309,9 @@ export function openCareerSetback(
       title: setbackTitle(input.kind),
       setbackKind: input.kind,
       previousTier,
+      triggerDecisionId: input.triggerDecisionId ?? "none",
+      triggerReportId: input.triggerReportId ?? "none",
+      triggerPlayerId: input.triggerPlayerId ?? "none",
     },
   });
   const registered = registerDecision(state.consequenceState, decision);
@@ -467,6 +496,10 @@ function recoveryFact(
       planId: episode.planId ?? "none",
       status,
       previousTier: episode.previousTier,
+      triggerDecisionId: episode.triggerDecisionId ?? "none",
+      triggerReportId: episode.triggerReportId ?? "none",
+      triggerPlayerId: episode.triggerPlayerId ?? "none",
+      affectedStakeholderIds: (episode.affectedStakeholders ?? []).map((stakeholder) => stakeholder.id),
     },
     observedAt: { week: state.currentWeek, season: state.currentSeason },
     visibility: episode.kind === "warning" ? "stakeholders" as const : "public" as const,
@@ -597,6 +630,12 @@ export function processCareerRecoveryWeek(
     progressSources.add(`quiet:s${completedSchedule.season}w${completedSchedule.week}`);
   }
 
+  const affectedContactIds = (episode.affectedStakeholders ?? [])
+    .filter((stakeholder) => stakeholder.kind === "contact")
+    .map((stakeholder) => stakeholder.id);
+  const requiredAffectedContactMet = episode.planId !== "rebuildTheNetwork"
+    || affectedContactIds.length === 0
+    || affectedContactIds.some((contactId) => progressSources.has(`contact:${contactId}`));
   const progress = Math.min(episode.target, progressSources.size);
   const progressedEpisode = {
     ...episode,
@@ -609,7 +648,7 @@ export function processCareerRecoveryWeek(
   };
   const financialClearance = episode.kind !== "bankruptcy"
     || (state.finances?.bankruptcyRecoveryCooldown ?? 0) <= 0;
-  if (progress >= episode.target && financialClearance) {
+  if (progress >= episode.target && financialClearance && requiredAffectedContactMet) {
     return resolveRecovery(progressedState, progressedEpisode, true);
   }
 

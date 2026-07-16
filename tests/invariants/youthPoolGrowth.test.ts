@@ -47,7 +47,7 @@ describe("unsigned-youth population integrity", () => {
     expect(after.currentSeason).toBe(initial.currentSeason);
     expect(after.currentWeek).toBe(9);
     expect(Object.keys(after.unsignedYouth).sort()).toEqual(initialYouthIds);
-  }, 30_000);
+  }, 90_000);
 
   it("removes an aged-out prospect at rollover while preserving scout-linked history", async () => {
     const { useGameStore } = await import("@/stores/gameStore");

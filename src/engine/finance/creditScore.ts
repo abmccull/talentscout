@@ -3,6 +3,7 @@
  */
 
 import type { FinancialRecord } from "../core/types";
+import { normalizeCanonicalLoanState } from "./saveMigration";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -53,11 +54,21 @@ export function adjustCreditScore(
 
 /**
  * Process monthly credit score updates based on financial health.
- * Called every 4 weeks alongside other monthly processing.
+ * Called at one of the season's twelve authoritative financial period closes.
  */
-export function processMonthlyCredit(finances: FinancialRecord): FinancialRecord {
+export function processMonthlyCredit(
+  finances: FinancialRecord,
+  week?: number,
+  season?: number,
+): FinancialRecord {
+  const referenceId = week !== undefined && season !== undefined
+    ? `credit-review:s${season}w${week}`
+    : undefined;
+  if (
+    referenceId
+    && finances.transactions.some((transaction) => transaction.referenceId === referenceId)
+  ) return finances;
   let updated = { ...finances };
-  const score = getCreditScore(updated);
 
   // Positive balance bonus
   if (updated.balance > 0) {
@@ -69,7 +80,22 @@ export function processMonthlyCredit(finances: FinancialRecord): FinancialRecord
     updated = adjustCreditScore(updated, CREDIT_EVENTS.negativeBalanceMonth);
   }
 
-  return updated;
+  return referenceId
+    ? {
+        ...updated,
+        transactions: [
+          ...updated.transactions,
+          {
+            week: week!,
+            season: season!,
+            amount: 0,
+            description: "Monthly credit review",
+            referenceId,
+            category: "debt",
+          },
+        ],
+      }
+    : updated;
 }
 
 /**
@@ -121,11 +147,12 @@ export function checkLoanEligibility(
   requestedAmount: number,
   careerTier: number,
 ): { eligible: boolean; reason?: string; interestRate: number; maxAmount: number } {
-  const score = getCreditScore(finances);
+  const normalizedFinances = normalizeCanonicalLoanState(finances);
+  const score = getCreditScore(normalizedFinances);
   const minScore = TIER_MIN_CREDIT[careerTier] ?? 30;
 
   // Calculate max loan amount: capped at 6x monthly income
-  const maxAmount = Math.min(20000, finances.monthlyIncome * 6);
+  const maxAmount = Math.min(20000, normalizedFinances.monthlyIncome * 6);
 
   // Interest rate inversely tied to credit score
   // Score 100 → 3%, Score 50 → 5%, Score 0 → 10%
@@ -141,12 +168,16 @@ export function checkLoanEligibility(
   }
 
   // Deny if existing debt exceeds 50% of monthly income
-  const existingDebt = finances.loans.reduce((sum, l) => sum + l.remainingBalance, 0)
-    + (finances.activeLoan?.remainingBalance ?? 0);
-  if (existingDebt > finances.monthlyIncome * 0.5 && finances.monthlyIncome > 0) {
+  const existingDebt = normalizedFinances.activeLoan?.remainingBalance ?? 0;
+  if (normalizedFinances.activeLoan || (
+    existingDebt > normalizedFinances.monthlyIncome * 0.5
+    && normalizedFinances.monthlyIncome > 0
+  )) {
     return {
       eligible: false,
-      reason: "Existing debt exceeds 50% of monthly income",
+      reason: normalizedFinances.activeLoan
+        ? "An active loan must be cleared before taking another."
+        : "Existing debt exceeds 50% of monthly income",
       interestRate,
       maxAmount,
     };

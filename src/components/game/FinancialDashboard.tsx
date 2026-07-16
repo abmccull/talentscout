@@ -22,7 +22,7 @@ import {
   Clock,
 } from "lucide-react";
 import {
-  calculateProfitAndLoss,
+  calculateMonthlyRunRate,
   forecastCashFlow,
   calculateRevenueBreakdown,
   calculateNetWorth,
@@ -30,16 +30,22 @@ import {
   getEquipmentItem,
   ALL_EQUIPMENT_SLOTS,
 } from "@/engine/finance";
+import { calculateAgencyHealth } from "@/engine/finance/dashboard";
+import {
+  canAcceptConsultingWork,
+  canAcceptRetainerWork,
+} from "@/engine/finance/agencyCapacity";
+import { canCompleteConsulting } from "@/engine/finance/consulting";
 import type { ExpenseType, LoanType } from "@/engine/core/types";
 import type { EquipmentSlot } from "@/engine/finance";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const LOAN_CONFIGS: Record<LoanType, { label: string; maxAmount: number; rate: number; termMonths: number }> = {
-  business: { label: "Business", maxAmount: 20000, rate: 0.05, termMonths: 12 },
-  equipment: { label: "Equipment", maxAmount: 10000, rate: 0.10, termMonths: 6 },
-  emergency: { label: "Emergency", maxAmount: 2000, rate: 0.08, termMonths: 4 },
+const LOAN_LABELS: Record<LoanType, string> = {
+  business: "Business",
+  equipment: "Equipment",
+  emergency: "Emergency",
 };
 
 const CONSULTING_TYPE_LABELS: Record<string, string> = {
@@ -138,6 +144,7 @@ export function FinancialDashboard() {
     acceptConsultingContract,
     declineRetainerOffer,
     declineConsultingOffer,
+    completeConsultingContract,
     sellEquipmentForCashAction,
   } = useGameStore(
     useShallow((state) => ({
@@ -155,6 +162,7 @@ export function FinancialDashboard() {
       acceptConsultingContract: state.acceptConsultingContract,
       declineRetainerOffer: state.declineRetainerOffer,
       declineConsultingOffer: state.declineConsultingOffer,
+      completeConsultingContract: state.completeConsultingContract,
       sellEquipmentForCashAction: state.sellEquipmentForCashAction,
     })),
   );
@@ -178,10 +186,11 @@ export function FinancialDashboard() {
     );
   }
 
-  const pnl = calculateProfitAndLoss(finances, scout);
-  const revenue = calculateRevenueBreakdown(finances, scout);
+  const monthlyRunRate = calculateMonthlyRunRate(finances, scout);
+  const lifetimeRevenue = calculateRevenueBreakdown(finances, scout);
   const netWorth = calculateNetWorth(finances);
   const forecast = forecastCashFlow(finances, scout, 12);
+  const agencyHealth = calculateAgencyHealth(finances, scout);
 
   const activeRetainers = finances.retainerContracts.filter((r) => r.status === "active");
   const suspendedRetainers = finances.retainerContracts.filter((r) => r.status === "suspended");
@@ -193,11 +202,11 @@ export function FinancialDashboard() {
   const pendingConsulting = finances.pendingConsultingOffers ?? [];
   const hasPendingOffers = pendingRetainers.length > 0 || pendingConsulting.length > 0;
 
-  const incomeEntries = Object.entries(revenue).filter(
-    ([key, val]) => key !== "total" && (val as number) > 0,
+  const incomeEntries = Object.entries(monthlyRunRate.incomeBreakdown).filter(
+    ([, val]) => (val as number) > 0,
   ) as [string, number][];
 
-  const expenseEntries = (Object.entries(pnl.expenseBreakdown) as [ExpenseType, number][]).filter(
+  const expenseEntries = (Object.entries(monthlyRunRate.expenseBreakdown) as [ExpenseType, number][]).filter(
     ([, val]) => val > 0,
   );
 
@@ -205,11 +214,11 @@ export function FinancialDashboard() {
 
   const getClubName = (clubId: string) => clubs[clubId]?.name ?? "Unknown Club";
 
-  // Loan calculation helper
   const calcMonthlyPayment = (type: LoanType, amount: number) => {
-    const cfg = LOAN_CONFIGS[type];
-    const totalInterest = amount * cfg.rate * cfg.termMonths;
-    return Math.round((amount + totalInterest) / cfg.termMonths);
+    const offer = loanEligibility.offers[type];
+    if (!offer) return 0;
+    const totalInterest = amount * offer.interestRate * offer.termMonths;
+    return Math.round((amount + totalInterest) / offer.termMonths);
   };
 
   const tabs: { key: TabKey; label: string; badge?: number }[] = [
@@ -355,9 +364,9 @@ export function FinancialDashboard() {
                 <CardContent className="pt-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs text-zinc-500 mb-1">Monthly Income</p>
+                      <p className="text-xs text-zinc-500 mb-1">Recurring Monthly Income</p>
                       <p className="text-xl font-bold text-emerald-400">
-                        {formatCurrency(pnl.totalIncome)}
+                        {formatCurrency(monthlyRunRate.totalIncome)}
                       </p>
                     </div>
                     <TrendingUp size={18} className="text-emerald-600 mt-0.5" aria-hidden="true" />
@@ -371,7 +380,7 @@ export function FinancialDashboard() {
                     <div>
                       <p className="text-xs text-zinc-500 mb-1">Monthly Expenses</p>
                       <p className="text-xl font-bold text-red-400">
-                        {formatCurrency(pnl.totalExpenses)}
+                        {formatCurrency(monthlyRunRate.totalExpenses)}
                       </p>
                     </div>
                     <TrendingDown size={18} className="text-red-600 mt-0.5" aria-hidden="true" />
@@ -383,17 +392,63 @@ export function FinancialDashboard() {
             {/* Net profit callout */}
             <div
               className={`rounded-lg border px-4 py-3 flex items-center justify-between ${
-                pnl.netProfit >= 0
+                monthlyRunRate.netProfit >= 0
                   ? "border-emerald-500/30 bg-emerald-500/5"
                   : "border-red-500/30 bg-red-500/5"
               }`}
             >
-              <span className="text-sm text-zinc-400">Net Monthly Profit / Loss</span>
-              <span className={`text-lg font-bold ${amountColor(pnl.netProfit)}`}>
-                {pnl.netProfit >= 0 ? "+" : ""}
-                {formatCurrency(pnl.netProfit)}
+              <span className="text-sm text-zinc-400">Recurring Monthly Run Rate</span>
+              <span className={`text-lg font-bold ${amountColor(monthlyRunRate.netProfit)}`}>
+                {monthlyRunRate.netProfit >= 0 ? "+" : ""}
+                {formatCurrency(monthlyRunRate.netProfit)}
               </span>
             </div>
+
+            {isIndependent && (
+              <Card className="border-emerald-400/20 bg-emerald-400/[0.04]">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center justify-between text-sm">
+                    <span>Agency pulse</span>
+                    <Badge
+                      variant={agencyHealth.capacity.utilization > 1 ? "destructive" : "outline"}
+                      className="text-[10px]"
+                    >
+                      {Math.round(agencyHealth.capacity.utilization * 100)}% committed
+                    </Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Report capacity</p>
+                    <p className="mt-1 text-lg font-semibold text-white">
+                      {agencyHealth.capacity.committedReportWork}/{agencyHealth.capacity.monthlyReportCapacity}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">monthly work units</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Revenue at risk</p>
+                    <p className={`mt-1 text-lg font-semibold ${agencyHealth.revenueAtRisk > 0 ? "text-amber-300" : "text-emerald-300"}`}>
+                      {formatCurrency(agencyHealth.revenueAtRisk)}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">still needs delivery</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Cash runway</p>
+                    <p className="mt-1 text-lg font-semibold text-white">
+                      {agencyHealth.runwayMonths == null ? "Sustainable" : `${agencyHealth.runwayMonths} mo`}
+                    </p>
+                    <p className="text-[10px] text-zinc-500">at current commitments</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wide text-zinc-500">Client concentration</p>
+                    <p className={`mt-1 text-lg font-semibold ${agencyHealth.clientConcentration > 0.6 ? "text-amber-300" : "text-white"}`}>
+                      {Math.round(agencyHealth.clientConcentration * 100)}%
+                    </p>
+                    <p className="text-[10px] text-zinc-500">largest retainer share</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Breakdown columns */}
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -402,7 +457,7 @@ export function FinancialDashboard() {
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <BarChart2 size={14} className="text-emerald-400" aria-hidden="true" />
-                    Income Breakdown
+                    Recurring Income Breakdown
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
@@ -414,17 +469,20 @@ export function FinancialDashboard() {
                         key={key}
                         label={INCOME_LABELS[key] ?? key}
                         amount={amount}
-                        total={revenue.total}
+                        total={monthlyRunRate.totalIncome}
                         accentClass="bg-emerald-500"
                       />
                     ))
                   )}
-                  {revenue.total > 0 && (
+                  {monthlyRunRate.totalIncome > 0 && (
                     <div className="border-t border-[#27272a] pt-2 flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Total</span>
-                      <span className="font-bold text-emerald-400">{formatCurrency(revenue.total)}</span>
+                      <span className="font-bold text-emerald-400">{formatCurrency(monthlyRunRate.totalIncome)}</span>
                     </div>
                   )}
+                  <p className="text-[10px] text-zinc-600">
+                    Variable report, placement, consulting, sell-on, and award revenue is excluded from this run rate.
+                  </p>
                 </CardContent>
               </Card>
 
@@ -445,15 +503,15 @@ export function FinancialDashboard() {
                         key={key}
                         label={EXPENSE_LABELS[key] ?? key}
                         amount={amount}
-                        total={pnl.totalExpenses}
+                        total={monthlyRunRate.totalExpenses}
                         accentClass="bg-red-500"
                       />
                     ))
                   )}
-                  {pnl.totalExpenses > 0 && (
+                  {monthlyRunRate.totalExpenses > 0 && (
                     <div className="border-t border-[#27272a] pt-2 flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Total</span>
-                      <span className="font-bold text-red-400">{formatCurrency(pnl.totalExpenses)}</span>
+                      <span className="font-bold text-red-400">{formatCurrency(monthlyRunRate.totalExpenses)}</span>
                     </div>
                   )}
                 </CardContent>
@@ -513,7 +571,7 @@ export function FinancialDashboard() {
                   </table>
                 </div>
                 <p className="mt-3 text-[10px] text-zinc-600">
-                  Payments cycle every 4 weeks. Variable income (report sales, fees) is not projected.
+                  Twelve financial periods are distributed across the season. Variable income (report sales, fees) is not projected.
                 </p>
               </CardContent>
             </Card>
@@ -564,7 +622,12 @@ export function FinancialDashboard() {
                         <span className="text-sm font-medium text-white capitalize">
                           {finances.activeLoan.type} Loan
                         </span>
-                        <Badge variant="destructive" className="text-[10px]">Active</Badge>
+                        <Badge
+                          variant={finances.activeLoan.status === "active" ? "outline" : "destructive"}
+                          className="text-[10px] capitalize"
+                        >
+                          {finances.activeLoan.status ?? "active"}
+                        </Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                         <div className="flex justify-between">
@@ -585,6 +648,26 @@ export function FinancialDashboard() {
                             {Math.round(finances.activeLoan.monthlyInterestRate * 100)}%
                           </span>
                         </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Arrears</span>
+                          <span className={(finances.activeLoan.arrears ?? 0) > 0 ? "font-semibold text-red-300" : "text-zinc-300"}>
+                            {formatCurrency(finances.activeLoan.arrears ?? 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Payment record</span>
+                          <span className="text-zinc-300">
+                            {finances.activeLoan.paymentsMade ?? 0} paid · {finances.activeLoan.missedPayments ?? 0} missed
+                          </span>
+                        </div>
+                        {finances.activeLoan.nextPaymentWeek !== undefined && finances.activeLoan.nextPaymentSeason !== undefined && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Next payment</span>
+                            <span className="text-zinc-300">
+                              S{finances.activeLoan.nextPaymentSeason}, W{finances.activeLoan.nextPaymentWeek}
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <Button
                         size="sm"
@@ -607,13 +690,14 @@ export function FinancialDashboard() {
                     <p className="text-xs text-zinc-400">No active loan. Select a loan type to apply.</p>
                     <div className="grid grid-cols-3 gap-2">
                       {loanEligibility.types.map((type) => {
-                        const cfg = LOAN_CONFIGS[type];
+                        const offer = loanEligibility.offers[type];
+                        if (!offer) return null;
                         return (
                           <button
                             key={type}
                             onClick={() => {
                               setSelectedLoanType(type);
-                              setLoanAmount(Math.min(cfg.maxAmount, Math.max(1000, loanAmount)));
+                              setLoanAmount(Math.min(offer.maxAmount, Math.max(500, loanAmount)));
                             }}
                             className={`rounded-md border px-3 py-2 text-left text-xs transition cursor-pointer ${
                               selectedLoanType === type
@@ -621,10 +705,10 @@ export function FinancialDashboard() {
                                 : "border-zinc-700 hover:border-zinc-600"
                             }`}
                           >
-                            <p className="font-medium text-white mb-0.5">{cfg.label}</p>
-                            <p className="text-zinc-500">Up to {formatCurrency(cfg.maxAmount)}</p>
-                            <p className="text-zinc-500">{Math.round(cfg.rate * 100)}% monthly</p>
-                            <p className="text-zinc-500">{cfg.termMonths}-month term</p>
+                            <p className="font-medium text-white mb-0.5">{LOAN_LABELS[type]}</p>
+                            <p className="text-zinc-500">Up to {formatCurrency(offer.maxAmount)}</p>
+                            <p className="text-zinc-500">{(offer.interestRate * 100).toFixed(1)}% monthly</p>
+                            <p className="text-zinc-500">{offer.termMonths}-month term</p>
                           </button>
                         );
                       })}
@@ -635,8 +719,8 @@ export function FinancialDashboard() {
                           <label className="text-xs text-zinc-400 shrink-0">Amount:</label>
                           <input
                             type="range"
-                            min={1000}
-                            max={LOAN_CONFIGS[selectedLoanType].maxAmount}
+                            min={Math.min(500, loanEligibility.offers[selectedLoanType]?.maxAmount ?? 500)}
+                            max={loanEligibility.offers[selectedLoanType]?.maxAmount ?? 500}
                             step={500}
                             value={loanAmount}
                             onChange={(e) => setLoanAmount(Number(e.target.value))}
@@ -666,7 +750,17 @@ export function FinancialDashboard() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-zinc-600">No loan options available.</p>
+                  <div className="space-y-1.5 text-xs text-zinc-500">
+                    <p>No responsible loan options are available right now.</p>
+                    {Object.values(loanEligibility.offers)
+                      .filter((offer) => offer && !offer.eligible && offer.reason)
+                      .slice(0, 2)
+                      .map((offer) => (
+                        <p key={offer!.type} className="text-[10px] text-zinc-600">
+                          {LOAN_LABELS[offer!.type]}: {offer!.reason}
+                        </p>
+                      ))}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -701,7 +795,9 @@ export function FinancialDashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
-                      {pendingRetainers.map((r) => (
+                      {pendingRetainers.map((r) => {
+                        const canAccept = canAcceptRetainerWork(finances, scout, r);
+                        return (
                         <div
                           key={r.id}
                           className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2"
@@ -719,13 +815,25 @@ export function FinancialDashboard() {
                               {formatCurrency(r.monthlyFee)}/mo
                             </span>
                           </div>
-                          <p className="text-[10px] text-zinc-500 mb-2">
-                            {r.requiredReportsPerMonth} reports/month required
+                          <p className="text-[11px] leading-4 text-zinc-300">
+                            {r.brief?.description ?? `${r.requiredReportsPerMonth} decision-ready reports each month.`}
                           </p>
+                          <div className="my-2 flex flex-wrap gap-1.5 text-[10px] text-zinc-400">
+                            <span className="rounded bg-zinc-800 px-1.5 py-0.5">{r.requiredReportsPerMonth} reports/mo</span>
+                            {r.brief && <span className="rounded bg-zinc-800 px-1.5 py-0.5">Quality {r.brief.minimumReportQuality}+</span>}
+                            {r.brief && <span className="rounded bg-zinc-800 px-1.5 py-0.5">Age {r.brief.ageRange[0]}–{r.brief.ageRange[1]}</span>}
+                            <span className="rounded bg-zinc-800 px-1.5 py-0.5">{r.termMonths ?? 3}-month term</span>
+                          </div>
+                          {!canAccept && (
+                            <p className="mb-2 text-[10px] text-red-300">
+                              This would exceed your current report capacity. Add scouting leverage or close another commitment.
+                            </p>
+                          )}
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               className="h-6 text-[11px]"
+                              disabled={!canAccept}
                               onClick={() => acceptRetainerContract(r)}
                             >
                               <CheckCircle size={10} className="mr-1" />
@@ -742,8 +850,11 @@ export function FinancialDashboard() {
                             </Button>
                           </div>
                         </div>
-                      ))}
-                      {pendingConsulting.map((c) => (
+                        );
+                      })}
+                      {pendingConsulting.map((c) => {
+                        const canAccept = canAcceptConsultingWork(finances, scout, c);
+                        return (
                         <div
                           key={c.id}
                           className="rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2"
@@ -758,13 +869,24 @@ export function FinancialDashboard() {
                               {formatCurrency(c.fee)}
                             </span>
                           </div>
-                          <p className="text-[10px] text-zinc-500 mb-2">
-                            Deadline: S{c.deadlineSeason} W{c.deadline}
-                          </p>
+                          <div className="my-2 space-y-1 text-[10px] text-zinc-400">
+                            {(c.deliverables ?? []).map((deliverable) => (
+                              <p key={`${c.id}-${deliverable.type}`}>
+                                {deliverable.required}× {deliverable.description}
+                              </p>
+                            ))}
+                            <p className="text-zinc-500">Deadline: S{c.deadlineSeason} W{c.deadline}</p>
+                          </div>
+                          {!canAccept && (
+                            <p className="mb-2 text-[10px] text-red-300">
+                              Your agency does not have enough delivery capacity for this engagement.
+                            </p>
+                          )}
                           <div className="flex gap-2">
                             <Button
                               size="sm"
                               className="h-6 text-[11px]"
+                              disabled={!canAccept}
                               onClick={() => acceptConsultingContract(c)}
                             >
                               <CheckCircle size={10} className="mr-1" />
@@ -781,7 +903,8 @@ export function FinancialDashboard() {
                             </Button>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 )}
@@ -825,11 +948,25 @@ export function FinancialDashboard() {
                                   {r.reportsDeliveredThisMonth}/{r.requiredReportsPerMonth} reports
                                 </span>
                               </div>
+                              {r.nextSettlementWeek !== undefined && r.nextSettlementSeason !== undefined && (
+                                <p className="mb-1.5 text-[10px] text-zinc-500">
+                                  Invoice decision: Season {r.nextSettlementSeason}, Week {r.nextSettlementWeek}
+                                </p>
+                              )}
+                              {r.brief && (
+                                <p className="mb-2 text-[10px] leading-4 text-zinc-400">
+                                  {r.brief.description} Quality floor {r.brief.minimumReportQuality}.
+                                </p>
+                              )}
                               <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800 mb-2">
                                 <div
                                   className="h-full rounded-full bg-emerald-500 transition-all"
                                   style={{ width: `${deliveryPct}%` }}
                                 />
+                              </div>
+                              <div className="mb-2 flex gap-3 text-[10px] text-zinc-500">
+                                <span>{r.consecutivePeriodsMet ?? 0} periods met</span>
+                                <span>{r.averageDeliveredQuality ?? 0} avg quality</span>
                               </div>
                               <Button
                                 size="sm"
@@ -917,6 +1054,28 @@ export function FinancialDashboard() {
                                 Deadline: S{c.deadlineSeason} W{c.deadline} ({weeksRemaining} week{weeksRemaining !== 1 ? "s" : ""} remaining)
                               </span>
                             </div>
+                            <div className="mt-2 space-y-1">
+                              {(c.deliverables ?? []).map((deliverable) => (
+                                <div
+                                  key={`${c.id}-${deliverable.type}`}
+                                  className="flex items-center justify-between text-[10px]"
+                                >
+                                  <span className="text-zinc-500">{deliverable.description}</span>
+                                  <span className={deliverable.delivered >= deliverable.required ? "text-emerald-300" : "text-amber-300"}>
+                                    {deliverable.delivered}/{deliverable.required}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <Button
+                              size="sm"
+                              className="mt-3 h-7 w-full text-[11px]"
+                              disabled={!canCompleteConsulting(c)}
+                              onClick={() => completeConsultingContract(c.id)}
+                            >
+                              <CheckCircle size={11} className="mr-1.5" />
+                              {canCompleteConsulting(c) ? "Deliver Final Work & Invoice" : "Complete Required Scouting First"}
+                            </Button>
                           </div>
                         );
                       })
@@ -932,7 +1091,37 @@ export function FinancialDashboard() {
         {/* REVENUE HISTORY TAB                                            */}
         {/* ═══════════════════════════════════════════════════════════════ */}
         {activeTab === "revenue" && (
-          <div data-tutorial-id="finances-marketplace">
+          <div className="space-y-6" data-tutorial-id="finances-marketplace">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <BarChart2 size={14} className="text-emerald-400" aria-hidden="true" />
+                  Recorded Career Revenue
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {Object.entries(lifetimeRevenue)
+                  .filter(([key, value]) => key !== "total" && value !== 0)
+                  .map(([key, amount]) => (
+                    <BreakdownRow
+                      key={key}
+                      label={INCOME_LABELS[key] ?? key}
+                      amount={amount}
+                      total={lifetimeRevenue.total}
+                      accentClass="bg-emerald-500"
+                    />
+                  ))}
+                <div className="border-t border-[#27272a] pt-2 flex items-center justify-between text-xs">
+                  <span className="text-zinc-500">Lifetime total</span>
+                  <span className="font-bold text-emerald-400">
+                    {formatCurrency(lifetimeRevenue.total)}
+                  </span>
+                </div>
+                <p className="text-[10px] text-zinc-600">
+                  Source totals are lifetime counters. Salary includes payroll recorded in the transaction ledger.
+                </p>
+              </CardContent>
+            </Card>
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">

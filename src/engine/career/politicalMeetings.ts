@@ -21,7 +21,9 @@ import {
   evaluateStakeholderMemoryPolicy,
   recordStakeholderMemory,
 } from "@/engine/consequences/stakeholderMemoryPolicy";
+import { getManagerStakeholderRef } from "@/engine/consequences/stakeholderProfiles";
 import type { StakeholderMemory } from "@/engine/consequences/types";
+import { getPhilosophyPreferredAgeRange } from "@/engine/world/recruitmentIdentity";
 
 export const MANAGER_MEETING_FATIGUE_COST = 4;
 export const BOARD_MEETING_FATIGUE_COST = 8;
@@ -128,16 +130,6 @@ function round1(value: number): number {
 
 function currentDate(state: GameState): { week: number; season: number } {
   return { week: state.currentWeek, season: state.currentSeason };
-}
-
-function managerStakeholderId(state: GameState): string {
-  const clubId = state.scout.currentClubId ?? "unemployed";
-  const managerId = state.clubs[clubId]?.managerId ?? "unidentified";
-  const managerName = state.managerProfiles[clubId]?.managerName
-    ?? state.scout.managerRelationship?.managerName
-    ?? "unknown-manager";
-  const nameKey = managerName.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return `${clubId}:${managerId}:${nameKey}`;
 }
 
 function hasScheduledPoliticalMeeting(
@@ -429,12 +421,6 @@ function createMeetingDirective(
     RW: ["pace", "dribbling", "crossing", "agility"],
     ST: ["finishing", "heading", "pace", "composure"],
   };
-  const ageRanges = {
-    winNow: [24, 31],
-    academyFirst: [17, 23],
-    marketSmart: [21, 27],
-    globalRecruiter: [19, 29],
-  } as const;
   const priority: ManagerDirective["priority"] = tone === "positive" ? "high" : "medium";
   const minCAStars = club.reputation >= 80 ? 3.5 : club.reputation >= 60 ? 3 : club.reputation >= 40 ? 2.5 : 2;
   const budgetShare = priority === "high" ? 0.3 : 0.2;
@@ -445,7 +431,7 @@ function createMeetingDirective(
     position,
     priority,
     budgetAllocation: Math.round(club.budget * budgetShare * (state.boardProfile?.budgetMultiplier ?? 1)),
-    ageRange: [...ageRanges[club.scoutingPhilosophy]],
+    ageRange: getPhilosophyPreferredAgeRange(club.scoutingPhilosophy),
     minCAStars,
     keyAttributes: attributeProfiles[position],
     submittedReportIds: [],
@@ -465,7 +451,10 @@ export function conductManagerMeeting(
   if (!eligibility.eligible) return { state, executed: false, reason: eligibility.reason };
 
   const clubId = state.scout.currentClubId!;
-  const stakeholderId = managerStakeholderId(state);
+  const stakeholderId = getManagerStakeholderRef(state, clubId)?.id;
+  if (!stakeholderId) {
+    return { state, executed: false, reason: "The current manager identity is unavailable." };
+  }
   const relationship = state.scout.managerRelationship!;
   const preference = state.managerProfiles[clubId]?.preference ?? relationship.scoutingPreference;
   const now = currentDate(state);

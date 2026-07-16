@@ -35,6 +35,20 @@ const tempDirs: string[] = [];
 // correct integrity result into a nondeterministic five-second test failure.
 const RELEASE_CHECK_TIMEOUT_MS = 20_000;
 
+interface ReleaseSoakPlan {
+  executionIdentityHash: string;
+  executionIdentity: {
+    candidateCommitSha: string;
+    candidateTreeSha: string;
+    maxSerializedBytes: number;
+  };
+  sourceTreeClean: boolean;
+  resumeEnabled: boolean;
+  reusableSeedIndices: number[];
+  pendingSeedIndices: number[];
+  rejectedCheckpoints: Array<{ seedIndex: number; reason: string }>;
+}
+
 function run(cwd: string, command: string, args: string[]) {
   const result = spawnSync(command, args, { cwd, encoding: "utf8" });
   if (result.status !== 0) {
@@ -137,6 +151,101 @@ function check(cwd: string, overrides: Record<string, string> = {}) {
   );
 }
 
+function planReleaseSoak(
+  cwd: string,
+  workerDirectory: string,
+  overrides: Record<string, string> = {},
+): ReleaseSoakPlan {
+  const result = spawnSync(process.execPath, [soakOrchestrator], {
+    cwd,
+    env: releaseNeutralEnvironment({
+      SOAK_SEEDS: "1",
+      SOAK_SEASONS: "1",
+      SOAK_CONCURRENCY: "1",
+      SOAK_PLAN_ONLY: "true",
+      SOAK_WORKER_DIRECTORY: workerDirectory,
+      ...overrides,
+    }),
+    encoding: "utf8",
+  });
+  expect(result.status, result.stderr).toBe(0);
+  const line = result.stdout
+    .split(/\r?\n/)
+    .find((entry) => entry.startsWith("SOAK_RELEASE_PLAN "));
+  expect(line).toBeDefined();
+  return JSON.parse(line!.slice("SOAK_RELEASE_PLAN ".length)) as ReleaseSoakPlan;
+}
+
+function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
+  const memorySample = {
+    season: 2,
+    heapUsedBytes: 1,
+    rssBytes: 1,
+    externalBytes: 0,
+    arrayBuffersBytes: 0,
+  };
+  return {
+    schemaVersion: 2,
+    generatedAt: "2026-07-16T00:00:00.000Z",
+    profile: {
+      kind: "full-canonical-weekly-career",
+      seedCount: 1,
+      seasonCount: 1,
+      maxSerializedBytes: plan.executionIdentity.maxSerializedBytes,
+      collectionByteBudgets: { players: 1024 },
+    },
+    runs: [{
+      seed: "release-soak-01",
+      reachedSeason: 2,
+      canonicalTicks: 38,
+      calendarWeeksSpanned: 38,
+      initialBytes: 1,
+      finalBytes: 1,
+      peakBytes: 1,
+      finalToInitialRatio: 1,
+      worldHistorySeasons: 1,
+      worldHistoryBytes: 1,
+      largestCollections: [],
+      seasonGrowth: [{
+        season: 2,
+        serializedBytes: 1,
+        growthBytes: 0,
+        compactionRemovedBytes: 0,
+        compactionEvents: 0,
+        collectionBytes: { players: 1 },
+        collectionCompactionDeltas: { players: 0 },
+      }],
+      compaction: {
+        events: 0,
+        seasonsWithReduction: 0,
+        totalRemovedBytes: 0,
+        collectionDeltas: { players: 0 },
+      },
+      memory: {
+        initial: memorySample,
+        final: memorySample,
+        peakHeapUsedBytes: 1,
+        peakRssBytes: 1,
+        samples: [memorySample],
+      },
+      weeklyLatencyMs: { p50: 1, p95: 1, max: 1, mean: 1 },
+      worldHealth: [{}],
+      digest: "a".repeat(64),
+    }],
+    checkpoint: {
+      protocolVersion: 1,
+      executionIdentityHash: plan.executionIdentityHash,
+      candidateCommitSha: plan.executionIdentity.candidateCommitSha,
+      candidateTreeSha: plan.executionIdentity.candidateTreeSha,
+      seedIndex: 1,
+      seed: "release-soak-01",
+      seasonCount: 1,
+      completedAt: "2026-07-16T00:00:00.000Z",
+      elapsedMs: 1,
+    },
+  };
+}
+
 afterEach(() => {
   while (tempDirs.length > 0) rmSync(tempDirs.pop()!, { recursive: true, force: true });
 });
@@ -206,6 +315,60 @@ describe("release evidence checker", () => {
       "SOAK_CONCURRENCY must be positive and no greater than SOAK_SEEDS",
     );
   });
+
+  it("resumes only complete workers bound to the exact clean candidate and profile", () => {
+    const { cwd } = fixture();
+    const workerDirectory = join(
+      cwd,
+      "artifacts",
+      "release",
+      "generated",
+      "long-career-workers",
+    );
+    mkdirSync(workerDirectory, { recursive: true });
+
+    const initial = planReleaseSoak(cwd, workerDirectory);
+    expect(initial).toMatchObject({
+      sourceTreeClean: true,
+      resumeEnabled: true,
+      reusableSeedIndices: [],
+      pendingSeedIndices: [1],
+    });
+
+    const stale = validSoakWorkerCheckpoint(initial);
+    stale.checkpoint.executionIdentityHash = "0".repeat(64);
+    writeJson(join(workerDirectory, "seed-01-run.json"), stale);
+    const rejected = planReleaseSoak(cwd, workerDirectory);
+    expect(rejected.reusableSeedIndices).toEqual([]);
+    expect(rejected.rejectedCheckpoints[0]?.reason).toContain(
+      "belongs to another candidate, runtime, or soak profile",
+    );
+
+    writeJson(
+      join(workerDirectory, "seed-01-run.json"),
+      validSoakWorkerCheckpoint(initial),
+    );
+    const reusable = planReleaseSoak(cwd, workerDirectory);
+    expect(reusable.reusableSeedIndices).toEqual([1]);
+    expect(reusable.pendingSeedIndices).toEqual([]);
+
+    const changedBudget = planReleaseSoak(cwd, workerDirectory, {
+      SOAK_MAX_SERIALIZED_BYTES: String(64 * 1024 * 1024),
+    });
+    expect(changedBudget.reusableSeedIndices).toEqual([]);
+    expect(changedBudget.rejectedCheckpoints[0]?.reason).toContain(
+      "belongs to another candidate, runtime, or soak profile",
+    );
+
+    writeFileSync(join(cwd, "source.txt"), "candidate source changed\n", "utf8");
+    const dirty = planReleaseSoak(cwd, workerDirectory);
+    expect(dirty).toMatchObject({
+      sourceTreeClean: false,
+      resumeEnabled: false,
+      reusableSeedIndices: [],
+      pendingSeedIndices: [1],
+    });
+  }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("generates a candidate-bound manifest without changing tracked state", () => {
     const { cwd, commitSha } = fixture();
@@ -363,6 +526,7 @@ describe("release evidence checker", () => {
     run(cwd, "git", ["add", "docs/release/release-evidence-status.json"]);
     run(cwd, "git", ["commit", "-m", "add long save policy"]);
     const updatedSha = run(cwd, "git", ["rev-parse", "HEAD"]);
+    const updatedTreeSha = run(cwd, "git", ["rev-parse", "HEAD^{tree}"]);
     const manifestPath = join(cwd, "artifacts", "release", "candidate-package-manifest.json");
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
     manifest.candidateCommitSha = updatedSha;
@@ -374,14 +538,44 @@ describe("release evidence checker", () => {
       calendarWeeksSpanned: 1140,
       digest: `digest-${index + 1}`,
     }));
+    const executionIdentity = {
+      protocolVersion: 1,
+      candidateCommitSha: updatedSha,
+      candidateTreeSha: updatedTreeSha,
+      seedCount: 20,
+      seasonCount: 30,
+      concurrency: 3,
+      maxSerializedBytes: 80 * 1024 * 1024,
+      profileKind: "full-canonical-weekly-career",
+      processIsolation: "one-seeded-career-per-process",
+      nodeVersion: process.version,
+      nodeOptions: "",
+      platform: process.platform,
+      architecture: process.arch,
+      availableParallelism: 4,
+      totalMemoryBytes: 16 * 1024 * 1024 * 1024,
+      cpuModel: "release-test-cpu",
+    };
     mkdirSync(join(cwd, "artifacts", "release", "generated"), { recursive: true });
     writeJson(join(cwd, "artifacts", "release", "generated", "long-career.json"), {
       schemaVersion: 3,
       evidenceKind: "long-career-release-soak",
       candidateCommitSha: updatedSha,
+      candidateTreeSha: updatedTreeSha,
       candidateBound: true,
       sourceTreeClean: true,
       status: "Passed",
+      checkpoint: {
+        protocolVersion: 1,
+        executionIdentity,
+        executionIdentityHash: createHash("sha256")
+          .update(JSON.stringify(executionIdentity))
+          .digest("hex"),
+        resumeEnabled: true,
+        reusedSeedCount: 0,
+        executedSeedCount: 20,
+        determinismReplayExecuted: true,
+      },
       profile: {
         kind: "full-canonical-weekly-career",
         skippedOrdinaryWeeks: false,

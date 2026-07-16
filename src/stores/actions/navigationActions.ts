@@ -16,6 +16,11 @@ import {
 } from "@/lib/playerResolution";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { resolveGameScreenForBuild } from "../gameScreenScope";
+import {
+  acknowledgeCareerMoment,
+  suppressCareerMoment,
+  suppressPendingCareerMoments,
+} from "@/engine/career/careerMoments";
 
 export function createNavigationActions(get: GetState, set: SetState) {
   return {
@@ -66,6 +71,49 @@ export function createNavigationActions(get: GetState, set: SetState) {
       scenarioProgress: null,
     }),
     dismissCelebration: () => set({ pendingCelebration: null }),
+    acknowledgeCareerMoment: (momentId: string) => {
+      const { gameState } = get();
+      if (!gameState) return;
+      set({
+        gameState: {
+          ...gameState,
+          careerMoments: acknowledgeCareerMoment(
+            gameState.careerMoments,
+            momentId,
+            { week: gameState.currentWeek, season: gameState.currentSeason },
+          ),
+        },
+      });
+    },
+    suppressCareerMoments: (reason?: string) => {
+      const { gameState } = get();
+      if (!gameState?.careerMoments?.pending.length) return;
+      set({
+        gameState: {
+          ...gameState,
+          careerMoments: suppressPendingCareerMoments(
+            gameState.careerMoments,
+            { week: gameState.currentWeek, season: gameState.currentSeason },
+            reason,
+          ),
+        },
+      });
+    },
+    suppressCareerMoment: (momentId: string, reason?: string) => {
+      const { gameState } = get();
+      if (!gameState) return;
+      set({
+        gameState: {
+          ...gameState,
+          careerMoments: suppressCareerMoment(
+            gameState.careerMoments,
+            momentId,
+            { week: gameState.currentWeek, season: gameState.currentSeason },
+            reason,
+          ),
+        },
+      });
+    },
     dismissSeasonAwards: () => {
       const { gameState } = get();
       if (!gameState?.seasonAwardsData) return;

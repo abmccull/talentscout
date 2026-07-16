@@ -88,7 +88,6 @@ import {
   applyWeekResults,
   ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
-  ACTIVITY_FATIGUE_COSTS as ACTIVITY_FATIGUE_COSTS_MAP,
 } from "@/engine/core/calendar";
 import { ensureLeadershipDelegationTeam } from "@/engine/career/index";
 import {
@@ -98,6 +97,15 @@ import {
 import {
   processLeadershipPortfolioWeek,
 } from "@/engine/career/leadership";
+import {
+  careerMomentFromLeadership,
+  careerMomentFromNarrativeEvent,
+  careerMomentFromPerformanceReview,
+  careerMomentFromRecovery,
+  createCareerMoment,
+  enqueueCareerMoments,
+  type CareerMoment,
+} from "@/engine/career/careerMoments";
 import {
   generateLegacyProfile as generateLegacyProfileEngine,
   applyLegacyPerks as applyLegacyPerksEngine,
@@ -117,7 +125,7 @@ import {
   getScoutHomeCountry as getScoutHome,
   processInternationalWeek,
   classifyStandingZone,
-  deriveRegionalPresence,
+  getRegionalTravelQuote,
   getActiveWorldConditionNames,
   getWorldConditionModifiers,
   getPlayerScoutingCountry,
@@ -137,7 +145,6 @@ import {
   getActiveEquipmentBonuses,
   migrateEquipmentLevel,
   negotiateRetainerTerms,
-  processAnnualAwards,
   calculateSigningBonus,
   processAssistantScoutWeek,
   processWeeklyInfrastructureCosts,
@@ -146,13 +153,21 @@ import {
 } from "@/engine/finance";
 import { getCreditScore } from "@/engine/finance/creditScore";
 import { getLifestyleEffects } from "@/engine/finance/expenses";
+import { isFinancialPeriodClose } from "@/engine/core/annualization";
 import {
+  createStoryDirectorStateV2,
   directWeeklyNarrativeEvent,
+  directWeeklyStoryEmissionsV2,
+  inferNarrativeEntityRefsV2,
+  recordEventDirectorOutcome,
   acknowledgeEvent,
   checkStorylineTriggers,
   processActiveStorylines,
   advanceChain,
+  type WeeklyNarrativeEmissionV2,
 } from "@/engine/events";
+import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
+import { directWeeklyRelationshipConflict } from "@/engine/consequences/relationshipConflictDirector";
 import {
   generateRivalScouts,
   processRivalScoutWeek,
@@ -170,6 +185,7 @@ import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import { generateManagerProfiles } from "@/engine/analytics";
 import {
   advanceYouthRecruitmentBriefs,
+  directWeeklyYouthProfessionalCase,
   generateYouthRecruitmentBriefs,
 } from "@/engine/youth";
 import {
@@ -224,6 +240,17 @@ export function getNarrativeRetentionAge(
   return Number.POSITIVE_INFINITY;
 }
 
+/** Reconcile recurring cast identity after contacts, staff and rivals move. */
+export function refreshWeeklyStakeholderProfiles(state: GameState): GameState {
+  return {
+    ...state,
+    stakeholderProfiles: createStakeholderProfileRegistry(
+      state,
+      state.stakeholderProfiles,
+    ),
+  };
+}
+
 import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import {
   createPrediction,
@@ -270,6 +297,10 @@ import { processWeeklyReportActivities } from "./weeklyReportActivities";
 import { processWeeklyActivityFeedback } from "./weeklyActivityFeedback";
 import { processWeeklyObservationActivities } from "./weeklyObservationActivities";
 import { processWeeklyPlacementResolution } from "./weeklyPlacementResolution";
+import {
+  applyDirectedWorldConditionArcBeats,
+  prepareWorldConditionArcWeek,
+} from "./weeklyWorldConditionArcs";
 
 export { projectExpiredNarrativeDefaults } from "./weeklyNarrativeConsequences";
 
@@ -517,7 +548,36 @@ export function createWeeklyActions(
     const rng = createRNG(`${gameState.seed}-week-${gameState.currentWeek}-${gameState.currentSeason}`);
 
     // Process scheduled activities → fatigue, skill XP, attribute XP
-    const weekResult = processCompletedWeek(gameState.schedule, gameState.scout, rng);
+    // Travel posture is supplied to the calendar's single authoritative
+    // fatigue path, keeping manual, batch, and save/reload advancement equal.
+    const scheduledTravelActivity = gameState.schedule.activities.find(
+      (activity) => activity?.type === "internationalTravel" || activity?.type === "travel",
+    );
+    const travelDestination = scheduledTravelActivity?.targetId
+      ?? gameState.scout.travelBooking?.destinationCountry;
+    const travelPosture = gameState.scout.travelBooking?.posture;
+    const quotedTravelFatigueMultiplier = travelDestination
+      ? getRegionalTravelQuote(
+          gameState,
+          travelDestination,
+          travelPosture,
+        ).fatigueMultiplier
+      : 1;
+    const infrastructureTravelMultiplier = calculateInfrastructureEffects(
+      gameState.scoutingInfrastructure,
+    ).travelFatigueMultiplier;
+    const travelFatigueMultiplier = Math.max(
+      0,
+      quotedTravelFatigueMultiplier * infrastructureTravelMultiplier,
+    );
+    const weekResult = processCompletedWeek(
+      gameState.schedule,
+      gameState.scout,
+      rng,
+      scheduledTravelActivity
+        ? { [scheduledTravelActivity.type]: travelFatigueMultiplier }
+        : undefined,
+    );
 
     // ── Roll activity quality per day/instance ─────────────────────────────
     // This keeps multi-day activities dynamic (e.g., day 1 excellent, day 2 poor)
@@ -790,28 +850,6 @@ export function createWeeklyActions(
     const fatigueReduction = weekToolBonuses.fatigueReduction ?? 0;
     const travelFatigueReduction = weekToolBonuses.travelFatigueReduction ?? 0;
 
-    const scheduledTravelActivity = gameState.schedule.activities.find(
-      (activity) => activity?.type === "internationalTravel" || activity?.type === "travel",
-    );
-    const travelDestination = scheduledTravelActivity?.targetId
-      ?? gameState.scout.travelBooking?.destinationCountry;
-    const infrastructureTravelMultiplier = calculateInfrastructureEffects(
-      gameState.scoutingInfrastructure,
-    ).travelFatigueMultiplier;
-    const presenceTravelMultiplier = travelDestination
-      ? deriveRegionalPresence(gameState, travelDestination).effects.travelFatigueMultiplier
-      : 1;
-    const baseTravelFatigue = scheduledTravelActivity
-      ? ACTIVITY_FATIGUE_COSTS_MAP[scheduledTravelActivity.type]
-      : 0;
-    const regionalAndInfrastructureTravelReduction = Math.max(
-      0,
-      Math.round(
-        baseTravelFatigue
-          * (1 - infrastructureTravelMultiplier * presenceTravelMultiplier),
-      ),
-    );
-
     // Equipment fatigueReduction: per-activity-type reductions from equipped items
     let equipFatigueReduction = 0;
     if (weekEquipBonuses?.fatigueReduction) {
@@ -829,7 +867,6 @@ export function createWeeklyActions(
       fatigueReduction > 0
       || travelFatigueReduction > 0
       || equipFatigueReduction > 0
-      || regionalAndInfrastructureTravelReduction > 0
     ) {
       // Check if any travel activities were scheduled this week
       const hasTravelActivity = gameState.schedule.activities.some(
@@ -837,8 +874,7 @@ export function createWeeklyActions(
       );
       const totalReduction = fatigueReduction
         + (hasTravelActivity ? travelFatigueReduction : 0)
-        + equipFatigueReduction
-        + (hasTravelActivity ? regionalAndInfrastructureTravelReduction : 0);
+        + equipFatigueReduction;
       if (totalReduction > 0) {
         updatedScout = {
           ...updatedScout,
@@ -1260,29 +1296,19 @@ export function createWeeklyActions(
     weeklyPipeline.enter("world-systems");
     let stateWithPhase2 = stateWithInternational;
 
-    // 1. Process finances (only acts on weeks that are multiples of 4)
+    // 1. Process finances at the competition's twelve financial period closes.
     //    Difficulty modifiers adjust income and expenses.
     if (stateWithPhase2.finances) {
       const financeRng = createRNG(
         `${gameState.seed}-finance-${gameState.currentWeek}-${gameState.currentSeason}`,
       );
       void financeRng; // seed is consumed for determinism; finance is pure math
-      // Migrate old saves that lack the new loans/starterBonus fields
-      const existingBonus = stateWithPhase2.finances.starterBonus ?? { firstReportBonusUsed: false, firstPlacementBonusUsed: false, starterStipendWeeksRemaining: 0 };
-      const migratedFinances = {
-        ...stateWithPhase2.finances,
-        loans: stateWithPhase2.finances.loans ?? [],
-        starterBonus: {
-          ...existingBonus,
-          // Existing saves without stipend tracking are treated as exhausted
-          starterStipendWeeksRemaining: existingBonus.starterStipendWeeksRemaining ?? 0,
-        },
-      };
       const rawFinances = processWeeklyFinances(
-        migratedFinances,
+        stateWithPhase2.finances,
         stateWithPhase2.scout,
         stateWithPhase2.currentWeek,
         stateWithPhase2.currentSeason,
+        getSeasonLength(stateWithPhase2.fixtures, stateWithPhase2.currentSeason),
       );
 
       // Apply starter stipend (guaranteed income for first 4 weeks)
@@ -1295,7 +1321,10 @@ export function createWeeklyActions(
 
       // Apply difficulty multipliers to income/expenses on pay weeks
       const diffMods = getDifficultyModifiers(stateWithPhase2.difficulty);
-      if (stateWithPhase2.currentWeek % 4 === 0) {
+      if (isFinancialPeriodClose(
+        stateWithPhase2.currentWeek,
+        getSeasonLength(stateWithPhase2.fixtures, stateWithPhase2.currentSeason),
+      )) {
         const baseIncome = updatedFinances.monthlyIncome;
         // Contractual debt service is not an operating expense and must not be
         // charged again through the difficulty expense multiplier.
@@ -1794,48 +1823,10 @@ export function createWeeklyActions(
     if (!stateWithPhase2.eventChains) {
       stateWithPhase2 = { ...stateWithPhase2, eventChains: [] };
     }
+    const priorNarrativeEvents = stateWithPhase2.narrativeEvents;
+    const priorEventDirector = stateWithPhase2.eventDirector;
     const weeklyResult = directWeeklyNarrativeEvent(eventRng, stateWithPhase2);
-    stateWithPhase2 = {
-      ...stateWithPhase2,
-      eventDirector: weeklyResult.director,
-    };
     const narrativeEvent = weeklyResult.event;
-
-    if (narrativeEvent) {
-      const eventInboxMessage: InboxMessage = {
-        id: `narrative-${narrativeEvent.id}`,
-        week: stateWithPhase2.currentWeek,
-        season: stateWithPhase2.currentSeason,
-        type: "event" as const,
-        title: narrativeEvent.title,
-        body: narrativeEvent.description,
-        read: false,
-        actionRequired: (narrativeEvent.choices?.length ?? 0) > 0,
-        relatedId: narrativeEvent.id,
-        relatedEntityType: "narrative" as const,
-      };
-      stateWithPhase2 = registerNarrativeDecisions({
-        ...stateWithPhase2,
-        narrativeEvents: [...stateWithPhase2.narrativeEvents, narrativeEvent],
-        inbox: [...stateWithPhase2.inbox, eventInboxMessage],
-      }, [narrativeEvent]);
-    }
-
-    // F2: Update event chains if a chain was advanced or started
-    if (weeklyResult.advancedChain) {
-      const updatedChains = (stateWithPhase2.eventChains ?? []).map((c) =>
-        c.id === weeklyResult.advancedChain!.chain.id
-          ? weeklyResult.advancedChain!.chain
-          : c,
-      );
-      stateWithPhase2 = { ...stateWithPhase2, eventChains: updatedChains };
-    }
-    if (weeklyResult.newChain) {
-      stateWithPhase2 = {
-        ...stateWithPhase2,
-        eventChains: [...(stateWithPhase2.eventChains ?? []), weeklyResult.newChain.chain],
-      };
-    }
 
     // 3b. Storyline system — trigger new storylines and advance active ones
     const storylineRng = createRNG(
@@ -1849,21 +1840,114 @@ export function createWeeklyActions(
       storylineRng,
       0.05 * storylineModifiers.storylineChanceMultiplier,
     );
-    if (newStoryline) {
-      stateWithPhase2 = {
-        ...stateWithPhase2,
-        activeStorylines: [...stateWithPhase2.activeStorylines, newStoryline],
-      };
-    }
+    // A new storyline remains provisional until the unified director grants it
+    // this week's opening slot. Existing due beats retain continuation priority.
+    const storylinesForProcessing = newStoryline
+      ? [...stateWithPhase2.activeStorylines, newStoryline]
+      : stateWithPhase2.activeStorylines;
+    const storylineProcessingState = newStoryline
+      ? { ...stateWithPhase2, activeStorylines: storylinesForProcessing }
+      : stateWithPhase2;
 
-    // Advance all active storylines that are due this week
     const { events: storylineEvents, updatedStorylines } = processActiveStorylines(
-      stateWithPhase2,
+      storylineProcessingState,
       storylineRng,
     );
 
-    if (updatedStorylines !== stateWithPhase2.activeStorylines || storylineEvents.length > 0) {
-      const storylineInboxMessages: InboxMessage[] = storylineEvents.map((evt) => ({
+    // Persistent world-condition arcs share the same opening/continuation gate
+    // as standalone events, chains, storylines, and specials. This prevents a
+    // second narrative authority from flooding the same week with prompts.
+    const worldArcWeek = prepareWorldConditionArcWeek(stateWithPhase2);
+    stateWithPhase2 = worldArcWeek.state;
+
+    const emissions: WeeklyNarrativeEmissionV2[] = [];
+    if (narrativeEvent) {
+      emissions.push({
+        event: narrativeEvent,
+        ...inferNarrativeEntityRefsV2(stateWithPhase2, narrativeEvent),
+        chain: weeklyResult.advancedChain?.chain ?? weeklyResult.newChain?.chain,
+        continuation: Boolean(weeklyResult.advancedChain),
+      });
+    }
+    for (const event of storylineEvents) {
+      emissions.push({
+        event,
+        ...inferNarrativeEntityRefsV2(stateWithPhase2, event),
+        storyline: updatedStorylines.find((storyline) => storyline.id === event.storylineId),
+        continuation: !newStoryline || event.storylineId !== newStoryline.id,
+      });
+    }
+
+    const storyDirection = directWeeklyStoryEmissionsV2({
+      rootSeed: stateWithPhase2.runManifest.rootSeed,
+      state: createStoryDirectorStateV2(stateWithPhase2.storyDirectorV2),
+      now: {
+        week: stateWithPhase2.currentWeek,
+        season: stateWithPhase2.currentSeason,
+      },
+      priorEvents: priorNarrativeEvents,
+      emissions,
+      candidates: worldArcWeek.beats.map((beat) => beat.candidate),
+      activeChoiceCount: Object.values(stateWithPhase2.consequenceState.decisions)
+        .filter((decision) => decision.status === "offered")
+        .length,
+      seasonLength: getSeasonLength(
+        stateWithPhase2.fixtures,
+        stateWithPhase2.currentSeason,
+      ),
+    });
+    const acceptedEventIds = new Set(
+      storyDirection.accepted.map(({ emission }) => emission.event.id),
+    );
+    const acceptedNarrativeEvents = emissions
+      .map(({ event }) => event)
+      .filter((event) => acceptedEventIds.has(event.id));
+    const acceptedNewStoryline = Boolean(
+      newStoryline
+      && acceptedNarrativeEvents.some((event) => event.storylineId === newStoryline.id),
+    );
+    const authoritativeStorylines = newStoryline && !acceptedNewStoryline
+      ? updatedStorylines.filter((storyline) => storyline.id !== newStoryline.id)
+      : updatedStorylines;
+    let authoritativeChains = stateWithPhase2.eventChains ?? [];
+    if (
+      weeklyResult.advancedChain
+      && weeklyResult.advancedChain.event
+      && acceptedEventIds.has(weeklyResult.advancedChain.event.id)
+    ) {
+      authoritativeChains = authoritativeChains.map((chain) =>
+        chain.id === weeklyResult.advancedChain!.chain.id
+          ? weeklyResult.advancedChain!.chain
+          : chain,
+      );
+    }
+    if (weeklyResult.newChain && acceptedEventIds.has(weeklyResult.newChain.event.id)) {
+      authoritativeChains = [...authoritativeChains, weeklyResult.newChain.chain];
+    }
+
+    const featuredEvent = acceptedNarrativeEvents[0] ?? null;
+    stateWithPhase2 = {
+      ...stateWithPhase2,
+      storyDirectorV2: storyDirection.state,
+      eventDirector: recordEventDirectorOutcome(
+        priorEventDirector,
+        featuredEvent,
+        Boolean(featuredEvent?.specialEventId),
+        stateWithPhase2.currentSeason,
+      ),
+      eventChains: authoritativeChains,
+      activeStorylines: authoritativeStorylines,
+    };
+    stateWithPhase2 = applyDirectedWorldConditionArcBeats({
+      state: stateWithPhase2,
+      beats: worldArcWeek.beats,
+      acceptedBeatIds: new Set(
+        storyDirection.acceptedCandidates.map(({ candidate }) => candidate.id),
+      ),
+    });
+
+    if (acceptedNarrativeEvents.length > 0) {
+      const narrativeInboxMessages: InboxMessage[] = acceptedNarrativeEvents.map((evt) => ({
         id: `narrative-${evt.id}`,
         week: stateWithPhase2.currentWeek,
         season: stateWithPhase2.currentSeason,
@@ -1878,11 +1962,17 @@ export function createWeeklyActions(
 
       stateWithPhase2 = registerNarrativeDecisions({
         ...stateWithPhase2,
-        narrativeEvents: [...stateWithPhase2.narrativeEvents, ...storylineEvents],
-        inbox: [...stateWithPhase2.inbox, ...storylineInboxMessages],
-        activeStorylines: updatedStorylines,
-      }, storylineEvents);
+        narrativeEvents: [...stateWithPhase2.narrativeEvents, ...acceptedNarrativeEvents],
+        inbox: [...stateWithPhase2.inbox, ...narrativeInboxMessages],
+      }, acceptedNarrativeEvents);
     }
+
+    stateWithPhase2 = directWeeklyRelationshipConflict({
+      state: stateWithPhase2,
+    }).state;
+    stateWithPhase2 = directWeeklyYouthProfessionalCase({
+      state: stateWithPhase2,
+    }).state;
 
     // 4. Check for newly unlocked tools
     const toolRng = createRNG(
@@ -2052,12 +2142,109 @@ export function createWeeklyActions(
       };
     }
     newState = processLeadershipPortfolioWeek(newState);
+
+    const momentCandidates: CareerMoment[] = [];
+    const priorNarrativeIds = new Set(gameState.narrativeEvents.map((event) => event.id));
+    for (const event of newState.narrativeEvents) {
+      if (priorNarrativeIds.has(event.id)) continue;
+      const moment = careerMomentFromNarrativeEvent(event, newState.runManifest.rootSeed);
+      if (moment) momentCandidates.push(moment);
+    }
+    const priorReviewKeys = new Set(gameState.performanceReviews.map((review) =>
+      `${review.season}:${review.outcome}`,
+    ));
+    for (const review of newState.performanceReviews) {
+      if (priorReviewKeys.has(`${review.season}:${review.outcome}`)) continue;
+      const moment = careerMomentFromPerformanceReview(
+        review,
+        newState.runManifest.rootSeed,
+        { week: newState.currentWeek, season: newState.currentSeason },
+      );
+      if (moment) momentCandidates.push(moment);
+    }
+    const previousRecoveryStatus = new Map(
+      [gameState.careerRecovery?.current, ...(gameState.careerRecovery?.history ?? [])]
+        .filter((episode): episode is NonNullable<typeof episode> => Boolean(episode))
+        .map((episode) => [episode.id, episode.status]),
+    );
+    for (const episode of [
+      newState.careerRecovery?.current,
+      ...(newState.careerRecovery?.history ?? []),
+    ]) {
+      if (!episode || previousRecoveryStatus.get(episode.id) === episode.status) continue;
+      const moment = careerMomentFromRecovery(episode, newState.runManifest.rootSeed);
+      if (moment) momentCandidates.push(moment);
+    }
+    const previousLeadershipStatus = new Map(
+      Object.values(gameState.leadershipPortfolio?.responsibilities ?? {})
+        .map((responsibility) => [responsibility.id, responsibility.status]),
+    );
+    for (const responsibility of Object.values(
+      newState.leadershipPortfolio?.responsibilities ?? {},
+    )) {
+      if (previousLeadershipStatus.get(responsibility.id) === responsibility.status) continue;
+      const moment = careerMomentFromLeadership(
+        responsibility,
+        newState.runManifest.rootSeed,
+      );
+      if (moment) momentCandidates.push(moment);
+    }
+    for (const consequence of Object.values(newState.consequenceState.consequences)) {
+      const previousStatus = gameState.consequenceState.consequences[consequence.id]?.status;
+      if (consequence.status !== "applied" || previousStatus === "applied") continue;
+      const isLateCareerCallback = consequence.tags.includes("lateCareerDilemma")
+        && consequence.tags.includes("callback");
+      const isTurningPoint = consequence.tags.includes("turning-point");
+      if (!isLateCareerCallback && !isTurningPoint) continue;
+      const decision = newState.consequenceState.decisions[consequence.decisionId];
+      const positive = consequence.tags.includes("favorable")
+        || consequence.tags.includes("crossroads-success");
+      const title = typeof decision?.metadata?.title === "string"
+        ? decision.metadata.title
+        : positive ? "Your judgment was vindicated" : "The risk came due";
+      const selectedOption = decision?.options.find(
+        (option) => option.id === decision.selectedOptionId,
+      );
+      momentCandidates.push(createCareerMoment({
+        rootSeed: newState.runManifest.rootSeed,
+        id: `consequence:${consequence.id}`,
+        source: { kind: "consequence", id: consequence.id },
+        occurredAt: { week: newState.currentWeek, season: newState.currentSeason },
+        category: positive ? "vindication" : "failure",
+        tone: positive ? "positive" : "negative",
+        magnitude: isLateCareerCallback ? "careerDefining" : "major",
+        cue: positive ? "vindication" : "failure",
+        title,
+        summary: selectedOption
+          ? `${selectedOption.label} produced its long-term ${positive ? "vindication" : "cost"}. The outcome is now part of your permanent career record.`
+          : `A long-running decision produced its ${positive ? "favorable" : "costly"} outcome.`,
+        playerId: typeof decision?.metadata?.relatedPlayerId === "string"
+          ? decision.metadata.relatedPlayerId
+          : undefined,
+        stakeholderIds: decision?.stakeholders.map((stakeholder) => stakeholder.id) ?? [],
+        tags: consequence.tags,
+      }));
+    }
+    if (momentCandidates.length > 0) {
+      newState = {
+        ...newState,
+        careerMoments: enqueueCareerMoments(
+          newState.careerMoments,
+          momentCandidates,
+          { week: newState.currentWeek, season: newState.currentSeason },
+        ),
+      };
+    }
     newState = compactCompletedSeasonHistory(gameState, newState);
+    newState = refreshWeeklyStakeholderProfiles(newState);
     weeklyPipeline.enter("finalize");
     newState = weeklyPipeline.complete(newState);
 
     const newInboxCount = newState.inbox.length - gameState.inbox.length;
-    const isPayWeek = gameState.currentWeek % 4 === 0;
+    const isPayWeek = isFinancialPeriodClose(
+      gameState.currentWeek,
+      getSeasonLength(gameState.fixtures, gameState.currentSeason),
+    );
     const actualFatigueChange = newState.scout.fatigue - gameState.scout.fatigue;
     const actualReputationChange = newState.scout.reputation - gameState.scout.reputation;
     const actualPlayersDiscovered = Math.max(

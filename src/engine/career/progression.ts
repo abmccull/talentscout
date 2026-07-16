@@ -14,7 +14,6 @@ import type {
   PerformanceReview,
   CareerTier,
   Specialization,
-  ScoutingPhilosophy,
   ConvictionLevel,
   WonderkidTier,
   NPCScout,
@@ -27,6 +26,7 @@ import {
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
 import { selectLatestReportsByCaseOpenedInRange } from "@/engine/reports/reportAccountability";
+import { getPhilosophySpecializationAffinity } from "@/engine/world/recruitmentIdentity";
 
 // ---------------------------------------------------------------------------
 // Reputation event union
@@ -70,21 +70,13 @@ const TIER_REPUTATION_REQUIREMENTS: Record<CareerTier, number> = {
   5: 90,
 };
 
-/** Monthly salary bands (£) per career tier. */
+/** Weekly salary bands (£) per career tier. */
 const SALARY_BANDS: Record<CareerTier, { min: number; max: number }> = {
   1: { min: 0,     max: 0 },     // Freelance — no salary
   2: { min: 500,   max: 1500 },
   3: { min: 1500,  max: 4000 },
   4: { min: 4000,  max: 10000 },
   5: { min: 10000, max: 25000 },
-};
-
-/** Scouting philosophies that align well with each specialization */
-const PHILOSOPHY_SPEC_AFFINITY: Record<ScoutingPhilosophy, Specialization[]> = {
-  academyFirst:    ["youth", "regional"],
-  winNow:          ["firstTeam", "data"],
-  marketSmart:     ["data", "regional", "firstTeam"],
-  globalRecruiter: ["regional", "data", "firstTeam"],
 };
 
 /** Role titles per specialization and tier */
@@ -329,9 +321,21 @@ export function calculatePerformanceReview(
   // Signings:     up to 25 pts (target = 3 successful)
   // Table pounds: up to 10 pts bonus
   // ---------------------------------------------------------------------------
-  const reportScore     = Math.min(25, (reportsSubmitted / 10) * 25);
-  const qualityScore    = Math.min(40, (averageQuality / 75) * 40);
-  const signingScore    = Math.min(25, (successfulRecommendations / 3) * 25);
+  const contractObjectives = scout.careerPath === "club"
+    ? scout.employmentContract?.objectives
+    : undefined;
+  const reportsTarget = Math.max(1, contractObjectives?.reportsPerSeason ?? 10);
+  const qualityTarget = Math.max(1, contractObjectives?.minimumAverageQuality ?? 75);
+  const recommendationsTarget = Math.max(
+    1,
+    contractObjectives?.successfulRecommendations ?? 3,
+  );
+  const reportScore = Math.min(25, (reportsSubmitted / reportsTarget) * 25);
+  const qualityScore = Math.min(40, (averageQuality / qualityTarget) * 40);
+  const signingScore = Math.min(
+    25,
+    (successfulRecommendations / recommendationsTarget) * 25,
+  );
   const tablePoundBonus = tablePoundsSuccessful >= 1 ? 10 : 0;
   let total = reportScore + qualityScore + signingScore + tablePoundBonus;
 
@@ -402,6 +406,19 @@ export function calculatePerformanceReview(
     tablePoundsSuccessful,
     reputationChange,
     outcome,
+    contractSummary: contractObjectives
+      ? {
+          objectivesMet: [
+            reportsSubmitted >= reportsTarget,
+            averageQuality >= qualityTarget,
+            successfulRecommendations >= recommendationsTarget,
+          ].filter(Boolean).length,
+          objectivesTotal: 3,
+          reportsTarget,
+          qualityTarget,
+          recommendationsTarget,
+        }
+      : undefined,
     coverageSummary: tierContext !== undefined
       ? {
           countriesScouted: new Set(
@@ -722,7 +739,7 @@ function filterCandidateClubs(
 
     if (!requirePhilosophyAlignment) return true;
 
-    const affinitySpecs = PHILOSOPHY_SPEC_AFFINITY[club.scoutingPhilosophy];
+    const affinitySpecs = getPhilosophySpecializationAffinity(club.scoutingPhilosophy);
     return affinitySpecs.includes(scout.primarySpecialization);
   });
 }
@@ -757,6 +774,85 @@ function buildJobOffer(
     role,
     salary,
     contractLength,
+    objectives: {
+      reportsPerSeason: 10 + tier * 5,
+      minimumAverageQuality: 42 + tier * 7,
+      successfulRecommendations: Math.max(1, tier - 1),
+    },
+    signingBonus: ({ 1: 0, 2: 0, 3: 2_000, 4: 5_000, 5: 10_000 } as const)[tier],
+    performanceBonusRate: 0.05 + tier * 0.02,
+    severanceWeeks: tier >= 5 ? 16 : tier >= 4 ? 10 : 4,
+    educationBudget: tier * 750,
+    expiresWeek,
+  };
+}
+
+/** Create a transparent renewal package when the current agreement is due. */
+export function generateContractRenewalOffer(
+  rng: RNG,
+  scout: Scout,
+  club: Club | undefined,
+  review: PerformanceReview,
+  season: number,
+  seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+): JobOffer | null {
+  if (
+    !club
+    || scout.careerPath !== "club"
+    || scout.currentClubId !== club.id
+    || review.outcome === "fired"
+    || (scout.contractEndSeason ?? Number.POSITIVE_INFINITY) > season
+  ) return null;
+
+  if (review.outcome === "warning" && rng.chance(0.45)) return null;
+  const performanceMultiplier = review.outcome === "promoted"
+    ? 1.15
+    : review.outcome === "retained"
+      ? 1.07
+      : 0.96;
+  const trustMultiplier = 0.96 + Math.max(0, Math.min(100, scout.clubTrust)) / 1_000;
+  const salary = Math.max(
+    SALARY_BANDS[scout.careerTier].min,
+    Math.min(
+      SALARY_BANDS[scout.careerTier].max,
+      Math.round(scout.salary * performanceMultiplier * trustMultiplier),
+    ),
+  );
+  const expiresWeek = Math.min(4, Math.max(2, seasonLength));
+  const contractLength = review.outcome === "warning" ? 1 : rng.nextInt(1, 3);
+  const currentObjectives = scout.employmentContract?.objectives;
+
+  return {
+    id: `renewal_${club.id}_s${season}_${rng.nextInt(1000, 9999)}`,
+    clubId: club.id,
+    tier: scout.careerTier,
+    role: scout.employmentContract?.role
+      ?? ROLE_TITLE_BY_SPEC[scout.primarySpecialization][scout.careerTier],
+    salary,
+    contractLength,
+    territory: scout.employmentContract?.territory,
+    objectives: {
+      reportsPerSeason: Math.max(10, (currentObjectives?.reportsPerSeason ?? 15) + 2),
+      minimumAverageQuality: Math.min(
+        90,
+        (currentObjectives?.minimumAverageQuality ?? 50) + 2,
+      ),
+      successfulRecommendations: Math.max(
+        1,
+        (currentObjectives?.successfulRecommendations ?? 1),
+      ),
+    },
+    signingBonus: 0,
+    performanceBonusRate: Math.min(
+      0.2,
+      (scout.employmentContract?.performanceBonusRate ?? 0.05) + 0.01,
+    ),
+    severanceWeeks: scout.employmentContract?.severanceWeeks ?? 4,
+    educationBudget: Math.round(
+      (scout.employmentContract?.educationBudget ?? scout.careerTier * 750) * 1.1,
+    ),
+    renewalOfContractId: scout.employmentContract?.id
+      ?? `legacy-contract:${club.id}:s${scout.contractEndSeason ?? season}`,
     expiresWeek,
   };
 }
@@ -819,6 +915,7 @@ export function expireJobOffersAtWeekEnd(
  * Does not mutate the input.
  */
 export function acceptJobOffer(scout: Scout, offer: JobOffer, currentSeason: number): Scout {
+  const endSeason = currentSeason + Math.max(1, offer.contractLength);
   return {
     ...scout,
     careerPath: "club",
@@ -826,8 +923,28 @@ export function acceptJobOffer(scout: Scout, offer: JobOffer, currentSeason: num
     independentTier: undefined,
     careerTier: offer.tier,
     currentClubId: offer.clubId,
-    contractEndSeason: (currentSeason + offer.contractLength),
+    contractEndSeason: endSeason,
     salary: offer.salary,
+    employmentContract: {
+      id: offer.renewalOfContractId ?? `scout-contract:${offer.id}`,
+      clubId: offer.clubId,
+      role: offer.role,
+      tier: offer.tier,
+      weeklySalary: offer.salary,
+      startSeason: currentSeason,
+      endSeason,
+      status: "active",
+      objectives: offer.objectives ?? {
+        reportsPerSeason: 10 + offer.tier * 5,
+        minimumAverageQuality: 42 + offer.tier * 7,
+        successfulRecommendations: Math.max(1, offer.tier - 1),
+      },
+      signingBonus: offer.signingBonus ?? 0,
+      performanceBonusRate: offer.performanceBonusRate ?? 0.05,
+      severanceWeeks: offer.severanceWeeks ?? 4,
+      educationBudget: offer.educationBudget ?? 0,
+      territory: offer.territory,
+    },
     clubTrust: 50, // Start with neutral trust at a new employer
   };
 }
@@ -846,6 +963,9 @@ export function endClubEmployment(scout: Scout): Scout {
     currentClubId: undefined,
     contractEndSeason: undefined,
     salary: 0,
+    employmentContract: scout.employmentContract
+      ? { ...scout.employmentContract, status: "terminated" }
+      : undefined,
     clubTrust: 0,
     managerRelationship: undefined,
     boardDirectives: [],

@@ -11,7 +11,13 @@ import type {
   Scout,
   ConvictionLevel,
 } from "../core/types";
-import { selectLatestReportsByCase } from "../reports/reportAccountability";
+import type {
+  RecruitmentOpportunity,
+  RecruitmentOpportunityState,
+  RecruitmentTransfer,
+} from "../recruitment";
+import { findCausalRecruitmentOpportunity } from "../recruitment";
+import { applyFirstPlacementBonus } from "./expenses";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -93,7 +99,12 @@ export function calculateSellOnPercentage(
  */
 export function processSellOnClauses(
   finances: FinancialRecord,
-  transfers: Array<{ playerId: string; fee: number }>,
+  transfers: Array<{
+    playerId: string;
+    fee: number;
+    fromClubId?: string;
+    toClubId?: string;
+  }>,
   week: number,
   season: number,
 ): FinancialRecord {
@@ -102,10 +113,28 @@ export function processSellOnClauses(
   for (const transfer of transfers) {
     // Find placement records with sell-on clauses for this player
     const matchingRecords = updated.placementFeeRecords.filter(
-      (r) => r.playerId === transfer.playerId && r.hasSellOnClause && r.sellOnPercentage > 0,
+      (r) =>
+        r.playerId === transfer.playerId
+        && r.hasSellOnClause
+        && r.sellOnPercentage > 0
+        // A newly registered clause cannot pay against the same move that
+        // created it. Later sell-ons originate from the placed club.
+        && (transfer.fromClubId === undefined || r.clubId === transfer.fromClubId)
+        && (transfer.toClubId === undefined || r.clubId !== transfer.toClubId),
     );
 
     for (const record of matchingRecords) {
+      const referenceId = [
+        "sell-on",
+        record.id,
+        transfer.playerId,
+        transfer.fromClubId ?? "unknown-source",
+        transfer.toClubId ?? "unknown-destination",
+        `s${season}w${week}`,
+      ].join(":");
+      if (updated.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+        continue;
+      }
       const sellOnPayment = Math.round(transfer.fee * record.sellOnPercentage);
       if (sellOnPayment <= 0) continue;
 
@@ -120,6 +149,7 @@ export function processSellOnClauses(
             season,
             amount: sellOnPayment,
             description: `Sell-on clause payment (${(record.sellOnPercentage * 100).toFixed(1)}%)`,
+            referenceId,
           },
         ],
       };
@@ -134,24 +164,19 @@ export function processSellOnClauses(
 // ---------------------------------------------------------------------------
 
 /**
- * Check if a scout has an active report on a transferred player.
- * Returns the matching report or undefined.
+ * Resolve the exact delivered report that qualifies for a destination-matched
+ * placement reward. Predicting that a player would move is tracked elsewhere
+ * and is not enough to earn contractual credit.
  */
 export function checkPlacementFeeEligibility(
-  transferPlayerId: string,
-  reports: Record<string, ScoutReport>,
+  state: RecruitmentOpportunityState,
+  transfer: RecruitmentTransfer,
   scoutId: string,
-): ScoutReport | undefined {
-  return selectLatestReportsByCase(
-    Object.values(reports).filter(
-      (report) => report.playerId === transferPlayerId && report.scoutId === scoutId,
-    ),
-  ).sort((left, right) =>
-    right.submittedSeason - left.submittedSeason
-    || right.submittedWeek - left.submittedWeek
-    || (right.revision ?? 1) - (left.revision ?? 1)
-    || right.id.localeCompare(left.id)
-  )[0];
+): { report: ScoutReport; opportunity: RecruitmentOpportunity } | undefined {
+  const opportunity = findCausalRecruitmentOpportunity(state, transfer, scoutId);
+  if (!opportunity) return undefined;
+  const report = state.reports[opportunity.reportId];
+  return report ? { report, opportunity } : undefined;
 }
 
 /**
@@ -166,9 +191,17 @@ export function triggerPlacementFee(
   sellOnPercentage: number,
   week: number,
   season: number,
+  referenceId?: string,
 ): FinancialRecord {
+  const effectiveReferenceId = referenceId
+    ?? `placement:${playerId}:${clubId}:s${season}w${week}`;
+  if (finances.transactions.some((transaction) =>
+    transaction.referenceId === effectiveReferenceId
+  )) {
+    return finances;
+  }
   const record: PlacementFeeRecord = {
-    id: `pf_${playerId}_${week}_${season}`,
+    id: `pf_${effectiveReferenceId}`,
     playerId,
     clubId,
     transferFee,
@@ -179,7 +212,7 @@ export function triggerPlacementFee(
     season,
   };
 
-  return {
+  const paid: FinancialRecord = {
     ...finances,
     balance: finances.balance + fee,
     placementFeeRevenue: finances.placementFeeRevenue + fee,
@@ -191,7 +224,11 @@ export function triggerPlacementFee(
         season,
         amount: fee,
         description: `Placement fee earned`,
+        referenceId: effectiveReferenceId,
+        category: "placement",
+        counterpartyId: clubId,
       },
     ],
   };
+  return applyFirstPlacementBonus(paid, fee, week, season);
 }

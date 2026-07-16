@@ -29,6 +29,7 @@ import { RNG } from "@/engine/rng";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import {
   buildStakeholderEcologyProfile,
+  type StakeholderProfile,
   type StakeholderEcologyProfile,
 } from "@/engine/consequences";
 import { StakeholderEcologyPanel } from "./StakeholderEcologyPanel";
@@ -124,6 +125,7 @@ interface IntelEntry {
 interface ContactDetailProps {
   contact: Contact;
   ecology: StakeholderEcologyProfile;
+  identity?: StakeholderProfile;
   knownPlayerNames: string[];
   intelEntries: IntelEntry[];
   currentWeek: number;
@@ -161,7 +163,7 @@ function formatPlayerName(
   return player ? `${player.firstName} ${player.lastName}` : null;
 }
 
-function ContactDetail({ contact, ecology, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
+function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntries, currentWeek, onScheduleMeeting, onClose }: ContactDetailProps) {
   const config = CONTACT_TYPE_CONFIG[contact.type];
   const Icon = config.icon;
   const trustLevel = contact.trustLevel ?? contact.relationship;
@@ -310,6 +312,42 @@ function ContactDetail({ contact, ecology, knownPlayerNames, intelEntries, curre
         </div>
 
         <StakeholderEcologyPanel profile={ecology} />
+
+        {identity && (
+          <div className="rounded-md border border-indigo-500/20 bg-indigo-500/5 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-200">
+                Persistent identity
+              </p>
+              <span className="text-[10px] capitalize text-indigo-300">
+                {identity.conflictStyle.replace(/([a-z])([A-Z])/g, "$1 $2")}
+              </span>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-500">What they value</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-zinc-300">
+                  {identity.priorities.slice(0, 3).map((value) =>
+                    value.replace(/([a-z])([A-Z])/g, "$1 $2"),
+                  ).join(" · ")}
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Red lines</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-zinc-300">
+                  {identity.redLine.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {identity.traits.slice(0, 4).map((trait) => (
+                <Badge key={trait} variant="outline" className="border-indigo-500/25 text-[9px] capitalize text-indigo-200">
+                  {trait.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* F3: Betrayal Risk Warning */}
         {betrayalRisk >= 0.05 && (
@@ -521,6 +559,7 @@ export function NetworkScreen() {
     clubsById,
     rivalScoutsById,
     consequenceState,
+    stakeholderProfiles,
     currentWeek,
     currentSeason,
     scoutId,
@@ -534,6 +573,7 @@ export function NetworkScreen() {
       clubsById: state.gameState?.clubs,
       rivalScoutsById: state.gameState?.rivalScouts,
       consequenceState: state.gameState?.consequenceState,
+      stakeholderProfiles: state.gameState?.stakeholderProfiles,
       currentWeek: state.gameState?.currentWeek,
       currentSeason: state.gameState?.currentSeason,
       scoutId: state.gameState?.scout.id,
@@ -871,6 +911,7 @@ export function NetworkScreen() {
                   <ContactDetail
                     contact={selectedContact}
                     ecology={contactEcologyMap.get(selectedContact.id)!}
+                    identity={stakeholderProfiles?.profiles[`contact:${selectedContact.id}`]}
                     knownPlayerNames={getKnownPlayerNames(selectedContact)}
                     intelEntries={contactIntelMap.get(selectedContact.id) ?? []}
                     currentWeek={currentWeek}

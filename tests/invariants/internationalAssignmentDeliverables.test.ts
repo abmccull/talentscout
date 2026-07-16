@@ -13,6 +13,7 @@ import {
   resolveInternationalAssignment,
   synchronizeInternationalAssignmentProgress,
 } from "@/engine/world/internationalDeliverables";
+import { processInternationalTravelLifecycle } from "@/stores/actions/weeklySimulationSupport";
 
 function assignment(
   type: InternationalAssignment["type"] = "scoutingMission",
@@ -303,6 +304,23 @@ describe("international assignment deliverables", () => {
     expect(failed.scout.reputation).toBe(39);
     expect(failed.activeInternationalAssignment).toBeNull();
     expect(failed.inbox[0].body).toContain("Travel alone earns no assignment credit");
+  });
+
+  it("applies a failed assignment penalty when the canonical travel lifecycle returns home", () => {
+    const returning = {
+      ...stateFor(assignment("seniorFriendly")),
+      currentWeek: 4,
+    };
+
+    const resolved = processInternationalTravelLifecycle(returning);
+
+    expect(resolved.activeInternationalAssignment).toBeNull();
+    expect(resolved.scout.travelBooking).toBeUndefined();
+    expect(resolved.scout.reputation).toBe(39);
+    expect(resolved.internationalAssignmentHistory?.at(-1)?.outcome).toMatchObject({
+      grade: "failed",
+      reputationDelta: -1,
+    });
   });
 
   it("migrates duplicate legacy event IDs and provides a local mission liaison without auto-credit", () => {

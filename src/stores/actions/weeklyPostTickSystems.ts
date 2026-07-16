@@ -1,5 +1,6 @@
 import type { GameState, InboxMessage } from "@/engine/core/types";
-import type { TickResult } from "@/engine/core/gameLoop";
+import { getSeasonLength, type TickResult } from "@/engine/core/gameLoop";
+import { isFinancialPeriodClose } from "@/engine/core/annualization";
 import { createRNG } from "@/engine/rng";
 import { processMonthlySnapshot } from "@/engine/career";
 import { applyCareerPathTransition } from "@/engine/career/transitions";
@@ -12,7 +13,6 @@ import {
 import { evaluateFatigueConsequences, rollBurnoutIllness } from "@/engine/core/calendar";
 import { processMonthlyCredit } from "@/engine/finance/creditScore";
 import { processDistress } from "@/engine/finance/distress";
-import { checkRetainerDeliverables } from "@/engine/finance/clientRelationships";
 
 export interface WeeklyPostTickSystemsInput {
   beforeWeek: GameState;
@@ -94,29 +94,16 @@ export function processWeeklyPostTickSystems(
   let scout = state.scout;
   const messages: InboxMessage[] = [];
 
-  if (state.currentWeek % 4 === 0) {
-    finances = processMonthlyCredit(finances);
-    const deliverables = checkRetainerDeliverables(
+  const sourceSeasonLength = getSeasonLength(
+    input.beforeWeek.fixtures,
+    input.beforeWeek.currentSeason,
+  );
+  if (isFinancialPeriodClose(input.beforeWeek.currentWeek, sourceSeasonLength)) {
+    finances = processMonthlyCredit(
       finances,
-      state.currentWeek,
-      state.currentSeason,
+      input.beforeWeek.currentWeek,
+      input.beforeWeek.currentSeason,
     );
-    finances = deliverables.finances;
-    for (const [index, message] of deliverables.messages.entries()) {
-      messages.push({
-        id: `retainer_fail_s${state.currentSeason}w${state.currentWeek}_${index}`,
-        week: state.currentWeek,
-        season: state.currentSeason,
-        type: "financial",
-        title: message.title,
-        body: message.body,
-        read: false,
-        actionRequired: false,
-      });
-      if (message.title === "Contract Terminated") {
-        scout = { ...scout, reputation: Math.max(0, scout.reputation - 5) };
-      }
-    }
   }
 
   const previousDistress = finances.distressLevel ?? "healthy";
@@ -186,11 +173,22 @@ export function processWeeklyPostTickSystems(
     inbox: [...state.inbox, ...messages],
   };
   if (previousDistress !== "bankruptcy" && finances.distressLevel === "bankruptcy") {
+    const affectedStakeholders = (finances.employees ?? [])
+      .slice()
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, 4)
+      .map((employee) => ({ kind: "employee" as const, id: employee.id }));
+    const latestFinancialTrigger = finances.transactions
+      .slice()
+      .reverse()
+      .find((transaction) => transaction.amount < 0);
     state = applyCareerPathTransition(state, "independent");
     state = openCareerSetback(state, {
       kind: "bankruptcy",
       previousTier,
       previousClubId,
+      triggerSummary: `the agency entering bankruptcy at a £${Math.abs(finances.balance).toLocaleString()} deficit${latestFinancialTrigger ? ` after ${latestFinancialTrigger.description.toLowerCase()}` : ""}`,
+      affectedStakeholders,
     });
   }
   return state;

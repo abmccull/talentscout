@@ -15,9 +15,9 @@ import type {
   Position,
   ScoutReport,
   ScoutingCase,
-  YouthBriefPriority,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
+import { deriveClubRecruitmentDoctrine } from "@/engine/world/recruitmentIdentity";
 
 const DEFAULT_SEASON_LENGTH = 38;
 
@@ -32,13 +32,6 @@ const POSITION_TARGETS: Record<Position, number> = {
   LW: 2,
   RW: 2,
   ST: 3,
-};
-
-const CONVICTION_RANK: Record<ConvictionLevel, number> = {
-  note: 0,
-  recommend: 1,
-  strongRecommend: 2,
-  tablePound: 3,
 };
 
 export type AcademyRecruitmentBriefStatus = YouthRecruitmentBrief["status"];
@@ -93,8 +86,6 @@ export type AcademyBriefFulfillmentFailure =
   | "decisionNotAccepted"
   | "positionMismatch"
   | "ageMismatch"
-  | "reportQualityTooLow"
-  | "convictionTooLow"
   | "missingCanonicalYouthSigning";
 
 export interface AcademyBriefFulfillmentInput {
@@ -152,28 +143,6 @@ export function addGameWeeks(
     week: zeroBasedWeek % seasonLength + 1,
     season: season + Math.floor(zeroBasedWeek / seasonLength),
   };
-}
-
-function ageRangeForClub(club: Club): [number, number] {
-  switch (club.scoutingPhilosophy) {
-    case "academyFirst":
-      return [14, 16];
-    case "winNow":
-      return [16, 17];
-    case "marketSmart":
-      return [15, 17];
-    case "globalRecruiter":
-    default:
-      return [14, 17];
-  }
-}
-
-function minimumQualityForClub(club: Club): number {
-  return clamp(
-    Math.round(40 + club.reputation * 0.2 + club.youthAcademyRating * 0.8),
-    45,
-    76,
-  );
 }
 
 function activeAt(
@@ -254,19 +223,6 @@ function deterministicNonce(rng: RNG): string {
   return rng.nextInt(0, 0x7fffffff).toString(36).padStart(6, "0");
 }
 
-function developmentPriorityForClub(club: Club): YouthBriefPriority {
-  if (club.scoutingPhilosophy === "winNow") return "earlyReadiness";
-  if (club.scoutingPhilosophy === "marketSmart") return "resale";
-  if (club.scoutingPhilosophy === "globalRecruiter") return "character";
-  return "highCeiling";
-}
-
-function riskToleranceForClub(club: Club): YouthRecruitmentBrief["riskTolerance"] {
-  if (club.scoutingPhilosophy === "academyFirst") return "high";
-  if (club.scoutingPhilosophy === "winNow") return "low";
-  return "medium";
-}
-
 function weeklyWageBudgetForClub(club: Club): number {
   const reputationAllowance = club.reputation * 35;
   const academyAllowance = club.youthAcademyRating * 75;
@@ -319,8 +275,13 @@ export function generateAcademyRecruitmentBriefs(
     )
     .slice(0, slotsAvailable);
 
-  const ageRange = ageRangeForClub(club);
-  const minimumReportQuality = minimumQualityForClub(club);
+  const doctrine = deriveClubRecruitmentDoctrine({
+    club,
+    seed: `academy-brief:${club.id}`,
+    season,
+  });
+  const ageRange = doctrine.academyIntakeAgeRange;
+  const minimumReportQuality = Math.min(76, doctrine.minimumEvidenceQuality);
   const minimumConviction: ConvictionLevel = minimumReportQuality >= 68
     ? "strongRecommend"
     : "recommend";
@@ -346,9 +307,9 @@ export function generateAcademyRecruitmentBriefs(
       reason,
       rationale: rationaleFor(gap.position, reason, gap.coverage),
       ageRange,
-      developmentPriority: developmentPriorityForClub(club),
+      developmentPriority: doctrine.seasonalObjective,
       maxAge: ageRange[1],
-      riskTolerance: riskToleranceForClub(club),
+      riskTolerance: doctrine.riskTolerance,
       weeklyWageBudget: weeklyWageBudgetForClub(club),
       competitionPressure: clamp(Math.round(club.reputation * 0.55 + rng.nextInt(5, 35)), 0, 100),
       minimumReportQuality,
@@ -393,6 +354,51 @@ function isPositionMatch(player: Player, position: Position): boolean {
   return player.position === position || player.secondaryPositions?.includes(position) === true;
 }
 
+/**
+ * Upgrade the broad persisted youth-brief shape into the strict causal shape
+ * used by placement settlement. New briefs already carry these fields; this
+ * fallback keeps older saves and authored test fixtures valid without running
+ * a competing fulfillment system.
+ */
+export function normalizeAcademyRecruitmentBrief(
+  brief: YouthRecruitmentBrief,
+  player?: Pick<Player, "position" | "age">,
+): AcademyRecruitmentBrief {
+  const existing = brief as YouthRecruitmentBrief & Partial<AcademyRecruitmentBrief>;
+  const targetPosition = brief.requiredPositions[0]
+    ?? existing.targetPosition
+    ?? player?.position
+    ?? "CM";
+  const maxAge = Number.isFinite(brief.maxAge)
+    ? Math.max(14, Math.round(brief.maxAge))
+    : Math.max(14, player?.age ?? 18);
+  const minimumAge = Array.isArray(existing.ageRange)
+    && Number.isFinite(existing.ageRange[0])
+    ? Math.max(14, Math.min(maxAge, Math.round(existing.ageRange[0])))
+    : 14;
+
+  return {
+    ...brief,
+    targetPosition,
+    priority: existing.priority
+      ?? (brief.competitionPressure >= 70
+        ? "critical"
+        : brief.competitionPressure >= 45
+          ? "high"
+          : "medium"),
+    reason: existing.reason ?? "thinDepth",
+    rationale: existing.rationale
+      ?? `The academy needs a credible ${targetPosition} pathway option.`,
+    ageRange: [minimumAge, maxAge],
+    minimumReportQuality: Number.isFinite(existing.minimumReportQuality)
+      ? Math.max(0, Math.min(100, Math.round(existing.minimumReportQuality ?? 0)))
+      : 0,
+    minimumConviction: existing.minimumConviction ?? "note",
+    issuedWeek: existing.issuedWeek ?? brief.createdWeek,
+    issuedSeason: existing.issuedSeason ?? brief.createdSeason,
+  };
+}
+
 function movementWithinBrief(
   movement: PlayerMovementEvent,
   brief: AcademyRecruitmentBrief,
@@ -425,7 +431,8 @@ export function fulfillAcademyRecruitmentBrief(
   input: AcademyBriefFulfillmentInput,
 ): AcademyBriefFulfillmentResult {
   const seasonLength = input.seasonLength ?? DEFAULT_SEASON_LENGTH;
-  const { brief, player, scoutingCase, report, placementReport, clubDecision } = input;
+  const { player, scoutingCase, report, placementReport, clubDecision } = input;
+  const brief = normalizeAcademyRecruitmentBrief(input.brief, player);
   if (brief.status === "fulfilled") {
     return { fulfilled: true, brief, failures: [] };
   }
@@ -466,12 +473,10 @@ export function fulfillAcademyRecruitmentBrief(
   if (playerAge < brief.ageRange[0] || playerAge > brief.ageRange[1]) {
     failures.push("ageMismatch");
   }
-  if (report.qualityScore < brief.minimumReportQuality) {
-    failures.push("reportQualityTooLow");
-  }
-  if (CONVICTION_RANK[report.conviction] < CONVICTION_RANK[brief.minimumConviction]) {
-    failures.push("convictionTooLow");
-  }
+  // Quality, conviction, wage credibility, and disclosed risk are evaluated
+  // by the canonical club decision. Once that decision is accepted, this
+  // function verifies the causal chain only; a second hidden veto here would
+  // let the same club both accept and reject the same report.
 
   const movement = input.movementHistory
     .filter((candidate) =>

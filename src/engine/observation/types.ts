@@ -17,7 +17,10 @@ import type {
   Specialization,
   PlayerAttribute,
   AttributeDomain,
+  CulturalInsight,
+  TravelPosture,
 } from "@/engine/core/types";
+import type { ObservationSituationSnapshot } from "./situations";
 
 // =============================================================================
 // PRIMITIVES & ENUMS
@@ -539,6 +542,14 @@ export interface ObservationSession {
   reflectionNotes: string[];
   /** Environmental/atmospheric context for this session. */
   venueAtmosphere?: VenueAtmosphere;
+  /** Persisted context that explains what this specific watch could reveal. */
+  situation?: ObservationSituationSnapshot;
+  /** Country whose football environment is being interpreted. */
+  countryId?: string;
+  /** Earned insights used to construct the situation. Optional on legacy sessions. */
+  culturalInsights?: CulturalInsight[];
+  /** Purpose selected for the active international trip, if any. */
+  travelPosture?: TravelPosture;
   /** All players visible in this session. */
   players: SessionPlayer[];
   /** Game week this session started. */
@@ -572,6 +583,12 @@ export interface SessionConfig {
   specialization: Specialization;
   /** Venue type string for atmosphere generation. Defaults to activityType. */
   venueType?: string;
+  /** Country whose football environment shapes this session. */
+  countryId?: string;
+  /** Cultural knowledge already earned by the scout in that country. */
+  culturalInsights?: CulturalInsight[];
+  /** Purpose selected for the active international trip, if any. */
+  travelPosture?: TravelPosture;
   /** If set, this session is a follow-up focused on a specific player. */
   targetPlayerId?: string;
   /** The pool of players available to observe in this session. */

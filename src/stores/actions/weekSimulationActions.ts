@@ -16,6 +16,7 @@ import type { ScoutQualityData } from "@/engine/youth/venues";
 import type { ActivityChoiceId } from "@/engine/core/activityInteractions";
 import { createRNG } from "@/engine/rng";
 import { expireJobOffersAtWeekEnd } from "@/engine/career/progression";
+import { applyCareerPathTransition } from "@/engine/career/transitions";
 import { hasRepresentedCareerCompletionState } from "@/engine/career/legacy";
 import { isBankruptcyRecoveryActive } from "@/engine/finance/distress";
 import {
@@ -38,11 +39,11 @@ import {
 import {
   getYouthVenuePool,
   mapVenueTypeToContext,
-  processVenueObservation,
 } from "@/engine/youth/venues";
 import { recordDiscovery } from "@/engine/career/index";
 import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 import { isDemoLimitReached } from "@/lib/demo";
+import { produceWeeklyVenueObservation } from "./weeklyObservationProducer";
 
 type SimulationChoiceId = ActivityChoiceId;
 
@@ -110,6 +111,12 @@ export function createWeekSimulationActions(
     const hasScheduledWork = getScheduledActivityInstances(gameState.schedule).length > 0;
     if (offerExpiry.expired.length > 0 || (recoveryActive && hasScheduledWork)) {
       const expiredIds = new Set(offerExpiry.expired.map((offer) => offer.id));
+      const expiredCurrentRenewal = offerExpiry.expired.some((offer) =>
+        Boolean(offer.renewalOfContractId)
+        && offer.clubId === gameState.scout.currentClubId
+        && (gameState.scout.contractEndSeason ?? Number.POSITIVE_INFINITY)
+          <= gameState.currentSeason
+      );
       const expiryMessages: InboxMessage[] = offerExpiry.expired.map((offer) => ({
         id: `job-expired-${offer.id}`,
         week: gameState.currentWeek,
@@ -121,8 +128,7 @@ export function createWeekSimulationActions(
         actionRequired: false,
         relatedId: offer.id,
       }));
-      set({
-        gameState: {
+      const stateAfterExpiry: GameState = {
           ...gameState,
           jobOffers: offerExpiry.active,
           schedule:
@@ -137,7 +143,27 @@ export function createWeekSimulationActions(
             ),
             ...expiryMessages,
           ],
-        },
+        };
+      const resolvedExpiryState = expiredCurrentRenewal && gameState.finances
+        ? {
+            ...applyCareerPathTransition(stateAfterExpiry, "independent"),
+            inbox: [
+              ...stateAfterExpiry.inbox,
+              {
+                id: `employment-contract-ended:s${gameState.currentSeason}w${gameState.currentWeek}`,
+                week: gameState.currentWeek,
+                season: gameState.currentSeason,
+                type: "feedback" as const,
+                title: "Contract Ended",
+                body: "The renewal window closed without an agreement. You are now independent and can rebuild your client book or consider another club role.",
+                read: false,
+                actionRequired: false,
+              },
+            ],
+          }
+        : stateAfterExpiry;
+      set({
+        gameState: resolvedExpiryState,
         weekSimulation: null,
       });
       get().startWeekSimulation();
@@ -354,22 +380,26 @@ export function createWeekSimulationActions(
               ...Object.values(gameState.observations),
             ].filter((o) => o.playerId === youth.player.id);
 
-            const result = processVenueObservation(
-              obsRng,
-              currentScout,
-              youth,
-              mapVenueTypeToContext(venueType),
-              existingObs,
-              gameState.currentWeek,
-              gameState.currentSeason,
+            const activityInstanceId = getInteractiveActivityCompletionKey(
+              instance.activity,
+              daySlot,
             );
-            const observation = applyRegionalPresenceToObservation(gameState, {
-              ...result.observation,
-              activityInstanceId: getInteractiveActivityCompletionKey(
-                instance.activity,
-                daySlot,
-              ),
+            const result = produceWeeklyVenueObservation({
+              state: gameState,
+              rng: obsRng,
+              scout: currentScout,
+              youth,
+              context: mapVenueTypeToContext(venueType),
+              activityType: venueType,
+              venueType,
+              existingObservations: existingObs,
+              activityInstanceId,
+              occurrenceKey: `day-${daySlot}-observation-${existingObs.length}`,
             });
+            const observation = applyRegionalPresenceToObservation(
+              gameState,
+              result.observation,
+            );
 
             newObservations[observation.id] = observation;
             updatedUnsignedYouth[youth.id] = result.updatedYouth;
@@ -510,15 +540,21 @@ export function createWeekSimulationActions(
           const existingObsForYouth = Object.values(gameState.observations).filter(
             (o) => o.playerId === youth.player.id,
           );
-          const previewObs = processVenueObservation(
-            previewRng,
-            currentScout,
+          const previewObs = produceWeeklyVenueObservation({
+            state: gameState,
+            rng: previewRng,
+            scout: currentScout,
             youth,
-            cfg.context,
-            existingObsForYouth,
-            gameState.currentWeek,
-            gameState.currentSeason,
-          );
+            context: cfg.context,
+            activityType: dayResult.activity.type,
+            venueType: cfg.venueType,
+            existingObservations: existingObsForYouth,
+            activityInstanceId: getInteractiveActivityCompletionKey(
+              dayResult.activity,
+              dayResult.dayIndex,
+            ),
+            occurrenceKey: `preview-day-${dayResult.dayIndex}-player-${i}`,
+          });
           previewUnsignedYouth[youth.id] = previewObs.updatedYouth;
 
           const topAttrs = previewObs.observation.attributeReadings

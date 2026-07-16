@@ -14,6 +14,7 @@ import {
   selectCareerStoryTemplate,
   type ConsequenceCinemaSource,
 } from "@/components/game/consequence-cinema/consequenceCinemaModel";
+import { createFarewellCareerMoment } from "@/engine/career/careerMoments";
 
 function emptyConsequenceState(): ConsequenceEngineState {
   return {
@@ -337,5 +338,26 @@ describe("career consequence cinema model", () => {
     expect(selectCareerStoryCallback("seed", "story", "resolvedDecision", "mixed"))
       .toBe(selectCareerStoryCallback("seed", "story", "resolvedDecision", "mixed"));
     expect(buildCareerStoryReel(source())).toEqual([]);
+  });
+
+  it("turns a presented career moment into an accessible causal archive story", () => {
+    const farewell = createFarewellCareerMoment({
+      rootSeed: "career-seed-a",
+      scoutId: "scout-1",
+      date: { season: 14, week: 52 },
+      title: "The final notebook closes",
+      summary: "A fourteen-season career ended with its players and decisions still active in the world.",
+      stakeholderIds: ["contact-1"],
+    });
+
+    const [story] = buildCareerStoryReel(source({ careerMoments: [farewell] }));
+    expect(story).toMatchObject({
+      kind: "careerMoment",
+      template: "farewellLetter",
+      momentCategory: "farewell",
+      title: "The final notebook closes",
+    });
+    expect(story.original.body).toContain("not from hidden simulation truth");
+    expect(story.callbackLine).toMatch(/career|recommendations|score|chain|world/i);
   });
 });

@@ -144,6 +144,46 @@ describe("long-career youth identity and placement integrity", () => {
     expect(result.updated[youth.id].retired).toBe(true);
   });
 
+  it("does not create an NPC youth signing when every eligible club is insolvent", () => {
+    const prospect = {
+      ...generatedPlayer("unsigned-insolvent-offer"),
+      age: 17,
+    };
+    const youth: UnsignedYouth = {
+      ...unsignedYouth(prospect),
+      generatedSeason: 1,
+      placed: false,
+      placedClubId: undefined,
+    };
+    const eligibleClub: Club = {
+      id: "club-insolvent",
+      name: "Insolvent FC",
+      shortName: "INS",
+      leagueId: "league-test",
+      reputation: 30,
+      budget: 0,
+      scoutingPhilosophy: "academyFirst",
+      managerId: "manager-insolvent",
+      playerIds: [],
+      academyPlayerIds: [],
+      youthAcademyRating: 12,
+      loanedOutPlayerIds: [],
+      loanedInPlayerIds: [],
+    };
+
+    const result = processYouthAging(
+      createRNG("insolvent-youth-offer"),
+      { [youth.id]: youth },
+      { [eligibleClub.id]: eligibleClub },
+      4,
+      { canClubSign: () => false },
+    );
+
+    expect(result.autoSigned).toEqual([]);
+    expect(result.retired).toEqual([youth.id]);
+    expect(result.updated[youth.id]).toMatchObject({ retired: true, placed: false });
+  });
+
   it("keeps repeated seasonal cohorts bounded without retaining terminal records", () => {
     let pool: Record<string, UnsignedYouth> = {};
     const cohortSize = 6;

@@ -24,12 +24,25 @@ function setbackLabel(kind: CareerSetbackKind): string {
   return "Career comeback";
 }
 
+function causalRecordLabel(
+  episode: NonNullable<NonNullable<GameState["careerRecovery"]>["current"]>,
+): string[] {
+  return [
+    episode.triggerReportId ? "Accountable report attached" : undefined,
+    episode.triggerPlayerId ? "Player case preserved" : undefined,
+    episode.affectedStakeholders?.length
+      ? `${episode.affectedStakeholders.length} affected stakeholder${episode.affectedStakeholders.length === 1 ? "" : "s"}`
+      : undefined,
+  ].filter((label): label is string => Boolean(label));
+}
+
 export function CareerRecoveryPanel({ state, onChoose }: CareerRecoveryPanelProps) {
   const episode = state.careerRecovery?.current;
   if (!episode) return null;
   const options = getCareerRecoveryPlanOptions(state, episode);
   const selectedOption = options.find((option) => option.id === episode.planId);
   const terminal = episode.status === "completed" || episode.status === "failed";
+  const causalLabels = causalRecordLabel(episode);
 
   if (terminal) {
     const succeeded = episode.status === "completed";
@@ -51,6 +64,11 @@ export function CareerRecoveryPanel({ state, onChoose }: CareerRecoveryPanelProp
                 {succeeded ? "Recovery completed" : "Recovery plan missed"}
               </p>
               <p className="mt-1 text-sm leading-6 text-zinc-300">{episode.outcomeSummary}</p>
+              {episode.triggerSummary && (
+                <p className="mt-2 text-xs leading-5 text-zinc-400">
+                  This comeback remains attached to: {episode.triggerSummary}
+                </p>
+              )}
             </div>
           </div>
           <Badge variant="outline" className={succeeded ? "border-emerald-400/30 text-emerald-200" : "border-red-400/30 text-red-200"}>
@@ -82,6 +100,21 @@ export function CareerRecoveryPanel({ state, onChoose }: CareerRecoveryPanelProp
                 ? "Each route consumes different work, carries a different deadline, and changes the level of any return opportunity. Ignoring the choice defaults to the slower step-back route."
                 : selectedOption?.description}
             </p>
+            {(episode.triggerSummary || causalLabels.length > 0) && (
+              <div className="mt-3 max-w-3xl rounded-lg border border-amber-300/15 bg-black/20 px-3 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-200">
+                  What caused this
+                </p>
+                {episode.triggerSummary && (
+                  <p className="mt-1 text-sm leading-5 text-zinc-300">{episode.triggerSummary}</p>
+                )}
+                {causalLabels.length > 0 && (
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    {causalLabels.join(" · ")}. The recovery cannot erase this causal record.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
           <Badge variant="outline" className="border-amber-400/30 text-amber-200">
             Previous Tier {episode.previousTier}

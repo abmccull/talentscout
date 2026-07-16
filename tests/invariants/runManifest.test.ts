@@ -4,6 +4,8 @@ import {
   createDeterministicRunId,
   createNamedRNG,
   createRunManifest,
+  getRunGameModeId,
+  getRunKind,
   deriveNamedSeed,
   formatRunFingerprint,
   repairRunManifest,
@@ -61,9 +63,11 @@ describe("deterministic run manifest", () => {
     expect(reorderedWorld.fingerprint).not.toBe(first.fingerprint);
   });
 
-  it("persists a V2 content definition ledger while accepting untouched V1 manifests", () => {
+  it("persists authoritative V3 mode identity while accepting older manifests", () => {
     const current = createRunManifest(BASE_INPUT);
-    expect(current.manifestVersion).toBe(2);
+    expect(current.manifestVersion).toBe(3);
+    expect(current.gameModeId).toBe("youth-scout");
+    expect(current.runKind).toBe("career");
     expect(current.contentDefinitionIds).toEqual([
       "arc:family-trust",
       "trait:agent-cartel",
@@ -78,9 +82,11 @@ describe("deterministic run manifest", () => {
     expect(historical.manifestVersion).toBe(1);
     expect(historical.contentDefinitionIds).toBeUndefined();
     expect(validateRunManifest(historical, BASE_INPUT.rootSeed)).toEqual([]);
+    expect(getRunGameModeId(historical)).toBe("youth-scout");
+    expect(getRunKind(historical)).toBe("career");
   });
 
-  it("diagnoses a V2 definition-ledger mismatch independently of its run hash", () => {
+  it("diagnoses a definition-ledger mismatch independently of its run hash", () => {
     const current = createRunManifest(BASE_INPUT);
     const tampered = {
       ...current,
@@ -92,7 +98,7 @@ describe("deterministic run manifest", () => {
     );
   });
 
-  it("downgrades an incomplete V2 ledger to an explicitly legacy-compatible manifest", () => {
+  it("downgrades an incomplete ledger to an explicitly legacy-compatible manifest", () => {
     const current = createRunManifest(BASE_INPUT);
     const incomplete = {
       ...current,
@@ -104,6 +110,22 @@ describe("deterministic run manifest", () => {
     expect(repaired.contentDefinitionIds).toBeUndefined();
     expect(repaired.integrity).toBe("legacy-import");
     expect(validateRunManifest(repaired, BASE_INPUT.rootSeed)).toEqual([]);
+  });
+
+  it("binds career versus challenge identity into the immutable run", () => {
+    const career = createRunManifest(BASE_INPUT);
+    const challenge = createRunManifest({ ...BASE_INPUT, runKind: "challenge" });
+
+    expect(challenge.runKind).toBe("challenge");
+    expect(challenge.fingerprint).not.toBe(career.fingerprint);
+    expect(getRunGameModeId(challenge)).toBe("youth-scout");
+  });
+
+  it("rejects a mode that contradicts the selected specialization", () => {
+    expect(() => createRunManifest({
+      ...BASE_INPUT,
+      gameModeId: "data-scout",
+    })).toThrow(/gameModeId/);
   });
 
   it("changes identity when an immutable run-defining choice changes", () => {

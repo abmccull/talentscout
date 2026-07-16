@@ -37,6 +37,10 @@ import {
 } from "./eventChains";
 import type { ChainStartResult, ChainAdvanceResult } from "./eventChains";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
+import {
+  resolveNarrativeTruth,
+  type NarrativeTruthResolution,
+} from "./narrativeTruth";
 
 // =============================================================================
 // Constants
@@ -207,9 +211,16 @@ function buildTemplateEvent(
   template: EventTemplate,
   rng: RNG,
   state: GameState,
+  truth: NarrativeTruthResolution | undefined,
 ): NarrativeEvent {
-  const ctx = buildEventContext(template.type, state);
-  const relatedIds = extractRelatedIds(template.type, state);
+  const ctx = {
+    ...buildEventContext(template.type, state),
+    ...truth?.evidence?.context,
+  };
+  const truthRelatedIds = truth?.evidence?.relatedIds ?? [];
+  const relatedIds = truthRelatedIds.length > 0
+    ? [...new Set(truthRelatedIds)]
+    : extractRelatedIds(template.type, state);
   return {
     id: generateEventId(rng),
     type: template.type,
@@ -233,6 +244,20 @@ function buildTemplateEvent(
   };
 }
 
+function resolveTemplateTruth(
+  template: EventTemplate,
+  state: GameState,
+): NarrativeTruthResolution | undefined | null {
+  return template.truth
+    ? resolveNarrativeTruth(template.truth, state)
+    : undefined;
+}
+
+function templateIsEligible(template: EventTemplate, state: GameState): boolean {
+  return template.prerequisites(state)
+    && resolveTemplateTruth(template, state) !== null;
+}
+
 /** Build a specific eligible authored beat for state-driven director duties. */
 export function generateNarrativeEventOfType(
   rng: RNG,
@@ -240,9 +265,11 @@ export function generateNarrativeEventOfType(
   type: NarrativeEventType,
 ): NarrativeEvent | null {
   const template = EVENT_TEMPLATES.find(
-    (candidate) => candidate.type === type && candidate.prerequisites(state),
+    (candidate) => candidate.type === type && templateIsEligible(candidate, state),
   );
-  return template ? buildTemplateEvent(template, rng, state) : null;
+  if (!template) return null;
+  const truth = resolveTemplateTruth(template, state);
+  return truth === null ? null : buildTemplateEvent(template, rng, state, truth);
 }
 
 // =============================================================================
@@ -341,7 +368,9 @@ export function generateWeeklyEvent(
   }
 
   // Step 4 — filter to eligible templates
-  const eligible = EVENT_TEMPLATES.filter((t) => t.prerequisites(state));
+  const eligible = EVENT_TEMPLATES.filter((template) =>
+    templateIsEligible(template, state)
+  );
   if (eligible.length === 0) {
     return { event: null };
   }
@@ -355,7 +384,12 @@ export function generateWeeklyEvent(
   );
 
   // Step 6 — build contextual content
-  return { event: buildTemplateEvent(template, rng, state) };
+  const truth = resolveTemplateTruth(template, state);
+  return {
+    event: truth === null
+      ? null
+      : buildTemplateEvent(template, rng, state, truth),
+  };
 }
 
 // =============================================================================

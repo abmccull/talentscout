@@ -19,6 +19,11 @@ import type {
   Club,
   InboxMessage,
 } from "@/engine/core/types";
+import {
+  assessClubAffordabilityFromContext,
+  buildClubAffordabilityContext,
+  type ClubAffordabilityContext,
+} from "@/engine/finance/clubEconomics";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 
@@ -129,6 +134,11 @@ export function tickFreeAgentPool(
   const removedPlayerIds: string[] = [];
   const messages: InboxMessage[] = [];
   const midSeasonReleases: FreeAgent[] = [];
+  const affordabilityContext = buildClubAffordabilityContext(
+    state.clubs,
+    state.players,
+    { currentWeek: state.currentWeek, currentSeason: state.currentSeason },
+  );
 
   // Determine if pool is overflowing (accelerate NPC signings)
   const overflowMultiplier = pool.agents.length > POOL_OVERFLOW_THRESHOLD ? 2.0 : 1.0;
@@ -181,7 +191,12 @@ export function tickFreeAgentPool(
       );
 
       if (rng.chance(offerChance) && updated.npcInterest.length < 3) {
-        const npcClub = findInterestedNPCClub(player, updated, state.clubs, rng);
+        const npcClub = findInterestedNPCClub(
+          player,
+          updated,
+          affordabilityContext,
+          rng,
+        );
         if (npcClub) {
           updated.npcInterest = [
             ...updated.npcInterest,
@@ -300,18 +315,22 @@ export function tickFreeAgentPool(
 function findInterestedNPCClub(
   player: Player,
   agent: FreeAgent,
-  clubs: Record<string, Club>,
+  affordabilityContext: ClubAffordabilityContext,
   rng: RNG,
 ): Club | null {
-  const candidates = Object.values(clubs).filter((club) => {
+  const candidates = Object.values(affordabilityContext).flatMap((entry) => {
+    const club = entry.club;
     // Don't sign back to former club (if still exists)
-    if (club.id === agent.releasedFrom) return false;
-    // Must have budget for the signing bonus and an initial wage reserve.
-    if (club.budget < agent.signingBonusExpectation + agent.wageExpectation * 12) return false;
+    if (club.id === agent.releasedFrom) return [];
+    const affordability = assessClubAffordabilityFromContext(entry, {
+      upfrontCost: agent.signingBonusExpectation,
+      weeklyWageCommitment: agent.wageExpectation,
+    });
+    if (!affordability.affordable) return [];
     // Reputation match: within 30 points
     const playerReputation = player.currentAbility / 2;
     const repDiff = Math.abs(club.reputation - playerReputation);
-    return repDiff <= 25;
+    return repDiff <= 25 ? [club] : [];
   });
 
   if (candidates.length === 0) return null;

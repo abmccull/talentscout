@@ -149,6 +149,7 @@ test.describe("Academy placement case", () => {
         decisionTotal: decision?.scoreBreakdown?.total,
         presentationScore: decision?.scoreBreakdown?.presentation,
         briefStatus: state.youthRecruitmentBriefs[briefId]?.status,
+        briefFailures: state.youthRecruitmentBriefs[briefId]?.fulfillmentFailures ?? [],
         reviewCheckpoints: reviews.map((review) => review.checkpoint).sort(),
       };
     }, { briefId: setup.briefId });
@@ -160,7 +161,7 @@ test.describe("Academy placement case", () => {
     expect(resolved.presentationScore).toBeLessThanOrEqual(100);
     expect(resolved.reasons.some((reason: string) => reason.includes("Pathway-led presentation"))).toBe(true);
     expect(resolved.reasons.some((reason: string) => /fit \d+\/100/.test(reason))).toBe(true);
-    expect(resolved.briefStatus).toBe("fulfilled");
+    expect(resolved.briefStatus, resolved.briefFailures.join(", ")).toBe("fulfilled");
     expect(resolved.reviewCheckpoints).toEqual(["oneSeason", "twoSeasons"]);
     gamePage.expectNoConsoleErrors();
   });

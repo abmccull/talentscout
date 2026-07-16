@@ -59,6 +59,19 @@ function canonicalCountry(country: string): string {
   return normalizeCountryKey(country) ?? country.trim().toLowerCase();
 }
 
+export function getSatelliteOfficeMonthlyCostTotal(
+  finances: Pick<FinancialRecord, "satelliteOffices">,
+): number {
+  return finances.satelliteOffices.reduce((sum, office) => sum + office.monthlyCost, 0);
+}
+
+export function getSatelliteOfficeCostReferenceId(
+  week: number,
+  season: number,
+): string {
+  return `satellite-costs:s${season}w${week}`;
+}
+
 export function getHomeBaseRelocationQuote(
   finances: HomeBaseRelocationFinances,
   scout: HomeBaseRelocationScout,
@@ -368,15 +381,28 @@ export function processSatelliteOfficeCosts(
 ): FinancialRecord {
   if (week % 4 !== 0) return finances;
   if (finances.satelliteOffices.length === 0) return finances;
+  const referenceId = getSatelliteOfficeCostReferenceId(week, season);
+  if (finances.transactions.some((transaction) =>
+    transaction.referenceId === referenceId
+    || transaction.referenceId === `monthly-finance:s${season}w${week}:operating-expenses`
+  )) {
+    return finances;
+  }
 
-  const totalCost = finances.satelliteOffices.reduce((sum, o) => sum + o.monthlyCost, 0);
+  const totalCost = getSatelliteOfficeMonthlyCostTotal(finances);
 
   return {
     ...finances,
     balance: finances.balance - totalCost,
     transactions: [
       ...finances.transactions,
-      { week, season, amount: -totalCost, description: `Satellite office costs (${finances.satelliteOffices.length} offices)` },
+      {
+        week,
+        season,
+        amount: -totalCost,
+        description: `Satellite office costs (${finances.satelliteOffices.length} offices)`,
+        referenceId,
+      },
     ],
   };
 }

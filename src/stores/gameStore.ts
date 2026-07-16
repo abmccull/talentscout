@@ -100,6 +100,14 @@ import { getRunContentDefinitionIds } from "@/engine/content/registry";
 import { getGameModeIdForSpecialization } from "@/engine/content/modeDefinitions";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
+import { createStoryDirectorStateV2 } from "@/engine/events/storyDirectorV2";
+import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
+import { createCareerStoryArchiveState } from "@/engine/consequences/careerStoryArchive";
+import {
+  createCareerChronologyState,
+  recordCareerTierReached,
+} from "@/engine/career/chronology";
+import { createCareerMomentState } from "@/engine/career/careerMoments";
 import { generateSeasonEvents, getActiveSeasonEvents } from "@/engine/core/seasonEvents";
 import { createEmptyPool } from "@/engine/freeAgents/pool";
 import {
@@ -111,9 +119,12 @@ import {
   applyWorldConditionSeasonStart,
   createWorldConditionState,
   getTravelEligibleCountryKeys,
+  getWorldConditionArcContentDefinitionIds,
   getWorldConditionContentDefinitionIds,
   getWorldConditionModifiers,
   initializeWorld,
+  createWorldConditionArcState,
+  startWorldConditionArcs,
 } from "@/engine/world";
 import { createScout } from "@/engine/scout/creation";
 import {
@@ -418,6 +429,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const runManifest = createRunManifest({
       rootSeed: effectiveConfig.worldSeed,
       specialization: effectiveConfig.specialization,
+      gameModeId: getGameModeIdForSpecialization(effectiveConfig.specialization),
+      runKind: scenario ? "challenge" : "career",
       difficulty: effectiveConfig.difficulty,
       selectedCountries,
       startingCountry: selectedCountries.includes(startingCountry)
@@ -435,6 +448,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ),
         ...getWorldTraitContentDefinitionIds(),
         ...getWorldConditionContentDefinitionIds(),
+        ...getWorldConditionArcContentDefinitionIds(),
         ...getScoutIdentityContentDefinitionIds(),
         ...getRivalOrganizationContentDefinitionIds(),
         "narrative-catalog:youth-ea.3",
@@ -469,6 +483,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       worldCountries,
       1,
     );
+    const worldConditionArcState = startWorldConditionArcs({
+      state: createWorldConditionArcState(),
+      rootSeed: runManifest.rootSeed,
+      conditions: worldConditionState.active,
+      now: { week: 1, season: 1 },
+      seasonLength: getSeasonLength(fixtures, 1),
+    });
     const initialRegionalKnowledge = initializeRegionalKnowledge(
       worldCountries,
       effectiveConfig.startingCountry ?? effectiveConfig.region ?? selectedCountries[0] ?? "england",
@@ -601,10 +622,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       territories,
       countries: worldCountries,
       worldConditionState,
+      worldConditionArcState,
       narrativeEvents: [],
       activeStorylines: [],
       eventDirector: createEventDirectorState(),
+      storyDirectorV2: createStoryDirectorStateV2(),
       consequenceState: createConsequenceEngineState(),
+      careerStoryArchive: createCareerStoryArchiveState(),
       eventChains: [],
       rivalScouts: {},
       rivalOrganizationState: createRivalOrganizationState(),
@@ -616,6 +640,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
       completedScenarioIds: [],
       discoveryRecords: [],
       performanceHistory: [],
+      careerChronology: recordCareerTierReached(
+        createCareerChronologyState({
+          currentSeason: 1,
+          careerTier: scout.careerTier,
+        }),
+        scout.careerTier,
+        { week: 1, season: 1 },
+      ),
+      careerMoments: createCareerMomentState(),
       transferRecords: [],
       playedFixtures: [],
       watchlist: [],
@@ -690,6 +723,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
     };
+
+    // Profiles are derived from the actual generated cast, so initialize only
+    // after the complete authoritative state exists.
+    tempState.stakeholderProfiles = createStakeholderProfileRegistry(tempState);
 
     // ── Phase 2 initialization ──────────────────────────────────────────────
 

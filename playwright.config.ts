@@ -29,7 +29,7 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: `node scripts/serve-static.mjs --dir out --port ${e2ePort}`,
+    command: `node scripts/serve-static.mjs --dir out-e2e --port ${e2ePort} --require-e2e-bridge`,
     url: e2eBaseUrl,
     reuseExistingServer: false,
     timeout: 30_000,

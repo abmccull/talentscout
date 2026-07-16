@@ -19,6 +19,23 @@ import {
 
 const youthEarlyAccess = process.env.NEXT_PUBLIC_YOUTH_EARLY_ACCESS !== "false";
 
+/** Acknowledge the persisted emotional-moment queue through its real modal UI. */
+export async function dismissCareerMomentOverlays(
+  page: Page,
+  maxAcknowledgements = 12,
+): Promise<void> {
+  for (let index = 0; index < maxAcknowledgements; index++) {
+    const overlay = page.getByTestId("career-moment-overlay");
+    if (!(await overlay.isVisible({ timeout: 500 }).catch(() => false))) return;
+    await overlay.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.waitForTimeout(100);
+  }
+
+  throw new Error(
+    `Career moment queue did not drain after ${maxAcknowledgements} acknowledgements`,
+  );
+}
+
 export class GamePage {
   readonly page: Page;
   private consoleErrors: string[] = [];
@@ -245,6 +262,10 @@ export class GamePage {
     await this.waitForScreen("weekSimulation", 10_000);
 
     for (let step = 0; step < 20; step++) {
+      // Milestones can replace the final simulation controls with a week-summary
+      // and celebration stack. These are acknowledgement dialogs, not gameplay
+      // choices, so clear them before looking for the next canonical control.
+      await this.dismissBlockingDialogs();
       if (await this.getCurrentScreen() === "calendar") break;
 
       if (launchLiveSession) {
@@ -326,7 +347,12 @@ export class GamePage {
 
     const finalScreen = await this.getCurrentScreen();
     if (finalScreen !== "calendar") {
-      throw new Error(`Canonical week ended on unexpected screen: ${finalScreen}`);
+      const consoleContext = this.consoleErrors.length > 0
+        ? `\nConsole errors:\n${this.consoleErrors.join("\n")}`
+        : "";
+      throw new Error(
+        `Canonical week ended on unexpected screen: ${finalScreen}${consoleContext}`,
+      );
     }
   }
 

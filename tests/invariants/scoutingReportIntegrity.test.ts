@@ -362,6 +362,24 @@ describe("report submission invariants", () => {
       ...store,
       gameState: {
         ...afterRetry,
+        clubs: {
+          "club-buyer": {
+            id: "club-buyer",
+            name: "Buyer United",
+            shortName: "BUY",
+            leagueId: "league-buyer",
+            reputation: 55,
+            budget: 1_000_000,
+            scoutingBudget: 25_000,
+            scoutingPhilosophy: "academyFirst",
+            managerId: "manager-buyer",
+            playerIds: [],
+            academyPlayerIds: [],
+            youthAcademyRating: 12,
+            loanedOutPlayerIds: [],
+            loanedInPlayerIds: [],
+          },
+        },
         finances: {
           ...finances,
           reportListings: [{
