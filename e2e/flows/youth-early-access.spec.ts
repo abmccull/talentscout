@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
 import { SELECTORS } from "../helpers/selectors";
+import { navigateToGame } from "../helpers/state-injection";
 
 async function allocateYouthPoints(page: Page) {
   const allocations: Record<string, number> = {
@@ -25,8 +26,7 @@ async function startFreshYouthCareer(
   options: { keepTutorials?: boolean } = {},
 ) {
   if (options.keepTutorials) {
-    await gamePage.page.goto("/play");
-    await gamePage.page.waitForFunction(() => Boolean((window as any).__GAME_STORE__));
+    await navigateToGame(gamePage.page);
   } else {
     await gamePage.goto();
   }

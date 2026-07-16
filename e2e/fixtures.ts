@@ -274,13 +274,13 @@ export class GamePage {
       await this.dismissBlockingDialogs();
       if (await this.getCurrentScreen() === "calendar") break;
 
-      if (launchLiveSession) {
-        const interactionResolved = await this.resolveWeekSimulationInteraction();
-        if (!interactionResolved) {
-          await this.page.waitForTimeout(250);
-          continue;
-        }
+      const interactionResolved = await this.resolveWeekSimulationInteraction();
+      if (!interactionResolved) {
+        await this.page.waitForTimeout(250);
+        continue;
+      }
 
+      if (launchLiveSession) {
         const launchLiveSessionButton = this.page.getByRole("button", {
           name: /^Launch Live Session$/,
         });

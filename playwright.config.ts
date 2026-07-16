@@ -10,7 +10,11 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
   workers: 1,
-  reporter: [["html", { open: "never" }], ["list"]],
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR ?? "test-results",
+  reporter: [["html", {
+    open: "never",
+    outputFolder: process.env.PLAYWRIGHT_HTML_OUTPUT_DIR ?? "playwright-report",
+  }], ["list"]],
   timeout: 60_000,
 
   use: {
