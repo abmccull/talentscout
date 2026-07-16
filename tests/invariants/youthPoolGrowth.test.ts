@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { RivalScout } from "@/engine/core/types";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -257,5 +258,126 @@ describe("unsigned-youth population integrity", () => {
       playerId: youth.player.id,
       placementReportId: placementId,
     }));
+  }, 45_000);
+
+  it("removes a prospect from the opportunity pool after a rival signing commits", async () => {
+    const { useGameStore } = await import("@/stores/gameStore");
+    const { createRNG } = await import("@/engine/rng");
+    const {
+      advanceYouthRivalPressure,
+      resolveRivalYouthClaim,
+    } = await import("@/engine/rivals/youthCompetition");
+    await useGameStore.getState().startNewGame({
+      scoutFirstName: "Rival",
+      scoutLastName: "Invariant",
+      scoutAge: 24,
+      specialization: "youth",
+      difficulty: "normal",
+      worldSeed: "rival-youth-claim-cleanup",
+      selectedCountries: ["england"],
+      startingCountry: "england",
+      nationality: "English",
+      skillAllocations: {
+        technicalEye: 2,
+        psychologicalRead: 2,
+        playerJudgment: 2,
+        potentialAssessment: 2,
+      },
+      originId: "academy-apprentice",
+      flawId: "fragile-network",
+      doctrineIds: ["evidence-first"],
+    });
+
+    const initial = useGameStore.getState().gameState!;
+    const [youthId, youth] = Object.entries(initial.unsignedYouth)[0];
+    const targetClub = Object.values(initial.clubs)
+      .slice()
+      .sort((left, right) => right.budget - left.budget)[0];
+    const contestedYouth = {
+      ...youth,
+      visibility: 100,
+      buzzLevel: 100,
+      discoveredBy: [initial.scout.id],
+    };
+    const rival: RivalScout = {
+      id: "rival-youth-claim-invariant",
+      name: "Rita Rival",
+      quality: 5,
+      specialization: "youth",
+      clubId: targetClub.id,
+      targetPlayerIds: [youth.player.id],
+      reputation: 80,
+      personality: "aggressive",
+      isNemesis: true,
+      competingForPlayers: [youth.player.id],
+      scoutingProgress: { [youth.player.id]: 4 },
+      aggressiveness: 1,
+      budgetTier: "high",
+      winsAgainstPlayer: 0,
+      lossesToPlayer: 0,
+    };
+    const pressured = advanceYouthRivalPressure({
+      rival,
+      youth: contestedYouth,
+      week: initial.currentWeek,
+      season: initial.currentSeason,
+      scoutHasInterest: true,
+    });
+    const successfulRootSeed = Array.from(
+      { length: 20 },
+      (_, index) => `rival-youth-claim-root-${index}`,
+    ).find((rootSeed) => resolveRivalYouthClaim(
+      createRNG(
+        `${rootSeed}-youth-rival-claim-${rival.id}-${youth.id}-s${initial.currentSeason}w${initial.currentWeek}`,
+      ),
+      {
+        rival: pressured.updatedRival,
+        youth: pressured.updatedYouth,
+        week: initial.currentWeek,
+        season: initial.currentSeason,
+        scoutHasInterest: true,
+      },
+    ).success);
+    expect(successfulRootSeed).toBeDefined();
+
+    useGameStore.setState({
+      gameState: {
+        ...initial,
+        seed: successfulRootSeed!,
+        scout: { ...initial.scout, fatigue: 0 },
+        clubs: {
+          ...initial.clubs,
+          [targetClub.id]: {
+            ...targetClub,
+            budget: Math.max(targetClub.budget, 10_000_000),
+            weeklyWageBudget: Math.max(targetClub.weeklyWageBudget ?? 0, 1_000_000_000),
+          },
+        },
+        unsignedYouth: { [youthId]: contestedYouth },
+        rivalScouts: { [rival.id]: rival },
+      },
+    });
+
+    await useGameStore.getState().batchAdvance(1);
+
+    const after = useGameStore.getState().gameState!;
+    const youthSigningMovements = after.playerMovementHistory.filter(
+      (movement) => movement.playerId === youth.player.id && movement.type === "youthSigning",
+    );
+    expect(after.unsignedYouth[youthId]).toBeUndefined();
+    expect(Object.values(after.unsignedYouth).every((candidate) =>
+      !candidate.placed && !candidate.retired
+    )).toBe(true);
+    expect(after.players[youth.player.id]).toMatchObject({
+      id: youth.player.id,
+      clubId: targetClub.id,
+      contractClubId: targetClub.id,
+    });
+    expect(youthSigningMovements).toHaveLength(1);
+    expect(youthSigningMovements[0]).toMatchObject({ toClubId: targetClub.id });
+    expect([
+      ...after.clubs[targetClub.id].playerIds,
+      ...(after.clubs[targetClub.id].academyPlayerIds ?? []),
+    ]).toContain(youth.player.id);
   }, 45_000);
 });

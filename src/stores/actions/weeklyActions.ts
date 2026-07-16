@@ -187,6 +187,7 @@ import {
   advanceYouthRecruitmentBriefs,
   directWeeklyYouthProfessionalCase,
   generateYouthRecruitmentBriefs,
+  reconcileYouthSigningPlacements,
 } from "@/engine/youth";
 import {
   completeAcademyRecommendationReview,
@@ -1625,11 +1626,15 @@ export function createWeeklyActions(
       );
       if (movement.applied.length === 0) continue;
       youthRivalLifecycle = movement.state;
-      const movedPlayer = youthRivalLifecycle.players[detachedPlayer.id];
-      youthRivalPool[youth.id] = {
-        ...claim.updatedYouth,
-        ...(movedPlayer ? { player: movedPlayer } : {}),
-      };
+      // The canonical Player and movement ledger now own this identity. Keep
+      // unsignedYouth limited to live opportunities, matching player-authored
+      // placements and annual NPC youth signings. Retaining claim.updatedYouth
+      // here would leave a placed prospect in the active pool indefinitely.
+      youthRivalPool = reconcileYouthSigningPlacements(
+        youthRivalPool,
+        [{ youthId: youth.id, clubId: rival.clubId }],
+        movement.applied,
+      );
       youthRivalScouts[rival.id] = claim.updatedRival;
       youthRivalActivities = claim.activities;
       youthRivalInbox = claim.messages;
