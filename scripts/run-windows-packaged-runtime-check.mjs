@@ -18,9 +18,11 @@ import { createServer } from "node:net";
 import {
   access,
   cp,
+  lstat,
   mkdir,
   readFile,
   readdir,
+  realpath,
   rm,
   stat,
   writeFile,
@@ -30,13 +32,24 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
+import {
+  evaluateWindowsRuntimeCertification,
+  evaluateWindowsSignerBinding,
+  inspectWindowsPackageManifestBinding,
+  mergeWindowsRuntimeOperatorControls,
+  requiredWindowsRuntimeControls,
+  validateWindowsRuntimeOperatorAttestation,
+  windowsRuntimeOperatorAttestationPolicy,
+} from "./windows-runtime-operator-attestation.mjs";
 
 const ROOT = process.cwd();
 const DIST_DIR = path.resolve(ROOT, "dist");
 const APP_DIR = path.resolve(DIST_DIR, "win-unpacked");
 const APP_EXE = path.resolve(APP_DIR, "TalentScout.exe");
 const APP_ASAR = path.resolve(APP_DIR, "resources", "app.asar");
-const INSTALLER = path.resolve(DIST_DIR, "TalentScout-Setup-1.0.0.exe");
+const packageDocument = JSON.parse(await readFile(path.resolve(ROOT, "package.json"), "utf8"));
+const productVersion = String(packageDocument.version ?? "").trim();
+const INSTALLER = path.resolve(DIST_DIR, `TalentScout-Setup-${productVersion}.exe`);
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const keepProfile = args.has("--keep-profile");
@@ -49,6 +62,25 @@ const manifestPath = path.resolve(
   ROOT,
   manifestArgument?.slice("--manifest=".length)
     ?? "artifacts/release/candidate-package-manifest.json",
+);
+const attestationArgument = rawArgs.find((argument) => argument.startsWith("--attestation="));
+const operatorAttestationPath = attestationArgument?.slice("--attestation=".length)
+  || process.env.WINDOWS_RUNTIME_OPERATOR_ATTESTATION?.trim()
+  || null;
+const expectedWorkflowRunId = (
+  process.env.WINDOWS_RELEASE_WORKFLOW_RUN_ID
+  || process.env.GITHUB_RUN_ID
+  || ""
+).trim();
+const expectedSignerCertificateSha256 = (
+  process.env.WINDOWS_RELEASE_SIGNER_SHA256
+  || ""
+).trim();
+const releaseEvidenceStatusPath = path.resolve(
+  ROOT,
+  "docs",
+  "release",
+  "release-evidence-status.json",
 );
 
 function runGit(argsList) {
@@ -80,6 +112,7 @@ async function safeRemoveTransient(parentPath, childPath) {
   if (
     basename !== "runtime-profile"
     && basename !== "runtime-package-no-steam"
+    && basename !== "runtime-package-under-test"
     && basename !== "runtime-installed-app"
     && basename !== "runtime-profile-installed"
   ) {
@@ -89,45 +122,24 @@ async function safeRemoveTransient(parentPath, childPath) {
 }
 
 async function inspectManifestBinding(head, installerArtifact) {
-  try {
-    const document = JSON.parse(await readFile(manifestPath, "utf8"));
-    const windowsEntry = Array.isArray(document.packages)
-      ? document.packages.find((entry) => entry?.kind === "windows-installer")
-      : null;
-    const failures = [];
-    if (document.schemaVersion !== 2) failures.push("manifest schemaVersion is not 2");
-    if (String(document.candidateCommitSha ?? "").toLowerCase() !== head.toLowerCase()) {
-      failures.push("manifest candidate SHA does not match HEAD");
-    }
-    if (!windowsEntry) {
-      failures.push("manifest has no windows-installer entry");
-    } else {
-      if (String(windowsEntry.sha256 ?? "").toUpperCase() !== installerArtifact.sha256) {
-        failures.push("installer SHA-256 does not match manifest");
-      }
-      if (windowsEntry.bytes !== installerArtifact.bytes) {
-        failures.push("installer byte length does not match manifest");
-      }
-      if (String(windowsEntry.path ?? "") !== installerArtifact.path) {
-        failures.push("installer path does not match manifest");
-      }
-    }
-    return {
-      available: true,
-      passed: failures.length === 0,
-      path: normalizeRelative(manifestPath),
-      failures,
-      candidateCommitSha: document.candidateCommitSha ?? null,
-    };
-  } catch (error) {
-    return {
-      available: false,
-      passed: false,
-      path: normalizeRelative(manifestPath),
-      failures: [error instanceof Error ? error.message : String(error)],
-      candidateCommitSha: null,
-    };
-  }
+  return inspectWindowsPackageManifestBinding({
+    root: ROOT,
+    manifestPath,
+    candidateCommitSha: head,
+    installerArtifact,
+    productVersion,
+    expectedWorkflowRunId,
+    resolveTagCommit: async (tag) => runGit([
+      "rev-parse",
+      "--verify",
+      `refs/tags/${tag}^{commit}`,
+    ]),
+  });
+}
+
+function publicManifestBinding(binding) {
+  const { realPath: _realPath, document: _document, ...publicFields } = binding;
+  return publicFields;
 }
 
 function inspectAuthenticode(filePath) {
@@ -135,8 +147,10 @@ function inspectAuthenticode(filePath) {
   const command = [
     `$signature = Get-AuthenticodeSignature -LiteralPath '${escapedPath}'`,
     "$subject = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { $null }",
+    "$thumbprint = if ($signature.SignerCertificate) { $signature.SignerCertificate.Thumbprint } else { $null }",
+    "$sha256 = if ($signature.SignerCertificate) { $algorithm = [Security.Cryptography.SHA256]::Create(); try { -join ($algorithm.ComputeHash($signature.SignerCertificate.RawData) | ForEach-Object { $_.ToString('X2') }) } finally { $algorithm.Dispose() } } else { $null }",
     "$timestamp = if ($signature.TimeStamperCertificate) { $signature.TimeStamperCertificate.Subject } else { $null }",
-    "[PSCustomObject]@{ Status = $signature.Status.ToString(); StatusMessage = $signature.StatusMessage; SignerSubject = $subject; TimestampSubject = $timestamp } | ConvertTo-Json -Compress",
+    "[PSCustomObject]@{ Status = $signature.Status.ToString(); StatusMessage = $signature.StatusMessage; SignerSubject = $subject; SignerThumbprintSha1 = $thumbprint; SignerCertificateSha256 = $sha256; TimestampSubject = $timestamp } | ConvertTo-Json -Compress",
   ].join("; ");
   const result = spawnSync(
     "powershell.exe",
@@ -618,7 +632,11 @@ async function runExactCandidateInstallJourney({
   head,
   sourceTreeClean,
   manifestBinding,
-  authenticode,
+  installerPath,
+  installerSignature,
+  unpackedExecutableSignature,
+  signerBinding,
+  expectedExeSha256,
   expectedAsarSha256,
 }) {
   const result = {
@@ -626,8 +644,11 @@ async function runExactCandidateInstallJourney({
     status: "Unverified",
     preconditions: {
       sourceTreeClean,
-      manifestBound: manifestBinding.passed,
-      authenticodeStatus: authenticode.Status ?? authenticode.status ?? "Unverified",
+      manifestBound: manifestBinding.packagePassed,
+      authenticodeStatus: installerSignature.Status ?? "Unverified",
+      unpackedExecutableAuthenticodeStatus:
+        unpackedExecutableSignature.Status ?? "Unverified",
+      signerPinned: signerBinding.passed,
       administrator: isAdministrator(),
     },
     install: null,
@@ -642,9 +663,23 @@ async function runExactCandidateInstallJourney({
   }
 
   if (!sourceTreeClean) result.failures.push("working tree is not clean");
-  if (!manifestBinding.passed) result.failures.push("installer is not bound to the candidate manifest");
-  if (result.preconditions.authenticodeStatus !== "Valid") {
-    result.failures.push("installer does not have a valid Authenticode signature");
+  if (!manifestBinding.packagePassed) {
+    result.failures.push("installer is not bound to the candidate manifest");
+  }
+  if (
+    result.preconditions.authenticodeStatus !== "Valid"
+    || result.preconditions.unpackedExecutableAuthenticodeStatus !== "Valid"
+  ) {
+    result.failures.push("installer or unpacked executable lacks a valid Authenticode signature");
+  }
+  if (
+    installerSignature.SignerCertificateSha256
+    !== unpackedExecutableSignature.SignerCertificateSha256
+  ) {
+    result.failures.push("installer and unpacked executable use different signing certificates");
+  }
+  if ((strict || expectedSignerCertificateSha256) && !signerBinding.passed) {
+    result.failures.push(`release signer binding failed: ${signerBinding.failures.join("; ")}`);
   }
   if (!result.preconditions.administrator) {
     result.failures.push("current token is not elevated for the per-machine shipping installer");
@@ -661,7 +696,7 @@ async function runExactCandidateInstallJourney({
   let installed = false;
   try {
     const installResult = spawnSync(
-      INSTALLER,
+      installerPath,
       ["/S", "/allusers", `/D=${installDirectory}`],
       {
         cwd: evidenceDir,
@@ -688,10 +723,34 @@ async function runExactCandidateInstallJourney({
     await access(installedExe, fsConstants.R_OK);
     await access(installedAsar, fsConstants.R_OK);
     const installedAsarSha256 = await sha256File(installedAsar);
+    const installedExeSha256 = await sha256File(installedExe);
+    const installedExeSignature = inspectAuthenticode(installedExe);
+    const installedSignerBinding = evaluateWindowsSignerBinding({
+      installerSignature,
+      executableSignature: installedExeSignature,
+      expectedSignerCertificateSha256,
+    });
     result.install.installedAppAsarSha256 = installedAsarSha256;
     result.install.installedAppAsarMatchesBuild = installedAsarSha256 === expectedAsarSha256;
+    result.install.installedAppExeSha256 = installedExeSha256;
+    result.install.installedAppExeMatchesBuild = installedExeSha256 === expectedExeSha256;
+    result.install.installedAppSignature = installedExeSignature;
+    result.install.installedSignerBinding = installedSignerBinding;
     if (!result.install.installedAppAsarMatchesBuild) {
       throw new Error("installed app.asar does not match the packaged build under test");
+    }
+    if (!result.install.installedAppExeMatchesBuild) {
+      throw new Error("installed TalentScout.exe does not match the packaged build under test");
+    }
+    const installedSignatureMatchesInstaller = installedExeSignature.Status === "Valid"
+      && installedExeSignature.SignerCertificateSha256
+        === installerSignature.SignerCertificateSha256;
+    result.install.installedSignatureMatchesInstaller = installedSignatureMatchesInstaller;
+    if (!installedSignatureMatchesInstaller) {
+      throw new Error("installed TalentScout.exe signature differs from the tested installer signer");
+    }
+    if ((strict || expectedSignerCertificateSha256) && !installedSignerBinding.passed) {
+      throw new Error(`installed TalentScout.exe signer binding failed: ${installedSignerBinding.failures.join("; ")}`);
     }
 
     activeRun = await connectToPackagedApp({
@@ -811,9 +870,18 @@ async function main() {
   if (process.platform !== "win32") {
     throw new Error("This supporting check must run on Windows");
   }
+  if (strict && !/^\d+$/.test(expectedWorkflowRunId)) {
+    throw new Error(
+      "Strict Windows certification requires WINDOWS_RELEASE_WORKFLOW_RUN_ID (or GITHUB_RUN_ID)",
+    );
+  }
+  if (strict && !/^[a-f0-9]{64}$/i.test(expectedSignerCertificateSha256)) {
+    throw new Error("Strict Windows certification requires WINDOWS_RELEASE_SIGNER_SHA256");
+  }
   await assertRequiredFiles();
 
   const head = runGit(["rev-parse", "HEAD"]);
+  const tree = runGit(["rev-parse", "HEAD^{tree}"]);
   const dirtyEntries = runGit(["status", "--porcelain=v1"])
     .split(/\r?\n/)
     .filter(Boolean);
@@ -831,29 +899,84 @@ async function main() {
   await safeRemoveTransient(evidenceDir, profileDirectory);
   await safeRemoveTransient(evidenceDir, noSteamPackage);
   await mkdir(profileDirectory, { recursive: true });
+  const runtimeStaging = await stageRuntimeArtifacts(evidenceDir);
+  const testedAppExe = runtimeStaging.appExecutable;
+  const testedAppAsar = runtimeStaging.appAsar;
+  const testedInstaller = runtimeStaging.installer;
 
   const packagedArtifacts = await Promise.all([
     artifactMetadata("windows-installer", INSTALLER),
     artifactMetadata("windows-unpacked-executable", APP_EXE),
     artifactMetadata("windows-app-asar", APP_ASAR),
   ]);
+  const testedArtifacts = await Promise.all([
+    artifactMetadata("windows-installer-staged", testedInstaller),
+    artifactMetadata("windows-unpacked-executable-staged", testedAppExe),
+    artifactMetadata("windows-app-asar-staged", testedAppAsar),
+  ]);
   const installerArtifact = packagedArtifacts.find(
     (artifact) => artifact.kind === "windows-installer",
   );
-  const asarArtifact = packagedArtifacts.find(
-    (artifact) => artifact.kind === "windows-app-asar",
+  const testedExeArtifact = testedArtifacts.find(
+    (artifact) => artifact.kind === "windows-unpacked-executable-staged",
   );
-  if (!installerArtifact || !asarArtifact) throw new Error("Package artifact inventory is incomplete");
+  const testedAsarArtifact = testedArtifacts.find(
+    (artifact) => artifact.kind === "windows-app-asar-staged",
+  );
+  if (!installerArtifact || !testedExeArtifact || !testedAsarArtifact) {
+    throw new Error("Package artifact inventory is incomplete");
+  }
   const manifestBinding = await inspectManifestBinding(head, installerArtifact);
-  const authenticode = inspectAuthenticode(INSTALLER);
+  const authenticode = {
+    installer: inspectAuthenticode(testedInstaller),
+    unpackedExecutable: inspectAuthenticode(testedAppExe),
+  };
+  const signerBinding = evaluateWindowsSignerBinding({
+    installerSignature: authenticode.installer,
+    executableSignature: authenticode.unpackedExecutable,
+    expectedSignerCertificateSha256,
+  });
+  const releaseEvidenceStatus = JSON.parse(await readFile(releaseEvidenceStatusPath, "utf8"));
+  const requiredControls = requiredWindowsRuntimeControls(releaseEvidenceStatus);
+  const operatorPolicy = windowsRuntimeOperatorAttestationPolicy(releaseEvidenceStatus);
+  const operatorAttestableControls = operatorPolicy.attestableControls;
+
+  const validateOperatorAttestation = () => validateWindowsRuntimeOperatorAttestation({
+    root: ROOT,
+    attestationPath: operatorAttestationPath,
+    candidateCommitSha: head,
+    candidateTreeSha: tree,
+    candidateTag: manifestBinding.candidateTag,
+    productVersion,
+    workflowRunId: manifestBinding.workflowRunId,
+    signerCertificateSha256: signerBinding.observedSignerCertificateSha256,
+    packageManifestPath: manifestBinding.realPath ?? manifestPath,
+    packageManifestGeneratedAt: manifestBinding.generatedAt,
+    installerSha256: installerArtifact.sha256,
+    requiredControls,
+    operatorAttestableControls,
+    schemaPath: operatorPolicy.schemaPath,
+    certificationBundleRoot: operatorPolicy.certificationBundleRoot,
+  });
+  const initialOperatorAttestationValidation = operatorAttestationPath
+    ? await validateOperatorAttestation()
+    : null;
+  if (initialOperatorAttestationValidation && !initialOperatorAttestationValidation.accepted) {
+    throw new Error(
+      `Windows runtime operator attestation was rejected:\n- ${initialOperatorAttestationValidation.failures.join("\n- ")}`,
+    );
+  }
 
   const evidence = {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     sourceHead: head,
+    sourceTree: tree,
     sourceTreeClean: dirtyEntries.length === 0,
     sourceDirtyEntryCount: dirtyEntries.length,
     candidateBound: false,
+    productVersion,
+    workflowRunId: manifestBinding.workflowRunId ?? null,
     host: {
       platform: os.platform(),
       release: os.release(),
@@ -864,15 +987,57 @@ async function main() {
       filesystem: "Unverified by this script",
     },
     artifacts: packagedArtifacts,
-    candidateManifestBinding: manifestBinding,
+    testedArtifacts,
+    artifactStaging: {
+      status: "Passed",
+      stagedRoot: normalizeRelative(runtimeStaging.stagingRoot),
+      sourceFileCount: runtimeStaging.sourceAppInventory.length,
+      testedFileCount: runtimeStaging.initialAppInventory.length,
+      sourceInventorySha256: createHash("sha256")
+        .update(JSON.stringify(runtimeStaging.sourceAppInventory))
+        .digest("hex"),
+      testedInventorySha256: createHash("sha256")
+        .update(JSON.stringify(runtimeStaging.initialAppInventory))
+        .digest("hex"),
+      sourceStableDuringStage: runtimeStaging.sourceStableDuringStage,
+      stagedCopyExact: runtimeStaging.stagedCopyExact,
+      unchangedAtCompletion: false,
+    },
+    candidateManifestBinding: publicManifestBinding(manifestBinding),
     authenticode,
+    signerBinding,
     controls: {},
+    requiredControlPolicy: {
+      path: normalizeRelative(releaseEvidenceStatusPath),
+      requiredControls,
+      operatorAttestableControls,
+      operatorAttestationSchema: operatorPolicy.schemaPath,
+      certificationBundleRoot: operatorPolicy.certificationBundleRoot,
+    },
+    operatorAttestation: initialOperatorAttestationValidation
+      ? {
+          status: "Accepted",
+          path: initialOperatorAttestationValidation.attestationPath,
+          sha256: initialOperatorAttestationValidation.attestationSha256,
+          tester: initialOperatorAttestationValidation.attestation.tester,
+          completedAt: initialOperatorAttestationValidation.attestation.completedAt,
+          schema: initialOperatorAttestationValidation.schema,
+          certificationBundlePath:
+            initialOperatorAttestationValidation.attestation.certificationBundlePath,
+          claimedControls: initialOperatorAttestationValidation.attestation.claims.map(
+            (claim) => claim.controlId,
+          ),
+        }
+      : {
+          status: "Not supplied",
+          operatorAttestableControls,
+        },
     runs: [],
     limitations: [],
   };
 
   const sevenZip = path.resolve(ROOT, "node_modules", "7zip-bin", "win", "x64", "7za.exe");
-  const archiveTest = spawnSync(sevenZip, ["t", INSTALLER], {
+  const archiveTest = spawnSync(sevenZip, ["t", testedInstaller], {
     cwd: ROOT,
     encoding: "utf8",
     windowsHide: true,
@@ -891,11 +1056,11 @@ async function main() {
     "7-Zip tested every embedded installer member without an integrity error.",
   );
   evidence.controls.windowsAuthenticodeSignature = control(
-    authenticode.Status === "Valid" ? "Passed" : "Unverified",
-    authenticode,
-    authenticode.Status === "Valid"
+    signerBinding.passed ? "Passed" : "Unverified",
+    { authenticode, signerBinding },
+    signerBinding.passed
       ? null
-      : "The local supporting package is not a signed release candidate; tagged CI builds must supply the Windows certificate.",
+      : "The package must be validly signed and match WINDOWS_RELEASE_SIGNER_SHA256 before it can certify a release.",
   );
   evidence.controls.packageManifestCandidateBinding = control(
     manifestBinding.passed ? "Passed" : "Unverified",
@@ -905,8 +1070,9 @@ async function main() {
   let firstRun;
   const activeRuns = new Set();
   let persistedBeforeRestart;
+  let runtimeJourneyCompleted = false;
   try {
-    firstRun = await connectToPackagedApp({ executable: APP_EXE, profileDirectory });
+    firstRun = await connectToPackagedApp({ executable: testedAppExe, profileDirectory });
     activeRuns.add(firstRun);
     const initialOffline = await offlineProbe(firstRun.page);
     const audio = await audioRangeProbe(firstRun.page);
@@ -993,7 +1159,7 @@ async function main() {
         : "Packaged saves cannot be traced to the source candidate that created them.",
     );
 
-    const secondRun = await connectToPackagedApp({ executable: APP_EXE, profileDirectory });
+    const secondRun = await connectToPackagedApp({ executable: testedAppExe, profileDirectory });
     activeRuns.add(secondRun);
     const secondOffline = await offlineProbe(secondRun.page);
     await restoreLoadFromMainMenu(secondRun.page);
@@ -1031,7 +1197,7 @@ async function main() {
       },
     );
 
-    const recoveryRun = await connectToPackagedApp({ executable: APP_EXE, profileDirectory });
+    const recoveryRun = await connectToPackagedApp({ executable: testedAppExe, profileDirectory });
     activeRuns.add(recoveryRun);
     const recoveryDisclosure = await mainMenuRecoveryDisclosure(recoveryRun.page);
     await recoveryRun.page.getByRole("button", { name: "Back", exact: true }).click();
@@ -1082,7 +1248,7 @@ async function main() {
         : "The verified fallback loads, but the main-menu save card does not tell the player that recovery occurred.",
     );
 
-    await cp(APP_DIR, noSteamPackage, { recursive: true, force: false });
+    await cp(runtimeStaging.appDirectory, noSteamPackage, { recursive: true, force: false });
     const removedSdkFiles = [
       path.resolve(
         noSteamPackage,
@@ -1150,6 +1316,7 @@ async function main() {
         menuAvailable,
       },
     );
+    runtimeJourneyCompleted = true;
   } finally {
     for (const run of activeRuns) {
       if (run?.child?.pid && run.child.exitCode === null) {
@@ -1159,6 +1326,9 @@ async function main() {
     if (!keepProfile) {
       await safeRemoveTransient(evidenceDir, profileDirectory);
       await safeRemoveTransient(evidenceDir, noSteamPackage);
+      if (!runtimeJourneyCompleted) {
+        await safeRemoveTransient(evidenceDir, runtimeStaging.stagingRoot);
+      }
     }
   }
 
@@ -1167,8 +1337,12 @@ async function main() {
     head,
     sourceTreeClean: evidence.sourceTreeClean,
     manifestBinding,
-    authenticode,
-    expectedAsarSha256: asarArtifact.sha256,
+    installerPath: testedInstaller,
+    installerSignature: authenticode.installer,
+    unpackedExecutableSignature: authenticode.unpackedExecutable,
+    signerBinding,
+    expectedExeSha256: testedExeArtifact.sha256,
+    expectedAsarSha256: testedAsarArtifact.sha256,
   });
   evidence.exactCandidateInstallJourney = exactInstallJourney;
   evidence.controls.installerInstalledAppOfflineSaveRestartUninstall = control(
@@ -1228,6 +1402,82 @@ async function main() {
     "A Windows host cannot execute or certify Linux packages.",
   );
 
+  const completionHead = runGit(["rev-parse", "HEAD"]);
+  const completionTree = runGit(["rev-parse", "HEAD^{tree}"]);
+  const completionDirtyEntries = runGit(["status", "--porcelain=v1"])
+    .split(/\r?\n/)
+    .filter(Boolean);
+  const completionInstallerArtifact = await artifactMetadata("windows-installer", INSTALLER);
+  const [
+    completionSourceAppInventory,
+    completionStagedAppInventory,
+    completionStagedInstallerArtifact,
+  ] = await Promise.all([
+    directoryInventory(APP_DIR),
+    directoryInventory(runtimeStaging.appDirectory),
+    artifactMetadata("windows-installer-staged", testedInstaller),
+  ]);
+  const completionAuthenticode = {
+    installer: inspectAuthenticode(testedInstaller),
+    unpackedExecutable: inspectAuthenticode(testedAppExe),
+  };
+  const completionSignerBinding = evaluateWindowsSignerBinding({
+    installerSignature: completionAuthenticode.installer,
+    executableSignature: completionAuthenticode.unpackedExecutable,
+    expectedSignerCertificateSha256,
+  });
+  const completionManifestBinding = await inspectManifestBinding(
+    completionHead,
+    completionInstallerArtifact,
+  );
+  evidence.artifactStaging.unchangedAtCompletion = inventoriesMatch(
+    runtimeStaging.initialAppInventory,
+    completionStagedAppInventory,
+  )
+    && inventoriesMatch(runtimeStaging.sourceAppInventory, completionSourceAppInventory)
+    && runtimeStaging.sourceInstaller.bytes === completionInstallerArtifact.bytes
+    && runtimeStaging.sourceInstaller.sha256 === completionInstallerArtifact.sha256
+    && runtimeStaging.stagedInstaller.bytes === completionStagedInstallerArtifact.bytes
+    && runtimeStaging.stagedInstaller.sha256 === completionStagedInstallerArtifact.sha256
+    && completionSignerBinding.passed;
+  evidence.completionAuthenticode = completionAuthenticode;
+  evidence.completionSignerBinding = completionSignerBinding;
+  evidence.sourceTreeCleanAtCompletion = completionDirtyEntries.length === 0;
+  evidence.sourceAndPackageUnchangedAtCompletion = completionHead === head
+    && completionTree === tree
+    && completionDirtyEntries.length === 0
+    && completionInstallerArtifact.sha256 === installerArtifact.sha256
+    && completionInstallerArtifact.bytes === installerArtifact.bytes
+    && completionManifestBinding.passed
+    && completionManifestBinding.sha256 === manifestBinding.sha256
+    && evidence.artifactStaging.unchangedAtCompletion;
+  evidence.completionCandidateManifestBinding = publicManifestBinding(completionManifestBinding);
+
+  if (initialOperatorAttestationValidation) {
+    const finalOperatorAttestationValidation = await validateOperatorAttestation();
+    if (!finalOperatorAttestationValidation.accepted) {
+      throw new Error(
+        `Windows runtime operator attestation became invalid during the run:\n- ${finalOperatorAttestationValidation.failures.join("\n- ")}`,
+      );
+    }
+    if (
+      finalOperatorAttestationValidation.attestationSha256
+      !== initialOperatorAttestationValidation.attestationSha256
+    ) {
+      throw new Error("Windows runtime operator attestation changed during the harness run");
+    }
+    const merged = mergeWindowsRuntimeOperatorControls(
+      evidence.controls,
+      finalOperatorAttestationValidation,
+    );
+    if (merged.failures.length > 0) {
+      throw new Error(
+        `Windows runtime operator attestation could not be merged:\n- ${merged.failures.join("\n- ")}`,
+      );
+    }
+    evidence.controls = merged.controls;
+  }
+
   if (!evidence.sourceTreeClean) {
     evidence.limitations.push(
       "The source tree was dirty, so this evidence is not candidate-bound.",
@@ -1245,24 +1495,134 @@ async function main() {
     "CDP network emulation plus an unreachable proxy is deterministic offline evidence, not a physical adapter-disconnect test.",
   );
   evidence.candidateBound = evidence.sourceTreeClean
+    && evidence.sourceAndPackageUnchangedAtCompletion
     && manifestBinding.passed
+    && signerBinding.passed
+    && evidence.artifactStaging.unchangedAtCompletion
     && evidence.controls.saveBuildVersionCandidateBinding?.status === "Passed"
     && !Object.values(evidence.controls).some((entry) => entry.status === "Failed");
-  evidence.result = Object.values(evidence.controls).some((entry) => entry.status === "Failed")
-    ? "supporting_fail"
-    : "supporting_pass";
+  const certification = evaluateWindowsRuntimeCertification({
+    controls: evidence.controls,
+    requiredControls,
+    candidateBound: evidence.candidateBound,
+  });
+  evidence.result = certification.result;
+  evidence.certification = {
+    status: certification.certificationPassed
+      ? "Passed"
+      : certification.failedControls.length > 0
+        ? "Failed"
+        : "Incomplete",
+    requiredControlCount: requiredControls.length,
+    nonPassingRequiredControls: certification.nonPassingRequiredControls,
+    failedControls: certification.failedControls,
+  };
 
   const outputPath = path.resolve(evidenceDir, "supporting-runtime-evidence.json");
   await writeFile(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, "utf8");
+  if (!keepProfile) await safeRemoveTransient(evidenceDir, runtimeStaging.stagingRoot);
   console.log(JSON.stringify({
     result: evidence.result,
     output: normalizeRelative(outputPath),
     controls: Object.fromEntries(
       Object.entries(evidence.controls).map(([name, entry]) => [name, entry.status]),
     ),
+    nonPassingRequiredControls: certification.nonPassingRequiredControls,
   }, null, 2));
 
-  if (strict && evidence.result !== "supporting_pass") process.exitCode = 1;
+  if (strict && !certification.certificationPassed) process.exitCode = 1;
+}
+
+function isPathInsideOrSame(parentPath, childPath) {
+  return path.resolve(parentPath) === path.resolve(childPath)
+    || isPathInside(parentPath, childPath);
+}
+
+async function directoryInventory(rootDirectory) {
+  const canonicalRoot = await realpath(rootDirectory);
+  const rootDetails = await lstat(rootDirectory);
+  if (rootDetails.isSymbolicLink() || !rootDetails.isDirectory()) {
+    throw new Error(`Runtime package root is not a real directory: ${rootDirectory}`);
+  }
+  const files = [];
+  async function walk(directory) {
+    const entries = await readdir(directory, { withFileTypes: true });
+    for (const entry of entries) {
+      const filePath = path.resolve(directory, entry.name);
+      const details = await lstat(filePath);
+      if (details.isSymbolicLink()) {
+        throw new Error(`Runtime package contains a symbolic link or junction: ${filePath}`);
+      }
+      const canonicalPath = await realpath(filePath);
+      if (!isPathInsideOrSame(canonicalRoot, canonicalPath)) {
+        throw new Error(`Runtime package entry resolves outside its root: ${filePath}`);
+      }
+      if (details.isDirectory()) {
+        await walk(filePath);
+      } else if (details.isFile()) {
+        files.push({
+          path: path.relative(rootDirectory, filePath).replaceAll(path.sep, "/"),
+          bytes: details.size,
+          sha256: await sha256File(filePath),
+        });
+      } else {
+        throw new Error(`Runtime package contains an unsupported filesystem entry: ${filePath}`);
+      }
+    }
+  }
+  await walk(rootDirectory);
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  return files;
+}
+
+function inventoriesMatch(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+async function stageRuntimeArtifacts(evidenceDir) {
+  const stagingRoot = path.resolve(evidenceDir, "runtime-package-under-test");
+  const stagedAppDirectory = path.resolve(stagingRoot, "win-unpacked");
+  const stagedInstaller = path.resolve(stagingRoot, path.basename(INSTALLER));
+  await safeRemoveTransient(evidenceDir, stagingRoot);
+
+  const sourceAppBefore = await directoryInventory(APP_DIR);
+  const sourceInstallerBefore = await artifactMetadata("windows-installer", INSTALLER);
+  await mkdir(stagingRoot, { recursive: true });
+  await cp(APP_DIR, stagedAppDirectory, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    verbatimSymlinks: true,
+  });
+  await cp(INSTALLER, stagedInstaller, { force: false, errorOnExist: true });
+  const [sourceAppAfter, sourceInstallerAfter, stagedApp, stagedInstallerArtifact] = await Promise.all([
+    directoryInventory(APP_DIR),
+    artifactMetadata("windows-installer", INSTALLER),
+    directoryInventory(stagedAppDirectory),
+    artifactMetadata("windows-installer-staged", stagedInstaller),
+  ]);
+  const sourceStableDuringStage = inventoriesMatch(sourceAppBefore, sourceAppAfter)
+    && sourceInstallerBefore.bytes === sourceInstallerAfter.bytes
+    && sourceInstallerBefore.sha256 === sourceInstallerAfter.sha256;
+  const stagedCopyExact = inventoriesMatch(sourceAppBefore, stagedApp)
+    && sourceInstallerBefore.bytes === stagedInstallerArtifact.bytes
+    && sourceInstallerBefore.sha256 === stagedInstallerArtifact.sha256;
+  if (!sourceStableDuringStage || !stagedCopyExact) {
+    throw new Error("Windows package artifacts changed or diverged while the immutable test copy was staged");
+  }
+  return {
+    stagingRoot,
+    appDirectory: stagedAppDirectory,
+    appExecutable: path.resolve(stagedAppDirectory, "TalentScout.exe"),
+    appAsar: path.resolve(stagedAppDirectory, "resources", "app.asar"),
+    installer: stagedInstaller,
+    initialAppInventory: stagedApp,
+    sourceAppInventory: sourceAppBefore,
+    sourceInstaller: sourceInstallerBefore,
+    stagedInstaller: stagedInstallerArtifact,
+    sourceStableDuringStage,
+    stagedCopyExact,
+  };
 }
 
 main().catch((error) => {

@@ -153,6 +153,21 @@
       "generatedEvidence": {
         "kind": "windows-packaged-runtime",
         "path": "artifacts/release/generated/certifications/windows-runtime.json",
+        "operatorAttestation": {
+          "kind": "windows-packaged-runtime-operator-attestation",
+          "schema": "docs/release/windows-runtime-operator-attestation.schema.json",
+          "certificationBundleRoot": "artifacts/release/generated/certifications/windows-runtime",
+          "attestableControls": [
+            "cleanStandardUserInstalledRuntime",
+            "networkLossDuringSave",
+            "interruptedWriteAtConfirmedTransactionBoundary",
+            "legacyGoldenSaveMigration",
+            "liveSteamCloudConflictAndReconnect",
+            "offlineReconnectNoDuplicateEffects",
+            "permissionDeniedAndDiskFull",
+            "suspendRebootDuringRollover"
+          ]
+        },
         "requiredControls": [
           "packageArchiveIntegrity",
           "windowsAuthenticodeSignature",
@@ -254,14 +269,46 @@
     "longSaveGrowthAndCompaction": {
       "status": "Unverified",
       "evidence": [],
-      "requiredReleaseProfile": "20 isolated seeds x 30 seasons on the exact committed candidate",
+      "requiredReleaseProfile": "20 isolated passive-world seeds x 30 complete 46-week seasons on the exact committed candidate",
       "generatedEvidence": {
         "kind": "long-career-release-soak",
         "path": "artifacts/release/generated/long-career-release-summary.json",
         "minimumSeedCount": 20,
         "minimumSeasonCount": 30,
         "requireProcessIsolation": true,
-        "requireDeterministicReplay": true
+        "requireDeterministicReplay": true,
+        "requiredProfile": {
+          "seedCount": 20,
+          "seasonCount": 30,
+          "concurrency": 3,
+          "scenarioId": "youth-england-passive-world-v1",
+          "actionPolicy": "passive-world-no-scout-actions",
+          "fatiguePolicy": "reset-at-95-to-20-for-world-longevity",
+          "expectedSeasonLengthWeeks": 46,
+          "expectedCanonicalTicksPerSeed": 1380,
+          "maxCanonicalWeekLatencyMs": 30000,
+          "maxSerializedBytes": 83886080,
+          "maxGrowthMultiplier": 64,
+          "maxHeapUsedBytes": 1610612736,
+          "maxRssBytes": 2147483648,
+          "maxPostGcHeapGrowthBytes": 1073741824,
+          "scheduledLeagueClubCounts": {
+            "league-championship": 24,
+            "league-one": 24,
+            "league-premier": 20,
+            "league-two": 24
+          },
+          "collectionByteBudgets": {
+            "players": 33554432,
+            "worldHistory": 25165824,
+            "fixtures": 8388608,
+            "matchRatings": 8388608,
+            "playerMovementHistory": 8388608,
+            "retiredPlayers": 6291456,
+            "retiredPlayerIds": 524288,
+            "unsignedYouth": 12582912
+          }
+        }
       }
     }
   }

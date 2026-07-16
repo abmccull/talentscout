@@ -16,7 +16,8 @@ original workflow artifacts byte-for-byte.
    - `windows-build`, `macos-build`, `linux-build`;
    - `steam-windows`, `steam-macos`, `steam-linux`;
    - `candidate-build-evidence` containing the manifest, core evidence, soak
-     evidence, and honest pre-certification gate report.
+     summary plus every hashed worker/replay artifact, and the honest
+     pre-certification gate report.
 3. Record the workflow run ID. Nothing in this workflow publishes a GitHub
    release or uploads to Steam, including RC tags.
 
@@ -36,10 +37,17 @@ The directory must contain the filenames declared in
 storage, but the bundle must contain a local result document whose hash is
 listed by the attestation. Never include personal participant information.
 
-For Windows, copy the harness output to `windows-runtime.json`. It is accepted
-only when the opt-in installed-package journey passed, the source and package
-manifest are exact, Authenticode is Valid, the installer hash/length matches,
-and no control is Failed.
+For Windows, do not promote or copy a supporting-only harness output. Complete
+the eight manual protocols, create the candidate-bound operator attestation,
+and rerun the opt-in installed-package journey with both `--attestation` and
+`--strict`. Only a `certifying_pass` output may be copied unchanged to
+`windows-runtime.json`. It is accepted only when every required control passed,
+the source and package manifest are exact, Authenticode is Valid, and the
+installer hash/length matches. Strict certification additionally binds a tag
+resolving to `HEAD`, `package.json` product version, originating workflow run,
+and the protected Windows signer-certificate SHA-256. Evidence must remain in
+the candidate-specific certification bundle. See
+`windows-packaged-runtime-attestation.md`.
 
 Other gate files use this shape:
 

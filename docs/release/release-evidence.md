@@ -55,12 +55,20 @@ $env:SOAK_CONCURRENCY = "3"
 npm run test:release-soak
 ```
 
-Each seed runs every canonical calendar week in its own process. The bounded
-worker pool only overlaps independent careers and writes results back in seed
-order. The generated summary is accepted only when it names the exact commit,
-came from a clean tree, contains at least 20 unique 30-season runs, crosses
-every final season boundary without skipping ordinary weeks, and reproduces
-seed one deterministically. The tracked gate remains
+Each seed runs every canonical calendar week in its own process. This is
+explicitly a passive-world longevity profile, not a substitute for the active
+organic-career browser journey: it schedules no scout actions and relieves
+fatigue at the safety threshold so world continuity, retention, and rollover
+remain the measured subject. Every season independently proves the complete
+England fixture graph (20/24/24/24 clubs, home and away pairings, 46 weeks), so
+each career must execute exactly 1,380 transitions. The committed policy owns
+the save, growth, heap, RSS, collection, latency, seed, season, and concurrency
+budgets; environment overrides can produce supporting diagnostics but cannot
+certify a release. The bounded worker pool only overlaps independent careers
+and writes results back in seed order. The generated summary is accepted only
+when it names the exact commit and tree, records the workflow and installed
+lockfile provenance, came from a clean tree, contains exactly 20 ordered
+30-season runs, and reproduces seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
 
@@ -71,6 +79,10 @@ count, and evidence shape match exactly. A dirty tree, changed commit, changed
 runtime, partial JSON, or legacy worker file is rejected and recomputed. Seed
 one is always executed again after all workers complete, even on a fully
 resumed run, so checkpoints cannot substitute for the determinism proof.
+The candidate bundle retains every worker JSON plus the replay worker. Promotion
+rehashes each exact file and its checkpoint-free payload, reconciles every run
+with the summary, rejects conflicting failure artifacts, and verifies the
+manifest hash chain before the long-save gate can pass.
 
 Preview the execution plan without starting a worker:
 
@@ -105,8 +117,11 @@ Build the exact Windows candidate, create its package manifest, and run the
 non-destructive supporting harness:
 
 ```powershell
-npm run electron:test-windows-runtime -- --strict
+npm run electron:test-windows-runtime
 ```
+
+This is intentionally non-certifying: a successful supporting run reports
+`supporting_incomplete` while required operator controls remain `Unverified`.
 
 For the installer/install/run/restart/uninstall path, use an elevated
 PowerShell only after the tree is clean, the manifest is present, and the
@@ -114,17 +129,28 @@ installer has its release Authenticode signature:
 
 ```powershell
 $env:WINDOWS_INSTALL_JOURNEY = "true"
-npm run electron:test-windows-runtime -- --strict
+npm run electron:test-windows-runtime
 ```
 
 The harness leaves physical power interruption, ACL/disk-full behavior, live
 Steam conflict/reconnection, clean-account observation, and non-Windows
 platform rows Unverified unless those environments are actually exercised.
 
+After the manual Windows protocols are complete, pass the exact-candidate
+operator attestation to the harness and rerun with `--strict`. The attestation
+may supplement only the eight declared manual controls; hashes, timestamps,
+environment and evidence references are validated, and no automated failure
+can be overwritten. Strict mode also requires the originating workflow run ID
+and approved signing-certificate SHA-256 through
+`WINDOWS_RELEASE_WORKFLOW_RUN_ID` and `WINDOWS_RELEASE_SIGNER_SHA256`; the
+manifest tag must resolve to `HEAD`. See
+`windows-packaged-runtime-attestation.md` for the schema and commands.
+
 Tagged desktop builds enforce the same process in `.github/workflows/build.yml`.
 The tag-only `release-soak` job runs the exact profile in parallel with the
-three native package jobs. `candidate-bundle` creates the exact manifest and
-uploads candidate evidence, but never publishes or uploads to Steam.
+three native package jobs. `candidate-bundle` retains the summary, all worker
+artifacts, and the exact manifest with the originating workflow run, but never
+publishes or uploads to Steam.
 
 Human and native-platform evidence is supplied later without changing the
 candidate through the explicit two-stage process in

@@ -136,6 +136,7 @@ jobs:
       - name: Enforce exact package, core, soak, human, hardware, and platform evidence
         env:
           RELEASE_WORKFLOW_RUN_ID: ${{ inputs.candidate_run_id }}
+          WINDOWS_RELEASE_SIGNER_SHA256: ${{ secrets.WINDOWS_RELEASE_SIGNER_SHA256 }}
         run: npm run test:release-evidence
 
       - name: Upload certification decision

@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { createWeekSchedule } from "@/engine/core/calendar";
 import { getSeasonLength } from "@/engine/core/gameDate";
+import { isFixtureInSeason } from "@/engine/world/fixtures";
 import {
   findSaveRetentionReferenceViolations,
   measureSaveRetentionFootprint,
@@ -60,6 +61,13 @@ const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
 const MAX_RSS_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_POST_GC_HEAP_GROWTH_BYTES = 1024 * 1024 * 1024;
+const EXPECTED_SEASON_LENGTH_WEEKS = 46;
+const EXPECTED_LEAGUE_CLUB_COUNTS = {
+  "league-championship": 24,
+  "league-one": 24,
+  "league-premier": 20,
+  "league-two": 24,
+} as const;
 const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   players: 32 * 1024 * 1024,
   // Five recent seasons keep broad 500-player comparison detail; older
@@ -75,17 +83,57 @@ const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
 
 interface MemorySample {
   season: number;
+  week: number;
+  canonicalTick: number;
   heapUsedBytes: number;
   rssBytes: number;
   externalBytes: number;
   arrayBuffersBytes: number;
 }
 
+interface MidseasonInvariantSample {
+  season: number;
+  week: number;
+  canonicalTick: number;
+  serializedBytes: number;
+  heapUsedBytes: number;
+  rssBytes: number;
+  nonFiniteNumbers: number;
+  referenceViolations: number;
+  retentionReferenceViolations: number;
+  economyViolations: number;
+}
+
+interface ReleaseInvariantAudit {
+  footprint: SaveRetentionFootprint;
+  violationCounts: Pick<
+    MidseasonInvariantSample,
+    | "nonFiniteNumbers"
+    | "referenceViolations"
+    | "retentionReferenceViolations"
+    | "economyViolations"
+  >;
+}
+
 interface RunEvidence {
   seed: string;
   reachedSeason: number;
   canonicalTicks: number;
+  expectedCanonicalTicks: number;
   calendarWeeksSpanned: number;
+  seasonLengths: Array<{ season: number; weeks: number }>;
+  seasonCalendarAudits: Array<{
+    season: number;
+    seasonLengthWeeks: number;
+    fixtureCount: number;
+    leagues: Array<{
+      leagueId: string;
+      clubCount: number;
+      weekCount: number;
+      fixtureCount: number;
+      uniquePairCount: number;
+    }>;
+  }>;
   initialBytes: number;
   finalBytes: number;
   peakBytes: number;
@@ -115,6 +163,7 @@ interface RunEvidence {
     peakRssBytes: number;
     samples: MemorySample[];
   };
+  midseasonInvariantSamples: MidseasonInvariantSample[];
   weeklyLatencyMs: {
     p50: number;
     p95: number;
@@ -160,10 +209,16 @@ function round(value: number, precision = 2): number {
   return Math.round(value * scale) / scale;
 }
 
-function collectMemorySample(season: number): MemorySample {
+function collectMemorySample(
+  season: number,
+  week: number,
+  canonicalTick: number,
+): MemorySample {
   const usage = process.memoryUsage();
   return {
     season,
+    week,
+    canonicalTick,
     heapUsedBytes: usage.heapUsed,
     rssBytes: usage.rss,
     externalBytes: usage.external,
@@ -179,11 +234,40 @@ async function flushAsyncPersistenceQueue(): Promise<void> {
   await new Promise<void>((resolveFlush) => setImmediate(resolveFlush));
 }
 
-function deterministicDigest(state: GameState): string {
-  const nondeterministicKeys = new Set(["createdAt", "lastSaved", "unlockedAt", "completedAt"]);
+function isExplicitWallClockPath(path: readonly string[], value: unknown): boolean {
+  if (typeof value !== "number") return false;
+  if (path.length === 1 && (path[0] === "createdAt" || path[0] === "lastSaved")) {
+    return true;
+  }
+  return path.length === 3
+    && path[0] === "reflectionJournal"
+    && path[2] === "createdAt";
+}
+
+function deterministicStateView(value: unknown, path: readonly string[] = []): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry, index) => deterministicStateView(entry, [...path, String(index)]));
+  }
+  if (!value || typeof value !== "object") return value;
+
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const entryPath = [...path, key];
+    if (isExplicitWallClockPath(entryPath, entry)) continue;
+    const normalized = deterministicStateView(entry, entryPath);
+    if (normalized !== undefined) result[key] = normalized;
+  }
+  return result;
+}
+
+function deterministicValueDigest(value: unknown): string {
   return createHash("sha256")
-    .update(JSON.stringify(state, (key, value) => nondeterministicKeys.has(key) ? undefined : value))
+    .update(JSON.stringify(deterministicStateView(value)))
     .digest("hex");
+}
+
+function deterministicDigest(state: GameState): string {
+  return deterministicValueDigest(state);
 }
 
 function serializedRoundTripDigest(state: GameState): string {
@@ -541,7 +625,8 @@ function validateEconomy(state: GameState): string[] {
 function assertReleaseInvariants(
   state: GameState,
   initialBytes: number,
-): SaveRetentionFootprint {
+  enforceCollectionBudgets = true,
+): ReleaseInvariantAudit {
   const retentionFootprint = measureSaveRetentionFootprint(state);
   const bytes = retentionFootprint.totalBytes;
   const nonFinite = collectNonFiniteNumbers(state);
@@ -564,7 +649,15 @@ function assertReleaseInvariants(
         economy,
       });
     }
-    return retentionFootprint;
+    return {
+      footprint: retentionFootprint,
+      violationCounts: {
+        nonFiniteNumbers: nonFinite.length,
+        referenceViolations: references.length,
+        retentionReferenceViolations: retentionReferences.length,
+        economyViolations: economy.length,
+      },
+    };
   }
   expect(nonFinite, "non-finite numeric state").toEqual([]);
   expect(references, "invalid entity references").toEqual([]);
@@ -576,19 +669,136 @@ function assertReleaseInvariants(
   expect(bytes, "serialized save growth exceeds release multiplier").toBeLessThanOrEqual(
     initialBytes * MAX_GROWTH_MULTIPLIER,
   );
-  if (retentionFootprint.collections.players > COLLECTION_BYTE_BUDGETS.players) {
+  if (
+    enforceCollectionBudgets
+    && retentionFootprint.collections.players > COLLECTION_BYTE_BUDGETS.players
+  ) {
     console.info(
       "LONG_CAREER_PLAYER_RETENTION_FAILURE",
       JSON.stringify(playerRetentionDiagnostic(state)),
     );
   }
-  for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
-    expect(
-      retentionFootprint.collections[key],
-      `${key} exceeds its long-save collection budget`,
-    ).toBeLessThanOrEqual(COLLECTION_BYTE_BUDGETS[key]);
+  if (enforceCollectionBudgets) {
+    for (const key of SAVE_RETENTION_COLLECTION_KEYS) {
+      expect(
+        retentionFootprint.collections[key],
+        `${key} exceeds its long-save collection budget`,
+      ).toBeLessThanOrEqual(COLLECTION_BYTE_BUDGETS[key]);
+    }
   }
-  return retentionFootprint;
+  return {
+    footprint: retentionFootprint,
+    violationCounts: {
+      nonFiniteNumbers: nonFinite.length,
+      referenceViolations: references.length,
+      retentionReferenceViolations: retentionReferences.length,
+      economyViolations: economy.length,
+    },
+  };
+}
+
+function midseasonSampleWeeks(seasonLength: number): number[] {
+  if (seasonLength < 3) return [];
+  return [...new Set([
+    Math.max(2, Math.floor((seasonLength + 1) / 3)),
+    Math.min(seasonLength - 1, Math.floor((2 * (seasonLength + 1)) / 3)),
+  ])].filter((week) => week > 1 && week < seasonLength);
+}
+
+function assertCanonicalSeasonFixtures(
+  state: GameState,
+  season: number,
+): RunEvidence["seasonCalendarAudits"][number] {
+  const fixtures = Object.values(state.fixtures).filter((fixture) => (
+    isFixtureInSeason(fixture, season)
+  ));
+  const expectedLeagueIds = Object.keys(EXPECTED_LEAGUE_CLUB_COUNTS).sort();
+  const actualLeagueIds = [...new Set(fixtures.map((fixture) => fixture.leagueId))].sort();
+  expect(actualLeagueIds, `season ${season} scheduled the wrong England league set`).toEqual(
+    expectedLeagueIds,
+  );
+
+  const leagues = expectedLeagueIds.map((leagueId) => {
+    const league = state.leagues[leagueId];
+    const expectedClubCount = EXPECTED_LEAGUE_CLUB_COUNTS[
+      leagueId as keyof typeof EXPECTED_LEAGUE_CLUB_COUNTS
+    ];
+    expect(league, `season ${season} is missing ${leagueId}`).toBeDefined();
+    const clubIds = [...new Set(league?.clubIds ?? [])].sort();
+    expect(clubIds, `season ${season} ${leagueId} has the wrong club count`).toHaveLength(
+      expectedClubCount,
+    );
+    const clubIdSet = new Set(clubIds);
+    const leagueFixtures = fixtures.filter((fixture) => fixture.leagueId === leagueId);
+    const expectedWeekCount = (expectedClubCount - 1) * 2;
+    const expectedFixtureCount = expectedClubCount * (expectedClubCount - 1);
+    expect(
+      leagueFixtures,
+      `season ${season} ${leagueId} has an incomplete double round robin`,
+    ).toHaveLength(expectedFixtureCount);
+
+    const pairDirections = new Map<string, Set<string>>();
+    for (const fixture of leagueFixtures) {
+      expect(fixture.homeClubId, `${fixture.id} has an unknown home club`).not.toBe(
+        fixture.awayClubId,
+      );
+      expect(clubIdSet.has(fixture.homeClubId), `${fixture.id} has an unknown home club`).toBe(true);
+      expect(clubIdSet.has(fixture.awayClubId), `${fixture.id} has an unknown away club`).toBe(true);
+      const [left, right] = [fixture.homeClubId, fixture.awayClubId].sort();
+      const pairKey = `${left}|${right}`;
+      const directions = pairDirections.get(pairKey) ?? new Set<string>();
+      directions.add(`${fixture.homeClubId}>${fixture.awayClubId}`);
+      pairDirections.set(pairKey, directions);
+    }
+    expect(
+      pairDirections.size,
+      `season ${season} ${leagueId} is missing unique club pairings`,
+    ).toBe((expectedClubCount * (expectedClubCount - 1)) / 2);
+    for (const [pairKey, directions] of pairDirections) {
+      const [left, right] = pairKey.split("|");
+      expect(
+        directions,
+        `season ${season} ${leagueId} pair ${pairKey} is not home-and-away complete`,
+      ).toEqual(new Set([`${left}>${right}`, `${right}>${left}`]));
+    }
+
+    const weeks = [...new Set(leagueFixtures.map((fixture) => fixture.week))].sort((a, b) => a - b);
+    expect(weeks, `season ${season} ${leagueId} has a broken weekly calendar`).toEqual(
+      Array.from({ length: expectedWeekCount }, (_, index) => index + 1),
+    );
+    for (const week of weeks) {
+      const weekFixtures = leagueFixtures.filter((fixture) => fixture.week === week);
+      expect(
+        weekFixtures,
+        `season ${season} ${leagueId} week ${week} has the wrong fixture count`,
+      ).toHaveLength(expectedClubCount / 2);
+      const participatingClubs = new Set(
+        weekFixtures.flatMap((fixture) => [fixture.homeClubId, fixture.awayClubId]),
+      );
+      expect(
+        participatingClubs.size,
+        `season ${season} ${leagueId} week ${week} does not schedule every club exactly once`,
+      ).toBe(expectedClubCount);
+    }
+
+    return {
+      leagueId,
+      clubCount: expectedClubCount,
+      weekCount: expectedWeekCount,
+      fixtureCount: expectedFixtureCount,
+      uniquePairCount: pairDirections.size,
+    };
+  });
+  const seasonLengthWeeks = Math.max(...leagues.map((league) => league.weekCount));
+  expect(seasonLengthWeeks, `season ${season} no longer has the committed 46-week calendar`).toBe(
+    EXPECTED_SEASON_LENGTH_WEEKS,
+  );
+  return {
+    season,
+    seasonLengthWeeks,
+    fixtureCount: leagues.reduce((sum, league) => sum + league.fixtureCount, 0),
+    leagues,
+  };
 }
 
 async function simulateCareer(
@@ -619,9 +829,14 @@ async function simulateCareer(
 
   const initial = useGameStore.getState().gameState;
   if (!initial) throw new Error(`Failed to initialize release soak seed ${seed}`);
+  if (initial.currentSeason !== 1 || initial.currentWeek !== 1) {
+    throw new Error(
+      `Seed ${seed} started at non-canonical S${initial.currentSeason} W${initial.currentWeek}`,
+    );
+  }
   const initialBytes = serializedBytes(initial);
   requestGarbageCollection();
-  const initialMemory = collectMemorySample(initial.currentSeason);
+  const initialMemory = collectMemorySample(initial.currentSeason, initial.currentWeek, 0);
   const memorySamples: MemorySample[] = [initialMemory];
   let peakHeapUsedBytes = initialMemory.heapUsedBytes;
   let peakRssBytes = initialMemory.rssBytes;
@@ -630,11 +845,14 @@ async function simulateCareer(
   let calendarWeeksSpanned = 0;
   let lastCheckedSeason = initial.currentSeason;
   let lastBoundaryBytes = initialBytes;
+  const seasonLengthBySeason = new Map<number, number>();
+  const seasonCalendarAudits: RunEvidence["seasonCalendarAudits"] = [];
   const weeklyLatency: number[] = [];
   const compactionSamples: SaveRetentionCompactionSample[] = [];
   const pendingCompactionSamples: SaveRetentionCompactionSample[] = [];
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
   const worldHealth: RunEvidence["worldHealth"] = [];
+  const midseasonInvariantSamples: MidseasonInvariantSample[] = [];
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
@@ -645,12 +863,38 @@ async function simulateCareer(
     if (!before) throw new Error(`Seed ${seed} lost game state`);
 
     const seasonLength = getSeasonLength(before.fixtures, before.currentSeason);
-    const targetWeek = Math.min(before.currentWeek, seasonLength);
-    calendarWeeksSpanned += 1;
+    if (!seasonLengthBySeason.has(before.currentSeason)) {
+      const calendarAudit = assertCanonicalSeasonFixtures(before, before.currentSeason);
+      expect(
+        seasonLength,
+        `season ${before.currentSeason} fixture-derived length disagrees with its schedule audit`,
+      ).toBe(calendarAudit.seasonLengthWeeks);
+      seasonCalendarAudits.push(calendarAudit);
+    }
+    if (
+      !Number.isInteger(before.currentWeek)
+      || before.currentWeek < 1
+      || before.currentWeek > seasonLength
+    ) {
+      throw new Error(
+        `Seed ${seed} reached invalid S${before.currentSeason} W${before.currentWeek} `
+        + `(season length ${seasonLength})`,
+      );
+    }
+    const recordedSeasonLength = seasonLengthBySeason.get(before.currentSeason);
+    if (recordedSeasonLength !== undefined && recordedSeasonLength !== seasonLength) {
+      throw new Error(
+        `Seed ${seed} changed season ${before.currentSeason} length `
+        + `from ${recordedSeasonLength} to ${seasonLength}`,
+      );
+    }
+    seasonLengthBySeason.set(before.currentSeason, seasonLength);
+    const expectedNext = before.currentWeek === seasonLength
+      ? { season: before.currentSeason + 1, week: 1 }
+      : { season: before.currentSeason, week: before.currentWeek + 1 };
     before = {
       ...before,
-      currentWeek: targetWeek,
-      schedule: createWeekSchedule(targetWeek, before.currentSeason),
+      schedule: createWeekSchedule(before.currentWeek, before.currentSeason),
     };
     useGameStore.setState({ gameState: before });
 
@@ -675,23 +919,58 @@ async function simulateCareer(
     // soak measures its own synchronous harness rather than game heap.
     await flushAsyncPersistenceQueue();
     const after = useGameStore.getState().gameState;
-    const advanced = Boolean(
-      after && (
-        after.currentSeason !== before.currentSeason
-        || after.currentWeek !== before.currentWeek
-      ),
-    );
-    if (!after || !advanced) {
+    if (!after) {
       throw new Error(
-        `Seed ${seed} stalled at S${before.currentSeason} W${before.currentWeek}`,
+        `Seed ${seed} lost game state after S${before.currentSeason} W${before.currentWeek}`,
+      );
+    }
+    if (
+      after.currentSeason !== expectedNext.season
+      || after.currentWeek !== expectedNext.week
+    ) {
+      throw new Error(
+        `Seed ${seed} advanced non-canonically from `
+        + `S${before.currentSeason} W${before.currentWeek}; expected `
+        + `S${expectedNext.season} W${expectedNext.week}, received `
+        + `S${after.currentSeason} W${after.currentWeek}`,
       );
     }
     canonicalTicks++;
+    calendarWeeksSpanned++;
     weeklyLatency.push(elapsed);
     expect(elapsed, `seed ${seed} batch latency indicates a hang`).toBeLessThan(MAX_SINGLE_BATCH_MS);
 
+    if (after.currentSeason <= seasonCount) {
+      const afterSeasonLength = getSeasonLength(after.fixtures, after.currentSeason);
+      if (midseasonSampleWeeks(afterSeasonLength).includes(after.currentWeek)) {
+        // Per-collection retention budgets apply after boundary compaction.
+        // Midseason samples still enforce absolute serialized-size, numeric,
+        // reference, economy, and memory integrity without treating the live
+        // in-season fixture working set as retained archive growth.
+        const audit = assertReleaseInvariants(after, initialBytes, false);
+        const memory = collectMemorySample(
+          after.currentSeason,
+          after.currentWeek,
+          canonicalTicks,
+        );
+        peakBytes = Math.max(peakBytes, audit.footprint.totalBytes);
+        peakHeapUsedBytes = Math.max(peakHeapUsedBytes, memory.heapUsedBytes);
+        peakRssBytes = Math.max(peakRssBytes, memory.rssBytes);
+        memorySamples.push(memory);
+        midseasonInvariantSamples.push({
+          season: after.currentSeason,
+          week: after.currentWeek,
+          canonicalTick: canonicalTicks,
+          serializedBytes: audit.footprint.totalBytes,
+          heapUsedBytes: memory.heapUsedBytes,
+          rssBytes: memory.rssBytes,
+          ...audit.violationCounts,
+        });
+      }
+    }
+
     if (after.currentSeason !== lastCheckedSeason) {
-      const footprint = assertReleaseInvariants(after, initialBytes);
+      const footprint = assertReleaseInvariants(after, initialBytes).footprint;
       expect(
         serializedRoundTripDigest(after),
         `seed ${seed} changed during the season ${after.currentSeason} save round trip`,
@@ -724,11 +1003,19 @@ async function simulateCareer(
       lastBoundaryBytes = bytes;
       peakBytes = Math.max(peakBytes, bytes);
       lastCheckedSeason = after.currentSeason;
-      const beforeCollection = collectMemorySample(after.currentSeason);
+      const beforeCollection = collectMemorySample(
+        after.currentSeason,
+        after.currentWeek,
+        canonicalTicks,
+      );
       peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, beforeCollection.rssBytes);
       requestGarbageCollection();
-      const afterCollection = collectMemorySample(after.currentSeason);
+      const afterCollection = collectMemorySample(
+        after.currentSeason,
+        after.currentWeek,
+        canonicalTicks,
+      );
       peakHeapUsedBytes = Math.max(peakHeapUsedBytes, afterCollection.heapUsedBytes);
       peakRssBytes = Math.max(peakRssBytes, afterCollection.rssBytes);
       memorySamples.push(afterCollection);
@@ -740,7 +1027,31 @@ async function simulateCareer(
 
   const finalState = useGameStore.getState().gameState;
   if (!finalState) throw new Error(`Seed ${seed} lost its final state`);
-  const finalBytes = assertReleaseInvariants(finalState, initialBytes).totalBytes;
+  const seasonLengths = [...seasonLengthBySeason]
+    .sort(([left], [right]) => left - right)
+    .map(([season, weeks]) => ({ season, weeks }));
+  expect(seasonLengths.map(({ season }) => season)).toEqual(
+    Array.from({ length: seasonCount }, (_, index) => index + 1),
+  );
+  expect(seasonLengths.every(({ weeks }) => weeks === EXPECTED_SEASON_LENGTH_WEEKS)).toBe(true);
+  expect(seasonCalendarAudits).toHaveLength(seasonCount);
+  const expectedCanonicalTicks = seasonLengths.reduce((sum, entry) => sum + entry.weeks, 0);
+  expect(expectedCanonicalTicks).toBe(seasonCount * EXPECTED_SEASON_LENGTH_WEEKS);
+  expect(canonicalTicks, `seed ${seed} processed the wrong number of canonical weeks`).toBe(
+    expectedCanonicalTicks,
+  );
+  expect(calendarWeeksSpanned, `seed ${seed} calendar span diverged from its ticks`).toBe(
+    expectedCanonicalTicks,
+  );
+  const expectedMidseasonSamples = seasonLengths.reduce(
+    (sum, entry) => sum + midseasonSampleWeeks(entry.weeks).length,
+    0,
+  );
+  expect(
+    midseasonInvariantSamples,
+    `seed ${seed} missed a bounded midseason invariant sample`,
+  ).toHaveLength(expectedMidseasonSamples);
+  const finalBytes = assertReleaseInvariants(finalState, initialBytes).footprint.totalBytes;
   peakBytes = Math.max(peakBytes, finalBytes);
   const history = finalState.worldHistory;
   expect(history, `seed ${seed} has no world history after ${seasonCount} seasons`).toBeDefined();
@@ -759,11 +1070,19 @@ async function simulateCareer(
     serializedRoundTripDigest(finalState),
     `seed ${seed} changed during JSON save round trip`,
   ).toBe(finalDigest);
-  const beforeFinalCollection = collectMemorySample(finalState.currentSeason);
+  const beforeFinalCollection = collectMemorySample(
+    finalState.currentSeason,
+    finalState.currentWeek,
+    canonicalTicks,
+  );
   peakHeapUsedBytes = Math.max(peakHeapUsedBytes, beforeFinalCollection.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, beforeFinalCollection.rssBytes);
   requestGarbageCollection();
-  const finalMemory = collectMemorySample(finalState.currentSeason);
+  const finalMemory = collectMemorySample(
+    finalState.currentSeason,
+    finalState.currentWeek,
+    canonicalTicks,
+  );
   peakHeapUsedBytes = Math.max(peakHeapUsedBytes, finalMemory.heapUsedBytes);
   peakRssBytes = Math.max(peakRssBytes, finalMemory.rssBytes);
   expect(peakHeapUsedBytes, `seed ${seed} exceeded the heap release budget`).toBeLessThanOrEqual(
@@ -781,7 +1100,10 @@ async function simulateCareer(
     seed,
     reachedSeason: finalState.currentSeason,
     canonicalTicks,
+    expectedCanonicalTicks,
     calendarWeeksSpanned,
+    seasonLengths,
+    seasonCalendarAudits,
     initialBytes,
     finalBytes,
     peakBytes,
@@ -810,6 +1132,7 @@ async function simulateCareer(
       peakRssBytes,
       samples: memorySamples,
     },
+    midseasonInvariantSamples,
     weeklyLatencyMs: {
       p50: round(percentile(weeklyLatency, 0.5)),
       p95: round(percentile(weeklyLatency, 0.95)),
@@ -823,6 +1146,41 @@ async function simulateCareer(
 
 describe("full canonical-week release soak", () => {
   it("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
+    const digestProbe = {
+      createdAt: 100,
+      lastSaved: 200,
+      reflectionJournal: { entry: { createdAt: 300 } },
+      narrative: {
+        createdAt: { season: 2, week: 3 },
+        completedAt: { season: 2, week: 7 },
+      },
+    };
+    expect(deterministicValueDigest({
+      ...digestProbe,
+      createdAt: 101,
+      lastSaved: 201,
+      reflectionJournal: { entry: { createdAt: 301 } },
+    }), "explicit wall-clock fields leaked into the deterministic digest").toBe(
+      deterministicValueDigest(digestProbe),
+    );
+    expect(deterministicValueDigest({
+      ...digestProbe,
+      narrative: {
+        ...digestProbe.narrative,
+        completedAt: { season: 2, week: 8 },
+      },
+    }), "gameplay completedAt was incorrectly excluded from the deterministic digest").not.toBe(
+      deterministicValueDigest(digestProbe),
+    );
+    expect(deterministicValueDigest({
+      ...digestProbe,
+      narrative: {
+        ...digestProbe.narrative,
+        createdAt: { season: 2, week: 4 },
+      },
+    }), "gameplay createdAt was incorrectly excluded from the deterministic digest").not.toBe(
+      deterministicValueDigest(digestProbe),
+    );
     expect(RELEASE_SEED_COUNT).toBeGreaterThan(0);
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
     const seeds = Array.from(
@@ -832,20 +1190,30 @@ describe("full canonical-week release soak", () => {
     const runs: RunEvidence[] = [];
     for (const seed of seeds) runs.push(await simulateCareer(seed, RELEASE_SEASON_COUNT));
 
-    const persistenceReplay = DIAGNOSTIC_ONLY || WORKER_MODE
+    const determinismReplay = DIAGNOSTIC_ONLY || WORKER_MODE
       ? runs[0]
       : await simulateCareer(seeds[0], RELEASE_SEASON_COUNT);
     if (!DIAGNOSTIC_ONLY && !WORKER_MODE) {
-      expect(persistenceReplay.digest, "same seed changed deterministic outcome").toBe(runs[0].digest);
+      expect(determinismReplay.digest, "same seed changed deterministic outcome").toBe(runs[0].digest);
     }
 
     const summary = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       generatedAt: new Date().toISOString(),
       profile: {
-        kind: "full-canonical-weekly-career",
+        kind: "passive-world-canonical-weekly-career",
         authoritativeTicksPerSeason: "calendar-dependent",
         skippedOrdinaryWeeks: false,
+        exactCanonicalTransitionAssertions: true,
+        scenarioId: "youth-england-passive-world-v1",
+        actionPolicy: "passive-world-no-scout-actions",
+        fatiguePolicy: "reset-at-95-to-20-for-world-longevity",
+        expectedSeasonLengthWeeks: EXPECTED_SEASON_LENGTH_WEEKS,
+        expectedCanonicalTicksPerSeed: RELEASE_SEASON_COUNT * EXPECTED_SEASON_LENGTH_WEEKS,
+        scheduledLeagueClubCounts: EXPECTED_LEAGUE_CLUB_COUNTS,
+        maxMidseasonInvariantSamplesPerSeason: 2,
+        midseasonAbsoluteSaveBudgetAssertions: true,
+        collectionBudgetsEnforcedAtSeasonBoundaries: true,
         seedCount: RELEASE_SEED_COUNT,
         seasonCount: RELEASE_SEASON_COUNT,
         deterministicReplaySeed: seeds[0],
@@ -883,7 +1251,7 @@ describe("full canonical-week release soak", () => {
         },
       },
       runs,
-      persistenceReplay,
+      determinismReplay,
     };
 
     await mkdir(dirname(OUTPUT_PATH), { recursive: true });

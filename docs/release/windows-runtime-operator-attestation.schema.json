@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talentscout.game/schemas/windows-runtime-operator-attestation.schema.json",
+  "title": "TalentScout Windows packaged-runtime operator attestation",
+  "description": "Supplemental human evidence for the manual Windows runtime controls. This document cannot replace automated harness results.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "evidenceKind",
+    "status",
+    "candidateCommitSha",
+    "candidateTreeSha",
+    "candidateTag",
+    "productVersion",
+    "workflowRunId",
+    "signerCertificateSha256",
+    "packageManifestSha256",
+    "packageHashes",
+    "certificationBundlePath",
+    "tester",
+    "completedAt",
+    "environments",
+    "evidence",
+    "claims"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "evidenceKind": { "const": "windows-packaged-runtime-operator-attestation" },
+    "status": { "const": "Passed" },
+    "candidateCommitSha": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{40,64}$"
+    },
+    "candidateTreeSha": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{40,64}$"
+    },
+    "candidateTag": {
+      "type": "string",
+      "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
+    },
+    "productVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$"
+    },
+    "workflowRunId": {
+      "type": "string",
+      "pattern": "^[0-9]+$"
+    },
+    "signerCertificateSha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "packageManifestSha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "packageHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["windows-installer"],
+      "properties": {
+        "windows-installer": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        }
+      }
+    },
+    "certificationBundlePath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tester": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "organization": { "type": "string", "minLength": 1 }
+      }
+    },
+    "completedAt": { "type": "string", "format": "date-time" },
+    "environments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "hostType",
+          "osEdition",
+          "osVersion",
+          "architecture",
+          "accountType",
+          "filesystem",
+          "hardware",
+          "networkContext"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          },
+          "hostType": { "const": "physical" },
+          "osEdition": { "type": "string", "minLength": 1 },
+          "osVersion": { "type": "string", "minLength": 1 },
+          "architecture": { "type": "string", "minLength": 1 },
+          "accountType": { "type": "string", "minLength": 1 },
+          "filesystem": { "type": "string", "minLength": 1 },
+          "hardware": { "type": "string", "minLength": 1 },
+          "networkContext": { "type": "string", "minLength": 1 },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "sha256",
+          "description",
+          "type",
+          "capturedAt",
+          "controlIds"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+          },
+          "path": { "type": "string", "minLength": 1 },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{64}$"
+          },
+          "description": { "type": "string", "minLength": 1 },
+          "type": {
+            "enum": [
+              "test-log",
+              "screenshot",
+              "screen-recording",
+              "save-envelope",
+              "ledger-comparison",
+              "system-report",
+              "network-trace",
+              "filesystem-trace",
+              "steam-cloud-record"
+            ]
+          },
+          "capturedAt": { "type": "string", "format": "date-time" },
+          "controlIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "cleanStandardUserInstalledRuntime",
+                "networkLossDuringSave",
+                "interruptedWriteAtConfirmedTransactionBoundary",
+                "legacyGoldenSaveMigration",
+                "liveSteamCloudConflictAndReconnect",
+                "offlineReconnectNoDuplicateEffects",
+                "permissionDeniedAndDiskFull",
+                "suspendRebootDuringRollover"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "controlId",
+          "status",
+          "testedAt",
+          "environmentIds",
+          "evidenceIds"
+        ],
+        "properties": {
+          "controlId": {
+            "enum": [
+              "cleanStandardUserInstalledRuntime",
+              "networkLossDuringSave",
+              "interruptedWriteAtConfirmedTransactionBoundary",
+              "legacyGoldenSaveMigration",
+              "liveSteamCloudConflictAndReconnect",
+              "offlineReconnectNoDuplicateEffects",
+              "permissionDeniedAndDiskFull",
+              "suspendRebootDuringRollover"
+            ]
+          },
+          "status": { "const": "Passed" },
+          "testedAt": { "type": "string", "format": "date-time" },
+          "environmentIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
+          "evidenceIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "notes": { "type": "string" }
+  }
+}

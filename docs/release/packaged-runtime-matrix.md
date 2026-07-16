@@ -30,7 +30,7 @@ run the opt-in shipping-installer journey:
 
 ```powershell
 $env:WINDOWS_INSTALL_JOURNEY = "true"
-npm run electron:test-windows-runtime -- --strict
+npm run electron:test-windows-runtime
 ```
 
 That journey fails closed unless the source tree is clean, the installer hash
@@ -40,6 +40,15 @@ per-machine installer. It installs into an isolated evidence directory, creates
 and saves an offline career, restarts and reloads the exact local generation,
 then invokes the shipping uninstaller and checks cleanup. It never treats an
 unpacked-app launch as installed-app evidence.
+
+This automated run remains `supporting_incomplete` while required physical or
+destructive scenarios are `Unverified`; it is not a Windows release pass.
+After those scenarios are exercised, supply a separately hashed operator
+attestation and rerun the installed-package journey with `--strict` as
+documented in `windows-packaged-runtime-attestation.md`. Strict mode fails
+unless every required Windows control is `Passed`, the manifest's tag resolves
+to `HEAD`, its version and protected workflow-run identity match, and both
+Windows executables match the pinned signing-certificate SHA-256.
 
 ## Platform matrix
 
@@ -78,6 +87,14 @@ Every ID in a gate's `requiredControls` array must exist in that platform's
 attestation with `status: "Passed"`; omitted, failed, or `Unverified` controls
 block promotion. Extra diagnostic controls may remain `Unverified` only for the
 specialized Windows harness when they are not part of the Windows required list.
+
+The eight manual Windows controls use the supplemental schema in
+`windows-runtime-operator-attestation.schema.json`. Claims must bind the exact
+commit, Git tree, package manifest, and installer, name the tester and physical
+environment, and reference typed, timestamped, described, hash-verified
+evidence inside the candidate-specific certification bundle. Evidence must
+declare exactly which controls it supports. A claim cannot replace an
+automated result.
 
 The Windows list includes the installed signed-package journey plus clean
 standard-user execution, network loss during save, confirmed transaction kill,

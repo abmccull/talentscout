@@ -492,6 +492,7 @@ jobs:
           cp artifacts/release/candidate-package-manifest.json candidate-bundle/artifacts/release/
           cp artifacts/release/release-evidence-check.json candidate-bundle/artifacts/release/
           cp artifacts/release/generated/long-career-release-summary.json candidate-bundle/artifacts/release/generated/
+          cp -R artifacts/release/generated/long-career-workers candidate-bundle/artifacts/release/generated/
           cp artifacts/release/generated/candidate-core-suites.json candidate-bundle/artifacts/release/generated/
           coverage_summary="$(find quality-evidence -path '*/artifacts/coverage/critical/coverage-summary.json' -print -quit)"
           if [ -z "$coverage_summary" ]; then
