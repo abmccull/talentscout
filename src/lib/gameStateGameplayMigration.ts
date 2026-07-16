@@ -31,14 +31,26 @@ import {
 import { getUnlockedPerks } from "@/engine/specializations/perks";
 import { migrateObservationSessionInteractions } from "@/engine/observation/interactionSelection";
 import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
-import { compactLongCareerHistory } from "@/engine/world/saveRetention";
+import {
+  collectCausallyReferencedPlayerIds,
+  compactLongCareerHistory,
+} from "@/engine/world/saveRetention";
+import {
+  getLifecycleWorld,
+  resolvePlayerMovements,
+  withLifecycleWorld,
+  type PlayerMovementIntent,
+} from "@/engine/world/playerLifecycle";
 import {
   getTravelEligibleCountryKeys,
   isInternationalAssignmentEligibleCountry,
   isTravelEligibleCountry,
 } from "@/engine/world/countryAvailability";
 import { getScoutHomeCountry } from "@/engine/world/travel";
-import { generateSubRegions } from "@/engine/youth/generation";
+import {
+  generateSubRegions,
+  UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS,
+} from "@/engine/youth/generation";
 import { reconcileScenarioAuthority } from "@/engine/scenarios/scenarioAuthority";
 import { getCountryDisplayName, normalizeCountryKey } from "@/lib/country";
 import { resetRebuildableGameStateCaches } from "@/engine/core/gameStatePartitions";
@@ -468,6 +480,65 @@ function migrateScoutEmploymentContract(state: GameState): void {
 }
 
 /**
+ * Repair saves created before the unsigned-youth hard cap was authoritative.
+ * Untracked opportunities disappear; scout-causal prospects are archived
+ * through the same player lifecycle used by an ordinary season rollover.
+ */
+export function migrateExpiredUnsignedYouth(state: GameState): GameState {
+  const expiredYouth = Object.entries(state.unsignedYouth ?? {})
+    .filter(([, youth]) =>
+      !youth.placed
+      && !youth.retired
+      && state.currentSeason - youth.generatedSeason
+        >= UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS
+    )
+    .sort(([leftId], [rightId]) => leftId.localeCompare(rightId));
+  if (expiredYouth.length === 0) return state;
+
+  const causalPlayerIds = collectCausallyReferencedPlayerIds(state);
+  const unsignedYouth = { ...state.unsignedYouth };
+  const lifecycle = getLifecycleWorld(state);
+  const players = { ...lifecycle.players };
+  const intents: PlayerMovementIntent[] = [];
+
+  for (const [youthId, youth] of expiredYouth) {
+    delete unsignedYouth[youthId];
+    const playerId = youth.player.id;
+    if (
+      (!causalPlayerIds.has(playerId) && !causalPlayerIds.has(youthId))
+      || players[playerId]
+      || lifecycle.retiredPlayers[playerId]
+    ) {
+      continue;
+    }
+    players[playerId] = {
+      ...youth.player,
+      clubId: "",
+      contractClubId: undefined,
+      contractExpiry: 0,
+      wage: 0,
+    };
+    intents.push({
+      type: "footballExit",
+      playerId,
+      reason: "Legacy save repair: unsigned prospect opportunity expired",
+    });
+  }
+
+  let migrated = { ...state, unsignedYouth };
+  if (intents.length === 0) return migrated;
+  const resolution = resolvePlayerMovements(
+    { ...lifecycle, players },
+    intents,
+    state.currentWeek,
+    state.currentSeason,
+    getSeasonLength(state.fixtures, state.currentSeason),
+  );
+  migrated = withLifecycleWorld(migrated, resolution.state);
+  return migrated;
+}
+
+/**
  * Gameplay-specific compatibility repairs. This owns every persisted-state
  * mutation that used to happen inside the Zustand load action, so local,
  * cloud, recovery, direct-import, and test loads now share one migration path.
@@ -610,6 +681,7 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
     club.academyPlayerIds ??= [];
   }
 
+  state = migrateExpiredUnsignedYouth(state);
   const compacted = reconcileScenarioAuthority(
     migratePoliticalMeetingState(compactLongCareerHistory(resetRebuildableGameStateCaches(state))),
   );

@@ -590,10 +590,10 @@ export const UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS = 4;
  * Process the annual aging pass for all unsigned youth in the world.
  *
  * Rules (evaluated in priority order):
+ *  - Four completed seasons: leave football before any reversible signing offer
  *  - Age 19+:  forced retirement (all leave football)
  *  - Age 18+:  50% chance NPC minor club signs them / 50% leave football
  *  - Age 17+ with buzzLevel >= 60: 30% chance NPC club signs (rating >= 10)
- *  - Otherwise unresolved after four completed seasons: leave football
  *
  * NPC auto-sign picks a random club whose youthAcademyRating >= 10.
  *
@@ -637,6 +637,17 @@ export function processYouthAging(
   for (const youth of Object.values(unsignedYouth)) {
     // Skip already resolved youth
     if (youth.placed || youth.retired) continue;
+
+    // A prospect generated in season N has completed one season when the
+    // season-N rollover runs. This is an absolute opportunity deadline: if a
+    // cap-year signing proposal were allowed first, a later authoritative
+    // lifecycle rejection could roll it back to active and bypass age-out.
+    const completedSeasons = Math.max(0, currentSeason - youth.generatedSeason + 1);
+    if (completedSeasons >= UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS) {
+      updated[youth.id] = { ...youth, retired: true };
+      retired.push(youth.id);
+      continue;
+    }
 
     // The pass runs immediately before the global season-end birthday update,
     // so decisions use the age the player is entering next season.
@@ -687,14 +698,6 @@ export function processYouthAging(
       // If chance fails, youth stays unsigned — no retirement at 17
     }
 
-    // A prospect generated in season N has completed one season when the
-    // season-N rollover runs. Age-specific outcomes above take precedence,
-    // while this hard boundary keeps the active opportunity pool bounded.
-    const completedSeasons = Math.max(0, currentSeason - youth.generatedSeason + 1);
-    if (completedSeasons >= UNSIGNED_YOUTH_MAX_COMPLETED_SEASONS) {
-      updated[youth.id] = { ...youth, retired: true };
-      retired.push(youth.id);
-    }
   }
 
   return { updated, autoSigned, retired };

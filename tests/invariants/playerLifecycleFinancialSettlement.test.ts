@@ -6,12 +6,15 @@ import type {
   FreeAgentPool,
   LoanDeal,
   Player,
+  UnsignedYouth,
 } from "@/engine/core/types";
 import { advanceWeek, type TickResult } from "@/engine/core/gameLoop";
+import { createRNG } from "@/engine/rng";
 import {
   resolvePlayerMovements,
   type LifecycleWorldState,
 } from "@/engine/world/playerLifecycle";
+import { processYouthAging } from "@/engine/youth/generation";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -618,5 +621,95 @@ describe("player lifecycle financial settlement", () => {
         type: "youthSigning",
       }),
     );
+  }, 60_000);
+
+  it("archives a causally linked prospect when the four-season opportunity closes", async () => {
+    const { useGameStore } = await import("@/stores/gameStore");
+    await useGameStore.getState().startNewGame({
+      scoutFirstName: "Youth",
+      scoutLastName: "Archive",
+      scoutAge: 28,
+      specialization: "youth",
+      difficulty: "normal",
+      worldSeed: "hard-cap-youth-archive",
+      selectedCountries: ["england"],
+      startingCountry: "england",
+      nationality: "English",
+      skillAllocations: {
+        technicalEye: 2,
+        psychologicalRead: 2,
+        playerJudgment: 2,
+        potentialAssessment: 2,
+      },
+      originId: "academy-apprentice",
+      flawId: "fragile-network",
+      doctrineIds: ["evidence-first"],
+    });
+
+    const generated = useGameStore.getState().gameState!;
+    const [youthId, generatedYouth] = Object.entries(generated.unsignedYouth)[0];
+    const youth: UnsignedYouth = {
+      ...generatedYouth,
+      player: { ...generatedYouth.player, age: 16 },
+      generatedSeason: 1,
+      buzzLevel: 100,
+      placed: false,
+      retired: false,
+    };
+    const aging = processYouthAging(
+      createRNG("hard-cap-youth-archive"),
+      { [youthId]: youth },
+      generated.clubs,
+      4,
+    );
+    const reportId = "report-hard-cap-youth-archive";
+    const state = {
+      ...generated,
+      currentSeason: 4,
+      currentWeek: 1,
+      unsignedYouth: { [youthId]: youth },
+      reports: {
+        ...generated.reports,
+        [reportId]: {
+          id: reportId,
+          playerId: youth.player.id,
+          scoutId: generated.scout.id,
+          submittedWeek: 1,
+          submittedSeason: 4,
+          attributeAssessments: [],
+          strengths: ["Historical assessment"],
+          weaknesses: ["Pathway closed"],
+          conviction: "note" as const,
+          summary: "Preserve this player identity after the opportunity closes.",
+          estimatedValue: 0,
+          qualityScore: 20,
+        },
+      },
+    };
+    const tick: TickResult = {
+      ...emptyTick(),
+      youthAgingResult: {
+        autoSigned: aging.autoSigned,
+        retired: aging.retired,
+        updatedUnsignedYouth: aging.updated,
+      },
+    };
+
+    const advanced = advanceWeek(state, tick);
+
+    expect(aging.autoSigned).toEqual([]);
+    expect(aging.retired).toEqual([youthId]);
+    expect(advanced.unsignedYouth[youthId]).toBeUndefined();
+    expect(advanced.players[youth.player.id]).toBeUndefined();
+    expect(advanced.retiredPlayers[youth.player.id]).toMatchObject({
+      id: youth.player.id,
+      firstName: youth.player.firstName,
+      lastName: youth.player.lastName,
+    });
+    expect(advanced.playerMovementHistory).toContainEqual(expect.objectContaining({
+      playerId: youth.player.id,
+      type: "footballExit",
+    }));
+    expect(advanced.reports[reportId].playerId).toBe(youth.player.id);
   }, 60_000);
 });

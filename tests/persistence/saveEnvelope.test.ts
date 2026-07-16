@@ -77,6 +77,88 @@ describe("save envelope migrations", () => {
     expect(migratedAgain).toEqual(migrated);
   });
 
+  it("repairs expired youth once while preserving scout-authored history", () => {
+    const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
+      state: Record<string, unknown>;
+    };
+    const baseline = migrateSaveState(legacy.state);
+    const sourcePlayer = Object.values(baseline.players)[0];
+    const trackedPlayer = {
+      ...sourcePlayer,
+      id: "expired-tracked-player",
+      firstName: "Tracked",
+      lastName: "Prospect",
+      clubId: "",
+      contractClubId: undefined,
+      contractExpiry: 0,
+      wage: 0,
+    };
+    const untrackedPlayer = {
+      ...trackedPlayer,
+      id: "expired-untracked-player",
+      firstName: "Untracked",
+    };
+    const makeYouth = (id: string, player: typeof trackedPlayer) => ({
+      id,
+      player,
+      visibility: 20,
+      buzzLevel: 20,
+      discoveredBy: [],
+      regionId: "region-legacy-expired",
+      country: "england",
+      venueAppearances: [],
+      generatedSeason: 4,
+      placed: false,
+      retired: false,
+    });
+    const reportId = "report-expired-tracked-player";
+    const stale = {
+      ...baseline,
+      currentSeason: 8,
+      unsignedYouth: {
+        tracked: makeYouth("tracked", trackedPlayer),
+        untracked: makeYouth("untracked", untrackedPlayer),
+      },
+      reports: {
+        ...baseline.reports,
+        [reportId]: {
+          id: reportId,
+          playerId: trackedPlayer.id,
+          scoutId: baseline.scout.id,
+          submittedWeek: 1,
+          submittedSeason: 5,
+          attributeAssessments: [],
+          strengths: ["Worth remembering"],
+          weaknesses: ["Pathway closed"],
+          conviction: "note" as const,
+          summary: "A historical report on an expired opportunity.",
+          estimatedValue: 0,
+          qualityScore: 25,
+        },
+      },
+    };
+    const original = structuredClone(stale);
+
+    const migrated = migrateSaveState(stale);
+    const migratedAgain = migrateSaveState(migrated);
+    const trackedExits = migrated.playerMovementHistory.filter(
+      (movement) => movement.playerId === trackedPlayer.id && movement.type === "footballExit",
+    );
+
+    expect(stale).toEqual(original);
+    expect(migrated.unsignedYouth.tracked).toBeUndefined();
+    expect(migrated.unsignedYouth.untracked).toBeUndefined();
+    expect(migrated.retiredPlayers[trackedPlayer.id]).toMatchObject({
+      id: trackedPlayer.id,
+      firstName: trackedPlayer.firstName,
+      lastName: trackedPlayer.lastName,
+    });
+    expect(migrated.retiredPlayers[untrackedPlayer.id]).toBeUndefined();
+    expect(migrated.reports[reportId].playerId).toBe(trackedPlayer.id);
+    expect(trackedExits).toHaveLength(1);
+    expect(migratedAgain).toEqual(migrated);
+  });
+
   it("normalizes required runtime collections at the canonical boundary", () => {
     const legacy = JSON.parse(readFileSync(goldenV0Path, "utf8")) as {
       state: Record<string, unknown>;

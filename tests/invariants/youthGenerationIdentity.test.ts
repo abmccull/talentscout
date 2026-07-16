@@ -121,6 +121,55 @@ describe("long-career youth identity and placement integrity", () => {
     expect(atCap.updated[youth.id].retired).toBe(true);
   });
 
+  it("enforces the cohort cap before a high-buzz signing offer can bypass it", () => {
+    const prospect = {
+      ...generatedPlayer("unsigned-cap-signing"),
+      age: 16,
+    };
+    const youth: UnsignedYouth = {
+      ...unsignedYouth(prospect),
+      generatedSeason: 1,
+      buzzLevel: 100,
+      placed: false,
+      placedClubId: undefined,
+    };
+    const eligibleClub: Club = {
+      id: "club-cap-signing",
+      name: "Cap Signing FC",
+      shortName: "CAP",
+      leagueId: "league-test",
+      reputation: 40,
+      budget: 1_000_000,
+      weeklyWageBudget: 100_000,
+      scoutingPhilosophy: "academyFirst",
+      managerId: "manager-cap-signing",
+      playerIds: [],
+      academyPlayerIds: [],
+      youthAcademyRating: 15,
+      loanedOutPlayerIds: [],
+      loanedInPlayerIds: [],
+    };
+    const signingSeed = Array.from({ length: 100 }, (_, index) => `cap-signing-${index}`)
+      .find((seed) => processYouthAging(
+        createRNG(seed),
+        { [youth.id]: { ...youth, generatedSeason: 2 } },
+        { [eligibleClub.id]: eligibleClub },
+        4,
+      ).autoSigned.length === 1);
+    expect(signingSeed).toBeDefined();
+
+    const atCap = processYouthAging(
+      createRNG(signingSeed!),
+      { [youth.id]: youth },
+      { [eligibleClub.id]: eligibleClub },
+      4,
+    );
+
+    expect(atCap.autoSigned).toEqual([]);
+    expect(atCap.retired).toEqual([youth.id]);
+    expect(atCap.updated[youth.id]).toMatchObject({ placed: false, retired: true });
+  });
+
   it("still lets age rules resolve a prospect before the cohort cap", () => {
     const prospect = {
       ...generatedPlayer("unsigned-age-exit"),
