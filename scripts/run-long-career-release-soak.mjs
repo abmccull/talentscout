@@ -6,6 +6,9 @@ import { availableParallelism, cpus, totalmem } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const CHECKPOINT_PROTOCOL_VERSION = 2;
+const MAX_WORKER_DIAGNOSTIC_BYTES_PER_STREAM = 32 * 1024;
+const WORKER_TERMINATION_GRACE_MS = 2_000;
+const WORKER_TERMINATION_FORCE_MS = 1_000;
 const RELEASE_PROFILE = Object.freeze({
   seedCount: 20,
   seasonCount: 30,
@@ -651,6 +654,137 @@ const seedStates = new Map(
     inspections[index].reusable ? "Reused" : "Pending",
   ]),
 );
+const activeWorkerProcesses = new Map();
+const cancelledSeedIndices = new Set();
+let abortRequested = false;
+let primaryFailure = null;
+let primaryFailureError = null;
+
+class SoakWorkerProcessError extends Error {
+  constructor(message, diagnostics) {
+    super(message);
+    this.name = "SoakWorkerProcessError";
+    this.diagnostics = diagnostics;
+  }
+}
+
+class SoakWorkerCancelledError extends Error {
+  constructor(seedIndex) {
+    super(`Soak worker ${seedIndex} cancelled after another seed failed`);
+    this.name = "SoakWorkerCancelledError";
+  }
+}
+
+function appendDiagnosticTail(current, chunk) {
+  const next = Buffer.concat([current, Buffer.from(chunk)]);
+  return next.length <= MAX_WORKER_DIAGNOSTIC_BYTES_PER_STREAM
+    ? next
+    : next.subarray(next.length - MAX_WORKER_DIAGNOSTIC_BYTES_PER_STREAM);
+}
+
+function diagnosticEvidence(stdoutTail, stderrTail, stdoutBytes, stderrBytes) {
+  return {
+    stdout: {
+      tail: stdoutTail.toString("utf8"),
+      totalBytes: stdoutBytes,
+      capturedBytes: stdoutTail.length,
+      truncated: stdoutBytes > stdoutTail.length,
+    },
+    stderr: {
+      tail: stderrTail.toString("utf8"),
+      totalBytes: stderrBytes,
+      capturedBytes: stderrTail.length,
+      truncated: stderrBytes > stderrTail.length,
+    },
+  };
+}
+
+function waitForChildExit(child, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolveExit) => {
+    const timer = setTimeout(done, timeoutMs);
+    function done() {
+      clearTimeout(timer);
+      child.off("close", done);
+      child.off("error", done);
+      resolveExit();
+    }
+    child.once("close", done);
+    child.once("error", done);
+  });
+}
+
+async function terminateWorkerProcess(child) {
+  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === "win32") {
+    await new Promise((resolveTermination) => {
+      const killer = spawn(
+        "taskkill.exe",
+        ["/PID", String(child.pid), "/T", "/F"],
+        { stdio: "ignore", windowsHide: true },
+      );
+      const timer = setTimeout(() => {
+        killer.kill();
+        resolveTermination();
+      }, WORKER_TERMINATION_GRACE_MS);
+      const done = () => {
+        clearTimeout(timer);
+        resolveTermination();
+      };
+      killer.once("error", done);
+      killer.once("close", done);
+    });
+    if (child.exitCode === null && child.signalCode === null) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // taskkill may already have completed the process tree.
+      }
+    }
+    await waitForChildExit(child, WORKER_TERMINATION_FORCE_MS);
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    try {
+      child.kill("SIGTERM");
+    } catch {
+      return;
+    }
+  }
+  await waitForChildExit(child, WORKER_TERMINATION_GRACE_MS);
+  // A detached worker may have exited while a descendant kept the process
+  // group alive. Always escalate the group after the grace period.
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    // ESRCH means the complete process group already exited.
+  }
+  await waitForChildExit(child, WORKER_TERMINATION_FORCE_MS);
+}
+
+function teeWorkerStream(stream, destination, onChunk) {
+  stream?.on("data", (chunk) => {
+    onChunk(chunk);
+    if (!destination.write(chunk)) {
+      stream.pause();
+      destination.once("drain", () => stream.resume());
+    }
+  });
+}
+
+function cancelPeerWorkers(failedSeedIndex) {
+  abortRequested = true;
+  const terminations = [];
+  for (const { seedIndex, child } of activeWorkerProcesses.values()) {
+    if (seedIndex === failedSeedIndex) continue;
+    cancelledSeedIndices.add(seedIndex);
+    terminations.push(terminateWorkerProcess(child));
+  }
+  return Promise.allSettled(terminations);
+}
 for (const seedIndex of reusableSeedIndices) {
   const result = inspections[seedIndex - 1].result;
   profile ??= result.profile;
@@ -703,6 +837,10 @@ async function runWorker(seedIndex, suffix = "run") {
   const workerOutput = workerOutputPath(seedIndex, suffix);
   const temporaryWorkerOutput = `${workerOutput}.partial-${process.pid}-${randomUUID()}.json`;
   const startedAt = Date.now();
+  let stdoutTail = Buffer.alloc(0);
+  let stderrTail = Buffer.alloc(0);
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
   console.info(
     `SOAK_WORKER_START seed=${seedIndex}/${seedCount} suffix=${suffix} active=${[
       ...seedStates.values(),
@@ -730,13 +868,30 @@ async function runWorker(seedIndex, suffix = "run") {
             SOAK_WORKER_MODE: "true",
             SOAK_DIAGNOSTIC_ONLY: "false",
           },
-          stdio: "inherit",
+          detached: process.platform !== "win32",
+          stdio: ["ignore", "pipe", "pipe"],
         },
       );
-      child.once("error", rejectWorker);
-      child.once("exit", (code, signal) => {
+      if (child.pid) activeWorkerProcesses.set(child.pid, { seedIndex, suffix, child });
+      teeWorkerStream(child.stdout, process.stdout, (chunk) => {
+        stdoutBytes += chunk.length;
+        stdoutTail = appendDiagnosticTail(stdoutTail, chunk);
+      });
+      teeWorkerStream(child.stderr, process.stderr, (chunk) => {
+        stderrBytes += chunk.length;
+        stderrTail = appendDiagnosticTail(stderrTail, chunk);
+      });
+      child.once("error", (error) => {
+        if (child.pid) activeWorkerProcesses.delete(child.pid);
+        rejectWorker(error);
+      });
+      child.once("close", (code, signal) => {
+        if (child.pid) activeWorkerProcesses.delete(child.pid);
         if (code === 0) resolveWorker();
-        else rejectWorker(new Error(`Soak worker ${seedIndex} failed (${signal ?? code})`));
+        else rejectWorker(new SoakWorkerProcessError(
+          `Soak worker ${seedIndex} failed (${signal ?? code})`,
+          diagnosticEvidence(stdoutTail, stderrTail, stdoutBytes, stderrBytes),
+        ));
       });
     });
     const result = JSON.parse(await readFile(temporaryWorkerOutput, "utf8"));
@@ -770,6 +925,10 @@ async function runWorker(seedIndex, suffix = "run") {
     );
     return completedResult;
   } catch (error) {
+    if (cancelledSeedIndices.has(seedIndex)) {
+      await rm(workerOutput.replace(/\.json$/, "-failure.json"), { force: true });
+      throw new SoakWorkerCancelledError(seedIndex);
+    }
     await writeJsonAtomic(
       workerOutput.replace(/\.json$/, "-failure.json"),
       {
@@ -783,6 +942,10 @@ async function runWorker(seedIndex, suffix = "run") {
         seed: expectedSeed(seedIndex),
         seasonCount,
         message: error instanceof Error ? error.message : String(error),
+        diagnostics:
+          error instanceof SoakWorkerProcessError
+            ? error.diagnostics
+            : diagnosticEvidence(stdoutTail, stderrTail, stdoutBytes, stderrBytes),
       },
     );
     throw error;
@@ -797,6 +960,7 @@ try {
   const workerSettlements = await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, pendingSeedIndices.length) }, async () => {
       while (true) {
+        if (abortRequested) return;
         const pendingIndex = nextPendingIndex;
         nextPendingIndex += 1;
         const seedIndex = pendingSeedIndices[pendingIndex];
@@ -811,16 +975,31 @@ try {
           seedStates.set(seedIndex, "Completed");
           await writeProgress("InProgress");
         } catch (error) {
+          if (error instanceof SoakWorkerCancelledError) {
+            seedStates.set(seedIndex, "Pending");
+            await writeProgress("Failed", primaryFailure);
+            return;
+          }
+          if (abortRequested) {
+            seedStates.set(seedIndex, "Pending");
+            await writeProgress("Failed", primaryFailure);
+            return;
+          }
+          primaryFailureError = error instanceof Error ? error : new Error(String(error));
+          primaryFailure = primaryFailureError.message;
           seedStates.set(seedIndex, "Failed");
+          const peerTermination = cancelPeerWorkers(seedIndex);
           await writeProgress(
             "Failed",
-            error instanceof Error ? error.message : String(error),
+            primaryFailure,
           );
-          throw error;
+          await peerTermination;
+          throw primaryFailureError;
         }
       }
     }),
   );
+  if (primaryFailureError) throw primaryFailureError;
   const failedWorker = workerSettlements.find((settlement) => settlement.status === "rejected");
   if (failedWorker?.status === "rejected") throw failedWorker.reason;
 
