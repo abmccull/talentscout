@@ -1143,6 +1143,11 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     || executionIdentity?.concurrency !== profile.concurrency
     || executionIdentity?.maxSerializedBytes !== profile.maxSerializedBytes
     || executionIdentity?.workerTestTimeoutMs !== profile.workerTestTimeoutMs
+    || executionIdentity?.orchestratorLockStaleMs !== profile.orchestratorLockStaleMs
+    || executionIdentity?.orchestratorLockUpdateMs !== profile.orchestratorLockUpdateMs
+    || executionIdentity?.orchestratorAutomaticStaleRecovery
+      !== profile.orchestratorAutomaticStaleRecovery
+    || executionIdentity?.orchestratorRecoveryCommand !== profile.orchestratorRecoveryCommand
     || executionIdentity?.profileKind !== "passive-world-canonical-weekly-career"
     || executionIdentity?.processIsolation !== "one-seeded-career-per-process"
     || !isPositiveInteger(executionIdentity?.availableParallelism)
@@ -1209,6 +1214,11 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     || profile.expectedSeasonLengthWeeks !== requiredProfile.expectedSeasonLengthWeeks
     || profile.expectedCanonicalTicksPerSeed !== requiredProfile.expectedCanonicalTicksPerSeed
     || profile.workerTestTimeoutMs !== requiredProfile.workerTestTimeoutMs
+    || profile.orchestratorLockStaleMs !== requiredProfile.orchestratorLockStaleMs
+    || profile.orchestratorLockUpdateMs !== requiredProfile.orchestratorLockUpdateMs
+    || profile.orchestratorAutomaticStaleRecovery
+      !== requiredProfile.orchestratorAutomaticStaleRecovery
+    || profile.orchestratorRecoveryCommand !== requiredProfile.orchestratorRecoveryCommand
     || profile.maxSerializedBytes !== requiredProfile.maxSerializedBytes
     || profile.maxGrowthMultiplier !== requiredProfile.maxGrowthMultiplier
     || profile.maxHeapUsedBytes !== requiredProfile.maxHeapUsedBytes

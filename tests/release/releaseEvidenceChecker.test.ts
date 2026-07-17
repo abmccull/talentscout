@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   rmSync,
   unlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 const checker = join(process.cwd(), "scripts", "check-release-evidence.mjs");
@@ -22,6 +24,11 @@ const soakOrchestrator = join(
   process.cwd(),
   "scripts",
   "run-long-career-release-soak.mjs",
+);
+const soakLeaseRecovery = join(
+  process.cwd(),
+  "scripts",
+  "recover-long-career-soak-lease.mjs",
 );
 const productionBuild = join(process.cwd(), "scripts", "build-production.mjs");
 const provenanceAssertion = join(
@@ -42,6 +49,10 @@ interface ReleaseSoakPlan {
     candidateTreeSha: string;
     maxSerializedBytes: number;
     workerTestTimeoutMs: number;
+    orchestratorLockStaleMs: number;
+    orchestratorLockUpdateMs: number;
+    orchestratorAutomaticStaleRecovery: boolean;
+    orchestratorRecoveryCommand: string;
   };
   sourceTreeClean: boolean;
   resumeEnabled: boolean;
@@ -148,6 +159,17 @@ function releaseNeutralEnvironment(overrides: Record<string, string> = {}) {
     "RELEASE_CANDIDATE_SHA",
     "RELEASE_CANDIDATE_TAG",
     "RELEASE_WORKFLOW_RUN_ID",
+    "SOAK_CANDIDATE_SHA",
+    "SOAK_CONCURRENCY",
+    "SOAK_MAX_SERIALIZED_BYTES",
+    "SOAK_OUTPUT",
+    "SOAK_PLAN_ONLY",
+    "SOAK_REQUIRE_CLEAN_CANDIDATE",
+    "SOAK_RESUME",
+    "SOAK_SEEDS",
+    "SOAK_SEASONS",
+    "SOAK_WORKER_DIRECTORY",
+    "SOAK_WORKER_TEST_TIMEOUT_MS",
   ]) {
     delete env[key];
   }
@@ -525,6 +547,10 @@ function createCompleteLongCareerEvidence(
     concurrency: 3,
     maxSerializedBytes: 80 * 1024 * 1024,
     workerTestTimeoutMs: 2 * 60 * 60 * 1_000,
+    orchestratorLockStaleMs: Number.MAX_SAFE_INTEGER,
+    orchestratorLockUpdateMs: 60_000,
+    orchestratorAutomaticStaleRecovery: false,
+    orchestratorRecoveryCommand: "npm run release:recover-soak-lease",
     profileKind: "passive-world-canonical-weekly-career",
     processIsolation: "one-seeded-career-per-process",
     nodeVersion: process.version,
@@ -668,6 +694,11 @@ function createCompleteLongCareerEvidence(
       expectedSeasonLengthWeeks: 46,
       expectedCanonicalTicksPerSeed: 1_380,
       workerTestTimeoutMs: executionIdentity.workerTestTimeoutMs,
+      orchestratorLockStaleMs: executionIdentity.orchestratorLockStaleMs,
+      orchestratorLockUpdateMs: executionIdentity.orchestratorLockUpdateMs,
+      orchestratorAutomaticStaleRecovery:
+        executionIdentity.orchestratorAutomaticStaleRecovery,
+      orchestratorRecoveryCommand: executionIdentity.orchestratorRecoveryCommand,
       scheduledLeagueClubCounts: canonicalScheduledLeagueClubCounts,
       maxMidseasonInvariantSamplesPerSeason: 2,
       midseasonAbsoluteSaveBudgetAssertions: true,
@@ -732,6 +763,10 @@ function fixtureWithLongSavePolicy() {
         expectedSeasonLengthWeeks: 46,
         expectedCanonicalTicksPerSeed: 1_380,
         workerTestTimeoutMs: 2 * 60 * 60 * 1_000,
+        orchestratorLockStaleMs: Number.MAX_SAFE_INTEGER,
+        orchestratorLockUpdateMs: 60_000,
+        orchestratorAutomaticStaleRecovery: false,
+        orchestratorRecoveryCommand: "npm run release:recover-soak-lease",
         maxCanonicalWeekLatencyMs: 30_000,
         maxSerializedBytes: 80 * 1024 * 1024,
         maxGrowthMultiplier: 64,
@@ -842,6 +877,200 @@ describe("release evidence checker", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("SOAK_WORKER_TEST_TIMEOUT_MS must be positive");
   });
+
+  it("rejects a second orchestrator before it can write or start workers", () => {
+    const { cwd } = fixture();
+    const workerDirectory = join(
+      cwd,
+      "artifacts",
+      "release",
+      "generated",
+      "long-career-workers",
+    );
+    mkdirSync(workerDirectory, { recursive: true });
+    const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+    const lockPath = join(generatedDirectory, "long-career-soak-orchestrator.lock");
+    const ownerPath = join(generatedDirectory, "long-career-soak-orchestrator.owner.json");
+    const existingLease = {
+      schemaVersion: 1,
+      evidenceKind: "long-career-soak-orchestrator-lease",
+      leaseId: "existing-lease",
+      pid: 4242,
+      startedAt: "2026-07-17T00:00:00.000Z",
+      candidateCommitSha: "a".repeat(40),
+    };
+    mkdirSync(lockPath);
+    writeJson(ownerPath, existingLease);
+
+    const result = spawnSync(process.execPath, [soakOrchestrator], {
+      cwd,
+      env: releaseNeutralEnvironment({
+        SOAK_SEEDS: "1",
+        SOAK_SEASONS: "1",
+        SOAK_CONCURRENCY: "1",
+        SOAK_OUTPUT: join(cwd, "artifacts", "release", "generated", "soak.json"),
+        SOAK_WORKER_DIRECTORY: workerDirectory,
+        SOAK_RESUME: "false",
+      }),
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("evidence is already leased");
+    expect(result.stderr).toContain("pid=4242");
+    expect(result.stdout).not.toContain("SOAK_WORKER_START");
+    expect(JSON.parse(readFileSync(ownerPath, "utf8"))).toEqual(existingLease);
+    expect(existsSync(lockPath)).toBe(true);
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("fails closed on a fresh lock with corrupt owner metadata", () => {
+    const { cwd } = fixture();
+    const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+    const workerDirectory = join(generatedDirectory, "corrupt-owner-workers");
+    const lockPath = join(generatedDirectory, "long-career-soak-orchestrator.lock");
+    const ownerPath = join(generatedDirectory, "long-career-soak-orchestrator.owner.json");
+    mkdirSync(generatedDirectory, { recursive: true });
+    mkdirSync(lockPath);
+    writeFileSync(ownerPath, "not-json", "utf8");
+
+    const result = spawnSync(process.execPath, [soakOrchestrator], {
+      cwd,
+      env: releaseNeutralEnvironment({
+        SOAK_SEEDS: "1",
+        SOAK_SEASONS: "1",
+        SOAK_CONCURRENCY: "1",
+        SOAK_OUTPUT: join(generatedDirectory, "corrupt-owner-soak.json"),
+        SOAK_WORKER_DIRECTORY: workerDirectory,
+        SOAK_RESUME: "false",
+      }),
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("owner metadata is unreadable");
+    expect(result.stdout).not.toContain("SOAK_WORKER_START");
+    expect(existsSync(lockPath)).toBe(true);
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("never takes over a stale global lease automatically", () => {
+    const { cwd } = fixture();
+    const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+    const workerDirectory = join(generatedDirectory, "stale-lease-workers");
+    const lockPath = join(generatedDirectory, "long-career-soak-orchestrator.lock");
+    const ownerPath = join(generatedDirectory, "long-career-soak-orchestrator.owner.json");
+    mkdirSync(generatedDirectory, { recursive: true });
+    mkdirSync(lockPath);
+    writeFileSync(ownerPath, "not-json", "utf8");
+    const staleAt = new Date(Date.now() - 3 * 60 * 60 * 1_000);
+    utimesSync(lockPath, staleAt, staleAt);
+
+    const result = spawnSync(process.execPath, [soakOrchestrator], {
+      cwd,
+      env: releaseNeutralEnvironment({
+        SOAK_SEEDS: "1",
+        SOAK_SEASONS: "1",
+        SOAK_CONCURRENCY: "1",
+        SOAK_OUTPUT: join(generatedDirectory, "stale-lease-soak.json"),
+        SOAK_WORKER_DIRECTORY: workerDirectory,
+        SOAK_RESUME: "false",
+      }),
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("SOAK_WORKER_START");
+    expect(result.stderr).toContain("evidence is already leased");
+    expect(result.stderr).toContain("release:recover-soak-lease");
+    expect(existsSync(lockPath)).toBe(true);
+    expect(existsSync(ownerPath)).toBe(true);
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("refuses explicit lease recovery while the recorded owner is alive", () => {
+    const { cwd } = fixture();
+    const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+    const lockPath = join(generatedDirectory, "long-career-soak-orchestrator.lock");
+    const ownerPath = join(generatedDirectory, "long-career-soak-orchestrator.owner.json");
+    mkdirSync(generatedDirectory, { recursive: true });
+    mkdirSync(lockPath);
+    writeJson(ownerPath, {
+      leaseId: "live-owner",
+      pid: process.pid,
+      startedAt: "2026-07-17T00:00:00.000Z",
+    });
+
+    const result = spawnSync(process.execPath, [soakLeaseRecovery], {
+      cwd,
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(`recorded orchestrator PID ${process.pid} is still alive`);
+    expect(existsSync(lockPath)).toBe(true);
+    expect(existsSync(ownerPath)).toBe(true);
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("explicitly recovers a corrupt orphan lease after process verification", () => {
+    const { cwd } = fixture();
+    const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+    const lockPath = join(generatedDirectory, "long-career-soak-orchestrator.lock");
+    const ownerPath = join(generatedDirectory, "long-career-soak-orchestrator.owner.json");
+    mkdirSync(generatedDirectory, { recursive: true });
+    mkdirSync(lockPath);
+    writeFileSync(ownerPath, "not-json", "utf8");
+
+    const result = spawnSync(process.execPath, [soakLeaseRecovery], {
+      cwd,
+      encoding: "utf8",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("LONG_CAREER_SOAK_LEASE_RECOVERY recovered lease=unknown");
+    expect(existsSync(lockPath)).toBe(false);
+    expect(existsSync(ownerPath)).toBe(false);
+  }, RELEASE_CHECK_TIMEOUT_MS);
+
+  it("refuses corrupt-owner recovery when a long repo-local Vitest process is alive", async () => {
+    const { cwd } = fixture();
+    const generatedDirectory = join(cwd, "artifacts", "release", "generated");
+    const lockPath = join(generatedDirectory, "long-career-soak-orchestrator.lock");
+    const ownerPath = join(generatedDirectory, "long-career-soak-orchestrator.owner.json");
+    mkdirSync(generatedDirectory, { recursive: true });
+    mkdirSync(lockPath);
+    writeFileSync(ownerPath, "not-json", "utf8");
+
+    const longPadding = "x".repeat(256);
+    const vitestMarker = join(cwd, "node_modules", "vitest", "dist", "workers", "forks.js");
+    const blocker = spawn(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1_000)", longPadding, vitestMarker],
+      { cwd, stdio: "ignore" },
+    );
+    await new Promise<void>((resolveSpawn, rejectSpawn) => {
+      blocker.once("spawn", resolveSpawn);
+      blocker.once("error", rejectSpawn);
+    });
+
+    try {
+      const result = spawnSync(process.execPath, [soakLeaseRecovery], {
+        cwd,
+        encoding: "utf8",
+      });
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("active soak processes");
+      expect(result.stderr).toContain(String(blocker.pid));
+      expect(existsSync(lockPath)).toBe(true);
+      expect(existsSync(ownerPath)).toBe(true);
+    } finally {
+      if (blocker.exitCode === null && blocker.signalCode === null) {
+        blocker.kill("SIGKILL");
+        await Promise.race([
+          new Promise<void>((resolveClose) => blocker.once("close", () => resolveClose())),
+          new Promise<void>((resolveTimeout) => setTimeout(resolveTimeout, 2_000)),
+        ]);
+      }
+    }
+  }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("rejects release certification when environment overrides weaken the committed soak profile", () => {
     const { cwd } = fixture();

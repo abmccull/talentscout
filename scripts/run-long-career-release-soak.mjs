@@ -1,14 +1,17 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import fs, { readFileSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { availableParallelism, cpus, totalmem } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import properLockfile from "proper-lockfile";
 
 const CHECKPOINT_PROTOCOL_VERSION = 3;
 const MAX_WORKER_DIAGNOSTIC_BYTES_PER_STREAM = 32 * 1024;
 const WORKER_TERMINATION_GRACE_MS = 2_000;
 const WORKER_TERMINATION_FORCE_MS = 1_000;
+const ORCHESTRATOR_LOCK_UPDATE_MS = 60_000;
+const ORCHESTRATOR_LOCK_STALE_MS = Number.MAX_SAFE_INTEGER;
 const RELEASE_PROFILE = Object.freeze({
   seedCount: 20,
   seasonCount: 30,
@@ -19,6 +22,10 @@ const RELEASE_PROFILE = Object.freeze({
   expectedSeasonLengthWeeks: 46,
   expectedCanonicalTicksPerSeed: 1_380,
   workerTestTimeoutMs: 2 * 60 * 60 * 1_000,
+  orchestratorLockStaleMs: ORCHESTRATOR_LOCK_STALE_MS,
+  orchestratorLockUpdateMs: ORCHESTRATOR_LOCK_UPDATE_MS,
+  orchestratorAutomaticStaleRecovery: false,
+  orchestratorRecoveryCommand: "npm run release:recover-soak-lease",
   maxSerializedBytes: 80 * 1024 * 1024,
   maxGrowthMultiplier: 64,
   maxHeapUsedBytes: 1536 * 1024 * 1024,
@@ -60,6 +67,11 @@ const workerDirectory = resolve(
     ?? "artifacts/release/generated/long-career-workers",
 );
 const checkpointPath = resolve(workerDirectory, "checkpoint.json");
+const orchestratorLockTarget = resolve(
+  "artifacts/release/generated/long-career-soak-orchestrator",
+);
+const orchestratorLockPath = `${orchestratorLockTarget}.lock`;
+const orchestratorOwnerPath = `${orchestratorLockTarget}.owner.json`;
 const vitestEntry = resolve("node_modules/vitest/vitest.mjs");
 const planOnly = process.env.SOAK_PLAN_ONLY === "true";
 const resumeRequested = process.env.SOAK_RESUME !== "false";
@@ -163,6 +175,10 @@ const executionIdentity = {
   concurrency,
   maxSerializedBytes,
   workerTestTimeoutMs,
+  orchestratorLockStaleMs: RELEASE_PROFILE.orchestratorLockStaleMs,
+  orchestratorLockUpdateMs: RELEASE_PROFILE.orchestratorLockUpdateMs,
+  orchestratorAutomaticStaleRecovery: RELEASE_PROFILE.orchestratorAutomaticStaleRecovery,
+  orchestratorRecoveryCommand: RELEASE_PROFILE.orchestratorRecoveryCommand,
   profileKind: "passive-world-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
   nodeVersion: process.version,
@@ -618,6 +634,106 @@ async function writeJsonAtomic(path, value) {
   }
 }
 
+function readLeaseOwnerForMessage() {
+  try {
+    const owner = JSON.parse(readFileSync(orchestratorOwnerPath, "utf8"));
+    return [
+      `pid=${String(owner.pid ?? "unknown")}`,
+      `startedAt=${String(owner.startedAt ?? "unknown")}`,
+      `candidate=${String(owner.candidateCommitSha ?? "unknown")}`,
+      `lease=${String(owner.leaseId ?? "unknown")}`,
+    ].join(" ");
+  } catch {
+    return "owner metadata is unreadable";
+  }
+}
+
+// proper-lockfile normally removes locks from its process-exit hook. Release
+// soaks intentionally fail closed instead: an abruptly terminated parent can
+// leave detached Vitest process trees alive, so the heartbeat must age past
+// the maximum worker timeout before another orchestrator may recover it.
+const failClosedLockFs = {
+  ...fs,
+  rmdirSync() {},
+};
+
+async function acquireOrchestratorLease() {
+  const lease = {
+    schemaVersion: 1,
+    evidenceKind: "long-career-soak-orchestrator-lease",
+    leaseId: randomUUID(),
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    candidateCommitSha: currentHeadSha,
+    candidateTreeSha: currentTreeSha,
+    executionIdentityHash,
+    lockPath: repositoryRelative(orchestratorLockPath),
+    ownerPath: repositoryRelative(orchestratorOwnerPath),
+    outputPath: repositoryRelative(outputPath),
+    workerDirectory: repositoryRelative(workerDirectory),
+    staleAfterMs: RELEASE_PROFILE.orchestratorLockStaleMs,
+    heartbeatIntervalMs: RELEASE_PROFILE.orchestratorLockUpdateMs,
+    automaticStaleRecovery: RELEASE_PROFILE.orchestratorAutomaticStaleRecovery,
+    recoveryCommand: RELEASE_PROFILE.orchestratorRecoveryCommand,
+  };
+  let release;
+  try {
+    release = await properLockfile.lock(orchestratorLockTarget, {
+      realpath: false,
+      retries: 0,
+      stale: RELEASE_PROFILE.orchestratorLockStaleMs,
+      update: RELEASE_PROFILE.orchestratorLockUpdateMs,
+      fs: failClosedLockFs,
+      onCompromised(error) {
+        console.error(`Long-career soak orchestrator lease was compromised: ${error.message}`);
+        throw error;
+      },
+    });
+    await writeJsonAtomic(orchestratorOwnerPath, lease);
+  } catch (error) {
+    if (release) {
+      try {
+        await release();
+      } catch {
+        // Preserve the acquisition error; stale recovery remains fail closed.
+      }
+    }
+    if (error?.code === "ELOCKED") {
+      throw new Error(
+        `Long-career soak evidence is already leased (${readLeaseOwnerForMessage()}). `
+          + `The repository-wide heartbeat lock is ${repositoryRelative(orchestratorLockPath)}; `
+          + `after verifying the owner is dead, use ${RELEASE_PROFILE.orchestratorRecoveryCommand}.`,
+      );
+    }
+    throw error;
+  }
+  return { lease, release };
+}
+
+async function releaseOrchestratorLease(ownership) {
+  const { lease, release } = ownership;
+  let stillOwnsLease = false;
+  try {
+    const current = JSON.parse(await readFile(orchestratorOwnerPath, "utf8"));
+    if (current.leaseId === lease.leaseId) {
+      stillOwnsLease = true;
+      await rm(orchestratorOwnerPath, { force: true });
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.warn("Long-career soak could not safely remove its lease owner metadata");
+    }
+  }
+  if (!stillOwnsLease) {
+    console.error(
+      "Long-career soak retained the heartbeat lock because its ownership token no longer matches",
+    );
+    return false;
+  }
+  await release();
+  return true;
+}
+
 const inspections = await Promise.all(
   Array.from({ length: seedCount }, (_, index) => readReusableWorker(index + 1)),
 );
@@ -652,7 +768,10 @@ if (planOnly) {
   process.exit(0);
 }
 
-await mkdir(workerDirectory, { recursive: true });
+await Promise.all([
+  mkdir(workerDirectory, { recursive: true }),
+  mkdir(dirname(orchestratorLockTarget), { recursive: true }),
+]);
 console.info(`SOAK_RELEASE_PLAN ${JSON.stringify(plan)}`);
 
 const runs = new Array(seedCount);
@@ -965,8 +1084,9 @@ async function runWorker(seedIndex, suffix = "run") {
   }
 }
 
-await writeProgress("InProgress");
+const orchestratorLease = await acquireOrchestratorLease();
 try {
+  await writeProgress("InProgress");
   let nextPendingIndex = 0;
   const workerSettlements = await Promise.allSettled(
     Array.from({ length: Math.min(concurrency, pendingSeedIndices.length) }, async () => {
@@ -1091,6 +1211,10 @@ try {
       expectedSeasonLengthWeeks: RELEASE_PROFILE.expectedSeasonLengthWeeks,
       expectedCanonicalTicksPerSeed: RELEASE_PROFILE.expectedCanonicalTicksPerSeed,
       workerTestTimeoutMs,
+      orchestratorLockStaleMs: RELEASE_PROFILE.orchestratorLockStaleMs,
+      orchestratorLockUpdateMs: RELEASE_PROFILE.orchestratorLockUpdateMs,
+      orchestratorAutomaticStaleRecovery: RELEASE_PROFILE.orchestratorAutomaticStaleRecovery,
+      orchestratorRecoveryCommand: RELEASE_PROFILE.orchestratorRecoveryCommand,
       processIsolation: executionIdentity.processIsolation,
       explicitGcAtSeasonBoundaries: true,
       deterministicReplaySeed: runs[0].seed,
@@ -1131,4 +1255,18 @@ try {
 } catch (error) {
   await writeProgress("Failed", error instanceof Error ? error.message : String(error));
   throw error;
+} finally {
+  if (activeWorkerProcesses.size > 0) {
+    abortRequested = true;
+    await Promise.allSettled(
+      [...activeWorkerProcesses.values()].map(({ child }) => terminateWorkerProcess(child)),
+    );
+  }
+  if (activeWorkerProcesses.size === 0) {
+    await releaseOrchestratorLease(orchestratorLease);
+  } else {
+    console.error(
+      "Long-career soak retained its lease because worker processes did not terminate cleanly",
+    );
+  }
 }
