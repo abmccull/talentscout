@@ -41,6 +41,7 @@ interface ReleaseSoakPlan {
     candidateCommitSha: string;
     candidateTreeSha: string;
     maxSerializedBytes: number;
+    workerTestTimeoutMs: number;
   };
   sourceTreeClean: boolean;
   resumeEnabled: boolean;
@@ -327,7 +328,7 @@ function validSoakWorkerCheckpoint(plan: ReleaseSoakPlan) {
   return {
     ...workerEvidence,
     checkpoint: {
-      protocolVersion: 2,
+      protocolVersion: 3,
       executionIdentityHash: plan.executionIdentityHash,
       candidateCommitSha: plan.executionIdentity.candidateCommitSha,
       candidateTreeSha: plan.executionIdentity.candidateTreeSha,
@@ -516,13 +517,14 @@ function createCompleteLongCareerEvidence(
     (_, index) => createCompleteLongCareerRun(index + 1, seasonCount),
   );
   const executionIdentity = {
-    protocolVersion: 2,
+    protocolVersion: 3,
     candidateCommitSha,
     candidateTreeSha,
     seedCount,
     seasonCount,
     concurrency: 3,
     maxSerializedBytes: 80 * 1024 * 1024,
+    workerTestTimeoutMs: 2 * 60 * 60 * 1_000,
     profileKind: "passive-world-canonical-weekly-career",
     processIsolation: "one-seeded-career-per-process",
     nodeVersion: process.version,
@@ -590,7 +592,7 @@ function createCompleteLongCareerEvidence(
     const worker = {
       ...payload,
       checkpoint: {
-        protocolVersion: 2,
+        protocolVersion: 3,
         executionIdentityHash,
         candidateCommitSha,
         candidateTreeSha,
@@ -647,7 +649,7 @@ function createCompleteLongCareerEvidence(
         .digest("hex"),
     },
     checkpoint: {
-      protocolVersion: 2,
+      protocolVersion: 3,
       executionIdentity,
       executionIdentityHash,
       resumeEnabled: true,
@@ -665,6 +667,7 @@ function createCompleteLongCareerEvidence(
       fatiguePolicy: "reset-at-95-to-20-for-world-longevity",
       expectedSeasonLengthWeeks: 46,
       expectedCanonicalTicksPerSeed: 1_380,
+      workerTestTimeoutMs: executionIdentity.workerTestTimeoutMs,
       scheduledLeagueClubCounts: canonicalScheduledLeagueClubCounts,
       maxMidseasonInvariantSamplesPerSeason: 2,
       midseasonAbsoluteSaveBudgetAssertions: true,
@@ -728,6 +731,7 @@ function fixtureWithLongSavePolicy() {
         fatiguePolicy: "reset-at-95-to-20-for-world-longevity",
         expectedSeasonLengthWeeks: 46,
         expectedCanonicalTicksPerSeed: 1_380,
+        workerTestTimeoutMs: 2 * 60 * 60 * 1_000,
         maxCanonicalWeekLatencyMs: 30_000,
         maxSerializedBytes: 80 * 1024 * 1024,
         maxGrowthMultiplier: 64,
@@ -823,6 +827,22 @@ describe("release evidence checker", () => {
     );
   });
 
+  it("rejects invalid worker timeouts before starting long-soak processes", () => {
+    const result = spawnSync(process.execPath, [soakOrchestrator], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        SOAK_SEEDS: "1",
+        SOAK_SEASONS: "1",
+        SOAK_CONCURRENCY: "1",
+        SOAK_WORKER_TEST_TIMEOUT_MS: "0",
+      },
+      encoding: "utf8",
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("SOAK_WORKER_TEST_TIMEOUT_MS must be positive");
+  });
+
   it("rejects release certification when environment overrides weaken the committed soak profile", () => {
     const { cwd } = fixture();
     const weakened = spawnSync(process.execPath, [soakOrchestrator], {
@@ -832,6 +852,7 @@ describe("release evidence checker", () => {
         SOAK_SEASONS: "1",
         SOAK_CONCURRENCY: "1",
         SOAK_MAX_SERIALIZED_BYTES: String(800 * 1024 * 1024),
+        SOAK_WORKER_TEST_TIMEOUT_MS: String(60 * 60 * 1_000),
         SOAK_REQUIRE_CLEAN_CANDIDATE: "true",
         SOAK_PLAN_ONLY: "true",
       }),
@@ -852,6 +873,12 @@ describe("release evidence checker", () => {
       encoding: "utf8",
     });
     expect(exact.status, exact.stderr).toBe(0);
+    const exactPlanLine = exact.stdout
+      .split(/\r?\n/)
+      .find((entry) => entry.startsWith("SOAK_RELEASE_PLAN "));
+    expect(exactPlanLine).toBeDefined();
+    const exactPlan = JSON.parse(exactPlanLine!.slice("SOAK_RELEASE_PLAN ".length)) as ReleaseSoakPlan;
+    expect(exactPlan.executionIdentity.workerTestTimeoutMs).toBe(2 * 60 * 60 * 1_000);
   }, RELEASE_CHECK_TIMEOUT_MS);
 
   it("resumes only complete workers bound to the exact clean candidate and profile", () => {
@@ -895,6 +922,14 @@ describe("release evidence checker", () => {
     });
     expect(changedBudget.reusableSeedIndices).toEqual([]);
     expect(changedBudget.rejectedCheckpoints[0]?.reason).toContain(
+      "belongs to another candidate, runtime, or soak profile",
+    );
+
+    const changedTimeout = planReleaseSoak(cwd, workerDirectory, {
+      SOAK_WORKER_TEST_TIMEOUT_MS: String(3 * 60 * 60 * 1_000),
+    });
+    expect(changedTimeout.reusableSeedIndices).toEqual([]);
+    expect(changedTimeout.rejectedCheckpoints[0]?.reason).toContain(
       "belongs to another candidate, runtime, or soak profile",
     );
 

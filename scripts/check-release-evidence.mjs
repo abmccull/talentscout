@@ -1131,17 +1131,18 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     ? createHash("sha256").update(JSON.stringify(executionIdentity)).digest("hex")
     : null;
   if (
-    checkpoint?.protocolVersion !== 2
+    checkpoint?.protocolVersion !== 3
     || checkpoint?.determinismReplayExecuted !== true
     || !hashPattern.test(String(checkpoint?.executionIdentityHash ?? ""))
     || checkpoint?.executionIdentityHash !== calculatedIdentityHash
-    || executionIdentity?.protocolVersion !== 2
+    || executionIdentity?.protocolVersion !== 3
     || executionIdentity?.candidateCommitSha !== candidateSha
     || executionIdentity?.candidateTreeSha !== currentTreeSha
     || executionIdentity?.seedCount !== seedCount
     || executionIdentity?.seasonCount !== seasonCount
     || executionIdentity?.concurrency !== profile.concurrency
     || executionIdentity?.maxSerializedBytes !== profile.maxSerializedBytes
+    || executionIdentity?.workerTestTimeoutMs !== profile.workerTestTimeoutMs
     || executionIdentity?.profileKind !== "passive-world-canonical-weekly-career"
     || executionIdentity?.processIsolation !== "one-seeded-career-per-process"
     || !isPositiveInteger(executionIdentity?.availableParallelism)
@@ -1207,6 +1208,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     || profile.fatiguePolicy !== requiredProfile.fatiguePolicy
     || profile.expectedSeasonLengthWeeks !== requiredProfile.expectedSeasonLengthWeeks
     || profile.expectedCanonicalTicksPerSeed !== requiredProfile.expectedCanonicalTicksPerSeed
+    || profile.workerTestTimeoutMs !== requiredProfile.workerTestTimeoutMs
     || profile.maxSerializedBytes !== requiredProfile.maxSerializedBytes
     || profile.maxGrowthMultiplier !== requiredProfile.maxGrowthMultiplier
     || profile.maxHeapUsedBytes !== requiredProfile.maxHeapUsedBytes
@@ -1317,7 +1319,7 @@ async function validateGeneratedGateEvidence(gateId, policy) {
         || worker?.profile?.kind !== "passive-world-canonical-weekly-career"
         || worker?.profile?.seedCount !== 1
         || worker?.profile?.seasonCount !== seasonCount
-        || worker?.checkpoint?.protocolVersion !== 2
+        || worker?.checkpoint?.protocolVersion !== 3
         || worker?.checkpoint?.executionIdentityHash !== checkpoint?.executionIdentityHash
         || worker?.checkpoint?.candidateCommitSha !== candidateSha
         || worker?.checkpoint?.candidateTreeSha !== currentTreeSha

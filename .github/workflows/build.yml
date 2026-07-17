@@ -148,7 +148,10 @@ jobs:
     needs: quality
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    # GitHub-hosted jobs have a six-hour ceiling. The soak's per-seed timeout
+    # is provenance-bound at two hours, while this outer limit prevents a
+    # stalled matrix from consuming an unbounded runner.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 

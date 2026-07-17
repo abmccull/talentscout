@@ -5,7 +5,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { availableParallelism, cpus, totalmem } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
-const CHECKPOINT_PROTOCOL_VERSION = 2;
+const CHECKPOINT_PROTOCOL_VERSION = 3;
 const MAX_WORKER_DIAGNOSTIC_BYTES_PER_STREAM = 32 * 1024;
 const WORKER_TERMINATION_GRACE_MS = 2_000;
 const WORKER_TERMINATION_FORCE_MS = 1_000;
@@ -18,6 +18,7 @@ const RELEASE_PROFILE = Object.freeze({
   fatiguePolicy: "reset-at-95-to-20-for-world-longevity",
   expectedSeasonLengthWeeks: 46,
   expectedCanonicalTicksPerSeed: 1_380,
+  workerTestTimeoutMs: 2 * 60 * 60 * 1_000,
   maxSerializedBytes: 80 * 1024 * 1024,
   maxGrowthMultiplier: 64,
   maxHeapUsedBytes: 1536 * 1024 * 1024,
@@ -66,6 +67,10 @@ const maxSerializedBytes = Number.parseInt(
   process.env.SOAK_MAX_SERIALIZED_BYTES ?? String(RELEASE_PROFILE.maxSerializedBytes),
   10,
 );
+const workerTestTimeoutMs = Number.parseInt(
+  process.env.SOAK_WORKER_TEST_TIMEOUT_MS ?? String(RELEASE_PROFILE.workerTestTimeoutMs),
+  10,
+);
 const canonicalWorkerDirectory = resolve(
   "artifacts/release/generated/long-career-workers",
 );
@@ -80,6 +85,9 @@ if (concurrency > 8) {
 }
 if (!Number.isInteger(maxSerializedBytes) || maxSerializedBytes <= 0) {
   throw new Error("SOAK_MAX_SERIALIZED_BYTES must be positive");
+}
+if (!Number.isInteger(workerTestTimeoutMs) || workerTestTimeoutMs <= 0) {
+  throw new Error("SOAK_WORKER_TEST_TIMEOUT_MS must be positive");
 }
 
 function git(...args) {
@@ -118,6 +126,7 @@ if (
     || seasonCount !== RELEASE_PROFILE.seasonCount
     || concurrency !== RELEASE_PROFILE.concurrency
     || maxSerializedBytes !== RELEASE_PROFILE.maxSerializedBytes
+    || workerTestTimeoutMs !== RELEASE_PROFILE.workerTestTimeoutMs
     || outputPath !== canonicalOutputPath
     || workerDirectory !== canonicalWorkerDirectory
   )
@@ -153,6 +162,7 @@ const executionIdentity = {
   seasonCount,
   concurrency,
   maxSerializedBytes,
+  workerTestTimeoutMs,
   profileKind: "passive-world-canonical-weekly-career",
   processIsolation: "one-seeded-career-per-process",
   nodeVersion: process.version,
@@ -867,6 +877,7 @@ async function runWorker(seedIndex, suffix = "run") {
             SOAK_OUTPUT: temporaryWorkerOutput,
             SOAK_WORKER_MODE: "true",
             SOAK_DIAGNOSTIC_ONLY: "false",
+            SOAK_WORKER_TEST_TIMEOUT_MS: String(workerTestTimeoutMs),
           },
           detached: process.platform !== "win32",
           stdio: ["ignore", "pipe", "pipe"],
@@ -1079,6 +1090,7 @@ try {
       concurrency,
       expectedSeasonLengthWeeks: RELEASE_PROFILE.expectedSeasonLengthWeeks,
       expectedCanonicalTicksPerSeed: RELEASE_PROFILE.expectedCanonicalTicksPerSeed,
+      workerTestTimeoutMs,
       processIsolation: executionIdentity.processIsolation,
       explicitGcAtSeasonBoundaries: true,
       deterministicReplaySeed: runs[0].seed,

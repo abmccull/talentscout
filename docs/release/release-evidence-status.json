@@ -286,6 +286,7 @@
           "fatiguePolicy": "reset-at-95-to-20-for-world-longevity",
           "expectedSeasonLengthWeeks": 46,
           "expectedCanonicalTicksPerSeed": 1380,
+          "workerTestTimeoutMs": 7200000,
           "maxCanonicalWeekLatencyMs": 30000,
           "maxSerializedBytes": 83886080,
           "maxGrowthMultiplier": 64,

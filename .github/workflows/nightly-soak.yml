@@ -48,7 +48,10 @@ jobs:
   simulation-soak:
     name: Canonical full-week long-career soaks
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    # Keep the exact soak alone inside GitHub's six-hour job ceiling. Browser
+    # and replayability regressions run independently below so their runtime
+    # cannot invalidate an otherwise complete candidate soak.
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
@@ -66,10 +69,6 @@ jobs:
           SOAK_CANDIDATE_SHA: ${{ github.sha }}
           SOAK_REQUIRE_CLEAN_CANDIDATE: "true"
         run: npm run test:release-soak
-      - run: npx playwright install --with-deps chromium
-      - run: npm run build:e2e
-      - run: npm run test:e2e:soak
-      - run: npm run test:replayability:nightly
 
       - name: Upload soak evidence
         if: always()
@@ -77,11 +76,38 @@ jobs:
         with:
           name: simulation-soak-evidence
           path: |
+            artifacts/release/generated/long-career-release-summary.json
+            artifacts/release/generated/long-career-workers/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  simulation-supporting-regressions:
+    name: Browser soak and replayability regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:e2e
+      - run: npm run test:e2e:soak
+      - run: npm run test:replayability:nightly
+
+      - name: Upload supporting simulation evidence
+        if: always()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: simulation-supporting-regression-evidence
+          path: |
             playwright-report/
             test-results/
             artifacts/soak/
-            artifacts/release/generated/long-career-release-summary.json
-            artifacts/release/generated/long-career-workers/
             artifacts/replayability/nightly-summary.json
           if-no-files-found: ignore
           retention-days: 30
