@@ -4,6 +4,10 @@ import type {
   PlayerMovementEvent,
   ScoutingCaseStatus,
 } from "@/engine/core/types";
+import {
+  buildRecommendationReviewTimelineDescription,
+  buildRecommendationReviewTimelineDetails,
+} from "@/engine/reports/recommendationReviewDisplay";
 
 export type ScoutingCaseTimelineEntryKind =
   | "discovery"
@@ -24,6 +28,7 @@ export interface ScoutingCaseTimelineEntry {
   season: number;
   title: string;
   description: string;
+  details?: string[];
   reportId?: string;
   clubId?: string;
   reviewId?: string;
@@ -240,6 +245,18 @@ export function buildScoutingCaseTimeline(
     });
   }
 
+  for (const message of state.inbox ?? []) {
+    if (!message.id.startsWith(`prospect-follow-up:${caseId}:`)) continue;
+    entries.push({
+      id: `follow-up:${message.id}`,
+      kind: "milestone",
+      week: message.week,
+      season: message.season,
+      title: message.title,
+      description: message.body,
+    });
+  }
+
   for (const report of Object.values(state.reports ?? {})) {
     if (report.caseId !== caseId && !caseReportIds.has(report.id)) continue;
     entries.push({
@@ -339,10 +356,6 @@ export function buildScoutingCaseTimeline(
   for (const review of Object.values(state.recommendationReviews ?? {})) {
     if (review.caseId !== caseId && !caseReviewIds.has(review.id)) continue;
     const completed = review.status === "complete";
-    const score = completed && review.overallScore !== undefined
-      ? ` Process score: ${review.overallScore}/100.`
-      : "";
-    const finding = completed ? review.findings?.[0] : undefined;
     entries.push({
       id: `review:${review.id}`,
       kind: "review",
@@ -350,8 +363,11 @@ export function buildScoutingCaseTimeline(
       season: completed ? review.completedSeason ?? review.dueSeason : review.dueSeason,
       title: `${review.checkpoint === "oneSeason" ? "One-season" : "Two-season"} review ${completed ? "completed" : "scheduled"}`,
       description: completed
-        ? `${finding ?? "The recommendation was reviewed against observable career evidence."}${score}`
+        ? buildRecommendationReviewTimelineDescription(review)
         : "Your original judgment remains open until enough career evidence exists.",
+      details: completed
+        ? buildRecommendationReviewTimelineDetails(review)
+        : undefined,
       reportId: review.reportId,
       clubId: review.clubId,
       reviewId: review.id,

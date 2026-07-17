@@ -235,7 +235,9 @@ export function projectExpiredNarrativeDefaults(
       activeStorylines: updatedStorylines,
       scout: {
         ...updated.scout,
-        reputation: Math.round(processed.state.metrics[reputationMetric]),
+        reputation: Math.round(
+          Math.min(100, Math.max(0, processed.state.metrics[reputationMetric])) * 1_000,
+        ) / 1_000,
         fatigue: Math.round(processed.state.metrics[fatigueMetric]),
       },
       inbox: [

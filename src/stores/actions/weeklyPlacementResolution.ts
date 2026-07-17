@@ -26,11 +26,13 @@ import {
 } from "@/engine/world/playerLifecycle";
 import {
   createAlumniRecord,
+  assessYouthMobility,
   generatePlacementReport,
   getEligibleClubsForPlacement,
   processPlacementOutcome,
   scoreAcademyClubDecision,
 } from "@/engine/youth";
+import { projectProspectiveDevelopmentEnvironment } from "@/engine/world/developmentEnvironment";
 import { settleYouthAgencyPlacement } from "@/engine/finance";
 import {
   fulfillAcademyRecruitmentBrief,
@@ -38,6 +40,7 @@ import {
 } from "@/engine/youth/recruitmentBriefs";
 import { scheduleAcademyRecommendationReviews } from "@/engine/youth/recommendationReviews";
 import { resolveUnsignedYouth } from "@/lib/playerResolution";
+import { normalizeCountryKey } from "@/lib/country";
 import {
   ensureScoutingCaseForReport,
   isGameDateDue,
@@ -45,6 +48,8 @@ import {
   recordDirectPlacementDelivery,
   resolveClubDecision,
 } from "@/engine/reports/scoutingCases";
+import { updateReputation } from "@/engine/career";
+import { scaleReputationChange } from "@/engine/core/difficulty";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 
@@ -201,9 +206,10 @@ export function processWeeklyPlacementResolution(
       let updatedRecommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
       let updatedFinances = stateWithScheduleApplied.finances;
       const placementMessages: InboxMessage[] = [];
-      const currentScoutForPlacement = stateWithScheduleApplied.scout;
+      let updatedScout = stateWithScheduleApplied.scout;
 
       for (const report of pendingReports) {
+        const currentScoutForPlacement = updatedScout;
         let resolvedClubDecision: ClubDecision | undefined;
         const youth = updatedUnsignedYouth[report.unsignedYouthId];
         const club = placementLifecycle.clubs[report.targetClubId];
@@ -221,6 +227,31 @@ export function processWeeklyPlacementResolution(
             .filter((contact) => contact.organization === club.name)
             .map((contact) => contact.relationship),
         );
+        const targetLeague = stateWithScheduleApplied.leagues[club.leagueId];
+        const targetCountryKey = normalizeCountryKey(targetLeague?.country);
+        const targetRegionalKnowledge = targetCountryKey
+          ? stateWithScheduleApplied.regionalKnowledge[targetCountryKey]
+            ?? Object.values(stateWithScheduleApplied.regionalKnowledge).find(
+              (knowledge) => normalizeCountryKey(knowledge.countryId) === targetCountryKey,
+            )
+          : undefined;
+        const worldConditionModifiers = targetLeague
+          ? getWorldConditionModifiers(stateWithScheduleApplied, targetLeague.country)
+          : undefined;
+        const mobilityAssessment = targetLeague
+          ? assessYouthMobility({
+              youth,
+              targetClub: club,
+              targetLeague,
+              targetRegionalKnowledge,
+              worldContext: worldConditionModifiers,
+              developmentEnvironment: projectProspectiveDevelopmentEnvironment(
+                stateWithScheduleApplied,
+                youth.player,
+                club.id,
+              ),
+            })
+          : undefined;
         const structuredDecision = sourceReport && brief
           ? scoreAcademyClubDecision({
               rng: createRNG(`${stateWithScheduleApplied.seed}-academy-decision-${report.id}`),
@@ -233,6 +264,7 @@ export function processWeeklyPlacementResolution(
               scout: currentScoutForPlacement,
               club,
               relationshipScore,
+              mobilityAssessment,
               stakeholderContext: {
                 consequenceState: updatedConsequenceState,
                 now: {
@@ -259,10 +291,27 @@ export function processWeeklyPlacementResolution(
         const legacyDecisionScore = Math.round(
           report.qualityScore * 0.65
           + ({ note: 20, recommend: 50, strongRecommend: 75, tablePound: 92 } as const)[report.conviction] * 0.35
+          + (mobilityAssessment?.clubDecisionAdjustment.score ?? 0)
           + (placementRng.next() - 0.5) * 8,
         );
         let decisionOutcome = structuredDecision?.outcome
           ?? (legacyDecisionScore >= 58 ? "accepted" as const : "rejected" as const);
+        if (mobilityAssessment?.status === "blocked") {
+          decisionOutcome = "followUpRequested";
+        }
+        const mobilityFallbackReasons = mobilityAssessment
+          ? [
+              mobilityAssessment.clubDecisionAdjustment.summary,
+              ...(mobilityAssessment.visibleReasons[0]
+                ? [mobilityAssessment.visibleReasons[0]]
+                : []),
+              ...(mobilityAssessment.suggestedMitigationActions[0]
+                ? [`Required next step: ${mobilityAssessment.suggestedMitigationActions[0]}`]
+                : []),
+            ]
+          : [];
+        const decisionReasons = structuredDecision?.reasons ?? mobilityFallbackReasons;
+        const decisionReasonText = decisionReasons.join(" ");
         const outcome = decisionOutcome === "accepted"
           ? processPlacementOutcome(placementRng, report, 1, youth, club)
           : processPlacementOutcome(placementRng, report, 0, youth, club);
@@ -325,9 +374,8 @@ export function processWeeklyPlacementResolution(
             outcome: "accepted",
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,
-            reason: structuredDecision?.reasons.join(" ")
-              ?? "Club accepted the youth placement recommendation",
-            reasons: structuredDecision?.reasons,
+            reason: decisionReasonText || "Club accepted the youth placement recommendation",
+            reasons: decisionReasons.length > 0 ? decisionReasons : undefined,
             scoreBreakdown: structuredDecision?.breakdown,
           });
           updatedScoutingCases = resolved.scoutingCases;
@@ -400,11 +448,28 @@ export function processWeeklyPlacementResolution(
               : { ...fulfilled.brief, fulfillmentFailures: fulfilled.failures };
           }
 
+          const placementReputation = updateReputation(updatedScout, {
+            type: "youthPlacement",
+            convictionLevel: report.conviction,
+          });
+          const rawReputationGain = placementReputation.reputation - updatedScout.reputation;
+          const scaledReputationGain = scaleReputationChange(
+            rawReputationGain,
+            stateWithScheduleApplied.difficulty,
+          );
+          updatedScout = {
+            ...placementReputation,
+            reputation: Math.max(
+              0,
+              Math.min(100, updatedScout.reputation + scaledReputationGain),
+            ),
+          };
+
           let commercialOutcome = "Commercial outcome: no finance ledger was available to settle this placement.";
           if (updatedFinances && sourceReport && signedMovement) {
             const settlement = settleYouthAgencyPlacement({
               finances: updatedFinances,
-              scout: stateWithScheduleApplied.scout,
+              scout: currentScoutForPlacement,
               report: sourceReport,
               placementReport: acceptedPlacement,
               club,
@@ -451,7 +516,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "event" as const,
             title: `Placement Accepted: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. ${commercialOutcome} You can track their career progress in your alumni records.`,
+            body: `${club.name} accepted your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}! The ${outcome.placementType === "academyIntake" ? "academy intake" : "youth contract"} has been finalized. Your standing increased by ${scaledReputationGain.toFixed(1)} reputation. ${commercialOutcome} You can track their career progress in your alumni records.`,
             read: false,
             actionRequired: false,
             relatedId: signedPlayerId,
@@ -474,8 +539,8 @@ export function processWeeklyPlacementResolution(
             outcome: "followUpRequested",
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,
-            reason: structuredDecision?.reasons.join(" ") ?? "The club requested more evidence.",
-            reasons: structuredDecision?.reasons,
+            reason: decisionReasonText || "The club requested more evidence.",
+            reasons: decisionReasons.length > 0 ? decisionReasons : undefined,
             scoreBreakdown: structuredDecision?.breakdown,
             requestedEvidenceCategory: structuredDecision?.requestedEvidenceCategory,
             followUpDueWeek: followUpDue.week,
@@ -496,7 +561,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "feedback",
             title: `More Evidence Requested: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} is not ready to offer a place. ${structuredDecision?.reasons.join(" ") ?? "Build the case in another context."} Requested focus: ${structuredDecision?.requestedEvidenceCategory ?? "overall confidence"}.`,
+            body: `${club.name} is not ready to offer a place. ${decisionReasonText || "Build the case in another context."} Requested focus: ${mobilityAssessment?.status === "blocked" ? "registration clearance and route verification" : structuredDecision?.requestedEvidenceCategory ?? "overall confidence"}.`,
             read: false,
             actionRequired: true,
             relatedId: youth.player.id,
@@ -512,11 +577,10 @@ export function processWeeklyPlacementResolution(
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,
             reason: signingRejectionReason
-              ?? structuredDecision?.reasons.join(" ")
-              ?? "Club declined the youth placement recommendation",
+              ?? (decisionReasonText || "Club declined the youth placement recommendation"),
             reasons: signingRejectionReason
               ? [signingRejectionReason]
-              : structuredDecision?.reasons,
+              : decisionReasons.length > 0 ? decisionReasons : undefined,
             scoreBreakdown: structuredDecision?.breakdown,
           });
           updatedScoutingCases = resolved.scoutingCases;
@@ -536,7 +600,7 @@ export function processWeeklyPlacementResolution(
             season: stateWithScheduleApplied.currentSeason,
             type: "event" as const,
             title: `Placement Declined: ${youth.player.firstName} ${youth.player.lastName}`,
-            body: `${club.name} declined your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}. ${signingRejectionReason ?? structuredDecision?.reasons.join(" ") ?? "Consider building more observations or targeting a different club."}`,
+            body: `${club.name} declined your placement recommendation for ${youth.player.firstName} ${youth.player.lastName}. ${signingRejectionReason ?? (decisionReasonText || "Consider building more observations or targeting a different club.")}`,
             read: false,
             actionRequired: false,
             relatedId: youth.player.id,
@@ -565,6 +629,7 @@ export function processWeeklyPlacementResolution(
         reportDeliveries: updatedReportDeliveries,
         clubDecisions: updatedClubDecisions,
         consequenceState: updatedConsequenceState,
+        scout: updatedScout,
         youthRecruitmentBriefs: updatedRecruitmentBriefs,
         recommendationReviews: updatedRecommendationReviews,
         finances: updatedFinances,

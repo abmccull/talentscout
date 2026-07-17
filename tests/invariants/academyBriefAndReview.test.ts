@@ -122,6 +122,7 @@ function causalPlacement() {
     summary: "A high-upside academy placement with a known availability risk.",
     estimatedValue: 0,
     qualityScore: 82,
+    evidenceObservationIds: ["obs-1"],
     intendedClubId: "club-academy",
     intendedAudience: "academyDirector",
     recruitmentNeed: "Central midfield pathway depth",
@@ -538,6 +539,19 @@ describe("academy recommendation reviews", () => {
     const oneSeason = completeAcademyRecommendationReview({
       review: scheduled.reviews[0],
       ...causal,
+      caseReports: [
+        causal.report,
+        {
+          ...causal.report,
+          id: "report-future",
+          supersedesReportId: causal.report.id,
+          revision: 2,
+          submittedWeek: 6,
+          submittedSeason: 2,
+          conviction: "tablePound",
+          evidenceObservationIds: ["obs-1", "obs-2"],
+        },
+      ],
       player: prospect,
       movementHistory: movements,
       currentWeek: 5,
@@ -550,6 +564,8 @@ describe("academy recommendation reviews", () => {
       completedSeason: 2,
       status: "complete",
       horizonSeasons: 1,
+      reportRevisionCount: 1,
+      opinionRevised: false,
       injuryRiskAssessment: "notRealized",
     });
     expect(oneSeason.review.outcomeEvidence).toMatchObject({
@@ -562,6 +578,20 @@ describe("academy recommendation reviews", () => {
       pathwayStatus: "loan",
       ageAtReview: 17,
     });
+    expect(oneSeason.review.playerFacingDimensions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "priceValueCalibration",
+        status: "positive",
+      }),
+      expect.objectContaining({
+        key: "supportAdaptationFit",
+        status: "positive",
+      }),
+      expect.objectContaining({
+        key: "revisionQuality",
+        status: "insufficientEvidence",
+      }),
+    ]));
 
     const revisedReport: ScoutReport = {
       ...causal.report,
@@ -570,6 +600,7 @@ describe("academy recommendation reviews", () => {
       revision: 2,
       submittedWeek: 4,
       conviction: "tablePound",
+      evidenceObservationIds: ["obs-1", "obs-2"],
     };
     const twoSeason = completeAcademyRecommendationReview({
       review: scheduled.reviews[1],
@@ -605,6 +636,17 @@ describe("academy recommendation reviews", () => {
     expect(twoSeason.review.outcomeEvidence?.injuryIds).not.toContain("injury-future");
     expect(twoSeason.review.outcomeEvidence?.seasonsReviewed).not.toContain(3);
     expect(twoSeason.review.categoryScores?.characterRisk).toBeUndefined();
+    expect(twoSeason.review.playerFacingDimensions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "pathwayQuality",
+        status: "positive",
+      }),
+      expect.objectContaining({
+        key: "revisionQuality",
+        status: "positive",
+        evidenceLevel: "full",
+      }),
+    ]));
   });
 
   it("produces the same review when hidden CA and PA are changed", () => {

@@ -11,14 +11,20 @@ import type {
   WeekSimulationState,
 } from "@/engine/core/types";
 import { processCompletedWeek, getScheduledActivityInstances } from "@/engine/core/calendar";
-import { getActiveEquipmentBonuses } from "@/engine/finance";
+import {
+  getActiveEquipmentBonuses,
+  getContextualEquipmentBonuses,
+} from "@/engine/finance";
 import { createRNG, type RNG } from "@/engine/rng";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import {
   deriveRegionalPresence,
   getScoutHomeCountry as getScoutHome,
 } from "@/engine/world";
-import { ALL_PERKS } from "@/engine/specializations/perks";
+import {
+  resolveScoutPerkModifiers,
+  type PerkModifiers,
+} from "@/engine/specializations/perks";
 import {
   discoverTournamentsPassive,
   formatGutFeelingWithPA,
@@ -36,6 +42,39 @@ import { produceWeeklyVenueObservation } from "./weeklyObservationProducer";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
+
+export function createWonderkidRadarAlert(input: {
+  perkModifiers: Pick<PerkModifiers, "canDetectWonderkids">;
+  youth: UnsignedYouth;
+  observations: Observation[];
+  week: number;
+  season: number;
+}): InboxMessage | null {
+  const { perkModifiers, youth, observations, week, season } = input;
+  const perceivedAbility = getPerceivedAbility(observations, youth.player.id);
+  if (
+    !perkModifiers.canDetectWonderkids
+    || youth.player.age > 16
+    || perceivedAbility === null
+    || perceivedAbility.paHigh < 4
+    || perceivedAbility.paConfidence < 0.25
+  ) {
+    return null;
+  }
+
+  return {
+    id: `wk-radar-${youth.player.id}-w${week}`,
+    week,
+    season,
+    type: "news",
+    title: `High-Upside Signal: ${youth.player.firstName} ${youth.player.lastName}`,
+    body: `Your radar picked up a promising pattern around ${youth.player.firstName} ${youth.player.lastName} (age ${youth.player.age}, ${youth.player.position}). This is an uncertain signal, not a hidden rating - schedule a follow-up before committing.`,
+    read: false,
+    actionRequired: false,
+    relatedId: youth.player.id,
+    relatedEntityType: "player",
+  };
+}
 
 export interface WeeklyYouthObservationInput {
   sourceState: GameState;
@@ -340,26 +379,18 @@ export function processWeeklyYouthObservationActivities(
     scheduledForTournament.find(i => i.activity.type === type)?.activity.targetId;
 
   // ── Gut feeling setup for youth observations ──────────────────────
+  const youthPerkModifiers = resolveScoutPerkModifiers(
+    stateWithScheduleApplied.scout,
+  );
   const newGutFeelings: GutFeeling[] = [];
   const gutEquipBonuses = stateWithScheduleApplied.finances?.equipment
     ? getActiveEquipmentBonuses(stateWithScheduleApplied.finances.equipment.loadout)
     : undefined;
-  const hasGutFeelingBonus = stateWithScheduleApplied.scout.unlockedPerks.some((perkId) => {
-    const perk = ALL_PERKS.find((p) => p.id === perkId);
-    return perk?.effect.type === "gutFeelingBonus";
-  });
-  const hasPAEstimate = stateWithScheduleApplied.scout.unlockedPerks.some((perkId) => {
-    const perk = ALL_PERKS.find((p) => p.id === perkId);
-    return perk?.effect.type === "paEstimate";
-  });
   const gutPerkMods = {
-    gutFeelingBonus: hasGutFeelingBonus,
-    paEstimate: hasPAEstimate,
+    gutFeelingMultiplier: youthPerkModifiers.gutFeelingMultiplier,
+    gutFeelingMaxAge: youthPerkModifiers.gutFeelingMaxAge,
+    paEstimate: youthPerkModifiers.hasPAEstimate,
   };
-  const hasWonderkidRadar = stateWithScheduleApplied.scout.unlockedPerks.some((perkId) => {
-    const perk = ALL_PERKS.find((p) => p.id === perkId);
-    return perk?.effect.type === "wonderkidDetection";
-  });
   const highUpsideAlertsSent = new Set<string>();
 
   // Helper for youth venue observation processing
@@ -406,7 +437,16 @@ export function processWeeklyYouthObservationActivities(
     // Deduct travel cost for international tournaments (first attendance)
     // Equipment travelCostReduction bonus reduces the cost
     if (tournament?.travelCost && stateWithScheduleApplied.finances) {
-      const travelCostReductionRate = weekEquipBonuses?.travelCostReduction ?? 0;
+      const travelContextBonuses = stateWithScheduleApplied.finances.equipment
+        ? getContextualEquipmentBonuses(
+            stateWithScheduleApplied.finances.equipment.loadout,
+            {
+              scoutHomeCountry: getScoutHome(currentScout),
+              country: tournament.country,
+            },
+          )
+        : undefined;
+      const travelCostReductionRate = travelContextBonuses?.travelCostReduction ?? 0;
       const tournamentPresence = deriveRegionalPresence(
         stateWithScheduleApplied,
         tournament.country,
@@ -501,7 +541,7 @@ export function processWeeklyYouthObservationActivities(
       if (gutFeeling) {
         gutFeeling.week = stateWithScheduleApplied.currentWeek;
         gutFeeling.season = stateWithScheduleApplied.currentSeason;
-        if (hasPAEstimate) {
+        if (youthPerkModifiers.hasPAEstimate) {
           gutFeeling.narrative = formatGutFeelingWithPA(
             gutFeeling,
             youth,
@@ -512,32 +552,16 @@ export function processWeeklyYouthObservationActivities(
         newGutFeelings.push(gutFeeling);
       }
 
-      // The perk surfaces an evidence-based signal, not hidden PA truth.
-      const perceivedAbility = getPerceivedAbility(
-        playerEvidence(youth.player.id),
-        youth.player.id,
-      );
-      if (
-        hasWonderkidRadar &&
-        youth.player.age <= 16 &&
-        perceivedAbility !== null &&
-        perceivedAbility.paHigh >= 4 &&
-        perceivedAbility.paConfidence >= 0.25 &&
-        !highUpsideAlertsSent.has(youth.player.id)
-      ) {
+      const wonderkidAlert = createWonderkidRadarAlert({
+        perkModifiers: youthPerkModifiers,
+        youth,
+        observations: playerEvidence(youth.player.id),
+        week: stateWithScheduleApplied.currentWeek,
+        season: stateWithScheduleApplied.currentSeason,
+      });
+      if (wonderkidAlert && !highUpsideAlertsSent.has(youth.player.id)) {
         highUpsideAlertsSent.add(youth.player.id);
-        actObsMessages.push({
-          id: `wk-radar-${youth.player.id}-w${stateWithScheduleApplied.currentWeek}`,
-          week: stateWithScheduleApplied.currentWeek,
-          season: stateWithScheduleApplied.currentSeason,
-          type: "news" as const,
-          title: `High-Upside Signal: ${youth.player.firstName} ${youth.player.lastName}`,
-          body: `Your radar picked up a promising pattern around ${youth.player.firstName} ${youth.player.lastName} (age ${youth.player.age}, ${youth.player.position}). This is an uncertain signal, not a hidden rating—schedule a follow-up before committing.`,
-          read: false,
-          actionRequired: false,
-          relatedId: youth.player.id,
-          relatedEntityType: "player" as const,
-        });
+        actObsMessages.push(wonderkidAlert);
       }
 
       const topAttrs = result.observation.attributeReadings
@@ -598,7 +622,7 @@ export function processWeeklyYouthObservationActivities(
         if (focusGutFeeling) {
           focusGutFeeling.week = stateWithScheduleApplied.currentWeek;
           focusGutFeeling.season = stateWithScheduleApplied.currentSeason;
-          if (hasPAEstimate) {
+          if (youthPerkModifiers.hasPAEstimate) {
             focusGutFeeling.narrative = formatGutFeelingWithPA(
               focusGutFeeling,
               focusedYouth,
@@ -718,7 +742,7 @@ export function processWeeklyYouthObservationActivities(
       if (followUpGutFeeling) {
         followUpGutFeeling.week = stateWithScheduleApplied.currentWeek;
         followUpGutFeeling.season = stateWithScheduleApplied.currentSeason;
-        if (hasPAEstimate) {
+        if (youthPerkModifiers.hasPAEstimate) {
           followUpGutFeeling.narrative = formatGutFeelingWithPA(
             followUpGutFeeling,
             youth,

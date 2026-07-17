@@ -5,6 +5,7 @@
  */
 
 import type { FinancialRecord, ActivityType } from "@/engine/core/types";
+import { normalizeCountryKey } from "@/lib/country";
 import {
   type EquipmentItemId,
   type EquipmentSlot,
@@ -12,7 +13,6 @@ import {
   type EquipmentInventory,
   type EquipmentItemDefinition,
   getEquipmentItem,
-  EQUIPMENT_CATALOG,
   DEFAULT_LOADOUT,
   DEFAULT_OWNED_ITEMS,
 } from "./equipmentCatalog";
@@ -42,6 +42,11 @@ export interface EquipmentPassiveBonus {
   valuationAccuracy: number;
 }
 
+export interface EquipmentBonusContext {
+  scoutHomeCountry: string;
+  country?: string | null;
+}
+
 function emptyBonus(): EquipmentPassiveBonus {
   return {
     observationConfidence: 0,
@@ -65,6 +70,85 @@ function emptyBonus(): EquipmentPassiveBonus {
   };
 }
 
+function canonicalCountry(value?: string | null): string | undefined {
+  const known = normalizeCountryKey(value ?? undefined);
+  if (known) return known;
+  const compact = value?.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  return compact || undefined;
+}
+
+function applyEffect(
+  bonus: EquipmentPassiveBonus,
+  effect: EquipmentItemDefinition["effects"][number],
+): void {
+  switch (effect.type) {
+    case "observationConfidence":
+      bonus.observationConfidence += effect.value;
+      break;
+    case "videoConfidence":
+      bonus.videoConfidence += effect.value;
+      break;
+    case "dataAccuracy":
+      bonus.dataAccuracy += effect.value;
+      break;
+    case "reportQuality":
+      bonus.reportQuality += effect.value;
+      break;
+    case "fatigueReduction":
+      if (effect.activityTypes) {
+        for (const at of effect.activityTypes) {
+          bonus.fatigueReduction[at] = (bonus.fatigueReduction[at] ?? 0) + effect.value;
+        }
+      }
+      break;
+    case "travelCostReduction":
+      bonus.travelCostReduction += effect.value;
+      break;
+    case "travelSlotReduction":
+      bonus.travelSlotReduction += effect.value;
+      break;
+    case "relationshipGainBonus":
+      bonus.relationshipGainBonus += effect.value;
+      break;
+    case "intelReliabilityBonus":
+      bonus.intelReliabilityBonus += effect.value;
+      break;
+    case "youthDiscoveryBonus":
+      bonus.youthDiscoveryBonus += effect.value;
+      break;
+    case "gutFeelingBonus":
+      bonus.gutFeelingBonus += effect.value;
+      break;
+    case "attributesPerSession":
+      bonus.attributesPerSession += effect.value;
+      break;
+    case "familiarityGainBonus":
+      bonus.familiarityGainBonus += effect.value;
+      break;
+    case "paEstimateAccuracy":
+      bonus.paEstimateAccuracy += effect.value;
+      break;
+    case "systemFitAccuracy":
+      bonus.systemFitAccuracy += effect.value;
+      break;
+    case "anomalyDetectionRate":
+      bonus.anomalyDetectionRate += effect.value;
+      break;
+    case "predictionAccuracy":
+      bonus.predictionAccuracy += effect.value;
+      break;
+    case "valuationAccuracy":
+      bonus.valuationAccuracy += effect.value;
+      break;
+  }
+}
+
+function shouldApplyHomeRegionEffects(context: EquipmentBonusContext): boolean {
+  const homeCountry = canonicalCountry(context.scoutHomeCountry);
+  const country = canonicalCountry(context.country);
+  return !!homeCountry && !!country && homeCountry === country;
+}
+
 // =============================================================================
 // BONUS AGGREGATION
 // =============================================================================
@@ -74,78 +158,44 @@ function emptyBonus(): EquipmentPassiveBonus {
  */
 export function getActiveEquipmentBonuses(loadout: EquipmentLoadout): EquipmentPassiveBonus {
   const bonus = emptyBonus();
-
   const slotKeys: EquipmentSlot[] = ["notebook", "video", "travel", "network", "analysis"];
 
   for (const slot of slotKeys) {
-    const itemId = loadout[slot];
-    const item = getEquipmentItem(itemId);
+    const item = getEquipmentItem(loadout[slot]);
     if (!item) continue;
 
     for (const effect of item.effects) {
-      // Skip homeRegionOnly effects in aggregation — they're applied contextually by callers
+      // Skip homeRegionOnly effects in aggregation — they're applied contextually by callers.
       if (effect.homeRegionOnly) continue;
+      applyEffect(bonus, effect);
+    }
+  }
 
-      switch (effect.type) {
-        case "observationConfidence":
-          bonus.observationConfidence += effect.value;
-          break;
-        case "videoConfidence":
-          bonus.videoConfidence += effect.value;
-          break;
-        case "dataAccuracy":
-          bonus.dataAccuracy += effect.value;
-          break;
-        case "reportQuality":
-          bonus.reportQuality += effect.value;
-          break;
-        case "fatigueReduction":
-          if (effect.activityTypes) {
-            for (const at of effect.activityTypes) {
-              bonus.fatigueReduction[at] = (bonus.fatigueReduction[at] ?? 0) + effect.value;
-            }
-          }
-          break;
-        case "travelCostReduction":
-          bonus.travelCostReduction += effect.value;
-          break;
-        case "travelSlotReduction":
-          bonus.travelSlotReduction += effect.value;
-          break;
-        case "relationshipGainBonus":
-          bonus.relationshipGainBonus += effect.value;
-          break;
-        case "intelReliabilityBonus":
-          bonus.intelReliabilityBonus += effect.value;
-          break;
-        case "youthDiscoveryBonus":
-          bonus.youthDiscoveryBonus += effect.value;
-          break;
-        case "gutFeelingBonus":
-          bonus.gutFeelingBonus += effect.value;
-          break;
-        case "attributesPerSession":
-          bonus.attributesPerSession += effect.value;
-          break;
-        case "familiarityGainBonus":
-          bonus.familiarityGainBonus += effect.value;
-          break;
-        case "paEstimateAccuracy":
-          bonus.paEstimateAccuracy += effect.value;
-          break;
-        case "systemFitAccuracy":
-          bonus.systemFitAccuracy += effect.value;
-          break;
-        case "anomalyDetectionRate":
-          bonus.anomalyDetectionRate += effect.value;
-          break;
-        case "predictionAccuracy":
-          bonus.predictionAccuracy += effect.value;
-          break;
-        case "valuationAccuracy":
-          bonus.valuationAccuracy += effect.value;
-          break;
-      }
+  return bonus;
+}
+
+/**
+ * Resolve equipment bonuses for a country-aware context.
+ *
+ * Home-region effects stay separate from global aggregation and only apply
+ * when a caller explicitly supplies the scout's actual home country plus the
+ * country where the work is happening.
+ */
+export function getContextualEquipmentBonuses(
+  loadout: EquipmentLoadout,
+  context: EquipmentBonusContext,
+): EquipmentPassiveBonus {
+  const bonus = getActiveEquipmentBonuses(loadout);
+  if (!shouldApplyHomeRegionEffects(context)) return bonus;
+
+  const slotKeys: EquipmentSlot[] = ["notebook", "video", "travel", "network", "analysis"];
+  for (const slot of slotKeys) {
+    const item = getEquipmentItem(loadout[slot]);
+    if (!item) continue;
+
+    for (const effect of item.effects) {
+      if (!effect.homeRegionOnly) continue;
+      applyEffect(bonus, effect);
     }
   }
 

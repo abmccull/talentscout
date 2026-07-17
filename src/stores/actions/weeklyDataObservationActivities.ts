@@ -8,7 +8,10 @@ import type {
   Scout,
 } from "@/engine/core/types";
 import { processCompletedWeek } from "@/engine/core/calendar";
-import { getActiveEquipmentBonuses } from "@/engine/finance";
+import {
+  calculateInfrastructureEffects,
+  getActiveEquipmentBonuses,
+} from "@/engine/finance";
 import { createRNG } from "@/engine/rng";
 import {
   deriveRegionalPresence,
@@ -77,11 +80,14 @@ export function processWeeklyDataObservationActivities(
   const prioritizeFocusedPlayers = input.prioritizePlayers;
   const actObsMessages = [...input.messages];
   let weekObservationsGenerated = input.observationsGenerated;
+  const infrastructureDataQualityBonus = calculateInfrastructureEffects(
+    stateWithScheduleApplied.scoutingInfrastructure,
+  ).dataQualityBonus;
 
   // --- Database Query: generate statistical profiles for league players ---
   if (weekResult.databaseQueriesExecuted > 0) {
-    // Equipment dataAccuracy bonus: extra profiles discovered per query
-    const dbDataAccBonus = weekEquipBonuses?.dataAccuracy ?? 0;
+    // Equipment + infrastructure data bonuses improve profile breadth and confidence.
+    const dbDataAccBonus = (weekEquipBonuses?.dataAccuracy ?? 0) + infrastructureDataQualityBonus;
     const dbRng = createRNG(
       `${gameState.seed}-dbquery-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
@@ -119,7 +125,11 @@ export function processWeeklyDataObservationActivities(
           {},
           stateWithScheduleApplied.currentSeason,
           stateWithScheduleApplied.currentWeek,
-          { accuracyBonus: pendingQueryInsight?.accuracyBonus },
+          {
+            accuracyBonus:
+              (pendingQueryInsight?.accuracyBonus ?? 0)
+              + infrastructureDataQualityBonus,
+          },
         );
         let effectiveProfiles = [...queryResult.profiles];
         let effectivePlayerIds = [...queryResult.playerIds];
@@ -234,7 +244,7 @@ export function processWeeklyDataObservationActivities(
   if (weekResult.deepVideoAnalysesExecuted > 0) {
     // Equipment videoConfidence + dataAccuracy bonuses for deep video analysis
     const deepVideoConfBoost = weekEquipBonuses?.videoConfidence ?? 0;
-    const deepDataAccBoost = weekEquipBonuses?.dataAccuracy ?? 0;
+    const deepDataAccBoost = (weekEquipBonuses?.dataAccuracy ?? 0) + infrastructureDataQualityBonus;
     const deepVideoRng = createRNG(
       `${gameState.seed}-deepvideo-${gameState.currentWeek}-${gameState.currentSeason}`,
     );
@@ -334,8 +344,8 @@ export function processWeeklyDataObservationActivities(
 
   // --- Stats Briefing: generate anomaly flags and highlights ---
   if (weekResult.statsBriefingsExecuted > 0) {
-    // Equipment dataAccuracy bonus: extra anomalies found during briefing
-    const briefingDataAccBonus = weekEquipBonuses?.dataAccuracy ?? 0;
+    // Equipment + infrastructure data bonuses improve briefing precision.
+    const briefingDataAccBonus = (weekEquipBonuses?.dataAccuracy ?? 0) + infrastructureDataQualityBonus;
     const briefingRng = createRNG(
       `${gameState.seed}-briefing-${gameState.currentWeek}-${gameState.currentSeason}`,
     );

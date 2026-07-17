@@ -40,7 +40,7 @@ import {
 } from "@/engine/career/recovery";
 import {
   calculateSigningBonus,
-  getActiveEquipmentBonuses,
+  getContextualEquipmentBonuses,
   applyBalanceTransaction,
 } from "@/engine/finance";
 import {
@@ -875,9 +875,15 @@ export function createProgressionActions(get: GetState, set: SetState) {
       );
       const departureWeek = gameState.currentWeek + 1;
 
-      const equipmentBonuses = gameState.finances?.equipment
-        ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-        : undefined;
+        const equipmentBonuses = gameState.finances?.equipment
+          ? getContextualEquipmentBonuses(
+              gameState.finances.equipment.loadout,
+              {
+                scoutHomeCountry: getScoutHome(gameState.scout),
+                country,
+              },
+            )
+          : undefined;
       const travelSlots = Math.max(
         1,
         regionalQuote.slots

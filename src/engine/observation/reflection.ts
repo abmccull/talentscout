@@ -611,7 +611,7 @@ export function checkGutFeelingTrigger(
   session: ObservationSession,
   scoutIntuition: number,
   scoutSpecLevel: number,
-  perkModifiers?: { paEstimate: boolean },
+  perkModifiers?: { paEstimate: boolean; paEstimateMargin?: number },
   paEstimateAccuracyBonus?: number,
   players?: Record<string, Player>,
 ): GutFeelingCandidate | null {
@@ -701,7 +701,11 @@ export function checkGutFeelingTrigger(
     const player = players[targetPlayer.playerId];
     if (player) {
       const pa = player.potentialAbility;
-      const margin = Math.max(1, Math.floor(5 * (1 - (paEstimateAccuracyBonus ?? 0))));
+      const baseMargin = perkModifiers.paEstimateMargin ?? 5;
+      const margin = Math.max(
+        1,
+        Math.floor(baseMargin * (1 - (paEstimateAccuracyBonus ?? 0))),
+      );
       paEstimate = {
         low: Math.max(1, pa - margin),
         high: Math.min(200, pa + margin),
@@ -815,7 +819,7 @@ export function generateReflection(
   rng: RNG,
   scoutIntuition: number,
   scoutSpecLevel: number,
-  perkModifiers?: { paEstimate: boolean },
+  perkModifiers?: { paEstimate: boolean; paEstimateMargin?: number },
   paEstimateAccuracyBonus?: number,
   players?: Record<string, Player>,
 ): ReflectionResult {

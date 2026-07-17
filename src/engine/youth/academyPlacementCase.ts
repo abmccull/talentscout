@@ -24,6 +24,8 @@ import {
   evaluateRecruitmentIdentityFit,
 } from "@/engine/world/recruitmentIdentity";
 import type { ClubRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
+import { resolveScoutPerkModifiers } from "@/engine/specializations/perks";
+import type { YouthMobilityAssessment } from "./youthMobility";
 
 const ROLE_BY_POSITION: Record<Player["position"], PlayerRole> = {
   GK: "sweeper",
@@ -263,8 +265,16 @@ export function scoreAcademyClubDecision(input: {
     scoreAdjustment: number;
     label: string;
   };
+  mobilityAssessment?: Pick<
+    YouthMobilityAssessment,
+    | "status"
+    | "clubDecisionAdjustment"
+    | "visibleReasons"
+    | "suggestedMitigationActions"
+  >;
 }): AcademyDecisionScore {
   const { report, brief, player, observations } = input;
+  const perkModifiers = resolveScoutPerkModifiers(input.scout);
   const verdictEntries = Object.entries(report.categoryVerdicts ?? {}) as Array<[
     JudgmentCategory,
     NonNullable<NonNullable<ScoutReport["categoryVerdicts"]>[JudgmentCategory]>,
@@ -389,6 +399,13 @@ export function scoreAcademyClubDecision(input: {
     -12,
     Math.min(12, Math.round(input.worldConditionContext?.scoreAdjustment ?? 0)),
   );
+  const placementReputationAdjustment = Math.round(
+    perkModifiers.placementReputationBonus * 20,
+  );
+  const mobilityAdjustment = Math.max(
+    -12,
+    Math.min(3, Math.round(input.mobilityAssessment?.clubDecisionAdjustment.score ?? 0)),
+  );
   const total = clamp(
     evidence * 0.25
     + briefFit * 0.25
@@ -399,6 +416,8 @@ export function scoreAcademyClubDecision(input: {
     + competition * 0.05
     + presentationImpact.alignmentAdjustment
     + seasonalRecruitmentAdjustment
+    + placementReputationAdjustment
+    + mobilityAdjustment
     + (input.rng.next() - 0.5) * 8,
   );
   const breakdown = {
@@ -411,6 +430,7 @@ export function scoreAcademyClubDecision(input: {
     competition,
     presentation: presentationImpact.presentationScore,
     calibration,
+    mobility: mobilityAdjustment,
     total,
   };
 
@@ -455,10 +475,27 @@ export function scoreAcademyClubDecision(input: {
     ...(seasonalRecruitmentAdjustment !== 0
       ? [`${input.worldConditionContext?.label ?? "The seasonal recruitment climate"} ${seasonalRecruitmentAdjustment > 0 ? "increases" : "reduces"} the club's appetite to act (${seasonalRecruitmentAdjustment > 0 ? "+" : ""}${seasonalRecruitmentAdjustment}).`]
       : []),
+    ...(placementReputationAdjustment > 0
+      ? [`Your placement reputation adds trusted weight to the recommendation (+${placementReputationAdjustment}).`]
+      : []),
+    ...(input.mobilityAssessment
+      ? [
+          input.mobilityAssessment.clubDecisionAdjustment.summary,
+          ...(input.mobilityAssessment.visibleReasons[0]
+            ? [input.mobilityAssessment.visibleReasons[0]]
+            : []),
+          ...(input.mobilityAssessment.status === "blocked"
+            && input.mobilityAssessment.suggestedMitigationActions[0]
+            ? [`Required next step: ${input.mobilityAssessment.suggestedMitigationActions[0]}`]
+            : []),
+        ]
+      : []),
   ];
 
   let outcome: ClubDecisionOutcome;
-  if (report.recommendedAction === "monitor") {
+  if (input.mobilityAssessment?.status === "blocked") {
+    outcome = "followUpRequested";
+  } else if (report.recommendedAction === "monitor") {
     outcome = total >= 44 ? "followUpRequested" : "rejected";
   } else if (report.recommendedAction === "inviteForTrial") {
     outcome = total >= 42 ? "followUpRequested" : "rejected";
@@ -473,6 +510,7 @@ export function scoreAcademyClubDecision(input: {
     outcome,
     reasons,
     requestedEvidenceCategory: outcome === "followUpRequested"
+      && input.mobilityAssessment?.status !== "blocked"
       ? requestedEvidenceCategory
       : undefined,
     breakdown,

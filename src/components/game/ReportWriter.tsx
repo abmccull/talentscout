@@ -56,9 +56,20 @@ import {
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
 import { EvidenceBoard } from "@/components/game/evidence";
-import { getSeasonLength } from "@/engine/core/gameDate";
+import {
+  addGameWeeks,
+  gameWeeksBetween,
+  getSeasonLength,
+} from "@/engine/core/gameDate";
+import { getDifficultyChallengeProfile } from "@/engine/core/difficulty";
 import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
 import { getPendingInsightReportQualityEffect } from "@/engine/insight/effects";
+import {
+  buildConciseOpeningSummary,
+  CONCISE_OPENING_ACTION_OPTIONS,
+  getRecommendedActionLabel,
+  isConciseOpeningReportMode,
+} from "@/components/game/reportWriterMode";
 
 const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
 
@@ -207,6 +218,8 @@ export function ReportWriter() {
   const [summary, setSummary] = useState("");
   const [selectedStrengths, setSelectedStrengths] = useState<string[]>([]);
   const [selectedWeaknesses, setSelectedWeaknesses] = useState<string[]>([]);
+  const [openingCurrentRead, setOpeningCurrentRead] = useState("");
+  const [openingKeyUncertainty, setOpeningKeyUncertainty] = useState("");
   const [briefId, setBriefId] = useState("");
   const [intendedAudience, setIntendedAudience] = useState<StructuredReportInput["intendedAudience"]>("academyDirector");
   const [presentationApproach, setPresentationApproach] = useState<YouthPresentationApproach>("evidenceLed");
@@ -351,6 +364,29 @@ export function ReportWriter() {
   const activeRecruitmentIdentity = activeBrief && activeBriefClub
     ? deriveBriefRecruitmentIdentity(activeBriefClub, activeBrief)
     : undefined;
+  const verificationDeadline = useMemo(() => {
+    if (!activeBrief || !gameState) return undefined;
+    const current = {
+      week: gameState.currentWeek,
+      season: gameState.currentSeason,
+    };
+    const briefDeadline = {
+      week: activeBrief.expiresWeek,
+      season: activeBrief.expiresSeason,
+    };
+    const baseWindow = Math.max(
+      0,
+      gameWeeksBetween(gameState.fixtures, current, briefDeadline),
+    );
+    const offset = getDifficultyChallengeProfile(
+      gameState.difficulty,
+    ).verificationWindowOffsetWeeks;
+    return addGameWeeks(
+      gameState.fixtures,
+      current,
+      Math.max(0, baseWindow + offset),
+    );
+  }, [activeBrief, gameState]);
   const previousReport = useMemo(
     () => gameState && canonicalPlayerId
       ? getLatestReportInScope(
@@ -366,6 +402,15 @@ export function ReportWriter() {
     () => getFreshReportObservationIds(observations, previousReport),
     [observations, previousReport],
   );
+  const conciseOpeningMode = isConciseOpeningReportMode({
+    isYouthScout: gameState?.scout.primarySpecialization === "youth",
+    openingStage: gameState?.openingCase?.stage ?? null,
+    openingPlayerId: gameState?.openingCase?.playerId ?? null,
+    selectedPlayerId: canonicalPlayerId ?? null,
+    previousReportExists: previousReport !== undefined,
+    observationCount: observations.length,
+    contextCount: contexts.length,
+  });
   const analystReview = useMemo(
     () => gameState?.finances && canonicalPlayerId
       ? getApplicableAnalystReview(
@@ -451,7 +496,7 @@ export function ReportWriter() {
   }, [playerHypotheses]);
 
   const structuredInput = useMemo<StructuredReportInput | undefined>(() => {
-    if (!isYouthCase || !activeBrief || !projectedRole) return undefined;
+    if (conciseOpeningMode || !isYouthCase || !activeBrief || !projectedRole) return undefined;
     return {
       briefId: activeBrief.id,
       intendedClubId: activeBrief.clubId,
@@ -462,8 +507,8 @@ export function ReportWriter() {
       recommendedAction,
       riskFactors: riskInput.split("\n").map((risk) => risk.trim()).filter(Boolean),
       estimatedWeeklyWage,
-      decisionDeadlineWeek: activeBrief.expiresWeek,
-      decisionDeadlineSeason: activeBrief.expiresSeason,
+      decisionDeadlineWeek: verificationDeadline?.week ?? activeBrief.expiresWeek,
+      decisionDeadlineSeason: verificationDeadline?.season ?? activeBrief.expiresSeason,
       categoryVerdicts: Object.fromEntries(
         JUDGMENT_CATEGORIES.map((category) => [category, {
           verdict: categoryDrafts[category].verdict,
@@ -481,18 +526,29 @@ export function ReportWriter() {
     estimatedWeeklyWage,
     intendedAudience,
     isYouthCase,
+    conciseOpeningMode,
     presentationApproach,
     projectedRole,
     recommendedAction,
     recruitmentNeed,
     riskInput,
+    verificationDeadline,
   ]);
   const structuredValidation = useMemo(
-    () => structuredInput
+    () => conciseOpeningMode
+      ? { valid: true, errors: [] as string[] }
+      : structuredInput
       ? validateStructuredReportInput(structuredInput, activeBrief)
       : { valid: !isYouthCase, errors: isYouthCase ? ["Select a matching academy brief."] : [] },
-    [activeBrief, isYouthCase, structuredInput],
+    [activeBrief, conciseOpeningMode, isYouthCase, structuredInput],
   );
+  const effectiveSummary = conciseOpeningMode
+    ? buildConciseOpeningSummary({
+        currentRead: openingCurrentRead,
+        keyUncertainty: openingKeyUncertainty,
+        recommendedActionLabel: getRecommendedActionLabel(recommendedAction, true),
+      })
+    : summary;
   const totalReportQualityBonus =
     equipmentReportQualityBonus
     + infrastructureReportQualityBonus
@@ -521,7 +577,7 @@ export function ReportWriter() {
     return prepareReportSubmission({
       draft,
       conviction,
-      summary,
+      summary: effectiveSummary,
       strengths: selectedStrengths,
       weaknesses: selectedWeaknesses,
       scout: gameState.scout,
@@ -540,7 +596,7 @@ export function ReportWriter() {
       player,
       canonicalPlayerId,
       conviction,
-      summary,
+      effectiveSummary,
       selectedStrengths,
       selectedWeaknesses,
       observations,
@@ -615,9 +671,9 @@ export function ReportWriter() {
       })
       .slice(0, MAX_WEAKNESSES)
       .map((claim) => claim.descriptor);
-    if (nextStrengths.length > 0) {
-      setSelectedStrengths(nextStrengths);
-    }
+      if (nextStrengths.length > 0) {
+        setSelectedStrengths(nextStrengths);
+      }
     if (nextWeaknesses.length > 0) {
       setSelectedWeaknesses(nextWeaknesses);
     }
@@ -660,8 +716,12 @@ export function ReportWriter() {
     if (draft.perceivedPARange) {
       lines.push(`Potential ceiling estimated at ${draft.perceivedPARange[0]}–${draft.perceivedPARange[1]} stars.`);
     }
-    setSummary(lines.join(" "));
-    playSFX("pen-scribble");
+      setSummary(lines.join(" "));
+      setOpeningCurrentRead(
+        `There is enough evidence to keep ${player?.firstName} ${player?.lastName} live as a ${player?.position} lead.`,
+      );
+      setOpeningKeyUncertainty("The standout action has not yet survived another phase or live context.");
+      playSFX("pen-scribble");
   }, [
     draft,
     player,
@@ -793,23 +853,27 @@ export function ReportWriter() {
   };
 
   const handleSubmit = () => {
-    if (!summary.trim() || (isYouthCase && !structuredInput)) return;
+    if (!effectiveSummary.trim() || (isYouthCase && !structuredInput && !conciseOpeningMode)) return;
     setIsDirty(false);
     playSFX("report-submit");
     submitReport(
       conviction,
-      summary.trim(),
+      effectiveSummary.trim(),
       selectedStrengths,
       selectedWeaknesses,
-      isYouthCase ? structuredInput : undefined,
+      isYouthCase && !conciseOpeningMode ? structuredInput : undefined,
     );
   };
 
   const isTablePound = conviction === "tablePound";
-  const canSubmit = summary.trim().length > 0
+  const canSubmit = effectiveSummary.trim().length > 0
     && observations.length > 0
     && freshObservationIds.length > 0
-    && (!isYouthCase || structuredValidation.valid);
+    && (
+      conciseOpeningMode
+        ? openingCurrentRead.trim().length >= 12 && openingKeyUncertainty.trim().length >= 8
+        : (!isYouthCase || structuredValidation.valid)
+    );
 
   return (
     <GameLayout>
@@ -841,7 +905,7 @@ export function ReportWriter() {
           </div>
         </div>
 
-        {isYouthCase && (
+        {isYouthCase && !conciseOpeningMode && (
           <section
             className="mb-6 rounded-2xl border border-emerald-400/25 bg-[linear-gradient(145deg,rgba(16,185,129,0.11),rgba(16,21,27,0.98)_44%)] p-4 shadow-xl shadow-black/20 sm:p-6"
             aria-labelledby="academy-case-heading"
@@ -886,10 +950,15 @@ export function ReportWriter() {
                     </select>
                   </label>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Deadline</p>
+                    <p className="text-[10px] uppercase tracking-wider text-zinc-500">Brief closes</p>
                     <p className="mt-1 text-sm font-semibold text-white">
                       S{activeBrief?.expiresSeason} W{activeBrief?.expiresWeek}
                     </p>
+                    {verificationDeadline && activeBrief && (
+                      <p className="mt-1 text-[10px] leading-4 text-zinc-400">
+                        Decision window S{verificationDeadline.season} W{verificationDeadline.week} ({gameState.difficulty})
+                      </p>
+                    )}
                   </div>
                   <div className="rounded-xl border border-white/10 bg-black/20 p-3">
                     <p className="text-[10px] uppercase tracking-wider text-zinc-500">Wage ceiling</p>
@@ -1273,7 +1342,7 @@ export function ReportWriter() {
                   </label>
                 </div>
 
-                {!structuredValidation.valid && (
+                {!conciseOpeningMode && !structuredValidation.valid && (
                   <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
                     <p className="text-xs font-semibold text-amber-200">Complete the professional artifact before filing:</p>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/80">
@@ -1338,8 +1407,14 @@ export function ReportWriter() {
               <div>
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Your recommendation</p>
-                    <h2 className="mt-1 text-xl font-bold text-white">State the call before the supporting detail</h2>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                      {conciseOpeningMode ? "First report mode" : "Your recommendation"}
+                    </p>
+                    <h2 className="mt-1 text-xl font-bold text-white">
+                      {conciseOpeningMode
+                        ? "Lock the first read, the doubt, and the next move"
+                        : "State the call before the supporting detail"}
+                    </h2>
                   </div>
                   <Badge
                     variant="outline"
@@ -1349,31 +1424,117 @@ export function ReportWriter() {
                     Craft: {craftRead.label}
                   </Badge>
                 </div>
-                <label htmlFor="report-summary" className="text-sm font-semibold text-zinc-200">
-                  Final scouting judgment
-                </label>
-                <p id="report-summary-help" className="mt-1 text-xs leading-5 text-zinc-400">
-                  Evidence can suggest language, but this is your professional opinion. Edit it until it says exactly what you are prepared to defend.
-                </p>
-                <textarea
-                  id="report-summary"
-                  value={summary}
-                  onChange={(event) => {
-                    setIsDirty(true);
-                    setSummary(event.target.value);
-                  }}
-                  aria-describedby="report-summary-help"
-                  rows={5}
-                  placeholder="What should the receiving club do, and why?"
-                  className="mt-3 min-h-32 w-full resize-y rounded-xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/40"
-                />
+                {conciseOpeningMode ? (
+                  <div className="space-y-4">
+                    <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/8 p-3 text-xs leading-5 text-emerald-100/85">
+                      The guided opening only asks for three accountable judgments. The full academy brief comes back once you have another context or a real delivery brief.
+                    </p>
+                    <label className="block">
+                      <span className="text-sm font-semibold text-zinc-200">Current read</span>
+                      <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                        What do you believe right now, based on this first live look?
+                      </span>
+                      <textarea
+                        value={openingCurrentRead}
+                        onChange={(event) => {
+                          setIsDirty(true);
+                          setOpeningCurrentRead(event.target.value);
+                        }}
+                        rows={4}
+                        placeholder="What is worth protecting from this first session?"
+                        className="mt-3 min-h-28 w-full resize-y rounded-xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/40"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="text-sm font-semibold text-zinc-200">Key uncertainty</span>
+                      <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                        Name the one thing this first session did not settle.
+                      </span>
+                      <textarea
+                        value={openingKeyUncertainty}
+                        onChange={(event) => {
+                          setIsDirty(true);
+                          setOpeningKeyUncertainty(event.target.value);
+                        }}
+                        rows={3}
+                        placeholder="What still needs another context, phase, or pressure test?"
+                        className="mt-3 min-h-24 w-full resize-y rounded-xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/40"
+                      />
+                    </label>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Filed summary preview</p>
+                      <p className="mt-2 text-sm leading-6 text-zinc-200">
+                        {effectiveSummary}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <label htmlFor="report-summary" className="text-sm font-semibold text-zinc-200">
+                      Final scouting judgment
+                    </label>
+                    <p id="report-summary-help" className="mt-1 text-xs leading-5 text-zinc-400">
+                      Evidence can suggest language, but this is your professional opinion. Edit it until it says exactly what you are prepared to defend.
+                    </p>
+                    <textarea
+                      id="report-summary"
+                      value={summary}
+                      onChange={(event) => {
+                        setIsDirty(true);
+                        setSummary(event.target.value);
+                      }}
+                      aria-describedby="report-summary-help"
+                      rows={5}
+                      placeholder="What should the receiving club do, and why?"
+                      className="mt-3 min-h-32 w-full resize-y rounded-xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/40"
+                    />
+                  </>
+                )}
               </div>
 
               <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                {conciseOpeningMode && (
+                  <fieldset className="mb-4">
+                    <legend className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Recommended next step</legend>
+                    <div className="mt-2 grid gap-2">
+                      {CONCISE_OPENING_ACTION_OPTIONS.map((option) => (
+                        <div key={option.value} className="relative">
+                          <input
+                            id={`concise-opening-action-${option.value}`}
+                            className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                            type="radio"
+                            name="concise-opening-action"
+                            value={option.value}
+                            checked={recommendedAction === option.value}
+                            onChange={() => {
+                              setIsDirty(true);
+                              setRecommendedAction(option.value);
+                            }}
+                          />
+                          <label
+                            htmlFor={`concise-opening-action-${option.value}`}
+                            className={`block min-h-16 cursor-pointer rounded-xl border p-3 text-left transition hover:border-white/20 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-400 ${
+                              recommendedAction === option.value
+                                ? "border-emerald-400/55 bg-emerald-400/10"
+                                : "border-white/10 bg-black/20"
+                            }`}
+                          >
+                            <span className="block text-sm font-semibold text-white">{option.label}</span>
+                            <span className="mt-1 block text-xs leading-4 text-zinc-400">{option.description}</span>
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Conviction</p>
-                    <p className="mt-1 text-sm text-zinc-300">How much reputation belongs behind this call?</p>
+                    <p className="mt-1 text-sm text-zinc-300">
+                      {conciseOpeningMode
+                        ? "How much reputation belongs behind this first read?"
+                        : "How much reputation belongs behind this call?"}
+                    </p>
                   </div>
                   <span className={`text-xs font-semibold ${canSubmit ? "text-emerald-300" : "text-amber-300"}`}>
                     {canSubmit ? "Ready to file" : "Needs judgment"}
@@ -1449,14 +1610,24 @@ export function ReportWriter() {
             </CardContent>
           </Card>
 
-          <details open className="group rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">
+          <details open={!conciseOpeningMode} className="group rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
               <div>
-                <span className="text-sm font-semibold text-white">Evidence and claim builder</span>
-                <span className="mt-1 block text-xs text-zinc-400">Review observations, ability ranges, form, attributes, strengths, weaknesses, and character.</span>
+                <span className="text-sm font-semibold text-white">
+                  {conciseOpeningMode ? "Optional evidence and expert depth" : "Evidence and claim builder"}
+                </span>
+                <span className="mt-1 block text-xs text-zinc-400">
+                  {conciseOpeningMode
+                    ? "Open the deeper dossier only if you want to pressure-test the first read."
+                    : "Review observations, ability ranges, form, attributes, strengths, weaknesses, and character."}
+                </span>
               </div>
-              <span className="text-xs font-semibold text-emerald-300 group-open:hidden">Open evidence</span>
-              <span className="hidden text-xs font-semibold text-emerald-300 group-open:inline">Hide evidence</span>
+              <span className="text-xs font-semibold text-emerald-300 group-open:hidden">
+                {conciseOpeningMode ? "Open optional depth" : "Open evidence"}
+              </span>
+              <span className="hidden text-xs font-semibold text-emerald-300 group-open:inline">
+                {conciseOpeningMode ? "Hide optional depth" : "Hide evidence"}
+              </span>
             </summary>
             <div className="mt-5 space-y-6">
           {/* Observation summary */}

@@ -21,6 +21,7 @@ const coreFiles = [
   "e2e/regression/achievement-toast-clickthrough.spec.ts",
   "e2e/regression/report-validation-delay.spec.ts",
   "e2e/regression/weekly-advancement-equivalence.spec.ts",
+  "e2e/regression/weekly-worker-resilience.spec.ts",
   "e2e/regression/week-simulation-interactivity.spec.ts",
   "e2e/regression/quick-interaction-integrity.spec.ts",
 ];

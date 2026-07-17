@@ -12,6 +12,7 @@ import { createRunManifest } from "@/engine/run";
 import {
   YOUTH_EVERGREEN_CASE_DEFINITIONS,
   directWeeklyYouthProfessionalCase,
+  getYouthProfessionalCaseTriggerChance,
   validateYouthEvergreenCaseDefinitions,
 } from "@/engine/youth/evergreenCases";
 import { emitProfessionalCaseCallbacks } from "@/stores/actions/weeklyProfessionalCaseCallbacks";
@@ -111,6 +112,15 @@ describe("evergreen Youth professional cases", () => {
   it("ships twelve non-equivalent, tradeoff-bearing case families", () => {
     expect(YOUTH_EVERGREEN_CASE_DEFINITIONS).toHaveLength(12);
     expect(validateYouthEvergreenCaseDefinitions()).toEqual([]);
+  });
+
+  it("escalates the first multi-stakeholder case to a season-one guarantee", () => {
+    expect(getYouthProfessionalCaseTriggerChance({ ...state(), currentWeek: 4 })).toBe(0);
+    expect(getYouthProfessionalCaseTriggerChance({ ...state(), currentWeek: 5 })).toBe(0.12);
+    expect(getYouthProfessionalCaseTriggerChance({ ...state(), currentWeek: 9 })).toBe(0.24);
+    const guaranteed = { ...state(), currentWeek: 13 };
+    expect(getYouthProfessionalCaseTriggerChance(guaranteed)).toBe(1);
+    expect(directWeeklyYouthProfessionalCase({ state: guaranteed }).offeredDecisionId).toBeTruthy();
   });
 
   it("opens one deterministic case on a real discovered prospect", () => {

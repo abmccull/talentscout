@@ -5,7 +5,10 @@ import {
   calculatePerformanceReview,
   updateReputation,
 } from "@/engine/career/progression";
-import { generatePerformancePulse } from "@/engine/career/performancePulse";
+import {
+  applyPulseConsequences,
+  generatePerformancePulse,
+} from "@/engine/career/performancePulse";
 import { hasSuccessfulSigningResponseThisWeek } from "@/engine/core/gameLoop";
 import { generateSeasonAwardsData } from "@/engine/core/seasonAwards";
 import { EVENT_TEMPLATES } from "@/engine/events/eventTemplates";
@@ -100,6 +103,43 @@ describe("report case accountability", () => {
 
     expect(pulse.reportsSubmitted).toBe(1);
     expect(pulse.reportQualityAvg).toBe(72);
+  });
+
+  it("treats active professional study as neutral work rather than inactivity", () => {
+    const scout = {
+      id: "scout-learning",
+      fatigue: 20,
+      reputation: 31.564,
+      accuracyHistory: [],
+      performancePulses: [],
+    } as unknown as Scout;
+    const state = {
+      currentWeek: 4,
+      currentSeason: 1,
+      reports: {},
+      discoveryRecords: [],
+      inbox: [],
+      finances: {
+        activeEnrollment: {
+          courseId: "fa_level_1",
+          startWeek: 1,
+          startSeason: 1,
+          completionWeek: 5,
+          completionSeason: 1,
+        },
+      },
+    } as unknown as GameState;
+
+    const pulse = generatePerformancePulse(state, scout);
+    const applied = applyPulseConsequences(scout, pulse, 4, 1);
+
+    expect(pulse).toMatchObject({
+      reportsSubmitted: 0,
+      professionalDevelopment: true,
+      grade: "C",
+    });
+    expect(applied.scout.reputation).toBe(31.564);
+    expect(applied.messages[0]?.body).toContain("Professional development: active");
   });
 
   it("uses the active revision for transfer rewards and narrative volume gates", () => {

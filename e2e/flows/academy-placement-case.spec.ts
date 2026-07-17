@@ -132,9 +132,10 @@ test.describe("Academy placement case", () => {
         deliveryStatus: placement?.deliveryId
           ? state.reportDeliveries[placement.deliveryId]?.status
           : undefined,
+        reputation: state.scout.reputation,
       };
     });
-    expect(pending).toEqual({ response: "pending", deliveryStatus: "awaitingDecision" });
+    expect(pending).toMatchObject({ response: "pending", deliveryStatus: "awaitingDecision" });
 
     await gamePage.navigateTo("calendar");
     await gamePage.advanceCanonicalWeek();
@@ -143,6 +144,9 @@ test.describe("Academy placement case", () => {
       const placement = Object.values(state.placementReports).at(-1) as any;
       const decision = placement?.decisionId ? state.clubDecisions[placement.decisionId] : undefined;
       const reviews = Object.values(state.recommendationReviews) as any[];
+      const placementMessage = state.inbox.find(
+        (message: any) => message.id === `placement-accepted-${placement?.id}`,
+      );
       return {
         response: placement?.clubResponse,
         reasons: decision?.reasons ?? [],
@@ -151,6 +155,8 @@ test.describe("Academy placement case", () => {
         briefStatus: state.youthRecruitmentBriefs[briefId]?.status,
         briefFailures: state.youthRecruitmentBriefs[briefId]?.fulfillmentFailures ?? [],
         reviewCheckpoints: reviews.map((review) => review.checkpoint).sort(),
+        placementMessageBody: placementMessage?.body,
+        reputation: state.scout.reputation,
       };
     }, { briefId: setup.briefId });
 
@@ -163,6 +169,8 @@ test.describe("Academy placement case", () => {
     expect(resolved.reasons.some((reason: string) => /fit \d+\/100/.test(reason))).toBe(true);
     expect(resolved.briefStatus, resolved.briefFailures.join(", ")).toBe("fulfilled");
     expect(resolved.reviewCheckpoints).toEqual(["oneSeason", "twoSeasons"]);
+    expect(resolved.placementMessageBody).toContain("increased by 5.0 reputation");
+    expect(resolved.reputation).toBeGreaterThan(pending.reputation);
     gamePage.expectNoConsoleErrors();
   });
 });

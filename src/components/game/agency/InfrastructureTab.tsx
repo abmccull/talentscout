@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   calculateInfrastructureEffects,
+  buildAgencyModifierLedger,
   getDataSubscriptionCost,
   getDataSubscriptionWeekly,
   getDataSubscriptionBonus,
+  getDataSubscriptionSystems,
   getTravelBudgetCost,
   getTravelBudgetWeekly,
   getTravelBudgetFatigue,
@@ -46,6 +48,11 @@ export function InfrastructureTab() {
   const infrastructure = gameState.scoutingInfrastructure;
   const infraEffects = calculateInfrastructureEffects(infrastructure);
   const assistantScouts = gameState.assistantScouts ?? [];
+  const dataSubscriptionSystems = getDataSubscriptionSystems();
+  const modifierLedger = buildAgencyModifierLedger({
+    scoutingInfrastructure: infrastructure,
+    finances,
+  });
 
   return (
     <div className="space-y-6">
@@ -71,6 +78,45 @@ export function InfrastructureTab() {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Current Modifier Ledger</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs leading-5 text-zinc-400">
+            One auditable view of what your office, infrastructure, satellite network, and equipped tools currently change.
+          </p>
+          <details className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3">
+            <summary className="min-h-8 cursor-pointer select-none py-1 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
+              Review {modifierLedger.length} modifier sources
+            </summary>
+            <div className="mt-3 grid gap-3 xl:grid-cols-2">
+              {modifierLedger.map((entry) => (
+                <div key={entry.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-white">{entry.source}</p>
+                      <p className="mt-1 text-[11px] text-zinc-400">{entry.effect}</p>
+                    </div>
+                    <Badge
+                      variant={entry.status === "active" ? "success" : entry.status === "conditional" ? "warning" : "outline"}
+                      className="text-[10px] capitalize"
+                    >
+                      {entry.status}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-emerald-300">{entry.currentValue}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-zinc-400">Formula: {entry.formula}</p>
+                  <p className="mt-2 text-[10px] leading-4 text-zinc-500">
+                    Affects: {entry.affectedActions.join(" • ")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </details>
+        </CardContent>
+      </Card>
+
       {/* Data Subscription */}
       <Card>
         <CardHeader><CardTitle className="text-base">Data Subscription</CardTitle></CardHeader>
@@ -80,6 +126,17 @@ export function InfrastructureTab() {
             {infrastructure?.dataSubscription && infrastructure.dataSubscription !== "none" && (
               <span className="ml-2 text-emerald-400">+{(getDataSubscriptionBonus(infrastructure.dataSubscription) * 100).toFixed(0)}% data quality</span>
             )}
+          </div>
+          <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+              Live Systems
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+              Data subscriptions now improve:
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+              {dataSubscriptionSystems.join(" • ")}.
+            </p>
           </div>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {(["basic", "premium", "elite"] as DataSubscriptionTier[]).map((tier) => {

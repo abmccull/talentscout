@@ -118,7 +118,7 @@ export interface PerkModifiers {
   gutFeelingMaxAge: number;
   /** Whether contacts share youth sighting tips */
   hasYouthNetworkTips: boolean;
-  /** Additive bonus to placement acceptance rate */
+  /** Trust factor mapped to a bounded additive academy-decision score. */
   placementReputationBonus: number;
   /** Whether scout can request trial days */
   hasTrialDayAccess: boolean;
@@ -184,7 +184,7 @@ export const ALL_PERKS: Perk[] = [
     id: "youth_placement_reputation",
     name: "Placement Reputation",
     description:
-      "Clubs trust your recommendations. Placement acceptance rate increases by 25% across all conviction levels.",
+      "Clubs trust your recommendations. Adds 5 points to academy placement decisions across all conviction levels; it cannot bypass registration or evidence gates.",
     level: 9,
     specialization: "youth",
     effect: { type: "placementReputationBonus", factor: 0.25 },
@@ -512,6 +512,14 @@ export const ALL_PERKS: Perk[] = [
   },
 ];
 
+const ALL_PERKS_BY_ID = new Map(ALL_PERKS.map((perk) => [perk.id, perk]));
+const VALID_SPECIALIZATIONS = new Set<Specialization>([
+  "youth",
+  "firstTeam",
+  "regional",
+  "data",
+]);
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
@@ -539,6 +547,28 @@ export function getAvailablePerks(
   return ALL_PERKS.filter(
     (p) => p.specialization === specialization && p.level > level
   );
+}
+
+/**
+ * Resolve the perk objects that should currently affect gameplay for a scout.
+ *
+ * Explicit unlocks remain authoritative, but we also backfill specialization
+ * perks from level for legacy saves whose unlock arrays were not persisted.
+ */
+export function getActivePerksForScout(scout: Scout): Perk[] {
+  const perkIds = new Set(scout.unlockedPerks ?? []);
+  if (VALID_SPECIALIZATIONS.has(scout.primarySpecialization)) {
+    for (const perk of getUnlockedPerks(
+      scout.primarySpecialization,
+      Math.max(1, scout.specializationLevel ?? 1),
+    )) {
+      perkIds.add(perk.id);
+    }
+  }
+
+  return [...perkIds]
+    .map((perkId) => ALL_PERKS_BY_ID.get(perkId))
+    .filter((perk): perk is Perk => perk !== undefined);
 }
 
 /**
@@ -765,4 +795,23 @@ export function applyPerkEffects(scout: Scout, perks: Perk[]): PerkModifiers {
     insightFizzleThreshold,
     insightCostReduction,
   };
+}
+
+/**
+ * Convenience wrapper for runtime systems that need the scout's current perk
+ * modifiers without repeating unlock resolution logic.
+ */
+export function resolveScoutPerkModifiers(scout: Scout): PerkModifiers {
+  const normalizedScout = {
+    ...scout,
+    primarySpecialization: VALID_SPECIALIZATIONS.has(scout.primarySpecialization)
+      ? scout.primarySpecialization
+      : "firstTeam",
+    specializationLevel: Math.max(1, scout.specializationLevel ?? 1),
+  } as Scout;
+
+  return applyPerkEffects(
+    normalizedScout,
+    getActivePerksForScout(normalizedScout),
+  );
 }

@@ -11,10 +11,12 @@ import {
   type ActivityType,
   type AttributeDomain,
   type CulturalInsight,
+  type DifficultyLevel,
   type ObservationContext,
   type PlayerAttribute,
   type TravelPosture,
 } from "@/engine/core/types";
+import { getDifficultyChallengeProfile } from "@/engine/core/difficulty";
 import {
   combineFootballCultureEffects,
   type CombinedFootballCultureEffects,
@@ -569,13 +571,59 @@ export interface ObservationSituationAttributeModifier {
   confidenceDelta: number;
 }
 
+/**
+ * Apply the selected information challenge without touching the observed
+ * player or the persisted situation. The result stays inside the established
+ * evidence bounds, so difficulty changes perception quality rather than truth.
+ */
+export function applyInformationDifficultyToObservationModifier(
+  modifier: Readonly<ObservationSituationAttributeModifier>,
+  difficulty: DifficultyLevel,
+): ObservationSituationAttributeModifier {
+  const profile = getDifficultyChallengeProfile(difficulty);
+  const baseSignalMultiplier = Number.isFinite(modifier.signalMultiplier)
+    ? clamp(modifier.signalMultiplier, 0.5, 1.55)
+    : 1;
+  const baseNoiseMultiplier = Number.isFinite(modifier.noiseMultiplier)
+    ? clamp(modifier.noiseMultiplier, 0.65, 1.75)
+    : 1;
+  const baseConfidenceDelta = Number.isFinite(modifier.confidenceDelta)
+    ? clamp(modifier.confidenceDelta, -0.08, 0.08)
+    : 0;
+  const signalMultiplier = round(clamp(
+    baseSignalMultiplier * profile.sourceReliabilityMultiplier,
+    0.5,
+    1.55,
+  ));
+  const noiseMultiplier = round(clamp(
+    baseNoiseMultiplier
+      * profile.evidenceNoiseMultiplier
+      / Math.sqrt(profile.sourceReliabilityMultiplier),
+    0.65,
+    1.75,
+  ));
+  const confidenceDelta = round(clamp(
+    baseConfidenceDelta
+      + (profile.sourceReliabilityMultiplier - 1) * 0.08
+      - (profile.evidenceNoiseMultiplier - 1) * 0.06,
+    -0.08,
+    0.08,
+  ));
+
+  return { signalMultiplier, noiseMultiplier, confidenceDelta };
+}
+
 /** Convert visible situation facts into evidence modifiers for one attribute. */
 export function getObservationSituationAttributeModifier(
   situation: ObservationSituationSnapshot | undefined,
   attribute: PlayerAttribute,
+  difficulty: DifficultyLevel = "normal",
 ): ObservationSituationAttributeModifier {
   if (!situation) {
-    return { signalMultiplier: 1, noiseMultiplier: 1, confidenceDelta: 0 };
+    return applyInformationDifficultyToObservationModifier(
+      { signalMultiplier: 1, noiseMultiplier: 1, confidenceDelta: 0 },
+      difficulty,
+    );
   }
   const domain = attributeDomain(attribute);
   const domainSignal = situation.signalByDomain[domain] ?? 1;
@@ -591,5 +639,8 @@ export function getObservationSituationAttributeModifier(
     -0.08,
     0.08,
   ));
-  return { signalMultiplier, noiseMultiplier, confidenceDelta };
+  return applyInformationDifficultyToObservationModifier(
+    { signalMultiplier, noiseMultiplier, confidenceDelta },
+    difficulty,
+  );
 }

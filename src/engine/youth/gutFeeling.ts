@@ -201,8 +201,10 @@ export function getPlayerPrimaryDomain(youth: UnsignedYouth): AttributeDomain {
 // =============================================================================
 
 export interface GutFeelingPerkModifiers {
-  /** Multiplies gut feeling chance by 1.4 for youth under 16. */
-  gutFeelingBonus?: boolean;
+  /** Multiplier applied when the observed youth is below the configured max age. */
+  gutFeelingMultiplier?: number;
+  /** Exclusive age ceiling for the gut-feeling multiplier. */
+  gutFeelingMaxAge?: number;
   /** Appends a PA estimate to the formatted narrative. */
   paEstimate?: boolean;
 }
@@ -222,7 +224,7 @@ export interface GutFeelingPerkModifiers {
  *   + 2% per point of scout.attributes.intuition above 10
  *   + 1% per specializationLevel when scout.primarySpecialization === "youth"
  *   × context multiplier  (followUpSession = 2×, streetFootball = 1.5×, else 1×)
- *   × 1.4 if perkModifiers.gutFeelingBonus === true AND youth.player.age < 16
+ *   × perkModifiers.gutFeelingMultiplier if youth.player.age < gutFeelingMaxAge
  *
  * Reliability:
  *   Math.min(0.85, (intuition + youthSpecLevel) / 40)
@@ -252,8 +254,11 @@ export function rollGutFeeling(
   }
 
   // Perk multiplier for very young players
-  if (perkModifiers?.gutFeelingBonus === true && youth.player.age < 16) {
-    chance *= 1.4;
+  if (
+    (perkModifiers?.gutFeelingMultiplier ?? 1) > 1
+    && youth.player.age < (perkModifiers?.gutFeelingMaxAge ?? 0)
+  ) {
+    chance *= perkModifiers?.gutFeelingMultiplier ?? 1;
   }
 
   // Equipment gut feeling bonus (multiplicative with base chance)

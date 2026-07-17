@@ -14,6 +14,8 @@ import type {
   PlacementReport,
   Player,
   PlayerMovementEvent,
+  RecommendationReviewDimension,
+  RecommendationReviewEvidenceLevel,
   RecommendationReview,
   RecommendationReviewCheckpoint,
   ScoutReport,
@@ -31,7 +33,7 @@ export type AcademyRecommendationVerdict =
   | "concerning"
   | "insufficientEvidence";
 
-export type AcademyReviewEvidenceLevel = "full" | "partial" | "limited";
+export type AcademyReviewEvidenceLevel = RecommendationReviewEvidenceLevel;
 
 export type AcademyConvictionAssessment =
   | "validated"
@@ -252,15 +254,17 @@ function preservedCaseReports(
   );
 }
 
+function opinionChangedBetween(left: ScoutReport, right: ScoutReport): boolean {
+  return right.conviction !== left.conviction
+    || right.projectedRole !== left.projectedRole
+    || JSON.stringify(right.perceivedPARange) !== JSON.stringify(left.perceivedPARange)
+    || right.recommendedAction !== left.recommendedAction;
+}
+
 function didOpinionChange(reports: ScoutReport[]): boolean {
   if (reports.length < 2) return false;
   const first = reports[0];
-  return reports.slice(1).some((report) =>
-    report.conviction !== first.conviction
-    || report.projectedRole !== first.projectedRole
-    || JSON.stringify(report.perceivedPARange) !== JSON.stringify(first.perceivedPARange)
-    || report.recommendedAction !== first.recommendedAction,
-  );
+  return reports.slice(1).some((report) => opinionChangedBetween(first, report));
 }
 
 /**
@@ -603,6 +607,387 @@ function evidenceLevelFor(
   return "limited";
 }
 
+function reviewDimensionStatus(score: number): RecommendationReviewDimension["status"] {
+  if (score >= 72) return "positive";
+  if (score < 45) return "negative";
+  return "mixed";
+}
+
+function formatWeeklyWage(value: number): string {
+  return `GBP ${Math.round(value).toLocaleString("en-GB")}/wk`;
+}
+
+function reportsThroughDate(
+  reports: ScoutReport[],
+  dueDate: GameDate,
+  seasonLength: number,
+): ScoutReport[] {
+  return reports.filter((report) =>
+    compareDates(
+      { week: report.submittedWeek, season: report.submittedSeason },
+      dueDate,
+      seasonLength,
+    ) <= 0,
+  );
+}
+
+function buildPriceValueDimension(input: {
+  report: ScoutReport;
+  brief?: AcademyRecruitmentBrief;
+  overallScore: number | undefined;
+  terminalFailure: boolean;
+  evidenceLevel: AcademyReviewEvidenceLevel;
+}): RecommendationReviewDimension {
+  const estimate = input.report.estimatedWeeklyWage;
+  const budget = input.brief?.weeklyWageBudget;
+  if (estimate === undefined) {
+    return {
+      key: "priceValueCalibration",
+      label: "Price/value calibration",
+      status: "insufficientEvidence",
+      evidenceLevel: "limited",
+      summary: "No preserved wage estimate exists for this recommendation, so value calibration stays unresolved.",
+    };
+  }
+  if (budget === undefined) {
+    return {
+      key: "priceValueCalibration",
+      label: "Price/value calibration",
+      status: "insufficientEvidence",
+      evidenceLevel: "limited",
+      summary: "The recommendation preserved a price ask, but the academy brief budget did not survive with it.",
+    };
+  }
+  const outcomeScore = input.overallScore;
+  if (outcomeScore === undefined && !input.terminalFailure) {
+    return {
+      key: "priceValueCalibration",
+      label: "Price/value calibration",
+      status: "insufficientEvidence",
+      evidenceLevel: "limited",
+      summary: "The wage context is preserved, but the pathway still lacks enough outcome evidence to judge value honestly.",
+    };
+  }
+
+  const ratio = estimate / Math.max(1, budget);
+  const budgetFitScore = ratio <= 1
+    ? clamp(Math.round(82 + (1 - ratio) * 18), 0, 100)
+    : clamp(Math.round(82 - Math.min(1.5, ratio - 1) * 55), 0, 100);
+  const score = clamp(
+    Math.round(budgetFitScore * 0.45 + (outcomeScore ?? 18) * 0.55),
+    0,
+    100,
+  );
+  const status = reviewDimensionStatus(score);
+  const budgetLabel = formatWeeklyWage(budget);
+  const estimateLabel = formatWeeklyWage(estimate);
+
+  let summary = `The report priced the player at ${estimateLabel} against a brief budget of ${budgetLabel}.`;
+  if (status === "positive") {
+    summary = `${summary} The later pathway returned credible value for that ask.`;
+  } else if (status === "mixed") {
+    summary = `${summary} The later return stayed mixed, so the value call was only partly justified.`;
+  } else {
+    summary = `${summary} The later pathway did not justify that outlay.`;
+  }
+
+  return {
+    key: "priceValueCalibration",
+    label: "Price/value calibration",
+    status,
+    evidenceLevel: input.evidenceLevel === "limited" ? "partial" : input.evidenceLevel,
+    score,
+    summary,
+  };
+}
+
+function buildSupportAdaptationDimension(input: {
+  outcome: AcademyRecommendationOutcomeEvidence;
+  placementClubId: string;
+  horizon: number;
+  ratingSeasons: number;
+}): RecommendationReviewDimension {
+  const { outcome, placementClubId, horizon, ratingSeasons } = input;
+  const seniorExposure = outcome.appearances > 0;
+  const retainedContract = outcome.contractClubIdAtReview === placementClubId;
+  const activePathway = outcome.pathwayStatus === "academy" || outcome.pathwayStatus === "unknown";
+
+  if (!seniorExposure && activePathway && outcome.movementIds.length <= 1) {
+    return {
+      key: "supportAdaptationFit",
+      label: "Support/adaptation fit",
+      status: "insufficientEvidence",
+      evidenceLevel: "limited",
+      summary: "The player is still inside the pathway with too little senior evidence to judge support and adaptation honestly.",
+    };
+  }
+
+  let score: number;
+  switch (outcome.pathwayStatus) {
+    case "firstTeam":
+      score = retainedContract ? 84 : 72;
+      break;
+    case "loan":
+      score = retainedContract
+        ? (seniorExposure ? 78 : 52)
+        : (seniorExposure ? 64 : 45);
+      break;
+    case "academy":
+      score = seniorExposure ? 68 : 50;
+      break;
+    case "transferred":
+      score = seniorExposure ? 56 : 38;
+      break;
+    case "unknown":
+      score = seniorExposure ? 58 : 42;
+      break;
+    case "freeAgent":
+      score = 22;
+      break;
+    case "released":
+      score = 18;
+      break;
+    case "retired":
+      score = 12;
+      break;
+    case "footballExit":
+      score = 0;
+      break;
+  }
+
+  if (seniorExposure) {
+    score = clamp(
+      score + Math.round(Math.min(10, outcome.appearances / Math.max(1, horizon * 18) * 10)),
+      0,
+      100,
+    );
+  }
+  const status = reviewDimensionStatus(score);
+  let summary = "The destination environment is still hard to read from preserved evidence.";
+  if (status === "positive") {
+    summary = outcome.pathwayStatus === "loan"
+      ? "The club kept the contract and used a structured loan, which suggests active support for adaptation."
+      : "The player stayed inside the original pathway and reached senior minutes, which suggests the environment supported adaptation.";
+  } else if (status === "mixed") {
+    summary = outcome.pathwayStatus === "transferred"
+      ? "The player found a route, but it moved away from the original club before support fit was clearly proven."
+      : "Some adaptation support is visible, but the pathway still looks uneven rather than settled.";
+  } else if (status === "negative") {
+    summary = "The pathway broke before the player settled, so the support and adaptation fit looks poor.";
+  }
+
+  return {
+    key: "supportAdaptationFit",
+    label: "Support/adaptation fit",
+    status,
+    evidenceLevel: seniorExposure
+      ? evidenceLevelFor(ratingSeasons, horizon, outcome.appearances, outcome.pathwayStatus)
+      : ["released", "retired", "footballExit", "transferred", "freeAgent"].includes(outcome.pathwayStatus)
+        ? "partial"
+        : "limited",
+    score,
+    summary,
+  };
+}
+
+function buildPathwayQualityDimension(input: {
+  outcome: AcademyRecommendationOutcomeEvidence;
+  performanceScore: number | undefined;
+  timingScore: number;
+  horizon: number;
+  ratingSeasons: number;
+}): RecommendationReviewDimension {
+  const { outcome, performanceScore, timingScore, horizon, ratingSeasons } = input;
+  const terminalOrExternal = ["released", "retired", "footballExit", "transferred", "freeAgent"]
+    .includes(outcome.pathwayStatus);
+
+  if (performanceScore === undefined && !terminalOrExternal && !(outcome.pathwayStatus === "loan" && outcome.appearances > 0)) {
+    return {
+      key: "pathwayQuality",
+      label: "Pathway quality",
+      status: "insufficientEvidence",
+      evidenceLevel: evidenceLevelFor(ratingSeasons, horizon, outcome.appearances, outcome.pathwayStatus),
+      summary: "The player remains on an academy track with too little match evidence to rate pathway quality honestly.",
+    };
+  }
+
+  const score = performanceScore !== undefined
+    ? clamp(
+        Math.round(
+          pathwayScore(outcome.pathwayStatus) * 0.35
+          + timingScore * 0.35
+          + performanceScore * 0.3,
+        ),
+        0,
+        100,
+      )
+    : outcome.pathwayStatus === "loan" && outcome.appearances > 0
+      ? clamp(Math.round(68 + Math.min(12, outcome.appearances / Math.max(1, horizon * 18) * 12)), 0, 100)
+      : clamp(
+          Math.round(pathwayScore(outcome.pathwayStatus) * 0.6 + timingScore * 0.4),
+          0,
+          100,
+        );
+  const status = reviewDimensionStatus(score);
+  let summary = "The pathway is still forming.";
+  if (status === "positive") {
+    if (outcome.avgRating !== undefined && outcome.appearances > 0) {
+      summary = `Reached ${humanizePathway(outcome.pathwayStatus)} by age ${outcome.ageAtReview} with ${outcome.appearances} appearances at ${outcome.avgRating.toFixed(1)}.`;
+    } else {
+      summary = `The player reached a credible ${humanizePathway(outcome.pathwayStatus)} route by age ${outcome.ageAtReview}.`;
+    }
+  } else if (status === "mixed") {
+    summary = outcome.pathwayStatus === "loan"
+      ? "A working loan pathway appeared, but the longer-term route is still only partly proven."
+      : "The player found some traction, but the pathway quality stayed mixed rather than decisive.";
+  } else if (status === "negative") {
+    summary = "The pathway ended before the player established stable football progress.";
+  }
+
+  return {
+    key: "pathwayQuality",
+    label: "Pathway quality",
+    status,
+    evidenceLevel: evidenceLevelFor(ratingSeasons, horizon, outcome.appearances, outcome.pathwayStatus),
+    score,
+    summary,
+  };
+}
+
+function buildRevisionQualityDimension(
+  reports: ScoutReport[],
+): RecommendationReviewDimension {
+  if (reports.length < 2) {
+    return {
+      key: "revisionQuality",
+      label: "Revision quality",
+      status: "insufficientEvidence",
+      evidenceLevel: "limited",
+      summary: "No later revision was preserved before this checkpoint, so revision quality cannot be judged.",
+    };
+  }
+
+  const seenObservationIds = new Set(reports[0].evidenceObservationIds ?? []);
+  const totalNewObservationIds = new Set<string>();
+  let revisionsWithNewEvidence = 0;
+  let revisionsWithoutNewEvidence = 0;
+  let changedWithNewEvidence = 0;
+
+  for (let index = 1; index < reports.length; index += 1) {
+    const report = reports[index];
+    const newObservationIds = (report.evidenceObservationIds ?? []).filter((id) => !seenObservationIds.has(id));
+    if (newObservationIds.length > 0) {
+      revisionsWithNewEvidence += 1;
+      newObservationIds.forEach((id) => totalNewObservationIds.add(id));
+      if (opinionChangedBetween(reports[index - 1], report)) changedWithNewEvidence += 1;
+    } else {
+      revisionsWithoutNewEvidence += 1;
+    }
+    (report.evidenceObservationIds ?? []).forEach((id) => seenObservationIds.add(id));
+  }
+
+  if (revisionsWithNewEvidence === 0) {
+    return {
+      key: "revisionQuality",
+      label: "Revision quality",
+      status: "insufficientEvidence",
+      evidenceLevel: "limited",
+      summary: "Later revisions exist, but no new recorded observation evidence was preserved with them.",
+    };
+  }
+
+  const first = reports[0];
+  const last = reports[reports.length - 1];
+  const qualityDelta = last.qualityScore - first.qualityScore;
+  const score = clamp(
+    Math.round(
+      60
+      + Math.min(15, totalNewObservationIds.size * 5)
+      + (changedWithNewEvidence > 0 ? 10 : 0)
+      + Math.max(-10, Math.min(10, qualityDelta / 2))
+      - revisionsWithoutNewEvidence * 8,
+    ),
+    0,
+    100,
+  );
+  const status = reviewDimensionStatus(score);
+  const observationLabel = `${totalNewObservationIds.size} new observation record${totalNewObservationIds.size === 1 ? "" : "s"}`;
+
+  let summary = `Later revisions added ${observationLabel}, but the preserved revision trail still reads mixed.`;
+  if (status === "positive") {
+    summary = changedWithNewEvidence > 0
+      ? `Later revisions added ${observationLabel} and updated the call instead of pretending the first draft was final.`
+      : `Later revisions added ${observationLabel} and strengthened the case without forcing a theatrical opinion swing.`;
+  } else if (status === "negative") {
+    summary = `Some later revisions added ${observationLabel}, but part of the revision trail still moved without clearly recorded new support.`;
+  }
+
+  return {
+    key: "revisionQuality",
+    label: "Revision quality",
+    status,
+    evidenceLevel: revisionsWithoutNewEvidence === 0 ? "full" : "partial",
+    score,
+    summary,
+  };
+}
+
+function buildPlayerFacingDimensions(input: {
+  report: ScoutReport;
+  brief?: AcademyRecruitmentBrief;
+  placementClubId: string;
+  outcome: AcademyRecommendationOutcomeEvidence;
+  overallScore: number | undefined;
+  performanceScore: number | undefined;
+  timingScore: number;
+  terminalFailure: boolean;
+  horizon: number;
+  ratingSeasons: number;
+  revisions: ScoutReport[];
+}): RecommendationReviewDimension[] {
+  const baseEvidenceLevel = evidenceLevelFor(
+    input.ratingSeasons,
+    input.horizon,
+    input.outcome.appearances,
+    input.outcome.pathwayStatus,
+  );
+  return [
+    buildPriceValueDimension({
+      report: input.report,
+      brief: input.brief,
+      overallScore: input.overallScore,
+      terminalFailure: input.terminalFailure,
+      evidenceLevel: baseEvidenceLevel,
+    }),
+    buildSupportAdaptationDimension({
+      outcome: input.outcome,
+      placementClubId: input.placementClubId,
+      horizon: input.horizon,
+      ratingSeasons: input.ratingSeasons,
+    }),
+    buildPathwayQualityDimension({
+      outcome: input.outcome,
+      performanceScore: input.performanceScore,
+      timingScore: input.timingScore,
+      horizon: input.horizon,
+      ratingSeasons: input.ratingSeasons,
+    }),
+    buildRevisionQualityDimension(input.revisions),
+  ];
+}
+
+function humanizePathway(pathway: AcademyPathwayStatus): string {
+  switch (pathway) {
+    case "firstTeam": return "first-team football";
+    case "loan": return "a senior loan route";
+    case "transferred": return "a transfer route";
+    case "academy": return "the academy";
+    case "freeAgent": return "free agency";
+    case "footballExit": return "a football exit";
+    default: return pathway.replace(/([A-Z])/g, " $1").toLowerCase();
+  }
+}
+
 function findingsFor(
   outcome: AcademyRecommendationOutcomeEvidence,
   performanceScore: number | undefined,
@@ -761,10 +1146,14 @@ export function completeAcademyRecommendationReview(
       : undefined;
   const conviction = assessConviction(input.report, overallScore);
   const riskAssessment = assessInjuryRisk(input.report, weeksMissed);
-  const revisions = preservedCaseReports(
-    input.scoutingCase,
-    input.report,
-    input.caseReports,
+  const revisions = reportsThroughDate(
+    preservedCaseReports(
+      input.scoutingCase,
+      input.report,
+      input.caseReports,
+    ),
+    dueDate,
+    seasonLength,
   );
   const reviewEvidence: RecommendationReview["evidence"] = [
     ...movements.map((movement) => ({
@@ -783,8 +1172,24 @@ export function completeAcademyRecommendationReview(
       sourceId: injury.id,
     })),
   ];
+  const playerFacingDimensions = buildPlayerFacingDimensions({
+    report: input.report,
+    brief: input.brief,
+    placementClubId: input.placementReport.targetClubId,
+    outcome,
+    overallScore,
+    performanceScore,
+    timingScore,
+    terminalFailure,
+    horizon,
+    ratingSeasons: ratings.length,
+    revisions,
+  });
   const verdict = verdictFor(overallScore, pathway.status);
-  const findings = findingsFor(outcome, performanceScore, riskAssessment, conviction.assessment);
+  const findings = [
+    ...playerFacingDimensions.map((dimension) => `${dimension.label}: ${dimension.summary}`),
+    ...findingsFor(outcome, performanceScore, riskAssessment, conviction.assessment),
+  ];
 
   const review: AcademyRecommendationReview = {
     ...existing,
@@ -808,6 +1213,7 @@ export function completeAcademyRecommendationReview(
     clubFitScore,
     timingScore,
     overallScore,
+    playerFacingDimensions,
     findings,
     evidence: reviewEvidence,
     verdict,

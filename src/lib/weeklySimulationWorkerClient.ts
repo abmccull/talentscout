@@ -19,7 +19,13 @@ import type {
   WeeklyWorkerWireRequest,
 } from "@/stores/actions/weeklyWorkerTypes";
 
-const WORKER_TIMEOUT_MS = 120_000;
+/**
+ * A worker is an optimization, never a reason to strand the player on the
+ * week-complete screen. Healthy weekly simulations finish comfortably inside
+ * this budget; a stalled worker falls back to the authoritative main-thread
+ * transaction while the result is still contextually immediate.
+ */
+export const WEEKLY_WORKER_TIMEOUT_MS = 8_000;
 
 function monotonicNow(): number {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -113,7 +119,7 @@ const dispatcher: WeeklyTransactionWorkerDispatcher<WeeklyWorkerInput, WeeklyWor
         pendingTransactions.delete(request.job.id);
         reject(new Error("Weekly simulation worker timed out."));
         disposeWorker();
-      }, WORKER_TIMEOUT_MS);
+      }, WEEKLY_WORKER_TIMEOUT_MS);
       pendingTransactions.set(request.job.id, { resolve, reject, timeoutId });
       const wireRequest: WeeklyWorkerWireRequest = {
         kind: request.kind,

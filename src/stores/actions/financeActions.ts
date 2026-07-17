@@ -479,9 +479,18 @@ export function createFinanceActions(get: GetState, set: SetState) {
     acceptRetainerContract: (contract: RetainerContract) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
+      // Public actions may receive a negotiated/generated offer or a direct
+      // contract assembled by another gameplay system. Anchor either shape to
+      // the acceptance date so a missing optional offer timestamp cannot make
+      // settlement fall back to an unrelated global week boundary.
+      const datedContract: RetainerContract = {
+        ...contract,
+        startWeek: contract.startWeek ?? contract.offeredWeek ?? gameState.currentWeek,
+        startSeason: contract.startSeason ?? contract.offeredSeason ?? gameState.currentSeason,
+      };
       const updated = acceptRetainer(
         gameState.finances,
-        contract,
+        datedContract,
         gameState.scout,
         getSeasonLength(gameState.fixtures, gameState.currentSeason),
       );

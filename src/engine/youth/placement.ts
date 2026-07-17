@@ -108,64 +108,6 @@ export function generatePlacementReport(
 }
 
 /**
- * Returns a 0–1 probability that the club will accept the placement.
- *
- * Base chance by conviction:
- *   "note"           → 0.10
- *   "recommend"      → 0.40
- *   "strongRecommend"→ 0.65
- *   "tablePound"     → 0.85
- *
- * Multiplicative modifiers:
- *   Scout reputation:       * (0.5 + scout.reputation / 200)    → [0.5x, 1.0x]
- *   Club academy quality:   rating > 15 → * 0.7
- *                           rating 10–15 → * 1.0
- *                           rating < 10 → * 1.3
- *   Youth buzz level:       * (0.7 + youth.buzzLevel / 300)      → [0.7x, 1.03x]
- *   Perk bonus:             if placementReputationBonus → * 1.25
- *
- * Result is clamped to [0.05, 0.95].
- */
-export function calculateClubAcceptanceChance(
-  report: PlacementReport,
-  youth: UnsignedYouth,
-  club: Club,
-  scout: Scout,
-  perkModifiers?: { placementReputationBonus?: boolean },
-): number {
-  // Base chance by conviction
-  const BASE_CHANCE: Record<ConvictionLevel, number> = {
-    note: 0.10,
-    recommend: 0.40,
-    strongRecommend: 0.65,
-    tablePound: 0.85,
-  };
-
-  let chance = BASE_CHANCE[report.conviction];
-
-  // Scout reputation modifier: range [0.5, 1.0]
-  chance *= 0.5 + scout.reputation / 200;
-
-  // Club academy selectivity
-  if (club.youthAcademyRating > 15) {
-    chance *= 0.7;
-  } else if (club.youthAcademyRating < 10) {
-    chance *= 1.3;
-  }
-  // Rating 10–15: * 1.0 (no change)
-
-  // Youth buzz modifier: range [0.7, 1.03]
-  chance *= 0.7 + youth.buzzLevel / 300;
-
-  // Perk bonus
-  if (perkModifiers?.placementReputationBonus) {
-    chance *= 1.25;
-  }
-
-  return Math.min(0.95, Math.max(0.05, chance));
-}
-
-/**
  * Roll the placement outcome and, on success, convert the unsigned youth to a
  * signed player at the target club.
  *

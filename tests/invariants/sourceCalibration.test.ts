@@ -104,6 +104,30 @@ describe("source evidence calibration", () => {
     expect(calibrated.calibration.note).toContain("9 recovery weeks");
   });
 
+  it("calibrates adaptability only from persisted support/adaptation review feedback", () => {
+    const adaptable = review({
+      playerFacingDimensions: [{
+        key: "supportAdaptationFit",
+        label: "Support/adaptation fit",
+        status: "positive",
+        evidenceLevel: "partial",
+        score: 78,
+        summary: "The destination club supported adaptation with a working senior loan route.",
+      }],
+    });
+
+    const calibrated = calibrateEvidenceClaimFromReview(
+      claim({
+        id: "claim-adaptability",
+        category: "adaptability",
+        direction: "positive",
+      }),
+      adaptable,
+    );
+    expect(calibrated.calibration.status).toBe("supported");
+    expect(calibrated.calibration.note).toContain("78/100");
+  });
+
   it("leaves character, potential, and insufficient injury evidence uncalibrated", () => {
     const potential = claim({ category: "potential" });
     expect(calibrateEvidenceClaimFromReview(potential, review())).toBe(potential);

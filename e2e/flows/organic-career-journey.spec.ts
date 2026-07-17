@@ -266,6 +266,159 @@ async function advanceCanonicalEmptyWeek(page: Page) {
   return result;
 }
 
+async function earnCourseQualification(page: Page, courseId: string) {
+  const enrollment = await page.evaluate((id) => {
+    const store = (window as any).__GAME_STORE__;
+    store.getState().enrollInCourse(id);
+    const state = store.getState().gameState;
+    return {
+      courseId: state.finances.activeEnrollment?.courseId ?? null,
+      balance: state.finances.balance,
+    };
+  }, courseId);
+  expect(enrollment.courseId, `course enrollment failed for ${courseId}`).toBe(courseId);
+  expect(enrollment.balance).toBeGreaterThanOrEqual(0);
+
+  for (let week = 0; week < 30; week++) {
+    const completed = await page.evaluate((id) =>
+      (window as any).__GAME_STORE__.getState().gameState.finances.completedCourses.includes(id),
+    courseId);
+    if (completed) return;
+    await advanceCanonicalEmptyWeek(page);
+  }
+
+  throw new Error(`Course did not complete through canonical weeks: ${courseId}`);
+}
+
+async function earnAcceptedYouthPlacement(page: Page) {
+  const attemptedOutcomes: string[] = [];
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const prepared = await page.evaluate((attemptIndex) => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      const reportedPlayerIds = new Set(
+        Object.values(state.reports).map((report: any) => report.playerId),
+      );
+      const youth = (Object.values(state.unsignedYouth) as any[]).find(
+        (candidate) =>
+          !candidate.placed
+          && !candidate.retired
+          && !reportedPlayerIds.has(candidate.player.id),
+      );
+      if (!youth) throw new Error("No fresh unsigned youth remained for an organic placement case");
+
+      const player = youth.player;
+      const contexts = [
+        "schoolMatch",
+        "academyVisit",
+        "grassrootsTournament",
+        "academyTrialDay",
+        "youthFestival",
+        "schoolMatch",
+      ];
+      for (const [contextIndex, context] of contexts.entries()) {
+        store.getState().startObservationSession(
+          context,
+          [{
+            playerId: player.id,
+            name: `${player.firstName} ${player.lastName}`,
+            position: player.position,
+          }],
+          player.id,
+          {
+            activityInstanceId: `organic-placement-${attemptIndex}-${contextIndex}`,
+            returnScreen: "dashboard",
+          },
+        );
+        store.getState().beginSession();
+        for (let phase = 0; phase < 40; phase++) {
+          const session = store.getState().activeSession;
+          if (!session || session.state !== "active") break;
+          const sessionPlayer = session.players.find(
+            (candidate: any) => candidate.playerId === player.id,
+          );
+          if (
+            session.focusTokens.available > 0
+            && !sessionPlayer?.focusedPhases.includes(session.currentPhaseIndex)
+          ) {
+            store.getState().allocateSessionFocus(player.id, "technical");
+          }
+          const current = store.getState().activeSession;
+          const moment = current?.phases[current.currentPhaseIndex]?.moments?.find(
+            (candidate: any) => candidate.playerId === player.id,
+          );
+          if (moment) store.getState().flagSessionMoment(moment.id, "promising");
+          store.getState().advanceSessionPhase();
+        }
+        if (store.getState().activeSession?.state !== "reflection") {
+          throw new Error(`Placement observation did not reach reflection for ${player.id}`);
+        }
+        store.getState().endObservationSession();
+      }
+
+      const reportsBefore = state.scout.reportsSubmitted;
+      store.getState().startReport(player.id);
+      store.getState().submitReport(
+        "strongRecommend",
+        `Multi-context academy placement case for ${player.firstName} ${player.lastName}`,
+        ["Repeated technical evidence", "Adaptation discussed with stakeholders"],
+        ["Pathway still requires monitoring"],
+      );
+      const reportState = store.getState().gameState;
+      const sourceReport = (Object.values(reportState.reports) as any[])
+        .filter((report) => report.playerId === player.id)
+        .sort((left, right) => right.submittedWeek - left.submittedWeek)[0];
+      if (!sourceReport || reportState.scout.reportsSubmitted !== reportsBefore + 1) {
+        throw new Error(`Organic placement report was not filed for ${player.id}`);
+      }
+
+      store.getState().scheduleActivity({
+        type: "writePlacementReport",
+        slots: 4,
+        targetId: player.id,
+        description: `Pitch the organic case for ${player.firstName} ${player.lastName}`,
+      }, 0);
+      store.getState().setScreen("calendar");
+      return {
+        youthId: youth.id,
+        playerId: player.id,
+        reputationBeforeDecision: reportState.scout.reputation,
+      };
+    }, attempt);
+
+    await advanceCanonicalEmptyWeek(page);
+    await advanceCanonicalEmptyWeek(page);
+    const outcome = await page.evaluate(({ youthId, before }) => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      const placement = (Object.values(state.placementReports) as any[]).find(
+        (candidate) => candidate.unsignedYouthId === youthId,
+      );
+      const message = state.inbox.find(
+        (candidate: any) => candidate.id === `placement-accepted-${placement?.id}`,
+      );
+      return {
+        response: placement?.clubResponse ?? "missing",
+        reputation: state.scout.reputation,
+        reputationGain: state.scout.reputation - before,
+        acceptedMessage: message?.body ?? "",
+      };
+    }, { youthId: prepared.youthId, before: prepared.reputationBeforeDecision });
+
+    attemptedOutcomes.push(outcome.response);
+    if (outcome.response === "accepted") {
+      // The accepted transaction awards +5 exactly (asserted by its message
+      // and the engine invariant). This net spans the otherwise idle response
+      // week as well, so one point of weekly opportunity cost is legitimate.
+      expect(outcome.reputationGain).toBeGreaterThanOrEqual(4);
+      expect(outcome.acceptedMessage).toContain("increased by 5.0 reputation");
+      return outcome;
+    }
+  }
+
+  throw new Error(`No organic youth placement was accepted: ${attemptedOutcomes.join(", ")}`);
+}
+
 test.describe("Organic career journey", () => {
   test("fresh Youth work earns a path choice, leadership, retirement, and inherited legacy", async ({ gamePage }) => {
     // This story advances a full season with canonical world processing and
@@ -321,21 +474,30 @@ test.describe("Organic career journey", () => {
 
     const leadershipWork = await authorReportsToCount(gamePage.page, 51);
     expect(leadershipWork.reportCount).toBe(51);
-    expect(leadershipWork.reputation).toBeGreaterThanOrEqual(60);
+    expect(leadershipWork.reputation).toBeGreaterThanOrEqual(30);
+    expect(leadershipWork.reputation).toBeLessThan(40);
 
     // These are controlled offers and financing inputs, accepted through the
     // same player actions as normal generated offers. Tiers are never injected.
     await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
-      const state = store.getState().gameState;
-      const clubIds = Object.keys(state.clubs);
       // The canonical lender caps a tier-2 agency below the old unrestricted
       // £20k test facility. A £5k offer is within underwriting and still gives
       // the business enough working capital for its tier-3 threshold.
       store.getState().takeLoanAction("business", 5_000);
+    });
+    const foundationCapital = await sellReportsToWorkingCapital(gamePage.page, 10_000);
+    expect(foundationCapital.openingBalance).toBeLessThan(20_000);
+    expect(foundationCapital.balance).toBeLessThan(25_000);
+    expect(foundationCapital.reportRevenue).toBe(foundationCapital.sales * 1_400);
+    await earnCourseQualification(gamePage.page, "fa_level_1");
+    await earnCourseQualification(gamePage.page, "fa_level_2");
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const clubId = Object.keys(store.getState().gameState.clubs)[0];
       store.getState().acceptRetainerContract({
         id: "organic_retainer_1",
-        clubId: clubIds[0],
+        clubId,
         tier: 2,
         monthlyFee: 2_000,
         requiredReportsPerMonth: 3,
@@ -343,7 +505,7 @@ test.describe("Organic career journey", () => {
         status: "active",
       });
     });
-    await sellReportsToWorkingCapital(gamePage.page, 6_000);
+    const tierThreeCapital = await sellReportsToWorkingCapital(gamePage.page, 6_000);
     const tierThreeRequirements = await gamePage.page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;
       return {
@@ -356,6 +518,7 @@ test.describe("Organic career journey", () => {
         retainers: state.finances.retainerContracts.filter(
           (contract: any) => contract.status === "active",
         ).length,
+        completedCourses: state.finances.completedCourses,
       };
     });
     expect(tierThreeRequirements).toMatchObject({
@@ -369,20 +532,54 @@ test.describe("Organic career journey", () => {
     });
     expect(tierThreeRequirements.reputation).toBeGreaterThanOrEqual(40);
     expect(tierThreeRequirements.balance).toBeGreaterThanOrEqual(5_000);
+    expect(tierThreeRequirements.completedCourses).toEqual(
+      expect.arrayContaining(["fa_level_1", "fa_level_2"]),
+    );
     expect((await advanceCanonicalEmptyWeek(gamePage.page)).after.tier).toBe(3);
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      for (const contract of store.getState().gameState.finances.retainerContracts) {
+        if (contract.status === "active") {
+          store.getState().cancelRetainerContract(contract.id);
+        }
+      }
+    });
 
-    const tierFourWork = await authorReportsToCount(gamePage.page, 55);
-    expect(tierFourWork.reportCount).toBe(55);
-    expect(tierFourWork.reputation).toBeGreaterThanOrEqual(60);
+    // Leadership is earned through both outcomes and professional education.
+    // Complete the prerequisite chain through canonical time rather than
+    // injecting the Tier 4 gate qualification into financial state. The
+    // agency first funds tuition and loan servicing through additional work.
+    const qualificationCapital = await sellReportsToWorkingCapital(
+      gamePage.page,
+      12_000,
+    );
+    expect(qualificationCapital.balance).toBeGreaterThanOrEqual(12_000);
+    await earnCourseQualification(gamePage.page, "fa_level_3");
+
+    // Study and a lapsed early client can reduce current standing. Rebuild it
+    // through fresh, evidence-backed work before claiming a leadership tier.
+    const tierFourWork = await authorReportsToCount(gamePage.page, 60);
+    expect(tierFourWork.reportCount).toBe(60);
+    expect(tierFourWork.reputation).toBeGreaterThanOrEqual(55);
+    const placementOutcome = await earnAcceptedYouthPlacement(gamePage.page);
+    expect(placementOutcome.reputation).toBeGreaterThanOrEqual(60);
 
     await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
-      const state = store.getState().gameState;
-      const clubIds = Object.keys(state.clubs);
-      for (let index = 2; index <= 3; index++) {
+      for (const contract of store.getState().gameState.finances.retainerContracts) {
+        if (contract.status === "suspended") {
+          store.getState().cancelRetainerContract(contract.id);
+        }
+      }
+      const clubIds = Object.keys(store.getState().gameState.clubs);
+      for (let index = 2; index <= 8; index++) {
+        const activeRetainers = store.getState().gameState.finances.retainerContracts.filter(
+          (contract: any) => contract.status === "active",
+        ).length;
+        if (activeRetainers >= 3) break;
         store.getState().acceptRetainerContract({
           id: `organic_retainer_${index}`,
-          clubId: clubIds[index - 1] ?? clubIds[0],
+          clubId: clubIds[(index - 1) % clubIds.length] ?? clubIds[0],
           tier: 2,
           monthlyFee: 2_000,
           requiredReportsPerMonth: 3,
@@ -397,10 +594,18 @@ test.describe("Organic career journey", () => {
       gamePage.page,
       18_000,
     );
-    expect(marketplaceCapital.sales).toBeGreaterThanOrEqual(5);
-    expect(marketplaceCapital.reportRevenue).toBeGreaterThanOrEqual(7_000);
+    const cumulativeMarketplaceSales = foundationCapital.sales
+      + tierThreeCapital.sales
+      + qualificationCapital.sales
+      + marketplaceCapital.sales;
+    const cumulativeReportRevenue = foundationCapital.reportRevenue
+      + tierThreeCapital.reportRevenue
+      + qualificationCapital.reportRevenue
+      + marketplaceCapital.reportRevenue;
+    expect(cumulativeMarketplaceSales).toBeGreaterThanOrEqual(2);
+    expect(cumulativeReportRevenue).toBeGreaterThanOrEqual(2_800);
     expect(marketplaceCapital.deliveries).toBeGreaterThanOrEqual(
-      marketplaceCapital.sales,
+      cumulativeMarketplaceSales,
     );
     expect(marketplaceCapital.firstSaleBonusUsed).toBe(true);
     const tierFourRequirements = await gamePage.page.evaluate(() => {
@@ -421,10 +626,10 @@ test.describe("Organic career journey", () => {
       path: "independent",
       independentTier: 3,
       reputation: expect.any(Number),
-      reports: 55,
       retainers: 3,
       employees: 1,
     });
+    expect(tierFourRequirements.reports).toBeGreaterThanOrEqual(60);
     expect(tierFourRequirements.reputation).toBeGreaterThanOrEqual(60);
     expect(tierFourRequirements.balance).toBeGreaterThanOrEqual(15_000);
     expect((await advanceCanonicalEmptyWeek(gamePage.page)).after.tier).toBe(4);

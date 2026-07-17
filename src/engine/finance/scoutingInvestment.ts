@@ -47,6 +47,13 @@ const DATA_SUBSCRIPTION_BONUS: Record<DataSubscriptionTier, number> = {
   elite: 0.20,
 };
 
+const DATA_SUBSCRIPTION_SYSTEMS = [
+  "Database queries",
+  "Deep video profiles",
+  "Stats briefings",
+  "Analyst evidence confidence",
+] as const;
+
 /** One-time upgrade cost to reach each travel budget tier. */
 const TRAVEL_BUDGET_COSTS: Record<TravelBudgetTier, number> = {
   economy: 0,
@@ -395,6 +402,11 @@ export function getOfficeEquipmentWeekly(tier: OfficeEquipmentTier): number {
 /** Get the data quality bonus for a tier. */
 export function getDataSubscriptionBonus(tier: DataSubscriptionTier): number {
   return DATA_SUBSCRIPTION_BONUS[tier];
+}
+
+/** Player-facing explanation of which live systems data subscriptions improve. */
+export function getDataSubscriptionSystems(): readonly string[] {
+  return DATA_SUBSCRIPTION_SYSTEMS;
 }
 
 /** Get the fatigue multiplier for a travel budget tier. */

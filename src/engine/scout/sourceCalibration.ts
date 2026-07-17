@@ -1,6 +1,7 @@
 import type {
   HiddenIntel,
   NPCScoutReport,
+  RecommendationReviewDimension,
   RecommendationReview,
   ScoutEvidenceClaim,
   ScoutEvidenceDirection,
@@ -71,16 +72,37 @@ function injuryDirection(
   return undefined;
 }
 
+function dimensionDirection(
+  dimension: RecommendationReviewDimension | undefined,
+  label: string,
+): ObservableDirection | undefined {
+  if (!dimension || dimension.status === "insufficientEvidence") return undefined;
+  return {
+    direction: dimension.status === "positive"
+      ? "positive"
+      : dimension.status === "negative"
+        ? "negative"
+        : "mixed",
+    note: `${label}${dimension.score === undefined ? "" : ` resolved at ${dimension.score}/100`} from persisted recommendation-review evidence.`,
+  };
+}
+
 function observableDirection(
   claim: ScoutEvidenceClaim,
   review: ObservableReview,
 ): ObservableDirection | undefined {
   const outcome = review.outcomeEvidence;
+  const dimensions = review.playerFacingDimensions ?? [];
   switch (claim.category) {
     case "readiness":
       return directionFromScore(review.overallScore, "Recommendation outcome");
     case "roleFit":
       return directionFromScore(review.clubFitScore, "Club fit");
+    case "adaptability":
+      return dimensionDirection(
+        dimensions.find((dimension) => dimension.key === "supportAdaptationFit"),
+        "Support/adaptation fit",
+      );
     case "injuryProneness":
     case "durability":
       return outcome ? injuryDirection(outcome, review.evidenceLevel) : undefined;

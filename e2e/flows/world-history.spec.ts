@@ -2,6 +2,7 @@ import { test, expect } from "../fixtures";
 import AxeBuilder from "@axe-core/playwright";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { getVisualEvidenceDirectory } from "../helpers/releaseEvidencePath";
 
 test.describe("World archive", () => {
   test("turns authoritative season history into an accessible, explorable story", async ({ gamePage }) => {
@@ -139,11 +140,7 @@ test.describe("World archive", () => {
       await dismissAchievement.click();
     }
 
-    const evidenceDirectory = path.resolve(
-      process.cwd(),
-      "design-audit-evidence",
-      "world-history-2026-07-12",
-    );
+    const evidenceDirectory = getVisualEvidenceDirectory("world-history");
     await mkdir(evidenceDirectory, { recursive: true });
     await gamePage.page.screenshot({
       path: path.join(evidenceDirectory, "world-archive-desktop.png"),

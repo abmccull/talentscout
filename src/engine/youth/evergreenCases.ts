@@ -18,6 +18,7 @@ import { openProfessionalScoutingCase } from "@/engine/reports/scoutingCases";
 
 export const YOUTH_CASE_TRIGGER_CHANCE = 0.08;
 export const YOUTH_CASE_COOLDOWN_WEEKS = 7;
+export const YOUTH_CASE_SEASON_ONE_GUARANTEE_WEEK = 13;
 const MAX_OPEN_PLAYER_DECISIONS = 2;
 
 export type YouthEvergreenCaseFamilyId =
@@ -364,6 +365,20 @@ function latestYouthCaseDate(state: GameState): GameDate | undefined {
   )[0];
 }
 
+/**
+ * Escalate the first professional case through the opening season. The player
+ * still gets four quiet onboarding weeks, but a viable Youth career cannot go
+ * an entire first season without the multi-stakeholder judgment loop appearing.
+ */
+export function getYouthProfessionalCaseTriggerChance(state: GameState): number {
+  if (latestYouthCaseDate(state)) return YOUTH_CASE_TRIGGER_CHANCE;
+  if (state.currentSeason > 1) return YOUTH_CASE_TRIGGER_CHANCE;
+  if (state.currentWeek >= YOUTH_CASE_SEASON_ONE_GUARANTEE_WEEK) return 1;
+  if (state.currentWeek >= 9) return 0.24;
+  if (state.currentWeek >= 5) return 0.12;
+  return 0;
+}
+
 function stakeholderRefs(state: GameState, player: Player): EntityRef[] {
   const refs: EntityRef[] = [{ kind: "family", id: player.id }];
   const agent = Object.values(state.contacts)
@@ -592,7 +607,10 @@ export function directWeeklyYouthProfessionalCase(input: {
     && gameWeeksBetween(state.fixtures, previous, now) < YOUTH_CASE_COOLDOWN_WEEKS
   ) return { state, blockedReason: "cooldown" };
 
-  const chance = Math.max(0, Math.min(1, input.triggerChance ?? YOUTH_CASE_TRIGGER_CHANCE));
+  const chance = Math.max(0, Math.min(
+    1,
+    input.triggerChance ?? getYouthProfessionalCaseTriggerChance(state),
+  ));
   const triggerRng = createNamedRNG(
     state.runManifest.rootSeed,
     "weekly-youth-professional-case-trigger",

@@ -3,8 +3,9 @@ import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "../fixtures";
 import type { GamePage } from "../fixtures";
+import { getVisualEvidenceDirectory } from "../helpers/releaseEvidencePath";
 
-const evidenceDir = path.join(process.cwd(), "design-audit-evidence", "academy-case");
+const evidenceDir = getVisualEvidenceDirectory("academy-case");
 
 async function capture(
   gamePage: GamePage,

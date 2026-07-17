@@ -38,7 +38,10 @@ import {
 } from "@/engine/core/activityQuality";
 import { calculateAccumulation } from "@/engine/insight/insight";
 import { getTournamentActivities } from "@/engine/youth/tournaments";
-import { getUnlockedPerks } from "@/engine/specializations/perks";
+import {
+  getUnlockedPerks,
+  resolveScoutPerkModifiers,
+} from "@/engine/specializations/perks";
 import { applyScoutSkillXp } from "@/engine/scout/progression";
 
 // ---------------------------------------------------------------------------
@@ -792,7 +795,7 @@ function getBestAbilityReading(
  * Availability rules:
  * - attendMatch / youthTournament: only if there are upcoming fixtures
  * - networkMeeting: only if the scout has contacts
- * - academyVisit: only if the scout has unlocked the academy_access perk
+ * - academyVisit: core Youth Scout access (trial days remain a level-15 perk)
  *   (checked via unlockedPerks array)
  * - trainingVisit: always available
  * - watchVideo / writeReport / study / rest / travel: always available
@@ -825,6 +828,7 @@ export function getAvailableActivities(
   reports?: Record<string, ScoutReport>,
 ): Activity[] {
   const activities: Activity[] = [];
+  const perkModifiers = resolveScoutPerkModifiers(scout);
   const observedCounts = collectObservedPlayerCounts(observations);
   const reportCandidates = topObservedPlayers(
     new Map(
@@ -892,7 +896,12 @@ export function getAvailableActivities(
           age: p?.age,
           position: p?.position,
           caStars: bestAbility?.perceivedCA,
-          paStars: bestAbility
+          paStars: (
+            scout.primarySpecialization !== "youth"
+            || !p
+            || p.age > 20
+            || perkModifiers.canSeeYouthProjection
+          ) && bestAbility
             ? ([bestAbility.perceivedPALow, bestAbility.perceivedPAHigh] as [number, number])
             : undefined,
           observations: c.observations,
@@ -924,12 +933,10 @@ export function getAvailableActivities(
     description: "Visit a club's training ground to observe a player in a controlled setting",
   });
 
-  // Academy visit (requires perk)
-  const hasAcademyAccess = scout.unlockedPerks.some(
-    (perkId) =>
-      perkId === "youth_academy_access" || perkId.includes("academy"),
-  );
-  if (hasAcademyAccess) {
+  // Academy visits are part of the base Youth Scout fantasy. A legacy ghost
+  // `academy_access` id used to gate this activity even though no such perk
+  // exists; private trial days remain the actual level-15 access reward.
+  if (scout.primarySpecialization === "youth") {
     activities.push({
       type: "academyVisit",
       slots: ACTIVITY_SLOT_COSTS.academyVisit,
@@ -968,7 +975,7 @@ export function getAvailableActivities(
   });
 
   // grassrootsTournament: requires discovered local/regional tournament active THIS week
-  if (scout.primarySpecialization === "youth" && scout.specializationLevel >= 1 && youthTournaments) {
+  if (perkModifiers.hasGrassrootsAccess && youthTournaments) {
     const { grassroots } = getTournamentActivities(youthTournaments, week);
     for (const tournament of grassroots) {
       activities.push({
@@ -984,7 +991,7 @@ export function getAvailableActivities(
   const hasLocalFamiliarity =
     subRegions !== undefined &&
     Object.values(subRegions).some((sr) => sr.familiarity >= 20);
-  if (hasLocalFamiliarity) {
+  if (perkModifiers.hasGrassrootsAccess && hasLocalFamiliarity) {
     activities.push({
       type: "streetFootball",
       slots: ACTIVITY_SLOT_COSTS.streetFootball,
@@ -998,7 +1005,7 @@ export function getAvailableActivities(
       (c.type === "academyCoach" || c.type === "academyDirector") &&
       c.relationship >= 40,
   );
-  if (hasAcademyContact) {
+  if (perkModifiers.hasTrialDayAccess && hasAcademyContact) {
     activities.push({
       type: "academyTrialDay",
       slots: ACTIVITY_SLOT_COSTS.academyTrialDay,

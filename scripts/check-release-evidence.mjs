@@ -32,6 +32,11 @@ async function git(args) {
   return stdout.trim();
 }
 
+async function gitRaw(args) {
+  const { stdout } = await execFileAsync("git", args, { cwd: root });
+  return stdout;
+}
+
 function isPathInsideRoot(path) {
   const fromRoot = relative(root, path);
   return (
@@ -40,6 +45,19 @@ function isPathInsideRoot(path) {
     !fromRoot.startsWith(`..${sep}`) &&
     !isAbsolute(fromRoot)
   );
+}
+
+function parsePorcelainEntries(output) {
+  return output
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => ({
+      status: line.slice(0, 2),
+      paths: line
+        .slice(3)
+        .split(" -> ")
+        .map((entryPath) => entryPath.replaceAll("\\", "/")),
+    }));
 }
 
 async function sha256(path) {
@@ -58,8 +76,11 @@ const packageDocument = JSON.parse(await readFile(resolve(root, "package.json"),
 const productVersion = String(packageDocument.version ?? "").trim();
 const currentSha = (await git(["rev-parse", "HEAD"])).toLowerCase();
 const currentTreeSha = (await git(["rev-parse", "HEAD^{tree}"])).toLowerCase();
-const treeOutput = await git(["status", "--porcelain", "--untracked-files=all"]);
+const treeOutput = await gitRaw(["status", "--porcelain", "--untracked-files=all"]);
 const dirty = treeOutput.length > 0;
+const dirtyPaths = [
+  ...new Set(parsePorcelainEntries(treeOutput).flatMap((entry) => entry.paths)),
+];
 const configuredSha =
   process.env.RELEASE_CANDIDATE_SHA?.trim() || process.env.GITHUB_SHA?.trim() || currentSha;
 const candidateSha = configuredSha.toLowerCase();
@@ -641,10 +662,12 @@ const report = {
     commitSha: candidateSha,
     shaSource: candidateShaSource,
     currentHeadSha: currentSha,
+    currentTreeSha,
     tag: configuredTag ?? null,
     packageManifest: packageManifestPath ? relative(root, packageManifestPath).replaceAll("\\", "/") : null,
   },
   dirty,
+  dirtyPaths,
   status: failures.length === 0 ? "Passed" : "Failed",
   packageVerification: {
     requiredKinds: requiredPackageKinds,

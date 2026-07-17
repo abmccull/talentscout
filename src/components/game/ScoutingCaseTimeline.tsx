@@ -73,6 +73,13 @@ export function ScoutingCaseTimelineView({
                 </span>
               </div>
               <p className="mt-1 text-xs leading-5 text-zinc-300">{entry.description}</p>
+              {entry.details && entry.details.length > 0 && (
+                <ul className="mt-2 space-y-1 text-[11px] leading-4 text-zinc-400">
+                  {entry.details.map((detail) => (
+                    <li key={`${entry.id}:${detail}`}>{detail}</li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ol>

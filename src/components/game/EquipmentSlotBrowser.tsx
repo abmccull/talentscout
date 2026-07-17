@@ -10,7 +10,9 @@ import {
   getEquipmentItem,
   getEquipmentMonthlyTotal,
 } from "@/engine/finance";
-import type { EquipmentSlot, EquipmentItemDefinition } from "@/engine/finance";
+import type { EquipmentSlot } from "@/engine/finance";
+import { getScoutHomeCountry } from "@/engine/world/travel";
+import { getCountryDisplayName } from "@/lib/country";
 
 interface Props {
   slot: EquipmentSlot;
@@ -63,6 +65,7 @@ export function EquipmentSlotBrowser({ slot, onClose }: Props) {
   const { equipment } = gameState.finances;
   const currentItemId = equipment.loadout[slot];
   const specialization = gameState.scout.primarySpecialization;
+  const homeCountry = getCountryDisplayName(getScoutHomeCountry(gameState.scout));
   const items = getItemsForSlot(slot, specialization);
   const balance = gameState.finances.balance;
   const currentMonthly = getEquipmentMonthlyTotal(equipment.loadout);
@@ -146,6 +149,12 @@ export function EquipmentSlotBrowser({ slot, onClose }: Props) {
               </div>
 
               <p className="text-[10px] text-zinc-400 mb-1.5">{item.description}</p>
+
+              {item.effects.some((effect) => effect.homeRegionOnly) && (
+                <p className="mb-1.5 text-[10px] text-zinc-500">
+                  Active only while working in {homeCountry}.
+                </p>
+              )}
 
               {/* Effects */}
               {item.effects.length > 0 && (

@@ -149,6 +149,7 @@ import {
   sumOperatingExpenses,
   applyDifficultyFinancialAdjustments,
   getActiveEquipmentBonuses,
+  getContextualEquipmentBonuses,
   migrateEquipmentLevel,
   negotiateRetainerTerms,
   calculateSigningBonus,
@@ -870,28 +871,44 @@ export function createWeeklyActions(
       .map((perkId) => ALL_PERKS.find((perk) => perk.id === perkId))
       .filter((perk): perk is NonNullable<typeof perk> => !!perk);
 
-    // Central equipment bonus aggregation for the week
-    const weekEquipBonuses = gameState.finances?.equipment
-      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-      : undefined;
+      // Central equipment bonus aggregation for the week
+      const weekEquipBonuses = gameState.finances?.equipment
+        ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+        : undefined;
+      const scoutHomeCountry = getScoutHome(gameState.scout);
 
     // Issue 5c+5d: Apply tool fatigue reduction bonuses
     const weekToolBonuses = getActiveToolBonuses(gameState.unlockedTools);
     const fatigueReduction = weekToolBonuses.fatigueReduction ?? 0;
     const travelFatigueReduction = weekToolBonuses.travelFatigueReduction ?? 0;
 
-    // Equipment fatigueReduction: per-activity-type reductions from equipped items
-    let equipFatigueReduction = 0;
-    if (weekEquipBonuses?.fatigueReduction) {
-      const seenTypes = new Set<string>();
-      for (const activity of gameState.schedule.activities) {
-        if (activity && !seenTypes.has(activity.type)) {
-          seenTypes.add(activity.type);
-          const activityReduction = weekEquipBonuses.fatigueReduction[activity.type] ?? 0;
-          if (activityReduction > 0) equipFatigueReduction += activityReduction;
+      // Equipment fatigueReduction: per-activity-type reductions from equipped items
+      let equipFatigueReduction = 0;
+      if (weekEquipBonuses?.fatigueReduction) {
+        const seenTypes = new Set<string>();
+        for (const activity of gameState.schedule.activities) {
+          if (activity && !seenTypes.has(activity.type)) {
+            seenTypes.add(activity.type);
+            const activityBonuses = gameState.finances?.equipment && (
+              activity.type === "travel"
+              || activity.type === "internationalTravel"
+              || activity.type === "attendMatch"
+            )
+              ? getContextualEquipmentBonuses(
+                  gameState.finances.equipment.loadout,
+                  {
+                    scoutHomeCountry,
+                    country: activity.type === "attendMatch"
+                      ? (scheduledTravelActivity?.targetId ?? scoutHomeCountry)
+                      : activity.targetId,
+                  },
+                )
+              : weekEquipBonuses;
+            const activityReduction = activityBonuses?.fatigueReduction[activity.type] ?? 0;
+            if (activityReduction > 0) equipFatigueReduction += activityReduction;
+          }
         }
       }
-    }
 
     if (
       fatigueReduction > 0

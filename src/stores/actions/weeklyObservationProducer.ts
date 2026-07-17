@@ -65,6 +65,7 @@ export function produceWeeklyPlayerObservation(
     {
       situation: evidence.situation,
       activityInstanceId: evidence.activityInstanceId,
+      difficulty: input.state.difficulty,
     },
   );
   return {
@@ -109,6 +110,7 @@ export function produceWeeklyVenueObservation(
     {
       situation: evidence.situation,
       activityInstanceId: evidence.activityInstanceId,
+      difficulty: input.state.difficulty,
     },
   );
 }

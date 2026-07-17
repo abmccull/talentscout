@@ -267,7 +267,8 @@ export class GamePage {
 
     await this.waitForScreen("weekSimulation", 10_000);
 
-    for (let step = 0; step < 20; step++) {
+    const settlementDeadline = Date.now() + 30_000;
+    while (Date.now() < settlementDeadline) {
       // Milestones can replace the final simulation controls with a week-summary
       // and celebration stack. These are acknowledgement dialogs, not gameplay
       // choices, so clear them before looking for the next canonical control.
@@ -353,12 +354,13 @@ export class GamePage {
         continue;
       }
 
-      if (step < 19) {
-        await this.page.waitForTimeout(250);
-        continue;
-      }
+      await this.page.waitForTimeout(250);
     }
 
+    // Career-moment cinema is queued after the canonical commit and can mount
+    // just after the Planner returns. Give that post-commit overlay one render
+    // turn, then clear it so the caller receives an actually interactive screen.
+    await this.page.waitForTimeout(250);
     await this.dismissBlockingDialogs();
 
     const finalScreen = await this.getCurrentScreen();

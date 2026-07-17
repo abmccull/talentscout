@@ -44,6 +44,26 @@ function projectionGameState(): GameState {
 }
 
 describe("consequence metric projection and lifecycle", () => {
+  it("preserves fractional reputation when the consequence ledger projects no change", () => {
+    const base = projectionGameState();
+    const gameState = {
+      ...base,
+      scout: { ...base.scout, reputation: 31.564 },
+      consequenceState: createConsequenceEngineState({
+        metrics: { "scout:reputation": 30 },
+      }),
+    };
+
+    const synchronized = synchronizeConsequenceMetrics(
+      gameState,
+      gameState.consequenceState,
+    );
+    const projected = projectConsequenceMetrics(gameState, synchronized);
+
+    expect(synchronized.metrics["scout:reputation"]).toBe(31.564);
+    expect(projected.scout.reputation).toBe(31.564);
+  });
+
   it("rebases and projects delayed scout/contact effects exactly once", () => {
     const decision = createDecisionRecord({
       id: "decision:delayed-projection",

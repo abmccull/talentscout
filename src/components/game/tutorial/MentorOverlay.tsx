@@ -7,6 +7,7 @@ import { getSequenceById } from "./tutorialSteps";
 import type { TutorialStep } from "./tutorialSteps";
 import { getGuidedMilestone } from "./guidedSession";
 import type { GuidedMilestoneDefinition } from "./guidedSession";
+import { getGuidedMilestoneInstruction } from "./guidedMilestoneInstruction";
 import type { GuidedMilestoneId } from "@/stores/tutorialStore";
 import { parseConceptText } from "@/components/ui/GameTerm";
 
@@ -110,6 +111,7 @@ const NON_GAME_SCREENS = new Set(["mainMenu", "newGame", "scenarioSelect", "hall
 export function MentorOverlay() {
   const gameState = useGameStore((s) => s.gameState);
   const currentGameScreen = useGameStore((s) => s.currentScreen);
+  const observationState = useGameStore((s) => s.activeSession?.state ?? null);
   const tutorialActive = useTutorialStore((s) => s.tutorialActive);
   const currentSequence = useTutorialStore((s) => s.currentSequence);
   const currentStep = useTutorialStore((s) => s.currentStep);
@@ -312,6 +314,13 @@ export function MentorOverlay() {
   }
 
   const showSkipControls = activeMode.kind === "tutorial";
+  const actionInstruction = activeMode.kind === "guided"
+    ? getGuidedMilestoneInstruction({
+        milestoneId: activeMode.milestone.id,
+        currentScreen: currentGameScreen,
+        observationState,
+      })
+    : "Complete the highlighted action to continue.";
 
   // ---------------------------------------------------------------------------
   // Spotlight style — inset box-shadow, pointerEvents none so clicks pass through
@@ -454,7 +463,7 @@ export function MentorOverlay() {
 
           {isInteractive || activeMode.kind === "guided" ? (
             <span className={`text-xs italic ${interactiveTextClass}`}>
-              Complete the action to continue
+              {activeMode.kind === "guided" ? actionInstruction : "Complete the action to continue"}
             </span>
           ) : (
             <button

@@ -628,13 +628,14 @@ describe("report submission invariants", () => {
       revision: 2,
       supersedesReportId: initialReport.id,
       caseId: initialReport.caseId,
-      reputationDelta: 0,
+      reputationDelta: -3,
     });
     expect(revisions[1].evidenceObservationIds).toEqual(
       [firstObservation.id, secondObservation.id].sort(),
     );
-    expect(afterRevision.scout.reputation).toBe(initialReputation);
+    expect(afterRevision.scout.reputation).toBe(initialReputation - 3);
     expect(afterRevision.scout.reportsSubmitted).toBe(initialVolume);
+    expect(afterRevision.inbox.at(-1)?.title).toBe("Public stance revised");
     expect(afterRevision.scoutingCases[initialReport.caseId!].reportIds).toEqual(
       revisions.map((report) => report.id),
     );

@@ -12,6 +12,10 @@ import {
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
 import { ensureScoutingCaseForReport } from "@/engine/reports/scoutingCases";
+import {
+  calculatePublicRevisionReputationCost,
+  scaleReputationChange,
+} from "@/engine/core/difficulty";
 
 export interface WeeklyReportActivitiesInput {
   state: GameState;
@@ -100,8 +104,28 @@ export function processWeeklyReportActivities(
     const isNewCase = previousReport === undefined;
     const reputationBefore = scout.reputation;
     if (isNewCase) {
-      scout = updateReputation(scout, { type: "reportSubmitted", quality });
-      scout = { ...scout, reportsSubmitted: scout.reportsSubmitted + 1 };
+      const reputationResult = updateReputation(scout, { type: "reportSubmitted", quality });
+      const rawGain = reputationResult.reputation - scout.reputation;
+      scout = {
+        ...reputationResult,
+        reputation: Math.max(
+          0,
+          Math.min(100, scout.reputation + scaleReputationChange(rawGain, input.state.difficulty)),
+        ),
+        reportsSubmitted: reputationResult.reportsSubmitted + 1,
+      };
+    } else {
+      const publicRevisionCost = calculatePublicRevisionReputationCost(
+        previousReport,
+        finalized,
+        input.state.difficulty,
+      );
+      if (publicRevisionCost > 0) {
+        scout = {
+          ...scout,
+          reputation: Math.max(0, scout.reputation - publicRevisionCost),
+        };
+      }
     }
     const reputationDelta = +(scout.reputation - reputationBefore).toFixed(1);
     let report: ScoutReport = {
@@ -140,7 +164,7 @@ export function processWeeklyReportActivities(
       title: `${isNewCase ? "Report Filed" : `Revision ${report.revision ?? 1} Filed`}: ${player.firstName} ${player.lastName}`,
       body: isNewCase
         ? `Your scouting report on ${player.firstName} ${player.lastName} has been filed.\nQuality: ${quality}/100 | Reputation ${reputationDelta >= 0 ? "+" : ""}${reputationDelta}`
-        : `New evidence has been preserved as revision ${report.revision ?? 1} of this case.\nQuality: ${quality}/100 | Case revisions improve accountability but do not inflate report volume or submission reputation.`,
+        : `New evidence has been preserved as revision ${report.revision ?? 1} of this case.\nQuality: ${quality}/100 | ${reputationDelta < 0 ? `Materially changing the filed stance cost ${Math.abs(reputationDelta)} reputation on ${input.state.difficulty} difficulty.` : "The filed stance remained consistent, so this evidence-backed clarification carried no public revision cost."}`,
       read: false,
       actionRequired: false,
       relatedId: playerId,

@@ -37,6 +37,19 @@ const CONVICTION_FEE_MULTIPLIER: Record<ConvictionLevel, number> = {
 /** After this many weeks a report is considered stale — half fee */
 const STALE_THRESHOLD_WEEKS = 26;
 
+/**
+ * Outcome fees must remain meaningful without turning one elite transfer into
+ * an agency-economy skip. These are consultancy success-fee ceilings, not
+ * football-agent percentages of the entire transfer consideration.
+ */
+const PLACEMENT_FEE_CAP_BY_TIER: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 1_500,
+  2: 3_000,
+  3: 7_500,
+  4: 15_000,
+  5: 25_000,
+};
+
 /** Flat youth placement fee range by club reputation tier */
 
 // ---------------------------------------------------------------------------
@@ -62,7 +75,14 @@ export function calculatePlacementFee(
   const staleMult = weeksAgoReported > STALE_THRESHOLD_WEEKS ? 0.5 : 1.0;
 
   const fee = transferFee * BASE_FEE_RATE * convictionMult * repMult * exclusivityMult * staleMult;
-  return Math.round(Math.max(100, fee)); // Minimum £100
+  const effectiveTier = Math.max(
+    1,
+    Math.min(5, scout.independentTier ?? scout.careerTier),
+  ) as 1 | 2 | 3 | 4 | 5;
+  return Math.min(
+    PLACEMENT_FEE_CAP_BY_TIER[effectiveTier],
+    Math.round(Math.max(100, fee)),
+  );
 }
 
 /**
@@ -135,7 +155,14 @@ export function processSellOnClauses(
       if (updated.transactions.some((transaction) => transaction.referenceId === referenceId)) {
         continue;
       }
-      const sellOnPayment = Math.round(transfer.fee * record.sellOnPercentage);
+      const uncappedSellOnPayment = Math.round(transfer.fee * record.sellOnPercentage);
+      // Residual clauses reward long-term judgment but cannot dwarf the
+      // success fee that created the relationship. This keeps alumni payoffs
+      // exciting while preserving the agency's multi-client progression.
+      const sellOnPayment = Math.min(
+        uncappedSellOnPayment,
+        Math.max(1_000, record.earnedFee * 2),
+      );
       if (sellOnPayment <= 0) continue;
 
       updated = {

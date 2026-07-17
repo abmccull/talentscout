@@ -60,6 +60,16 @@ export function getEmployeeEfficiency(employee: AgencyEmployee): number {
   return Math.max(0, Math.min(1, moraleFactor * fatigueFactor * qualityFactor * payFactor));
 }
 
+/** Resolve the office whose quality modifier actually applies to this employee. */
+export function getEmployeeOfficeQualityBonus(
+  finances: Pick<FinancialRecord, "office" | "satelliteOffices">,
+  employeeId: string,
+): number {
+  return finances.satelliteOffices.find((office) =>
+    office.employeeIds.includes(employeeId),
+  )?.qualityBonus ?? finances.office.qualityBonus ?? 0;
+}
+
 // ---------------------------------------------------------------------------
 // Internal: scout work
 // ---------------------------------------------------------------------------
@@ -178,7 +188,7 @@ function processScoutWork(
   });
 
   // Office quality bonus applies a small upward nudge to report quality score
-  const officeBonus = result.finances.office.qualityBonus ?? 0;
+  const officeBonus = getEmployeeOfficeQualityBonus(result.finances, emp.id);
   const qualityScore = Math.min(100, Math.round(
     (emp.quality / 20) * 60 + efficiency * 30 + officeBonus * 100,
   ));

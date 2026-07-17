@@ -101,6 +101,12 @@ export function generatePerformancePulse(
 
   // Average fatigue over the period (rough estimate from current)
   const fatigueAvg = scout.fatigue;
+  const professionalDevelopment = Boolean(state.finances?.activeEnrollment)
+    || state.inbox?.some((message) =>
+      message.title === "Course Completed"
+      && message.week === state.currentWeek
+      && message.season === state.currentSeason
+    ) === true;
 
   // Calculate composite score
   const compositeScore = calculateCompositeScore(
@@ -109,6 +115,7 @@ export function generatePerformancePulse(
     accuracyRate,
     signingSuccess,
     fatigueAvg,
+    professionalDevelopment,
   );
 
   // Determine grade
@@ -126,6 +133,7 @@ export function generatePerformancePulse(
     accuracyRate: Math.round(accuracyRate),
     signingSuccess,
     fatigueAvg: Math.round(fatigueAvg),
+    professionalDevelopment,
     grade,
     trend,
   };
@@ -153,6 +161,9 @@ export function applyPulseConsequences(
     D: "Below expectations this month. Your employer has expressed concern about your recent performance. Two consecutive D grades may lead to assignment changes.",
     F: "Poor performance this month. You've received a formal warning. Two F grades in a season may result in contract termination for club scouts.",
   };
+  if (pulse.professionalDevelopment && pulse.grade === "C") {
+    gradeMessages.C = "A productive month of formal study. Your course work maintained professional standing while case output was lower, but qualifications do not replace accountable scouting outcomes.";
+  }
 
   messages.push({
     id: `pulse_${season}_${pulse.period}`,
@@ -160,7 +171,7 @@ export function applyPulseConsequences(
     season,
     type: "performance" as any,
     title: `Monthly Review: Grade ${pulse.grade}`,
-    body: `${gradeMessages[pulse.grade]}\n\nReports: ${pulse.reportsSubmitted} | Quality: ${pulse.reportQualityAvg}% | Accuracy: ${pulse.accuracyRate}% | Trend: ${pulse.trend}${repChange !== 0 ? `\nReputation ${repChange > 0 ? "+" : ""}${repChange}` : ""}`,
+    body: `${gradeMessages[pulse.grade]}\n\nReports: ${pulse.reportsSubmitted} | Quality: ${pulse.reportQualityAvg}% | Accuracy: ${pulse.accuracyRate}% | Trend: ${pulse.trend}${pulse.professionalDevelopment ? " | Professional development: active" : ""}${repChange !== 0 ? `\nReputation ${repChange > 0 ? "+" : ""}${repChange}` : ""}`,
     read: false,
     actionRequired: pulse.grade === "D" || pulse.grade === "F",
     relatedId: "performance",
@@ -206,6 +217,7 @@ function calculateCompositeScore(
   accuracyRate: number,
   signings: number,
   fatigue: number,
+  professionalDevelopment = false,
 ): number {
   // Weighted scoring:
   // - Reports submitted (20%): 0 reports = 0, 4+ = 100
@@ -214,13 +226,22 @@ function calculateCompositeScore(
   // - Signings (15%): 0 = 30 (baseline), 1 = 70, 2+ = 100
   // - Fatigue penalty (10%): lower fatigue = higher score
 
-  const reportScore = Math.min(100, (reportsSubmitted / 4) * 100);
+  // Formal qualifications are real work, but not a substitute for case
+  // outcomes. During a study-only period they provide a neutral baseline,
+  // preventing the same course from both consuming time and triggering a
+  // contradictory "poor performance" reputation penalty.
+  const studyBaseline = professionalDevelopment && reportsSubmitted === 0 ? 50 : 0;
+  const reportScore = Math.max(
+    studyBaseline,
+    Math.min(100, (reportsSubmitted / 4) * 100),
+  );
+  const qualityScore = Math.max(studyBaseline, qualityAvg);
   const signingScore = signings >= 2 ? 100 : signings === 1 ? 70 : 30;
   const fatigueScore = Math.max(0, 100 - fatigue);
 
   return Math.round(
     reportScore * 0.20 +
-    qualityAvg * 0.30 +
+    qualityScore * 0.30 +
     accuracyRate * 0.25 +
     signingScore * 0.15 +
     fatigueScore * 0.10,
@@ -247,6 +268,7 @@ function calculateTrend(
     lastPulse.accuracyRate,
     lastPulse.signingSuccess,
     lastPulse.fatigueAvg,
+    lastPulse.professionalDevelopment,
   );
 
   const diff = currentScore - lastScore;

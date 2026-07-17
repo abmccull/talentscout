@@ -343,6 +343,7 @@ describe("recruitment opportunity causality", () => {
       4,
       true,
     ));
+    expect(first.finances?.placementFeeRevenue).toBe(3_000);
     expect(first.finances?.sellOnRevenue).toBe(0);
     expect(first.finances?.transactions.filter(
       (transaction) => transaction.referenceId?.endsWith(":placementFee"),
@@ -366,7 +367,22 @@ describe("recruitment opportunity causality", () => {
     }], 12, 1);
 
     expect(laterSellOn.sellOnRevenue).toBeGreaterThan(0);
+    expect(laterSellOn.sellOnRevenue).toBeLessThanOrEqual(
+      (first.finances?.placementFeeRevenue ?? 0) * 2,
+    );
     expect(replayedSellOn).toBe(laterSellOn);
+  });
+
+  it("caps elite-transfer success fees at the scout's agency tier", () => {
+    const state = weeklyState({ includeDestinationDelivery: true });
+
+    expect(calculatePlacementFee(
+      100_000_000,
+      REPORT,
+      state.scout,
+      1,
+      true,
+    )).toBe(3_000);
   });
 });
 

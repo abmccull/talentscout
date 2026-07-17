@@ -23,6 +23,7 @@ export {
 
 export {
   getActiveEquipmentBonuses,
+  getContextualEquipmentBonuses,
   getEquipmentMonthlyTotal,
   purchaseEquipmentItem,
   sellEquipmentItem,
@@ -31,7 +32,10 @@ export {
   createDefaultInventory,
 } from "./equipmentBonuses";
 
-export type { EquipmentPassiveBonus } from "./equipmentBonuses";
+export type {
+  EquipmentPassiveBonus,
+  EquipmentBonusContext,
+} from "./equipmentBonuses";
 
 export {
   EQUIPMENT_CATALOG,
@@ -130,7 +134,17 @@ export type {
 } from "./retainers";
 export { OFFICE_TIERS, SALARY_BY_ROLE, upgradeOffice, hireEmployee, fireEmployee, processEmployeeWeek, calculateAgencyOverhead } from "./agency";
 export type { EmployeeWorkResult } from "./employeeWork";
-export { getEmployeeEfficiency, processEmployeeWork } from "./employeeWork";
+export {
+  getEmployeeEfficiency,
+  getEmployeeOfficeQualityBonus,
+  processEmployeeWork,
+} from "./employeeWork";
+export { buildAgencyModifierLedger } from "./modifierLedger";
+export type {
+  AgencyModifierLedgerEntry,
+  AgencyModifierLedgerInput,
+  ModifierLedgerStatus,
+} from "./modifierLedger";
 export {
   MAX_ANALYST_CRAFT_BONUS,
   MAX_ANALYST_REVIEW_HISTORY,
@@ -207,6 +221,7 @@ export {
   getDataSubscriptionCost,
   getDataSubscriptionWeekly,
   getDataSubscriptionBonus,
+  getDataSubscriptionSystems,
   getTravelBudgetCost,
   getTravelBudgetWeekly,
   getTravelBudgetFatigue,

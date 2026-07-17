@@ -1272,6 +1272,8 @@ export interface ClubDecision {
     presentation?: number;
     /** Evidence-supported confidence rather than the scout's declared confidence alone. */
     calibration?: number;
+    /** Visible registration, adaptation, family, and pathway context for youth moves. */
+    mobility?: number;
     total: number;
   };
   requestedEvidenceCategory?: JudgmentCategory;
@@ -1348,6 +1350,29 @@ export interface YouthRecruitmentBrief {
 
 export type RecommendationReviewCheckpoint = "oneSeason" | "twoSeasons";
 
+export type RecommendationReviewEvidenceLevel = "full" | "partial" | "limited";
+
+export type RecommendationReviewDimensionKey =
+  | "priceValueCalibration"
+  | "supportAdaptationFit"
+  | "pathwayQuality"
+  | "revisionQuality";
+
+export type RecommendationReviewDimensionStatus =
+  | "positive"
+  | "mixed"
+  | "negative"
+  | "insufficientEvidence";
+
+export interface RecommendationReviewDimension {
+  key: RecommendationReviewDimensionKey;
+  label: string;
+  status: RecommendationReviewDimensionStatus;
+  evidenceLevel: RecommendationReviewEvidenceLevel;
+  score?: number;
+  summary: string;
+}
+
 export interface RecommendationReview {
   id: string;
   caseId: string;
@@ -1366,6 +1391,7 @@ export interface RecommendationReview {
   clubFitScore?: number;
   timingScore?: number;
   overallScore?: number;
+  playerFacingDimensions?: RecommendationReviewDimension[];
   findings?: string[];
   evidence?: Array<{
     source: "movement" | "seasonRating" | "injury" | "minutes" | "contract";
@@ -3507,6 +3533,8 @@ export interface PerformancePulse {
   accuracyRate: number;
   signingSuccess: number;
   fatigueAvg: number;
+  /** Formal study kept the period professionally productive despite low case volume. */
+  professionalDevelopment?: boolean;
   grade: "A" | "B" | "C" | "D" | "F";
   trend: "improving" | "stable" | "declining";
 }

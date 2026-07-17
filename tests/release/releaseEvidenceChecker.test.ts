@@ -434,6 +434,7 @@ describe("release evidence checker", () => {
       currentHeadSha: commitSha,
       shaSource: "git HEAD",
     });
+    expect(report.candidate.currentTreeSha).toMatch(/^[a-f0-9]{40}$/);
     expect(report.packageVerification.packages[0]).toMatchObject({
       status: "Passed",
       path: "dist/package.bin",
@@ -447,6 +448,7 @@ describe("release evidence checker", () => {
 
     expect(report.status).toBe("Failed");
     expect(report.dirty).toBe(true);
+    expect(report.dirtyPaths).toEqual(expect.arrayContaining(["source.txt"]));
     expect(report.failures).toContain(
       "working tree is dirty; evidence cannot describe an exact shipping candidate",
     );

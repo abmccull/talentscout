@@ -6,9 +6,10 @@ import { conductBoardMeeting, conductManagerMeeting } from "@/engine/career";
 import { isContactAccessSuspended, meetContact } from "@/engine/network/contacts";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import {
-  getActiveEquipmentBonuses,
+  getContextualEquipmentBonuses,
   getLifestyleNetworkingBonus,
 } from "@/engine/finance";
+import { getScoutHomeCountry } from "@/engine/world/travel";
 import { processContactFreeAgentTip } from "@/engine/freeAgents/discovery";
 import { processContactTournamentTip } from "@/engine/youth";
 import { resolvePlayerEntity, resolveUnsignedYouth } from "@/lib/playerResolution";
@@ -54,13 +55,20 @@ export function processWeeklyRelationshipActivities(
   const messages: InboxMessage[] = [];
   let contactIntel = { ...(state.contactIntel ?? {}) };
   const toolBonuses = getActiveToolBonuses(state.unlockedTools);
-  const equipmentBonuses = state.finances?.equipment
-    ? getActiveEquipmentBonuses(state.finances.equipment.loadout)
-    : undefined;
+  const homeCountry = getScoutHomeCountry(state.scout);
 
   for (const contactId of input.result.meetingsHeld) {
     const contact = contacts[contactId];
     if (!contact) continue;
+    const equipmentBonuses = state.finances?.equipment
+      ? getContextualEquipmentBonuses(
+          state.finances.equipment.loadout,
+          {
+            scoutHomeCountry: homeCountry,
+            country: contact.country ?? contact.region,
+          },
+        )
+      : undefined;
     const currentDate = {
       season: input.sourceState.currentSeason,
       week: input.sourceState.currentWeek,

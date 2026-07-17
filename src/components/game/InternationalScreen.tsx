@@ -18,7 +18,7 @@ import { getAvailableAssignments } from "@/engine/world/international";
 import { WorldMap } from "@/components/game/WorldMap";
 import { CountryPopup } from "@/components/game/CountryPopup";
 import { WorldHistoryDrawer } from "@/components/game/WorldHistoryDrawer";
-import { getActiveEquipmentBonuses } from "@/engine/finance";
+import { getContextualEquipmentBonuses } from "@/engine/finance";
 import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
 import {
   getWorldCountryAvailability,
@@ -693,7 +693,13 @@ export function InternationalScreen() {
     if (!gameState || !selectedCountry) return;
     if (gameState.scout.travelBooking) return;
     const equipmentBonuses = gameState.finances?.equipment
-      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+      ? getContextualEquipmentBonuses(
+          gameState.finances.equipment.loadout,
+          {
+            scoutHomeCountry: getScoutHomeCountry(gameState.scout),
+            country: selectedCountry,
+          },
+        )
       : undefined;
     const travelCost = Math.round(
       getRegionalTravelQuote(gameState, selectedCountry, travelPosture).cost
@@ -736,7 +742,13 @@ export function InternationalScreen() {
     if (!assignment || gameState.scout.travelBooking) return;
 
     const equipmentBonuses = gameState.finances?.equipment
-      ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
+      ? getContextualEquipmentBonuses(
+          gameState.finances.equipment.loadout,
+          {
+            scoutHomeCountry: getScoutHomeCountry(gameState.scout),
+            country: assignment.country,
+          },
+        )
       : undefined;
     const travelCost = Math.round(
       getRegionalTravelQuote(gameState, assignment.country, "assignmentFirst").cost
@@ -887,15 +899,21 @@ export function InternationalScreen() {
     : undefined;
   const selectedFamiliarity = selectedReputation?.familiarity ?? 0;
   const selectedContinent = selectedCountry ? getContinentId(selectedCountry) : "unknown";
-  const travelEquipmentBonuses = gameState.finances?.equipment
-    ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
-    : undefined;
   const effectiveTravelQuoteFor = (
     country: string,
     posture: TravelPosture = country === selectedCountry
       ? travelPosture
       : "assignmentFirst",
   ) => {
+    const travelEquipmentBonuses = gameState.finances?.equipment
+      ? getContextualEquipmentBonuses(
+          gameState.finances.equipment.loadout,
+          {
+            scoutHomeCountry: homeCountry,
+            country,
+          },
+        )
+      : undefined;
     const quote = getRegionalTravelQuote(gameState, country, posture);
     return {
       ...quote,

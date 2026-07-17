@@ -16,7 +16,10 @@ import type {
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
 import { createRNG } from "@/engine/rng";
-import { scaleReputationChange } from "@/engine/core/difficulty";
+import {
+  calculatePublicRevisionReputationCost,
+  scaleReputationChange,
+} from "@/engine/core/difficulty";
 import { generateReportContent, prepareReportSubmission } from "@/engine/reports/reporting";
 import {
   ensureScoutingCaseForReport,
@@ -307,9 +310,15 @@ export function createReportActions(get: GetState, set: SetState) {
       // Difficulty is sign-aware: easier modes improve gains and soften
       // losses, while harder modes do the reverse.
       const repDelta = baseUpdatedScout.reputation - gameState.scout.reputation;
+      const publicRevisionCost = calculatePublicRevisionReputationCost(
+        previousReport,
+        report,
+        gameState.difficulty,
+      );
       const adjustedRep = Math.max(0, Math.min(100,
         gameState.scout.reputation
-          + scaleReputationChange(repDelta, gameState.difficulty),
+          + scaleReputationChange(repDelta, gameState.difficulty)
+          - publicRevisionCost,
       ));
       const updatedScout = {
         ...baseUpdatedScout,
@@ -543,6 +552,20 @@ export function createReportActions(get: GetState, set: SetState) {
       // For independent scouts, flag the newly submitted report for the listing prompt
       const shouldOfferMarketplaceListing = isNewCase
         && gameState.scout.careerPath === "independent";
+      const revisionCostMessage: InboxMessage | null = publicRevisionCost > 0
+        ? {
+            id: `public-revision-cost-${scoredReport.id}`,
+            week: gameState.currentWeek,
+            season: gameState.currentSeason,
+            type: "feedback",
+            title: "Public stance revised",
+            body: `This revision materially changed your filed conviction, role, or recommended action. Owning the change preserves the evidence trail, but it costs ${publicRevisionCost} reputation on ${gameState.difficulty} difficulty.`,
+            read: false,
+            actionRequired: false,
+            relatedId: canonicalPlayerId,
+            relatedEntityType: "player",
+          }
+        : null;
 
       set({
         gameState: synchronizeInternationalAssignmentProgress({
@@ -555,9 +578,11 @@ export function createReportActions(get: GetState, set: SetState) {
           clubResponses: updatedClubResponses,
           predictions: updatedPredictions,
           systemFitCache: updatedSystemFitCache,
-          inbox: responseInboxMessage
-            ? [...gameState.inbox, responseInboxMessage]
-            : gameState.inbox,
+          inbox: [
+            ...gameState.inbox,
+            ...(responseInboxMessage ? [responseInboxMessage] : []),
+            ...(revisionCostMessage ? [revisionCostMessage] : []),
+          ],
         }),
         currentScreen: "reportHistory",
         ...(shouldOfferMarketplaceListing ? { pendingListingReportId: scoredReport.id } : {}),

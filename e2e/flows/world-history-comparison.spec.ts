@@ -2,12 +2,9 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "../fixtures";
 import AxeBuilder from "@axe-core/playwright";
+import { getVisualEvidenceDirectory } from "../helpers/releaseEvidencePath";
 
-const evidenceDir = path.join(
-  process.cwd(),
-  "design-audit-evidence",
-  "release-2026-07-13",
-);
+const evidenceDir = getVisualEvidenceDirectory("world-history-comparison");
 
 test.describe("World archive comparisons", () => {
   test("compares player-safe multi-season player, club, and manager evidence", async ({ gamePage }) => {

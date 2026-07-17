@@ -48,7 +48,12 @@ import {
 } from "@/lib/playerResolution";
 import { EvidenceBoard } from "@/components/game/evidence";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { projectPlayerDevelopmentEnvironment } from "@/engine/world/developmentEnvironment";
+import {
+  projectPlayerDevelopmentEnvironment,
+  projectProspectiveDevelopmentEnvironment,
+} from "@/engine/world/developmentEnvironment";
+import { getWorldConditionModifiers } from "@/engine/world";
+import { assessYouthMobility } from "@/engine/youth";
 import { useShallow } from "zustand/react/shallow";
 
 // ---------------------------------------------------------------------------
@@ -1398,6 +1403,36 @@ export function PlayerProfile() {
         )
         .sort((left, right) => right.competitionPressure - left.competitionPressure)
     : [];
+  const mobilityByBriefId = new Map(
+    unsignedYouthRecord
+      ? relevantBriefs.slice(0, 2).flatMap((brief) => {
+          const targetClub = gameState.clubs[brief.clubId];
+          const targetLeague = targetClub
+            ? gameState.leagues[targetClub.leagueId]
+            : undefined;
+          if (!targetClub || !targetLeague) return [];
+          const targetCountryKey = normalizeCountryKey(targetLeague.country);
+          const targetRegionalKnowledge = targetCountryKey
+            ? gameState.regionalKnowledge[targetCountryKey]
+              ?? Object.values(gameState.regionalKnowledge).find(
+                (knowledge) => normalizeCountryKey(knowledge.countryId) === targetCountryKey,
+              )
+            : undefined;
+          return [[brief.id, assessYouthMobility({
+            youth: unsignedYouthRecord,
+            targetClub,
+            targetLeague,
+            targetRegionalKnowledge,
+            worldContext: getWorldConditionModifiers(gameState, targetLeague.country),
+            developmentEnvironment: projectProspectiveDevelopmentEnvironment(
+              gameState,
+              unsignedYouthRecord.player,
+              targetClub.id,
+            ),
+          })] as const];
+        })
+      : [],
+  );
   const latestHypotheses = (() => {
     const byId = new Map<string, ReflectionHypothesisRecord>();
     [...dossierEntries].reverse().forEach((entry) => entry.hypotheses.forEach((hypothesis) => {
@@ -1769,7 +1804,9 @@ export function PlayerProfile() {
               <CardContent className="space-y-3 p-5 pt-1">
                 {relevantBriefs.length === 0 ? (
                   <p className="text-sm leading-6 text-zinc-400">No open academy brief currently matches this player&apos;s position and age. A speculative report can still preserve the judgment, but it has no immediate club need behind it.</p>
-                ) : relevantBriefs.slice(0, 2).map((brief) => (
+                ) : relevantBriefs.slice(0, 2).map((brief) => {
+                  const mobility = mobilityByBriefId.get(brief.id);
+                  return (
                   <div key={brief.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div>
@@ -1785,8 +1822,62 @@ export function PlayerProfile() {
                       <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
                       <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
                     </div>
+                    {mobility && (
+                      <div
+                        className={`mt-4 rounded-lg border p-3 ${
+                          mobility.status === "blocked"
+                            ? "border-red-400/30 bg-red-400/[0.08]"
+                            : mobility.status === "conditional"
+                              ? "border-amber-400/30 bg-amber-400/[0.08]"
+                              : "border-emerald-400/25 bg-emerald-400/[0.07]"
+                        }`}
+                        data-testid={`mobility-route-${brief.id}`}
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+                              Mobility and registration
+                            </p>
+                            <p className="mt-1 text-xs font-semibold text-white">
+                              {mobility.originCountry.label} to {mobility.targetCountry.label}
+                            </p>
+                          </div>
+                          <Badge
+                            variant={mobility.status === "blocked" ? "destructive" : mobility.status === "conditional" ? "warning" : "success"}
+                            className="text-[10px] capitalize"
+                          >
+                            {mobility.status} · risk {mobility.overallRiskScore}/100
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-xs leading-5 text-zinc-300">
+                          {mobility.clubDecisionAdjustment.summary}
+                        </p>
+                        <details className="mt-2 rounded-md border border-white/10 bg-black/15 px-3 py-2 text-xs">
+                          <summary className="min-h-7 cursor-pointer select-none py-1 font-medium text-sky-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300">
+                            Review route evidence and next step
+                          </summary>
+                          <ul className="mt-2 space-y-1.5 leading-5 text-zinc-300">
+                            {mobility.visibleReasons.slice(0, 3).map((reason) => (
+                              <li key={reason} className="flex gap-2">
+                                <span className="text-sky-300" aria-hidden="true">•</span>
+                                <span>{reason}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          {mobility.suggestedMitigationActions[0] && (
+                            <p className="mt-3 border-t border-white/10 pt-2 leading-5 text-amber-100">
+                              Next step: {mobility.suggestedMitigationActions[0]}
+                            </p>
+                          )}
+                          <p className="mt-2 text-[10px] leading-4 text-zinc-500">
+                            {mobility.modelNotice}
+                          </p>
+                        </details>
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </CardContent>
             </Card>
 

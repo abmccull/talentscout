@@ -376,11 +376,14 @@ describe("meaningful difficulty", () => {
       expect(modifiers.wonderkidRateMultiplier).toBe(1);
     }
 
-    expect(scaleReputationChange(10, "casual")).toBe(13);
-    expect(scaleReputationChange(-10, "casual")).toBe(-8);
-    expect(scaleReputationChange(10, "hard")).toBe(9);
-    expect(scaleReputationChange(-10, "hard")).toBe(-12);
+    expect(scaleReputationChange(10, "casual")).toBe(12.5);
+    expect(scaleReputationChange(-10, "casual")).toBe(-7.5);
+    expect(scaleReputationChange(10, "hard")).toBe(8.5);
+    expect(scaleReputationChange(-10, "hard")).toBe(-11.5);
     expect(scaleReputationChange(10, "ironman")).toBe(8);
-    expect(scaleReputationChange(-10, "ironman")).toBe(-13);
+    expect(scaleReputationChange(-10, "ironman")).toBe(-12.5);
+    expect(scaleReputationChange(0.4, "normal")).toBe(0.4);
+    expect(scaleReputationChange(0.4, "hard")).toBe(0.34);
+    expect(scaleReputationChange(0.4, "ironman")).toBe(0.32);
   });
 });

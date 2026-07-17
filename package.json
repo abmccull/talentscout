@@ -37,6 +37,8 @@
     "test:release-evidence": "node scripts/check-release-evidence.mjs",
     "audit:release-evidence": "node scripts/check-release-evidence.mjs --report-only",
     "audit:architecture": "node scripts/analyze-architecture.mjs",
+    "audit:youth-perks": "node scripts/audit-youth-perk-truth-table.mjs",
+    "test:youth-perks": "node scripts/audit-youth-perk-truth-table.mjs --check",
     "test:architecture": "node scripts/analyze-architecture.mjs --check",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:smoke": "playwright test e2e/regression/smoke.spec.ts",

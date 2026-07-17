@@ -62,6 +62,10 @@ function boundedMetric(value: number): number {
   return Math.round(Math.min(100, Math.max(0, value)));
 }
 
+function boundedReputation(value: number): number {
+  return Math.round(Math.min(100, Math.max(0, value)) * 1_000) / 1_000;
+}
+
 function authoritativeContactMetric(
   contact: Contact,
   metric: ContactConsequenceMetricName,
@@ -174,7 +178,9 @@ export function projectConsequenceMetrics(
 
   for (const [metricKey, rawValue] of Object.entries(consequenceState.metrics)) {
     if (!Number.isFinite(rawValue)) continue;
-    const value = boundedMetric(rawValue);
+    const value = metricKey === "scout:reputation"
+      ? boundedReputation(rawValue)
+      : boundedMetric(rawValue);
     if (isScoutMetricKey(metricKey)) {
       const field = SCOUT_METRICS[metricKey];
       if (scout[field] !== value) {

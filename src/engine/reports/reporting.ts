@@ -23,6 +23,7 @@ import type {
 import { ATTRIBUTE_DOMAINS as ATTR_DOMAINS } from "@/engine/core/types";
 import { starsToAbility } from "@/engine/scout/starRating";
 import { calculateMarketValue } from "@/engine/players/generation";
+import { resolveScoutPerkModifiers } from "@/engine/specializations/perks";
 
 // ---------------------------------------------------------------------------
 // Report draft type
@@ -313,6 +314,11 @@ export function generateReportContent(
   const recentWithAbility = observations
     .filter((o) => o.abilityReading)
     .slice(-3);
+  const perkModifiers = resolveScoutPerkModifiers(scout);
+  const canShowYouthProjection =
+    scout.primarySpecialization !== "youth"
+    || player.age > 20
+    || perkModifiers.canSeeYouthProjection;
 
   let perceivedCAStars: number | undefined;
   let perceivedPARange: [number, number] | undefined;
@@ -329,10 +335,12 @@ export function generateReportContent(
     const avgPAHigh =
       recentWithAbility.reduce((s, o) => s + o.abilityReading!.perceivedPAHigh, 0) /
       recentWithAbility.length;
-    perceivedPARange = [
-      Math.round(avgPALow * 2) / 2,
-      Math.min(5.0, Math.round(avgPAHigh * 2) / 2),
-    ];
+    if (canShowYouthProjection) {
+      perceivedPARange = [
+        Math.round(avgPALow * 2) / 2,
+        Math.min(5.0, Math.round(avgPAHigh * 2) / 2),
+      ];
+    }
   }
 
   const suggestedStrengthClaims = identifyStrengthClaims(player, attributeAssessments, positionAverages);

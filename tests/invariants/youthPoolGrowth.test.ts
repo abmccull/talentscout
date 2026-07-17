@@ -155,6 +155,7 @@ describe("unsigned-youth population integrity", () => {
       doctrineIds: ["evidence-first"],
     });
     const initial = useGameStore.getState().gameState!;
+    const initialReputation = initial.scout.reputation;
     const [youthId, youth] = Object.entries(initial.unsignedYouth)[0];
     const targetClub = Object.values(initial.clubs)[0];
     const reportId = "report-accepted-placement";
@@ -256,6 +257,11 @@ describe("unsigned-youth population integrity", () => {
     expect(after.alumniRecords).toContainEqual(expect.objectContaining({
       playerId: youth.player.id,
       placementReportId: placementId,
+    }));
+    expect(after.scout.reputation).toBe(initialReputation + 5);
+    expect(after.inbox).toContainEqual(expect.objectContaining({
+      id: `placement-accepted-${placementId}`,
+      body: expect.stringContaining("increased by 5.0 reputation"),
     }));
   }, 45_000);
 });

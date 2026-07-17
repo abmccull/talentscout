@@ -25,12 +25,23 @@ interface ScreenHelpButtonProps {
 
 export function ScreenHelpButton({ placement = "content" }: ScreenHelpButtonProps) {
   const openScreenGuide = useTutorialStore((s) => s.openScreenGuide);
+  const tutorialActive = useTutorialStore((s) => s.tutorialActive);
+  const currentSequence = useTutorialStore((s) => s.currentSequence);
+  const guidedSessionActive = useTutorialStore((s) => s.guidedSessionActive);
+  const activeScreenGuide = useTutorialStore((s) => s.activeScreenGuide);
+  const activeHint = useTutorialStore((s) => s.activeHint);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const careerPath = useGameStore((s) => s.gameState?.scout.careerPath ?? "club");
 
   // Only render when a guide exists for the current screen.
   const guide = getScreenGuide(currentScreen);
   if (!guide) return null;
+  const inObservationReportContext = new Set(["observation", "reportWriter", "reportHistory"]).has(currentScreen);
+  const guidanceSurfaceActive = (tutorialActive && currentSequence)
+    || guidedSessionActive
+    || activeScreenGuide != null
+    || activeHint != null;
+  if (inObservationReportContext && guidanceSurfaceActive) return null;
 
   const mentorName = careerPath === "independent" ? "Tommy" : "Margaret";
   const isMobileHeader = placement === "mobileHeader";

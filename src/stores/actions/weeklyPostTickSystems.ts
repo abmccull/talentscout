@@ -20,6 +20,7 @@ import {
 import { createConsequenceEngineState } from "@/engine/consequences";
 import { processMonthlyCredit } from "@/engine/finance/creditScore";
 import { processDistress } from "@/engine/finance/distress";
+import { projectWeeklyProspectFollowUps } from "@/engine/youth/prospectFollowUps";
 
 export interface WeeklyPostTickSystemsInput {
   beforeWeek: GameState;
@@ -32,6 +33,17 @@ export function processWeeklyPostTickSystems(
   input: WeeklyPostTickSystemsInput,
 ): GameState {
   let state = input.state;
+
+  const prospectFollowUps = projectWeeklyProspectFollowUps(state);
+  if (prospectFollowUps.length > 0) {
+    state = {
+      ...state,
+      inbox: [
+        ...state.inbox,
+        ...prospectFollowUps.map((beat) => beat.message),
+      ],
+    };
+  }
 
   if (input.alumniMilestones && input.alumniMilestones.length > 0) {
     const messages: InboxMessage[] = input.alumniMilestones.map((milestone, index) => ({

@@ -18,6 +18,7 @@ import {
   type ObservationContext,
   type AttributeReading,
   type FlaggedMoment,
+  type DifficultyLevel,
   ATTRIBUTE_DOMAINS,
   HIDDEN_ATTRIBUTES,
 } from "@/engine/core/types";
@@ -421,6 +422,8 @@ export interface LightObservationEvidenceOptions {
   activityInstanceId?: string;
   /** Persisted, player-visible situation that modifies evidence quality. */
   situation?: ObservationSituationSnapshot;
+  /** Changes evidence clarity only; canonical player truth is never altered. */
+  difficulty?: DifficultyLevel;
 }
 
 /**
@@ -543,6 +546,7 @@ export function observePlayerLight(
     const situationModifier = getObservationSituationAttributeModifier(
       evidenceOptions?.situation,
       attr,
+      evidenceOptions?.difficulty,
     );
     for (let pass = 0; pass < passes; pass++) {
       addReading(

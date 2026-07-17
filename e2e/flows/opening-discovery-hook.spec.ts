@@ -68,6 +68,13 @@ test.describe("first-five-minute discovery hook", () => {
 
     await page.getByRole("button", { name: /Keep the name private/ }).click();
     await gamePage.waitForScreen("reportWriter");
+    await expect(page.getByText("First report mode")).toBeVisible();
+    await expect(page.getByText("Lock the first read, the doubt, and the next move")).toBeVisible();
+    await expect(page.getByText("Current read", { exact: true })).toBeVisible();
+    await expect(page.getByText("Key uncertainty", { exact: true })).toBeVisible();
+    await expect(page.getByText("Recommended next step", { exact: true })).toBeVisible();
+    await expect(page.getByText("Answer a real club need")).toHaveCount(0);
+    await expect(page.getByLabel(/Ask (Margaret|Tommy) for help/i)).toHaveCount(0);
 
     const persisted = await page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;
@@ -99,6 +106,27 @@ test.describe("first-five-minute discovery hook", () => {
         (violation) => violation.impact === "serious" || violation.impact === "critical",
       ),
     ).toEqual([]);
+    await page.getByLabel("Current read").fill(
+      "Early signs point to a live attacking lead worth protecting and testing again quickly.",
+    );
+    await page.getByLabel("Key uncertainty").fill(
+      "The standout action has not yet repeated once the pressure and match state change.",
+    );
+    await page.getByRole("radio", { name: /^Test next\b/ }).click();
+    await page.getByRole("radio", { name: /^Recommend\b/ }).click();
+    await page.getByRole("button", { name: /^Submit Report$/ }).click();
+    await gamePage.waitForScreen("reportHistory");
+
+    const latestReport = await page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      const reports = Object.values(state?.reports ?? {}) as any[];
+      return reports.at(-1) ?? null;
+    });
+    expect(latestReport).not.toBeNull();
+    expect(latestReport.summary).toContain("Current read:");
+    expect(latestReport.summary).toContain("Key uncertainty:");
+    expect(latestReport.summary).toContain("Recommended next step:");
+    expect(latestReport.briefId ?? null).toBeNull();
     expect(missingResources, "The opening flow requested missing production assets").toEqual([]);
     gamePage.expectNoConsoleErrors();
   });

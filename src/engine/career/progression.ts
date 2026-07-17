@@ -162,12 +162,11 @@ function calculateReportSubmissionDelta(
   reportsSubmitted: number,
 ): number {
   const normalised = Math.max(0, Math.min(100, quality)) / 100;
-  // The first five distinct cases establish professional credibility and keep
-  // the opening career-path choice attainable. Once established, craft alone
-  // is a small signal; mature accuracy carries the meaningful reputation risk.
-  return reportsSubmitted < 5
-    ? 0.5 + normalised * 1.5
-    : 0.1 + normalised * 0.4;
+  // The first five distinct, evidence-backed cases establish baseline
+  // professional credibility and make the authored path choice attainable.
+  // Once established, report craft remains useful but bounded; delayed
+  // accuracy, placements, and discovery outcomes still carry the larger risk.
+  return reportsSubmitted < 5 ? 2 : 0.1 + normalised * 0.4;
 }
 
 export function getPerformanceReviewReputationChange(

@@ -99,7 +99,24 @@ function caseState(): GameState {
         completedWeek: 12,
         completedSeason: 2,
         overallScore: 84,
-        findings: ["The player received a credible development opportunity."],
+        playerFacingDimensions: [{
+          key: "pathwayQuality",
+          label: "Pathway quality",
+          status: "positive",
+          evidenceLevel: "full",
+          score: 81,
+          summary: "Reached first-team football by age 18 with 24 appearances at 7.2.",
+        }, {
+          key: "revisionQuality",
+          label: "Revision quality",
+          status: "insufficientEvidence",
+          evidenceLevel: "limited",
+          summary: "No later revision was preserved before this checkpoint, so revision quality cannot be judged.",
+        }],
+        findings: [
+          "Pathway quality: Reached first-team football by age 18 with 24 appearances at 7.2.",
+          "Revision quality: No later revision was preserved before this checkpoint, so revision quality cannot be judged.",
+        ],
       },
     },
     alumniRecords: [{
@@ -228,6 +245,12 @@ describe("scouting case timeline", () => {
     expect(timeline?.entries.some((entry) => entry.description.includes("must not appear"))).toBe(false);
     expect(timeline?.entries.some((entry) => entry.id === "movement:movement-before-case")).toBe(false);
     expect(timeline?.entries.filter((entry) => entry.title.includes("transfer"))).toHaveLength(1);
+    const reviewEntry = timeline?.entries.find((entry) => entry.id === "review:review-1");
+    expect(reviewEntry?.description).toBe("Observable review completed at 84/100.");
+    expect(reviewEntry?.details).toEqual([
+      "Pathway quality: Reached first-team football by age 18 with 24 appearances at 7.2.",
+      "Revision quality: No later revision was preserved before this checkpoint, so revision quality cannot be judged.",
+    ]);
 
     const serialized = JSON.stringify(timeline);
     expect(serialized).not.toContain("validationSnapshot");

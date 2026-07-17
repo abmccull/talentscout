@@ -24,6 +24,7 @@ import {
   getCompletedCount,
   getTotalCount,
 } from "./guidedSession";
+import { getGuidedMilestoneInstruction } from "./guidedMilestoneInstruction";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -34,10 +35,12 @@ const NON_GAME_SCREENS = new Set(["mainMenu", "newGame", "scenarioSelect", "hall
 export function GuidedChecklist() {
   const guidedSessionActive = useTutorialStore((s) => s.guidedSessionActive);
   const guidedMilestones = useTutorialStore((s) => s.guidedMilestones);
+  const currentGuidedTask = useTutorialStore((s) => s.currentGuidedTask);
   const skipGuidedSession = useTutorialStore((s) => s.skipGuidedSession);
 
   const currentScreen = useGameStore((s) => s.currentScreen);
   const gameState = useGameStore((s) => s.gameState);
+  const observationState = useGameStore((s) => s.activeSession?.state ?? null);
   const setScreen = useGameStore((s) => s.setScreen);
 
   const [isExpanded, setIsExpanded] = useState(true);
@@ -153,7 +156,7 @@ export function GuidedChecklist() {
           return (
             <li
               key={milestone.id}
-              className="flex items-center gap-3 px-2 py-2.5"
+              className="flex items-start gap-3 px-2 py-2.5"
             >
               {/* Completion icon */}
               {done ? (
@@ -169,13 +172,24 @@ export function GuidedChecklist() {
               )}
 
               {/* Title */}
-              <span
-                className={`flex-1 text-xs leading-snug ${
-                  done ? "text-zinc-400 line-through" : "text-zinc-200"
-                }`}
-              >
-                {milestone.title}
-              </span>
+              <div className="flex-1">
+                <span
+                  className={`block text-xs leading-snug ${
+                    done ? "text-zinc-400 line-through" : "text-zinc-200"
+                  }`}
+                >
+                  {milestone.title}
+                </span>
+                {!done && milestone.id === currentGuidedTask && (
+                  <span className="mt-1 block text-[11px] leading-4 text-zinc-500">
+                    {getGuidedMilestoneInstruction({
+                      milestoneId: milestone.id,
+                      currentScreen,
+                      observationState,
+                    })}
+                  </span>
+                )}
+              </div>
 
               {/* Go button — only shown for incomplete milestones */}
               {!done && (

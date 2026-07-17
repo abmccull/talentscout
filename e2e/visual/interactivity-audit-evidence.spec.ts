@@ -4,13 +4,10 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Locator } from "@playwright/test";
 import { test, expect } from "../fixtures";
 import type { GamePage } from "../fixtures";
+import { getVisualEvidenceDirectory } from "../helpers/releaseEvidencePath";
 import { SELECTORS } from "../helpers/selectors";
 
-const evidenceDir = path.join(
-  process.cwd(),
-  "design-audit-evidence",
-  "release-2026-07-13",
-);
+const evidenceDir = getVisualEvidenceDirectory("interactivity-audit");
 
 const viewports = [
   { name: "desktop" as const, width: 1440, height: 900 },

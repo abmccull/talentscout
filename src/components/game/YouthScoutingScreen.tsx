@@ -419,6 +419,7 @@ interface UnsignedYouthTabProps {
   setObservedOnly: (b: boolean) => void;
   reportedIds: Set<string>;
   onSelectYouth: (youthId: string) => void;
+  onPlanDiscovery: () => void;
   viewMode: ViewMode;
   setViewMode: (m: ViewMode) => void;
   minAge: string;
@@ -448,6 +449,7 @@ function UnsignedYouthTab({
   setObservedOnly,
   reportedIds,
   onSelectYouth,
+  onPlanDiscovery,
   viewMode,
   setViewMode,
   minAge,
@@ -747,10 +749,14 @@ function UnsignedYouthTab({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <Users size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm text-zinc-300">No unsigned youth found.</p>
-            <p className="mt-1 text-xs text-zinc-400">
-              Scout youth venues to discover unsigned players in the world.
+            <p className="text-sm font-semibold text-zinc-200">No discovered unsigned prospects match this view.</p>
+            <p className="mt-1 max-w-md text-xs leading-5 text-zinc-400">
+              The world still contains youth talent. Plan a school match, academy visit, tournament, or local scouting trip to bring real names into your pipeline.
             </p>
+            <Button className="mt-5 min-h-11" onClick={onPlanDiscovery}>
+              <CalendarPlus size={15} className="mr-2" aria-hidden="true" />
+              Plan a discovery week
+            </Button>
           </CardContent>
         </Card>
       ) : viewMode === "list" ? (
@@ -1184,6 +1190,7 @@ export function YouthScoutingScreen() {
       setObservedOnly={setObservedOnly}
       reportedIds={reportedIds}
       onSelectYouth={handleSelectYouth}
+      onPlanDiscovery={() => setScreen("calendar")}
       viewMode={viewMode}
       setViewMode={setViewMode}
       minAge={minAge}

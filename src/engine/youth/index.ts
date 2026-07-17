@@ -18,7 +18,6 @@ export {
 // Placement pipeline — placing unsigned youth at clubs
 export {
   generatePlacementReport,
-  calculateClubAcceptanceChance,
   processPlacementOutcome,
   getEligibleClubsForPlacement,
 } from "./placement";
@@ -54,6 +53,17 @@ export {
   scoreAcademyClubDecision,
 } from "./academyPlacementCase";
 export type { AcademyDecisionScore } from "./academyPlacementCase";
+
+// Player-facing cross-border registration, adaptation, and pathway context.
+export {
+  YOUTH_MOBILITY_MODEL_NOTICE,
+  assessYouthMobility,
+} from "./youthMobility";
+export type {
+  YouthMobilityAssessment,
+  YouthMobilityAssessmentInput,
+  YouthMobilityStatus,
+} from "./youthMobility";
 
 // Evergreen professional cases — recurring judgment after the opening hook
 export {

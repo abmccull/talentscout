@@ -269,6 +269,21 @@ describe("organic career journey", () => {
     expect(employed.jobOffers).toEqual([]);
   });
 
+  it("keeps report craft useful while verified outcomes remain decisive", () => {
+    const created = createScout(CONFIG, new RNG("organic-report-pacing"));
+    const openingCases = recordReportWork(created, 5, 35);
+    const establishedCase = recordReportWork(openingCases, 6, 50);
+    const validatedCase = updateReputation(establishedCase, {
+      type: "reportValidated",
+      accuracy: 100,
+    });
+
+    expect(openingCases.reputation).toBe(20);
+    expect(establishedCase.reputation).toBeCloseTo(20.3);
+    expect(validatedCase.reputation).toBeCloseTo(23.3);
+    expect(establishedCase.reportsSubmitted).toBe(6);
+  });
+
   it("advances through earned business gates and unlocks a save-stable delegation team", () => {
     const created = createScout(CONFIG, new RNG("organic-leadership-scout"));
     const openingFinances = initializeFinances(created, "independent", "normal");

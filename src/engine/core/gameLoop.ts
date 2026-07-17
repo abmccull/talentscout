@@ -70,6 +70,7 @@ import {
   processRegionalKnowledgeGrowth,
   synchronizeRegionalFamiliarity,
 } from "../specializations/regionalKnowledge";
+import { resolveScoutPerkModifiers } from "../specializations/perks";
 import {
   deriveClubRecruitmentDoctrine,
   scoreDoctrineAgeFit,
@@ -2061,11 +2062,13 @@ function generateExpiringOfferMessages(
  * giving flavourful leads about tournaments, hidden gems, or promising kids
  * that a contact has spotted. ~25% chance per week.
  */
-function maybeGenerateYouthTip(
+export function maybeGenerateYouthTip(
   state: GameState,
   rng: RNG,
 ): InboxMessage | null {
   if (state.scout.primarySpecialization !== "youth") return null;
+  const perkModifiers = resolveScoutPerkModifiers(state.scout);
+  if (!perkModifiers.hasYouthNetworkTips) return null;
   if (!rng.chance(0.25)) return null;
 
   // Need unsigned youth to tip about
@@ -2359,7 +2362,13 @@ function computeReputationChangeDetailed(
   const scheduledCount = state.schedule.activities.filter(
     (a) => a !== null,
   ).length;
-  if (scheduledCount === 0) {
+  const professionalDevelopment = Boolean(state.finances?.activeEnrollment)
+    || state.inbox.some((message) =>
+      message.title === "Course Completed"
+      && message.week === state.currentWeek
+      && message.season === state.currentSeason
+    );
+  if (scheduledCount === 0 && !professionalDevelopment) {
     deltas.push({
       reason: "Idle week (no scouting activity)",
       delta: -1,

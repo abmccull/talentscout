@@ -48,7 +48,7 @@ import {
 } from "@/engine/insight/effects";
 import { createRNG } from "@/engine/rng";
 import { getActiveEquipmentBonuses } from "@/engine/finance";
-import { ALL_PERKS } from "@/engine/specializations/perks";
+import { resolveScoutPerkModifiers } from "@/engine/specializations/perks";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { observePlayerLight } from "@/engine/scout/perception";
 import {
@@ -344,6 +344,7 @@ function buildInteractiveObservationBatch(
         sourceSessionId: session.id,
         activityInstanceId: session.activityInstanceId,
         situation: session.situation,
+        difficulty: gameState.difficulty,
       },
     );
     const observation = applyRegionalPresenceToObservation(gameState, {
@@ -765,11 +766,7 @@ export function createObservationActions(get: GetState, set: SetState) {
           : undefined;
         const gutBoost = (reflEquipBonuses?.gutFeelingBonus ?? 0) * 200;
 
-        // Check if scout has the PA estimate perk (Generational Eye)
-        const hasPAEstimatePerk = latestGameState.scout.unlockedPerks.some((perkId) => {
-          const perk = ALL_PERKS.find((p) => p.id === perkId);
-          return perk?.effect.type === "paEstimate";
-        });
+        const perkModifiers = resolveScoutPerkModifiers(latestGameState.scout);
         const paAccuracyBonus = reflEquipBonuses?.paEstimateAccuracy ?? 0;
 
         const reflectionResult = generateReflection(
@@ -777,7 +774,10 @@ export function createObservationActions(get: GetState, set: SetState) {
           rng,
           latestGameState.scout.attributes.intuition + gutBoost,
           latestGameState.scout.specializationLevel,
-          { paEstimate: hasPAEstimatePerk },
+          {
+            paEstimate: perkModifiers.hasPAEstimate,
+            paEstimateMargin: perkModifiers.paEstimateMargin,
+          },
           paAccuracyBonus,
           latestGameState.players,
         );
