@@ -6,6 +6,7 @@ import {
   getCountryMapPosition,
   isCompactCountryMapMarker,
 } from "@/engine/world/mapCountryRegistry";
+import { WORLD_TERMS } from "@/components/game/worldTerminology";
 
 // =============================================================================
 // TYPES
@@ -70,6 +71,13 @@ function GradientDefs() {
       </radialGradient>
     </defs>
   );
+}
+
+function knowledgeBandLabel(knowledgeLevel: number): string {
+  if (knowledgeLevel >= 75) return "4";
+  if (knowledgeLevel >= 50) return "3";
+  if (knowledgeLevel >= 25) return "2";
+  return "1";
 }
 
 // =============================================================================
@@ -229,7 +237,7 @@ function CountryMarker({
   return (
     <g
       role="button"
-      aria-label={`${country.label}${isCurrent ? " (current location)" : ""}${hasActiveAssignment ? ", active assignment" : ""}, familiarity ${familiarity}%`}
+      aria-label={`${country.label}${isCurrent ? " (current location)" : ""}${hasActiveAssignment ? ", active assignment" : ""}, ${WORLD_TERMS.familiarity.shortLabel.toLowerCase()} ${familiarity}%, ${WORLD_TERMS.regionalKnowledge.shortLabel.toLowerCase()} ${knowledgeLevel}%`}
       tabIndex={onClick ? 0 : -1}
       style={{
         cursor: onClick ? "pointer" : "default",
@@ -375,12 +383,12 @@ function CountryMarker({
             fill="#fff"
             pointerEvents="none"
           >
-            {knowledgeLevel >= 75 ? "M" : knowledgeLevel >= 50 ? "E" : knowledgeLevel >= 25 ? "F" : "N"}
+            {knowledgeBandLabel(knowledgeLevel)}
           </text>
         </g>
       )}
 
-      {/* Knowledge level tooltip on hover */}
+      {/* Regional knowledge tooltip on hover */}
       {hovered && knowledgeLevel > 0 && (
         <text
           x={x}
@@ -397,7 +405,7 @@ function CountryMarker({
             textShadow: "0 1px 4px rgba(0,0,0,0.9)",
           }}
         >
-          Knowledge: {knowledgeLevel}%
+          {WORLD_TERMS.regionalKnowledge.shortLabel}: {knowledgeLevel}%
         </text>
       )}
     </g>

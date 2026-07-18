@@ -29,6 +29,7 @@ test.describe("Calendar Screen", () => {
     const itinerary = gamePage.page.locator('[data-tutorial-id="calendar-grid"]');
     await expect(itinerary).toBeVisible();
     await expect(itinerary.getByRole("button", { name: /open day/i })).toHaveCount(7);
+    await expect(gamePage.page.getByRole("button", { name: /open day/i })).toHaveCount(7);
   });
 
   test("Planner puts the itinerary before the collapsed desk policy", async ({ gamePage }) => {

@@ -10,6 +10,7 @@ import type { TerritoryIdentity } from "@/engine/world/territoryIdentity";
 import type { WorldConditionStakeholderMatrix } from "@/engine/world/worldConditionStakeholders";
 import type { ClubRecruitmentEcosystem } from "@/engine/world/clubRecruitmentEcosystem";
 import { Tooltip } from "@/components/ui/tooltip";
+import { WORLD_TERMS } from "@/components/game/worldTerminology";
 
 // =============================================================================
 // TYPES
@@ -299,9 +300,9 @@ export function CountryPopup({
 
         {/* ── Familiarity bar ────────────────────────────────────── */}
         <div className="px-4 pb-3" data-tutorial-id="travel-familiarity">
-          <Tooltip content="Your knowledge of this country. Higher familiarity = better scouting accuracy. Grows from reports, contacts, and successful finds." side="bottom">
+          <Tooltip content={WORLD_TERMS.familiarity.description} side="bottom">
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] text-zinc-500">Familiarity</span>
+            <span className="text-[11px] text-zinc-500">{WORLD_TERMS.familiarity.label}</span>
             <div className="flex items-center gap-1.5">
               <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${tierBadgeClasses(familiarity)}`}>
                 {expertiseTierLabel(familiarity)}
@@ -458,11 +459,11 @@ export function CountryPopup({
 
         {regionalKnowledge && (
           <div className="px-4 pb-3">
-            <Tooltip content="Regional knowledge grows from scouting activity in this country. It records the local access and context you have actually earned." side="bottom">
+            <Tooltip content={WORLD_TERMS.regionalKnowledge.description} side="bottom">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] text-zinc-500 flex items-center gap-1">
                 <BookOpen size={10} className="text-purple-400" />
-                Knowledge
+                {WORLD_TERMS.regionalKnowledge.label}
               </span>
               <span className="text-[11px] text-purple-300">
                 {knowledgeLevel}/100
@@ -484,7 +485,7 @@ export function CountryPopup({
 
             {knowledgeLevel === 0 && (
               <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
-                No local intelligence logged yet. Work this country to build a more useful regional dossier.
+                No local football intelligence logged yet. Work this country to build a more useful regional dossier before it goes stale.
               </p>
             )}
 
@@ -536,14 +537,14 @@ export function CountryPopup({
           <div className="mx-4 mb-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-cyan-200">
-                Operational presence
+                {WORLD_TERMS.operationalPresence.label}
               </p>
               <span className="text-[10px] font-medium capitalize text-cyan-300">
                 {regionalPresence.accessTier} · {regionalPresence.accessScore}/100
               </span>
             </div>
             <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">
-              {regionalPresence.summary}
+              {WORLD_TERMS.operationalPresence.description} {regionalPresence.summary}
             </p>
             <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px]">
               {Object.entries(regionalPresence.dimensions).map(([dimension, score]) => (

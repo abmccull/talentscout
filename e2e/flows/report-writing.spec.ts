@@ -154,6 +154,34 @@ test.describe("Report Writing", () => {
     gamePage.expectNoConsoleErrors();
   });
 
+  test("final review counts the fresh-evidence blocker before allowing a revision", async ({ gamePage }) => {
+    await prepareObservedYouthPlayer(gamePage);
+
+    await gamePage.submitCurrentReportViaUI("recommend");
+    await gamePage.waitForScreen("reportHistory");
+
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const latestReport = Object.values(store.getState().gameState?.reports ?? {}).at(-1) as any;
+      if (!latestReport?.playerId) throw new Error("Expected a submitted report before reopening the writer");
+      store.getState().startReport(latestReport.playerId);
+    });
+
+    await gamePage.waitForScreen("reportWriter");
+    await gamePage.submitCurrentReportViaUI("recommend", { submit: false });
+    await expect(
+      gamePage.page.getByText(/^1 decision remaining$/),
+    ).toBeVisible();
+    await expect(
+      gamePage.page.getByText(/Gather fresh evidence in another match, training visit, video review, or meaningful context before filing this revision\./),
+    ).toBeVisible();
+    await expect(
+      gamePage.page.getByRole("button", { name: /^File revision 2$/ }),
+    ).toBeDisabled();
+
+    gamePage.expectNoConsoleErrors();
+  });
+
   test("a low-evidence 14-year-old goalkeeper stays conservative and avoids invented keeper claims", async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectState({

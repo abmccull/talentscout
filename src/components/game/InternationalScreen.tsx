@@ -18,6 +18,7 @@ import { getAvailableAssignments } from "@/engine/world/international";
 import { WorldMap } from "@/components/game/WorldMap";
 import { CountryPopup } from "@/components/game/CountryPopup";
 import { WorldHistoryDrawer } from "@/components/game/WorldHistoryDrawer";
+import { WORLD_TERMS, worldTermSummary } from "@/components/game/worldTerminology";
 import { getContextualEquipmentBonuses } from "@/engine/finance";
 import { migrateInternationalAssignment } from "@/engine/world/internationalDeliverables";
 import {
@@ -109,10 +110,17 @@ const LEGEND_ITEMS = [
 function LegendHUD() {
   return (
     <div
-      className="absolute bottom-3 left-3 z-20 rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md"
+      className="absolute bottom-3 left-3 z-20 max-w-[18rem] rounded-lg border border-zinc-700/50 bg-zinc-900/80 px-3 py-2 backdrop-blur-md"
       role="group"
-      aria-label="Map legend"
+      aria-label="World map legend"
+      title={worldTermSummary()}
     >
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-300">
+        {WORLD_TERMS.familiarity.label} marker tiers
+      </p>
+      <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">
+        Personal credibility shown by the ring color. {WORLD_TERMS.regionalKnowledge.label} uses the purple badge. {WORLD_TERMS.operationalPresence.label} lives in the dossier and country browser, not as a separate map tier.
+      </p>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {LEGEND_ITEMS.map(({ color, label }) => (
           <span key={label} className="flex items-center gap-1.5 text-[10px] text-zinc-400">
@@ -130,6 +138,17 @@ function LegendHUD() {
             aria-hidden="true"
           />
           Current
+        </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-400">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-flex h-3 w-3 items-center justify-center rounded-[3px] bg-violet-500 text-[8px] font-semibold text-white" aria-hidden="true">
+            2
+          </span>
+          {WORLD_TERMS.regionalKnowledge.label} band
+        </span>
+        <span className="text-zinc-500">
+          {WORLD_TERMS.operationalPresence.label}: open the dossier
         </span>
       </div>
     </div>
@@ -328,7 +347,7 @@ function CountryBrowser({
                       onOpenCountry(country.countryKey, dossierTrigger);
                     }}
                     className="min-h-14 w-full rounded-xl border border-zinc-800 bg-zinc-900/70 px-3 py-2.5 text-left transition hover:border-blue-400/55 hover:bg-blue-500/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-300"
-                    aria-label={`${countryName}, ${contentTierLabel}, knowledge ${knowledge} of 100, operational presence ${presenceScores[country.countryKey] ?? 0} of 100. Open country dossier.`}
+                    aria-label={`${countryName}, ${contentTierLabel}, ${WORLD_TERMS.regionalKnowledge.shortLabel.toLowerCase()} ${knowledge} of 100, ${WORLD_TERMS.operationalPresence.shortLabel.toLowerCase()} ${presenceScores[country.countryKey] ?? 0} of 100. Open country dossier.`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -344,8 +363,8 @@ function CountryBrowser({
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3 text-[10px]">
-                      <span className="text-purple-200">
-                        Knowledge {knowledge}/100 · Presence {presenceScores[country.countryKey] ?? 0}/100
+                      <span className="text-purple-200" title={worldTermSummary()}>
+                        {WORLD_TERMS.regionalKnowledge.shortLabel} {knowledge}/100 · {WORLD_TERMS.operationalPresence.shortLabel} {presenceScores[country.countryKey] ?? 0}/100
                       </span>
                       <span className={isCurrent ? "font-medium text-blue-200" : hasAssignment ? "font-medium text-amber-200" : "text-zinc-500"}>
                         {isCurrent ? "Current location" : hasAssignment ? "Live assignment" : "Open dossier"}
@@ -454,7 +473,7 @@ function AssignmentPanel({
   travelCostFor,
   canFitTravel,
   onOpenAssignment,
-  onAcceptAssignment,
+  onReviewAssignment,
 }: {
   currentWeek: number;
   currentSeason: number;
@@ -465,7 +484,7 @@ function AssignmentPanel({
   travelCostFor: (country: string) => number;
   canFitTravel: (country: string) => boolean;
   onOpenAssignment: (country: string) => void;
-  onAcceptAssignment: (assignmentId: string) => void;
+  onReviewAssignment: (assignmentId: string) => void;
 }) {
   return (
     <div
@@ -508,7 +527,6 @@ function AssignmentPanel({
               const travelCost = travelCostFor(assignment.country);
               const canAfford = scoutBalance >= travelCost;
               const hasCalendarCapacity = canFitTravel(assignment.country);
-              const canAccept = canAcceptAssignments && canAfford && hasCalendarCapacity;
 
               return (
             <div
@@ -531,7 +549,7 @@ function AssignmentPanel({
                   <p className="text-[11px] text-zinc-500">
                     {assignment.duration === 1 ? "1 week" : `${assignment.duration} weeks`} on site
                   </p>
-                  <p className="text-[10px] text-zinc-600">Travel £{travelCost.toLocaleString()}</p>
+                  <p className="text-[10px] text-zinc-600">Base travel £{travelCost.toLocaleString()}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -543,24 +561,25 @@ function AssignmentPanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onAcceptAssignment(assignment.id)}
-                    disabled={!canAccept}
+                    onClick={() => onReviewAssignment(assignment.id)}
+                    disabled={!canAcceptAssignments}
                     className={`min-h-11 rounded-md px-3 py-2 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
-                      canAccept
+                      canAcceptAssignments
                         ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/50 hover:bg-emerald-500/15"
                         : "cursor-not-allowed border border-zinc-800 bg-zinc-900 text-zinc-600"
                     }`}
                   >
-                    {canAcceptAssignments
-                      ? canAfford
-                        ? hasCalendarCapacity
-                          ? "Accept"
-                          : "Clear Calendar"
-                        : "Funds Low"
-                      : "Unavailable"}
+                    {canAcceptAssignments ? "Review trip" : "Unavailable"}
                   </button>
                 </div>
               </div>
+              {canAcceptAssignments && (!canAfford || !hasCalendarCapacity) && (
+                <p className="mt-2 text-[10px] leading-relaxed text-amber-300/85">
+                  {!canAfford
+                    ? "Commitment is blocked right now: raise funds before you book from the dossier."
+                    : "Commitment is blocked right now: clear enough weekly schedule space before you book from the dossier."}
+                </p>
+              )}
             </div>
               );
             })()
@@ -747,41 +766,19 @@ export function InternationalScreen() {
     }, 1500);
   }, [gameState, selectedCountry, travelPosture, playSFX, bookInternationalTravel, handleClose]);
 
-  const handleAcceptAssignment = useCallback((assignmentId: string) => {
+  const handleReviewAssignment = useCallback((assignmentId: string) => {
     if (!gameState) return;
     const assignment = gameState.internationalAssignments.find(
       (item) => item.id === assignmentId,
     );
-    if (!assignment || gameState.scout.travelBooking) return;
+    if (!assignment) return;
+    const position = getCountryMapPosition(assignment.country);
+    if (!position) return;
 
-    const equipmentBonuses = gameState.finances?.equipment
-      ? getContextualEquipmentBonuses(
-          gameState.finances.equipment.loadout,
-          {
-            scoutHomeCountry: getScoutHomeCountry(gameState.scout),
-            country: assignment.country,
-          },
-        )
-      : undefined;
-    const travelCost = Math.round(
-      getRegionalTravelQuote(gameState, assignment.country, "assignmentFirst").cost
-        * (1 - (equipmentBonuses?.travelCostReduction ?? 0)),
-    );
-    if ((gameState.finances?.balance ?? Infinity) < travelCost) return;
-
-    const booked = bookInternationalTravel(assignment.country, {
-      duration: assignment.duration,
-      assignmentId: assignment.id,
-      posture: "assignmentFirst",
-    });
-    if (!booked) return;
-    playSFX("travel");
-    setJustBooked(true);
-    clearTimeout(bookTimerRef.current);
-    bookTimerRef.current = setTimeout(() => {
-      handleClose();
-    }, 1500);
-  }, [gameState, playSFX, bookInternationalTravel, handleClose]);
+    rememberPopupTrigger(document.activeElement);
+    setTravelPosture("assignmentFirst");
+    openCountryPopup(assignment.country, position.x, position.y);
+  }, [gameState, openCountryPopup, rememberPopupTrigger]);
 
   useEffect(() => {
     if (!pendingInternationalCountry) return;
@@ -1094,7 +1091,7 @@ export function InternationalScreen() {
             rememberPopupTrigger(document.activeElement);
             openCountryPopup(country, position.x, position.y);
           }}
-          onAcceptAssignment={handleAcceptAssignment}
+          onReviewAssignment={handleReviewAssignment}
         />
 
         {/* ── Country Popup ────────────────────────────────────── */}
@@ -1119,10 +1116,10 @@ export function InternationalScreen() {
             position={popupPos}
             containerRect={cRect}
             justBooked={justBooked}
-            bookingActionLabel={selectedAssignment ? "Accept Assignment" : "Book Travel"}
+            bookingActionLabel={selectedAssignment ? "Commit trip" : "Book travel"}
             bookingDetail={
               selectedAssignment
-                ? `Full completion can earn up to +${selectedAssignment.reputationReward} reputation; objectives are graded at return.`
+                ? `Choose a trip posture before you commit. Full completion can earn up to +${selectedAssignment.reputationReward} reputation; objectives are graded at return.`
                 : undefined
             }
             contentTier={selectedAvailability?.contentTier === "unavailable" ? undefined : selectedAvailability?.contentTier}

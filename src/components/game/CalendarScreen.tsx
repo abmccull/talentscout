@@ -37,6 +37,7 @@ import {
   getCurrentTransferWindow,
   isDeadlineDayPressure,
 } from "@/engine/core/transferWindow";
+import { countOpenScheduleDays } from "@/engine/core/calendar";
 import { ACTIVITY_DISPLAY } from "./calendar/ActivityCard";
 import { ActivityPanel } from "./calendar/ActivityPanel";
 import { TargetPicker } from "./calendar/TargetPicker";
@@ -390,6 +391,8 @@ export function CalendarScreen() {
     }
   };
 
+  const openDayCount = countOpenScheduleDays(gameState.schedule);
+
   // Click-to-place: user clicked an empty day slot while an activity is selected
   const handleDaySlotClick = (dayIndex: number) => {
     if (!selectedActivity) return;
@@ -631,7 +634,7 @@ export function CalendarScreen() {
                 {Math.round(scout.fatigue)}% fatigue
               </span>
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">
-                {maxSlots - slotsUsed} open day{maxSlots - slotsUsed === 1 ? "" : "s"}
+                {openDayCount} open day{openDayCount === 1 ? "" : "s"}
               </span>
             </div>
           </div>
@@ -655,8 +658,7 @@ export function CalendarScreen() {
               <Button
                 ref={advanceWeekButtonRef}
                 onClick={() => {
-                  const emptyCount = (gameState.schedule.activities ?? []).filter((a) => a === null).length;
-                  if (emptyCount > 0) {
+                  if (openDayCount > 0) {
                     setShowEmptyDayWarning(true);
                   } else {
                     playSFX("calendar-slide");
@@ -742,7 +744,7 @@ export function CalendarScreen() {
               <p className="mt-1 text-xs text-zinc-300" aria-live="polite">
                 {selectedActivity
                   ? `${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "Selected activity"}: choose a highlighted start day.`
-                  : `${maxSlots - slotsUsed} open day${maxSlots - slotsUsed === 1 ? "" : "s"}. Select one opportunity below to compare and place it.`}
+                  : `${openDayCount} open day${openDayCount === 1 ? "" : "s"}. Select one opportunity below to compare and place it.`}
               </p>
             </div>
             {selectedActivity && (
@@ -893,7 +895,7 @@ export function CalendarScreen() {
             resolveClubName={resolveClubName}
             highlightTargetId={pendingCalendarActivity?.targetId}
             selectedActivity={selectedActivity}
-            openDayCount={maxSlots - slotsUsed}
+            openDayCount={openDayCount}
             onSelectActivity={(activity) => {
               setSelectedActivity(activity);
             }}
@@ -1061,7 +1063,7 @@ export function CalendarScreen() {
 
         <details className="mb-4 rounded-xl border border-white/10 bg-[#11161c]/90">
           <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-            Detailed schedule and week context
+            Detailed week context
             <span className="text-xs font-normal text-zinc-400">Optional drill-down</span>
           </summary>
           <div className="border-t border-white/8 p-4">
@@ -1142,186 +1144,6 @@ export function CalendarScreen() {
           </div>
         </div>
 
-        {/* Responsive itinerary: agenda on phones, dense week grid on larger screens. */}
-        <section id="planner-itinerary-details" aria-labelledby="itinerary-details-heading">
-          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 id="itinerary-details-heading" className="text-lg font-semibold text-white">Week itinerary details</h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                {selectedActivity
-                  ? `Choose an open day for ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "the selected activity"}.`
-                  : "Select an opportunity below, then place it on an open day."}
-              </p>
-            </div>
-            {selectedActivity && (
-              <Button className="min-h-11 self-start" variant="outline" onClick={() => setSelectedActivity(null)}>
-                Clear selection
-              </Button>
-            )}
-          </div>
-
-          <div className="space-y-2 md:hidden">
-            {DAY_KEYS.map((dayKey, i) => {
-              const activity = activities[i];
-              const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
-              const Icon = display?.icon;
-              const canPlaceSelected = !!selectedActivity && canScheduleAt(selectedActivity, i);
-
-              return (
-                <div
-                  key={dayKey}
-                  className={`flex min-h-[76px] overflow-hidden rounded-xl border ${
-                    activity
-                      ? "border-emerald-400/25 bg-emerald-400/[0.06]"
-                      : canPlaceSelected
-                        ? "border-blue-400/35 bg-blue-400/[0.07]"
-                        : "border-white/10 bg-[#11161c]/90"
-                  }`}
-                >
-                  <div className="flex w-16 shrink-0 flex-col items-center justify-center border-r border-white/10 bg-black/20 px-2">
-                    <span className="text-xs font-bold uppercase tracking-[0.12em] text-zinc-200">{DAY_KEYS[i]}</span>
-                    <span className="mt-1 text-[10px] text-zinc-500">Day {i + 1}</span>
-                  </div>
-                  {activity && display && Icon ? (
-                    <div className="flex min-w-0 flex-1 items-center gap-3 p-3">
-                      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/25 ${display.color}`}>
-                        <Icon size={18} aria-hidden="true" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-semibold ${display.color}`}>{display.label}</p>
-                        <p className="mt-1 line-clamp-2 text-xs leading-4 text-zinc-300">{activity.description}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => unscheduleActivity(i)}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-zinc-400 transition hover:bg-red-500/10 hover:text-red-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                        aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
-                      >
-                        <X size={17} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleDaySlotClick(i)}
-                      disabled={!canPlaceSelected}
-                      aria-label={
-                        selectedActivity
-                          ? `Place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} on ${DAY_KEYS[i]}`
-                          : `${DAY_KEYS[i]} open day`
-                      }
-                      className={`min-h-11 min-w-0 flex-1 px-4 py-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
-                        canPlaceSelected ? "text-blue-100 hover:bg-blue-400/10" : "cursor-default text-zinc-500"
-                      }`}
-                    >
-                      <span className="block text-sm font-semibold">{canPlaceSelected ? "Place activity here" : "Open day"}</span>
-                      <span className="mt-1 block text-xs">{canPlaceSelected ? "Tap to commit this opportunity." : "Recovers a small amount of fatigue."}</span>
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="hidden grid-cols-7 gap-2 md:grid">
-          {DAY_KEYS.map((dayKey, i) => {
-            const activity = activities[i];
-            const display = activity ? ACTIVITY_DISPLAY[activity.type] : null;
-            const Icon = display?.icon;
-
-            // Determine the "active" activity for hover/drag preview
-            const anchorDay = hoverDay ?? dragOverDay;
-            const activeAct = selectedActivity ?? (dragOverDay != null ? selectedActivity : null);
-
-            // Slot highlighting for click-to-place and drag-and-drop
-            const isEmpty = !activity;
-            const isAnchor = anchorDay === i && isEmpty && activeAct && canScheduleAt(activeAct, i);
-            const isMultiSlotGhost = activeAct && anchorDay != null && isEmpty
-              && i > anchorDay && i < anchorDay + activeAct.slots
-              && canScheduleAt(activeAct, anchorDay);
-            const isInvalidDrop = activeAct && anchorDay === i && isEmpty && !canScheduleAt(activeAct, i);
-
-            // Also highlight when dragging (dragOverDay is independent of selectedActivity)
-            const isDragAnchor = dragOverDay === i && isEmpty;
-            const dragActivity = isDragAnchor ? activeAct : null;
-            // For drag, we need to check multi-slot even without selectedActivity
-            // since the dragged activity comes from dataTransfer (not available during dragOver)
-            // We'll highlight the anchor slot on dragOver; multi-slot ghost requires selectedActivity
-
-            const slotClass = activity
-              ? "border-emerald-500/30 bg-emerald-500/5"
-              : isAnchor || isDragAnchor
-                ? "border-blue-500/50 bg-blue-500/10 ring-1 ring-blue-500/30 cursor-pointer"
-                : isMultiSlotGhost
-                  ? "border-blue-500/30 bg-blue-500/5"
-                  : isInvalidDrop
-                    ? "border-red-500/30 bg-red-500/5"
-                    : selectedActivity && isEmpty
-                      ? "border-[#27272a] bg-[#141414] cursor-pointer hover:border-blue-500/30 hover:bg-blue-500/5"
-                      : "border-[#27272a] bg-[#141414]";
-
-            return (
-              <div key={dayKey} className="flex flex-col gap-1">
-                <p className="text-center text-xs font-semibold text-zinc-500">{t(`dayLabels.${dayKey}`)}</p>
-                <Tooltip content={selectedActivity ? `Click to place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} here` : "Drag or click an activity card, then place it here."} side="top">
-                <div
-                  className={`min-h-[80px] rounded-lg border p-2 transition ${slotClass}`}
-                  role={!activity ? "button" : undefined}
-                  tabIndex={!activity ? 0 : undefined}
-                  aria-label={!activity
-                    ? selectedActivity
-                      ? `Place ${ACTIVITY_DISPLAY[selectedActivity.type]?.label ?? "activity"} on ${DAY_KEYS[i]}`
-                      : `${DAY_KEYS[i]} open day`
-                    : undefined}
-                  onClick={() => handleDaySlotClick(i)}
-                  onKeyDown={(event) => {
-                    if (!activity && (event.key === "Enter" || event.key === " ")) {
-                      event.preventDefault();
-                      handleDaySlotClick(i);
-                    }
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
-                  onDragEnter={(e) => { e.preventDefault(); setDragOverDay(i); }}
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverDay(null);
-                  }}
-                  onDrop={(e) => handleDaySlotDrop(e, i)}
-                  onMouseEnter={() => { if (selectedActivity) setHoverDay(i); }}
-                  onMouseLeave={() => { if (selectedActivity) setHoverDay(null); }}
-                >
-                  {activity && display && Icon ? (
-                    <div className="relative flex h-full flex-col gap-1">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); unscheduleActivity(i); }}
-                        className="absolute right-0 top-0 text-zinc-600 hover:text-red-400 transition"
-                        aria-label={`Remove ${display.label} from ${t(`dayLabels.${dayKey}`)}`}
-                      >
-                        <X size={12} />
-                      </button>
-                      <Icon size={16} className={display.color} aria-hidden="true" />
-                      <p className={`text-xs font-medium leading-tight ${display.color}`}>
-                        {display.label}
-                      </p>
-                      {activity.description && (
-                        <p className="text-[10px] text-zinc-500 leading-tight line-clamp-2">
-                          {activity.description}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className={`text-center text-xs mt-2 ${isAnchor || isDragAnchor ? "text-blue-400" : "text-zinc-400"}`}>
-                      {isAnchor || isDragAnchor ? "Drop here" : "Empty"}
-                    </p>
-                  )}
-                </div>
-                </Tooltip>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Available activities — grouped by category, specialization-aware */}
-        </section>
           </div>
         </details>
         </div>
@@ -1344,7 +1166,7 @@ export function CalendarScreen() {
             <p id="empty-day-warning-description" className="mb-5 text-sm text-zinc-300">
               You have{" "}
               <span className="font-semibold text-amber-400">
-                {(gameState.schedule.activities ?? []).filter((a) => a === null).length}
+                {openDayCount}
               </span>{" "}
               unplanned day(s). Empty days recover a small amount of fatigue but
               scheduled activities earn XP and progress. Advance anyway?

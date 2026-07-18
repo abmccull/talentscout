@@ -43,6 +43,7 @@ import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability
 import type { EquipmentSlot } from "@/engine/finance";
 import { getSeasonPhase } from "@/engine/core/seasonEvents";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
+import { countOpenScheduleDays } from "@/engine/core/calendar";
 import { SeasonTimeline } from "./SeasonTimeline";
 import { InsightMeter } from "./InsightMeter";
 import { ConnectedScenarioProgressPanel } from "./ScenarioProgressPanel";
@@ -352,6 +353,8 @@ export function Dashboard() {
 
   const scheduleActivities = gameState.schedule.activities ?? [];
   const scheduledSlots = scheduleActivities.filter((activity) => activity !== null).length;
+  const openDayCount = countOpenScheduleDays(gameState.schedule);
+  const needsPlannerBeforeAdvance = openDayCount > 0;
   const plannedActivities: Array<{
     key: string;
     dayIndex: number;
@@ -443,8 +446,10 @@ export function Dashboard() {
         : {
             eyebrow: "Ready to simulate",
             title: "Your week has a purpose",
-            description: "Run the itinerary, collect what the week reveals, then turn those observations into a decision.",
-            label: "Advance week",
+            description: needsPlannerBeforeAdvance
+              ? "The week is not fully committed yet. Review the itinerary before you simulate so the tradeoffs are intentional."
+              : "Run the itinerary, collect what the week reveals, then turn those observations into a decision.",
+            label: needsPlannerBeforeAdvance ? "Finish in planner" : "Advance week",
             kind: "advance" as const,
           };
 
@@ -456,6 +461,10 @@ export function Dashboard() {
     if (youthDeskAction.kind === "prospect" && nextProspect) {
       selectPlayer(nextProspect.youth.player.id);
       setScreen("playerProfile");
+      return;
+    }
+    if (needsPlannerBeforeAdvance) {
+      setScreen("calendar");
       return;
     }
     requestWeekAdvance();
@@ -669,7 +678,7 @@ export function Dashboard() {
                     )}
                   </div>
                   <p className="mt-4 text-xs leading-5 text-zinc-400">
-                    Advancing resolves every scheduled activity. Unused days produce no evidence and cannot be recovered.
+                    Advancing resolves every scheduled activity. Open days recover some fatigue, but they also leave scouting opportunities unused.
                   </p>
                 </div>
 
@@ -992,7 +1001,9 @@ export function Dashboard() {
               <Calendar size={16} className="mr-2" aria-hidden="true" />
               Planner
             </Button>
-            <Button onClick={() => requestWeekAdvance()}>Advance Week</Button>
+            <Button onClick={() => (needsPlannerBeforeAdvance ? setScreen("calendar") : requestWeekAdvance())}>
+              {needsPlannerBeforeAdvance ? "Finish in Planner" : "Advance Week"}
+            </Button>
           </div>
         </div>
 

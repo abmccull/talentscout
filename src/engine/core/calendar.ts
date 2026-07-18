@@ -640,6 +640,12 @@ export function createWeekSchedule(week: number, season: number): WeekSchedule {
   };
 }
 
+export function countOpenScheduleDays(schedule: WeekSchedule | null | undefined): number {
+  if (!schedule) return TOTAL_WEEK_SLOTS;
+  const committedDays = (schedule.activities ?? []).filter(Boolean).length;
+  return Math.max(0, TOTAL_WEEK_SLOTS - committedDays);
+}
+
 /**
  * Check whether an activity can be added to the schedule at the given
  * day-slot index.

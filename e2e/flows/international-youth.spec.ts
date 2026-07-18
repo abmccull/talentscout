@@ -102,7 +102,8 @@ test.describe("Youth geography and travel", () => {
     const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });
     await expect(dossier).toContainText("Football coverage");
     await expect(dossier).toContainText("Scouting network");
-    await expect(dossier).toContainText("Knowledge");
+    await expect(dossier).toContainText("Regional knowledge");
+    await expect(dossier).toContainText("Operational presence");
     await expect(dossier).toContainText("38/100");
     await expect(dossier).toContainText("Nigeria National League");
     const dossierAxe = await new AxeBuilder({ page: gamePage.page })
@@ -315,10 +316,15 @@ test.describe("Youth geography and travel", () => {
     await expect(gamePage.page.getByText("Up to +2 rep")).toBeVisible();
     await gamePage.page.getByRole("button", { name: "Open on Map", exact: true }).click();
     await expect(gamePage.page.getByText(
-      "Full completion can earn up to +2 reputation; objectives are graded at return.",
+      "Choose a trip posture before you commit. Full completion can earn up to +2 reputation; objectives are graded at return.",
     )).toBeVisible();
     await gamePage.page.keyboard.press("Escape");
-    await gamePage.page.getByRole("button", { name: "Accept", exact: true }).click();
+    await gamePage.page.getByRole("button", { name: "Review trip", exact: true }).click();
+    const dossier = gamePage.page.getByRole("dialog", { name: "Brazil intel dossier" });
+    await expect(dossier).toBeVisible();
+    await expect(gamePage.page.getByTestId("active-international-objectives")).toHaveCount(0);
+    await expect(gamePage.page.getByText("Travel Booked!")).toHaveCount(0);
+    await dossier.getByRole("button", { name: "Commit trip", exact: true }).click();
 
     const activeObjectives = gamePage.page.getByTestId("active-international-objectives");
     await expect(activeObjectives).toContainText("Objective progress");

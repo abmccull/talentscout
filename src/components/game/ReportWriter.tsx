@@ -68,6 +68,7 @@ import {
   resolveReportWorkflow,
   type ReportWorkflowStep,
 } from "@/components/game/reportWriterMode";
+import { buildReportWriterStatus } from "@/components/game/reportWriterStatus";
 import {
   buildFormalAssessment,
   buildInitialAssessment,
@@ -984,31 +985,40 @@ export function ReportWriter() {
   };
 
   const isTablePound = !conciseOpeningMode && conviction === "tablePound";
-  const canSubmit = effectiveSummary.trim().length > 0
-    && observations.length > 0
-    && freshObservationIds.length > 0
-    && (
-      conciseOpeningMode
-        ? Boolean(initialAssessmentInput && initialAssessmentResult?.valid)
-        : (!isYouthCase || structuredValidation.valid)
-    );
+  const reportStatus = buildReportWriterStatus({
+    mode: conciseOpeningMode ? "opening" : isYouthCase ? "youth" : "general",
+    hasObservations: observations.length > 0,
+    hasFreshEvidence: freshObservationIds.length > 0,
+    hasSummary: effectiveSummary.trim().length > 0,
+    initialAssessmentReady: Boolean(initialAssessmentInput && initialAssessmentResult?.valid),
+    openingDecisionCount: initialAssessmentInput ? 1 : 5,
+    youthValidationErrors: structuredValidation.errors,
+  });
+  const canSubmit = reportStatus.canSubmit;
+  const observationsBlocker = reportStatus.blockers.find((blocker) => blocker.id === "observation-required");
+  const freshEvidenceBlocker = reportStatus.blockers.find((blocker) => blocker.id === "fresh-evidence-required");
   const sectionNavigatorItems: SectionNavigatorItem[] = (() => {
     if (conciseOpeningMode) {
+      const assessmentRemaining = reportStatus.countsByStep.assessment;
       return [
         {
           id: "assessment",
           targetId: "report-section-evidence",
           label: "Assessment",
-          detail: initialAssessmentResult?.valid
+          detail: canSubmit
             ? "Five decisions logged"
-            : "Complete the five evidence decisions",
-          complete: Boolean(initialAssessmentResult?.valid),
-          decisionsRemaining: initialAssessmentResult?.valid ? 0 : 5,
+            : reportStatus.primaryBlocker ?? "Complete the five evidence decisions",
+          complete: canSubmit,
+          decisionsRemaining: assessmentRemaining,
         },
       ];
     }
 
     if (isYouthCase) {
+      const briefRemaining = reportStatus.countsByStep.brief;
+      const caseRemaining = reportStatus.countsByStep.case;
+      const riskRemaining = reportStatus.countsByStep.risk;
+      const finalRemaining = reportStatus.countsByStep.final;
       return [
         {
           id: "brief",
@@ -1017,28 +1027,28 @@ export function ReportWriter() {
           detail: activeBrief
             ? `${activeBriefClub?.name ?? "Club"} selected`
             : "Select a matching academy brief",
-          complete: Boolean(activeBrief),
-          decisionsRemaining: activeBrief ? 0 : 1,
+          complete: briefRemaining === 0,
+          decisionsRemaining: briefRemaining,
         },
         {
           id: "case",
           targetId: "report-section-framing",
           label: "Build the case",
-          detail: `${completedJudgmentCount}/${JUDGMENT_CATEGORIES.length} defended`,
-          complete: completedJudgmentCount === JUDGMENT_CATEGORIES.length && estimatedWeeklyWage > 0,
-          decisionsRemaining:
-            JUDGMENT_CATEGORIES.length - completedJudgmentCount
-            + (estimatedWeeklyWage > 0 ? 0 : 1),
+          detail: caseRemaining === 0
+            ? `${completedJudgmentCount}/${JUDGMENT_CATEGORIES.length} defended`
+            : `${caseRemaining} decision${caseRemaining === 1 ? "" : "s"} still need support`,
+          complete: caseRemaining === 0,
+          decisionsRemaining: caseRemaining,
         },
         {
           id: "risk",
           targetId: "report-section-risks",
           label: "Risk",
-          detail: selectedRiskAssessments.length > 0
+          detail: riskRemaining === 0 && selectedRiskAssessments.length > 0
             ? `${riskSignalCount > 0 ? riskSignalCount : "No"} specific risk ${riskSignalCount === 1 ? "signal" : "signals"} logged`
-            : "Record a risk stance",
-          complete: selectedRiskAssessments.length > 0,
-          decisionsRemaining: selectedRiskAssessments.length > 0 ? 0 : 1,
+            : reportStatus.blockers.find((blocker) => blocker.stepId === "risk")?.message ?? "Record a risk stance",
+          complete: riskRemaining === 0,
+          decisionsRemaining: riskRemaining,
         },
         {
           id: "final",
@@ -1046,9 +1056,9 @@ export function ReportWriter() {
           label: "Final review",
           detail: canSubmit
             ? "Ready to file"
-            : `${structuredValidation.errors.length} issue${structuredValidation.errors.length === 1 ? "" : "s"} to resolve`,
+            : `${reportStatus.totalRemaining} issue${reportStatus.totalRemaining === 1 ? "" : "s"} to resolve`,
           complete: canSubmit,
-          decisionsRemaining: 0,
+          decisionsRemaining: finalRemaining,
         },
       ];
     }
@@ -1060,9 +1070,9 @@ export function ReportWriter() {
         label: "Final review",
         detail: privateNarrativeNote
           ? `${t(`convictions.${conviction}`)} conviction selected`
-          : "Add your private note and check conviction",
+          : reportStatus.primaryBlocker ?? "Add your private note and check conviction",
         complete: canSubmit,
-        decisionsRemaining: privateNarrativeNote ? 0 : 1,
+        decisionsRemaining: reportStatus.countsByStep.final,
       },
     ];
   })();
@@ -1781,11 +1791,11 @@ export function ReportWriter() {
                   </label>
                 </div>
 
-                {!conciseOpeningMode && !structuredValidation.valid && isWorkflowSectionActive("final") && (
+                {!conciseOpeningMode && reportStatus.blockers.length > 0 && isWorkflowSectionActive("final") && (
                   <div role="alert" className="rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
                     <p className="text-xs font-semibold text-amber-200">Complete the report before filing:</p>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/80">
-                      {structuredValidation.errors.map((error) => <li key={error}>{error}</li>)}
+                      {reportStatus.blockers.map((blocker) => <li key={blocker.id}>{blocker.message}</li>)}
                     </ul>
                   </div>
                 )}
@@ -1795,24 +1805,22 @@ export function ReportWriter() {
           </details>
         )}
 
-        {observations.length === 0 && (
+        {observationsBlocker && (
           <div role="alert" className="mb-6 flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-start gap-2 text-sm leading-5 text-red-200">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <span>{t("noObservations")} Return to the dossier and choose the context that can answer the open question.</span>
+              <span>{t("noObservations")} {observationsBlocker.message}</span>
             </p>
             <Button className="min-h-11 shrink-0" variant="outline" onClick={handleBack}>
               Plan observation
             </Button>
           </div>
         )}
-        {observations.length > 0 && previousReport && freshObservationIds.length === 0 && (
+        {freshEvidenceBlocker && previousReport && (
           <div role="status" className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4">
             <p className="flex items-start gap-2 text-sm leading-5 text-amber-200">
               <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-              This case already uses every available observation. Gather evidence in another match,
-              training visit, video review, or meaningful context before filing revision {(previousReport.revision ?? 1) + 1}.
-              Rewriting the same evidence does not earn reputation or performance credit.
+              {freshEvidenceBlocker.message} Rewriting the same evidence does not earn reputation or performance credit for revision {(previousReport.revision ?? 1) + 1}.
             </p>
           </div>
         )}
@@ -1867,9 +1875,7 @@ export function ReportWriter() {
                 <p className={`text-sm ${canSubmit ? "text-emerald-200" : "text-amber-200"}`} aria-live="polite">
                   {canSubmit
                     ? "Your evidence, uncertainty, next test, and confidence are ready to file."
-                    : initialAssessmentCards.length === 0
-                      ? "Return to the observation and save at least one cue."
-                      : "Complete the five assessment decisions to file this first read."}
+                    : reportStatus.primaryBlocker ?? "Complete the five assessment decisions to file this first read."}
                 </p>
                 <Button className="min-h-11" variant="outline" onClick={handleBack}>
                   {tc("cancel")}
@@ -1968,7 +1974,9 @@ export function ReportWriter() {
                       <p className="mt-1 text-sm text-zinc-300">How much reputation belongs behind this call?</p>
                     </div>
                     <span className={`text-xs font-semibold ${canSubmit ? "text-emerald-300" : "text-amber-300"}`}>
-                      {canSubmit ? "Ready to file" : "Needs judgment"}
+                      {canSubmit
+                        ? "Ready to file"
+                        : `${reportStatus.totalRemaining} issue${reportStatus.totalRemaining === 1 ? "" : "s"} to resolve`}
                     </span>
                   </div>
                   <fieldset>

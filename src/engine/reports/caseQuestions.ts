@@ -19,7 +19,10 @@ import {
   type ObservationObjectiveFamily,
 } from "@/engine/observation/objectives";
 import { deriveProfessionalCaseAccountability } from "@/engine/reports/caseAccountability";
-import { buildScoutingCaseDepth } from "@/engine/reports/scoutingCases";
+import {
+  buildScoutingCaseDepth,
+  selectObservationsForScoutingCase,
+} from "@/engine/reports/scoutingCases";
 
 export interface CaseContextRecommendation {
   context: ObservationContext;
@@ -94,29 +97,6 @@ function compareByDecisionDate(
 
 function unique<T>(values: readonly T[]): T[] {
   return [...new Set(values)];
-}
-
-function observationRecordsForCase(
-  state: CaseState,
-  scoutingCase: ScoutingCase,
-  reports: ScoutReport[],
-): Observation[] {
-  const evidenceObservationIds = new Set(
-    reports.flatMap((report) => report.evidenceObservationIds ?? []),
-  );
-  return Object.values(state.observations)
-    .filter((observation) =>
-      observation.playerId === scoutingCase.playerId
-      && (
-        evidenceObservationIds.size === 0
-        || evidenceObservationIds.has(observation.id)
-      ),
-    )
-    .sort((left, right) =>
-      left.season - right.season
-      || left.week - right.week
-      || left.id.localeCompare(right.id),
-    );
 }
 
 function latestReportForCase(
@@ -206,6 +186,44 @@ function defaultQuestionIdForFamily(
     case "upside":
       return "projection";
   }
+}
+
+const QUESTION_FAMILY_COMPATIBILITY: Record<ScoutingQuestionId, ObservationObjectiveFamily[]> = {
+  execution: ["role", "readiness"],
+  decisions: ["role", "readiness"],
+  movement: ["role"],
+  pressure: ["personality", "pathway", "readiness"],
+  repeatability: ["readiness"],
+  projection: ["upside", "pathway"],
+};
+
+function isQuestionIdCompatibleWithFamily(
+  questionId: ScoutingQuestionId | undefined,
+  family: ObservationObjectiveFamily,
+): questionId is ScoutingQuestionId {
+  return Boolean(questionId && QUESTION_FAMILY_COMPATIBILITY[questionId]?.includes(family));
+}
+
+function resolveQuestionIdForFamily(
+  family: ObservationObjectiveFamily,
+  depth: ReturnType<typeof buildScoutingCaseDepth>,
+  report?: ScoutReport,
+): ScoutingQuestionId {
+  const reportQuestionId = report?.evidenceAssessment?.nextTest.questionId
+    ?? report?.evidenceAssessment?.questionId;
+  if (isQuestionIdCompatibleWithFamily(reportQuestionId, family)) {
+    return reportQuestionId;
+  }
+
+  const historicalQuestionId = [...(depth?.questionHistory ?? [])]
+    .reverse()
+    .map((question) => question.questionId)
+    .find((questionId) => isQuestionIdCompatibleWithFamily(questionId, family));
+  if (historicalQuestionId) {
+    return historicalQuestionId;
+  }
+
+  return defaultQuestionIdForFamily(family);
 }
 
 function reportUncertaintyText(report: ScoutReport | undefined): string | undefined {
@@ -341,7 +359,7 @@ export function deriveScoutingCaseQuestions(
   const reports = Object.values(state.reports).filter((candidate) =>
     candidate.caseId === caseId || scoutingCase.reportIds.includes(candidate.id),
   );
-  const observations = observationRecordsForCase(state, scoutingCase, reports);
+  const observations = selectObservationsForScoutingCase(state, scoutingCase);
   const contexts = observations.map((observation) => observation.context);
   const activeQuestions: CaseQuestion[] = [];
   const callbacks: CaseCallback[] = [];
@@ -355,7 +373,6 @@ export function deriveScoutingCaseQuestions(
     preferredRole: report?.projectedRole ?? linkedBrief?.preferredRole,
   };
   const openHypotheses = unresolvedHypothesesForCase(state, scoutingCase);
-  const historyQuestionId = depth.questionHistory.find((question) => question.questionId)?.questionId;
 
   if (observations.length < 2) {
     activeQuestions.push(
@@ -365,7 +382,7 @@ export function deriveScoutingCaseQuestions(
         "Which second context would tell you whether the first impression was representative?",
         "The case is still leaning heavily on one independent environment.",
         "Another context is needed before the confidence level should rise much further.",
-        historyQuestionId ?? defaultQuestionIdForFamily("upside"),
+        resolveQuestionIdForFamily("upside", depth, report),
         observations,
         caseLens,
       ),
@@ -383,7 +400,7 @@ export function deriveScoutingCaseQuestions(
           : `What new evidence would answer the club's remaining ${decision.requestedEvidenceCategory} doubt?`,
         "A club explicitly kept the case alive rather than closing it.",
         decision.reasons?.[0] ?? "The next recommendation still needs one category of evidence the club can act on.",
-        historyQuestionId ?? defaultQuestionIdForFamily(decisionFamily),
+        resolveQuestionIdForFamily(decisionFamily, depth, report),
         observations,
         caseLens,
       ),
@@ -407,7 +424,7 @@ export function deriveScoutingCaseQuestions(
         hypothesis.evidence?.length
           ? `Current evidence remains ${hypothesis.state}; another independent test is still needed.`
           : "You preserved the question, but you still do not have enough evidence to settle it.",
-        defaultQuestionIdForFamily(family),
+        resolveQuestionIdForFamily(family, depth, report),
         observations,
         caseLens,
         deriveObservationObjectiveTargetDomains(family),
@@ -425,7 +442,7 @@ export function deriveScoutingCaseQuestions(
         uncertainty || "What would have to change for the current report to be wrong?",
         "The latest report still names a meaningful uncertainty.",
         report?.riskFactors?.[0] ?? "The report carries a stated risk that has not yet been cleared by a new context.",
-        historyQuestionId ?? defaultQuestionIdForFamily(riskFamily),
+        resolveQuestionIdForFamily(riskFamily, depth, report),
         observations,
         caseLens,
       ),

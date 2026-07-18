@@ -541,12 +541,13 @@ export class GamePage {
       if (!await convictionRadio.isChecked()) {
         await convictionRadio.click();
       }
-      await expect(
-        this.page.getByRole("button", { name: /^Submit Report$/ }),
-        "Structured report should be valid at final review",
-      ).toBeEnabled();
       if (shouldSubmit) {
-        await this.page.getByRole("button", { name: /^Submit Report$/ }).click();
+        const submitButton = this.page.getByRole("button", { name: /^Submit Report$/ });
+        await expect(
+          submitButton,
+          "Structured report should be valid at final review",
+        ).toBeEnabled();
+        await submitButton.click();
       }
       return;
     }

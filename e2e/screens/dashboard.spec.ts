@@ -84,6 +84,15 @@ test.describe("Dashboard Screen", () => {
       ).toBeVisible();
     });
 
+    test("desk routes incomplete weeks back to Planner instead of bypassing the empty-day safeguard", async ({ gamePage }) => {
+      const finishButton = gamePage.page.getByRole("button", { name: "Finish in planner" });
+      await expect(finishButton).toBeVisible();
+
+      await finishButton.click();
+      await expect(gamePage.page.getByRole("heading", { name: "Planner" })).toBeVisible();
+      await expect(gamePage.page.locator('[data-tutorial-id="calendar-grid"]')).toBeVisible();
+    });
+
     test("dashboard shows scout name in sidebar", async ({ gamePage }) => {
       // The sidebar footer shows "FirstName LastName" under Scout section
       const sidebarText = await gamePage.page.innerText("aside");

@@ -3,6 +3,7 @@ import type {
   ClubDecisionOutcome,
   GameState,
   MarketplaceBid,
+  Observation,
   PlacementReport,
   ProfessionalCaseContext,
   ReportDelivery,
@@ -256,6 +257,28 @@ function isOnOrAfterCase(
     || (season === scoutingCase.openedSeason && week >= scoutingCase.openedWeek);
 }
 
+export function selectObservationsForScoutingCase(
+  state: Pick<GameState, "observations">,
+  scoutingCase: ScoutingCase,
+  providedIndex?: ScoutingCaseDepthIndex,
+): Observation[] {
+  const observations = providedIndex
+    ? providedIndex.observationsByPlayerId.get(scoutingCase.playerId) ?? []
+    : Object.values(state.observations).filter(
+        (observation) => observation.playerId === scoutingCase.playerId,
+      );
+  return observations
+    .filter((observation) =>
+      observation.playerId === scoutingCase.playerId
+      && isOnOrAfterCase(observation.week, observation.season, scoutingCase),
+    )
+    .sort((left, right) =>
+      left.season - right.season
+      || left.week - right.week
+      || left.id.localeCompare(right.id),
+    );
+}
+
 function reportsForCase(
   state: GameState,
   scoutingCase: ScoutingCase,
@@ -493,10 +516,7 @@ export function buildScoutingCaseDepth(
   const index = providedIndex ?? buildScoutingCaseDepthIndex(state);
   const reports = reportsForCase(state, scoutingCase, index);
   const questions = deriveQuestions(scoutingCase, reports);
-  const observations = (index.observationsByPlayerId.get(scoutingCase.playerId) ?? []).filter((observation) =>
-    observation.playerId === scoutingCase.playerId
-    && isOnOrAfterCase(observation.week, observation.season, scoutingCase),
-  );
+  const observations = selectObservationsForScoutingCase(state, scoutingCase, index);
   const comparisons = buildFollowUpObservationComparisons(
     observations,
     scoutingCase.playerId,
