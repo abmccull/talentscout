@@ -13,6 +13,19 @@ import {
 import type { AgencyDilemmaContext } from "./types";
 import { createNamedRNG } from "@/engine/run";
 
+function relationshipRevenueConcentration(state: GameState): number {
+  const finances = state.finances;
+  if (!finances) return 0;
+  const clients = sortedByRevenue(activeClients(finances));
+  if (clients.length < 2) return 0;
+  const totalRevenue = clients.reduce(
+    (sum, client) => sum + Math.max(0, client.totalRevenue ?? 0),
+    0,
+  );
+  if (totalRevenue <= 0) return 0;
+  return Math.max(0, clients[0]?.totalRevenue ?? 0) / totalRevenue;
+}
+
 function hasResolvedCapitalCrossroads(state: GameState): boolean {
   const currentDecisions = Object.values(state.consequenceState.decisions).some((decision) =>
     decision.source.kind === "agencyDilemma"
@@ -39,14 +52,19 @@ function resolveConcentrationContext(state: GameState): AgencyDilemmaContext | u
   const clients = sortedByRevenue(activeClients(finances));
   if (clients.length < 2) return undefined;
   const pressure = deriveAgencyStrategicPressure(finances, state.scout);
-  if (pressure.clientConcentration < 0.58) return undefined;
+  const relationshipConcentration = relationshipRevenueConcentration(state);
+  const effectiveConcentration = Math.max(
+    pressure.clientConcentration,
+    relationshipConcentration,
+  );
+  if (effectiveConcentration < 0.58) return undefined;
   const anchor = clients[0];
   const alternatives = clients.slice(1).map((client) => client.clubId);
   return {
     id: "clientConcentration",
     title: "One client is starting to own the agency",
     premise: `${state.clubs[anchor.clubId]?.name ?? anchor.clubId} now represents too much of your monthly security. You can lean into the account, rebalance the book, or deliberately step away before one client owns your judgment.`,
-    pressureScore: Math.round(pressure.clientConcentration * 100),
+    pressureScore: Math.round(effectiveConcentration * 100),
     semanticSignature: "agency:client-concentration",
     anchorClientId: anchor.clubId,
     alternateClientIds: alternatives,

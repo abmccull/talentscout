@@ -118,11 +118,14 @@ export function getObservationIndependenceKey(observation: Observation): string 
 
 function domainsActuallyObserved(observation: Observation): Set<AttributeDomain> {
   const domains = new Set<AttributeDomain>();
-  for (const reading of observation.attributeReadings) {
+  // Older saves and deliberately sparse historical fixtures can predate the
+  // structured evidence arrays. Treat those records as observations with no
+  // domain-level evidence rather than making every downstream case view fail.
+  for (const reading of observation.attributeReadings ?? []) {
     const domain = ATTRIBUTE_DOMAINS[reading.attribute];
     if (domain) domains.add(domain);
   }
-  for (const moment of observation.flaggedMoments) {
+  for (const moment of observation.flaggedMoments ?? []) {
     const domain = ATTRIBUTE_DOMAINS[moment.attribute];
     if (domain) domains.add(domain);
   }
@@ -402,9 +405,10 @@ function deriveContextChanges(
 }
 
 function averageReadingConfidence(observation: Observation): number {
-  if (observation.attributeReadings.length === 0) return 0;
-  return observation.attributeReadings.reduce((sum, reading) => sum + reading.confidence, 0)
-    / observation.attributeReadings.length;
+  const readings = observation.attributeReadings ?? [];
+  if (readings.length === 0) return 0;
+  return readings.reduce((sum, reading) => sum + reading.confidence, 0)
+    / readings.length;
 }
 
 /**
@@ -419,9 +423,9 @@ export function compareObservationEvidence(
     throw new RangeError("Observation comparisons require the same player.");
   }
   const firstByAttribute = new Map(
-    first.attributeReadings.map((reading) => [reading.attribute, reading]),
+    (first.attributeReadings ?? []).map((reading) => [reading.attribute, reading]),
   );
-  const shared = second.attributeReadings.flatMap((reading) => {
+  const shared = (second.attributeReadings ?? []).flatMap((reading) => {
     const prior = firstByAttribute.get(reading.attribute);
     return prior ? [{ first: prior, second: reading }] : [];
   });

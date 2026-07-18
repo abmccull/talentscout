@@ -427,7 +427,10 @@ function rivalMarketContext(
 ): RegionalTerritorialContext["rivalMarket"] {
   const trackedPlayerIds = [...new Set(Object.values(state.rivalScouts ?? {}).flatMap((rival) => [
     ...(rival.currentTarget ? [rival.currentTarget] : []),
-    ...rival.targetPlayerIds,
+    // Rival shortlists were added after the original save format. Sparse
+    // historical rivals still contribute their current target without making
+    // territory and quiet-week views unreadable.
+    ...(rival.targetPlayerIds ?? []),
   ]))];
   const snapshots = trackedPlayerIds
     .filter((playerId) => getPlayerScoutingCountry(state, playerId) === countryId)
