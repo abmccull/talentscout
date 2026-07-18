@@ -146,7 +146,10 @@ test.describe("Report Writing", () => {
 
     expect(latestReport).not.toBeNull();
     expect(latestReport.conviction).toBe("recommend");
-    expect((latestReport.attributeAssessments ?? []).length).toBeGreaterThan(0);
+    expect(Object.keys(latestReport.categoryVerdicts ?? {})).toEqual(
+      expect.arrayContaining(["potential", "roleFit", "characterRisk"]),
+    );
+    expect((latestReport.evidenceAssessment?.evidenceIds ?? []).length).toBeGreaterThan(0);
     expect(Array.isArray(latestReport.strengths)).toBe(true);
     expect(Array.isArray(latestReport.weaknesses)).toBe(true);
     await expect(gamePage.page.getByText("Recommend", { exact: true }).last()).toBeVisible();
@@ -173,7 +176,9 @@ test.describe("Report Writing", () => {
       gamePage.page.getByText(/^1 decision remaining$/),
     ).toBeVisible();
     await expect(
-      gamePage.page.getByText(/Gather fresh evidence in another match, training visit, video review, or meaningful context before filing this revision\./),
+      gamePage.page.getByRole("status").filter({
+        hasText: /Gather fresh evidence in another match, training visit, video review, or meaningful context before filing this revision\./,
+      }),
     ).toBeVisible();
     await expect(
       gamePage.page.getByRole("button", { name: /^File revision 2$/ }),

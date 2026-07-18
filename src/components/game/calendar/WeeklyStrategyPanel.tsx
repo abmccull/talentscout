@@ -29,9 +29,9 @@ export function WeeklyStrategyPanel({
 
   return (
     <WorkspaceDisclosure
-      title="Desk policy"
+      title="Change desk policy"
       eyebrow="Advanced weekly controls"
-      description="Strategic intent and delegation policy persist until you change them, so they stay out of the way unless you need to revise them."
+      description="Change how your desk prioritizes work and handles missed calls. These standing orders persist until you revise them."
       icon={<Compass size={16} className="text-violet-300" aria-hidden="true" />}
       summary={
         <div className="space-y-0.5">

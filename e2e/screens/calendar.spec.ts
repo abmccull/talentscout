@@ -53,7 +53,7 @@ test.describe("Calendar Screen", () => {
 
     await policyControl.focus();
     await gamePage.page.keyboard.press("Enter");
-    await expect(policyPanel.locator("details")).toHaveAttribute("open", "");
+    await expect(policyPanel).toHaveAttribute("open", "");
     await expect(policyPanel.getByRole("radio", { name: /Chase an edge/i })).toBeVisible();
   });
 

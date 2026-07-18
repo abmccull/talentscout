@@ -85,7 +85,9 @@ test.describe("Dashboard Screen", () => {
     });
 
     test("desk routes incomplete weeks back to Planner instead of bypassing the empty-day safeguard", async ({ gamePage }) => {
-      const finishButton = gamePage.page.getByRole("button", { name: "Finish in planner" });
+      await gamePage.scheduleActivityByType("study", 0);
+
+      const finishButton = gamePage.page.getByRole("button", { name: /Finish in planner/i }).first();
       await expect(finishButton).toBeVisible();
 
       await finishButton.click();
