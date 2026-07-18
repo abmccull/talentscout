@@ -75,7 +75,10 @@ test.describe("Canonical weekly advancement", () => {
       },
     });
     await gamePage.navigateTo("calendar");
-    await gamePage.page.getByTestId("weekly-strategy-panel").locator("summary").click();
+    await gamePage.page
+      .getByTestId("weekly-strategy-panel")
+      .locator(":scope > summary")
+      .click();
     const speculativeIntent = gamePage.page.getByRole("radio", { name: /Chase an edge/i });
     const relationshipPolicy = gamePage.page.getByRole("radio", { name: /Protect relationships/i });
     await speculativeIntent.click();

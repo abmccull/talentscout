@@ -192,7 +192,7 @@ describe("career role depth", () => {
       title: "Boutique Youth Agency Principal",
       authorityLevel: "owner",
     });
-    expect(agency.authorities.join(" ")).toContain("operating posture");
+    expect(agency.authorities.join(" ")).toContain("operating policy");
     expect(agency.failureModes.map((mode) => mode.id)).toEqual(
       expect.arrayContaining(["clientConcentration", "qualityDebt"]),
     );

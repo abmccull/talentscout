@@ -42,6 +42,7 @@ import {
   calculateSigningBonus,
   getContextualEquipmentBonuses,
   applyBalanceTransaction,
+  reconcileAgencyDilemmaDecisions,
 } from "@/engine/finance";
 import {
   bookTravel,
@@ -93,6 +94,7 @@ import {
   ensureInternationalAssignmentLiaison,
 } from "@/engine/world/internationalDeliverables";
 import { normalizeCountryKey } from "@/lib/country";
+import { reconcileRivalCampaignDecisions } from "./weeklyRivalCampaigns";
 
 function consequenceFailureMessages(
   state: GameState,
@@ -1047,6 +1049,12 @@ export function createProgressionActions(get: GetState, set: SetState) {
             seasonLength,
           }),
         };
+      }
+      if (decision.source.kind === "agencyDilemma") {
+        projected = reconcileAgencyDilemmaDecisions(projected, now);
+      }
+      if (decision.source.kind === "rivalCampaign") {
+        projected = reconcileRivalCampaignDecisions(projected, now);
       }
       set({
         gameState: {

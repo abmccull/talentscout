@@ -870,6 +870,36 @@ export function CalendarScreen() {
           )}
         </section>
 
+        <section data-tutorial-id="calendar-activities" aria-labelledby="planner-opportunity-heading">
+          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 id="planner-opportunity-heading" className="text-base font-semibold text-white">
+                Available opportunities
+              </h2>
+              <p className="text-sm leading-6 text-zinc-400">
+                Compare live opportunities against fatigue, travel room, and your existing commitments before filling the week.
+              </p>
+            </div>
+          </div>
+          <ActivityPanel
+            activities={engineActivities}
+            specialization={scout.primarySpecialization}
+            canScheduleAt={canScheduleAt}
+            onSchedule={handleSchedule}
+            leagueFilter={selectedLeagueId}
+            allLeagues={allLeagues}
+            fixtureLeagueById={fixtureLeagueById}
+            onLeagueFilterChange={setSelectedLeagueId}
+            resolveClubName={resolveClubName}
+            highlightTargetId={pendingCalendarActivity?.targetId}
+            selectedActivity={selectedActivity}
+            openDayCount={maxSlots - slotsUsed}
+            onSelectActivity={(activity) => {
+              setSelectedActivity(activity);
+            }}
+          />
+        </section>
+
         <WeeklyStrategyPanel
           strategy={weeklyStrategy}
           onSelectIntent={setWeeklyIntent}
@@ -1294,25 +1324,6 @@ export function CalendarScreen() {
         </section>
           </div>
         </details>
-        <div data-tutorial-id="calendar-activities">
-        <ActivityPanel
-          activities={engineActivities}
-          specialization={scout.primarySpecialization}
-          canScheduleAt={canScheduleAt}
-          onSchedule={handleSchedule}
-          leagueFilter={selectedLeagueId}
-          allLeagues={allLeagues}
-          fixtureLeagueById={fixtureLeagueById}
-          onLeagueFilterChange={setSelectedLeagueId}
-          resolveClubName={resolveClubName}
-          highlightTargetId={pendingCalendarActivity?.targetId}
-          selectedActivity={selectedActivity}
-          openDayCount={maxSlots - slotsUsed}
-          onSelectActivity={(activity) => {
-            setSelectedActivity(activity);
-          }}
-        />
-        </div>
         </div>
       </div>
       {/* Empty-day warning dialog */}

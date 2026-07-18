@@ -22,13 +22,13 @@ import {
 } from "./employeeEconomics";
 import { calculateAgencyHealth } from "./dashboard";
 import {
-  AGENCY_STRATEGIC_POSTURES,
   getAgencyClientConcentration,
-  getAgencyStrategicPosture,
-  getAgencyStrategicPostureRecordForWeek,
-  getRecordedAgencyStrategicPosture,
-  type AgencyStrategicPosture,
 } from "./agencyCapacity";
+import {
+  getAgencyOperatingPolicyDefinition,
+  normalizeAgencyStrategyState,
+  type AgencyOperatingPolicy,
+} from "./agencyStrategyState";
 
 export type AgencyStrategicHealthStatus =
   | "resilient"
@@ -47,7 +47,7 @@ export type AgencyStrategicFailureMode =
 export interface AgencyStrategicHealth {
   score: number;
   status: AgencyStrategicHealthStatus;
-  posture: AgencyStrategicPosture;
+  policy: AgencyOperatingPolicy;
   runwayMonths: number | null;
   cashRunwayRisk: number;
   activeClientCount: number;
@@ -62,23 +62,9 @@ export interface AgencyStrategicHealth {
   pressurePoints: string[];
   strengths: string[];
   failureModes: AgencyStrategicFailureMode[];
-  recommendedPosture: AgencyStrategicPosture;
+  recommendedPolicy: AgencyOperatingPolicy;
   seniorAgencyReady: boolean;
   promotionBlockers: string[];
-}
-
-export type AgencyStrategicPostureChangeBlocker =
-  | "notAgencyCareer"
-  | "weeklyChoiceLocked";
-
-export interface AgencyStrategicPostureChangeAssessment {
-  allowed: boolean;
-  requestedPosture: AgencyStrategicPosture;
-  currentPosture: AgencyStrategicPosture;
-  selectedThisWeek?: AgencyStrategicPosture;
-  lockedForWeek: boolean;
-  blocker?: AgencyStrategicPostureChangeBlocker;
-  reason: string;
 }
 
 function clamp(value: number, minimum = 0, maximum = 100): number {
@@ -136,7 +122,7 @@ function deriveQualityDebt(
   finances: FinancialRecord,
   rawCapacity: number,
   committedWork: number,
-  posture: AgencyStrategicPosture,
+  policy: AgencyOperatingPolicy,
 ): number {
   const activeEmployees = finances.employees.filter((employee) => !employee.onLeave);
   const rawUtilization = rawCapacity > 0 ? committedWork / rawCapacity : committedWork > 0 ? 2 : 0;
@@ -148,7 +134,7 @@ function deriveQualityDebt(
     75,
   );
   const peopleRisk = 100 - peopleConfidence;
-  const awaitingReview = finances.staffWorkProducts.filter(
+  const awaitingReview = (finances.staffWorkProducts ?? []).filter(
     (product) => product.status === "awaitingReview",
   );
   const reviewDebtRisk = rawCapacity > 0
@@ -158,7 +144,7 @@ function deriveQualityDebt(
     (total, product) => total + Math.max(0, product.reviewDebtPenalty ?? 0),
     0,
   );
-  const activeRetainers = finances.retainerContracts.filter(
+  const activeRetainers = (finances.retainerContracts ?? []).filter(
     (contract) => contract.status === "active" || contract.status === "suspended",
   );
   const missedPeriods = activeRetainers.reduce(
@@ -174,8 +160,9 @@ function deriveQualityDebt(
     + reviewDebtRisk * 0.15
     + deliveryRisk * 0.1
     + Math.min(15, explicitReviewDebt);
+  const policyDefinition = getAgencyOperatingPolicyDefinition(policy);
   return Math.round(clamp(
-    baseDebt + AGENCY_STRATEGIC_POSTURES[posture].qualityDebtAdjustment,
+    baseDebt + policyDefinition.qualityDebtAdjustment,
   ));
 }
 
@@ -186,18 +173,18 @@ function recommendPosture(input: {
   reputationExposure: number;
   activeClientCount: number;
   rawUtilization: number;
-}): AgencyStrategicPosture {
-  if (input.cashRunwayRisk >= 55) return "cashDefense";
-  if (input.qualityDebt >= 55 || input.reputationExposure >= 70) return "qualityFirst";
+}): AgencyOperatingPolicy {
+  if (input.cashRunwayRisk >= 55) return "runwayDefense";
+  if (input.qualityDebt >= 55 || input.reputationExposure >= 70) return "qualityDiscipline";
   if (input.activeClientCount > 0 && input.clientConcentrationRisk >= 55) {
-    return "diversifyClients";
+    return "clientDiversification";
   }
   if (
     input.activeClientCount >= 2
     && input.rawUtilization <= 0.7
     && input.reputationExposure <= 35
-  ) return "controlledGrowth";
-  return "balanced";
+  ) return "marketExpansion";
+  return "balancedBook";
 }
 
 /**
@@ -209,7 +196,8 @@ export function deriveAgencyStrategicHealth(
   scout: Scout,
 ): AgencyStrategicHealth {
   const operatingHealth = calculateAgencyHealth(finances, scout);
-  const posture = operatingHealth.capacity.posture;
+  const policy = operatingHealth.capacity.policy;
+  const policyDefinition = getAgencyOperatingPolicyDefinition(policy);
   const concentration = getAgencyClientConcentration(finances);
   const cashRunwayRisk = runwayRisk(operatingHealth.runwayMonths);
   const clientConcentrationRisk = concentrationRisk(
@@ -220,7 +208,7 @@ export function deriveAgencyStrategicHealth(
     finances,
     operatingHealth.capacity.rawMonthlyReportCapacity,
     operatingHealth.capacity.committedReportWork,
-    posture,
+    policy,
   );
   const activeClientIds = new Set(Object.keys(concentration.valueByClient));
   const activeRelationships = finances.clientRelationships.filter(
@@ -240,7 +228,7 @@ export function deriveAgencyStrategicHealth(
       + clientConcentrationRisk * 0.25
       + satisfactionRisk * 0.2
       + failureRisk * 0.1
-      + AGENCY_STRATEGIC_POSTURES[posture].reputationExposureAdjustment,
+      + policyDefinition.reputationExposureAdjustment,
   ));
   const pipelineRisk = concentration.activeClientCount === 0 ? 65 : 0;
   const totalRisk = cashRunwayRisk * 0.3
@@ -314,7 +302,7 @@ export function deriveAgencyStrategicHealth(
   return {
     score,
     status,
-    posture,
+    policy,
     runwayMonths: operatingHealth.runwayMonths,
     cashRunwayRisk,
     activeClientCount: concentration.activeClientCount,
@@ -329,7 +317,7 @@ export function deriveAgencyStrategicHealth(
     pressurePoints,
     strengths,
     failureModes: [...new Set(failureModes)],
-    recommendedPosture: recommendPosture({
+    recommendedPolicy: recommendPosture({
       cashRunwayRisk,
       clientConcentrationRisk,
       qualityDebt,
@@ -339,95 +327,6 @@ export function deriveAgencyStrategicHealth(
     }),
     seniorAgencyReady: promotionBlockers.length === 0,
     promotionBlockers,
-  };
-}
-
-/**
- * Agency posture is a weekly strategic commitment, not a free toggle. Callers
- * can use this assessment to disable the choice after the first decision and
- * explain which posture is locked in until the next game week.
- */
-export function assessAgencyStrategicPostureChange(
-  finances: FinancialRecord,
-  scout: Scout,
-  requestedPosture: AgencyStrategicPosture,
-  week: number,
-  season: number,
-): AgencyStrategicPostureChangeAssessment {
-  const currentPosture = getAgencyStrategicPosture(finances);
-  if (!isAgencyCareer(scout, finances)) {
-    return {
-      allowed: false,
-      requestedPosture,
-      currentPosture,
-      lockedForWeek: false,
-      blocker: "notAgencyCareer",
-      reason: "Strategic postures unlock when the independent career becomes an agency at tier 3.",
-    };
-  }
-
-  const weeklyRecord = getAgencyStrategicPostureRecordForWeek(
-    finances,
-    week,
-    season,
-  );
-  if (weeklyRecord) {
-    return {
-      allowed: false,
-      requestedPosture,
-      currentPosture,
-      selectedThisWeek: weeklyRecord.posture,
-      lockedForWeek: true,
-      blocker: "weeklyChoiceLocked",
-      reason: weeklyRecord.posture === requestedPosture
-        ? `${AGENCY_STRATEGIC_POSTURES[weeklyRecord.posture].label} is already locked in for this week.`
-        : `${AGENCY_STRATEGIC_POSTURES[weeklyRecord.posture].label} is locked in until next week.`,
-    };
-  }
-
-  return {
-    allowed: true,
-    requestedPosture,
-    currentPosture,
-    lockedForWeek: false,
-    reason: `${AGENCY_STRATEGIC_POSTURES[requestedPosture].label} can be committed for this week.`,
-  };
-}
-
-/**
- * Persist strategy in the existing financial decision ledger. This survives
- * save/load without adding another mutable field or migration branch.
- */
-export function setAgencyStrategicPosture(
-  finances: FinancialRecord,
-  scout: Scout,
-  posture: AgencyStrategicPosture,
-  week: number,
-  season: number,
-): FinancialRecord | null {
-  const assessment = assessAgencyStrategicPostureChange(
-    finances,
-    scout,
-    posture,
-    week,
-    season,
-  );
-  if (assessment.blocker === "notAgencyCareer") return null;
-  if (!assessment.allowed) return finances;
-  const referenceId = `agency-posture:${posture}:s${season}w${week}`;
-  const previousPosture = getRecordedAgencyStrategicPosture(finances) ?? "balanced";
-  return {
-    ...finances,
-    transactions: [
-      ...finances.transactions,
-      {
-        week,
-        season,
-        amount: 0,
-        description: `Agency strategy: ${AGENCY_STRATEGIC_POSTURES[posture].label} (from ${AGENCY_STRATEGIC_POSTURES[previousPosture].label})`,
-        referenceId,
-      },
-    ],
   };
 }
 
@@ -460,10 +359,13 @@ export function upgradeOffice(
 
   // Cash defence is a real operating constraint: the player can reduce fixed
   // costs, but cannot quietly add them while that posture is active.
-  if (
-    getAgencyStrategicPosture(finances) === "cashDefense"
-    && newOffice.monthlyCost > finances.office.monthlyCost
-  ) return null;
+  const currentPolicy = normalizeAgencyStrategyState(finances.agencyStrategyState)?.policy;
+  const currentPolicyDefinition = currentPolicy
+    ? getAgencyOperatingPolicyDefinition(currentPolicy)
+    : undefined;
+  if (currentPolicyDefinition?.blocksFixedCostGrowth && newOffice.monthlyCost > finances.office.monthlyCost) {
+    return null;
+  }
 
   if (finances.balance < newOffice.monthlyCost) return null;
 
@@ -513,7 +415,8 @@ export function hireEmployee(
 ): FinancialRecord | null {
   // Check office capacity
   if (finances.employees.length >= finances.office.maxEmployees) return null;
-  if (getAgencyStrategicPosture(finances) === "cashDefense") return null;
+  const currentPolicy = normalizeAgencyStrategyState(finances.agencyStrategyState)?.policy;
+  if (currentPolicy && getAgencyOperatingPolicyDefinition(currentPolicy).blocksFixedCostGrowth) return null;
 
   const skills = generateEmployeeSkills(rng, role);
   const quality = deriveQuality(skills);
@@ -630,7 +533,6 @@ export function processEmployeeWeek(
     week,
     season,
   );
-  const strategicPosture = getAgencyStrategicPosture(baseFinances);
   const resignations: string[] = [];
 
   const updatedEmployees = baseFinances.employees.map((rawEmployee) => {
@@ -663,8 +565,6 @@ export function processEmployeeWeek(
     }
     // Random noise
     moraleDelta += rng.nextInt(-1, 1);
-    if (strategicPosture === "qualityFirst") moraleDelta += 1;
-    if (strategicPosture === "controlledGrowth") moraleDelta -= 1;
 
     const newMorale = Math.max(5, Math.min(100, emp.morale + moraleDelta));
 
@@ -727,16 +627,9 @@ export function processEmployeeWeek(
 
     // Work fatigue from active assignments
     if (emp.currentAssignment && emp.currentAssignment.type !== "idle") {
-      const fatigueRange = strategicPosture === "qualityFirst"
-        ? [1, 5] as const
-        : strategicPosture === "controlledGrowth"
-          ? [5, 10] as const
-          : strategicPosture === "cashDefense"
-            ? [4, 9] as const
-            : [3, 8] as const;
       newFatigue = Math.min(
         100,
-        newFatigue + rng.nextInt(fatigueRange[0], fatigueRange[1]),
+        newFatigue + rng.nextInt(3, 8),
       );
     }
 

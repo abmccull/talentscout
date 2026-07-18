@@ -41,6 +41,7 @@ import {
   buildContactEvidenceClaim,
   deriveContactPerspective,
 } from "@/engine/scout/sourcePerspectives";
+import { getActiveAccessAgreementIdsForGrantor } from "@/engine/consequences/accessAgreements";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -1046,9 +1047,14 @@ export function generateContactFavor(
 export function processWeeklyContactDecay(
   state: GameState,
   rng: RNG,
-): { updatedContacts: Record<string, Contact>; betrayalMessages: InboxMessage[] } {
+): {
+  updatedContacts: Record<string, Contact>;
+  betrayalMessages: InboxMessage[];
+  revokedAccessAgreementIds: string[];
+} {
   const updatedContacts: Record<string, Contact> = {};
   const betrayalMessages: InboxMessage[] = [];
+  const revokedAccessAgreementIds = new Set<string>();
   const currentDate = getCurrentGameDate(state);
 
   for (const [id, contact] of Object.entries(state.contacts)) {
@@ -1096,14 +1102,6 @@ export function processWeeklyContactDecay(
       betrayalRisk: calculateBetrayalRisk(updated),
     };
 
-    // Expire exclusive windows
-    if (
-      updated.exclusiveWindow
-      && isGameDateAtOrAfter(currentDate, updated.exclusiveWindow.expiresAt)
-    ) {
-      updated = { ...updated, exclusiveWindow: undefined };
-    }
-
     // Evaluate betrayal: low-loyalty contacts may leak scout reports
     const betrayalResult = accessSuspended
       ? { betrayed: false, message: "", accessSuspensionWeeks: 0 }
@@ -1128,10 +1126,16 @@ export function processWeeklyContactDecay(
         interactionHistory: [...(updated.interactionHistory ?? []), betrayalInteraction],
         betrayalRisk: clamp((updated.betrayalRisk ?? 0) + 0.1, 0, 1),
         gossipQueue: [],
-        exclusiveWindow: undefined,
         accessSuspendedUntil,
         dormant: true,
       };
+      for (const agreementId of getActiveAccessAgreementIdsForGrantor(
+        state.accessAgreements,
+        { kind: "contact", id: contact.id },
+        currentDate,
+      )) {
+        revokedAccessAgreementIds.add(agreementId);
+      }
 
       betrayalMessages.push({
         id: `msg_betrayal_${rng.nextInt(100000, 999999)}`,
@@ -1150,7 +1154,11 @@ export function processWeeklyContactDecay(
     updatedContacts[id] = updated;
   }
 
-  return { updatedContacts, betrayalMessages };
+  return {
+    updatedContacts,
+    betrayalMessages,
+    revokedAccessAgreementIds: [...revokedAccessAgreementIds].sort(),
+  };
 }
 
 /**
@@ -1218,55 +1226,10 @@ export function generateExclusiveWindow(
   contact: Contact,
   state: GameState,
 ): { updatedContact: Contact; message: InboxMessage } | null {
-  const currentDate = getCurrentGameDate(state);
-  const trustLevel = contact.trustLevel ?? contact.relationship;
-
-  // Only high-trust insider contacts (clubStaff, academyCoach, sportingDirector, academyDirector)
-  const insiderTypes = new Set(["clubStaff", "academyCoach", "sportingDirector", "academyDirector"]);
-  if (!insiderTypes.has(contact.type)) return null;
-  if (trustLevel < 75) return null;
-  if (contact.dormant || isContactAccessSuspended(contact, currentDate)) return null;
-
-  // Already has an active exclusive window
-  if (contact.exclusiveWindow) return null;
-
-  // 5% chance per week for eligible contacts
-  const loyaltyBonus = ((contact.loyalty ?? 50) - 50) / 1000; // -0.05 to 0.05
-  if (!rng.chance(0.05 + loyaltyBonus)) return null;
-
-  // Pick a player to offer exclusive access to
-  const knownPlayers = contact.knownPlayerIds
-    .map((id) => state.players[id])
-    .filter((p): p is Player => !!p && p.age <= 25);
-
-  if (knownPlayers.length === 0) return null;
-
-  const player = rng.pick(knownPlayers);
-  const expiresAt = addGameWeeks(state.fixtures, currentDate, 2);
-
-  const updatedContact: Contact = {
-    ...contact,
-    exclusiveWindow: {
-      playerId: player.id,
-      expiresAt,
-    },
-    lastInteractionAt: currentDate,
-  };
-
-  const message: InboxMessage = {
-    id: `msg_exclusive_${rng.nextInt(100000, 999999)}`,
-    week: state.currentWeek,
-    season: state.currentSeason,
-    type: "news",
-    title: `Exclusive Tip from ${contact.name}`,
-    body: `${contact.name} has given you a 2-week exclusive on ${player.firstName} ${player.lastName}. You have early access before other scouts are aware. This window expires in season ${expiresAt.season}, week ${expiresAt.week}.`,
-    read: false,
-    actionRequired: true,
-    relatedId: player.id,
-    relatedEntityType: "player",
-  };
-
-  return { updatedContact, message };
+  void rng;
+  void contact;
+  void state;
+  return null;
 }
 
 /** True while a betrayal-imposed access suspension is still in force. */
@@ -1292,20 +1255,8 @@ export function processExclusiveWindows(
   state: GameState,
   rng: RNG,
 ): { updatedContacts: Record<string, Contact>; exclusiveMessages: InboxMessage[] } {
-  const updatedContacts: Record<string, Contact> = {};
-  const exclusiveMessages: InboxMessage[] = [];
-
-  for (const [id, contact] of Object.entries(state.contacts)) {
-    const result = generateExclusiveWindow(rng, contact, state);
-    if (result) {
-      updatedContacts[id] = result.updatedContact;
-      exclusiveMessages.push(result.message);
-    } else {
-      updatedContacts[id] = contact;
-    }
-  }
-
-  return { updatedContacts, exclusiveMessages };
+  void rng;
+  return { updatedContacts: { ...state.contacts }, exclusiveMessages: [] };
 }
 
 // ---------------------------------------------------------------------------

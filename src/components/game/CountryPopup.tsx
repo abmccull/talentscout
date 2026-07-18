@@ -6,6 +6,9 @@ import { getTierColors } from "@/components/game/WorldMap";
 import type { CountryReputation, TravelBooking, RegionalKnowledge, HiddenLeague, TravelPosture } from "@/engine/core/types";
 import type { RegionalPresenceSnapshot } from "@/engine/world/regionalPresence";
 import { TRAVEL_POSTURE_DEFINITIONS } from "@/engine/world/travel";
+import type { TerritoryIdentity } from "@/engine/world/territoryIdentity";
+import type { WorldConditionStakeholderMatrix } from "@/engine/world/worldConditionStakeholders";
+import type { ClubRecruitmentEcosystem } from "@/engine/world/clubRecruitmentEcosystem";
 import { Tooltip } from "@/components/ui/tooltip";
 
 // =============================================================================
@@ -49,6 +52,13 @@ export interface CountryPopupProps {
   regionalPresence?: RegionalPresenceSnapshot;
   /** Hidden leagues discovered in this country (F13). */
   discoveredHiddenLeagues?: HiddenLeague[];
+  territoryIdentity?: TerritoryIdentity | null;
+  stakeholderMatrix?: WorldConditionStakeholderMatrix | null;
+  clubEcosystems?: Array<{
+    clubId: string;
+    name: string;
+    ecosystem: ClubRecruitmentEcosystem;
+  }>;
   travelPosture: TravelPosture;
   onTravelPostureChange: (posture: TravelPosture) => void;
   onBookTravel: () => void;
@@ -132,6 +142,9 @@ export function CountryPopup({
   regionalKnowledge,
   regionalPresence,
   discoveredHiddenLeagues,
+  territoryIdentity,
+  stakeholderMatrix,
+  clubEcosystems = [],
   travelPosture,
   onTravelPostureChange,
   onBookTravel,
@@ -205,6 +218,15 @@ export function CountryPopup({
   const knowledgeLevel = regionalKnowledge?.knowledgeLevel ?? 0;
   const culturalInsights = regionalKnowledge?.culturalInsights ?? [];
   const localContacts = regionalKnowledge?.localContacts ?? [];
+  const stakeholderChips = territoryIdentity
+    ? [
+      { label: "Families", value: territoryIdentity.stakeholderClimate.family.travelTolerance, hint: "travel tolerance" },
+      { label: "Agents", value: territoryIdentity.stakeholderClimate.agent.priceLeverage, hint: "price leverage" },
+      { label: "Organizers", value: territoryIdentity.stakeholderClimate.organizer.accessFriction, hint: "access friction" },
+      { label: "Journalists", value: territoryIdentity.stakeholderClimate.journalist.secrecyPressure, hint: "secrecy pressure" },
+      { label: "Rivals", value: territoryIdentity.stakeholderClimate.rival.rivalHeat, hint: "heat" },
+    ]
+    : [];
 
   return (
     <div
@@ -353,6 +375,87 @@ export function CountryPopup({
         )}
 
         {/* ── Regional Knowledge (F13) ─────────────────────────── */}
+        {territoryIdentity && (
+          <div className="mx-4 mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-200">
+                Why scout here now
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded-full border border-emerald-500/30 px-2 py-0.5 text-[10px] font-medium capitalize text-emerald-100">
+                  {territoryIdentity.opportunityWindow}
+                </span>
+                <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] font-medium capitalize text-zinc-300">
+                  {territoryIdentity.accessPattern.replace(/([A-Z])/g, " $1").toLowerCase()}
+                </span>
+              </div>
+            </div>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-300">
+              {territoryIdentity.reasons[0] ?? territoryIdentity.presence.summary}
+            </p>
+            <div className="mt-2 grid gap-1.5 text-[10px] sm:grid-cols-2">
+              <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
+                Archetype <span className="font-medium text-emerald-200">{territoryIdentity.archetype.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
+              </div>
+              <div className="rounded bg-zinc-950/60 px-2 py-1 text-zinc-400">
+                Club focus <span className="font-medium text-emerald-200">{territoryIdentity.clubDemandMix.dominantFocus ?? "mixed"}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {territoryIdentity && stakeholderChips.length > 0 && (
+          <div className="mx-4 mb-3 rounded-lg border border-blue-500/15 bg-blue-500/5 px-3 py-2.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-blue-200">
+              Access climate
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-zinc-400">
+              These are the live pressures shaping how people in this territory respond to you.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-1.5 text-[10px] sm:grid-cols-3">
+              {stakeholderChips.map((chip) => (
+                <div key={chip.label} className="rounded bg-zinc-950/70 px-2 py-1">
+                  <p className="text-zinc-300">{chip.label}</p>
+                  <p className="mt-0.5 font-medium text-blue-100">{chip.value} {chip.hint}</p>
+                </div>
+              ))}
+            </div>
+            {stakeholderMatrix?.climates.clubDirector && (
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+                Directors are at {stakeholderMatrix.climates.clubDirector.evidenceScrutiny} scrutiny and managers at {stakeholderMatrix.climates.manager.evidenceScrutiny} scrutiny.
+              </p>
+            )}
+          </div>
+        )}
+
+        {territoryIdentity && clubEcosystems.length > 0 && (
+          <div className="mx-4 mb-3 rounded-lg border border-purple-500/15 bg-purple-500/5 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-purple-200">
+                Club demand
+              </p>
+              {territoryIdentity.clubDemandMix.dominantPhilosophy && (
+                <span className="text-[10px] font-medium text-purple-100">
+                  {territoryIdentity.clubDemandMix.dominantPhilosophy}
+                </span>
+              )}
+            </div>
+            <div className="mt-2 space-y-2">
+              {clubEcosystems.map((club) => (
+                <div key={club.clubId} className="rounded bg-zinc-950/70 px-2.5 py-2 text-[10px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-semibold text-white">{club.name}</p>
+                    <span className="text-zinc-400 capitalize">{club.ecosystem.leadershipCenter.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
+                  </div>
+                  <p className="mt-1 text-zinc-400">
+                    Evidence floor {club.ecosystem.evidenceFloor}/100 · urgency {club.ecosystem.marketUrgency}/100 · pathway tolerance {club.ecosystem.pathwayTolerance}/100
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {regionalKnowledge && (
           <div className="px-4 pb-3">
             <Tooltip content="Regional knowledge grows from scouting activity in this country. It records the local access and context you have actually earned." side="bottom">

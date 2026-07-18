@@ -1,4 +1,5 @@
 import type { StakeholderEcologyProfile } from "@/engine/consequences";
+import { memoryPersistenceLabel } from "./stakeholderEcologyPresentation";
 
 function gameDate(date: { week: number; season: number }): string {
   return `S${date.season} W${date.week}`;
@@ -76,8 +77,8 @@ export function StakeholderEcologyPanel({
                     className={`rounded-md border px-2 py-1.5 text-[11px] leading-4 ${TONE_CLASS[memory.tone]}`}
                   >
                     <p>{memory.summary}</p>
-                    <p className="mt-0.5 text-[9px] text-zinc-500">
-                      {gameDate(memory.occurredAt)} · salience {memory.effectiveSalience}/100
+                    <p className="mt-0.5 text-[10px] text-zinc-300">
+                      {gameDate(memory.occurredAt)} · {memoryPersistenceLabel(memory.effectiveSalience)}
                     </p>
                   </li>
                 ))}
@@ -101,7 +102,7 @@ export function StakeholderEcologyPanel({
                           : "Involved: "}
                     </span>
                     {obligation.terms}
-                    <span className="ml-1 text-zinc-500">
+                    <span className="ml-1 text-zinc-300">
                       ({obligation.status}{obligation.dueAt ? ` · due ${gameDate(obligation.dueAt)}` : ""})
                     </span>
                   </li>
@@ -125,7 +126,7 @@ export function StakeholderEcologyPanel({
                         ? ` · next consequence ${gameDate(decision.nextConsequenceAt)}`
                         : ""}
                     </span>
-                    <span className="shrink-0 text-[9px] text-zinc-500">{gameDate(decision.offeredAt)}</span>
+                    <span className="shrink-0 text-[10px] text-zinc-300">{gameDate(decision.offeredAt)}</span>
                   </li>
                 ))}
               </ul>

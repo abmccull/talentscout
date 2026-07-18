@@ -63,6 +63,7 @@ import { calculateMonthlyRunRate } from "@/engine/finance/dashboard";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { getSeasonLength } from "@/engine/core/gameDate";
+import { deriveCareerRolePackage } from "@/engine/career/rolePackages";
 import { ConsequenceCinema } from "./consequence-cinema/ConsequenceCinema";
 import { LeadershipPortfolioPanel } from "./career/LeadershipPortfolioPanel";
 import { CareerRecoveryPanel } from "./career/CareerRecoveryPanel";
@@ -81,6 +82,14 @@ import {
 import { PoliticalMeetingCards } from "./career/PoliticalMeetingCards";
 import { usePersistentDisclosure } from "@/lib/usePersistentDisclosure";
 import { deriveCareerRoleProfile } from "@/engine/career/roleProfile";
+import {
+  AGENCY_POLICY_DEFINITIONS,
+  canChangeAgencyOperatingPolicy,
+  deriveAgencyStrategicPressure,
+  normalizeAgencyStrategyState,
+} from "@/engine/finance/agencyStrategy";
+import { UrgentQueue } from "./workspace/UrgentQueue";
+import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -116,7 +125,7 @@ interface CareerMetricTileProps {
   label: string;
   value: string;
   helper?: string;
-  tone?: "default" | "emerald" | "amber" | "blue" | "red";
+  tone?: "default" | "emerald" | "amber" | "blue" | "violet" | "red";
 }
 
 export function getCareerCourseSummary(input: {
@@ -247,6 +256,8 @@ function metricToneClass(tone: CareerMetricTileProps["tone"]): string {
       return "text-amber-300";
     case "blue":
       return "text-blue-300";
+    case "violet":
+      return "text-violet-300";
     case "red":
       return "text-red-300";
     default:
@@ -553,6 +564,12 @@ export function CareerScreen() {
       || (right.selectedAt?.week ?? right.offeredAt.week) - (left.selectedAt?.week ?? left.offeredAt.week),
     )
     .slice(0, 8);
+  const rivalOrganizationCount = Object.keys(
+    gameState.rivalOrganizationState?.organizations ?? {},
+  ).length;
+  const openRivalOpportunityCount = Object.values(
+    gameState.rivalOrganizationState?.opportunities ?? {},
+  ).filter((opportunity) => opportunity.status === "open").length;
   const youthPlacementReports = Object.values(gameState.placementReports ?? {}).filter(
     (report) => report.scoutId === scout.id,
   );
@@ -582,6 +599,118 @@ export function CareerScreen() {
       unlockedAchievements.has(achievement.id),
   ).length;
   const latestPerformanceReview = performanceReviews.at(-1);
+  const rolePackage = deriveCareerRolePackage({
+    scout,
+    finances: finances ?? undefined,
+    club: currentClub,
+    leadershipPortfolio: gameState.leadershipPortfolio,
+  });
+  const agencyStrategy = finances
+    ? normalizeAgencyStrategyState(finances.agencyStrategyState)
+    : undefined;
+  const agencyPressure = scout.careerPath === "independent" && finances
+    ? deriveAgencyStrategicPressure(finances, scout)
+    : null;
+  const agencyPolicyChangeAvailable = finances
+    ? canChangeAgencyOperatingPolicy(
+        finances,
+        { week: gameState.currentWeek, season: gameState.currentSeason },
+      )
+    : false;
+  const leadPressure = rolePackage.pressures[0];
+  const employerNeedSummary = scout.employmentContract?.objectives
+    ? `${scout.employmentContract.objectives.reportsPerSeason} reports · ${scout.employmentContract.objectives.minimumAverageQuality}+ quality · ${scout.employmentContract.objectives.successfulRecommendations} successful recommendations`
+    : agencyPressure
+      ? `${rolePackage.summary} Current operating pressure: ${agencyPressure.dominantRisk}. Choose which tradeoff the practice can carry.`
+    : scout.careerPath === "independent"
+      ? "Protect runway, diversify clients, and avoid letting one failed call dominate the practice."
+      : "Keep producing trustworthy work that creates better roles and more leverage.";
+  const careerPressureItems = [
+    activeObligations[0]
+      ? {
+          id: `obligation-${activeObligations[0].id}`,
+          eyebrow: "Active obligation",
+          title: activeObligations[0].terms,
+          body: activeObligations[0].dueAt
+            ? `Due ${formatWeekSeason(activeObligations[0].dueAt.season, activeObligations[0].dueAt.week)}. Breaching it becomes part of your history.`
+            : "This promise is still open and can return through future access, trust, or fallout.",
+          meta: activeObligations[0].kind,
+          tone: "amber" as const,
+        }
+      : null,
+    showPathChoice
+      ? {
+          id: "career-path-choice",
+          eyebrow: "Career fork",
+          title: "A structural path decision is open",
+          body: "Choose whether the next era is employer-led or self-directed. This changes who carries the risk and who sets the work.",
+          meta: "Overview decision",
+          tone: "amber" as const,
+        }
+      : null,
+    scout.employmentContract?.objectives
+      ? {
+          id: "contract-objectives",
+          eyebrow: scout.careerPath === "independent" ? "Practice pressure" : "Employer expectation",
+          title: scout.careerPath === "independent"
+            ? "The practice needs dependable output"
+            : `${careerRoleLabel} expectations are live`,
+          body: employerNeedSummary,
+          meta: scout.employmentContract.status === "expiring" ? "Renewal leverage is at stake" : "Current role benchmarks",
+          tone: "sky" as const,
+        }
+      : null,
+    agencyPressure
+      ? {
+          id: "agency-strategy",
+          eyebrow: "Practice pressure",
+          title: `Dominant pressure: ${agencyPressure.dominantRisk}`,
+          body: "Runway, client concentration, capacity, and quality debt will respond differently to the agency policy you carry this month.",
+          meta: agencyPressure.runwayWeeks != null
+            ? `${agencyPressure.runwayWeeks} runway weeks · ${Math.round(agencyPressure.capacityUtilization * 100)}% capacity`
+            : `${Math.round(agencyPressure.capacityUtilization * 100)}% capacity · ${Math.round(agencyPressure.clientConcentration * 100)}% concentration`,
+          tone: agencyPressure.dominantRisk === "runway" || agencyPressure.dominantRisk === "qualityDebt" || agencyPressure.dominantRisk === "staffFragility"
+            ? "amber" as const
+            : "emerald" as const,
+        }
+      : null,
+    leadPressure
+      ? {
+          id: `role-pressure-${leadPressure.id}`,
+          eyebrow: "Role pressure",
+          title: leadPressure.label,
+          body: leadPressure.reason,
+          meta: `Mitigation: ${leadPressure.mitigation}`,
+          tone: leadPressure.severity === "high"
+            ? "red" as const
+            : leadPressure.severity === "medium"
+              ? "amber" as const
+              : "sky" as const,
+        }
+      : null,
+    openRivalOpportunityCount > 0
+      ? {
+          id: "rival-openings",
+          eyebrow: "Competitive landscape",
+          title: `${openRivalOpportunityCount} rival opening${openRivalOpportunityCount === 1 ? "" : "s"} can still reshape this season`,
+          body: "Persistent organizations are moving on their own timelines. Waiting means giving up initiative, not pausing the world.",
+          meta: `${rivalOrganizationCount} rival organization${rivalOrganizationCount === 1 ? "" : "s"}`,
+          tone: "violet" as const,
+          actionLabel: "Open rivals",
+          onAction: () => setScreen("rivals"),
+        }
+      : null,
+    jobOffers.length > 0
+      ? {
+          id: "career-offers",
+          eyebrow: "Opportunity",
+          title: `${jobOffers.length} career offer${jobOffers.length === 1 ? "" : "s"} on the table`,
+          body: "A better title is only valuable if the role, pressure, and fit improve what your weeks actually become.",
+          meta: "Career opportunities",
+          tone: "emerald" as const,
+        }
+      : null,
+  ].filter((item) => item !== null).slice(0, 3);
   const careerTimeline: CareerTimelineEntry[] = [
     ...youthDiscoveryRecords.map((record) => {
       const player = gameState.players[record.playerId] ?? gameState.retiredPlayers?.[record.playerId];
@@ -714,6 +843,18 @@ export function CareerScreen() {
                   monthlyExpenses={monthlyExpenses}
                   onPlanWeek={() => setScreen("calendar")}
                 />
+
+                <UrgentQueue
+                  title="Current pressure"
+                  description="The live obligations, role pressures, and competitive openings that can change the next era of your career."
+                  icon={<Briefcase size={17} className="text-emerald-300" aria-hidden="true" />}
+                  items={careerPressureItems}
+                  emptyTitle="No immediate fires"
+                  emptyBody={employerNeedSummary}
+                  footerActionLabel="Plan next week"
+                  onFooterAction={() => setScreen("calendar")}
+                />
+
                 <details
                   className="group rounded-xl border border-white/10 bg-black/20"
                   open={careerMetricsOpen}
@@ -732,19 +873,41 @@ export function CareerScreen() {
                   </div>
                 </details>
 
-                {scout.careerTier >= 4 && (
-                  <LeadershipPortfolioPanel
-                    portfolio={gameState.leadershipPortfolio}
-                    players={gameState.players}
-                    npcScouts={gameState.npcScouts}
-                    npcDelegations={gameState.npcDelegations}
-                    onChoice={resolveLeadershipResponsibility}
-                    onOpenPlayer={(playerId) => {
-                      selectPlayer(playerId);
-                      setScreen("playerProfile");
-                    }}
-                    onOpenNpcManagement={() => setScreen("npcManagement")}
-                  />
+                {scout.careerPath === "independent" && scout.careerTier >= 3 && finances && agencyPressure && (
+                  <WorkspaceDisclosure
+                    title="Agency operating policy"
+                    eyebrow="Four-week commitment"
+                    description="Career summarizes the current policy and pressure. Change the live operating commitment from Agency, where the full practice view is visible."
+                    icon={<Building2 size={17} className="text-emerald-300" aria-hidden="true" />}
+                    summary={
+                      <div className="space-y-0.5">
+                        <p>{agencyStrategy ? AGENCY_POLICY_DEFINITIONS[agencyStrategy.policy].label : "No policy selected"}</p>
+                        <p>{agencyPolicyChangeAvailable ? "Agency can change it now" : `Locked to S${agencyStrategy?.lockedUntil.season} W${agencyStrategy?.lockedUntil.week}`}</p>
+                      </div>
+                    }
+                    contentClassName="space-y-4"
+                  >
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-zinc-500">Current pressure</p>
+                        <p className="mt-2 text-sm font-semibold text-white">{agencyPressure.dominantRisk}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">
+                          {agencyPressure.runwayWeeks != null
+                            ? `${agencyPressure.runwayWeeks} runway weeks · ${Math.round(agencyPressure.capacityUtilization * 100)}% capacity utilization`
+                            : `${Math.round(agencyPressure.capacityUtilization * 100)}% capacity utilization · ${Math.round(agencyPressure.clientConcentration * 100)}% concentration`}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Recommended next</p>
+                        <p className="mt-2 text-sm font-semibold text-white">{AGENCY_POLICY_DEFINITIONS[agencyPressure.suggestedPolicy].label}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-300">{agencyPressure.policyEffect.recommendedWhen}</p>
+                      </div>
+                    </div>
+                    <Button className="min-h-11 w-full sm:w-auto" onClick={() => setScreen("agency")}>
+                      Open Agency workspace
+                      <ArrowRight size={16} className="ml-2" aria-hidden="true" />
+                    </Button>
+                  </WorkspaceDisclosure>
                 )}
 
                 {showPathChoice && finances && (
@@ -772,6 +935,21 @@ export function CareerScreen() {
                       </button>
                     </CardContent>
                   </Card>
+                )}
+
+                {scout.careerTier >= 4 && (
+                  <LeadershipPortfolioPanel
+                    portfolio={gameState.leadershipPortfolio}
+                    players={gameState.players}
+                    npcScouts={gameState.npcScouts}
+                    npcDelegations={gameState.npcDelegations}
+                    onChoice={resolveLeadershipResponsibility}
+                    onOpenPlayer={(playerId) => {
+                      selectPlayer(playerId);
+                      setScreen("playerProfile");
+                    }}
+                    onOpenNpcManagement={() => setScreen("npcManagement")}
+                  />
                 )}
 
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
@@ -829,6 +1007,30 @@ export function CareerScreen() {
                     </CardContent>
                   </Card>
                 </div>
+
+                <button
+                  type="button"
+                  data-testid="career-world-details"
+                  onClick={() => setScreen("internationalView")}
+                  className="flex min-h-20 w-full items-center gap-4 rounded-xl border border-fuchsia-400/20 bg-[radial-gradient(circle_at_right,rgba(217,70,239,0.08),transparent_42%),rgba(17,22,28,0.95)] px-4 py-3 text-left transition hover:border-fuchsia-300/40 hover:bg-fuchsia-400/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-fuchsia-300"
+                >
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-fuchsia-300/20 bg-fuchsia-400/10 text-fuchsia-200">
+                    <Shield size={18} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
+                      World context
+                    </span>
+                    <span className="mt-1 block text-sm font-semibold text-white">Open regional and football outlook</span>
+                    <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                      World conditions, territorial position, and club recruitment identities live with the map. {rivalOrganizationCount} rival organization{rivalOrganizationCount === 1 ? "" : "s"} active.
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2 text-xs font-semibold text-fuchsia-100">
+                    Open World
+                    <ArrowRight size={15} aria-hidden="true" />
+                  </span>
+                </button>
 
                 {(scout.managerRelationship || scout.careerTier >= 5) && (
                   <section aria-labelledby="club-politics-title" className="space-y-3">

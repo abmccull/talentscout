@@ -27,6 +27,10 @@ import { checkPersonalityReveal } from "@/engine/players/personalityReveal";
 import { progressivePersonalityReveal } from "@/engine/players/personalityEffects";
 import type { ObservationSituationSnapshot } from "@/engine/observation/situations";
 import { getObservationSituationAttributeModifier } from "@/engine/observation/situations";
+import {
+  deriveObservationContextResolution,
+  getContextResolutionDomainModifier,
+} from "@/engine/observation/contextResolution";
 
 // ---------------------------------------------------------------------------
 // Transaction-local evidence index
@@ -476,6 +480,17 @@ export function observePlayerLight(
 
   // Context diversity: count distinct context types seen for this player
   const contextDiversity = new Set(existingObservations.filter((o) => o.playerId === player.id).map((o) => o.context)).size / 6;
+  const contextResolution = deriveObservationContextResolution({
+    player: {
+      id: player.id,
+      position: player.position,
+      secondaryPositions: player.secondaryPositions,
+      naturalRole: player.naturalRole,
+    },
+    context,
+    existingObservations,
+    situation: evidenceOptions?.situation,
+  });
 
   // Build visible attribute set from context + scout skill bonuses
   const baseVisible = new Set<PlayerAttribute>(CONTEXT_VISIBLE_ATTRIBUTES[context]);
@@ -522,15 +537,25 @@ export function observePlayerLight(
   const evidenceSet = new Set(evidenceOptions?.evidenceAttributes ?? []);
   const lens = evidenceOptions?.focusLens;
   const priorityScore = (attribute: PlayerAttribute): number => {
+    const domain = ATTRIBUTE_DOMAINS[attribute];
     let score = 0;
     if (evidenceSet.has(attribute)) score += 2;
     if (lens && ATTRIBUTE_DOMAINS[attribute] === lens) score += 1;
+    score += contextResolution.priorityByDomain[domain] ?? 0;
     return score;
   };
   const prioritized = [...shuffled, ...shuffledSeen].sort(
     (a, b) => priorityScore(b) - priorityScore(a),
   );
-  for (let i = 0; i < attrCount && i < prioritized.length; i++) {
+  const resolvedAttrCount = Math.max(
+    1,
+    Math.min(
+      prioritized.length,
+      (contextResolution.attributeCap ?? Number.POSITIVE_INFINITY),
+      attrCount + contextResolution.attributeBudgetDelta,
+    ),
+  );
+  for (let i = 0; i < resolvedAttrCount && i < prioritized.length; i++) {
     selected.push(prioritized[i]);
   }
 
@@ -543,12 +568,29 @@ export function observePlayerLight(
     const passes = focusedEvidence
       ? Math.max(1, Math.min(3, evidenceOptions?.evidencePasses ?? 1))
       : 1;
+    const domain = ATTRIBUTE_DOMAINS[attr];
     const situationModifier = getObservationSituationAttributeModifier(
       evidenceOptions?.situation,
       attr,
       evidenceOptions?.difficulty,
     );
-    for (let pass = 0; pass < passes; pass++) {
+    const resolutionModifier = getContextResolutionDomainModifier(
+      contextResolution,
+      attr,
+      domain,
+    );
+    const combinedNoiseMultiplier = situationModifier.noiseMultiplier * resolutionModifier.noiseMultiplier;
+    const combinedConfidenceDelta = situationModifier.confidenceDelta + resolutionModifier.confidenceDelta;
+    const totalPasses = focusedEvidence
+      ? Math.max(
+          1,
+          Math.min(
+            3,
+            passes + contextResolution.evidencePassBonus,
+          ),
+        )
+      : 1;
+    for (let pass = 0; pass < totalPasses; pass++) {
       addReading(
         rng,
         sessionReadings,
@@ -561,8 +603,8 @@ export function observePlayerLight(
         context,
         1.0,
         0,
-        situationModifier.noiseMultiplier,
-        situationModifier.confidenceDelta,
+        combinedNoiseMultiplier,
+        combinedConfidenceDelta,
       );
     }
   }
@@ -618,6 +660,7 @@ export function observePlayerLight(
   if (evidenceOptions?.focusLens) {
     notes.push(`Direct ${evidenceOptions.focusLens} focus deepened the session evidence.`);
   }
+  notes.push(...contextResolution.notes);
   const preservedMomentCount = evidenceOptions?.flaggedMoments?.length ?? 0;
   if (preservedMomentCount > 0) {
     notes.push(

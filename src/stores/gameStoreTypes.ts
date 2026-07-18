@@ -49,7 +49,6 @@ import type {
   TravelPosture,
   WeekSimulationState,
 } from "@/engine/core/types";
-import type { AgencyStrategicPosture } from "@/engine/finance/agencyCapacity";
 import type { WeeklyWorkerTelemetry } from "@/engine/core/weeklyTransactionProtocol";
 import type { LeadershipResponsibilityChoice } from "@/engine/career/leadership";
 import type { CareerRecoveryPlanId } from "@/engine/career/recovery";
@@ -377,6 +376,10 @@ export interface GameStoreState {
   equipEquipItem: (itemId: EquipmentItemId) => void;
 
   chooseCareerPath: (path: CareerPath) => void;
+  setAgencyOperatingPolicy: (
+    policy: import("@/engine/finance").AgencyOperatingPolicy,
+    focusRegionId?: string,
+  ) => void;
   changeLifestyle: (level: LifestyleLevel) => void;
   approveStaffWorkProduct: (workProductId: string) => void;
   rejectStaffWorkProduct: (workProductId: string) => void;
@@ -393,7 +396,6 @@ export interface GameStoreState {
   acceptRetainerContract: (contract: RetainerContract) => void;
   cancelRetainerContract: (contractId: string) => void;
   enrollInCourse: (courseId: string) => void;
-  setAgencyStrategicPosture: (posture: AgencyStrategicPosture) => void;
   upgradeAgencyOffice: (tier: OfficeTier) => void;
   hireAgencyEmployee: (role: AgencyEmployeeRole) => void;
   fireAgencyEmployee: (employeeId: string) => void;

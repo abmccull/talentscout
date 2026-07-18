@@ -30,24 +30,58 @@ test.describe("Dashboard Screen", () => {
       gamePage.expectNoConsoleErrors();
     });
 
-    test("dashboard keeps the core decision and brief queue ahead of supporting detail", async ({ gamePage }) => {
+    test("dashboard keeps one decision ahead of compact, progressively disclosed context", async ({ gamePage }) => {
       await expect(gamePage.page.getByTestId("desk-primary-decision")).toHaveCount(1);
       await expect(gamePage.page.getByTestId("desk-week-status")).toContainText(/Week 1/);
       await expect(gamePage.page.getByTestId("desk-week-status")).toContainText(/fatigue/);
 
-      const urgentItems = gamePage.page.getByTestId("desk-urgent-item");
-      expect(await urgentItems.count()).toBeLessThanOrEqual(3);
+      const statusSnapshot = gamePage.page.getByRole("region", {
+        name: "Current status snapshot",
+      });
+      await expect(statusSnapshot).toBeVisible();
+      await expect(statusSnapshot).toContainText("Current week");
+      await expect(statusSnapshot).toContainText("Scout fatigue");
+      await expect(statusSnapshot).toContainText("Decisions ready");
+      await expect(statusSnapshot).toContainText("Placed");
 
-      const briefQueue = gamePage.page.getByTestId("desk-top-briefs");
-      await expect(briefQueue).toBeVisible();
-      expect(await briefQueue.getByTestId("desk-brief").count()).toBeLessThanOrEqual(3);
+      await expect(
+        gamePage.page.getByRole("heading", { name: "Urgent queue" }),
+      ).toHaveCount(1);
 
-      const supportingContext = gamePage.page.locator("details#desk-supporting-context");
-      await expect(supportingContext).not.toHaveAttribute("open", "");
-      await supportingContext.locator("summary").focus();
+      await expect(
+        gamePage.page.getByRole("heading", { name: "Live academy briefs" }),
+      ).toBeVisible();
+      expect(await gamePage.page.getByTestId("desk-brief").count()).toBeLessThanOrEqual(3);
+
+      const scoutLoop = gamePage.page.locator("details").filter({
+        hasText: "The scout's loop",
+      });
+      await expect(scoutLoop).toHaveCount(1);
+      await expect(scoutLoop).not.toHaveAttribute("open", "");
+      await scoutLoop.locator("summary").focus();
       await gamePage.page.keyboard.press("Enter");
-      await expect(supportingContext).toHaveAttribute("open", "");
-      await expect(gamePage.page.getByRole("heading", { name: "Your scouting loop" })).toBeVisible();
+      await expect(scoutLoop).toHaveAttribute("open", "");
+      await expect(scoutLoop.getByText("Find", { exact: true })).toBeVisible();
+      await expect(scoutLoop.getByText("Track", { exact: true })).toBeVisible();
+
+      const seasonContext = gamePage.page.locator("details#desk-season-context");
+      await expect(seasonContext).toHaveCount(1);
+      await expect(seasonContext).not.toHaveAttribute("open", "");
+      await seasonContext.locator("summary").click();
+      await expect(seasonContext).toHaveAttribute("open", "");
+      await expect(seasonContext.getByText(/Season Calendar/)).toBeVisible();
+
+      const workingSet = gamePage.page.locator("details").filter({
+        hasText: "Current working set",
+      });
+      await expect(workingSet).toHaveCount(1);
+      await expect(workingSet).not.toHaveAttribute("open", "");
+      await workingSet.locator("summary").focus();
+      await gamePage.page.keyboard.press("Enter");
+      await expect(workingSet).toHaveAttribute("open", "");
+      await expect(
+        workingSet.getByRole("heading", { name: "This week's itinerary" }),
+      ).toBeVisible();
     });
 
     test("dashboard shows scout name in sidebar", async ({ gamePage }) => {

@@ -56,7 +56,7 @@ test.describe("Rivals Screen", () => {
     expect(typeof rivalInfo.count).toBe("number");
   });
 
-  test("organization opening exposes its odds and resolves exactly once", async ({ gamePage }) => {
+  test("organization opening exposes the scout's read and resolves exactly once", async ({ gamePage }) => {
     const fixture = await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
@@ -98,7 +98,7 @@ test.describe("Rivals Screen", () => {
 
     await gamePage.setScreen("career");
     const landscapeButton = gamePage.page.getByRole("button", {
-      name: "Respond to openings",
+      name: "Open rivals",
     });
     await expect(landscapeButton).toBeVisible();
     await landscapeButton.click();
@@ -108,7 +108,7 @@ test.describe("Rivals Screen", () => {
       gamePage.page.getByRole("heading", { name: "Recruitment organizations" }),
     ).toBeVisible();
     await expect(gamePage.page.getByText(fixture.organizationName).first()).toBeVisible();
-    await expect(gamePage.page.getByText("70%", { exact: true })).toBeVisible();
+    await expect(gamePage.page.getByText("Strong opening", { exact: true })).toBeVisible();
     await expect(gamePage.page.getByText("Failure strengthens the rival agenda")).toBeVisible();
 
     await gamePage.page.getByRole("button", { name: "Exploit the opening" }).click();

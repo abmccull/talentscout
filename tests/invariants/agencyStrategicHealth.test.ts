@@ -8,16 +8,17 @@ import type {
   Scout,
 } from "@/engine/core/types";
 import {
-  assessAgencyStrategicPostureChange,
   deriveAgencyStrategicHealth,
   hireEmployee,
-  setAgencyStrategicPosture,
   upgradeOffice,
 } from "@/engine/finance/agency";
 import {
+  canChangeAgencyOperatingPolicy,
+  selectAgencyOperatingPolicy,
+} from "@/engine/finance/agencyStrategy";
+import {
   assessRetainerWorkAcceptance,
   getAgencyCapacity,
-  getAgencyStrategicPosture,
 } from "@/engine/finance/agencyCapacity";
 import { initializeFinances } from "@/engine/finance/expenses";
 import { RNG } from "@/engine/rng";
@@ -111,29 +112,46 @@ function agencyFinances(scout: Scout): FinancialRecord {
   };
 }
 
+function withPolicy(
+  finances: FinancialRecord,
+  policy: Parameters<typeof selectAgencyOperatingPolicy>[0]["policy"],
+  week = 8,
+  season = 2,
+  focusRegionId = "england",
+): FinancialRecord {
+  const selected = selectAgencyOperatingPolicy({
+    finances,
+    policy,
+    now: { week, season },
+    seasonLength: 38,
+    focusRegionId,
+  });
+  expect(selected.changed).toBe(true);
+  return selected.finances;
+}
+
 describe("agency strategic health", () => {
-  it("persists a posture in the existing ledger and changes usable capacity after save/load", () => {
+  it("uses the canonical agency policy to gate capacity and lock timing", () => {
     const scout = agencyScout();
     const finances = agencyFinances(scout);
     const balanced = getAgencyCapacity(finances, scout);
 
-    const qualityFirst = setAgencyStrategicPosture(
-      finances,
-      scout,
-      "qualityFirst",
-      8,
-      2,
-    );
-    expect(qualityFirst).not.toBeNull();
-    if (!qualityFirst) return;
-
-    expect(qualityFirst.balance).toBe(finances.balance);
-    expect(qualityFirst.transactions.at(-1)).toMatchObject({
-      amount: 0,
-      referenceId: "agency-posture:qualityFirst:s2w8",
+    const disciplined = withPolicy(finances, "qualityDiscipline");
+    expect(disciplined.agencyStrategyState).toMatchObject({
+      policy: "qualityDiscipline",
+      lockedUntil: { season: 2, week: 12 },
     });
-    expect(getAgencyStrategicPosture(structuredClone(qualityFirst))).toBe("qualityFirst");
-    const protectedCapacity = getAgencyCapacity(qualityFirst, scout);
+    expect(canChangeAgencyOperatingPolicy(
+      disciplined,
+      { season: 2, week: 11 },
+    )).toBe(false);
+    expect(canChangeAgencyOperatingPolicy(
+      disciplined,
+      { season: 2, week: 12 },
+    )).toBe(true);
+
+    const protectedCapacity = getAgencyCapacity(structuredClone(disciplined), scout);
+    expect(protectedCapacity.policy).toBe("qualityDiscipline");
     expect(protectedCapacity.rawMonthlyReportCapacity).toBe(
       balanced.rawMonthlyReportCapacity,
     );
@@ -141,99 +159,69 @@ describe("agency strategic health", () => {
       balanced.monthlyReportCapacity,
     );
 
-    const replayed = setAgencyStrategicPosture(
-      qualityFirst,
-      scout,
-      "qualityFirst",
-      8,
-      2,
-    );
-    expect(replayed).toBe(qualityFirst);
-
-    const sameWeekSwitch = setAgencyStrategicPosture(
-      qualityFirst,
-      scout,
-      "controlledGrowth",
-      8,
-      2,
-    );
-    expect(sameWeekSwitch).toBe(qualityFirst);
-    expect(getAgencyStrategicPosture(sameWeekSwitch!)).toBe("qualityFirst");
-    expect(sameWeekSwitch?.transactions.filter(
-      (transaction) => transaction.referenceId?.includes(":s2w8"),
-    )).toHaveLength(1);
-    expect(assessAgencyStrategicPostureChange(
-      qualityFirst,
-      scout,
-      "controlledGrowth",
-      8,
-      2,
-    )).toMatchObject({
-      allowed: false,
-      lockedForWeek: true,
-      selectedThisWeek: "qualityFirst",
-      blocker: "weeklyChoiceLocked",
+    const unchanged = selectAgencyOperatingPolicy({
+      finances: disciplined,
+      policy: "qualityDiscipline",
+      now: { season: 2, week: 8 },
+      seasonLength: 38,
+      focusRegionId: "england",
     });
-    expect(assessAgencyStrategicPostureChange(
-      qualityFirst,
-      scout,
-      "controlledGrowth",
-      9,
-      2,
-    )).toMatchObject({
-      allowed: true,
-      lockedForWeek: false,
-      currentPosture: "qualityFirst",
-    });
-
-    const growth = setAgencyStrategicPosture(
-      qualityFirst,
-      scout,
-      "controlledGrowth",
-      9,
-      2,
-    )!;
-    expect(getAgencyCapacity(growth, scout).monthlyReportCapacity).toBeGreaterThan(
-      balanced.monthlyReportCapacity,
-    );
+    expect(unchanged.changed).toBe(false);
   });
 
-  it("makes diversification refuse deeper dominant-client dependence while allowing a new client", () => {
+  it("distinguishes runway defense from stable retainers as different economic jobs", () => {
+    const scout = agencyScout();
+    const base = agencyFinances(scout);
+    const defensive = withPolicy(base, "runwayDefense", 14, 2);
+    const retainers = withPolicy(base, "stableRetainers", 14, 2);
+
+    expect(upgradeOffice(defensive, "professional")).toBeNull();
+    expect(hireEmployee(
+      new RNG("defensive-hire"),
+      defensive,
+      "analyst",
+      14,
+      2,
+    )).toBeNull();
+    expect(upgradeOffice(retainers, "professional")?.office.tier).toBe("professional");
+    expect(hireEmployee(
+      new RNG("retainer-hire"),
+      retainers,
+      "analyst",
+      14,
+      2,
+    )).not.toBeNull();
+  });
+
+  it("distinguishes client diversification from market expansion in work acceptance", () => {
     const scout = agencyScout();
     const base = {
       ...agencyFinances(scout),
       retainerContracts: [retainer("anchor", "club-a", 4_000, 2)],
     };
-    const diversified = setAgencyStrategicPosture(
-      base,
-      scout,
-      "diversifyClients",
-      10,
-      2,
-    )!;
+    const diversified = withPolicy(base, "clientDiversification", 10, 2);
+    const expansion = withPolicy(base, "marketExpansion", 10, 2);
 
-    const sameClient = assessRetainerWorkAcceptance(
+    const sameClientUnderDiversification = assessRetainerWorkAcceptance(
       diversified,
       scout,
       retainer("more-anchor", "club-a", 2_000, 1),
     );
-    const newClient = assessRetainerWorkAcceptance(
-      diversified,
+    const sameClientUnderExpansion = assessRetainerWorkAcceptance(
+      expansion,
       scout,
-      retainer("new-book", "club-b", 2_000, 1),
+      retainer("more-anchor", "club-a", 2_000, 1),
     );
 
-    expect(sameClient.allowed).toBe(false);
-    expect(sameClient.blockers).toContain("clientConcentration");
-    expect(newClient.allowed).toBe(true);
-    expect(newClient.projectedConcentration.activeClientCount).toBe(2);
-    expect(newClient.projectedConcentration.dominantShare).toBeCloseTo(2 / 3);
+    expect(sameClientUnderDiversification.allowed).toBe(false);
+    expect(sameClientUnderDiversification.blockers).toContain("clientConcentration");
+    expect(sameClientUnderExpansion.allowed).toBe(true);
   });
 
   it("distinguishes a resilient diversified firm from a fragile overloaded book", () => {
     const scout = agencyScout();
     const resilient = {
-      ...agencyFinances(scout),
+      ...withPolicy(agencyFinances(scout), "balancedBook", 6, 2),
       retainerContracts: [
         retainer("one", "club-a"),
         retainer("two", "club-b"),
@@ -259,7 +247,7 @@ describe("agency strategic health", () => {
       })),
     };
     const fragile = {
-      ...agencyFinances(scout),
+      ...withPolicy(agencyFinances(scout), "marketExpansion", 6, 2),
       balance: 150,
       office: {
         tier: "hq" as const,
@@ -297,7 +285,7 @@ describe("agency strategic health", () => {
     ]));
   });
 
-  it("makes quality protection and controlled growth carry opposite delivery risks", () => {
+  it("makes quality discipline and market expansion carry opposite delivery risks", () => {
     const scout = agencyScout();
     const loaded = {
       ...agencyFinances(scout),
@@ -307,20 +295,8 @@ describe("agency strategic health", () => {
       ],
       employees: [employee("scout", "scout", { fatigue: 55 })],
     };
-    const protectedBook = setAgencyStrategicPosture(
-      loaded,
-      scout,
-      "qualityFirst",
-      12,
-      2,
-    )!;
-    const growthBook = setAgencyStrategicPosture(
-      loaded,
-      scout,
-      "controlledGrowth",
-      12,
-      2,
-    )!;
+    const protectedBook = withPolicy(loaded, "qualityDiscipline", 12, 2);
+    const growthBook = withPolicy(loaded, "marketExpansion", 12, 2);
 
     const protectedHealth = deriveAgencyStrategicHealth(protectedBook, scout);
     const growthHealth = deriveAgencyStrategicHealth(growthBook, scout);
@@ -332,43 +308,5 @@ describe("agency strategic health", () => {
     expect(protectedHealth.reputationExposure).toBeLessThan(
       growthHealth.reputationExposure,
     );
-  });
-
-  it("turns cash defence into a fixed-cost constraint without adding accounting chores", () => {
-    const scout = agencyScout();
-    const base = agencyFinances(scout);
-    const defensive = setAgencyStrategicPosture(
-      base,
-      scout,
-      "cashDefense",
-      14,
-      2,
-    )!;
-
-    expect(upgradeOffice(defensive, "professional")).toBeNull();
-    expect(hireEmployee(
-      new RNG("defensive-hire"),
-      defensive,
-      "analyst",
-      14,
-      2,
-    )).toBeNull();
-    expect(upgradeOffice(defensive, "coworking")?.office.tier).toBe("coworking");
-
-    const growth = setAgencyStrategicPosture(
-      defensive,
-      scout,
-      "controlledGrowth",
-      15,
-      2,
-    )!;
-    expect(upgradeOffice(growth, "professional")?.office.tier).toBe("professional");
-    expect(hireEmployee(
-      new RNG("growth-hire"),
-      growth,
-      "analyst",
-      15,
-      2,
-    )).not.toBeNull();
   });
 });

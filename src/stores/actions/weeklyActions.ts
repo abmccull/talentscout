@@ -173,8 +173,11 @@ import {
   advanceChain,
   type WeeklyNarrativeEmissionV2,
 } from "@/engine/events";
+import {
+  applyDirectedWorldPulse,
+  prepareWeeklyWorldPulse,
+} from "@/engine/events/worldPulse";
 import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
-import { directWeeklyRelationshipConflict } from "@/engine/consequences/relationshipConflictDirector";
 import {
   generateRivalScouts,
   processRivalScoutWeek,
@@ -270,6 +273,7 @@ import {
   nextGameWeek,
   resolveClubDecision,
 } from "@/engine/reports/scoutingCases";
+import { deriveScoutingCaseObservationFocus } from "@/engine/reports/caseQuestions";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { persistGameState } from "@/lib/saveProvider";
 import {
@@ -291,6 +295,45 @@ import {
   rollDayActivityQuality,
   seedKnownPlayersForContact,
 } from "./weeklySimulationSupport";
+
+const OBSERVATION_FOCUS_ACTIVITY_TYPES = new Set<Activity["type"]>([
+  "schoolMatch",
+  "grassrootsTournament",
+  "streetFootball",
+  "academyTrialDay",
+  "youthFestival",
+  "academyVisit",
+  "youthTournament",
+  "followUpSession",
+  "parentCoachMeeting",
+  "reserveMatch",
+  "attendMatch",
+  "trainingVisit",
+  "trialMatch",
+]);
+
+function withScoutingCaseFocus(
+  state: GameState,
+  activity: Activity,
+): Activity {
+  if (
+    !activity.targetId
+    || !OBSERVATION_FOCUS_ACTIVITY_TYPES.has(activity.type)
+    || activity.scoutingQuestionId
+  ) {
+    return activity;
+  }
+  const focus = deriveScoutingCaseObservationFocus(state, {
+    playerId: activity.targetId,
+    briefId: activity.briefId,
+  });
+  if (!focus) return activity;
+  return {
+    ...activity,
+    scoutingQuestionId: focus.scoutingQuestionId,
+    scoutingQuestionIds: focus.scoutingQuestionIds,
+  };
+}
 import {
   processWeeklyContextualHint,
   processWeeklyTutorialMilestones,
@@ -299,6 +342,14 @@ import { registerNarrativeDecisions } from "./weeklyNarrativeConsequences";
 import { processWeeklyWorldProgression } from "./weeklyWorldProgression";
 import { processWeeklyTransferAccountability } from "./weeklyTransferAccountability";
 import { processWeeklySpecializationSystems } from "./weeklySpecializationSystems";
+import {
+  applyDirectedWeeklyScoutingEcology,
+  prepareWeeklyScoutingEcology,
+} from "./weeklyScoutingEcologyPhase";
+import {
+  applyDirectedWeeklyRivalCampaigns,
+  prepareWeeklyRivalCampaigns,
+} from "./weeklyRivalCampaigns";
 import { processWeeklyPostTickSystems } from "./weeklyPostTickSystems";
 import { processWeeklySeasonRollover } from "./weeklySeasonRollover";
 import { processWeeklyRelationshipActivities } from "./weeklyRelationshipActivities";
@@ -375,14 +426,17 @@ export function createWeeklyActions(
       return;
     }
     // Equipment travelSlotReduction: reduce slot cost for travel activities
-    let effectiveActivity = activity;
-    if (activity.type === "travel" || activity.type === "internationalTravel") {
+    let effectiveActivity = withScoutingCaseFocus(gameState, activity);
+    if (effectiveActivity.type === "travel" || effectiveActivity.type === "internationalTravel") {
       const travelEquipBonuses = gameState.finances?.equipment
         ? getActiveEquipmentBonuses(gameState.finances.equipment.loadout)
         : undefined;
       const slotReduction = travelEquipBonuses?.travelSlotReduction ?? 0;
-      if (slotReduction > 0 && activity.slots > 1) {
-        effectiveActivity = { ...activity, slots: Math.max(1, activity.slots - slotReduction) };
+      if (slotReduction > 0 && effectiveActivity.slots > 1) {
+        effectiveActivity = {
+          ...effectiveActivity,
+          slots: Math.max(1, effectiveActivity.slots - slotReduction),
+        };
       }
     }
     if (!canScheduleActivity(
@@ -408,7 +462,7 @@ export function createWeeklyActions(
       "schoolMatch", "grassrootsTournament", "streetFootball",
       "academyTrialDay", "youthFestival", "youthTournament",
     ]);
-    if (YOUTH_ACTIVITIES.has(activity.type)) {
+    if (YOUTH_ACTIVITIES.has(effectiveActivity.type)) {
       tutorial.checkAutoAdvance("youthActivityScheduled");
       // Contextual trigger: first youth activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
@@ -419,7 +473,7 @@ export function createWeeklyActions(
       "databaseQuery", "deepVideoAnalysis", "statsBriefing",
       "algorithmCalibration", "marketInefficiency",
     ]);
-    if (DATA_ACTIVITIES.has(activity.type)) {
+    if (DATA_ACTIVITIES.has(effectiveActivity.type)) {
       tutorial.checkAutoAdvance("dataActivityScheduled");
       // Contextual trigger: first data activity → specialization onboarding
       const hasClub = !!gameState.scout.currentClubId;
@@ -430,7 +484,7 @@ export function createWeeklyActions(
     const FT_ACTIVITIES = new Set([
       "oppositionAnalysis", "reserveMatch", "tacticalBriefing",
     ]);
-    if (FT_ACTIVITIES.has(activity.type)) {
+    if (FT_ACTIVITIES.has(effectiveActivity.type)) {
       const hasClub = !!gameState.scout.currentClubId;
       tutorial.startSequence(resolveOnboardingSequence("firstTeam", hasClub));
     }
@@ -1518,8 +1572,15 @@ export function createWeeklyActions(
           ...organizationFacts,
         },
       },
-      inbox: [...stateWithPhase2.inbox, ...organizationResult.messages],
     };
+    const rivalCampaignWeek = prepareWeeklyRivalCampaigns({
+      state: stateWithPhase2,
+      seasonLength: getSeasonLength(
+        stateWithPhase2.fixtures,
+        stateWithPhase2.currentSeason,
+      ),
+    });
+    stateWithPhase2 = rivalCampaignWeek.state;
 
     // 2a. Process individual rival scouts under this week's organization pressure.
     const rivalRng = createRNG(
@@ -1939,6 +2000,10 @@ export function createWeeklyActions(
     // second narrative authority from flooding the same week with prompts.
     const worldArcWeek = prepareWorldConditionArcWeek(stateWithPhase2);
     stateWithPhase2 = worldArcWeek.state;
+    const scoutingEcologyWeek = prepareWeeklyScoutingEcology({
+      state: stateWithPhase2,
+      rivalOpportunity: organizationResult.opportunity,
+    });
 
     const emissions: WeeklyNarrativeEmissionV2[] = [];
     if (narrativeEvent) {
@@ -1957,6 +2022,20 @@ export function createWeeklyActions(
         continuation: !newStoryline || event.storylineId !== newStoryline.id,
       });
     }
+    const seasonLength = getSeasonLength(
+      stateWithPhase2.fixtures,
+      stateWithPhase2.currentSeason,
+    );
+    const worldPulseWeek = prepareWeeklyWorldPulse({
+      state: stateWithPhase2,
+      seasonLength,
+      blockedByActivity:
+        Boolean(narrativeEvent)
+        || storylineEvents.length > 0
+        || worldArcWeek.beats.length > 0
+        || scoutingEcologyWeek.candidates.length > 0
+        || rivalCampaignWeek.candidates.length > 0,
+    });
 
     const storyDirection = directWeeklyStoryEmissionsV2({
       rootSeed: stateWithPhase2.runManifest.rootSeed,
@@ -1967,14 +2046,16 @@ export function createWeeklyActions(
       },
       priorEvents: priorNarrativeEvents,
       emissions,
-      candidates: worldArcWeek.beats.map((beat) => beat.candidate),
+      candidates: [
+        ...worldArcWeek.beats.map((beat) => beat.candidate),
+        ...scoutingEcologyWeek.candidates,
+        ...rivalCampaignWeek.candidates,
+        ...(worldPulseWeek ? [worldPulseWeek.candidate] : []),
+      ],
       activeChoiceCount: Object.values(stateWithPhase2.consequenceState.decisions)
         .filter((decision) => decision.status === "offered")
         .length,
-      seasonLength: getSeasonLength(
-        stateWithPhase2.fixtures,
-        stateWithPhase2.currentSeason,
-      ),
+      seasonLength,
     });
     const acceptedEventIds = new Set(
       storyDirection.accepted.map(({ emission }) => emission.event.id),
@@ -2022,12 +2103,28 @@ export function createWeeklyActions(
       eventChains: authoritativeChains,
       activeStorylines: authoritativeStorylines,
     };
+    const acceptedStoryCandidateIds = new Set(
+      storyDirection.acceptedCandidates.map(({ candidate }) => candidate.id),
+    );
     stateWithPhase2 = applyDirectedWorldConditionArcBeats({
       state: stateWithPhase2,
       beats: worldArcWeek.beats,
-      acceptedBeatIds: new Set(
-        storyDirection.acceptedCandidates.map(({ candidate }) => candidate.id),
-      ),
+      acceptedBeatIds: acceptedStoryCandidateIds,
+    });
+    stateWithPhase2 = applyDirectedWeeklyScoutingEcology({
+      state: stateWithPhase2,
+      prepared: scoutingEcologyWeek,
+      acceptedCandidateIds: acceptedStoryCandidateIds,
+    });
+    stateWithPhase2 = applyDirectedWorldPulse({
+      state: stateWithPhase2,
+      prepared: worldPulseWeek,
+      acceptedCandidateIds: acceptedStoryCandidateIds,
+    });
+    stateWithPhase2 = applyDirectedWeeklyRivalCampaigns({
+      state: stateWithPhase2,
+      prepared: rivalCampaignWeek,
+      acceptedCandidateIds: acceptedStoryCandidateIds,
     });
 
     if (acceptedNarrativeEvents.length > 0) {
@@ -2051,9 +2148,6 @@ export function createWeeklyActions(
       }, acceptedNarrativeEvents);
     }
 
-    stateWithPhase2 = directWeeklyRelationshipConflict({
-      state: stateWithPhase2,
-    }).state;
     stateWithPhase2 = directWeeklyYouthProfessionalCase({
       state: stateWithPhase2,
     }).state;

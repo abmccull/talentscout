@@ -27,6 +27,8 @@ import {
 } from "@/engine/rivals";
 import type { RivalScout, RivalActivity, Scout } from "@/engine/core/types";
 import type {
+  RivalCampaign,
+  RivalCampaignHistoryRecord,
   RivalOrganization,
   RivalOrganizationOpportunity,
 } from "@/engine/rivals";
@@ -430,9 +432,13 @@ function OpportunityCard({
       <p className="mt-3 text-sm leading-6 text-zinc-300">{opportunity.description}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-[auto_1fr]">
         <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/5 px-3 py-2">
-          <p className="text-[10px] uppercase tracking-wider text-zinc-400">Estimated success</p>
+          <p className="text-[10px] uppercase tracking-wider text-zinc-400">Scout&apos;s read</p>
           <p className="mt-0.5 font-mono text-lg font-bold text-emerald-300">
-            {Math.round(opportunity.successChance * 100)}%
+            {opportunity.successChance >= 0.7
+              ? "Strong opening"
+              : opportunity.successChance >= 0.5
+                ? "Live opening"
+                : "Long shot"}
           </p>
         </div>
         <ul className="space-y-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-zinc-400">
@@ -461,6 +467,165 @@ function OpportunityCard({
         </button>
       </div>
     </article>
+  );
+}
+
+const CAMPAIGN_KIND_LABELS: Record<RivalCampaign["kind"], string> = {
+  relationshipPoach: "Relationship poach",
+  sourceLeak: "Source leak",
+  territoryLock: "Territory lock",
+  showcaseControl: "Showcase control",
+  clubInfluence: "Club influence",
+  mediaPressure: "Media pressure",
+  employeeDefection: "Employee defection",
+  familyAccess: "Family access",
+};
+
+const CAMPAIGN_PHASE_LABELS: Record<RivalCampaign["phase"], string> = {
+  signal: "Signal",
+  contest: "Contest",
+  response: "Response due",
+  aftermath: "Aftermath",
+};
+
+const CAMPAIGN_TARGET_LABELS: Record<RivalCampaign["targetKind"], string> = {
+  player: "Prospect",
+  contact: "Source",
+  employee: "Employee",
+  family: "Family",
+  journalist: "Journalist",
+  club: "Club buyer",
+  venue: "Venue",
+  territory: "Territory",
+};
+
+function CampaignCard({
+  campaign,
+  organization,
+  leadRivalName,
+  onOpenInbox,
+  onOpenPlayer,
+}: {
+  campaign: RivalCampaign;
+  organization?: RivalOrganization;
+  leadRivalName: string;
+  onOpenInbox: () => void;
+  onOpenPlayer: (playerId: string) => void;
+}) {
+  const deadline = campaign.responseDueAt
+    ? `S${campaign.responseDueAt.season} W${campaign.responseDueAt.week}`
+    : null;
+
+  return (
+    <article className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-red-300">
+            {CAMPAIGN_PHASE_LABELS[campaign.phase]}
+          </p>
+          <h3 className="mt-1 text-base font-semibold text-white">
+            {CAMPAIGN_KIND_LABELS[campaign.kind]}
+          </h3>
+          <p className="mt-1 text-xs text-zinc-400">
+            {organization?.name ?? "Rival network"} through {leadRivalName}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="outline" className="border-red-500/30 text-[10px] text-red-200">
+            {CAMPAIGN_TARGET_LABELS[campaign.targetKind]}
+          </Badge>
+          {deadline && (
+            <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-200">
+              Due {deadline}
+            </Badge>
+          )}
+        </div>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-zinc-300">
+        {campaign.target.label}
+      </p>
+      {campaign.visibleSignals.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {campaign.visibleSignals.slice(0, 3).map((signal) => (
+            <li key={`${campaign.id}:${signal.headline}`} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-white">{signal.headline}</p>
+                <span className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                  {signal.urgency}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-zinc-400">{signal.detail}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+      {campaign.responseOptions.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {campaign.responseOptions.map((option) => (
+            <Badge key={option.id} variant="secondary" className="text-[10px]">
+              {option.label}
+            </Badge>
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={onOpenInbox}
+          className="min-h-11 rounded-md border border-red-400/30 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-100 transition hover:border-red-300/50 hover:bg-red-500/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-300"
+        >
+          Review response lane
+        </button>
+        {campaign.relatedPlayerId && (
+          <button
+            type="button"
+            onClick={() => onOpenPlayer(campaign.relatedPlayerId!)}
+            className="min-h-11 rounded-md border border-zinc-700 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:border-zinc-600 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+          >
+            Open prospect
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function CampaignHistoryPanel({
+  history,
+}: {
+  history: RivalCampaignHistoryRecord[];
+}) {
+  if (history.length === 0) return null;
+
+  return (
+    <Card className="border-white/10 bg-black/20">
+      <CardContent className="pt-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Clock size={14} className="text-zinc-400" aria-hidden="true" />
+          <h3 className="text-sm font-semibold text-white">Recent scars</h3>
+        </div>
+        <div className="space-y-2">
+          {history.slice(0, 5).map((record) => (
+            <div key={record.id} className="rounded-lg border border-white/10 bg-zinc-950/80 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-white">
+                  {CAMPAIGN_KIND_LABELS[record.kind]}
+                </p>
+                <span className="text-[10px] text-zinc-500">
+                  S{record.createdAt.season} W{record.createdAt.week}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+                {record.targetLabel}
+              </p>
+              <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                {record.resolution ?? record.status}
+              </p>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -525,6 +690,30 @@ export function RivalsScreen() {
       rivalOrganizationState
         ? getOpenRivalOrganizationOpportunities(rivalOrganizationState)
         : [],
+    [rivalOrganizationState],
+  );
+  const activeCampaigns = useMemo(
+    () =>
+      Object.values(rivalOrganizationState?.campaignState.campaigns ?? {})
+        .filter((campaign) => campaign.status === "active")
+        .sort((left, right) => {
+          const leftDue = left.responseDueAt ? left.responseDueAt.season * 100 + left.responseDueAt.week : Number.MAX_SAFE_INTEGER;
+          const rightDue = right.responseDueAt ? right.responseDueAt.season * 100 + right.responseDueAt.week : Number.MAX_SAFE_INTEGER;
+          return leftDue - rightDue
+            || left.updatedAt.season - right.updatedAt.season
+            || left.updatedAt.week - right.updatedAt.week
+            || left.id.localeCompare(right.id);
+        }),
+    [rivalOrganizationState],
+  );
+  const campaignHistory = useMemo(
+    () =>
+      [...(rivalOrganizationState?.campaignState.history ?? [])]
+        .sort((left, right) =>
+          (right.resolvedAt?.season ?? right.createdAt.season) - (left.resolvedAt?.season ?? left.createdAt.season)
+          || (right.resolvedAt?.week ?? right.createdAt.week) - (left.resolvedAt?.week ?? left.createdAt.week)
+          || left.id.localeCompare(right.id),
+        ),
     [rivalOrganizationState],
   );
 
@@ -615,6 +804,7 @@ export function RivalsScreen() {
   // Count total signed players by rivals
   const signedByRivals = activities.filter((a) => a.type === "playerSigned").length;
   const activeTargets = rivalList.filter((r) => r.currentTarget).length;
+  const campaignsAwaitingResponse = activeCampaigns.filter((campaign) => campaign.phase === "response").length;
 
   return (
     <GameLayout>
@@ -642,6 +832,14 @@ export function RivalsScreen() {
               {activeTargets} actively scouting
             </span>
           </div>
+          {activeCampaigns.length > 0 && (
+            <div className="flex items-center gap-2 rounded-md border border-red-400/25 bg-red-400/5 px-3 py-2">
+              <Swords size={14} className="text-red-300" aria-hidden="true" />
+              <span className="text-xs text-red-100">
+                {activeCampaigns.length} live contest{activeCampaigns.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
           {openOpportunities.length > 0 && (
             <div className="flex items-center gap-2 rounded-md border border-amber-400/25 bg-amber-400/5 px-3 py-2">
               <Zap size={14} className="text-amber-300" aria-hidden="true" />
@@ -659,6 +857,57 @@ export function RivalsScreen() {
             </div>
           )}
         </div>
+
+        {(activeCampaigns.length > 0 || campaignHistory.length > 0) && (
+          <section aria-labelledby="rival-campaigns-heading" className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 id="rival-campaigns-heading" className="flex items-center gap-2 text-lg font-semibold text-white">
+                  <Swords size={17} className="text-red-300" aria-hidden="true" />
+                  Live contests
+                </h2>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Rival organizations are now contesting people, territory, and access channels rather than only chasing players.
+                </p>
+              </div>
+              {campaignsAwaitingResponse > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setScreen("inbox")}
+                  className="min-h-11 rounded-md border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-100 transition hover:border-red-300/45 hover:bg-red-500/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-300"
+                >
+                  {campaignsAwaitingResponse} awaiting reply
+                </button>
+              )}
+            </div>
+            <div className="grid gap-4 xl:grid-cols-[1.35fr_0.85fr]">
+              <div className="space-y-3">
+                {activeCampaigns.length > 0 ? (
+                  activeCampaigns.slice(0, 4).map((campaign) => (
+                    <CampaignCard
+                      key={campaign.id}
+                      campaign={campaign}
+                      organization={rivalOrganizationState?.organizations[campaign.organizationId]}
+                      leadRivalName={rivalScoutsById?.[campaign.leadRivalId]?.name ?? "Unknown rival"}
+                      onOpenInbox={() => setScreen("inbox")}
+                      onOpenPlayer={navigateToPlayer}
+                    />
+                  ))
+                ) : (
+                  <Card className="border-white/10 bg-black/20">
+                    <CardContent className="pt-4">
+                      <p className="text-sm text-zinc-300">No active rival campaigns this week.</p>
+                      <p className="mt-1 text-xs leading-5 text-zinc-500">
+                        Rival pressure still exists through target overlap and organization agendas, but there is no direct contest currently escalated against you.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              <CampaignHistoryPanel history={campaignHistory} />
+            </div>
+          </section>
+        )}
 
         {rivalOrganizationState && openOpportunities.length > 0 && (
           <section aria-labelledby="rival-openings-heading" className="space-y-3">

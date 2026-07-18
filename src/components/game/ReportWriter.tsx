@@ -1143,7 +1143,7 @@ export function ReportWriter() {
               )}
             </div>
 
-            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5" aria-label="Report steps">
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5" role="tablist" aria-label="Report steps">
               {sectionNavigatorItems.map((item) => {
                 const Icon = item.complete ? CheckCircle2 : Circle;
                 const canOpen = canOpenReportWorkflowStep(item, workflow.nextRequiredStepId);
@@ -1152,8 +1152,10 @@ export function ReportWriter() {
                   <button
                     key={item.id}
                     type="button"
+                    role="tab"
                     onClick={() => openWorkflowSection(item)}
                     disabled={!canOpen}
+                    aria-selected={active}
                     aria-current={active ? "step" : undefined}
                     aria-label={`${item.label}. ${item.detail}`}
                     className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 sm:gap-2 sm:px-3 ${
@@ -1206,11 +1208,22 @@ export function ReportWriter() {
         )}
 
         {isYouthCase && !conciseOpeningMode && (
-          <section
+          <details
             id="report-section-brief"
-            className="mb-6 rounded-2xl border border-emerald-400/25 bg-[linear-gradient(145deg,rgba(16,185,129,0.11),rgba(16,21,27,0.98)_44%)] p-4 shadow-xl shadow-black/20 sm:p-6"
+            open={isWorkflowSectionActive("brief") || isWorkflowSectionActive("case") || isWorkflowSectionActive("risk")}
+            className="group mb-6 rounded-2xl border border-emerald-400/25 bg-[linear-gradient(145deg,rgba(16,185,129,0.11),rgba(16,21,27,0.98)_44%)] shadow-xl shadow-black/20"
             aria-labelledby="academy-case-heading"
           >
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 sm:px-6 [&::-webkit-details-marker]:hidden">
+              <div>
+                <span className="text-sm font-semibold text-white">Brief, fit, and professional context</span>
+                <span className="mt-1 block text-xs text-zinc-400">Audience, pathway, primary risk, and the evidence framing the room will hear.</span>
+              </div>
+              <Badge variant={sectionNavigatorItems.find((step) => step.id === "brief")?.complete ? "success" : "warning"}>
+                {sectionNavigatorItems.find((step) => step.id === "brief")?.complete ? "Complete" : "Open decisions"}
+              </Badge>
+            </summary>
+            <div className="border-t border-white/10 p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Academy placement case</p>
@@ -1778,15 +1791,19 @@ export function ReportWriter() {
                 )}
               </div>
             )}
-          </section>
+            </div>
+          </details>
         )}
 
         {observations.length === 0 && (
-          <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-            <p className="flex items-center gap-2 text-sm text-red-400">
-              <AlertTriangle size={16} aria-hidden="true" />
-              {t("noObservations")}
+          <div role="alert" className="mb-6 flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-start gap-2 text-sm leading-5 text-red-200">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+              <span>{t("noObservations")} Return to the dossier and choose the context that can answer the open question.</span>
             </p>
+            <Button className="min-h-11 shrink-0" variant="outline" onClick={handleBack}>
+              Plan observation
+            </Button>
           </div>
         )}
         {observations.length > 0 && previousReport && freshObservationIds.length === 0 && (
@@ -2481,6 +2498,7 @@ export function ReportWriter() {
 
             </div>
           </details>
+
 
           {/* Written summary */}
           <Card className="hidden">

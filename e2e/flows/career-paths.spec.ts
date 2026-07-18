@@ -34,9 +34,11 @@ test.describe("Career Paths", () => {
 
     await gamePage.navigateTo("career");
 
-    const conditions = gamePage.page.getByText("This career's world conditions", {
-      exact: true,
-    });
+    await gamePage.page.getByTestId("career-world-details").locator(":scope > summary").click();
+
+    const conditions = gamePage.page.getByText(
+      /These seed-locked conditions shape talent, competition, markets, and story pacing for the full career\./,
+    );
     await expect(conditions).toBeVisible();
     await expect(gamePage.page.getByText("talent", { exact: true })).toBeVisible();
     await expect(gamePage.page.getByText("competition", { exact: true })).toBeVisible();
@@ -71,7 +73,9 @@ test.describe("Career Paths", () => {
 
     expect(await gamePage.getGameStateValue("scout.currentClubId")).toBeFalsy();
     expect(await gamePage.getGameStateValue("scout.salary")).toBe(0);
-    await expect(gamePage.page.getByText("Freelance Scout", { exact: true })).toBeVisible();
+    await expect(
+      gamePage.page.getByLabel("Overview").getByText("Freelance Scout", { exact: true }),
+    ).toBeVisible();
 
     gamePage.expectNoConsoleErrors();
   });

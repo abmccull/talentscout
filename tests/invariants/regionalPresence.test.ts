@@ -211,6 +211,8 @@ describe("regional presence invariants", () => {
       opportunityMultiplier: 1,
       costMultiplier: 1,
       fatigueMultiplier: 1,
+      observationContextSignalBias: {},
+      observationContextUncertaintyBias: {},
     };
     expect(getTravelPostureEffects(undefined)).toEqual(neutralEffects);
     expect(getTravelPostureEffects("legacy-posture" as never)).toEqual(neutralEffects);
@@ -250,6 +252,60 @@ describe("regional presence invariants", () => {
     expect(established.effects.travelFatigueMultiplier).toBeLessThan(1);
     expect(established.effects.travelSlotReduction).toBe(1);
     expect(established.effects.passiveKnowledgeGain).toBeGreaterThan(0);
+  });
+
+  it("makes protected access and an agency regional commitment change real outcomes", () => {
+    const remoteFinances = {
+      ...finances(),
+      careerPath: "independent" as const,
+      employees: [],
+      satelliteOffices: [],
+    };
+    const remoteOverrides = {
+      finances: remoteFinances,
+      contacts: {},
+      regionalKnowledge: {
+        england: knowledge("england", 25),
+        brazil: knowledge("brazil", 0),
+      },
+    };
+    const remote = deriveRegionalPresence(state(remoteOverrides), "brazil");
+    const protectedAccess = deriveRegionalPresence(state({
+      ...remoteOverrides,
+      accessAgreements: {
+        "brazil-channel": {
+          id: "brazil-channel",
+          grantor: { kind: "contact", id: "academy-director" },
+          beneficiary: { kind: "scout", id: "scout" },
+          scope: "regionalIntro",
+          status: "active",
+          exclusive: true,
+          confidential: false,
+          createdAt: { season: 2, week: 4 },
+          countryId: "brazil",
+        },
+      },
+    }), "brazil");
+    const regionalCommitment = deriveRegionalPresence(state({
+      ...remoteOverrides,
+      finances: {
+        ...remoteFinances,
+        agencyStrategyState: {
+          policy: "regionalDepth",
+          selectedAt: { season: 2, week: 6 },
+          lockedUntil: { season: 2, week: 10 },
+          focusRegionId: "brazil",
+        },
+      },
+    }), "brazil");
+
+    expect(protectedAccess.sources.some((source) => source.kind === "accessAgreement")).toBe(true);
+    expect(protectedAccess.dimensions.access).toBeGreaterThan(remote.dimensions.access);
+    expect(protectedAccess.effects.opportunityMultiplier).toBeGreaterThan(remote.effects.opportunityMultiplier);
+    expect(regionalCommitment.sources.some((source) => source.kind === "operatingPolicy")).toBe(true);
+    expect(regionalCommitment.dimensions.intelligence).toBeGreaterThan(remote.dimensions.intelligence);
+    expect(regionalCommitment.effects.discoveryMultiplier).toBeGreaterThan(remote.effects.discoveryMultiplier);
+    expect(regionalCommitment.effects.passiveKnowledgeGain).toBeGreaterThan(remote.effects.passiveKnowledgeGain);
   });
 
   it("lets specialist staff improve the capability they actually provide", () => {
@@ -429,6 +485,38 @@ describe("regional presence invariants", () => {
     const result = processRegionalKnowledgeGrowth(before, createRNG("presence-growth"));
 
     expect(result.regionalKnowledge.brazil.knowledgeLevel).toBeGreaterThan(65);
+  });
+
+  it("reduces visible presence effects when a shallow neglected region goes stale", () => {
+    const beforeState = state({
+      contacts: {},
+      finances: { ...finances(), satelliteOffices: [], employees: [] },
+      regionalKnowledge: {
+        england: knowledge("england", 25),
+        brazil: {
+          ...knowledge("brazil", 14),
+          maintenanceState: {
+            lastProcessedSeason: 2,
+            lastProcessedWeek: 7,
+            neglectedWeeks: 3,
+          },
+        },
+      },
+    });
+
+    const before = deriveRegionalPresence(beforeState, "brazil");
+    const tick = processRegionalKnowledgeGrowth(beforeState, createRNG("presence-stale"));
+    const after = deriveRegionalPresence(
+      { ...beforeState, regionalKnowledge: tick.regionalKnowledge },
+      "brazil",
+    );
+
+    expect(tick.regionalKnowledge.brazil.knowledgeLevel).toBe(13.2);
+    expect(after.dimensions.intelligence).toBeLessThan(before.dimensions.intelligence);
+    expect(after.dimensions.logistics).toBeLessThanOrEqual(before.dimensions.logistics);
+    expect(after.effects.observationConfidenceBonus).toBeLessThan(before.effects.observationConfidenceBonus);
+    expect(after.sources.find((source) => source.kind === "regionalKnowledge")?.score)
+      .toBeLessThan(before.sources.find((source) => source.kind === "regionalKnowledge")?.score ?? 0);
   });
 
   it("keeps an employee assigned to at most one satellite office", () => {

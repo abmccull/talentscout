@@ -34,6 +34,11 @@ import {
   getWorldConditionModifiers,
 } from "./worldConditions";
 import { isFixtureInSeason } from "./fixtures";
+import { isAccessAgreementActive } from "@/engine/consequences/accessAgreements";
+import {
+  getAgencyPolicyWeeklyModifiers,
+  normalizeAgencyStrategyState,
+} from "@/engine/finance/agencyStrategy";
 
 export type RegionalAccessTier =
   | "remote"
@@ -50,7 +55,9 @@ export interface RegionalPresenceSource {
     | "assignedStaff"
     | "localContacts"
     | "regionalKnowledge"
-    | "delegatedCoverage";
+    | "delegatedCoverage"
+    | "accessAgreement"
+    | "operatingPolicy";
   label: string;
   score: number;
   /** Which operational capabilities this source actually strengthens. */
@@ -231,6 +238,26 @@ function accessTier(score: number): RegionalAccessTier {
   if (score >= 40) return "networked";
   if (score >= 20) return "informed";
   return "remote";
+}
+
+function dimensionsFromSources(
+  sources: readonly RegionalPresenceSource[],
+): RegionalPresenceDimensions {
+  const totals = sources.reduce<RegionalPresenceDimensions>(
+    (result, source) => ({
+      access: result.access + (source.dimensions?.access ?? 0),
+      intelligence: result.intelligence + (source.dimensions?.intelligence ?? 0),
+      relationships: result.relationships + (source.dimensions?.relationships ?? 0),
+      logistics: result.logistics + (source.dimensions?.logistics ?? 0),
+    }),
+    { access: 0, intelligence: 0, relationships: 0, logistics: 0 },
+  );
+  return {
+    access: Math.round(clamp(totals.access, 0, 100)),
+    intelligence: Math.round(clamp(totals.intelligence, 0, 100)),
+    relationships: Math.round(clamp(totals.relationships, 0, 100)),
+    logistics: Math.round(clamp(totals.logistics, 0, 100)),
+  };
 }
 
 function titleCase(value: string): string {
@@ -511,6 +538,26 @@ export function deriveRegionalPresence(
   const knowledgeLevel = clamp(knowledge?.knowledgeLevel ?? 0, 0, 100);
   const localContactCount = (knowledge?.localContacts ?? []).length;
   const culturalInsightCount = (knowledge?.culturalInsights ?? []).length;
+  const agencyStrategy = normalizeAgencyStrategyState(state.finances?.agencyStrategyState);
+  const agencyPolicy = getAgencyPolicyWeeklyModifiers(agencyStrategy?.policy);
+  const agencyPolicyCountry = canonicalCountry(agencyStrategy?.focusRegionId) ?? homeCountry;
+  const agencyPolicyActiveHere = Boolean(
+    agencyStrategy
+    && agencyPolicy.regionalPresenceBonus > 0
+    && agencyPolicyCountry === countryId,
+  );
+  const accessAgreements = Object.values(state.accessAgreements ?? {}).filter((agreement) =>
+    isAccessAgreementActive(agreement, {
+      season: state.currentSeason,
+      week: state.currentWeek,
+    })
+    && (
+      canonicalCountry(agreement.countryId) === countryId
+      || canonicalCountry(agreement.regionId) === countryId
+      || (agreement.subject?.kind === "territory"
+         && canonicalCountry(agreement.subject.id) === countryId)
+    ),
+  );
 
   const sources: RegionalPresenceSource[] = [];
   if (isHomeBase) {
@@ -534,7 +581,12 @@ export function deriveRegionalPresence(
       kind: "satelliteOffice",
       label: "Satellite office",
       score: 22,
-      dimensions: { access: 18, intelligence: 5, relationships: 8, logistics: 35 },
+      dimensions: {
+        access: 18,
+        intelligence: 5 + office.qualityBonus * 25,
+        relationships: 8,
+        logistics: 35,
+      },
     });
   }
   if (assignedEmployees.length > 0) {
@@ -585,6 +637,33 @@ export function deriveRegionalPresence(
       },
     });
   }
+  if (accessAgreements.length > 0) {
+    const agreementWeight = Math.min(4, accessAgreements.length);
+    sources.push({
+      kind: "accessAgreement",
+      label: `${accessAgreements.length} active protected access ${accessAgreements.length === 1 ? "channel" : "channels"}`,
+      score: agreementWeight * 8,
+      dimensions: {
+        access: agreementWeight * 10,
+        relationships: agreementWeight * 6,
+      },
+    });
+  }
+  if (agencyStrategy && agencyPolicyActiveHere) {
+    sources.push({
+      kind: "operatingPolicy",
+      label: agencyStrategy.policy === "regionalDepth"
+        ? "Agency committed to regional depth"
+        : "Agency market-expansion campaign",
+      score: agencyPolicy.regionalPresenceBonus,
+      dimensions: {
+        access: agencyPolicy.regionalPresenceBonus,
+        intelligence: Math.round(agencyPolicy.regionalPresenceBonus * 0.8),
+        relationships: Math.round(agencyPolicy.regionalPresenceBonus * 0.6),
+        logistics: Math.round(agencyPolicy.regionalPresenceBonus * 0.4),
+      },
+    });
+  }
   if (knowledgeLevel > 0) {
     sources.push({
       kind: "regionalKnowledge",
@@ -595,18 +674,6 @@ export function deriveRegionalPresence(
   }
 
   const analystCount = assignedEmployees.filter((employee) => employee.role === "analyst").length;
-  const scoutCount = assignedEmployees.filter((employee) =>
-    employee.role === "scout" || employee.role === "mentee"
-  ).length;
-  const administratorCount = assignedEmployees.filter(
-    (employee) => employee.role === "administrator",
-  ).length;
-  const relationshipManagerCount = assignedEmployees.filter(
-    (employee) => employee.role === "relationshipManager",
-  ).length;
-  const relationshipStrength = contacts.reduce((sum, contact) =>
-    sum + clamp((contact.relationship + (contact.trustLevel ?? contact.relationship)) / 200, 0.1, 1), 0);
-  const officeQuality = office?.qualityBonus ?? 0;
   const countryReputation = state.scout.countryReputations?.[countryId]
     ?? Object.values(state.scout.countryReputations ?? {}).find((entry) =>
       canonicalCountry(entry.country) === countryId
@@ -673,47 +740,21 @@ export function deriveRegionalPresence(
     rivalMarket,
   };
 
+  // Sources are the single calculation authority for operational presence.
+  // Territorial reputation is a contextual modifier layered onto those
+  // explainable sources instead of retaining the older parallel hand-built
+  // formula, which would otherwise double-count offices, staff, and contacts.
+  const sourceDimensions = dimensionsFromSources(sources);
   const dimensions: RegionalPresenceDimensions = generatedWorldEligible
     ? {
-        access: Math.round(clamp(
-          (isHomeBase ? 42 : 0)
-            + (isActiveLocation ? 28 : 0)
-            + (office ? 18 : 0)
-            + scoutCount * 10
-            + delegatedCount * 5
-            + relationshipStrength * 7
-            + localContactCount * 2,
-          0,
-          100,
-        )),
+        ...sourceDimensions,
         intelligence: Math.round(clamp(
-          knowledgeLevel * 0.62
-            + (isActiveLocation ? 14 : 0)
-            + (office ? 5 : 0)
-            + scoutCount * 5
-            + analystCount * 12
-            + officeQuality * 25
-            + regionalReputationScore * 0.05,
+          sourceDimensions.intelligence + regionalReputationScore * 0.05,
           0,
           100,
         )),
         relationships: Math.round(clamp(
-          relationshipStrength * 20
-            + localContactCount * 4
-            + relationshipManagerCount * 15
-            + (office ? 8 : 0)
-            + (isActiveLocation ? 8 : 0)
-            + regionalReputationScore * 0.12,
-          0,
-          100,
-        )),
-        logistics: Math.round(clamp(
-          (isHomeBase ? 45 : 0)
-            + (isActiveLocation ? 10 : 0)
-            + (office ? 35 : 0)
-            + administratorCount * 18
-            + assignedEmployees.length * 4
-            + knowledgeLevel * 0.1,
+          sourceDimensions.relationships + regionalReputationScore * 0.12,
           0,
           100,
         )),
@@ -745,7 +786,8 @@ export function deriveRegionalPresence(
     ? clamp(
       (office ? 0.5 : 0)
         + assignedEmployees.length * 0.25
-        + delegatedCount * 0.15,
+        + delegatedCount * 0.15
+        + (agencyPolicyActiveHere ? agencyPolicy.regionalPresenceBonus * 0.03 : 0),
       0,
       2,
     )

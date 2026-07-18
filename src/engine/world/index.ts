@@ -57,6 +57,36 @@ export type {
   RecruitmentReach,
   RecruitmentIdentityFit,
 } from './recruitmentIdentity';
+export {
+  deriveWorldConditionStakeholderClimate,
+  deriveWorldConditionStakeholderMatrix,
+  WORLD_STAKEHOLDER_ROLES,
+} from './worldConditionStakeholders';
+export type {
+  WorldStakeholderRole,
+  WorldConditionStakeholderClimate,
+  WorldConditionStakeholderMatrix,
+} from './worldConditionStakeholders';
+export {
+  deriveTerritoryIdentity,
+  deriveTerritoryIdentityIndex,
+} from './territoryIdentity';
+export type {
+  TerritoryIdentity,
+  TerritoryIdentityArchetype,
+  TerritoryAccessPattern,
+  TerritoryOpportunityWindow,
+  TerritoryIdentityEvidenceProfile,
+  TerritoryIdentityClubDemandMix,
+} from './territoryIdentity';
+export {
+  deriveClubRecruitmentEcosystem,
+} from './clubRecruitmentEcosystem';
+export type {
+  ClubRecruitmentEcosystem,
+  ClubRecruitmentEvidenceMix,
+  RecruitmentLanePreference,
+} from './clubRecruitmentEcosystem';
 export type {
   LifecycleWorldState,
   LifecycleResolution,
@@ -161,6 +191,18 @@ export type {
   WorldConditionSeasonRecord,
   WorldConditionState,
 } from './worldConditions';
+export {
+  CLUB_PHILOSOPHY_TRANSITION_HISTORY_LIMIT,
+  CLUB_PHILOSOPHY_TRANSITION_STATE_VERSION,
+  createClubPhilosophyTransitionState,
+  migrateClubPhilosophyTransitionState,
+  applyClubPhilosophySeasonStart,
+} from './clubPhilosophyTransitions';
+export type {
+  ClubPhilosophyTransitionReasonCode,
+  ClubPhilosophyTransitionRecord,
+  ClubPhilosophyTransitionState,
+} from './clubPhilosophyTransitions';
 
 export {
   WORLD_CONDITION_ARC_COMPLETED_LIMIT,

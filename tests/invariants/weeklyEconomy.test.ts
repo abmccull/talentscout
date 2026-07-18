@@ -111,6 +111,124 @@ describe("weekly economy orchestration", () => {
     expect(processWeeklyEconomy(state, state)).toBe(state);
   });
 
+  it("charges an agency posture once and keeps the cash ledger balanced", () => {
+    const base = economyState();
+    const state = {
+      ...base,
+      currentWeek: 3,
+      finances: {
+        ...base.finances!,
+        agencyStrategyState: {
+          policy: "marketExpansion" as const,
+          selectedAt: { season: 1, week: 1 },
+          lockedUntil: { season: 1, week: 5 },
+        },
+      },
+    };
+    const processed = processWeeklyEconomy(state, state);
+    const replayed = processWeeklyEconomy(processed, state);
+    const referenceId = "agency-policy:marketExpansion:s1w3";
+
+    expect(processed.finances?.transactions.filter(
+      (transaction) => transaction.referenceId === referenceId,
+    )).toHaveLength(1);
+    expect(replayed.finances?.transactions.filter(
+      (transaction) => transaction.referenceId === referenceId,
+    )).toHaveLength(1);
+    expect(replayed.finances?.balance).toBe(processed.finances?.balance);
+    expect(replayed.finances?.transactions.reduce(
+      (total, transaction) => total + transaction.amount,
+      0,
+    )).toBe(replayed.finances?.balance);
+  });
+
+  it("applies agency policy staff pressure exactly once per weekly tick", () => {
+    const base = economyState();
+    const neutralState = {
+      ...base,
+      currentWeek: 3,
+      finances: {
+        ...base.finances!,
+        employees: [{
+          id: "emp-1",
+          name: "Employee One",
+          role: "scout" as const,
+          quality: 70,
+          salary: 900,
+          paySatisfaction: 60,
+          morale: 55,
+          fatigue: 70,
+          hiredWeek: 1,
+          hiredSeason: 1,
+          workProductsGenerated: [],
+          experience: 100,
+          weeklyLog: [],
+          regionFocusWeeks: 0,
+        }],
+        clientRelationships: [{
+          clubId: "club-a",
+          satisfaction: 60,
+          totalReportsDelivered: 0,
+          totalRevenue: 0,
+          tenureWeeks: 1,
+          preferences: [],
+          status: "active" as const,
+          lastInteractionWeek: 2,
+          lastInteractionSeason: 1,
+        }],
+      },
+    } as unknown as GameState;
+    const policyState = {
+      ...neutralState,
+      finances: {
+        ...neutralState.finances!,
+        agencyStrategyState: {
+          policy: "marketExpansion" as const,
+          selectedAt: { season: 1, week: 1 },
+          lockedUntil: { season: 1, week: 5 },
+        },
+      },
+    } as GameState;
+
+    const neutral = processWeeklyEconomy(neutralState, neutralState);
+    const pressured = processWeeklyEconomy(policyState, policyState);
+
+    expect(pressured.finances?.employees[0].morale).toBe(
+      neutral.finances!.employees[0].morale - 1,
+    );
+    expect(pressured.finances?.employees[0].fatigue).toBe(
+      neutral.finances!.employees[0].fatigue + 2,
+    );
+    expect(pressured.finances?.clientRelationships[0].satisfaction).toBe(
+      neutral.finances!.clientRelationships[0].satisfaction - 1,
+    );
+  });
+
+  it("reconciles a stale finance career path before processing agency policy", () => {
+    const base = economyState();
+    const mismatched = {
+      ...base,
+      scout: { ...base.scout, careerPath: "club" as const },
+      finances: {
+        ...base.finances!,
+        careerPath: "independent" as const,
+        agencyStrategyState: {
+          policy: "marketExpansion" as const,
+          selectedAt: { season: 1, week: 1 },
+          lockedUntil: { season: 1, week: 5 },
+        },
+      },
+    };
+
+    const processed = processWeeklyEconomy(mismatched, mismatched);
+
+    expect(processed.finances?.careerPath).toBe("club");
+    expect(processed.finances?.agencyStrategyState?.lastAppliedAt).toBeUndefined();
+    expect(processed.finances?.transactions.some((transaction) =>
+      transaction.referenceId?.startsWith("agency-policy:"),
+    )).toBe(false);
+  });
+
   it("cannot reinterpret a fulfilled retainer as failed when the economy phase replays", () => {
     const base = economyState();
     const state = {

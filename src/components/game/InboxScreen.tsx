@@ -191,6 +191,24 @@ function getSeasons(inbox: InboxMessage[]): number[] {
   return Array.from(seasons).sort((a, b) => b - a);
 }
 
+interface InboxThreadSummary {
+  key: string;
+  title: string;
+  subtitle: string;
+  unreadCount: number;
+  actionRequired: boolean;
+  latestMessageId: string;
+  latestSeason: number;
+  latestWeek: number;
+}
+
+function inboxThreadKey(message: InboxMessage): string {
+  if (message.relatedEntityType && message.relatedId) {
+    return `${message.relatedEntityType}:${message.relatedId}`;
+  }
+  return `${message.type}:${message.title}`;
+}
+
 // ─── ConsequenceList (A5) ────────────────────────────────────────────────────
 
 function ConsequenceList({ consequences }: { consequences: ChainConsequence[] }) {
@@ -460,7 +478,11 @@ function ConsequenceDecisionCard({
 }) {
   const metadataTitle = decision.metadata?.title;
   const metadataPremise = decision.metadata?.premise;
-  const title = typeof metadataTitle === "string" ? metadataTitle : "Career decision";
+  const title = typeof metadataTitle === "string"
+    ? metadataTitle
+    : decision.source.kind === "rivalCampaign"
+      ? "Rival campaign / counter-move"
+      : "Career decision";
   const premise = typeof metadataPremise === "string"
     ? metadataPremise
     : "Two legitimate obligations are pulling your career in different directions. Your choice will be recorded.";
@@ -470,6 +492,8 @@ function ConsequenceDecisionCard({
       ? "World condition decision"
       : decision.source.kind === "professionalCase"
         ? "Scouting case"
+        : decision.source.kind === "rivalCampaign"
+          ? "Rival campaign"
       : "Conflicting obligations";
   const absoluteWeek = (season: number, week: number) => (season - 1) * seasonLength + week;
   const weeksRemaining = Math.max(
@@ -946,6 +970,7 @@ export function InboxScreen() {
         decision.status === "offered"
         && (decision.source.kind === "lateCareerDilemma"
           || decision.source.kind === "relationshipConflict"
+          || decision.source.kind === "rivalCampaign"
           || decision.source.kind === "worldConditionArc"
           || decision.source.kind === "professionalCase"),
       )
@@ -1002,6 +1027,52 @@ export function InboxScreen() {
     };
     return counts;
   }, [inbox, seasonFilter]);
+
+  const threadSummaries = useMemo<InboxThreadSummary[]>(() => {
+    const threads = new Map<string, InboxThreadSummary>();
+    for (const message of inbox) {
+      const key = inboxThreadKey(message);
+      const latestIndex = message.season * 100 + message.week;
+      const current = threads.get(key);
+      if (!current || latestIndex > current.latestSeason * 100 + current.latestWeek) {
+        threads.set(key, {
+          key,
+          title: message.title,
+          subtitle: message.relatedEntityType
+            ? `${message.relatedEntityType} thread`
+            : `${message.type} thread`,
+          unreadCount: current?.unreadCount ?? 0,
+          actionRequired: (current?.actionRequired ?? false) || message.actionRequired,
+          latestMessageId: message.id,
+          latestSeason: message.season,
+          latestWeek: message.week,
+        });
+      }
+      if (!message.read) {
+        const entry = threads.get(key);
+        if (entry) entry.unreadCount += 1;
+      }
+      if (message.actionRequired) {
+        const entry = threads.get(key);
+        if (entry) entry.actionRequired = true;
+      }
+    }
+    return [...threads.values()]
+      .sort((left, right) =>
+        right.latestSeason - left.latestSeason
+        || right.latestWeek - left.latestWeek
+        || left.key.localeCompare(right.key),
+      );
+  }, [inbox]);
+
+  const urgentMessages = useMemo(
+    () =>
+      sortMessages(
+        inbox.filter((message) => message.actionRequired || !message.read),
+        "newest",
+      ).slice(0, 4),
+    [inbox],
+  );
 
   if (!gameState) return null;
 
@@ -1060,6 +1131,95 @@ export function InboxScreen() {
               Mark all read
             </button>
           )}
+        </div>
+
+        <div className="mb-6 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <Card className="border-emerald-500/20 bg-zinc-950/85">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Bell size={14} className="text-emerald-300" aria-hidden="true" />
+                Decision queue
+              </CardTitle>
+              <p className="text-xs leading-5 text-zinc-400">
+                The highest-pressure items that can still change outcomes this week.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {urgentMessages.length > 0 ? (
+                urgentMessages.map((message) => (
+                  <button
+                    key={message.id}
+                    type="button"
+                    onClick={() => handleExpand(message)}
+                    className="w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-left transition hover:border-zinc-600"
+                    aria-label={`Open message thread ${message.title}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-white">{message.title}</p>
+                      {!message.read && (
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                          Unread
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      {message.type} · S{message.season} W{message.week}
+                    </p>
+                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">{message.body}</p>
+                  </button>
+                ))
+              ) : (
+                <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-zinc-400">
+                  No urgent inbox items. The archive is quiet for now.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-white/10 bg-black/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Link2 size={14} className="text-blue-300" aria-hidden="true" />
+                Live threads
+              </CardTitle>
+              <p className="text-xs leading-5 text-zinc-400">
+                The current mail stream distilled into ongoing relationship and world threads.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2.5">
+              {threadSummaries.slice(0, 5).map((thread) => {
+                const latestMessage = inbox.find((message) => message.id === thread.latestMessageId);
+                if (!latestMessage) return null;
+                return (
+                  <button
+                    key={thread.key}
+                    type="button"
+                    onClick={() => handleExpand(latestMessage)}
+                    className="w-full rounded-xl border border-white/10 bg-zinc-950/80 px-3 py-2.5 text-left transition hover:border-zinc-600"
+                    aria-label={`Open thread ${thread.title}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-white">{thread.title}</p>
+                      <div className="flex items-center gap-1.5">
+                        {thread.actionRequired && (
+                          <Badge variant="warning" className="text-[10px]">
+                            Action
+                          </Badge>
+                        )}
+                        {thread.unreadCount > 0 && (
+                          <Badge variant="outline" className="border-emerald-500/25 text-[10px] text-emerald-200">
+                            {thread.unreadCount} unread
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                    <p className="mt-1 text-[11px] text-zinc-500">{thread.subtitle}</p>
+                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-zinc-400">{latestMessage.body}</p>
+                  </button>
+                );
+              })}
+            </CardContent>
+          </Card>
         </div>
 
         {activeCareerDecisions.length > 0 && (

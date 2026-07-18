@@ -29,6 +29,11 @@ import { getHiddenLeaguesForCountry } from "@/engine/world/hiddenLeagues";
 import { getCountryMapLabel, getCountryMapPosition } from "@/engine/world/mapCountryRegistry";
 import { getCountryDisplayName } from "@/lib/country";
 import { WorldOutlookDrawer } from "./world/WorldOutlookDrawer";
+import {
+  deriveClubRecruitmentEcosystem,
+  deriveTerritoryIdentity,
+  deriveWorldConditionStakeholderMatrix,
+} from "@/engine/world";
 
 // ---------------------------------------------------------------------------
 // Country metadata resolver — works for both core and secondary countries
@@ -973,7 +978,28 @@ export function InternationalScreen() {
       ? `${selectedAvailability.clubCount} active clubs and ${selectedAvailability.fixtureCount} playable fixtures are on the calendar here.`
       : `${selectedAvailability.unsignedYouthCount} youth prospects and ${selectedAvailability.subRegionCount} regional scouting areas are active here. This country is tracked through local intel rather than a weekly fixture calendar.`
     : undefined;
-
+  const selectedTerritoryIdentity = selectedCountry
+    ? deriveTerritoryIdentity(gameState, selectedCountry)
+    : null;
+  const selectedStakeholderMatrix = selectedCountry
+    ? deriveWorldConditionStakeholderMatrix(gameState, { countryId: selectedCountry })
+    : null;
+  const selectedClubEcosystems = selectedCountry
+    ? Object.values(gameState.clubs)
+      .filter((club) => gameState.leagues[club.leagueId]?.country === selectedCountry)
+      .map((club) => ({
+        clubId: club.id,
+        name: club.name,
+        ecosystem: deriveClubRecruitmentEcosystem(gameState, club.id),
+      }))
+      .filter((entry): entry is { clubId: string; name: string; ecosystem: NonNullable<ReturnType<typeof deriveClubRecruitmentEcosystem>> } => entry.ecosystem !== null)
+      .sort((left, right) =>
+        right.ecosystem.marketUrgency - left.ecosystem.marketUrgency
+        || right.ecosystem.evidenceFloor - left.ecosystem.evidenceFloor
+        || left.name.localeCompare(right.name),
+      )
+      .slice(0, 3)
+    : [];
   // Container rect for popup clamping
   const containerEl = containerRef.current;
   const cRect = containerEl
@@ -1105,6 +1131,9 @@ export function InternationalScreen() {
             regionalKnowledge={selectedRegionalKnowledge}
             regionalPresence={selectedTravelQuote?.presence}
             discoveredHiddenLeagues={selectedHiddenLeagues}
+            territoryIdentity={selectedTerritoryIdentity}
+            stakeholderMatrix={selectedStakeholderMatrix}
+            clubEcosystems={selectedClubEcosystems}
             travelPosture={travelPosture}
             onTravelPostureChange={setTravelPosture}
             onBookTravel={handleBookTravel}

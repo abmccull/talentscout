@@ -634,13 +634,21 @@ const neutralModifiers: WorldConditionModifiers = {
 };
 
 describe("world-condition narrative arcs", () => {
-  it("provides four authored three-phase arcs with materially different choices", () => {
+  it("provides twelve authored three-phase arcs with materially different choices", () => {
     expect(getWorldConditionArcDefinitions().map((definition) => definition.conditionDefinitionId).sort())
       .toEqual([
         "academy-investment-wave",
+        "agency-consolidation",
         "agent-exclusivity-wave",
         "data-rights-dispute",
+        "diaspora-return-corridor",
+        "elite-coaching-exodus",
+        "grassroots-funding-collapse",
         "local-football-recession",
+        "local-media-scrutiny",
+        "scouting-integrity-crackdown",
+        "tactical-role-revolution",
+        "youth-welfare-reform",
       ]);
     for (const definition of getWorldConditionArcDefinitions()) {
       expect(definition.choices).toHaveLength(3);

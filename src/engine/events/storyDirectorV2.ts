@@ -13,7 +13,11 @@ export type StoryCandidateKind =
   | "storyline"
   | "special"
   | "callback"
-  | "worldArc";
+  | "worldArc"
+  | "worldPulse"
+  | "relationshipConflict"
+  | "rivalOpportunity"
+  | "rivalCampaign";
 
 export interface StoryCandidateV2 {
   id: string;
@@ -120,6 +124,10 @@ const STORY_KINDS: ReadonlySet<string> = new Set<StoryCandidateKind>([
   "special",
   "callback",
   "worldArc",
+  "worldPulse",
+  "relationshipConflict",
+  "rivalOpportunity",
+  "rivalCampaign",
 ]);
 
 function safeStringArray(value: unknown): string[] {
@@ -213,6 +221,10 @@ function defaultTemplateCooldown(candidate: StoryCandidateV2, seasonLength: numb
   if (candidate.kind === "chain" || candidate.kind === "storyline") return seasonLength;
   if (candidate.kind === "callback") return 4;
   if (candidate.kind === "worldArc") return Math.ceil(seasonLength / 2);
+  if (candidate.kind === "worldPulse") return 4;
+  if (candidate.kind === "relationshipConflict") return 10;
+  if (candidate.kind === "rivalOpportunity") return 6;
+  if (candidate.kind === "rivalCampaign") return 4;
   return 10;
 }
 

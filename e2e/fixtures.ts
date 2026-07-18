@@ -99,7 +99,10 @@ export class GamePage {
   }
 
   private async dismissBlockingDialogs(): Promise<void> {
-    for (let attempt = 0; attempt < 8; attempt++) {
+    // Seeded test careers can legitimately unlock a dense stack of milestone
+    // acknowledgements after their first simulated week. Drain the full stack
+    // so a late Week Summary cannot strand the canonical advancement helper.
+    for (let attempt = 0; attempt < 32; attempt++) {
       const dialogs = this.page.getByRole("dialog");
       const dialogCount = await dialogs.count();
       let dismissed = false;
@@ -471,7 +474,7 @@ export class GamePage {
     if (await professionalReport.isVisible({ timeout: 5_000 }).catch(() => false)) {
       await expect(this.page.getByLabel("Recruitment brief")).not.toHaveValue("");
       await this.page.waitForTimeout(100);
-      const buildCaseStep = this.page.getByRole("button", { name: /^Build the case\./ });
+      const buildCaseStep = this.page.getByRole("tab", { name: /^Build the case\b/ });
       if (await buildCaseStep.isVisible({ timeout: 500 }).catch(() => false)) {
         await buildCaseStep.click();
       }
@@ -523,13 +526,13 @@ export class GamePage {
         }
       }
 
-      const riskStep = this.page.getByRole("button", { name: /^Risk\./ });
+      const riskStep = this.page.getByRole("tab", { name: /^Risk\b/ });
       await expect(riskStep).toBeEnabled();
       await riskStep.click();
       const noSpecificRisk = this.page.getByRole("checkbox", { name: "Make no specific risk claim" });
       await noSpecificRisk.locator("..").click();
 
-      const finalReviewStep = this.page.getByRole("button", { name: /^Final review\./ });
+      const finalReviewStep = this.page.getByRole("tab", { name: /^Final review\b/ });
       await expect(finalReviewStep).toBeEnabled();
       await finalReviewStep.click();
       const convictionRadio = this.page.getByRole("radio", {
@@ -548,6 +551,10 @@ export class GamePage {
       return;
     }
 
+    const finalReviewStep = this.page.getByRole("tab", { name: /^Final review\b/ });
+    if (await finalReviewStep.isVisible({ timeout: 500 }).catch(() => false)) {
+      await finalReviewStep.click();
+    }
     const convictionRadio = this.page.getByRole("radio", {
       name: new RegExp(`^${convictionLabels[conviction]}\\b`),
     });

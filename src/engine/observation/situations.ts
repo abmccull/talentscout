@@ -399,6 +399,12 @@ export function createObservationSituation(
   for (const domain of Object.keys(signalByDomain) as AttributeDomain[]) {
     signalByDomain[domain] *= travelPostureEffects.observationSignalMultiplier;
   }
+  const contextSignalBias = baseline.context
+    ? travelPostureEffects.observationContextSignalBias[baseline.context] ?? 1
+    : 1;
+  for (const domain of Object.keys(signalByDomain) as AttributeDomain[]) {
+    signalByDomain[domain] *= contextSignalBias;
+  }
 
   const signalByAttribute: Partial<Record<PlayerAttribute, number>> = {};
   for (const attribute of atmosphere?.amplifiedAttributes ?? []) {
@@ -448,6 +454,9 @@ export function createObservationSituation(
       + eventNoise * 0.35
     )
       * culture.uncertaintyMultiplier
+      * (baseline.context
+        ? travelPostureEffects.observationContextUncertaintyBias[baseline.context] ?? 1
+        : 1)
       * travelPostureEffects.observationUncertaintyMultiplier,
     0.7,
     1.6,
@@ -490,7 +499,10 @@ export function createObservationSituation(
     reasons.push(`${culture.insightIds.length} earned football-culture insight${culture.insightIds.length === 1 ? "" : "s"} improve interpretation without changing player truth.`);
   }
   if (input.travelPosture) {
-    reasons.push(`The ${input.travelPosture.replace(/([A-Z])/g, " $1").toLowerCase()} trip posture changed evidence depth and opportunity coverage.`);
+    const contextLabel = baseline.context
+      ? baseline.context.replace(/([A-Z])/g, " $1").toLowerCase()
+      : input.activityType.replace(/([A-Z])/g, " $1").toLowerCase();
+    reasons.push(`The ${input.travelPosture.replace(/([A-Z])/g, " $1").toLowerCase()} trip posture changed how useful ${contextLabel} evidence is in this setting.`);
   }
 
   return {

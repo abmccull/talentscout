@@ -5,6 +5,12 @@ import type {
   RetainerContract,
   Scout,
 } from "../core/types";
+import {
+  getAgencyOperatingPolicyDefinition,
+  normalizeAgencyStrategyState,
+  type AgencyOperatingPolicy,
+  type LegacyAgencyStrategicPosture,
+} from "./agencyStrategyState";
 
 const BASE_REPORT_CAPACITY: Record<IndependentTier, number> = {
   1: 2,
@@ -14,66 +20,10 @@ const BASE_REPORT_CAPACITY: Record<IndependentTier, number> = {
   5: 22,
 };
 
-export type AgencyStrategicPosture =
-  | "balanced"
-  | "cashDefense"
-  | "qualityFirst"
-  | "diversifyClients"
-  | "controlledGrowth";
-
-export interface AgencyStrategicPostureRule {
-  label: string;
-  purpose: string;
-  capacityMultiplier: number;
-  qualityDebtAdjustment: number;
-  reputationExposureAdjustment: number;
-}
-
-export const AGENCY_STRATEGIC_POSTURES: Record<
-  AgencyStrategicPosture,
-  AgencyStrategicPostureRule
-> = {
-  balanced: {
-    label: "Balanced book",
-    purpose: "Keep delivery, client development, and staff recovery in equilibrium.",
-    capacityMultiplier: 1,
-    qualityDebtAdjustment: 0,
-    reputationExposureAdjustment: 0,
-  },
-  cashDefense: {
-    label: "Defend the runway",
-    purpose: "Freeze new fixed-cost commitments while the agency rebuilds cash resilience.",
-    capacityMultiplier: 1,
-    qualityDebtAdjustment: 3,
-    reputationExposureAdjustment: 0,
-  },
-  qualityFirst: {
-    label: "Protect the standard",
-    purpose: "Reserve review time and accept less work so delegated output remains defensible.",
-    capacityMultiplier: 0.8,
-    qualityDebtAdjustment: -22,
-    reputationExposureAdjustment: -8,
-  },
-  diversifyClients: {
-    label: "Diversify the book",
-    purpose: "Reserve commercial time and refuse work that deepens dependence on the dominant client.",
-    capacityMultiplier: 0.85,
-    qualityDebtAdjustment: -4,
-    reputationExposureAdjustment: -5,
-  },
-  controlledGrowth: {
-    label: "Press for growth",
-    purpose: "Stretch near-term output to capture demand, accepting higher staff and reputation exposure.",
-    capacityMultiplier: 1.15,
-    qualityDebtAdjustment: 15,
-    reputationExposureAdjustment: 12,
-  },
-};
-
 const POSTURE_REFERENCE_PATTERN = /^agency-posture:(balanced|cashDefense|qualityFirst|diversifyClients|controlledGrowth):s(\d+)w(\d+)$/;
 
 export interface RecordedAgencyStrategicPosture {
-  posture: AgencyStrategicPosture;
+  posture: LegacyAgencyStrategicPosture;
   season: number;
   week: number;
   referenceId: string;
@@ -85,7 +35,7 @@ function parseAgencyStrategicPostureReference(
   const match = referenceId?.match(POSTURE_REFERENCE_PATTERN);
   if (!match) return undefined;
   return {
-    posture: match[1] as AgencyStrategicPosture,
+    posture: match[1] as LegacyAgencyStrategicPosture,
     season: Number.parseInt(match[2], 10),
     week: Number.parseInt(match[3], 10),
     referenceId: referenceId as string,
@@ -95,9 +45,10 @@ function parseAgencyStrategicPostureReference(
 export function getLatestAgencyStrategicPostureRecord(
   finances: FinancialRecord,
 ): RecordedAgencyStrategicPosture | undefined {
-  for (let index = finances.transactions.length - 1; index >= 0; index -= 1) {
+  const transactions = finances.transactions ?? [];
+  for (let index = transactions.length - 1; index >= 0; index -= 1) {
     const record = parseAgencyStrategicPostureReference(
-      finances.transactions[index].referenceId,
+      transactions[index].referenceId,
     );
     if (record) return record;
   }
@@ -109,9 +60,10 @@ export function getAgencyStrategicPostureRecordForWeek(
   week: number,
   season: number,
 ): RecordedAgencyStrategicPosture | undefined {
-  for (let index = finances.transactions.length - 1; index >= 0; index -= 1) {
+  const transactions = finances.transactions ?? [];
+  for (let index = transactions.length - 1; index >= 0; index -= 1) {
     const record = parseAgencyStrategicPostureReference(
-      finances.transactions[index].referenceId,
+      transactions[index].referenceId,
     );
     if (record?.week === week && record.season === season) return record;
   }
@@ -120,15 +72,8 @@ export function getAgencyStrategicPostureRecordForWeek(
 
 export function getRecordedAgencyStrategicPosture(
   finances: FinancialRecord,
-): AgencyStrategicPosture | undefined {
+): LegacyAgencyStrategicPosture | undefined {
   return getLatestAgencyStrategicPostureRecord(finances)?.posture;
-}
-
-/** Legacy saves use balanced strategy until the player records a decision. */
-export function getAgencyStrategicPosture(
-  finances: FinancialRecord,
-): AgencyStrategicPosture {
-  return getRecordedAgencyStrategicPosture(finances) ?? "balanced";
 }
 
 export interface AgencyCapacity {
@@ -138,7 +83,7 @@ export interface AgencyCapacity {
   availableReportCapacity: number;
   utilization: number;
   strategicCapacityAdjustment: number;
-  posture: AgencyStrategicPosture;
+  policy: AgencyOperatingPolicy;
 }
 
 export interface AgencyClientConcentration {
@@ -238,12 +183,13 @@ export function getAgencyCapacity(
   const base = BASE_REPORT_CAPACITY[scout.independentTier ?? 1];
   const officeBonus = Math.max(0, Math.floor((finances.office?.maxEmployees ?? 0) / 2));
   const rawMonthlyReportCapacity = base + employeeCapacity(finances) + officeBonus;
-  const posture = getAgencyStrategicPosture(finances);
+  const policy = normalizeAgencyStrategyState(finances.agencyStrategyState)?.policy ?? "balancedBook";
+  const policyDefinition = getAgencyOperatingPolicyDefinition(policy);
   const monthlyReportCapacity = Math.max(
     1,
     Math.floor(
       rawMonthlyReportCapacity
-      * AGENCY_STRATEGIC_POSTURES[posture].capacityMultiplier,
+      * policyDefinition.capacityMultiplier,
     ),
   );
   const retainerWork = finances.retainerContracts
@@ -264,7 +210,7 @@ export function getAgencyCapacity(
       ? Math.min(2, committedReportWork / monthlyReportCapacity)
       : committedReportWork > 0 ? 2 : 0,
     strategicCapacityAdjustment: monthlyReportCapacity - rawMonthlyReportCapacity,
-    posture,
+    policy,
   };
 }
 
@@ -288,7 +234,7 @@ function assessAgencyWorkAcceptance(
     blockers.push("capacity");
   }
 
-  const deepensDominantDependency = capacity.posture === "diversifyClients"
+  const deepensDominantDependency = getAgencyOperatingPolicyDefinition(capacity.policy).blocksDominantClientConcentration === true
     && currentConcentration.activeClientCount > 0
     && projectedConcentration.dominantClientId === input.clubId
     && projectedConcentration.dominantShare > 0.65;

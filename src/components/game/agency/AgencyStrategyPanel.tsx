@@ -7,17 +7,17 @@ import {
   type AgencyStrategicHealthStatus,
 } from "@/engine/finance/agency";
 import {
-  AGENCY_STRATEGIC_POSTURES,
-  type AgencyStrategicPosture,
-} from "@/engine/finance/agencyCapacity";
+  AGENCY_POLICY_DEFINITIONS,
+  type AgencyOperatingPolicy,
+} from "@/engine/finance/agencyStrategy";
 import { usePersistentDisclosure } from "@/lib/usePersistentDisclosure";
 
 interface AgencyStrategyPanelProps {
   finances: FinancialRecord;
   scout: Scout;
   clubs: Record<string, Club>;
-  onChangePosture: (posture: AgencyStrategicPosture) => void;
-  postureChangeLocked?: boolean;
+  onSelectPolicy: (policy: AgencyOperatingPolicy) => void;
+  policyChangeLocked?: boolean;
 }
 
 const STATUS_LABELS: Record<AgencyStrategicHealthStatus, string> = {
@@ -70,19 +70,19 @@ export function AgencyStrategyPanel({
   finances,
   scout,
   clubs,
-  onChangePosture,
-  postureChangeLocked = false,
+  onSelectPolicy,
+  policyChangeLocked = false,
 }: AgencyStrategyPanelProps) {
   const health = deriveAgencyStrategicHealth(finances, scout);
   const [strategyOpen, setStrategyOpen] = usePersistentDisclosure(
     "agency.operating-posture",
-    health.posture !== health.recommendedPosture,
+    health.policy !== health.recommendedPolicy,
   );
   const dominantClient = health.dominantClientId
     ? clubs[health.dominantClientId]?.shortName ?? clubs[health.dominantClientId]?.name
     : undefined;
-  const posture = AGENCY_STRATEGIC_POSTURES[health.posture];
-  const recommended = AGENCY_STRATEGIC_POSTURES[health.recommendedPosture];
+  const currentPolicy = AGENCY_POLICY_DEFINITIONS[health.policy];
+  const recommendedPolicy = AGENCY_POLICY_DEFINITIONS[health.recommendedPolicy];
 
   return (
     <section
@@ -98,18 +98,18 @@ export function AgencyStrategyPanel({
           </p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <h2 id="agency-health-title" className="text-lg font-bold text-white">
-              {posture.label}
+              {currentPolicy.label}
             </h2>
             <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${STATUS_CLASSES[health.status]}`}>
               {STATUS_LABELS[health.status]} · {health.score}/100
             </span>
           </div>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">{posture.purpose}</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-zinc-400">{currentPolicy.purpose}</p>
         </div>
-        {health.recommendedPosture !== health.posture && (
+        {health.recommendedPolicy !== health.policy && (
           <div className="rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2 text-xs text-amber-100">
-            <p className="font-semibold">Recommended: {recommended.label}</p>
-            <p className="mt-0.5 text-amber-100/70">{recommended.purpose}</p>
+            <p className="font-semibold">Recommended: {recommendedPolicy.label}</p>
+            <p className="mt-0.5 text-amber-100/70">{recommendedPolicy.purpose}</p>
           </div>
         )}
       </div>
@@ -182,46 +182,48 @@ export function AgencyStrategyPanel({
         onToggle={(event) => setStrategyOpen(event.currentTarget.open)}
       >
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300">
-          Choose operating posture
+          Choose operating policy
           <span className="text-xs font-normal text-zinc-400 group-open:hidden">Change what the agency protects</span>
           <span className="hidden text-xs font-normal text-zinc-400 group-open:inline">Hide choices</span>
         </summary>
-        <div className="grid gap-2 border-t border-white/10 p-3 md:grid-cols-2 xl:grid-cols-5">
-          {(Object.entries(AGENCY_STRATEGIC_POSTURES) as Array<[
-            AgencyStrategicPosture,
-            (typeof AGENCY_STRATEGIC_POSTURES)[AgencyStrategicPosture],
+        <div className="grid gap-2 border-t border-white/10 p-3 md:grid-cols-2 xl:grid-cols-4">
+          {(Object.entries(AGENCY_POLICY_DEFINITIONS) as Array<[
+            AgencyOperatingPolicy,
+            (typeof AGENCY_POLICY_DEFINITIONS)[AgencyOperatingPolicy],
           ]>).map(([id, rule]) => {
-            const active = id === health.posture;
-            const isRecommended = id === health.recommendedPosture;
+            const active = id === health.policy;
+            const isRecommended = id === health.recommendedPolicy;
             return (
               <button
                 key={id}
                 type="button"
                 aria-pressed={active}
-                disabled={active || postureChangeLocked}
-                onClick={() => onChangePosture(id)}
-                className={`min-h-28 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 ${active
+                disabled={active || policyChangeLocked}
+                onClick={() => onSelectPolicy(id)}
+                className={`min-h-32 rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 ${active
                   ? "border-emerald-300/40 bg-emerald-300/10"
-                  : postureChangeLocked
+                  : policyChangeLocked
                     ? "cursor-not-allowed border-white/5 bg-white/[0.015] opacity-55"
                     : "border-white/10 bg-white/[0.025] hover:border-emerald-300/25 hover:bg-emerald-300/[0.05]"}`}
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-white">{rule.label}</span>
                   {active
-                    ? <ShieldCheck size={15} className="text-emerald-300" aria-label="Current posture" />
+                    ? <ShieldCheck size={15} className="text-emerald-300" aria-label="Current policy" />
                     : isRecommended
                       ? <span className="text-[8px] font-semibold uppercase tracking-wide text-amber-200">Recommended</span>
                       : null}
                 </span>
                 <span className="mt-2 block text-[11px] leading-4 text-zinc-400">{rule.purpose}</span>
+                <span className="mt-3 block text-[11px] leading-4 text-zinc-300">{rule.benefits[0]}</span>
+                <span className="mt-1 block text-[11px] leading-4 text-zinc-500">Tradeoff: {rule.tradeoffs[0]}</span>
               </button>
             );
           })}
         </div>
-        {postureChangeLocked && (
+        {policyChangeLocked && (
           <p className="border-t border-white/10 px-4 py-3 text-xs text-zinc-500">
-            This week&apos;s operating decision is set. Review the consequences before choosing again next week.
+            This four-week operating commitment is locked. Review the consequences before choosing again.
           </p>
         )}
       </details>

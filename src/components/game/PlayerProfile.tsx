@@ -20,6 +20,7 @@ import type {
   ReflectionFlaggedMomentRecord,
   ReflectionHypothesisRecord,
   ReflectionJournalEntry,
+  ScoutingQuestionId,
 } from "@/engine/core/types";
 import { ATTRIBUTE_DOMAINS } from "@/engine/core/types";
 import { calculateConfidenceRange } from "@/engine/scout/perception";
@@ -37,6 +38,7 @@ import { HelpTooltip, AttributeValueTooltip } from "@/components/ui/HelpTooltip"
 import { getCountryDisplayName } from "@/engine/network/contacts";
 import { formatObservationActivityLabel } from "@/engine/observation/reflection";
 import { getHighestValueNextContext } from "@/engine/observation/informationGain";
+import { deriveScoutingCaseQuestions } from "@/engine/reports/caseQuestions";
 import { getYouthRivalPressure, getYouthRivalPressureBand } from "@/engine/rivals";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { getTransferFlowProbability } from "@/engine/world/transfers";
@@ -61,6 +63,14 @@ import {
   buildPlayerMovementPresentation,
   buildRetirementOutlookPresentation,
 } from "@/engine/transfers";
+import { PlayerProfileTabBar } from "@/components/game/player-profile/PlayerProfileTabBar";
+import {
+  evidenceOpportunityLabel,
+  PLAYER_PROFILE_TABS,
+  selectMostRelevantScoutingCase,
+  summarizeUnknownAttributes,
+  type PlayerProfileTabId,
+} from "@/components/game/player-profile/playerProfilePresentation";
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -83,6 +93,14 @@ const FORM_MAP: Record<number, FormDisplay> = {
 FORM_MAP[-1] = { label: "Below Average",  color: "text-red-300",  bgColor: "bg-red-500/5",  borderColor: "border-red-500/20",  icon: "down" };
 FORM_MAP[-2] = { label: "Poor Form",      color: "text-red-400",  bgColor: "bg-red-500/10", borderColor: "border-red-500/30",  icon: "down" };
 FORM_MAP[-3] = { label: "Terrible Form",  color: "text-red-400",  bgColor: "bg-red-500/15", borderColor: "border-red-500/40",  icon: "down" };
+
+function definedQuestionIds(
+  questions: Array<{ questionId?: ScoutingQuestionId }> | undefined,
+): ScoutingQuestionId[] {
+  return (questions ?? [])
+    .map((question) => question.questionId)
+    .filter((questionId): questionId is ScoutingQuestionId => Boolean(questionId));
+}
 
 function getFormDisplay(form: number): FormDisplay {
   const clamped = Math.max(-3, Math.min(3, Math.round(form)));
@@ -116,19 +134,6 @@ const DOMAIN_LABELS: Record<string, string> = {
 };
 
 const DOMAIN_ORDER = ["technical", "physical", "mental", "tactical"] as const;
-
-type PlayerProfileView = "decision" | "evidence" | "development" | "history";
-
-const PLAYER_PROFILE_VIEWS: Array<{
-  id: PlayerProfileView;
-  label: string;
-  description: string;
-}> = [
-  { id: "decision", label: "Decision", description: "The next call and the actions available now" },
-  { id: "evidence", label: "Evidence", description: "Observed ability, attributes, cues, and source intel" },
-  { id: "development", label: "Development", description: "Pathway, environment, status, and opportunity" },
-  { id: "history", label: "History", description: "Observations, form, availability, movement, and reports" },
-];
 
 function confidenceColor(confidence: number): string {
   if (confidence >= 0.7) return "bg-emerald-500";
@@ -1251,10 +1256,10 @@ export function PlayerProfile() {
   );
 
   const [networkIntel, setNetworkIntel] = useState<{ title: string; body: string; contactName?: string } | null>(null);
-  const [profileView, setProfileView] = useState<PlayerProfileView>("decision");
-  const [showUnknownAttributes, setShowUnknownAttributes] = useState(false);
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
   const [loanTargetClubId, setLoanTargetClubId] = useState("");
+  const [activeTab, setActiveTab] = useState<PlayerProfileTabId>("decision");
+  const [expandedUnknownDomains, setExpandedUnknownDomains] = useState<Record<string, boolean>>({});
   const [loanRationale, setLoanRationale] = useState<
     "development" | "playing-time" | "experience" | "squad-depth"
   >("development");
@@ -1400,9 +1405,6 @@ export function PlayerProfile() {
     if (!byDomain.has(domain)) byDomain.set(domain, []);
     byDomain.get(domain)!.push([attr, merged.get(attr)]);
   }
-  const unknownAttributeCount = Object.keys(ATTRIBUTE_DOMAINS).filter(
-    (attribute) => !merged.has(attribute),
-  ).length;
 
   // Aggregate ability readings using shared helper
   const allObs = Object.values(gameState.observations);
@@ -1573,6 +1575,22 @@ export function PlayerProfile() {
           .map((hypothesis) => hypothesis.domain),
       })
     : null;
+  const activeScoutingCase = selectMostRelevantScoutingCase(gameState, canonicalPlayerId);
+  const caseQuestionSnapshot = activeScoutingCase
+    ? deriveScoutingCaseQuestions({
+        scoutingCases: gameState.scoutingCases,
+        players: gameState.players,
+        youthRecruitmentBriefs: gameState.youthRecruitmentBriefs,
+        reports: gameState.reports,
+        observations: gameState.observations,
+        clubDecisions: gameState.clubDecisions,
+        recommendationReviews: gameState.recommendationReviews,
+        inbox: gameState.inbox,
+        reflectionJournal: gameState.reflectionJournal,
+      }, activeScoutingCase.id)
+    : null;
+  const activeCaseQuestion = caseQuestionSnapshot?.activeQuestions[0] ?? null;
+  const recommendedCaseContexts = activeCaseQuestion?.recommendedContexts ?? [];
   const trackingYouthRivals = unsignedYouthRecord
     ? Object.values(gameState.rivalScouts)
         .filter((rival) =>
@@ -1816,6 +1834,8 @@ export function PlayerProfile() {
                       type: "followUpSession" as const,
                       slots: ACTIVITY_SLOT_COSTS.followUpSession,
                       targetId: player.id,
+                      scoutingQuestionId: activeCaseQuestion?.questionId,
+                      scoutingQuestionIds: definedQuestionIds(caseQuestionSnapshot?.activeQuestions),
                       description: `Follow-up session: ${player.firstName} ${player.lastName}`,
                     };
                     // Find first available day slot
@@ -1849,6 +1869,8 @@ export function PlayerProfile() {
                       type: "parentCoachMeeting" as const,
                       slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
                       targetId: player.id,
+                      scoutingQuestionId: activeCaseQuestion?.questionId,
+                      scoutingQuestionIds: definedQuestionIds(caseQuestionSnapshot?.activeQuestions),
                       description: `Parent/Coach meeting: ${player.firstName} ${player.lastName}`,
                     };
                     let scheduled = false;
@@ -1879,45 +1901,21 @@ export function PlayerProfile() {
           </div>
         </div>
 
-        <nav
-          aria-label="Player profile views"
-          className="sticky top-2 z-20 mb-5 rounded-2xl border border-white/10 bg-[#0d1216]/95 p-2 shadow-xl shadow-black/30 backdrop-blur"
-        >
-          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
-            {PLAYER_PROFILE_VIEWS.map((view) => {
-              const selected = profileView === view.id;
-              return (
-                <button
-                  key={view.id}
-                  type="button"
-                  aria-label={view.label}
-                  aria-pressed={selected}
-                  aria-describedby={`player-profile-view-${view.id}-description`}
-                  onClick={() => setProfileView(view.id)}
-                  className={`min-h-11 rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
-                    selected
-                      ? "bg-emerald-400/12 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]"
-                      : "text-zinc-300 hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <span className="block text-sm font-semibold">{view.label}</span>
-                  <span
-                    id={`player-profile-view-${view.id}-description`}
-                    className="sr-only"
-                  >
-                    {view.description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
+        <div className="sticky top-2 z-20">
+          <PlayerProfileTabBar
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            tabs={PLAYER_PROFILE_TABS}
+          />
+        </div>
 
-        <section
-          aria-label="Player decision"
-          hidden={profileView !== "decision"}
-        >
-
+        {activeTab === "decision" && (
+          <section
+            id="player-profile-panel-decision"
+            role="tabpanel"
+            aria-labelledby="player-profile-tab-decision"
+            className="space-y-5"
+          >
         <Card className="mb-5 overflow-hidden border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.1),transparent_42%),rgba(17,22,28,0.96)]">
           <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
@@ -2063,7 +2061,7 @@ export function PlayerProfile() {
                         <p className="mt-1 text-xs text-zinc-400">{nextObservationContext.sourceFamily} evidence family</p>
                       </div>
                       <Badge variant={nextObservationContext.gainBand === "high" ? "success" : nextObservationContext.gainBand === "medium" ? "warning" : "outline"}>
-                        Gain {nextObservationContext.score}/100
+                        {evidenceOpportunityLabel(nextObservationContext.gainBand)}
                       </Badge>
                     </div>
                     <ul className="mt-4 space-y-2 text-xs leading-5 text-zinc-300">
@@ -2109,13 +2107,169 @@ export function PlayerProfile() {
             )}
           </section>
         )}
+            <details className="group rounded-2xl border border-white/10 bg-[#10151b]/90">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden">
+                <span>Case reasoning and callbacks</span>
+                <span className="text-xs font-normal text-zinc-400 group-open:hidden">Open expert detail</span>
+                <span className="hidden text-xs font-normal text-zinc-400 group-open:inline">Hide expert detail</span>
+              </summary>
+              <div className="space-y-5 border-t border-white/10 p-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500">Position</p>
+                  <p className="mt-1 font-semibold">{player.position}</p>
+                  {displayedRoles[0] && (
+                    <p className="mt-1 text-xs text-zinc-400">
+                      Best role read: {formatAttribute(displayedRoles[0].role)}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500">Opportunity</p>
+                  <p className="mt-1 font-semibold text-emerald-400">{relevantBriefs.length}</p>
+                  <p className="text-xs text-zinc-400">open relevant brief{relevantBriefs.length === 1 ? "" : "s"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500">Open question</p>
+                  <p className="mt-1 font-semibold text-white">
+                    {caseQuestionSnapshot?.activeQuestions.length ?? (nextObservationContext ? 1 : 0)}
+                  </p>
+                  <p className="text-xs text-zinc-400">current evidence gap{(caseQuestionSnapshot?.activeQuestions.length ?? 0) === 1 ? "" : "s"}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-500">Market value</p>
+                  <p className="mt-1 font-semibold text-emerald-400">{formatMarketValue(player.marketValue)}</p>
+                  <p className="text-xs text-zinc-400">{reports.length} filed report{reports.length === 1 ? "" : "s"}</p>
+                </CardContent>
+              </Card>
+            </div>
 
-        </section>
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+              <Card className="border-emerald-400/20 bg-[#111820]/95">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base text-white">Decision focus</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">Central question</p>
+                    <p className="mt-2 text-sm leading-6 text-zinc-200">
+                      {caseQuestionSnapshot?.centralQuestion ?? nextDecision}
+                    </p>
+                  </div>
+                  {caseQuestionSnapshot?.activeQuestions.length ? (
+                    <div className="space-y-3">
+                      {caseQuestionSnapshot.activeQuestions.slice(0, 2).map((question) => (
+                        <div key={question.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-white">{question.prompt}</p>
+                            <Badge variant="outline" className="text-[10px] capitalize">
+                              {question.family}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">{question.whyNow}</p>
+                          <p className="mt-2 text-xs text-amber-200/80">Gap: {question.evidenceGap}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
+                      No formal scouting case is driving this profile yet. The next step is still to preserve a changed-context judgment.
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      className="min-h-11"
+                      onClick={() => startReport(canonicalPlayerId)}
+                      disabled={!canStartReport}
+                      title={needsReportableYouthEvidence ? "Complete a focused observation and save at least one classified cue first." : undefined}
+                    >
+                      <FileText size={14} className="mr-2" />
+                      Write Report
+                    </Button>
+                    <Button className="min-h-11" variant="outline" onClick={() => setScreen("calendar")}>
+                      <CalendarPlus size={14} className="mr-2" />
+                      Plan next action
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
 
-        <section
-          aria-label="Player development"
-          hidden={profileView !== "development"}
-        >
+              <Card className="border-violet-400/20 bg-[#15131d]/95">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base text-white">Best next evidence</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {recommendedCaseContexts.length > 0 ? (
+                    <>
+                      {recommendedCaseContexts.map((entry) => (
+                        <div key={entry.context} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-white">{formatAttribute(entry.context)}</p>
+                            <Badge variant={entry.score >= 78 ? "success" : entry.score >= 52 ? "warning" : "outline"}>
+                              {entry.score >= 78
+                                ? "Strong fit"
+                                : entry.score >= 52
+                                  ? "Useful fit"
+                                  : "Exploratory"}
+                            </Badge>
+                          </div>
+                          <p className="mt-2 text-xs leading-5 text-zinc-400">{entry.reason}</p>
+                        </div>
+                      ))}
+                    </>
+                  ) : nextObservationContext ? (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-semibold text-white">{formatAttribute(nextObservationContext.context)}</p>
+                        <Badge variant={nextObservationContext.gainBand === "high" ? "success" : nextObservationContext.gainBand === "medium" ? "warning" : "outline"}>
+                          {evidenceOpportunityLabel(nextObservationContext.gainBand)}
+                        </Badge>
+                      </div>
+                      <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-400">
+                        {nextObservationContext.reasons.slice(0, 3).map((reason) => (
+                          <li key={reason} className="flex gap-2"><span className="text-violet-300">•</span><span>{reason}</span></li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-zinc-300">
+                      No additional context currently outranks the existing file.
+                    </div>
+                  )}
+                  {(caseQuestionSnapshot?.callbacks.length ?? 0) > 0 && (
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-400">Recent callbacks</p>
+                      <div className="mt-3 space-y-2">
+                        {caseQuestionSnapshot?.callbacks.slice(0, 3).map((callback) => (
+                          <div key={callback.id}>
+                            <p className="text-sm font-semibold text-white">{callback.title}</p>
+                            <p className="text-xs leading-5 text-zinc-400">{callback.summary}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+              </div>
+            </details>
+          </section>
+        )}
+
+        {activeTab === "development" && (
+          <section
+            id="player-profile-panel-development"
+            role="tabpanel"
+            aria-labelledby="player-profile-tab-development"
+          >
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card>
@@ -2206,84 +2360,6 @@ export function PlayerProfile() {
             </Card>
           )}
         </div>
-
-        {developmentEnvironment && (
-          <Card data-testid="development-environment" className="mb-6 overflow-hidden border-cyan-500/20 bg-cyan-500/[0.04]">
-            <CardHeader className="pb-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-300">
-                    Development environment
-                  </p>
-                  <CardTitle className="mt-1 text-base text-white">
-                    {developmentEnvironment.headline}
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    {developmentEnvironment.clubName} · visible pathway evidence
-                  </p>
-                </div>
-                <div
-                  className="rounded-lg border border-cyan-400/20 bg-black/20 px-3 py-2 text-right"
-                  aria-label={`Development environment score ${developmentEnvironment.score} out of 100`}
-                >
-                  <p className="text-xs uppercase tracking-wider text-zinc-400">Environment</p>
-                  <p className="font-mono text-lg font-bold text-cyan-200">
-                    {developmentEnvironment.score}
-                    <span className="text-xs font-normal text-zinc-500">/100</span>
-                  </p>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-xs leading-relaxed text-zinc-300">
-                {developmentEnvironment.summary}
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2" aria-label="Development factors">
-                {developmentEnvironment.factors.map((factor) => {
-                  const positive = factor.impact === "positive" || factor.impact === "strong-positive";
-                  const negative = factor.impact === "negative" || factor.impact === "strong-negative";
-                  return (
-                    <div key={factor.id} className="rounded-lg border border-white/10 bg-black/20 p-3">
-                      <div className="flex items-center gap-2">
-                        {positive ? (
-                          <TrendingUp size={13} className="shrink-0 text-emerald-400" aria-hidden="true" />
-                        ) : negative ? (
-                          <AlertTriangle size={13} className="shrink-0 text-amber-400" aria-hidden="true" />
-                        ) : (
-                          <Minus size={13} className="shrink-0 text-zinc-500" aria-hidden="true" />
-                        )}
-                        <p className="text-xs font-semibold text-zinc-200">{factor.label}</p>
-                      </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">{factor.summary}</p>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="border-t border-white/10 pt-3 text-xs text-cyan-200/80">
-                Next review: {developmentEnvironment.reviewPrompt}
-              </p>
-              {(player.developmentHistory?.length ?? 0) > 0 && (
-                <div className="border-t border-white/10 pt-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                    Recent development turns
-                  </p>
-                  <ol className="mt-2 space-y-2">
-                    {[...(player.developmentHistory ?? [])].reverse().slice(0, 4).map((entry) => (
-                      <li key={entry.id} className="flex gap-3 text-xs">
-                        <span className="shrink-0 font-mono text-xs text-zinc-400">
-                          S{entry.season} W{entry.week}
-                        </span>
-                        <span className={entry.outcome === "improved" ? "text-emerald-300" : "text-amber-300"}>
-                          {entry.summary}
-                        </span>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
 
         {/* Unsigned Youth Details */}
         {unsignedYouthRecord && (
@@ -2393,9 +2469,10 @@ export function PlayerProfile() {
         )}
 
         </section>
+        )}
 
         {/* Ability Assessment */}
-        <div hidden={profileView !== "evidence"}>
+        <div hidden={activeTab !== "evidence"}>
         {aggregatedAbility && (
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card>
@@ -2451,45 +2528,57 @@ export function PlayerProfile() {
         </div>
 
         <section
-          aria-label={profileView === "history" ? "Player history" : "Player evidence"}
-          hidden={profileView !== "evidence" && profileView !== "history"}
-          className={profileView === "evidence" ? "grid grid-cols-1 gap-6 lg:grid-cols-3" : ""}
+          id={activeTab === "history" ? "player-profile-panel-history" : "player-profile-panel-evidence"}
+          role="tabpanel"
+          aria-labelledby={activeTab === "history" ? "player-profile-tab-history" : "player-profile-tab-evidence"}
+          aria-label={activeTab === "history" ? "Player history" : "Player evidence"}
+          hidden={activeTab !== "evidence" && activeTab !== "history"}
+          className={activeTab === "evidence" ? "grid grid-cols-1 gap-6 lg:grid-cols-3" : ""}
         >
           {/* Attribute table */}
-          <div className={profileView === "evidence" ? "space-y-4 lg:col-span-2" : "hidden"}>
+          <div className={activeTab === "evidence" ? "space-y-4 lg:col-span-2" : "hidden"}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-zinc-500">
                 Scouting Data
                 <HelpTooltip text="Confidence shows how certain you are about this player's attributes. Higher confidence means more accurate readings. Observe in multiple contexts to increase confidence." />
               </h2>
-              {unknownAttributeCount > 0 && (
-                <button
-                  type="button"
-                  aria-pressed={showUnknownAttributes}
-                  onClick={() => setShowUnknownAttributes((current) => !current)}
-                  className="min-h-10 rounded-lg border border-white/10 px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                >
-                  {showUnknownAttributes
-                    ? "Hide unobserved attributes"
-                    : `Show ${unknownAttributeCount} unobserved attribute${unknownAttributeCount === 1 ? "" : "s"}`}
-                </button>
-              )}
             </div>
             {DOMAIN_ORDER.map((domain) => {
               const domainAttrs = byDomain.get(domain) ?? [];
               if (domainAttrs.length === 0) return null;
               const hasAny = domainAttrs.some(([, r]) => !!r);
               if (!hasAny) return null;
+              const unknownSummary = summarizeUnknownAttributes(
+                domainAttrs.map(([attr, reading]) => [formatAttribute(attr), reading]),
+              );
+              const showUnknown = expandedUnknownDomains[domain] ?? false;
+              const visibleDomainAttrs = showUnknown
+                ? domainAttrs
+                : domainAttrs.filter(([, reading]) => Boolean(reading));
               return (
                 <Card key={domain}>
                   <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-sm">{DOMAIN_LABELS[domain]}</CardTitle>
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle className="text-sm">{DOMAIN_LABELS[domain]}</CardTitle>
+                      {unknownSummary.hiddenCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedUnknownDomains((current) => ({
+                            ...current,
+                            [domain]: !showUnknown,
+                          }))}
+                          className="text-[11px] font-medium text-zinc-400 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                        >
+                          {showUnknown
+                            ? `Hide ${unknownSummary.hiddenCount} unknown`
+                            : `Show ${unknownSummary.hiddenCount} unknown`}
+                        </button>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <div className="space-y-2">
-                      {domainAttrs
-                        .filter(([, reading]) => showUnknownAttributes || Boolean(reading))
-                        .map(([attr, reading]) => (
+                      {visibleDomainAttrs.map(([attr, reading]) => (
                         <div key={attr} className="flex items-center gap-3">
                           <Tooltip content="Your estimated reading of this attribute. Accuracy depends on observations, lens focus, and scout skills." side="right">
                             <span className="w-32 shrink-0 text-xs capitalize text-zinc-400">
@@ -2528,6 +2617,12 @@ export function PlayerProfile() {
                         </div>
                       ))}
                     </div>
+                    {!showUnknown && unknownSummary.hiddenCount > 0 && (
+                      <p className="mt-3 text-[11px] leading-5 text-zinc-500">
+                        Hidden by default: {unknownSummary.hiddenLabels.slice(0, 4).join(", ")}
+                        {unknownSummary.hiddenLabels.length > 4 ? ` and ${unknownSummary.hiddenLabels.length - 4} more.` : "."}
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -2949,8 +3044,8 @@ export function PlayerProfile() {
           </div>
 
           {/* Sidebar: observations & reports */}
-          <div className={profileView === "history" ? "grid gap-4 md:grid-cols-2 xl:grid-cols-3" : "space-y-4"}>
-            {profileView === "evidence" && (
+          <div className={activeTab === "history" ? "grid gap-4 md:grid-cols-2 xl:grid-cols-3" : "space-y-4"}>
+            {activeTab === "evidence" && (
               <>
             {/* Observation history */}
             <ObservationsSidebar
@@ -2973,7 +3068,7 @@ export function PlayerProfile() {
               </>
             )}
 
-            {profileView === "history" && (
+            {activeTab === "history" && (
               <>
             {/* Injury Status & History */}
             <InjuryStatusCard player={player} />
@@ -3081,6 +3176,21 @@ export function PlayerProfile() {
                 )}
               </CardContent>
             </Card>
+            {(caseQuestionSnapshot?.callbacks.length ?? 0) > 0 && (
+              <Card className="border-violet-400/20 bg-violet-400/[0.04]">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Evidence Callbacks</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {caseQuestionSnapshot?.callbacks.slice(0, 6).map((callback) => (
+                    <div key={callback.id} className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                      <p className="text-xs font-medium text-zinc-200">{callback.title}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-zinc-400">{callback.summary}</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
               </>
             )}
           </div>

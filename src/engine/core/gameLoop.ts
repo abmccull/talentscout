@@ -91,8 +91,12 @@ import { processActiveNegotiations } from "../firstTeam/negotiation";
 import { processBoardWeekly } from "../firstTeam/boardAI";
 import { processWeeklyGossip } from "../network/gossip";
 import { processWeeklyReferrals } from "../network/referrals";
-import { processWeeklyContactDecay, processExclusiveWindows } from "../network/contacts";
+import { processWeeklyContactDecay } from "../network/contacts";
 import { getContactCoverageCountry, getCountryDisplayName } from "../network/contacts";
+import {
+  processWeeklyAccessAgreements,
+  revokeAccessAgreements,
+} from "../consequences/accessAgreements";
 import type { CardEvent, DisciplinaryRecord, TransferNegotiation, BoardReaction, BoardProfile, TacticalMatchup } from "./types";
 import { calculateTacticalMatchup } from "../match/tactics";
 import {
@@ -165,6 +169,7 @@ import {
   computeSemanticPlayerDevelopment,
   hasSemanticImprovement,
 } from "../players/development";
+import { applyClubPhilosophySeasonStart } from "../world/clubPhilosophyTransitions";
 import { applyWorldConditionSeasonStart } from "../world/worldConditions";
 import {
   buildStandingsByLeague,
@@ -341,6 +346,8 @@ export interface TickResult {
   updatedFreeAgentNegotiations?: FreeAgentNegotiation[];
   /** Updated contacts after F3 contact network depth processing. */
   updatedContacts?: Record<string, Contact>;
+  /** Canonical access agreements after weekly relationship/access processing. */
+  accessAgreements?: NonNullable<GameState["accessAgreements"]>;
   /** Board AI reaction result (F10, tier 5 weekly). */
   boardReactions?: BoardReaction[];
   /** Updated board profile after weekly evaluation (F10). */
@@ -3049,9 +3056,18 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 18. F3: Contact Network Depth — gossip, referrals, trust decay, betrayal, exclusives
   const contactDecayResult = processWeeklyContactDecay(state, rng);
   newMessages.push(...contactDecayResult.betrayalMessages);
+  const revokedAccessAgreements = revokeAccessAgreements(
+    state.accessAgreements,
+    contactDecayResult.revokedAccessAgreementIds,
+    { season: state.currentSeason, week: state.currentWeek },
+  );
 
   // Gossip processing on decayed contacts
-  const gossipState: GameState = { ...state, contacts: contactDecayResult.updatedContacts };
+  const gossipState: GameState = {
+    ...state,
+    contacts: contactDecayResult.updatedContacts,
+    accessAgreements: revokedAccessAgreements,
+  };
   const gossipResult = processWeeklyGossip(gossipState, rng);
   newMessages.push(...gossipResult.gossipMessages);
 
@@ -3060,12 +3076,23 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const referralResult = processWeeklyReferrals(referralState, rng);
   newMessages.push(...referralResult.referralMessages);
 
-  // Exclusive windows processing
-  const exclusiveState: GameState = { ...state, contacts: referralResult.updatedContacts };
-  const exclusiveResult = processExclusiveWindows(exclusiveState, rng);
-  newMessages.push(...exclusiveResult.exclusiveMessages);
+  // Canonical access-agreement processing replaces contact-local exclusive windows.
+  const accessAgreementState: Pick<
+    GameState,
+    "accessAgreements" | "contacts" | "players" | "fixtures" | "currentSeason" | "currentWeek" | "scout"
+  > = {
+    accessAgreements: revokedAccessAgreements,
+    contacts: referralResult.updatedContacts,
+    players: state.players,
+    fixtures: state.fixtures,
+    currentSeason: state.currentSeason,
+    currentWeek: state.currentWeek,
+    scout: state.scout,
+  };
+  const accessAgreementResult = processWeeklyAccessAgreements(accessAgreementState, rng);
+  newMessages.push(...accessAgreementResult.exclusiveMessages);
 
-  const f3UpdatedContacts = exclusiveResult.updatedContacts;
+  const f3UpdatedContacts = referralResult.updatedContacts;
 
   // 19. Form momentum updates for all players.
   const formMomentumUpdates = processFormMomentum(state, fixturesPlayed);
@@ -3193,6 +3220,7 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       : undefined,
     updatedFreeAgentNegotiations: freeAgentNegotiationResult.negotiations,
     updatedContacts: f3UpdatedContacts,
+    accessAgreements: accessAgreementResult.accessAgreements,
     boardReactions: boardAIResult?.reactions,
     updatedBoardProfile: boardAIResult?.updatedProfile,
     relegationResult,
@@ -3924,6 +3952,9 @@ export function advanceWeek(
   let updatedContacts = tickResult.updatedContacts
     ? { ...tickResult.updatedContacts }
     : { ...state.contacts };
+  const updatedAccessAgreements = tickResult.accessAgreements
+    ? { ...tickResult.accessAgreements }
+    : { ...(state.accessAgreements ?? {}) };
   if (tickResult.alumniContactPromotions) {
     for (const promo of tickResult.alumniContactPromotions) {
       updatedContacts[promo.contact.id] = promo.contact;
@@ -4169,6 +4200,7 @@ export function advanceWeek(
       scout: synchronizedRegionalState.scout,
       inbox: updatedInbox,
       contacts: updatedContacts,
+      accessAgreements: updatedAccessAgreements,
       npcScouts: updatedNPCScouts,
       npcReports: updatedNPCReports,
       currentWeek: nextWeek,
@@ -4209,7 +4241,9 @@ export function advanceWeek(
       satisfactionHistory: updatedSatisfactionHistory,
       freeAgentPool: lifecycleFreeAgentPool,
     };
-    return applyWorldConditionSeasonStart(seasonStartState);
+    return applyClubPhilosophySeasonStart(
+      applyWorldConditionSeasonStart(seasonStartState),
+    );
   }
   const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);
 
@@ -4221,6 +4255,7 @@ export function advanceWeek(
     scout: synchronizedRegionalState.scout,
     inbox: updatedInbox,
     contacts: updatedContacts,
+    accessAgreements: updatedAccessAgreements,
     npcScouts: updatedNPCScouts,
     npcReports: updatedNPCReports,
     currentWeek: nextWeek,

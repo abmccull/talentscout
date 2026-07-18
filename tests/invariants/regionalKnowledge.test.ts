@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Activity, GameState, RegionalKnowledge, Scout, UnsignedYouth } from "@/engine/core/types";
+import type {
+  Activity,
+  AgencyEmployee,
+  FinancialRecord,
+  GameState,
+  RegionalKnowledge,
+  Scout,
+  UnsignedYouth,
+} from "@/engine/core/types";
 import { addActivity, createWeekSchedule } from "@/engine/core/calendar";
 import { createRNG } from "@/engine/rng";
 import { processRegionalKnowledgeGrowth } from "@/engine/specializations/regionalKnowledge";
@@ -63,6 +71,48 @@ function state(overrides: Partial<GameState> = {}): GameState {
     currentWeek: 10,
     currentSeason: 1,
     countries: ["england", "spain"],
+    territories: {
+      england: {
+        id: "england",
+        name: "England",
+        country: "England",
+        countryKey: "england",
+        leagueIds: ["eng-league"],
+        maxScouts: 2,
+        assignedScoutIds: [],
+      },
+      spain: {
+        id: "spain",
+        name: "Spain",
+        country: "Spain",
+        countryKey: "spain",
+        leagueIds: ["spa-league"],
+        maxScouts: 2,
+        assignedScoutIds: [],
+      },
+    },
+    leagues: {
+      "eng-league": { id: "eng-league", country: "England", clubIds: ["eng-club"] },
+      "spa-league": { id: "spa-league", country: "Spain", clubIds: ["spa-club"] },
+    },
+    clubs: {
+      "eng-club": { id: "eng-club", leagueId: "eng-league" },
+      "spa-club": { id: "spa-club", leagueId: "spa-league" },
+    },
+    players: {
+      "eng-player": { id: "eng-player", clubId: "eng-club", firstName: "Tom", lastName: "North" },
+      "spa-player": { id: "spa-player", clubId: "spa-club", firstName: "Luis", lastName: "South" },
+    },
+    fixtures: {
+      "eng-fixture": { id: "eng-fixture", leagueId: "eng-league" },
+      "spa-fixture": { id: "spa-fixture", leagueId: "spa-league" },
+    },
+    subRegions: {
+      england: { id: "england", name: "London", country: "England", countryKey: "england", familiarity: 0 },
+      spain: { id: "spain", name: "Madrid", country: "Spain", countryKey: "spain", familiarity: 0 },
+    },
+    unsignedYouth: {},
+    youthTournaments: {},
     regionalKnowledge: {
       england: knowledge("england", 25),
       spain: knowledge("spain", 0),
@@ -96,6 +146,42 @@ function unsignedYouth(id: string, country: string): UnsignedYouth {
     placed: false,
     retired: false,
   };
+}
+
+function supportedFinances(): FinancialRecord {
+  const employee: AgencyEmployee = {
+    id: "spain-scout",
+    name: "Spain Scout",
+    role: "scout",
+    quality: 16,
+    salary: 1_000,
+    morale: 75,
+    fatigue: 10,
+    hiredWeek: 1,
+    hiredSeason: 1,
+    reportsGenerated: [],
+    experience: 0,
+    weeklyLog: [],
+    regionFocusWeeks: 0,
+  };
+
+  return {
+    balance: 20_000,
+    transactions: [],
+    employees: [employee],
+    satelliteOffices: [
+      {
+        id: "office-spain",
+        region: "spain",
+        monthlyCost: 1_200,
+        qualityBonus: 0.1,
+        maxEmployees: 3,
+        employeeIds: [employee.id],
+        openedWeek: 1,
+        openedSeason: 1,
+      },
+    ],
+  } as unknown as FinancialRecord;
 }
 
 describe("regional knowledge invariants", () => {
@@ -184,6 +270,95 @@ describe("regional knowledge invariants", () => {
       reportsSubmitted: 0,
       successfulFinds: 0,
       contactCount: 0,
+    });
+  });
+
+  it("decays neglected shallow foreign knowledge once per week after the grace window", () => {
+    const initial = state({
+      regionalKnowledge: {
+        england: knowledge("england", 25),
+        spain: {
+          ...knowledge("spain", 20),
+          maintenanceState: {
+            lastProcessedSeason: 1,
+            lastProcessedWeek: 9,
+            neglectedWeeks: 3,
+          },
+        },
+      },
+    });
+
+    const first = processRegionalKnowledgeGrowth(initial, createRNG("knowledge-decay"));
+    const replay = processRegionalKnowledgeGrowth(
+      { ...initial, regionalKnowledge: first.regionalKnowledge },
+      createRNG("knowledge-decay"),
+    );
+    const nextWeek = processRegionalKnowledgeGrowth(
+      {
+        ...initial,
+        currentWeek: 11,
+        regionalKnowledge: first.regionalKnowledge,
+      },
+      createRNG("knowledge-decay-next"),
+    );
+
+    expect(first.regionalKnowledge.spain.knowledgeLevel).toBe(19.4);
+    expect(first.regionalKnowledge.spain.maintenanceState).toEqual({
+      lastProcessedSeason: 1,
+      lastProcessedWeek: 10,
+      neglectedWeeks: 4,
+    });
+    expect(replay.regionalKnowledge.spain.knowledgeLevel).toBe(19.4);
+    expect(replay.regionalKnowledge.spain.maintenanceState).toEqual({
+      lastProcessedSeason: 1,
+      lastProcessedWeek: 10,
+      neglectedWeeks: 4,
+    });
+    expect(nextWeek.regionalKnowledge.spain.knowledgeLevel).toBe(18.7);
+    expect(nextWeek.regionalKnowledge.spain.maintenanceState).toEqual({
+      lastProcessedSeason: 1,
+      lastProcessedWeek: 11,
+      neglectedWeeks: 5,
+    });
+  });
+
+  it("lets supported regions hold their knowledge instead of decaying", () => {
+    const result = processRegionalKnowledgeGrowth(
+      state({
+        contacts: {
+          spainAgent: {
+            id: "spainAgent",
+            name: "Luis Ortega",
+            type: "agent",
+            organization: "Ortega Football",
+            relationship: 78,
+            reliability: 72,
+            knownPlayerIds: [],
+            country: "spain",
+            trustLevel: 74,
+          },
+        },
+        finances: supportedFinances(),
+        regionalKnowledge: {
+          england: knowledge("england", 25),
+          spain: {
+            ...knowledge("spain", 22),
+            maintenanceState: {
+              lastProcessedSeason: 1,
+              lastProcessedWeek: 9,
+              neglectedWeeks: 5,
+            },
+          },
+        },
+      }),
+      createRNG("knowledge-supported"),
+    );
+
+    expect(result.regionalKnowledge.spain.knowledgeLevel).toBe(22.75);
+    expect(result.regionalKnowledge.spain.maintenanceState).toEqual({
+      lastProcessedSeason: 1,
+      lastProcessedWeek: 10,
+      neglectedWeeks: 0,
     });
   });
 

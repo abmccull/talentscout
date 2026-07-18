@@ -1606,6 +1606,7 @@ export interface Contact {
   referralNetwork?: string[];
   /** Probability 0-1 that this contact will betray the scout. */
   betrayalRisk?: number;
+  /** @deprecated Legacy compatibility only. Use top-level accessAgreements. */
   /** Timed exclusive access to a prospect via a high-trust insider. */
   exclusiveWindow?: {
     playerId: string;
@@ -1969,6 +1970,10 @@ export interface Activity {
   placementSupportCondition?: PlacementSupportCondition;
   /** Recruitment brief this scheduled work advances. */
   briefId?: string;
+  /** Planned primary scouting question for observation work created from case guidance. */
+  scoutingQuestionId?: ScoutingQuestionId;
+  /** Active case questions preserved on the schedule for later observation setup. */
+  scoutingQuestionIds?: ScoutingQuestionId[];
   description: string;
   /** Available targets for player/contact-targeted activities (deduplicated cards). */
   targetPool?: TargetOption[];
@@ -2426,6 +2431,8 @@ export interface GameState {
   /** One- and two-season audits of recommendation quality. */
   recommendationReviews: Record<string, RecommendationReview>;
   contacts: Record<string, Contact>;
+  /** Canonical live access and exclusivity contracts affecting scouting access. */
+  accessAgreements?: import("../consequences/accessAgreements").AccessAgreementState;
 
   /** The active week schedule. Replaced each time the week advances. */
   schedule: WeekSchedule;
@@ -2564,6 +2571,8 @@ export interface GameState {
   playerMovementHistory: PlayerMovementEvent[];
   /** Bounded, authoritative cross-entity archive written at season rollover. */
   worldHistory?: import("../world/worldHistory").WorldHistoryState;
+  /** Authoritative club recruitment-philosophy changes resolved at season start. */
+  clubPhilosophyTransitionState?: import("../world/clubPhilosophyTransitions").ClubPhilosophyTransitionState;
   /** Seeded seasonal and regional conditions that alter the live football world. */
   worldConditionState?: import("../world/worldConditions").WorldConditionState;
   /** Persistent signal, choice, and aftermath arcs spawned by world conditions. */
@@ -3028,7 +3037,11 @@ export type TravelPosture =
   | "deepDive"
   | "networkBuild"
   | "opportunityBlitz"
-  | "assignmentFirst";
+  | "assignmentFirst"
+  | "academyEmbed"
+  | "communityCircuit"
+  | "agentTour"
+  | "showcaseSweep";
 
 export interface TravelBooking {
   /** Destination country. */
@@ -3816,6 +3829,8 @@ export interface FinancialRecord {
   blacklistedClubs?: string[];
   /** Weeks remaining in bankruptcy recovery cooldown. */
   bankruptcyRecoveryCooldown?: number;
+  /** Four-week strategic posture for independent agency leadership. */
+  agencyStrategyState?: import("../finance/agencyStrategyState").AgencyStrategyState;
 }
 
 export type DistressLevel = "healthy" | "warning" | "distressed" | "critical" | "bankruptcy";
@@ -4977,6 +4992,8 @@ export interface RegionalKnowledge {
   knowledgeLedger?: RegionalKnowledgeLedgerEntry[];
   /** Counter watermark that prevents historical rewards being paid twice. */
   processedMetrics?: RegionalKnowledgeProcessedMetrics;
+  /** Exact-once weekly maintenance state for neglected-region staleness. */
+  maintenanceState?: RegionalKnowledgeMaintenanceState;
 }
 
 export type RegionalKnowledgeSource =
@@ -5002,6 +5019,12 @@ export interface RegionalKnowledgeProcessedMetrics {
   reportsSubmitted: number;
   successfulFinds: number;
   contactCount: number;
+}
+
+export interface RegionalKnowledgeMaintenanceState {
+  lastProcessedSeason: number;
+  lastProcessedWeek: number;
+  neglectedWeeks: number;
 }
 
 /**

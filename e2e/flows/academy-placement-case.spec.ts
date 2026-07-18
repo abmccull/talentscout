@@ -82,6 +82,7 @@ test.describe("Academy placement case", () => {
     await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
     await gamePage.waitForScreen("reportWriter");
 
+    await gamePage.page.getByRole("tab", { name: /^Brief\b/ }).click();
     await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();
     await expect(gamePage.page.getByText("Development potential", { exact: true })).toBeVisible();
     const identityBriefing = gamePage.page.getByTestId("recruitment-identity-briefing");

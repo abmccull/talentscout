@@ -54,6 +54,9 @@ import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
+import { CompactMetricStrip } from "./workspace/CompactMetricStrip";
+import { UrgentQueue } from "./workspace/UrgentQueue";
+import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -477,62 +480,118 @@ export function Dashboard() {
       const section = document.getElementById(sectionId);
       if (!(section instanceof HTMLDetailsElement)) return;
       section.open = true;
-      window.requestAnimationFrame(() => section.scrollIntoView({ behavior: "smooth", block: "start" }));
+      window.requestAnimationFrame(() => {
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
     };
-    const urgentDeskItems: Array<{
-      id: string;
-      title: string;
-      detail: string;
-      label: string;
-      onActivate: () => void;
-    }> = [];
-
-    if (activeSeasonDecisions.length > 0) {
-      urgentDeskItems.push({
-        id: "season-decision",
-        title: `${activeSeasonDecisions.length} season decision${activeSeasonDecisions.length === 1 ? "" : "s"} waiting`,
-        detail: "An active football event needs your response before the week moves on.",
-        label: "Review",
-        onActivate: () => revealDeskSection("desk-season-context"),
-      });
-    }
-    if (dueRecommendationReviews.length > 0) {
-      urgentDeskItems.push({
-        id: "recommendation-review",
-        title: `${dueRecommendationReviews.length} recommendation review${dueRecommendationReviews.length === 1 ? "" : "s"} complete`,
-        detail: "See how an earlier judgment held up over time.",
-        label: "See outcome",
-        onActivate: () => setScreen("reportHistory"),
-      });
-    }
-    if (scout.fatigue >= 70) {
-      urgentDeskItems.push({
-        id: "fatigue-risk",
-        title: "Your read is at risk",
-        detail: `${Math.round(scout.fatigue)}% fatigue can reduce observation accuracy.`,
-        label: "Plan recovery",
-        onActivate: () => setScreen("calendar"),
-      });
-    }
-    if (unreadMessages.length > 0) {
-      urgentDeskItems.push({
-        id: "unread-messages",
-        title: `${unreadMessages.length} unread message${unreadMessages.length === 1 ? "" : "s"}`,
-        detail: "Club responses and career updates are waiting in your inbox.",
-        label: "Open inbox",
-        onActivate: () => setScreen("inbox"),
-      });
-    }
-    if (nextTournament && nextTournament.startWeek <= currentWeek + 1) {
-      urgentDeskItems.push({
-        id: "tournament-window",
-        title: nextTournament.startWeek <= currentWeek ? "A youth event is live" : "A youth event starts next week",
-        detail: `${nextTournament.name} is a time-sensitive chance to see a wider field.`,
-        label: "Plan coverage",
-        onActivate: () => setScreen("calendar"),
-      });
-    }
-    const visibleUrgentDeskItems = urgentDeskItems.slice(0, 3);
+    const deskMetrics = [
+      {
+        label: "Current week",
+        value: `W${currentWeek}`,
+        detail: `Season ${currentSeason} · ${7 - scheduledSlots} open day${7 - scheduledSlots === 1 ? "" : "s"}`,
+        icon: <Calendar size={18} className="text-emerald-300" aria-hidden="true" />,
+      },
+      {
+        label: "Scout fatigue",
+        value: `${Math.round(scout.fatigue)}%`,
+        detail: scout.fatigue >= 70 ? "Accuracy at risk" : scout.fatigue >= 40 ? "Recovery soon" : "Ready for field work",
+        icon: <Eye size={18} className="text-sky-300" aria-hidden="true" />,
+        toneClassName: scout.fatigue >= 70 ? "text-red-300" : scout.fatigue >= 40 ? "text-amber-300" : "text-emerald-300",
+      },
+      {
+        label: "Decisions ready",
+        value: decisionReadyYouth.length,
+        detail: `${pendingPlacementCount} awaiting club response`,
+        icon: <ClipboardList size={18} className="text-amber-300" aria-hidden="true" />,
+      },
+      {
+        label: "Placed",
+        value: placedYouthCount,
+        detail: `${gameState.legacyScore.totalScore} legacy points`,
+        icon: <Trophy size={18} className="text-violet-300" aria-hidden="true" />,
+      },
+    ];
+    const urgentDeskQueue = [
+      activeSeasonDecisions.length > 0
+        ? {
+            id: "season-decision",
+            eyebrow: "Decision required",
+            title: `${activeSeasonDecisions.length} season decision${activeSeasonDecisions.length === 1 ? "" : "s"} waiting`,
+            body: "A live football event needs your response. The choice will change the world state and should not be buried in reference material.",
+            meta: `Week ${currentWeek} season context`,
+            tone: "amber" as const,
+            actionLabel: "Review choice",
+            onAction: () => revealDeskSection("desk-season-context"),
+          }
+        : null,
+      dueRecommendationReviews.length > 0
+        ? {
+            id: "completed-reviews",
+            eyebrow: "Recommendation accountability",
+            title: `${dueRecommendationReviews.length} long-term review${dueRecommendationReviews.length === 1 ? "" : "s"} landed this week`,
+            body: "Revisit whether your original report was right for the right reason before the next brief arrives.",
+            meta: "Reports workspace",
+            tone: "violet" as const,
+            actionLabel: "Open reports",
+            onAction: () => setScreen("reportHistory"),
+          }
+        : null,
+      unreadMessages[0]
+        ? {
+            id: `message-${unreadMessages[0].id}`,
+            eyebrow: unreadMessages.length > 1 ? `${unreadMessages.length} unread messages` : "Unread message",
+            title: unreadMessages[0].title,
+            body: unreadMessages[0].body,
+            meta: "Inbox follow-up",
+            tone: "sky" as const,
+            actionLabel: "Open inbox",
+            onAction: () => {
+              markMessageRead(unreadMessages[0]!.id);
+              setScreen("inbox");
+            },
+          }
+        : null,
+      nextTournament
+        ? {
+            id: `tournament-${nextTournament.id}`,
+            eyebrow: "Opportunity radar",
+            title: nextTournament.name,
+            body: nextTournament.startWeek <= currentWeek
+              ? "The event is live now. If you wait, another scout gets the first look."
+              : `Starts in week ${nextTournament.startWeek}. Reserve time while the access window is still soft.`,
+            meta: `${nextTournament.country} · ${nextTournament.prestige}`,
+            tone: "amber" as const,
+            actionLabel: "Plan attendance",
+            onAction: () => setScreen("calendar"),
+          }
+        : null,
+      scout.fatigue >= 50
+        ? {
+            id: "fatigue-pressure",
+            eyebrow: "Scout condition",
+            title: `${Math.round(scout.fatigue)}% fatigue is now shaping your week`,
+            body: scout.fatigue >= 75
+              ? "Accuracy is materially at risk. Leave room for recovery before forcing another live read."
+              : "Moderate fatigue is manageable, but the next few slots should be intentional.",
+            meta: `Tier ${scout.careerTier} · ${Math.round(scout.reputation)} reputation`,
+            tone: scout.fatigue >= 75 ? "red" as const : "amber" as const,
+            actionLabel: "Review planner",
+            onAction: () => setScreen("calendar"),
+          }
+        : null,
+      pendingPlacementCount > 0
+        ? {
+            id: "pending-placements",
+            eyebrow: "Placement queue",
+            title: `${pendingPlacementCount} recommendation${pendingPlacementCount === 1 ? "" : "s"} still await a club response`,
+            body: "These calls are part of your record now. Track which pathways are cooling and which clubs still need persuasion.",
+            meta: "Career consequences continue after filing",
+            tone: "emerald" as const,
+            actionLabel: "Track outcomes",
+            onAction: () => setScreen("reportHistory"),
+          }
+        : null,
+    ].filter((item) => item !== null).slice(0, 3);
 
     return (
       <GameLayout>
@@ -614,87 +673,64 @@ export function Dashboard() {
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Urgent now</p>
-                      <p className="mt-1 text-sm text-zinc-300">Only the items that may change your next move.</p>
-                    </div>
-                    <AlertTriangle size={19} className="shrink-0 text-amber-300" aria-hidden="true" />
-                  </div>
-                  <ul className="space-y-2" data-testid="desk-urgent-list" aria-label="Urgent desk items">
-                    {visibleUrgentDeskItems.length === 0 ? (
-                      <li className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] p-3 text-sm text-emerald-100">
-                        No urgent interruptions. Protect the decision in front of you.
-                      </li>
-                    ) : visibleUrgentDeskItems.map((item) => (
-                      <li key={item.id} data-testid="desk-urgent-item" className="rounded-lg border border-white/10 bg-white/[0.025] p-3">
-                        <p className="text-sm font-semibold text-white">{item.title}</p>
-                        <p className="mt-1 text-xs leading-5 text-zinc-400">{item.detail}</p>
-                        <button
-                          type="button"
-                          onClick={item.onActivate}
-                          className="mt-2 min-h-11 rounded-md px-1 text-xs font-semibold text-emerald-200 underline decoration-emerald-400/40 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                        >
-                          {item.label}
-                        </button>
+                <WorkspaceDisclosure
+                  title="The scout's loop"
+                  description="Every name must earn the next step, and each step changes what the next week should do."
+                  icon={<Target size={18} className="text-emerald-300" aria-hidden="true" />}
+                  summary={<span>{loopSteps.filter((step) => step.complete).length}/4 active</span>}
+                  className="border-white/10 bg-black/20"
+                  contentClassName="pt-3"
+                >
+                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+                    {loopSteps.map((step, index) => (
+                      <li
+                        key={step.label}
+                        className={`rounded-lg border p-3 ${
+                          step.complete
+                            ? "border-emerald-400/30 bg-emerald-400/10"
+                            : "border-white/10 bg-white/[0.025]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
+                          }`}>
+                            {step.complete ? "✓" : index + 1}
+                          </span>
+                          <span className="text-xs font-semibold text-white">{step.label}</span>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
                       </li>
                     ))}
-                  </ul>
-                </div>
+                  </ol>
+                </WorkspaceDisclosure>
               </CardContent>
             </Card>
 
-            <details
-              id="desk-season-context"
-              className="group mb-5 overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/90"
-            >
-              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden sm:px-5">
-                <span>
-                  <span className="block text-sm font-semibold text-white">Season and pipeline</span>
-                  <span className="mt-1 block text-xs text-zinc-400">
-                    {youthDiscoveredCount} known · {multiViewCount} repeat looks · {decisionReadyYouth.length} decisions ready
-                  </span>
-                </span>
-                <ChevronDown size={18} className="shrink-0 text-zinc-400 transition-transform group-open:rotate-180" aria-hidden="true" />
-              </summary>
-              <div className="border-t border-white/10 p-4 sm:p-5">
-                {gameState.seasonEvents.length > 0 && (
-                  <SeasonTimeline
-                    seasonEvents={gameState.seasonEvents}
-                    currentWeek={currentWeek}
-                    seasonLength={seasonLength}
-                    onResolveEvent={(eventId, choiceIndex) => {
-                      useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
-                    }}
-                  />
-                )}
+            {gameState.seasonEvents.length > 0 && (
+              <WorkspaceDisclosure
+                id="desk-season-context"
+                title={`Season context · Week ${currentWeek}`}
+                eyebrow="Calendar"
+                description="Open only when you need the wider rhythm behind this week's choice."
+                summary={<span>{gameState.seasonEvents.length} season markers</span>}
+                className="mb-5"
+                contentClassName="p-0"
+              >
+                <SeasonTimeline
+                  seasonEvents={gameState.seasonEvents}
+                  currentWeek={currentWeek}
+                  seasonLength={seasonLength}
+                  onResolveEvent={(eventId, choiceIndex) => {
+                    useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
+                  }}
+                />
+              </WorkspaceDisclosure>
+            )}
 
-                <section aria-label="Youth pipeline snapshot" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {[
-                    { label: "Known prospects", value: youthDiscoveredCount, detail: `${youthList.length} in your active world`, icon: Users, tone: "text-emerald-300" },
-                    { label: "Repeat looks", value: multiViewCount, detail: `${firmReadCount} with a firm read`, icon: Eye, tone: "text-sky-300" },
-                    { label: "Decisions ready", value: decisionReadyYouth.length, detail: `${pendingPlacementCount} awaiting club response`, icon: ClipboardList, tone: "text-amber-300" },
-                    { label: "Placed", value: placedYouthCount, detail: `${gameState.legacyScore.totalScore} legacy points`, icon: Trophy, tone: "text-violet-300" },
-                  ].map(({ label, value, detail, icon: Icon, tone }) => (
-                    <Card key={label} className="border-white/10 bg-black/20 shadow-lg shadow-black/10">
-                      <CardContent className="p-4 sm:p-5">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</p>
-                            <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{value}</p>
-                          </div>
-                          <Icon size={19} className={tone} aria-hidden="true" />
-                        </div>
-                        <p className="mt-2 text-xs text-zinc-400">{detail}</p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </section>
-              </div>
-            </details>
+            <CompactMetricStrip items={deskMetrics} className="mb-5" />
 
-            <Card data-testid="desk-top-briefs" className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
+            <Card className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
               <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base text-white">
@@ -774,53 +810,14 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <details
-              id="desk-supporting-context"
-              className="group overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/90"
-            >
-              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden sm:px-5">
-                <span>
-                  <span className="block text-sm font-semibold text-white">Open the full desk overview</span>
-                  <span className="mt-1 block text-xs text-zinc-400">Itinerary, priority prospects, opportunities, inbox, and scout condition</span>
-                </span>
-                <ChevronDown size={18} className="shrink-0 text-zinc-400 transition-transform group-open:rotate-180" aria-hidden="true" />
-              </summary>
-
-              <div className="border-t border-white/10 p-4 sm:p-5">
-                <section aria-labelledby="scout-loop-heading" className="mb-5 rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <h2 id="scout-loop-heading" className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-300">Your scouting loop</h2>
-                      <p className="mt-1 text-sm text-zinc-300">Every name must earn the next step.</p>
-                    </div>
-                    <Target size={20} className="text-emerald-300" aria-hidden="true" />
-                  </div>
-                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {loopSteps.map((step, index) => (
-                      <li
-                        key={step.label}
-                        className={`rounded-lg border p-3 ${
-                          step.complete
-                            ? "border-emerald-400/30 bg-emerald-400/10"
-                            : "border-white/10 bg-white/[0.025]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
-                          }`}>
-                            {step.complete ? "✓" : index + 1}
-                          </span>
-                          <span className="text-xs font-semibold text-white">{step.label}</span>
-                        </div>
-                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-
-                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
-              <div className="space-y-5">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
+              <WorkspaceDisclosure
+                title="Current working set"
+                eyebrow="Reference"
+                description="Your itinerary and prospect queue live in Planner and Prospects. Expand this only for a quick cross-check."
+                summary={<span>{plannedActivities.length} planned · {deskProspects.length} tracked</span>}
+                contentClassName="space-y-5"
+              >
                 <Card className="border-white/10 bg-[#11161c]/95">
                   <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
                     <div>
@@ -930,116 +927,21 @@ export function Dashboard() {
                     )}
                   </CardContent>
                 </Card>
-              </div>
+              </WorkspaceDisclosure>
 
               <aside className="space-y-5" aria-label="Scouting context">
-                <Card className="border-amber-400/20 bg-[#151711]/95">
-                  <CardHeader className="p-5 pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base text-white">
-                      <Star size={17} className="text-amber-300" aria-hidden="true" />
-                      Opportunity radar
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-5 pt-1">
-                    {nextTournament ? (
-                      <>
-                        <Badge className="mb-3 border-amber-400/25 bg-amber-400/10 text-amber-200" variant="outline">
-                          {nextTournament.prestige} · {nextTournament.country}
-                        </Badge>
-                        <h3 className="text-lg font-bold text-white">{nextTournament.name}</h3>
-                        <p className="mt-2 text-sm leading-6 text-zinc-300">
-                          {nextTournament.startWeek <= currentWeek
-                            ? "The event is live now. Attend before the window closes."
-                            : `Starts in week ${nextTournament.startWeek}. Reserve time before another scout gets the first look.`}
-                        </p>
-                        <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded-lg bg-black/20 p-3">
-                            <p className="text-zinc-400">Talent pool</p>
-                            <p className="mt-1 font-semibold text-white">{nextTournament.poolSizeMultiplier.toFixed(1)}× field</p>
-                          </div>
-                          <div className="rounded-lg bg-black/20 p-3">
-                            <p className="text-zinc-400">Observation</p>
-                            <p className="mt-1 font-semibold text-white">+{nextTournament.observationBonus} bonus</p>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm leading-6 text-zinc-300">No verified tournament is demanding attention yet. Contacts and local familiarity reveal better opportunities over time.</p>
-                      </>
-                    )}
-                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => setScreen("calendar")}>
-                      View planning opportunities
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardHeader className="flex-row items-center justify-between space-y-0 p-5 pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base text-white">
-                      <Mail size={17} className="text-sky-300" aria-hidden="true" />
-                      Inbox
-                    </CardTitle>
-                    {unreadMessages.length > 0 && <Badge variant="secondary">{unreadMessages.length} unread</Badge>}
-                  </CardHeader>
-                  <CardContent className="p-5 pt-1">
-                    {unreadMessages.length === 0 ? (
-                      <p className="text-sm text-zinc-400">You are caught up. New club responses and career events will appear here.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {unreadMessages.slice(0, 3).map((message) => (
-                          <button
-                            key={message.id}
-                            onClick={() => {
-                              markMessageRead(message.id);
-                              setScreen("inbox");
-                            }}
-                            className="min-h-14 w-full rounded-lg border border-white/10 bg-white/[0.025] p-3 text-left transition hover:border-sky-400/30 hover:bg-sky-400/[0.04] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                          >
-                            <p className="line-clamp-1 text-sm font-semibold text-white">{message.title}</p>
-                            <p className="mt-1 line-clamp-1 text-xs text-zinc-400">{message.body}</p>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    <Button className="mt-3 min-h-11 w-full" variant="ghost" onClick={() => setScreen("inbox")}>
-                      Open inbox
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardContent className="p-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Scout condition</p>
-                        <p className="mt-1 text-sm font-semibold text-white">Tier {scout.careerTier} · {Math.round(scout.reputation)} reputation</p>
-                      </div>
-                      <TrendingUp size={19} className="text-emerald-300" aria-hidden="true" />
-                    </div>
-                    <div className="mt-4">
-                      <div className="mb-1.5 flex items-center justify-between text-xs">
-                        <span className="text-zinc-400">Fatigue</span>
-                        <span className={scout.fatigue >= 70 ? "font-semibold text-red-300" : scout.fatigue >= 40 ? "font-semibold text-amber-300" : "font-semibold text-emerald-300"}>
-                          {Math.round(scout.fatigue)}%
-                        </span>
-                      </div>
-                      <div className="h-2 overflow-hidden rounded-full bg-zinc-800">
-                        <div
-                          className={`h-full rounded-full ${scout.fatigue >= 70 ? "bg-red-400" : scout.fatigue >= 40 ? "bg-amber-400" : "bg-emerald-400"}`}
-                          style={{ width: `${Math.min(100, Math.max(0, scout.fatigue))}%` }}
-                        />
-                      </div>
-                    </div>
-                    <Button className="mt-4 min-h-11 w-full" variant="outline" onClick={() => setScreen("career")}>
-                      Open career development
-                    </Button>
-                  </CardContent>
-                </Card>
-                  </aside>
-                </div>
-              </div>
-            </details>
+                <UrgentQueue
+                  title="Urgent queue"
+                  description="Three things that can materially change your next decision. Everything else belongs in its own workspace."
+                  icon={<Mail size={17} className="text-sky-300" aria-hidden="true" />}
+                  items={urgentDeskQueue}
+                  emptyTitle="No urgent interruptions"
+                  emptyBody="The desk is clear. Use the planner to chase a new lead, deepen evidence, or protect recovery time before advancing."
+                  footerActionLabel="Open career view"
+                  onFooterAction={() => setScreen("career")}
+                />
+              </aside>
+            </div>
           </div>
         </section>
       </GameLayout>

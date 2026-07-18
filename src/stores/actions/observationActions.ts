@@ -97,6 +97,7 @@ import {
   type OpeningCaseChoiceId,
 } from "@/engine/youth/openingCase";
 import { shapeVeteranPrologueSession } from "@/engine/youth/veteranPrologueSession";
+import { deriveScoutingCaseObservationFocus } from "@/engine/reports/caseQuestions";
 
 const INVESTIGATION_CONTACT_TYPES: Partial<
   Record<ActivityType, GameState["contacts"][string]["type"][]>
@@ -651,6 +652,8 @@ function buildSessionObserverContext(
   gameState: GameState,
   targetPlayerId: string | undefined,
   regionalKnowledgeLevel: number | undefined,
+  briefId?: string,
+  plannedQuestionIds?: readonly ScoutingQuestionId[],
 ): ObservationExperienceSnapshot | undefined {
   if (!targetPlayerId) return undefined;
 
@@ -679,9 +682,17 @@ function buildSessionObserverContext(
       || right.submittedWeek - left.submittedWeek
       || right.id.localeCompare(left.id),
     )[0];
-  const openQuestionIds = latestReport?.evidenceAssessment?.nextTest.questionId
-    ? [latestReport.evidenceAssessment.nextTest.questionId]
-    : [];
+  const caseFocus = deriveScoutingCaseObservationFocus(gameState, {
+    playerId: targetPlayerId,
+    briefId,
+  });
+  const openQuestionIds = Array.from(new Set([
+    ...(plannedQuestionIds ?? []),
+    ...(caseFocus?.scoutingQuestionIds ?? []),
+    ...(latestReport?.evidenceAssessment?.nextTest.questionId
+      ? [latestReport.evidenceAssessment.nextTest.questionId]
+      : []),
+  ]));
 
   return buildObservationExperienceSnapshot({
     scout: gameState.scout,
@@ -737,6 +748,9 @@ export function createObservationActions(get: GetState, set: SetState) {
         playerIds,
       );
       const simulatedYouth = weekSimulation?.youthVenueResults?.updatedUnsignedYouth;
+      const canonicalTargetId = targetId
+        ? resolveSessionPlayerProfile(gameState, simulatedYouth, targetId)?.id ?? targetId
+        : undefined;
       const playerProfiles = Object.fromEntries(
         dedupedPool.flatMap((entry) => {
           const profile = resolveSessionPlayerProfile(
@@ -754,8 +768,19 @@ export function createObservationActions(get: GetState, set: SetState) {
         options?.contactId,
       );
       const countryId = targetId
-        ? getPlayerScoutingCountry(gameState, targetId)
+        ? getPlayerScoutingCountry(gameState, canonicalTargetId ?? targetId)
         : undefined;
+      const scheduledActivity = activityInstanceId
+        ? gameState.schedule?.activities.find(
+            (activity) => activity?.instanceId === activityInstanceId,
+          ) ?? undefined
+        : undefined;
+      const caseFocus = canonicalTargetId
+        ? deriveScoutingCaseObservationFocus(gameState, {
+            playerId: canonicalTargetId,
+            briefId: scheduledActivity?.briefId,
+          })
+        : null;
       const regionalKnowledge = countryId
         ? gameState.regionalKnowledge[countryId]
           ?? Object.values(gameState.regionalKnowledge).find(
@@ -769,8 +794,10 @@ export function createObservationActions(get: GetState, set: SetState) {
         : undefined;
       const observerContext = buildSessionObserverContext(
         gameState,
-        targetId,
+        canonicalTargetId ?? targetId,
         regionalKnowledge?.knowledgeLevel,
+        scheduledActivity?.briefId,
+        scheduledActivity?.scoutingQuestionIds ?? caseFocus?.scoutingQuestionIds,
       );
 
       const config = {
@@ -791,6 +818,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         sourceContactId: sourceContact?.id,
         sourceContactName: sourceContact?.name,
         sourceRelationshipScore: sourceContact?.relationship,
+        scoutingQuestionId: scheduledActivity?.scoutingQuestionId ?? caseFocus?.scoutingQuestionId,
       };
 
       let session = createSession(config, rng);

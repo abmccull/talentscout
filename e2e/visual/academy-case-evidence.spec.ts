@@ -193,6 +193,7 @@ test.describe("Academy case rendered evidence", () => {
         document: window.scrollY,
         workspace: document.querySelector<HTMLElement>("#game-main")?.scrollTop ?? 0,
       }))).toEqual({ document: 0, workspace: 0 });
+      await gamePage.page.getByRole("tab", { name: /^Brief\b/ }).click();
       await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();
       await expect(gamePage.page.getByTestId("report-presentation-room")).toBeVisible();
       await capture(gamePage, viewport.name, "report-writer");

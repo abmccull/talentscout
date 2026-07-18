@@ -4,6 +4,7 @@ import type {
   PlayerMovementEvent,
   ScoutingCaseStatus,
 } from "@/engine/core/types";
+import { deriveProfessionalCaseAccountability } from "@/engine/reports/caseAccountability";
 import {
   buildRecommendationReviewTimelineDescription,
   buildRecommendationReviewTimelineDetails,
@@ -383,6 +384,9 @@ export function buildScoutingCaseTimeline(
   for (const review of Object.values(state.recommendationReviews ?? {})) {
     if (review.caseId !== caseId && !caseReviewIds.has(review.id)) continue;
     const completed = review.status === "complete";
+    const accountability = completed
+      ? deriveProfessionalCaseAccountability(state, scoutingCase.id)
+      : null;
     entries.push({
       id: `review:${review.id}`,
       kind: "review",
@@ -390,10 +394,11 @@ export function buildScoutingCaseTimeline(
       season: completed ? review.completedSeason ?? review.dueSeason : review.dueSeason,
       title: `${review.checkpoint === "oneSeason" ? "One-season" : "Two-season"} review ${completed ? "completed" : "scheduled"}`,
       description: completed
-        ? buildRecommendationReviewTimelineDescription(review)
+        ? accountability?.headline ?? buildRecommendationReviewTimelineDescription(review)
         : "Your original judgment remains open until enough career evidence exists.",
       details: completed
-        ? buildRecommendationReviewTimelineDetails(review)
+        ? accountability?.categories.map((category) => `${category.label}: ${category.summary}`)
+          ?? buildRecommendationReviewTimelineDetails(review)
         : undefined,
       reportId: review.reportId,
       clubId: review.clubId,

@@ -41,6 +41,37 @@ export {
 } from "./youthCompetition";
 
 export {
+  createRivalCampaignState,
+  directRivalCampaignWeek,
+  resolveRivalCampaignResponse,
+} from "./campaigns";
+
+export type {
+  DirectRivalCampaignWeekInput,
+  DirectRivalCampaignWeekResult,
+  ResolveRivalCampaignResponseInput,
+  ResolveRivalCampaignResponseResult,
+  RivalCampaign,
+  RivalCampaignCounterplayOption,
+  RivalCampaignDirectory,
+  RivalCampaignHistoryRecord,
+  RivalCampaignKind,
+  RivalCampaignOperationalEffect,
+  RivalCampaignPhase,
+  RivalCampaignProvenancePacket,
+  RivalCampaignResolution,
+  RivalCampaignSignal,
+  RivalCampaignState,
+  RivalCampaignStatus,
+  RivalCampaignTarget,
+  RivalCampaignTargetKind,
+} from "./campaigns";
+
+export {
+  buildRivalCampaignDirectory,
+} from "./campaignDirectory";
+
+export {
   RIVAL_ORGANIZATION_DEFINITIONS,
   createRivalOrganizationState,
   assessRivalMarketCounterplay,

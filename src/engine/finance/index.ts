@@ -255,3 +255,5 @@ export {
 } from "./specializationIncome";
 
 export type { IncomeSource } from "./specializationIncome";
+export * from "./agencyStrategy";
+export * from "./agencyDilemmas";

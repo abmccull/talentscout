@@ -805,9 +805,12 @@ export function evaluatePlayerDevelopmentEnvironment(
   const { strongestPositive, strongestRisk } = strongestFactors(factors);
   const clubName = club?.name ?? "Unattached football";
   const headline = BAND_LABELS[band];
-  const summary = strongestRisk
+  const structuralSummary = strongestRisk
     ? `${strongestPositive?.summary ?? "There is some support in place"} The main constraint is clear: ${strongestRisk.summary}`
     : `${strongestPositive?.summary ?? "The setting is stable."} No major visible pathway constraint stands out right now.`;
+  const summary = seasonalFactor && !structuralSummary.includes(seasonalFactor.summary)
+    ? `${structuralSummary} ${seasonalFactor.summary}`
+    : structuralSummary;
   const reviewPrompt = strongestRisk?.id === "playing-pathway"
     ? "Review after the next run of fixtures or consider a less congested pathway."
     : strongestRisk?.id === "health"

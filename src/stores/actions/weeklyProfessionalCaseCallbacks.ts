@@ -1,4 +1,5 @@
 import type { GameState, InboxMessage, ScoutingCase } from "@/engine/core/types";
+import { deriveProfessionalCaseAccountability } from "@/engine/reports/caseAccountability";
 
 function playerName(state: GameState, playerId: string): string {
   const player = state.players[playerId]
@@ -40,8 +41,15 @@ export function emitProfessionalCaseCallbacks(state: GameState): GameState {
     const outcomeDetail = typeof fact.metadata?.detail === "string"
       ? fact.metadata.detail
       : undefined;
+    const accountability = deriveProfessionalCaseAccountability(state, caseId);
+    const accountabilityLine = accountability?.summary
+      ? `\n\nAccountability line: ${accountability.summary}`
+      : "";
     const name = playerName(state, scoutingCase.playerId);
     const title = scoutingCase.professionalContext?.title ?? "Professional case";
+    const actionLine = selected?.label
+      ? `Your decision to "${selected.label}" `
+      : "The recorded approach ";
     messages.push({
       id: `professional-case-callback:${fact.id}`,
       week: state.currentWeek,
@@ -51,12 +59,10 @@ export function emitProfessionalCaseCallbacks(state: GameState): GameState {
         ? `${name}: the accepted risk came due`
         : `${name}: the earlier judgment mattered`,
       body: isSetback
-        ? `${title} has exposed the downside you accepted.${outcomeDetail ? ` ${outcomeDetail}.` : ""} ${selected
-          ? `Your decision to “${selected.label}” remains part of the permanent case record.`
-          : "The recorded approach remains part of the permanent case record."}`
-        : `${title} has produced a concrete opening.${outcomeDetail ? ` ${outcomeDetail}.` : ""} ${selected
-          ? `Your decision to “${selected.label}” is now part of why the case moved.`
-          : "The approach recorded in the case has now created a follow-up opportunity."} The result is preserved in the living casebook rather than awarded as an unexplained bonus.`,
+        ? `${title} has exposed the downside you accepted.${outcomeDetail ? ` ${outcomeDetail}.` : ""} ${actionLine}remains part of the permanent case record.${accountabilityLine}`
+        : `${title} has produced a concrete opening.${outcomeDetail ? ` ${outcomeDetail}.` : ""} ${actionLine}${selected
+          ? "is now part of why the case moved."
+          : "has now created a follow-up opportunity."} The result is preserved in the living casebook rather than awarded as an unexplained bonus.${accountabilityLine}`,
       read: false,
       actionRequired: false,
       relatedId: scoutingCase.playerId,

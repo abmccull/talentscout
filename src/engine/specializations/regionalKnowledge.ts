@@ -20,11 +20,12 @@ import type {
   ActivityType,
   Contact,
   RegionalKnowledgeLedgerEntry,
+  RegionalKnowledgeMaintenanceState,
   RegionalKnowledgeProcessedMetrics,
 } from "@/engine/core/types";
 import { discoverHiddenLeague } from "@/engine/world/hiddenLeagues";
 import { getTravelPostureEffects, isScoutAbroad } from "@/engine/world/travel";
-import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
+import { deriveRegionalPresence, type RegionalPresenceSnapshot } from "@/engine/world/regionalPresence";
 import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import { getScheduledActivityInstances } from "@/engine/core/calendar";
 import { generateContactForType } from "@/engine/network/contacts";
@@ -121,6 +122,8 @@ const DEFAULT_INSIGHT_POOL: CulturalInsight[] = [
  */
 const INSIGHT_THRESHOLDS = [10, 25, 45, 70];
 const MAX_KNOWLEDGE_LEDGER_ENTRIES = 64;
+const NEGLECT_GRACE_WEEKS = 4;
+const STALE_KNOWLEDGE_CEILING = 55;
 
 /** Activities that create first-hand or relationship-backed local knowledge. */
 const ACTIVITY_KNOWLEDGE_GAIN: Partial<Record<ActivityType, number>> = {
@@ -159,6 +162,10 @@ function canonicalizeCountry(value?: string): string | undefined {
 
 function fallbackNormalizeCountry(value: string): string {
   return canonicalizeCountry(value) ?? value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function getCountryReputationByCountry(
@@ -365,6 +372,111 @@ function materializeLocalContact(
       15,
       Math.min(70, Math.round((generatedContact.trustLevel ?? 0) * postureEffects.contactQualityMultiplier)),
     ),
+  };
+}
+
+function roundToTenth(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function isSameProcessedWeek(
+  maintenance: RegionalKnowledgeMaintenanceState | undefined,
+  season: number,
+  week: number,
+): boolean {
+  return maintenance?.lastProcessedSeason === season
+    && maintenance?.lastProcessedWeek === week;
+}
+
+function calculateMaintenanceSupport(presence: RegionalPresenceSnapshot): number {
+  const structuralSupport = presence.sources
+    .filter((source) => source.kind !== "regionalKnowledge")
+    .reduce((sum, source) => sum + source.score, 0);
+
+  return clamp(
+    structuralSupport
+      + (presence.isHomeBase ? 18 : 0)
+      + (presence.isActiveLocation ? 12 : 0)
+      + (presence.satelliteOfficeId ? 10 : 0)
+      + presence.assignedEmployeeIds.length * 4
+      + presence.contactIds.length * 2,
+    0,
+    100,
+  );
+}
+
+function calculateNeglectedKnowledgeDecay(
+  knowledgeLevel: number,
+  neglectedWeeks: number,
+  supportScore: number,
+): number {
+  if (knowledgeLevel <= 0 || knowledgeLevel > STALE_KNOWLEDGE_CEILING) return 0;
+  if (neglectedWeeks < NEGLECT_GRACE_WEEKS) return 0;
+
+  const vulnerability = knowledgeLevel <= 15
+    ? 0.7
+    : knowledgeLevel <= 30
+      ? 0.55
+      : knowledgeLevel <= 45
+        ? 0.35
+        : 0.2;
+  const overduePressure = Math.min(0.35, (neglectedWeeks - (NEGLECT_GRACE_WEEKS - 1)) * 0.08);
+  const supportMitigation = clamp(supportScore / 35, 0, 0.85);
+  return roundToTenth(
+    Math.min(
+      knowledgeLevel,
+      clamp((vulnerability + overduePressure) * (1 - supportMitigation), 0, 0.9),
+    ),
+  );
+}
+
+function nextMaintenanceState(input: {
+  previous: RegionalKnowledgeMaintenanceState | undefined;
+  currentSeason: number;
+  currentWeek: number;
+  hasWeeklyReinforcement: boolean;
+  presence: RegionalPresenceSnapshot;
+  knowledgeLevel: number;
+}): {
+  maintenanceState: RegionalKnowledgeMaintenanceState;
+  decayAmount: number;
+} {
+  const {
+    previous,
+    currentSeason,
+    currentWeek,
+    hasWeeklyReinforcement,
+    presence,
+    knowledgeLevel,
+  } = input;
+  if (isSameProcessedWeek(previous, currentSeason, currentWeek)) {
+    return {
+      maintenanceState: previous!,
+      decayAmount: 0,
+    };
+  }
+
+  const supportScore = calculateMaintenanceSupport(presence);
+  const isStabilityProtected = !presence.generatedWorldEligible
+    || presence.isHomeBase
+    || presence.isActiveLocation
+    || supportScore >= 45;
+  const carriedNeglect = previous?.neglectedWeeks ?? 0;
+  const neglectedWeeks = !previous
+    ? 0
+    : hasWeeklyReinforcement || isStabilityProtected
+      ? 0
+      : carriedNeglect + 1;
+
+  return {
+    maintenanceState: {
+      lastProcessedSeason: currentSeason,
+      lastProcessedWeek: currentWeek,
+      neglectedWeeks,
+    },
+    decayAmount: !previous || hasWeeklyReinforcement || isStabilityProtected
+      ? 0
+      : calculateNeglectedKnowledgeDecay(knowledgeLevel, neglectedWeeks, supportScore),
   };
 }
 
@@ -628,10 +740,8 @@ export function processRegionalKnowledgeGrowth(
       }));
     }
 
-    const passiveKnowledgeGain = deriveRegionalPresence(
-      state,
-      countryId,
-    ).effects.passiveKnowledgeGain;
+    const presence = deriveRegionalPresence(state, countryId);
+    const passiveKnowledgeGain = presence.effects.passiveKnowledgeGain;
     if (passiveKnowledgeGain > 0) {
       ledgerEntries.push(makeLedgerEntry({
         countryId,
@@ -660,18 +770,27 @@ export function processRegionalKnowledgeGrowth(
     const existingLedgerIds = new Set((prev.knowledgeLedger ?? []).map((entry) => entry.id));
     const novelLedgerEntries = ledgerEntries.filter((entry) => !existingLedgerIds.has(entry.id));
     const knowledgeGain = novelLedgerEntries.reduce((sum, entry) => sum + entry.amount, 0);
+    const maintenance = nextMaintenanceState({
+      previous: prev.maintenanceState,
+      currentSeason: state.currentSeason,
+      currentWeek: state.currentWeek,
+      hasWeeklyReinforcement: knowledgeGain > 0,
+      presence,
+      knowledgeLevel: prev.knowledgeLevel,
+    });
     const baseUpdated: RegionalKnowledge = {
       ...prev,
       processedMetrics: metrics,
       knowledgeLedger: appendKnowledgeLedger(prev.knowledgeLedger, novelLedgerEntries),
+      maintenanceState: maintenance.maintenanceState,
     };
-    if (knowledgeGain <= 0) {
+    if (knowledgeGain <= 0 && maintenance.decayAmount <= 0) {
       knowledge[countryId] = baseUpdated;
       continue;
     }
 
     const oldLevel = prev.knowledgeLevel;
-    const newLevel = Math.min(100, oldLevel + knowledgeGain);
+    const newLevel = clamp(oldLevel + knowledgeGain - maintenance.decayAmount, 0, 100);
 
     let updated: RegionalKnowledge = {
       ...baseUpdated,

@@ -3,6 +3,7 @@ import { getSeasonLength, type TickResult } from "@/engine/core/gameLoop";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
 import { createRNG } from "@/engine/rng";
 import { processMonthlySnapshot } from "@/engine/career";
+import { processWeeklyRoleResponsibilities } from "@/engine/career/roleResponsibilities";
 import { applyCareerPathTransition } from "@/engine/career/transitions";
 import { openCareerSetback } from "@/engine/career/recovery";
 import {
@@ -133,6 +134,10 @@ export function processWeeklyPostTickSystems(
     },
     inbox: refreshedMessage ? [...state.inbox, refreshedMessage] : state.inbox,
   };
+  state = processWeeklyRoleResponsibilities({
+    beforeWeek: input.beforeWeek,
+    state,
+  });
 
   const snapshot = processMonthlySnapshot(state);
   if (snapshot) {

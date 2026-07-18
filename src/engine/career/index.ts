@@ -137,3 +137,5 @@ export * from "./careerMoments";
 export * from "./lateCareerDilemmas";
 export * from "./lateCareerDilemmaMaterializer";
 export * from "./roleProfile";
+export * from "./rolePackages";
+export * from "./roleResponsibilities";

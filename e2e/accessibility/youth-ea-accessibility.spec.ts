@@ -221,7 +221,8 @@ test.describe("Youth Early Access accessibility", () => {
 
       await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
       await gamePage.waitForScreen("reportWriter");
-      await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();
+      await expect(gamePage.page.getByRole("heading", { name: "Write Scouting Report" })).toBeVisible();
+      await expect(gamePage.page.getByRole("heading", { name: "Check the artifact before filing" })).toBeVisible();
       await expectNoBlockingViolations(gamePage.page, `${viewport.name} professional report writer`);
     }
 

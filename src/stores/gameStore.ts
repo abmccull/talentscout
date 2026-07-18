@@ -100,6 +100,7 @@ import {
 import { getRunContentDefinitionIds } from "@/engine/content/registry";
 import { getGameModeIdForSpecialization } from "@/engine/content/modeDefinitions";
 import { createConsequenceEngineState } from "@/engine/consequences";
+import { createAccessAgreementState } from "@/engine/consequences/accessAgreements";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
 import { createStoryDirectorStateV2 } from "@/engine/events/storyDirectorV2";
 import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
@@ -609,6 +610,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       youthRecruitmentBriefs: initialRecruitmentBriefs,
       recommendationReviews: {},
       contacts,
+      accessAgreements: createAccessAgreementState(undefined),
       schedule: createWeekSchedule(1, 1),
       weeklyStrategy: createWeeklyStrategyState(1, 1),
       jobOffers: [],

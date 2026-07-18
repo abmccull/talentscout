@@ -22,6 +22,10 @@ import {
   expireEmployeeEvents,
   processRetainerRenewals,
   getLifestyleReputationPenalty,
+  applyBalanceTransaction,
+  getAgencyPolicyWeeklyModifiers,
+  normalizeAgencyStrategyState,
+  processAgencyOperatingPolicyWeek,
 } from "@/engine/finance";
 import { expireRetainerOffers } from "@/engine/finance/retainers";
 import { expireConsultingOffers } from "@/engine/finance/consulting";
@@ -63,7 +67,13 @@ export function processWeeklyEconomy(
   const econRng = createRNG(
     `${rngContext.seed}-econ-${rngContext.currentWeek}-${rngContext.currentSeason}`,
   );
-  let econFinances = state.finances;
+  // Reconcile old or partially-written saves before any path-gated system is
+  // evaluated. Scout.careerPath is authoritative across the game.
+  let econFinances = state.finances.careerPath === state.scout.careerPath
+    ? state.finances
+    : { ...state.finances, careerPath: state.scout.careerPath };
+  const agencyStrategy = normalizeAgencyStrategyState(econFinances.agencyStrategyState);
+  const agencyPolicyModifiers = getAgencyPolicyWeeklyModifiers(agencyStrategy?.policy);
   const economicSeasonLength = getSeasonLength(
     nextState.fixtures,
     nextState.currentSeason,
@@ -123,8 +133,12 @@ export function processWeeklyEconomy(
       nextState.unsignedYouth,
       economicSeasonLength,
       {
-        valueMultiplier: marketplaceConditions.marketplaceValueMultiplier,
-        demandMultiplier: marketplaceConditions.opportunityMultiplier,
+        valueMultiplier:
+          marketplaceConditions.marketplaceValueMultiplier
+          * agencyPolicyModifiers.marketplaceValueMultiplier,
+        demandMultiplier:
+          marketplaceConditions.opportunityMultiplier
+          * agencyPolicyModifiers.marketplaceDemandMultiplier,
       },
     );
     econFinances = bidResult.finances;
@@ -516,6 +530,25 @@ export function processWeeklyEconomy(
     if (advancement.decision.eligible) {
       nextState = { ...nextState, scout: advancement.scout };
       econFinances = advancement.finances as typeof econFinances;
+    }
+  }
+
+  const agencyPolicyWeek = processAgencyOperatingPolicyWeek(
+    econFinances,
+    { week: nextState.currentWeek, season: nextState.currentSeason },
+  );
+  econFinances = agencyPolicyWeek.finances;
+  if (agencyPolicyWeek.changed && agencyPolicyWeek.operatingCost > 0 && agencyPolicyWeek.policy) {
+    const referenceId = `agency-policy:${agencyPolicyWeek.policy}:s${nextState.currentSeason}w${nextState.currentWeek}`;
+    if (!econFinances.transactions.some((transaction) => transaction.referenceId === referenceId)) {
+      econFinances = applyBalanceTransaction(
+        econFinances,
+        -agencyPolicyWeek.operatingCost,
+        nextState.currentWeek,
+        nextState.currentSeason,
+        `Agency operating policy: ${agencyPolicyWeek.policy}`,
+        referenceId,
+      );
     }
   }
 

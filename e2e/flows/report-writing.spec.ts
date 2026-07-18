@@ -113,7 +113,7 @@ test.describe("Report Writing", () => {
     await gamePage.page.keyboard.press("ArrowRight");
     await expect(recommend).toBeChecked();
 
-    await gamePage.page.getByRole("button", { name: /^Build the case\./ }).click();
+    await gamePage.page.getByRole("tab", { name: /^Build the case\b/ }).click();
 
     const monitor = gamePage.page.getByRole("radio", { name: /^Monitor\b/ });
     const inviteForTrial = gamePage.page.getByRole("radio", { name: /^Invite for trial\b/ });
@@ -123,8 +123,7 @@ test.describe("Report Writing", () => {
     await expect(monitor).toBeChecked();
     await gamePage.page.keyboard.press("ArrowRight");
     await expect(inviteForTrial).toBeChecked();
-
-    await gamePage.page.getByRole("button", { name: /^Final review\./ }).click();
+    await gamePage.page.getByRole("tab", { name: /^Final review\b/ }).click();
     await expect(gamePage.page.getByRole("button", { name: /^Submit Report$/ })).toBeEnabled();
 
     gamePage.expectNoConsoleErrors();

@@ -16,6 +16,7 @@ import type {
   CountryReputation,
   Fixture,
   Territory,
+  ObservationContext,
 } from "@/engine/core/types";
 import { normalizeCountryKey } from "@/lib/country";
 import {
@@ -36,6 +37,8 @@ export interface TravelPostureEffects {
   opportunityMultiplier: number;
   costMultiplier: number;
   fatigueMultiplier: number;
+  observationContextSignalBias: Partial<Record<ObservationContext, number>>;
+  observationContextUncertaintyBias: Partial<Record<ObservationContext, number>>;
 }
 
 export interface TravelPostureDefinition {
@@ -56,6 +59,8 @@ const NEUTRAL_TRAVEL_POSTURE_EFFECTS: TravelPostureEffects = {
   opportunityMultiplier: 1,
   costMultiplier: 1,
   fatigueMultiplier: 1,
+  observationContextSignalBias: {},
+  observationContextUncertaintyBias: {},
 };
 
 export const TRAVEL_POSTURE_DEFINITIONS: Record<TravelPosture, TravelPostureDefinition> = {
@@ -74,6 +79,16 @@ export const TRAVEL_POSTURE_DEFINITIONS: Record<TravelPosture, TravelPostureDefi
       opportunityMultiplier: 0.8,
       costMultiplier: 1.12,
       fatigueMultiplier: 1.12,
+      observationContextSignalBias: {
+        academyVisit: 1.04,
+        trainingGround: 1.05,
+        followUpSession: 1.05,
+      },
+      observationContextUncertaintyBias: {
+        academyVisit: 0.94,
+        trainingGround: 0.93,
+        followUpSession: 0.92,
+      },
     },
   },
   networkBuild: {
@@ -91,6 +106,14 @@ export const TRAVEL_POSTURE_DEFINITIONS: Record<TravelPosture, TravelPostureDefi
       opportunityMultiplier: 1.18,
       costMultiplier: 1.08,
       fatigueMultiplier: 0.96,
+      observationContextSignalBias: {
+        parentCoachMeeting: 1.08,
+        agentShowcase: 0.96,
+      },
+      observationContextUncertaintyBias: {
+        parentCoachMeeting: 0.95,
+        academyVisit: 1.04,
+      },
     },
   },
   opportunityBlitz: {
@@ -108,6 +131,16 @@ export const TRAVEL_POSTURE_DEFINITIONS: Record<TravelPosture, TravelPostureDefi
       opportunityMultiplier: 1.35,
       costMultiplier: 1.18,
       fatigueMultiplier: 1.25,
+      observationContextSignalBias: {
+        liveMatch: 0.95,
+        youthTournament: 0.95,
+        youthFestival: 0.96,
+      },
+      observationContextUncertaintyBias: {
+        liveMatch: 1.05,
+        youthTournament: 1.04,
+        youthFestival: 1.06,
+      },
     },
   },
   assignmentFirst: {
@@ -125,6 +158,131 @@ export const TRAVEL_POSTURE_DEFINITIONS: Record<TravelPosture, TravelPostureDefi
       opportunityMultiplier: 0.82,
       costMultiplier: 1,
       fatigueMultiplier: 0.9,
+      observationContextSignalBias: {
+        liveMatch: 1.02,
+        followUpSession: 1.03,
+      },
+      observationContextUncertaintyBias: {
+        liveMatch: 0.98,
+        followUpSession: 0.97,
+      },
+    },
+  },
+  academyEmbed: {
+    id: "academyEmbed",
+    label: "Academy embed",
+    summary: "Work inside coached academy environments to deepen pathway knowledge and role interpretation.",
+    upside: "Stronger academy evidence, dependable local trust, and faster knowledge growth in structured settings.",
+    tradeoff: "Narrower discovery breadth and fewer speculative marketplace leads.",
+    effects: {
+      observationSignalMultiplier: 1.05,
+      observationUncertaintyMultiplier: 0.94,
+      regionalKnowledgeMultiplier: 1.32,
+      contactQualityMultiplier: 1.18,
+      discoveryMultiplier: 0.86,
+      opportunityMultiplier: 0.92,
+      costMultiplier: 1.06,
+      fatigueMultiplier: 1.04,
+      observationContextSignalBias: {
+        academyVisit: 1.14,
+        academyTrialDay: 1.13,
+        youthTournament: 1.08,
+        youthFestival: 1.06,
+        trainingGround: 1.09,
+      },
+      observationContextUncertaintyBias: {
+        academyVisit: 0.88,
+        academyTrialDay: 0.89,
+        youthTournament: 0.93,
+        trainingGround: 0.9,
+      },
+    },
+  },
+  communityCircuit: {
+    id: "communityCircuit",
+    label: "Community circuit",
+    summary: "Build coverage through school, grassroots, and informal local football networks.",
+    upside: "Better early discovery, stronger local relationships, and broader grassroots context.",
+    tradeoff: "Noisier evidence and weaker access to tightly controlled academy samples.",
+    effects: {
+      observationSignalMultiplier: 0.98,
+      observationUncertaintyMultiplier: 1.03,
+      regionalKnowledgeMultiplier: 1.18,
+      contactQualityMultiplier: 1.28,
+      discoveryMultiplier: 1.18,
+      opportunityMultiplier: 1.08,
+      costMultiplier: 1.04,
+      fatigueMultiplier: 1,
+      observationContextSignalBias: {
+        schoolMatch: 1.1,
+        grassrootsTournament: 1.12,
+        streetFootball: 1.08,
+        parentCoachMeeting: 1.12,
+      },
+      observationContextUncertaintyBias: {
+        schoolMatch: 0.95,
+        grassrootsTournament: 0.94,
+        streetFootball: 0.97,
+        academyVisit: 1.07,
+        academyTrialDay: 1.08,
+      },
+    },
+  },
+  agentTour: {
+    id: "agentTour",
+    label: "Agent tour",
+    summary: "Prioritize represented talent, intermediaries, and negotiated access windows.",
+    upside: "Better relationship yield and more time-sensitive commercial leads.",
+    tradeoff: "Evidence is more curated and academy or community knowledge deepens slowly.",
+    effects: {
+      observationSignalMultiplier: 0.96,
+      observationUncertaintyMultiplier: 1.08,
+      regionalKnowledgeMultiplier: 0.92,
+      contactQualityMultiplier: 1.52,
+      discoveryMultiplier: 1.02,
+      opportunityMultiplier: 1.26,
+      costMultiplier: 1.12,
+      fatigueMultiplier: 0.98,
+      observationContextSignalBias: {
+        agentShowcase: 1.12,
+        trialMatch: 1.06,
+        parentCoachMeeting: 1.05,
+      },
+      observationContextUncertaintyBias: {
+        agentShowcase: 0.95,
+        trialMatch: 0.97,
+        academyVisit: 1.08,
+        schoolMatch: 1.05,
+      },
+    },
+  },
+  showcaseSweep: {
+    id: "showcaseSweep",
+    label: "Showcase sweep",
+    summary: "Bounce between concentrated talent events to maximize short-window opportunity coverage.",
+    upside: "Much stronger showcase discovery and a larger pool of urgent follow-up leads.",
+    tradeoff: "Shallower relationship depth, weaker retained knowledge, and higher fatigue.",
+    effects: {
+      observationSignalMultiplier: 0.92,
+      observationUncertaintyMultiplier: 1.12,
+      regionalKnowledgeMultiplier: 0.82,
+      contactQualityMultiplier: 0.88,
+      discoveryMultiplier: 1.32,
+      opportunityMultiplier: 1.3,
+      costMultiplier: 1.15,
+      fatigueMultiplier: 1.18,
+      observationContextSignalBias: {
+        youthFestival: 1.11,
+        youthTournament: 1.1,
+        liveMatch: 1.03,
+        agentShowcase: 1.07,
+      },
+      observationContextUncertaintyBias: {
+        youthFestival: 0.96,
+        youthTournament: 0.97,
+        liveMatch: 1.02,
+        followUpSession: 1.08,
+      },
     },
   },
 };

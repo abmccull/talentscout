@@ -246,10 +246,13 @@ describe("scouting case timeline", () => {
     expect(timeline?.entries.some((entry) => entry.id === "movement:movement-before-case")).toBe(false);
     expect(timeline?.entries.filter((entry) => entry.title.includes("transfer"))).toHaveLength(1);
     const reviewEntry = timeline?.entries.find((entry) => entry.id === "review:review-1");
-    expect(reviewEntry?.description).toBe("Observable review completed at 84/100.");
+    expect(reviewEntry?.description).toBe("One-season accountability at 84/100: timing and pathway supported.");
     expect(reviewEntry?.details).toEqual([
-      "Pathway quality: Reached first-team football by age 18 with 24 appearances at 7.2.",
-      "Revision quality: No later revision was preserved before this checkpoint, so revision quality cannot be judged.",
+      "Club fit: A club acted on the recommendation, but long-run adaptation and role fit still need later evidence.",
+      "Timing and pathway: Reached first-team football by age 18 with 24 appearances at 7.2.",
+      "Strengths and risks: No structured category verdict survived with the report, so the original strengths-and-risks case cannot yet be judged cleanly.",
+      "Confidence calibration: The report preserved a confidence stance, but not enough later evidence exists yet to judge whether that certainty was proportionate.",
+      "Revision behavior: No later revision was preserved before this checkpoint, so revision quality cannot be judged.",
     ]);
 
     const serialized = JSON.stringify(timeline);

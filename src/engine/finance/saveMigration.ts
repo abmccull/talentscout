@@ -27,6 +27,11 @@ import {
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "../core/gameDate";
 import { monthlyEquivalentOfWeeklyAmount } from "../core/annualization";
+import {
+  mapLegacyAgencyPostureToPolicy,
+  normalizeAgencyStrategyState,
+} from "./agencyStrategyState";
+import { getLatestAgencyStrategicPostureRecord } from "./agencyCapacity";
 
 /**
  * Default lifestyle config for a given career tier.
@@ -106,6 +111,29 @@ function normalizeClientRelationship(
   return {
     ...relationship,
     failedContracts: relationship.failedContracts ?? 0,
+  };
+}
+
+function migrateLegacyAgencyStrategyState(
+  legacy: Partial<FinancialRecord>,
+): FinancialRecord["agencyStrategyState"] | undefined {
+  const normalized = normalizeAgencyStrategyState(legacy.agencyStrategyState);
+  if (normalized) return normalized;
+  const finances = legacy as FinancialRecord;
+  const legacyPosture = getLatestAgencyStrategicPostureRecord(finances);
+  if (!legacyPosture) return undefined;
+  return {
+    policy: mapLegacyAgencyPostureToPolicy(legacyPosture.posture),
+    selectedAt: {
+      season: legacyPosture.season,
+      week: legacyPosture.week,
+    },
+    // Legacy posture was weekly, so migrate it as immediately reviewable
+    // rather than extending an old decision into a new four-week lock.
+    lockedUntil: {
+      season: legacyPosture.season,
+      week: legacyPosture.week,
+    },
   };
 }
 
@@ -316,7 +344,10 @@ export function migrateFinancialRecord(
     Array.isArray(value) ? value : [];
   const finite = (value: number | undefined, fallback = 0): number =>
     Number.isFinite(value) ? value! : fallback;
-  const careerPath = legacy.careerPath ?? scout.careerPath ?? "club";
+  // The scout is the canonical career authority. Intermediate saves could
+  // persist a stale finance copy after a path change, so never let it override
+  // the active career on load.
+  const careerPath = scout.careerPath ?? legacy.careerPath ?? "club";
 
   return reconcileFinancialLedger(normalizeCanonicalLoanState({
     ...legacy,
@@ -377,6 +408,7 @@ export function migrateFinancialRecord(
       firstPlacementBonusUsed: false,
       starterStipendWeeksRemaining: 0,
     },
+    agencyStrategyState: migrateLegacyAgencyStrategyState(legacy),
   } as FinancialRecord));
 }
 

@@ -172,6 +172,8 @@ describe("scouting evidence invariants", () => {
         scout,
         "statsBriefing",
         history,
+        undefined,
+        { evidenceAttributes: ["passing"] },
       ), index);
       history.push(observation);
       passingCounts.push(
@@ -188,6 +190,8 @@ describe("scouting evidence invariants", () => {
       scout,
       "statsBriefing",
       [...history, history[0]],
+      undefined,
+      { evidenceAttributes: ["passing"] },
     );
     expect(
       next.attributeReadings.find((reading) => reading.attribute === "passing")!

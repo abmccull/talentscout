@@ -744,9 +744,9 @@ test.describe("Interactivity audit rendered evidence", () => {
       axe: true,
       assertResponsiveWidth: true,
     });
-    await gamePage.page.getByRole("button", { name: "Development", exact: true }).click();
+    await gamePage.page.getByRole("tab", { name: /^Development/ }).click();
     await captureSurfaceBoth(gamePage, "12a-development-environment", "development-environment");
-    await gamePage.page.getByRole("button", { name: "Evidence", exact: true }).click();
+    await gamePage.page.getByRole("tab", { name: /^Evidence/ }).click();
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText("Morgan Vale");
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText(/conflict/i);
     await captureSurfaceBoth(gamePage, "12b-evidence-board", "evidence-board");
@@ -760,6 +760,7 @@ test.describe("Interactivity audit rendered evidence", () => {
       axe: true,
       assertResponsiveWidth: true,
     });
+    await gamePage.page.getByText("Brief, fit, and professional context", { exact: true }).click();
     await captureSurfaceBoth(
       gamePage,
       "13b-report-presentation-room",

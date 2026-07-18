@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-07-18",
+  "scope": "Youth Scout Early Access scouting ecology and six permanent workspaces",
+  "overallScore": 9.1,
+  "arithmeticMean": 9.07,
+  "scoreCapApplied": false,
+  "scores": {
+    "visualHierarchy": 9.1,
+    "layoutAndSpacing": 8.8,
+    "typography": 9.0,
+    "colorAndContrast": 9.2,
+    "componentsAndStates": 9.2,
+    "interactionAndFeedback": 9.1,
+    "informationArchitectureAndNavigation": 9.1,
+    "taskFlowDesign": 9.0,
+    "accessibilityAndInclusiveUx": 9.3,
+    "imageryAndIconography": 8.7,
+    "brandVisualSystem": 9.2,
+    "emotionalTrustAndPolish": 9.0,
+    "systemCohesion": 9.2
+  },
+  "evidence": {
+    "visualEvidenceDirectory": "artifacts/release/generated/visual-evidence/head-49c4ba29372c__base-tree-43ec01390f14__dirty-9471cb9dadfb",
+    "unitTests": { "filesPassed": 193, "testsPassed": 1043 },
+    "architecture": { "modules": 575, "stronglyConnectedComponents": 0, "modulesInCycles": 0 },
+    "renderedScenariosPassed": 3,
+    "accessibilityScenariosPassed": 6,
+    "smokeScenariosPassed": 4,
+    "organicCareerScenariosPassed": 1,
+    "replayability": {
+      "seeds": 100,
+      "seasons": 3,
+      "compositeTrajectoryUniqueRatio": 1,
+      "eventTrajectoryUniqueRatio": 1,
+      "averageTrajectoryDistance": 0.9523,
+      "deadDirectorStateRate": 0,
+      "runawayDirectorStateRate": 0
+    }
+  },
+  "remainingDesignDebt": [
+    "Desk remains long on phones after the decisive first viewport",
+    "World assignment and map controls remain visually dense on phones",
+    "Fresh careers need faster accumulation of distinctive named-rival history",
+    "Regional culture needs more experiential presentation beyond modifiers",
+    "Telemetry needs a player-facing cadence metric that counts non-modal World Pulses"
+  ],
+  "externalReleaseGates": [
+    "Manual NVDA testing",
+    "Manual VoiceOver testing",
+    "Moderated first-hour usability testing",
+    "Physical minimum-hardware profiling",
+    "Packaged Windows, macOS, and Linux install/save/recovery testing",
+    "Tagged 20-seed by 30-season release soak"
+  ]
+}

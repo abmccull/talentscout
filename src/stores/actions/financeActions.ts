@@ -27,6 +27,7 @@ import type {
   GameState,
 } from "@/engine/core/types";
 import type { EquipmentItemId } from "@/engine/finance";
+import type { AgencyOperatingPolicy } from "@/engine/finance";
 import { createRNG } from "@/engine/rng";
 import {
   purchaseEquipmentItem,
@@ -68,6 +69,7 @@ import {
   getTransferContingentReserve,
   recordRetainerDelivery,
   recordConsultingReportDelivery,
+  selectAgencyOperatingPolicy,
 } from "@/engine/finance";
 import { creditForLoanRepayment } from "@/engine/finance/creditScore";
 import { sellEquipmentForCash as sellEquipmentForCashEngine } from "@/engine/finance/distress";
@@ -96,7 +98,7 @@ import {
 } from "@/engine/freeAgents/negotiation";
 import { isTransferWindowOpen } from "@/engine/core/transferWindow";
 import { getSeasonLength } from "@/engine/core/gameDate";
-import { isTravelEligibleCountry } from "@/engine/world";
+import { getScoutHomeCountry, isTravelEligibleCountry } from "@/engine/world";
 import {
   getLifecycleWorld,
   resolvePlayerMovements,
@@ -110,8 +112,6 @@ import {
   recordMarketplaceDelivery,
 } from "@/engine/reports/scoutingCases";
 import { getStaffWorkReviewPreview } from "@/engine/finance/staffWorkReview";
-import { setAgencyStrategicPosture as setAgencyStrategicPostureEngine } from "@/engine/finance/agency";
-import type { AgencyStrategicPosture } from "@/engine/finance/agencyCapacity";
 
 function completeFreeAgentSigning(
   state: GameState,
@@ -244,6 +244,48 @@ export function createFinanceActions(get: GetState, set: SetState) {
       }
 
       set({ gameState: applyCareerPathTransition(gameState, path) });
+    },
+
+    setAgencyOperatingPolicy: (
+      policy: AgencyOperatingPolicy,
+      focusRegionId?: string,
+    ) => {
+      const { gameState } = get();
+      if (
+        !gameState?.finances
+        || gameState.scout.careerPath !== "independent"
+        || gameState.scout.careerTier < 3
+      ) return;
+      const selected = selectAgencyOperatingPolicy({
+        finances: gameState.finances,
+        policy,
+        now: { week: gameState.currentWeek, season: gameState.currentSeason },
+        seasonLength: getSeasonLength(gameState.fixtures, gameState.currentSeason),
+        focusRegionId: focusRegionId
+          ?? gameState.scout.travelBooking?.destinationCountry
+          ?? getScoutHomeCountry(gameState.scout),
+      });
+      if (!selected.changed) return;
+      const strategy = selected.finances.agencyStrategyState!;
+      set({
+        gameState: {
+          ...gameState,
+          finances: selected.finances,
+          inbox: [
+            {
+              id: `agency-policy-selected:${policy}:s${gameState.currentSeason}w${gameState.currentWeek}`,
+              week: gameState.currentWeek,
+              season: gameState.currentSeason,
+              type: "financial",
+              title: "Agency Operating Policy Set",
+              body: `${policy} will shape bids, client trust, staff pressure, operating cost, and regional presence through Season ${strategy.lockedUntil.season}, Week ${strategy.lockedUntil.week}.`,
+              read: false,
+              actionRequired: false,
+            },
+            ...gameState.inbox,
+          ],
+        },
+      });
     },
 
     changeLifestyle: (level: LifestyleLevel) => {
@@ -745,20 +787,6 @@ export function createFinanceActions(get: GetState, set: SetState) {
           },
         });
       }
-    },
-
-    setAgencyStrategicPosture: (posture: AgencyStrategicPosture) => {
-      const { gameState } = get();
-      if (!gameState?.finances) return;
-      const updated = setAgencyStrategicPostureEngine(
-        gameState.finances,
-        gameState.scout,
-        posture,
-        gameState.currentWeek,
-        gameState.currentSeason,
-      );
-      if (!updated || updated === gameState.finances) return;
-      set({ gameState: { ...gameState, finances: updated } });
     },
 
     upgradeAgencyOffice: (tier: OfficeTier) => {

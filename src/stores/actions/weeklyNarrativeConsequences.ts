@@ -23,6 +23,7 @@ import {
   clearTerminalConsequenceInboxActions,
   clearTerminalNarrativeInboxActions,
 } from "./narrativeInboxState";
+import { reconcileAgencyDilemmaDecisions } from "@/engine/finance";
 import {
   applyConsequences,
   applyNarrativeRelationshipChoice,
@@ -32,6 +33,7 @@ import {
   createWorldConditionArcState,
   reconcileWorldConditionArcDecisions,
 } from "@/engine/world/worldConditionArcs";
+import { reconcileRivalCampaignDecisions } from "./weeklyRivalCampaigns";
 
 export function registerNarrativeDecisions(
   state: GameState,
@@ -301,6 +303,8 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
       seasonLength,
     }),
   };
+  updated = reconcileAgencyDilemmaDecisions(updated, date);
+  updated = reconcileRivalCampaignDecisions(updated, date);
   const synchronized = synchronizeConsequenceMetrics(
     updated,
     updated.consequenceState,

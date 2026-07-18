@@ -30,8 +30,7 @@ import { getScoutHomeCountry } from "@/engine/world/travel";
 import { LegacyTab } from "./agency/LegacyTab";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { AgencyStrategyPanel } from "./agency/AgencyStrategyPanel";
-import { assessAgencyStrategicPostureChange } from "@/engine/finance/agency";
-import { getAgencyStrategicPosture } from "@/engine/finance/agencyCapacity";
+import { canChangeAgencyOperatingPolicy } from "@/engine/finance/agencyStrategy";
 
 // ─── Tab system ──────────────────────────────────────────────────────────────
 
@@ -60,7 +59,7 @@ const ROADMAP_TIERS = [
 
 export function AgencyScreen() {
   const gameState = useGameStore((s) => s.gameState);
-  const setAgencyStrategicPosture = useGameStore((s) => s.setAgencyStrategicPosture);
+  const setAgencyOperatingPolicy = useGameStore((s) => s.setAgencyOperatingPolicy);
   const [activeTab, setActiveTab] = useState<TabId>("infrastructure");
   const [roadmapOpen, setRoadmapOpen] = useState(false);
 
@@ -122,15 +121,12 @@ export function AgencyScreen() {
 
   // ── Summary bar data ──────────────────────────────────────────────────────
   const showFullAgencySummary = isIndependent && independentTier >= 3;
-  const postureChangeAssessment = showFullAgencySummary
-    ? assessAgencyStrategicPostureChange(
-        finances,
-        scout,
-        getAgencyStrategicPosture(finances),
-        gameState.currentWeek,
-        gameState.currentSeason,
-      )
-    : null;
+  const policyChangeLocked = showFullAgencySummary
+    ? !canChangeAgencyOperatingPolicy(finances, {
+        week: gameState.currentWeek,
+        season: gameState.currentSeason,
+      })
+    : false;
 
   return (
     <GameLayout>
@@ -236,8 +232,8 @@ export function AgencyScreen() {
               finances={finances}
               scout={scout}
               clubs={gameState.clubs}
-              onChangePosture={setAgencyStrategicPosture}
-              postureChangeLocked={postureChangeAssessment?.lockedForWeek}
+              onSelectPolicy={setAgencyOperatingPolicy}
+              policyChangeLocked={policyChangeLocked}
             />
           </div>
         ) : (

@@ -41,9 +41,13 @@ import { gameWeeksBetween, isGameDateAtOrAfter } from "@/engine/core/gameDate";
 import { RNG } from "@/engine/rng";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import {
-  buildStakeholderEcologyProfile,
+  buildContactRelationshipPosition,
+  buildStoryThread,
+  getActiveEarlyAccessForContact,
+  type AccessAgreement,
+  type RelationshipPosition,
   type StakeholderProfile,
-  type StakeholderEcologyProfile,
+  type StoryThread,
 } from "@/engine/consequences";
 import { StakeholderEcologyPanel } from "./StakeholderEcologyPanel";
 
@@ -145,7 +149,8 @@ interface IntelEntry {
 
 interface ContactDetailProps {
   contact: Contact;
-  ecology: StakeholderEcologyProfile;
+  accessAgreement?: AccessAgreement;
+  position: RelationshipPosition;
   identity?: StakeholderProfile;
   knownPlayerNames: string[];
   intelEntries: IntelEntry[];
@@ -185,7 +190,8 @@ function formatPlayerName(
   return player ? `${player.firstName} ${player.lastName}` : null;
 }
 
-function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntries, currentDate, fixtures, onScheduleMeeting, onClose }: ContactDetailProps) {
+function ContactDetail({ contact, accessAgreement, position, identity, knownPlayerNames, intelEntries, currentDate, fixtures, onScheduleMeeting, onClose }: ContactDetailProps) {
+  const ecology = position.ecology;
   const config = CONTACT_TYPE_CONFIG[contact.type];
   const Icon = config.icon;
   const trustLevel = contact.trustLevel ?? contact.relationship;
@@ -193,7 +199,6 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
   const gossipQueue = contact.gossipQueue ?? [];
   const activeGossip = gossipQueue.filter((g) => isActiveBefore(currentDate, g.expiresAt));
   const referralCount = (contact.referralNetwork ?? []).length;
-  const exclusiveWindow = contact.exclusiveWindow;
   const risk = betrayalRiskLabel(betrayalRisk);
   const weeksSinceContact = contact.lastInteractionAt
     ? Math.max(0, gameWeeksBetween(fixtures, contact.lastInteractionAt, currentDate))
@@ -212,7 +217,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
           </CardTitle>
           <button
             onClick={onClose}
-            className="text-zinc-500 hover:text-white transition rounded p-1"
+            className="text-zinc-300 hover:text-white transition rounded p-1"
             aria-label="Close contact detail"
           >
             <X size={14} />
@@ -220,24 +225,35 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2" aria-label="Relationship position">
+          <Badge variant="outline" className="border-emerald-500/25 text-[10px] capitalize text-emerald-200">
+            {position.stance.replace(/([a-z])([A-Z])/g, "$1 $2")}
+          </Badge>
+          {position.leverageScore > 0 && (
+            <span className="text-[10px] text-zinc-300">Leverage {position.leverageScore}</span>
+          )}
+          {position.threatScore >= 45 && (
+            <span className="text-[10px] text-amber-300">Pressure {position.threatScore}</span>
+          )}
+        </div>
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
-            <span className="text-zinc-500">Type: </span>
+            <span className="text-zinc-300">Type: </span>
             <span className="text-white">{config.label}</span>
           </div>
           <div>
-            <span className="text-zinc-500">Organisation: </span>
+            <span className="text-zinc-300">Organisation: </span>
             <span className="text-white">{contact.organization}</span>
           </div>
           {contact.region && (
             <div>
-              <span className="text-zinc-500">Region: </span>
+              <span className="text-zinc-300">Region: </span>
               <span className="text-white">{contact.region}</span>
             </div>
           )}
           {weeksSinceContact != null && (
             <div>
-              <span className="text-zinc-500">Last contact: </span>
+              <span className="text-zinc-300">Last contact: </span>
               <span className="text-white">
                 {weeksSinceContact === 0
                   ? "This week"
@@ -254,7 +270,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
               <AlertTriangle size={12} className="text-red-400" aria-hidden="true" />
               <span className="font-medium text-red-400">Dormant</span>
             </div>
-            <p className="mt-1 text-[10px] text-zinc-500">
+            <p className="mt-1 text-[10px] text-zinc-300">
               This contact has gone dormant due to low relationship. Schedule a meeting to rebuild the connection.
             </p>
           </div>
@@ -265,7 +281,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
               <AlertTriangle size={12} className="text-amber-400" aria-hidden="true" />
               <span className="font-medium text-amber-400">Relationship Fading</span>
             </div>
-            <p className="mt-1 text-[10px] text-zinc-500">
+            <p className="mt-1 text-[10px] text-zinc-300">
               Your relationship is deteriorating. Consider reaching out before this contact goes dormant.
             </p>
           </div>
@@ -283,7 +299,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
               >
                 {bonus.badgeLabel}
               </span>
-              <span className="text-xs text-zinc-400">{bonus.description}</span>
+              <span className="text-xs text-zinc-300">{bonus.description}</span>
             </div>
           );
         })()}
@@ -291,7 +307,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         {/* Relationship */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-zinc-500">Relationship</span>
+            <span className="text-zinc-300">Relationship</span>
             <span className="text-white font-medium">{relationshipLabel(contact.relationship)}</span>
           </div>
           <Progress
@@ -299,13 +315,13 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
             max={100}
             indicatorClassName={relationshipColor(contact.relationship)}
           />
-          <p className="mt-1 text-xs text-zinc-500">{contact.relationship}/100</p>
+          <p className="mt-1 text-xs text-zinc-300">{contact.relationship}/100</p>
         </div>
 
         {/* F3: Trust Level */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-zinc-500 flex items-center gap-1">
+            <span className="text-zinc-300 flex items-center gap-1">
               <Shield size={10} aria-hidden="true" />
               Trust
             </span>
@@ -316,13 +332,13 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
             max={100}
             indicatorClassName={trustColor(trustLevel)}
           />
-          <p className="mt-1 text-xs text-zinc-500">{trustLevel}/100</p>
+          <p className="mt-1 text-xs text-zinc-300">{trustLevel}/100</p>
         </div>
 
         {/* Reliability */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="text-zinc-500">Intel Reliability</span>
+            <span className="text-zinc-300">Intel Reliability</span>
             <span className="text-white font-medium">
               {contact.reliability}%
             </span>
@@ -348,7 +364,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">What they value</p>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-300">What they value</p>
                 <p className="mt-1 text-[10px] leading-relaxed text-zinc-300">
                   {identity.priorities.slice(0, 3).map((value) =>
                     value.replace(/([a-z])([A-Z])/g, "$1 $2"),
@@ -356,7 +372,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
                 </p>
               </div>
               <div>
-                <p className="text-[9px] uppercase tracking-wide text-zinc-500">Red lines</p>
+                <p className="text-[9px] uppercase tracking-wide text-zinc-300">Red lines</p>
                 <p className="mt-1 text-[10px] leading-relaxed text-zinc-300">
                   {identity.redLine.replace(/([a-z])([A-Z])/g, "$1 $2")}
                 </p>
@@ -377,7 +393,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
               <Lock size={12} className="text-red-400" aria-hidden="true" />
               <span className="font-medium text-red-400">Access Suspended</span>
             </div>
-            <p className="mt-1 text-[10px] text-zinc-500">
+            <p className="mt-1 text-[10px] text-zinc-300">
               This source will not provide gossip, referrals, or exclusive access until {formatGameDate(contact.accessSuspendedUntil)}.
             </p>
           </div>
@@ -392,14 +408,14 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
                 Betrayal: {risk.label}
               </span>
             </div>
-            <p className="mt-1 text-[10px] text-zinc-500">
+            <p className="mt-1 text-[10px] text-zinc-300">
               This contact may leak information to rivals. Maintain trust to reduce risk.
             </p>
           </div>
         )}
 
         {/* F3: Exclusive Window */}
-        {exclusiveWindow && isActiveBefore(currentDate, exclusiveWindow.expiresAt) && (
+        {accessAgreement && (
           <div className="rounded-md border border-amber-500/20 bg-amber-500/5 p-2.5">
             <div className="flex items-center gap-2 text-xs">
               <Lock size={12} className="text-amber-400" aria-hidden="true" />
@@ -407,8 +423,10 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
                 Exclusive Access
               </span>
             </div>
-            <p className="mt-1 text-[10px] text-zinc-400">
-              Early access to a prospect expires {formatGameDate(exclusiveWindow.expiresAt)}.
+            <p className="mt-1 text-[10px] text-zinc-300">
+              {accessAgreement.expiresAt
+                ? `Early access to a prospect expires ${formatGameDate(accessAgreement.expiresAt)}.`
+                : "This source has granted active early access to a prospect."}
             </p>
           </div>
         )}
@@ -416,7 +434,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         {/* F3: Gossip Feed */}
         {activeGossip.length > 0 && (
           <div>
-            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1">
+            <p className="text-xs text-zinc-300 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1">
               <MessageCircle size={11} aria-hidden="true" />
               Gossip ({activeGossip.length})
             </p>
@@ -430,13 +448,13 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
                     <span className={`text-[10px] font-medium ${gossipTypeColor(item.type)}`}>
                       {gossipTypeLabel(item.type)}
                     </span>
-                    <span className="text-[10px] text-zinc-600">
+                    <span className="text-[10px] text-zinc-300">
                       Expires {formatGameDate(item.expiresAt)}
                     </span>
                   </div>
-                  <p className="text-zinc-400 leading-relaxed">{item.content}</p>
+                  <p className="text-zinc-300 leading-relaxed">{item.content}</p>
                   <div className="mt-1 flex items-center gap-1">
-                    <span className="text-[10px] text-zinc-600">Reliability:</span>
+                    <span className="text-[10px] text-zinc-300">Reliability:</span>
                     <span
                       className={`text-[10px] font-medium ${reliabilityColor(item.reliability)}`}
                     >
@@ -453,7 +471,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         {referralCount > 0 && (
           <div className="flex items-center gap-2 text-xs">
             <UserPlus size={11} className="text-cyan-400" aria-hidden="true" />
-            <span className="text-zinc-500">
+            <span className="text-zinc-300">
               Introduced {referralCount} contact{referralCount !== 1 ? "s" : ""} to your network
             </span>
           </div>
@@ -462,7 +480,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         {/* Known players */}
         {knownPlayerNames.length > 0 && (
           <div>
-            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold">
+            <p className="text-xs text-zinc-300 mb-2 uppercase tracking-wider font-semibold">
               Known Players ({knownPlayerNames.length})
             </p>
             <div className="flex flex-wrap gap-1">
@@ -483,7 +501,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
         {/* Available intel */}
         {intelEntries.length > 0 && (
           <div>
-            <p className="text-xs text-zinc-500 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1">
+            <p className="text-xs text-zinc-300 mb-2 uppercase tracking-wider font-semibold flex items-center gap-1">
               <Eye size={11} aria-hidden="true" />
               Available Intel ({intelEntries.length})
             </p>
@@ -507,7 +525,7 @@ function ContactDetail({ contact, ecology, identity, knownPlayerNames, intelEntr
                       </span>
                     </div>
                   </div>
-                  <p className="text-zinc-400 leading-relaxed">{entry.intel.hint}</p>
+                  <p className="text-zinc-300 leading-relaxed">{entry.intel.hint}</p>
                 </li>
               ))}
             </ul>
@@ -574,16 +592,173 @@ function GossipFeedPanel({ contacts, currentDate }: { contacts: Contact[]; curre
                   <span className={`font-medium ${gossipTypeColor(gossip.type)}`}>
                     {gossipTypeLabel(gossip.type)}
                   </span>
-                  <span className="text-zinc-600">via {contact.name}</span>
+                  <span className="text-zinc-300">via {contact.name}</span>
                 </div>
-                <span className="text-[10px] text-zinc-600 shrink-0">
+                <span className="text-[10px] text-zinc-300 shrink-0">
                   {formatGameDate(gossip.revealedAt)}
                 </span>
               </div>
-              <p className="text-zinc-400 leading-relaxed">{gossip.content}</p>
+              <p className="text-zinc-300 leading-relaxed">{gossip.content}</p>
             </li>
           ))}
         </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function storyEntryLabel(entry: StoryThread["entries"][number]): string {
+  if (entry.kind === "access") return "Access live";
+  if (entry.kind === "obligation") return "Favor in motion";
+  return "Memory logged";
+}
+
+function storyEntryTone(entry: StoryThread["entries"][number]): string {
+  if (entry.kind === "access") return "text-amber-300";
+  if (entry.kind === "obligation") return "text-blue-300";
+  return "text-zinc-300";
+}
+
+interface ContactThreadPreview {
+  contact: Contact;
+  accessAgreement: AccessAgreement | undefined;
+  position: RelationshipPosition;
+  thread: StoryThread;
+  urgencyScore: number;
+  whyNow: string;
+}
+
+function ActiveThreadRail({
+  previews,
+  selectedContactId,
+  onSelect,
+}: {
+  previews: ContactThreadPreview[];
+  selectedContactId: string | null;
+  onSelect: (contactId: string) => void;
+}) {
+  if (previews.length === 0) return null;
+
+  return (
+    <Card className="border-emerald-500/20 bg-zinc-950/85">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <MessageCircle size={14} className="text-emerald-300" aria-hidden="true" />
+          Active threads
+        </CardTitle>
+        <p className="text-xs leading-5 text-zinc-400">
+          The relationships most likely to change your access, leverage, or risk this week.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {previews.map((preview) => {
+          const latest = preview.thread.entries[0];
+          const isSelected = selectedContactId === preview.contact.id;
+          return (
+            <button
+              key={preview.contact.id}
+              type="button"
+              onClick={() => onSelect(preview.contact.id)}
+              className={`w-full rounded-xl border p-3 text-left transition ${
+                isSelected
+                  ? "border-emerald-400/40 bg-emerald-500/10"
+                  : "border-white/10 bg-black/20 hover:border-zinc-500"
+              }`}
+              aria-pressed={isSelected}
+              aria-label={`Open thread with ${preview.contact.name}`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-white">{preview.contact.name}</p>
+                  <p className="text-[11px] text-zinc-300">
+                    {CONTACT_TYPE_CONFIG[preview.contact.type].label} at {preview.contact.organization}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline" className="border-emerald-500/25 text-[10px] capitalize text-emerald-200">
+                    {preview.position.stance.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                  </Badge>
+                  {preview.accessAgreement && (
+                    <Badge variant="outline" className="border-amber-500/30 text-[10px] text-amber-200">
+                      Early access
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-zinc-300">{preview.whyNow}</p>
+              {latest && (
+                <div className="mt-2 flex items-start justify-between gap-3 rounded-lg border border-white/10 bg-zinc-900/70 px-2.5 py-2">
+                  <div className="min-w-0">
+                    <p className={`text-[10px] font-semibold uppercase tracking-[0.16em] ${storyEntryTone(latest)}`}>
+                      {storyEntryLabel(latest)}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-5 text-zinc-400">{latest.title}</p>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-mono text-zinc-300">
+                    S{latest.season} W{latest.week}
+                  </span>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function NetworkPressurePanel({
+  contacts,
+  previews,
+}: {
+  contacts: Contact[];
+  previews: ContactThreadPreview[];
+}) {
+  const exclusiveSources = previews.filter((preview) => preview.accessAgreement).length;
+  const leveragePositions = previews.filter((preview) => preview.position.leverageScore > 0).length;
+  const pressureThreads = previews.filter((preview) => preview.position.threatScore >= 45).length;
+  const dormantContacts = contacts.filter((contact) => contact.dormant === true).length;
+
+  return (
+    <Card className="border-white/10 bg-black/20">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Shield size={14} className="text-blue-300" aria-hidden="true" />
+          Network pressure
+        </CardTitle>
+        <p className="text-xs leading-5 text-zinc-400">
+          Network quality matters as much as network size.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-zinc-950/80 p-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-300">Exclusive sources</p>
+          <p className="mt-1 text-2xl font-semibold text-white">{exclusiveSources}</p>
+          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+            Sources currently protecting access for you.
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-zinc-950/80 p-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-300">Leverage live</p>
+          <p className="mt-1 text-2xl font-semibold text-white">{leveragePositions}</p>
+          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+            Threads carrying active obligations or reciprocity.
+          </p>
+        </div>
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-amber-200">Threatened lines</p>
+          <p className="mt-1 text-2xl font-semibold text-white">{pressureThreads}</p>
+          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+            Relationships likely to create conflict, scrutiny, or betrayal pressure.
+          </p>
+        </div>
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-red-200">Dormant lines</p>
+          <p className="mt-1 text-2xl font-semibold text-white">{dormantContacts}</p>
+          <p className="mt-1 text-[11px] leading-5 text-zinc-400">
+            Contacts no longer giving useful access unless you repair them.
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
@@ -601,7 +776,8 @@ export function NetworkScreen() {
     fixturesById,
     clubsById,
     rivalScoutsById,
-    consequenceState,
+      consequenceState,
+      accessAgreements,
     stakeholderProfiles,
     currentWeek,
     currentSeason,
@@ -617,6 +793,7 @@ export function NetworkScreen() {
       clubsById: state.gameState?.clubs,
       rivalScoutsById: state.gameState?.rivalScouts,
       consequenceState: state.gameState?.consequenceState,
+      accessAgreements: state.gameState?.accessAgreements,
       stakeholderProfiles: state.gameState?.stakeholderProfiles,
       currentWeek: state.gameState?.currentWeek,
       currentSeason: state.gameState?.currentSeason,
@@ -635,6 +812,17 @@ export function NetworkScreen() {
   const selectedContact = selectedContactId
     ? (contactsById?.[selectedContactId] ?? null)
     : null;
+
+  const activeAccessByContact = useMemo(() => {
+    const result = new Map<string, AccessAgreement>();
+    if (!accessAgreements || currentWeek == null || currentSeason == null) return result;
+    const now = { week: currentWeek, season: currentSeason };
+    for (const contact of contacts) {
+      const agreement = getActiveEarlyAccessForContact(accessAgreements, contact.id, now);
+      if (agreement) result.set(contact.id, agreement);
+    }
+    return result;
+  }, [accessAgreements, contacts, currentSeason, currentWeek]);
 
   const contactIntelMap = useMemo<Map<string, IntelEntry[]>>(() => {
     const map = new Map<string, IntelEntry[]>();
@@ -691,14 +879,15 @@ export function NetworkScreen() {
     return map;
   }, [contacts, contactsById, contactIntel, playersById]);
 
-  const contactEcologyMap = useMemo(() => {
-    const profiles = new Map<string, StakeholderEcologyProfile>();
+  const relationshipPositionMap = useMemo(() => {
+    const profiles = new Map<string, RelationshipPosition>();
     if (
       !contactsById
       || !playersById
       || !clubsById
       || !rivalScoutsById
       || !consequenceState
+      || !accessAgreements
       || currentWeek == null
       || currentSeason == null
       || !scoutId
@@ -713,13 +902,11 @@ export function NetworkScreen() {
       return undefined;
     };
     for (const contact of contacts) {
-      profiles.set(contact.id, buildStakeholderEcologyProfile({
-        state: consequenceState,
-        stakeholder: { kind: "contact", id: contact.id },
+      profiles.set(contact.id, buildContactRelationshipPosition({
+        state: { consequenceState, accessAgreements },
+        contact,
         now: { week: currentWeek, season: currentSeason },
         scoutId,
-        baseTrust: contact.trustLevel ?? contact.relationship,
-        baseInfluence: Math.round((contact.relationship + contact.reliability) / 2),
         resolveEntityName,
       }));
     }
@@ -731,10 +918,73 @@ export function NetworkScreen() {
     clubsById,
     rivalScoutsById,
     consequenceState,
+    accessAgreements,
     currentWeek,
     currentSeason,
     scoutId,
   ]);
+
+  const storyThreadMap = useMemo(() => {
+    const map = new Map<string, StoryThread>();
+    if (!consequenceState || !accessAgreements || currentWeek == null || currentSeason == null) {
+      return map;
+    }
+    for (const contact of contacts) {
+      map.set(contact.id, buildStoryThread({
+        state: { consequenceState, accessAgreements },
+        stakeholder: { kind: "contact", id: contact.id },
+        now: { week: currentWeek, season: currentSeason },
+      }));
+    }
+    return map;
+  }, [accessAgreements, consequenceState, contacts, currentSeason, currentWeek]);
+
+  const contactThreadPreviews = useMemo<ContactThreadPreview[]>(() =>
+    contacts
+      .map((contact) => {
+        const position = relationshipPositionMap.get(contact.id);
+        const thread = storyThreadMap.get(contact.id);
+        if (!position || !thread) return undefined;
+        const accessAgreement = activeAccessByContact.get(contact.id);
+        const latest = thread.entries[0];
+        const hasFreshGossip = (contact.gossipQueue ?? []).some((item) =>
+          currentWeek != null && currentSeason != null
+            ? isActiveBefore({ season: currentSeason, week: currentWeek }, item.expiresAt)
+            : false,
+        );
+        const urgencyScore = (accessAgreement ? 60 : 0)
+          + Math.max(0, position.threatScore)
+          + Math.max(0, position.leverageScore * 10)
+          + (latest ? 12 : 0)
+          + ((contact.betrayalRisk ?? 0) * 100);
+        let whyNow = "Maintain this relationship before the line goes cold.";
+        if (accessAgreement?.expiresAt) {
+          whyNow = `Protected access expires ${formatGameDate(accessAgreement.expiresAt)}.`;
+        } else if (position.threatScore >= 45) {
+          whyNow = "Pressure is building around this relationship.";
+        } else if (position.leverageScore > 0) {
+          whyNow = "There is open leverage or reciprocity attached to this line.";
+        } else if (latest) {
+          whyNow = latest.description;
+        } else if (hasFreshGossip) {
+          whyNow = "Fresh information is available from this contact.";
+        }
+        return {
+          contact,
+          accessAgreement,
+          position,
+          thread,
+          urgencyScore,
+          whyNow,
+        };
+      })
+      .filter((preview): preview is ContactThreadPreview => preview !== undefined)
+      .sort((left, right) =>
+        right.urgencyScore - left.urgencyScore
+        || right.thread.entries.length - left.thread.entries.length
+        || left.contact.name.localeCompare(right.contact.name),
+      ),
+  [activeAccessByContact, contacts, currentSeason, currentWeek, relationshipPositionMap, storyThreadMap]);
 
   if (
     !contactsById
@@ -797,13 +1047,24 @@ export function NetworkScreen() {
         {contacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Users size={40} className="mb-4 text-zinc-700" aria-hidden="true" />
-            <p className="text-sm text-zinc-500">Your network is empty.</p>
-            <p className="text-xs text-zinc-600 mt-1">
+            <p className="text-sm text-zinc-300">Your network is empty.</p>
+            <p className="text-xs text-zinc-400 mt-1">
               Attend matches and complete networking activities to build contacts.
             </p>
           </div>
         ) : (
           <div className="space-y-6">
+            <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+              <div data-tutorial-id="network-intel">
+                <ActiveThreadRail
+                  previews={contactThreadPreviews.slice(0, 4)}
+                  selectedContactId={selectedContactId}
+                  onSelect={setSelectedContactId}
+                />
+              </div>
+              <NetworkPressurePanel contacts={contacts} previews={contactThreadPreviews} />
+            </div>
+
             {/* Gossip Feed — full-width intelligence summary */}
             <div data-tutorial-id="network-intel">
               <GossipFeedPanel contacts={contacts} currentDate={currentDate} />
@@ -823,9 +1084,8 @@ export function NetworkScreen() {
                     const gossipCount = (contact.gossipQueue ?? []).filter(
                       (g) => isActiveBefore(currentDate, g.expiresAt),
                     ).length;
-                    const hasExclusive =
-                      contact.exclusiveWindow &&
-                      isActiveBefore(currentDate, contact.exclusiveWindow.expiresAt);
+                    const hasExclusive = activeAccessByContact.has(contact.id);
+                    const threadPreview = contactThreadPreviews.find((preview) => preview.contact.id === contact.id);
                     const weeksSinceContact = contact.lastInteractionAt
                       ? Math.max(
                           0,
@@ -845,7 +1105,7 @@ export function NetworkScreen() {
                         className={`rounded-lg border p-4 text-left transition ${
                           isSelected
                             ? "border-emerald-500/50 bg-emerald-500/5"
-                            : "border-[#27272a] bg-[#141414] hover:border-zinc-600"
+                            : "border-[#27272a] bg-[#141414] hover:border-zinc-500"
                         }`}
                       >
                         <div className="mb-3 flex items-center justify-between">
@@ -870,7 +1130,7 @@ export function NetworkScreen() {
                             )}
                             <ChevronRight
                               size={14}
-                              className={`text-zinc-600 transition ${isSelected ? "rotate-90" : ""}`}
+                              className={`text-zinc-400 transition ${isSelected ? "rotate-90" : ""}`}
                               aria-hidden="true"
                             />
                           </div>
@@ -879,16 +1139,26 @@ export function NetworkScreen() {
                           <Badge variant="outline" className="text-[10px]">
                             {config.label}
                           </Badge>
+                          {threadPreview && (
+                            <Badge variant="outline" className="border-emerald-500/20 text-[10px] capitalize text-emerald-200">
+                              {threadPreview.position.stance.replace(/([a-z])([A-Z])/g, "$1 $2")}
+                            </Badge>
+                          )}
                           <span>{contact.organization}</span>
                           {contact.region && (
-                            <span className="text-zinc-600">· {contact.region}</span>
+                            <span className="text-zinc-400">· {contact.region}</span>
                           )}
                         </div>
+                        {threadPreview && (
+                          <p className="mb-3 text-[11px] leading-5 text-zinc-300">
+                            {threadPreview.whyNow}
+                          </p>
+                        )}
 
                         {/* Relationship bar */}
                         <div className="mb-2">
                           <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="text-zinc-500">Relationship</span>
+                            <span className="text-zinc-300">Relationship</span>
                             <span className="text-white">{contact.relationship}/100</span>
                           </div>
                           <Progress
@@ -902,7 +1172,7 @@ export function NetworkScreen() {
                         {/* Trust bar */}
                         <div>
                           <div className="mb-1 flex items-center justify-between text-xs">
-                            <span className="text-zinc-500 flex items-center gap-1">
+                            <span className="text-zinc-300 flex items-center gap-1">
                               <Shield size={9} aria-hidden="true" />
                               Trust
                             </span>
@@ -949,7 +1219,7 @@ export function NetworkScreen() {
                             <span className="text-xs text-emerald-400">Meeting scheduled</span>
                           )}
                           {weeksSinceContact != null && (
-                            <span className="flex items-center gap-1 text-[10px] text-zinc-500">
+                            <span className="flex items-center gap-1 text-[10px] text-zinc-300">
                               <Clock size={10} aria-hidden="true" />
                               {weeksSinceContact === 0
                                 ? "This week"
@@ -968,7 +1238,8 @@ export function NetworkScreen() {
                 <div data-tutorial-id="network-meet">
                   <ContactDetail
                     contact={selectedContact}
-                    ecology={contactEcologyMap.get(selectedContact.id)!}
+                    accessAgreement={activeAccessByContact.get(selectedContact.id)}
+                    position={relationshipPositionMap.get(selectedContact.id)!}
                     identity={stakeholderProfiles?.profiles[`contact:${selectedContact.id}`]}
                     knownPlayerNames={getKnownPlayerNames(selectedContact)}
                     intelEntries={contactIntelMap.get(selectedContact.id) ?? []}

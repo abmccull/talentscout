@@ -28,6 +28,15 @@ export {
   getReportCaseKey,
   selectLatestReportsByCase,
 } from "./reportAccountability";
+export {
+  deriveProfessionalCaseAccountability,
+} from "./caseAccountability";
+export type {
+  ProfessionalCaseAccountabilityCategory,
+  ProfessionalCaseAccountabilityKey,
+  ProfessionalCaseAccountabilitySnapshot,
+  ProfessionalCaseAccountabilityStatus,
+} from "./caseAccountability";
 
 export {
   attachListingToCase,
@@ -64,3 +73,4 @@ export {
   getRemainingTablePounds,
   getSeasonTablePoundAllowance,
 } from "./conviction";
+export * from "./caseQuestions";

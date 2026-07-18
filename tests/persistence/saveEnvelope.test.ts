@@ -138,7 +138,17 @@ describe("save envelope migrations", () => {
         trustDelta: 2,
       },
     ]);
-    expect(migratedContact.exclusiveWindow?.expiresAt).toEqual({ season: 2, week: 2 });
+    expect(migratedContact.exclusiveWindow).toBeUndefined();
+    expect(migrated.accessAgreements).toMatchObject({
+      "access:legacy-contact:contact-legacy:player:player-legacy:expires:s2:w2": {
+        grantor: { kind: "contact", id: "contact-legacy" },
+        beneficiary: { kind: "scout", id: migrated.scout.id },
+        scope: "playerEarlyAccess",
+        status: "active",
+        subject: { kind: "player", id: "player-legacy" },
+        expiresAt: { season: 2, week: 2 },
+      },
+    });
     expect(migratedContact.gossipQueue).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "contact-gossip",

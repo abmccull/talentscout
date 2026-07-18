@@ -5,6 +5,7 @@ import { RNG } from "@/engine/rng";
 import {
   processWeeklyContactDecay,
 } from "@/engine/network/contacts";
+import type { AccessAgreementState } from "@/engine/consequences/accessAgreements";
 import {
   applyGossipAction,
   generateGossip,
@@ -78,17 +79,20 @@ function stateAt(
   season: number,
   week: number,
   sourceContact: Contact,
+  accessAgreements: AccessAgreementState = {},
 ): GameState {
   return {
     currentSeason: season,
     currentWeek: week,
     fixtures: {},
     contacts: { [sourceContact.id]: sourceContact },
+    accessAgreements,
     players: {
       [goodProspect.id]: goodProspect,
       [poorProspect.id]: poorProspect,
     },
     clubs: { [club.id]: club },
+    scout: { id: "scout-1" },
   } as GameState;
 }
 
@@ -190,12 +194,21 @@ describe("network gossip cohesion", () => {
       trustLevel: 0,
       loyalty: 0,
       gossipQueue: [gossip()],
-      exclusiveWindow: {
-        playerId: goodProspect.id,
+    });
+    const state = stateAt(1, 36, source, {
+      "access:test": {
+        id: "access:test",
+        grantor: { kind: "contact", id: source.id },
+        beneficiary: { kind: "scout", id: "scout-1" },
+        scope: "playerEarlyAccess",
+        status: "active",
+        exclusive: true,
+        confidential: true,
+        createdAt: { season: 1, week: 35 },
         expiresAt: { season: 2, week: 4 },
+        subject: { kind: "player", id: goodProspect.id },
       },
     });
-    const state = stateAt(1, 36, source);
     let betrayed: ReturnType<typeof processWeeklyContactDecay> | null = null;
     for (let index = 0; index < 500 && !betrayed?.betrayalMessages.length; index++) {
       betrayed = processWeeklyContactDecay(state, new RNG(`betrayal-${index}`));
@@ -208,7 +221,7 @@ describe("network gossip cohesion", () => {
       accessSuspendedUntil: { season: 2, week: 2 },
       gossipQueue: [],
     });
-    expect(updated.exclusiveWindow).toBeUndefined();
+    expect(betrayed?.revokedAccessAgreementIds).toEqual(["access:test"]);
 
     const otherwiseTrusted = contact({
       trustLevel: 100,

@@ -17,14 +17,13 @@ import {
   createNamedRNG,
 } from "@/engine/run/runManifest";
 import { getEffectiveRivalPlayerEvidence } from "./rivalEvidence";
+import {
+  createRivalCampaignState,
+  type RivalCampaignState,
+} from "./campaigns";
+import type { RivalOrganizationArchetypeId } from "./organizationTypes";
 
-export type RivalOrganizationArchetypeId =
-  | "academy-conglomerate"
-  | "analytics-syndicate"
-  | "agent-black-book"
-  | "club-consortium"
-  | "regional-guild"
-  | "global-sports-group";
+export type { RivalOrganizationArchetypeId } from "./organizationTypes";
 
 export type RivalOrganizationAgendaId =
   | "control-youth-pathways"
@@ -241,6 +240,7 @@ export interface RivalOrganizationState {
   organizations: Record<string, RivalOrganization>;
   activities: RivalOrganizationActivity[];
   opportunities: Record<string, RivalOrganizationOpportunity>;
+  campaignState: RivalCampaignState;
   currentPressure: RivalOrganizationPressure;
   /** Bounded idempotency ledger for manual/batch-equivalent advancement. */
   processedWeekKeys: string[];
@@ -861,6 +861,7 @@ export function createRivalOrganizationState(
     organizations: { ...(partial.organizations ?? {}) },
     activities: [...(partial.activities ?? [])].slice(-MAX_ACTIVITY_HISTORY),
     opportunities: { ...(partial.opportunities ?? {}) },
+    campaignState: createRivalCampaignState(partial.campaignState),
     currentPressure: {
       ...NEUTRAL_PRESSURE,
       ...(partial.currentPressure ?? {}),
@@ -1100,7 +1101,7 @@ function expireOpportunities(
   }));
 }
 
-function opportunityMessage(
+export function createRivalOrganizationOpportunityMessage(
   opportunity: RivalOrganizationOpportunity,
   organization: RivalOrganization,
 ): InboxMessage {
@@ -1406,6 +1407,7 @@ export function processRivalOrganizationWeek(
       state: {
         ...state,
         opportunities: pruneOpportunities(expiredOpportunities),
+        campaignState: state.campaignState,
         currentPressure: { ...NEUTRAL_PRESSURE },
         processedWeekKeys: [...state.processedWeekKeys, weekKey].slice(
           -MAX_PROCESSED_WEEK_KEYS,
@@ -1619,6 +1621,7 @@ export function processRivalOrganizationWeek(
       organizations,
       activities: [...state.activities, activity].slice(-MAX_ACTIVITY_HISTORY),
       opportunities,
+      campaignState: state.campaignState,
       currentPressure: pressure,
       processedWeekKeys: [...state.processedWeekKeys, weekKey].slice(
         -MAX_PROCESSED_WEEK_KEYS,
@@ -1629,7 +1632,7 @@ export function processRivalOrganizationWeek(
     opportunity,
     facts: [fact],
     messages: opportunity
-      ? [opportunityMessage(opportunity, updatedActor)]
+      ? [createRivalOrganizationOpportunityMessage(opportunity, updatedActor)]
       : [],
     changed: true,
   };

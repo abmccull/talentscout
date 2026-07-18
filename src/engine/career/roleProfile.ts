@@ -438,7 +438,7 @@ function authoritiesFor(
     ? [
         "Hire and assign a small team",
         "Choose retainers and consulting work",
-        "Set an operating posture for the agency",
+        "Set an operating policy for the agency",
       ]
     : [
         "Allocate staff and office capacity",
