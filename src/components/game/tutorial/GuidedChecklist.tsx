@@ -25,6 +25,7 @@ import {
   getTotalCount,
 } from "./guidedSession";
 import { getGuidedMilestoneInstruction } from "./guidedMilestoneInstruction";
+import { isHalfTimePhase } from "@/engine/observation/session";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -41,6 +42,16 @@ export function GuidedChecklist() {
   const currentScreen = useGameStore((s) => s.currentScreen);
   const gameState = useGameStore((s) => s.gameState);
   const observationState = useGameStore((s) => s.activeSession?.state ?? null);
+  const observationPhaseIndex = useGameStore(
+    (s) => s.activeSession?.currentPhaseIndex ?? null,
+  );
+  const observationIsHalfTime = useGameStore((s) => Boolean(
+    s.activeSession
+    && isHalfTimePhase(s.activeSession, s.activeSession.currentPhaseIndex),
+  ));
+  const observationHalftimeApproach = useGameStore(
+    (s) => s.activeSession?.halftimeApproach ?? null,
+  );
   const setScreen = useGameStore((s) => s.setScreen);
 
   const [isExpanded, setIsExpanded] = useState(true);
@@ -186,15 +197,20 @@ export function GuidedChecklist() {
                       milestoneId: milestone.id,
                       currentScreen,
                       observationState,
+                      observationPhaseIndex,
+                      observationIsHalfTime,
+                      observationHalftimeApproach,
                     })}
                   </span>
                 )}
               </div>
 
               {/* Go button — only shown for incomplete milestones */}
-              {!done && (
+              {!done && milestone.id === currentGuidedTask && (
                 <button
-                  onClick={() => setScreen(targetScreen)}
+                  onClick={() => setScreen(
+                    milestone.id === "openedCalendar" ? "calendar" : targetScreen,
+                  )}
                   aria-label={`Go to ${milestone.title}`}
                   className="flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-medium text-emerald-400 transition hover:bg-zinc-800 hover:text-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-500"
                 >

@@ -13,7 +13,10 @@ import {
   processSellOnClauses,
   triggerPlacementFee,
 } from "@/engine/finance";
-import { getRecruitmentOpportunityTransferReference } from "@/engine/recruitment";
+import {
+  deriveRecruitmentOpportunities,
+  getRecruitmentOpportunityTransferReference,
+} from "@/engine/recruitment";
 
 export interface WeeklyTransferAccountabilityInput {
   beforeTick: GameState;
@@ -42,6 +45,7 @@ export function processWeeklyTransferAccountability(
     ),
   );
   if (appliedTransfers.length === 0) return state;
+  const recruitmentOpportunities = deriveRecruitmentOpportunities(state);
 
   const rng = createRNG(
     `${input.beforeTick.seed}-trlink-${input.beforeTick.currentWeek}-${input.beforeTick.currentSeason}`,
@@ -67,7 +71,12 @@ export function processWeeklyTransferAccountability(
     // the stronger player-facing "signed from this report" state.
     const causallySignedReportIds = new Set(
       appliedTransfers
-        .map((transfer) => checkPlacementFeeEligibility(state, transfer, state.scout.id))
+        .map((transfer) => checkPlacementFeeEligibility(
+          state,
+          transfer,
+          state.scout.id,
+          recruitmentOpportunities,
+        ))
         .filter((eligibility) => Boolean(eligibility))
         .map((eligibility) => eligibility!.report.id),
     );
@@ -97,6 +106,7 @@ export function processWeeklyTransferAccountability(
         state,
         datedTransfer,
         state.scout.id,
+        recruitmentOpportunities,
       );
       if (!eligibility) continue;
       const { report, opportunity } = eligibility;

@@ -42,6 +42,28 @@ export interface WeeklyWorkerInput {
   tutorial: WeeklyTutorialSnapshot;
 }
 
+export interface WeeklyWorkerGameStatePatch {
+  changedFields: Partial<GameState>;
+  removedFields: Array<keyof GameState>;
+}
+
+export type WeeklyWorkerWireState =
+  | { kind: "replace"; input: WeeklyWorkerInput }
+  | {
+      kind: "patch";
+      base: {
+        seed: string;
+        season: number;
+        week: number;
+        mode: GameState["scout"]["primarySpecialization"];
+      };
+      gameState: WeeklyWorkerGameStatePatch;
+      weekSimulation: WeekSimulationState;
+      currentScreen: GameScreen;
+      isLoaded: boolean;
+      tutorial: WeeklyTutorialSnapshot;
+    };
+
 /** Store fields the canonical transaction may commit. */
 export interface WeeklyTransactionStorePatch {
   gameState?: GameState | null;
@@ -90,7 +112,12 @@ export interface WeeklyArrayDelta {
 export type WeeklyValueDelta =
   | { kind: "replace"; value: unknown }
   | { kind: "record"; delta: WeeklyRecordDelta }
-  | { kind: "array"; delta: WeeklyArrayDelta };
+  | { kind: "array"; delta: WeeklyArrayDelta }
+  | {
+      kind: "array-window";
+      dropFirst: number;
+      append: unknown[];
+    };
 
 /** Compact worker response; unchanged GameState branches never cross back. */
 export interface WeeklyWorkerCommit {
@@ -102,6 +129,8 @@ export interface WeeklyWorkerCommit {
 
 export interface WeeklyWorkerExecution {
   commit: WeeklyWorkerCommit;
+  /** Materialized once so the live store and worker cache share one base. */
+  materializedCommit?: WeeklyHeadlessCommit;
   route: "worker" | "main-thread-fallback";
   fallbackReason?: "worker-unavailable" | "worker-failed" | "worker-response-mismatch";
   telemetry: WeeklyWorkerTelemetry;
@@ -113,12 +142,12 @@ export interface WeeklyWorkerErrorPayload {
   stack?: string;
 }
 
-/** JSON wire request avoids structured-cloning the full world object graph. */
+/** Browser-native structured-clone request; avoids redundant JSON encode/parse. */
 export interface WeeklyWorkerWireRequest {
   kind: "weekly-transaction-request";
   protocolVersion: 1;
   job: WeeklyTransactionJob;
-  stateJson: string;
+  state: WeeklyWorkerWireState;
 }
 
 export type WeeklyWorkerMessage =
@@ -132,7 +161,7 @@ export type WeeklyWorkerMessage =
         season: number;
         week: number;
       };
-      stateJson: string;
+      state: WeeklyWorkerCommit;
     }
   | {
       kind: "weekly-transaction-error";

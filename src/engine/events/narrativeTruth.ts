@@ -1,4 +1,5 @@
 import type {
+  GameDate,
   GameState,
   NarrativeEventType,
   Player,
@@ -7,6 +8,7 @@ import type {
   ScoutReport,
   TournamentEvent,
 } from "@/engine/core/types";
+import { gameWeeksBetween, getSeasonLength } from "@/engine/core/gameDate";
 import { selectLatestReportsByCase } from "@/engine/reports/reportAccountability";
 
 /** Player-facing context proven by the same record that supports a claim. */
@@ -23,6 +25,10 @@ export type NarrativeEvidenceSource =
   | "player-movement"
   | "alumni-milestone"
   | "tournament"
+  | "recommendation-review"
+  | "performance-pulse"
+  | "club-decision"
+  | "rival-activity"
   | "simulation-command";
 
 /** A stable reference to the authoritative state behind material prose. */
@@ -66,6 +72,222 @@ export interface NarrativeTruthResolution {
   kind: NarrativeTruthContract["kind"];
   evidence?: NarrativeEvidenceReference;
   sourceLabel?: string;
+}
+
+export type NarrativeCallbackDomain = "career" | "prospect" | "club" | "rival";
+
+/**
+ * A low-intensity story beat backed by a completed simulation receipt. These
+ * signals never resolve a transfer, case, or review; they only make an existing
+ * result eligible for the shared narrative cadence.
+ */
+export interface NarrativeCallbackSignal {
+  domain: NarrativeCallbackDomain;
+  fingerprint: string;
+  title: string;
+  summary: string;
+  occurredAt: GameDate;
+  evidence: NarrativeEvidenceReference;
+  narrativeType: NarrativeEventType;
+  weight: number;
+}
+
+const CALLBACK_LOOKBACK_WEEKS = 16;
+
+function callbackPlayer(state: GameState, playerId: string): Player | undefined {
+  return state.players?.[playerId]
+    ?? state.retiredPlayers?.[playerId]
+    ?? Object.values(state.unsignedYouth ?? {})
+      .find((candidate) => candidate.player.id === playerId)?.player;
+}
+
+function callbackPlayerName(state: GameState, playerId: string): string {
+  const player = callbackPlayer(state, playerId);
+  return player ? `${player.firstName} ${player.lastName}`.trim() : "the prospect";
+}
+
+function callbackIsRecent(state: GameState, occurredAt: GameDate): boolean {
+  const age = gameWeeksBetween(
+    state.fixtures ?? {},
+    occurredAt,
+    { season: state.currentSeason, week: state.currentWeek },
+  );
+  return age >= 0 && age <= CALLBACK_LOOKBACK_WEEKS;
+}
+
+export function narrativeCallbackEventId(
+  signal: Pick<NarrativeCallbackSignal, "domain" | "evidence">,
+): string {
+  return `callback:${signal.domain}:${signal.evidence.source}:${signal.evidence.sourceId}`;
+}
+
+function callbackAlreadyShown(
+  state: GameState,
+  signal: Pick<NarrativeCallbackSignal, "domain" | "evidence">,
+): boolean {
+  const id = narrativeCallbackEventId(signal);
+  return (state.narrativeEvents ?? []).some((event) => event.id === id)
+    || (state.storyDirectorV2?.callbackFingerprints ?? []).includes(id);
+}
+
+function recommendationCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+  return Object.values(state.recommendationReviews ?? {}).flatMap((review) => {
+    if (
+      review.status !== "complete"
+      || review.completedWeek === undefined
+      || review.completedSeason === undefined
+    ) return [];
+    const occurredAt = { week: review.completedWeek, season: review.completedSeason };
+    if (!callbackIsRecent(state, occurredAt)) return [];
+    const name = callbackPlayerName(state, review.playerId);
+    const scoredDimensions = review.playerFacingDimensions ?? [];
+    const positive = scoredDimensions.filter((dimension) => dimension.status === "positive").length;
+    const mixed = scoredDimensions.filter((dimension) => dimension.status === "mixed").length;
+    const negative = scoredDimensions.filter((dimension) => dimension.status === "negative").length;
+    const score = typeof review.overallScore === "number"
+      ? ` The evidence review scored ${Math.round(review.overallScore)}/100.`
+      : "";
+    const dimensionSummary = scoredDimensions.length > 0
+      ? ` Across the reviewed areas: ${positive} positive, ${mixed} mixed, and ${negative} negative.`
+      : " The review remains limited to the outcomes recorded so far.";
+    return [{
+      domain: "prospect" as const,
+      fingerprint: `recommendation-review:${review.id}`,
+      title: `${name}: the recommendation is on the record`,
+      summary: `${review.checkpoint === "oneSeason" ? "One season" : "Two seasons"} after your recommendation, the formal review is complete.${score}${dimensionSummary}`,
+      occurredAt,
+      evidence: {
+        source: "recommendation-review" as const,
+        sourceId: review.id,
+        relatedIds: [review.playerId, review.clubId, review.caseId, review.reportId],
+        context: { playerName: name },
+      },
+      narrativeType: "reportCitedInBoardMeeting" as const,
+      weight: 1.3,
+    }];
+  });
+}
+
+function performanceCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+  return (state.scout.performancePulses ?? []).flatMap((pulse) => {
+    const occurredAt = {
+      season: pulse.season,
+      week: Math.max(1, Math.min(
+        pulse.period * 4,
+        getSeasonLength(state.fixtures ?? {}, pulse.season),
+      )),
+    };
+    if (!callbackIsRecent(state, occurredAt)) return [];
+    const reportLabel = pulse.reportsSubmitted === 1 ? "report" : "reports";
+    const development = pulse.professionalDevelopment
+      ? " Formal study also counted toward the period's professional development."
+      : "";
+    return [{
+      domain: "career" as const,
+      fingerprint: `performance-pulse:${state.scout.id}:${pulse.season}:${pulse.period}`,
+      title: `Your latest professional review: Grade ${pulse.grade}`,
+      summary: `Your form is ${pulse.trend}. The review covers ${pulse.reportsSubmitted} ${reportLabel}, ${pulse.reportQualityAvg}% average report quality, and ${pulse.accuracyRate}% recorded accuracy.${development}`,
+      occurredAt,
+      evidence: {
+        source: "performance-pulse" as const,
+        sourceId: `${state.scout.id}:s${pulse.season}:p${pulse.period}`,
+        relatedIds: [state.scout.id],
+      },
+      narrativeType: "reportCitedInBoardMeeting" as const,
+      weight: 0.85,
+    }];
+  });
+}
+
+function clubDecisionCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+  const outcomeText = {
+    accepted: "accepted your recommendation",
+    rejected: "declined your recommendation",
+    trial: "asked to see the player on trial",
+    followUpRequested: "asked you for more evidence",
+  } as const;
+  return Object.values(state.clubDecisions ?? {}).flatMap((decision) => {
+    const occurredAt = { week: decision.decidedWeek, season: decision.decidedSeason };
+    if (!callbackIsRecent(state, occurredAt)) return [];
+    const playerId = (decision.reportId
+      ? state.reports?.[decision.reportId]?.playerId
+      : undefined)
+      ?? state.scoutingCases?.[decision.caseId]?.playerId;
+    const club = state.clubs?.[decision.clubId];
+    const clubName = club?.name ?? "The club";
+    const name = playerId ? callbackPlayerName(state, playerId) : "the prospect";
+    return [{
+      domain: "club" as const,
+      fingerprint: `club-decision:${decision.id}`,
+      title: `${clubName} has answered`,
+      summary: `${clubName} ${outcomeText[decision.outcome]} on ${name}. The decision and the evidence behind it now form part of your professional record.`,
+      occurredAt,
+      evidence: {
+        source: "club-decision" as const,
+        sourceId: decision.id,
+        relatedIds: [decision.clubId, decision.caseId, ...(playerId ? [playerId] : [])],
+        context: { clubName, ...(playerId ? { playerName: name } : {}) },
+      },
+      narrativeType: "reportCitedInBoardMeeting" as const,
+      weight: 1.2,
+    }];
+  });
+}
+
+function rivalCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+  const descriptions = {
+    spotted: "has been seen watching",
+    targetAcquired: "has added",
+    reportSubmitted: "has submitted a club report on",
+    playerSigned: "has helped their club complete a move for",
+  } as const;
+  return (state.rivalActivities ?? []).flatMap((activity) => {
+    const occurredAt = { week: activity.week, season: activity.season };
+    if (!callbackIsRecent(state, occurredAt)) return [];
+    const rival = state.rivalScouts?.[activity.rivalId];
+    const rivalName = rival?.name ?? "A rival scout";
+    const playerId = activity.playerId;
+    const name = playerId ? callbackPlayerName(state, playerId) : "the same market";
+    const sourceId = [
+      activity.rivalId,
+      activity.type,
+      playerId ?? activity.fixtureId ?? "market",
+      `s${activity.season}`,
+      `w${activity.week}`,
+    ].join(":");
+    return [{
+      domain: "rival" as const,
+      fingerprint: `rival-activity:${sourceId}`,
+      title: `${rivalName} is moving`,
+      summary: `${rivalName} ${descriptions[activity.type]} ${name}. This is recorded market activity, not a guarantee of where the player will go.`,
+      occurredAt,
+      evidence: {
+        source: "rival-activity" as const,
+        sourceId,
+        relatedIds: [activity.rivalId, ...(playerId ? [playerId] : []), ...(activity.fixtureId ? [activity.fixtureId] : [])],
+        context: playerId ? { playerName: name } : undefined,
+      },
+      narrativeType: "rivalPoach" as const,
+      weight: 1.05,
+    }];
+  });
+}
+
+/** Return unseen, receipt-backed callbacks in deterministic priority order. */
+export function getNarrativeCallbackSignals(state: GameState): NarrativeCallbackSignal[] {
+  return [
+    ...recommendationCallbackSignals(state),
+    ...clubDecisionCallbackSignals(state),
+    ...rivalCallbackSignals(state),
+    ...performanceCallbackSignals(state),
+  ]
+    .filter((signal) => !callbackAlreadyShown(state, signal))
+    .sort((left, right) =>
+      right.weight - left.weight
+      || right.occurredAt.season - left.occurredAt.season
+      || right.occurredAt.week - left.occurredAt.week
+      || left.fingerprint.localeCompare(right.fingerprint)
+    );
 }
 
 export function resolveNarrativeTruth(

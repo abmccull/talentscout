@@ -122,4 +122,31 @@ describe("organic transfer motivation", () => {
       veteranMotivation.weeklyMoveProbability,
     );
   });
+
+  it("rebuilds the appearance ledger when the season changes on the same canonical ratings object", () => {
+    const candidate = player({ contractExpiry: 5, morale: 6, position: "ST" });
+    const game = state(candidate, []);
+    game.currentWeek = 4;
+    game.fixtures = {
+      s4a: { id: "s4a", season: 4, week: 1, played: true, homeClubId: "club", awayClubId: "other" },
+      s4b: { id: "s4b", season: 4, week: 2, played: true, homeClubId: "club", awayClubId: "other" },
+      s5a: { id: "s5a", season: 5, week: 1, played: true, homeClubId: "club", awayClubId: "other" },
+    } as unknown as GameState["fixtures"];
+    game.matchRatings = {
+      s4a: { target: { playerId: "target", fixtureId: "s4a", rating: 7, eventCount: 1, stats: {}, minutesPlayed: 90, started: true, source: "simulated" } },
+      s4b: { target: { playerId: "target", fixtureId: "s4b", rating: 7.1, eventCount: 1, stats: {}, minutesPlayed: 88, started: true, source: "simulated" } },
+      s5a: {},
+    } as unknown as GameState["matchRatings"];
+
+    const seasonFour = calculateTransferMotivation(candidate, game);
+    game.currentSeason = 5;
+    game.currentWeek = 2;
+    const seasonFive = calculateTransferMotivation(candidate, game);
+
+    expect(seasonFour.components.playingTimePressure).toBeLessThan(30);
+    expect(seasonFive.components.playingTimePressure).toBeGreaterThan(
+      seasonFour.components.playingTimePressure + 20,
+    );
+    expect(seasonFive.score).toBeGreaterThan(seasonFour.score);
+  });
 });

@@ -13,7 +13,6 @@ import type {
   JobOffer,
   PerformanceReview,
   CareerTier,
-  Specialization,
   ConvictionLevel,
   WonderkidTier,
   NPCScout,
@@ -30,6 +29,13 @@ import {
   selectLatestReportsByCaseOpenedInRange,
 } from "@/engine/reports/reportAccountability";
 import { getPhilosophySpecializationAffinity } from "@/engine/world/recruitmentIdentity";
+import {
+  calculateClubRolePressurePenalty,
+  deriveCareerOperatingModel,
+  deriveCareerRoleProfile,
+  deriveContractObjectivesForRole,
+  getCareerRoleTitle,
+} from "./roleProfile";
 
 // ---------------------------------------------------------------------------
 // Reputation event union
@@ -80,38 +86,6 @@ const SALARY_BANDS: Record<CareerTier, { min: number; max: number }> = {
   3: { min: 1500,  max: 4000 },
   4: { min: 4000,  max: 10000 },
   5: { min: 10000, max: 25000 },
-};
-
-/** Role titles per specialization and tier */
-const ROLE_TITLE_BY_SPEC: Record<Specialization, Record<CareerTier, string>> = {
-  youth: {
-    1: "Freelance Youth Scout",
-    2: "Youth Scout",
-    3: "Senior Youth Scout",
-    4: "Head of Youth Scouting",
-    5: "Youth Development Director",
-  },
-  firstTeam: {
-    1: "Freelance Scout",
-    2: "First Team Scout",
-    3: "Senior Scout",
-    4: "Chief Scout",
-    5: "Director of Football",
-  },
-  regional: {
-    1: "Freelance Regional Scout",
-    2: "Regional Scout",
-    3: "Senior Regional Scout",
-    4: "Head of Regional Scouting",
-    5: "Sporting Director",
-  },
-  data: {
-    1: "Freelance Data Analyst",
-    2: "Data Analyst",
-    3: "Lead Data Analyst",
-    4: "Head of Analysis",
-    5: "Director of Football Analytics",
-  },
 };
 
 // ---------------------------------------------------------------------------
@@ -382,6 +356,11 @@ export function calculatePerformanceReview(
     + accuracyScore
     + decisionValueScore
     + tablePoundBonus;
+
+  // An active club role carries relationship pressure appropriate to its
+  // authority. The same evidence is judged more harshly when a senior scout
+  // has lost the trust required to use that authority.
+  total += calculateClubRolePressurePenalty(scout);
 
   // ---------------------------------------------------------------------------
   // Tier 3 — Full-time scout
@@ -797,9 +776,23 @@ function buildJobOffer(
   // Reputation premium: higher rep → up to 20 % bonus within the band
   const repPremium =
     Math.round(((scout.reputation - 25) / 75) * (band.max - band.min) * 0.2);
-  const salary = Math.min(band.max, baseSalary + Math.max(0, repPremium));
+  const sourceOperatingModel = deriveCareerOperatingModel(scout);
+  const sourceLeverage = sourceOperatingModel === "agency"
+    ? 1.08
+    : sourceOperatingModel === "independent"
+      ? 1.03
+      : 1 + Math.max(0, Math.min(100, scout.clubTrust) - 50) / 1_000;
+  const salary = Math.min(
+    band.max,
+    Math.round((baseSalary + Math.max(0, repPremium)) * sourceLeverage),
+  );
 
-  const role = ROLE_TITLE_BY_SPEC[scout.primarySpecialization][tier];
+  const roleProfile = deriveCareerRoleProfile({
+    scout,
+    club,
+    tier,
+    operatingModel: "club",
+  });
   const contractLength = rng.nextInt(1, 3);
   const expiryWindow = getSeasonEndWindow(seasonLength, 4);
   const expiresWeek = rng.nextInt(expiryWindow.startWeek, expiryWindow.endWeek);
@@ -808,14 +801,14 @@ function buildJobOffer(
     id: `offer_${club.id}_s${season}_${rng.nextInt(1000, 9999)}`,
     clubId: club.id,
     tier,
-    role,
+    role: roleProfile.title,
     salary,
     contractLength,
-    objectives: {
-      reportsPerSeason: 10 + tier * 5,
-      minimumAverageQuality: 42 + tier * 7,
-      successfulRecommendations: Math.max(1, tier - 1),
-    },
+    objectives: deriveContractObjectivesForRole({
+      specialization: scout.primarySpecialization,
+      tier,
+      club,
+    }),
     signingBonus: ({ 1: 0, 2: 0, 3: 2_000, 4: 5_000, 5: 10_000 } as const)[tier],
     performanceBonusRate: 0.05 + tier * 0.02,
     severanceWeeks: tier >= 5 ? 16 : tier >= 4 ? 10 : 4,
@@ -864,21 +857,21 @@ export function generateContractRenewalOffer(
     clubId: club.id,
     tier: scout.careerTier,
     role: scout.employmentContract?.role
-      ?? ROLE_TITLE_BY_SPEC[scout.primarySpecialization][scout.careerTier],
+      ?? getCareerRoleTitle(
+        scout.primarySpecialization,
+        scout.careerTier,
+        "club",
+      ),
     salary,
     contractLength,
     territory: scout.employmentContract?.territory,
-    objectives: {
-      reportsPerSeason: Math.max(10, (currentObjectives?.reportsPerSeason ?? 15) + 2),
-      minimumAverageQuality: Math.min(
-        90,
-        (currentObjectives?.minimumAverageQuality ?? 50) + 2,
-      ),
-      successfulRecommendations: Math.max(
-        1,
-        (currentObjectives?.successfulRecommendations ?? 1),
-      ),
-    },
+    objectives: deriveContractObjectivesForRole({
+      specialization: scout.primarySpecialization,
+      tier: scout.careerTier,
+      club,
+      currentObjectives,
+      reviewOutcome: review.outcome,
+    }),
     signingBonus: 0,
     performanceBonusRate: Math.min(
       0.2,
@@ -971,11 +964,10 @@ export function acceptJobOffer(scout: Scout, offer: JobOffer, currentSeason: num
       startSeason: currentSeason,
       endSeason,
       status: "active",
-      objectives: offer.objectives ?? {
-        reportsPerSeason: 10 + offer.tier * 5,
-        minimumAverageQuality: 42 + offer.tier * 7,
-        successfulRecommendations: Math.max(1, offer.tier - 1),
-      },
+      objectives: offer.objectives ?? deriveContractObjectivesForRole({
+        specialization: scout.primarySpecialization,
+        tier: offer.tier,
+      }),
       signingBonus: offer.signingBonus ?? 0,
       performanceBonusRate: offer.performanceBonusRate ?? 0.05,
       severanceWeeks: offer.severanceWeeks ?? 4,

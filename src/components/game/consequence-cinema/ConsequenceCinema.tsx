@@ -236,7 +236,7 @@ function PhoneCallFrame({ story }: { story: CareerStory }) {
         <div className="border-b border-white/10 bg-black/20 px-5 py-4 text-center">
           <PhoneCall size={20} className="mx-auto text-sky-300" aria-hidden="true" />
           <p className="mt-1 text-xs font-semibold text-white">{caller}</p>
-          <p className="text-[10px] uppercase tracking-[0.15em] text-sky-200/70">Recorded career callback</p>
+          <p className="text-[10px] uppercase tracking-[0.15em] text-sky-200/70">Career callback</p>
         </div>
         <div className="space-y-4 p-4 sm:p-6">
           <div className="max-w-[88%] rounded-2xl rounded-tl-sm bg-white/8 p-4">
@@ -248,7 +248,7 @@ function PhoneCallFrame({ story }: { story: CareerStory }) {
           <StakeholderRecords memories={story.memories} obligations={story.obligations} ink="light" />
         </div>
         <div className="border-t border-white/10 px-5 py-3 text-center text-[10px] text-zinc-400">
-          S{story.season} W{story.week} · Transcript assembled from persisted records
+          S{story.season} W{story.week} · Scout file assembled from notes, reports, and later fallout
         </div>
       </div>
     </article>
@@ -475,12 +475,12 @@ export function ConsequenceCinema({
             <h2 id="consequence-cinema-heading" className="text-base font-bold text-white">Career story reel</h2>
           </div>
           <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-            Revisit what you believed, what you chose, and what the football world recorded later.
+            Revisit what you believed, what you chose, and what the football world made of it later.
           </p>
         </div>
         {stories.length > 0 && (
           <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-400">
-            {stories.length} preserved {stories.length === 1 ? "story" : "stories"}
+            {stories.length} archived {stories.length === 1 ? "story" : "stories"}
           </p>
         )}
       </div>
@@ -490,14 +490,14 @@ export function ConsequenceCinema({
           <FileSearch size={28} className="mx-auto text-zinc-600" aria-hidden="true" />
           <h3 className="mt-3 text-sm font-semibold text-zinc-200">No complete causal stories yet</h3>
           <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-400">
-            A reel appears after a recommendation review completes, a player you discovered moves, or a recorded decision finishes resolving. The game will not manufacture a story before the save contains an outcome.
+            A reel appears after a recommendation review completes, a player you discovered moves, or a hard decision fully plays out. This archive waits for a confirmed outcome before telling the story.
           </p>
         </div>
       ) : (
         <>
           <div className="border-b border-white/10 bg-black/15 px-3 py-3 sm:px-4">
             <div className="mb-2 flex items-center justify-between gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-              <span>Select a preserved story</span>
+              <span>Select an archived story</span>
               <span className="hidden items-center gap-1 sm:flex"><ChevronLeft size={11} aria-hidden="true" /> Arrow keys <ChevronRight size={11} aria-hidden="true" /></span>
             </div>
             <ul
@@ -548,7 +548,7 @@ export function ConsequenceCinema({
             <CareerCallback story={selectedStory} />
             {(selectedStory.playerId || selectedStory.reportId) && (
               <div className="mt-3 flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-zinc-400">Continue from the preserved story into the underlying game record.</p>
+                <p className="text-xs text-zinc-400">Continue from this story into the full case file.</p>
                 <div className="flex flex-col gap-2 min-[430px]:flex-row">
                   {selectedStory.playerId && (
                     <Button size="sm" variant="outline" onClick={() => onOpenPlayer(selectedStory.playerId!)} className="min-h-11">

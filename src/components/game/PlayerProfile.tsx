@@ -55,6 +55,12 @@ import {
 import { getWorldConditionModifiers } from "@/engine/world";
 import { assessYouthMobility } from "@/engine/youth";
 import { useShallow } from "zustand/react/shallow";
+import { getActiveToolBonuses } from "@/engine/tools/unlockables";
+import { buildObservationTrend } from "@/engine/scout/observationTrend";
+import {
+  buildPlayerMovementPresentation,
+  buildRetirementOutlookPresentation,
+} from "@/engine/transfers";
 
 // ---------------------------------------------------------------------------
 // Form display helpers (A1 — Form Visibility)
@@ -110,6 +116,19 @@ const DOMAIN_LABELS: Record<string, string> = {
 };
 
 const DOMAIN_ORDER = ["technical", "physical", "mental", "tactical"] as const;
+
+type PlayerProfileView = "decision" | "evidence" | "development" | "history";
+
+const PLAYER_PROFILE_VIEWS: Array<{
+  id: PlayerProfileView;
+  label: string;
+  description: string;
+}> = [
+  { id: "decision", label: "Decision", description: "The next call and the actions available now" },
+  { id: "evidence", label: "Evidence", description: "Observed ability, attributes, cues, and source intel" },
+  { id: "development", label: "Development", description: "Pathway, environment, status, and opportunity" },
+  { id: "history", label: "History", description: "Observations, form, availability, movement, and reports" },
+];
 
 function confidenceColor(confidence: number): string {
   if (confidence >= 0.7) return "bg-emerald-500";
@@ -459,7 +478,7 @@ function StatisticalProfileCard({ profile, anomalies }: StatProfileCardProps) {
         </CardHeader>
         <CardContent>
           <p className="text-xs text-zinc-500">
-            No statistical profile available. Generate one via the data analysis system.
+            No statistical profile is available yet. Commission an analyst review to add one to the dossier.
           </p>
         </CardContent>
       </Card>
@@ -561,7 +580,13 @@ function StatisticalProfileCard({ profile, anomalies }: StatProfileCardProps) {
 
 // ─── ObservationsSidebar ────────────────────────────────────────────────────
 
-function ObservationsSidebar({ observations }: { observations: Observation[] }) {
+function ObservationsSidebar({
+  observations,
+  trendHistoryDepth,
+}: {
+  observations: Observation[];
+  trendHistoryDepth?: number;
+}) {
   const [compareMode, setCompareMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -597,6 +622,12 @@ function ObservationsSidebar({ observations }: { observations: Observation[] }) 
     rows.sort((a, b) => a.attr.localeCompare(b.attr));
     return { obsA, obsB, rows };
   }, [selected, observations]);
+  const observationTrend = useMemo(
+    () => trendHistoryDepth
+      ? buildObservationTrend(observations, trendHistoryDepth)
+      : null,
+    [observations, trendHistoryDepth],
+  );
 
   return (
     <>
@@ -622,6 +653,22 @@ function ObservationsSidebar({ observations }: { observations: Observation[] }) 
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {observationTrend && observationTrend.seasons.length > 0 && (
+            <div className="mb-3 rounded-md border border-sky-800/50 bg-sky-950/20 p-3" data-testid="performance-tracker-trend">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-sky-300">Evidence trend</span>
+                <span className="text-xs capitalize text-zinc-300">{observationTrend.direction}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {observationTrend.seasons.map((season) => (
+                  <span key={season.season} className="rounded border border-zinc-700 bg-zinc-950/70 px-2 py-1 text-[10px] text-zinc-300">
+                    S{season.season}: {season.averagePerceivedValue.toFixed(1)} · {season.averageConfidence}% confidence
+                  </span>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-400">{observationTrend.explanation}</p>
+            </div>
+          )}
           {observations.length === 0 ? (
             <p className="text-xs text-zinc-500">None yet.</p>
           ) : (
@@ -1010,6 +1057,56 @@ function FormPerformanceCard({ player }: { player: import("@/engine/core/types")
   );
 }
 
+function RetirementOutlookCard(
+  { player, currentSeason }: {
+    player: import("@/engine/core/types").Player;
+    currentSeason: number;
+  },
+) {
+  const outlook = buildRetirementOutlookPresentation(player, currentSeason);
+  if (!outlook) return null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <CalendarPlus size={14} className="text-amber-400" />
+          Retirement Outlook
+          <Badge variant="outline" className={`ml-auto text-[10px] ${outlook.badgeClassName}`}>
+            {outlook.badgeLabel}
+          </Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-md border border-[#27272a] bg-[#141414] p-3">
+          <p className="text-xs font-semibold text-zinc-100">{outlook.headline}</p>
+          <p className="mt-1 text-[11px] text-zinc-400">{outlook.timingLabel}</p>
+          <p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-500">
+            {outlook.updatedLabel}
+          </p>
+        </div>
+        {outlook.reasons.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+              Recorded Signals
+            </p>
+            <div className="space-y-1.5">
+              {outlook.reasons.map((reason, index) => (
+                <div
+                  key={`${outlook.badgeLabel}-${index}`}
+                  className="rounded border border-[#27272a] bg-[#141414] px-2 py-1.5 text-[11px] text-zinc-300"
+                >
+                  {reason}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ---- Disciplinary Card Component ----
 
 function DisciplinaryCard({ record, gameState }: { record: DisciplinaryRecord | undefined; gameState: { currentSeason: number } }) {
@@ -1154,6 +1251,8 @@ export function PlayerProfile() {
   );
 
   const [networkIntel, setNetworkIntel] = useState<{ title: string; body: string; contactName?: string } | null>(null);
+  const [profileView, setProfileView] = useState<PlayerProfileView>("decision");
+  const [showUnknownAttributes, setShowUnknownAttributes] = useState(false);
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
   const [loanTargetClubId, setLoanTargetClubId] = useState("");
   const [loanRationale, setLoanRationale] = useState<
@@ -1185,6 +1284,9 @@ export function PlayerProfile() {
   const club = getClub(player.clubId);
   const league = club ? getLeague(club.leagueId) : undefined;
   const observations = getPlayerObservations(canonicalPlayerId);
+  const trendHistoryDepth = getActiveToolBonuses(
+    gameState.unlockedTools,
+  ).trendHistoryDepth;
   const reports = getPlayerReports(canonicalPlayerId);
   const latestAuthoredRole = [...reports]
     .sort((left, right) =>
@@ -1271,6 +1373,9 @@ export function PlayerProfile() {
   const movementHistory = (gameState.playerMovementHistory ?? [])
     .filter((event) => event.playerId === player.id)
     .sort((a, b) => b.season - a.season || b.week - a.week);
+  const loanDealsById = new Map(
+    [...(gameState.activeLoans ?? []), ...(gameState.loanHistory ?? [])].map((deal) => [deal.id, deal] as const),
+  );
 
   // Aggregate readings from all observations
   const allReadings: AttributeReading[] = observations.flatMap((o) => o.attributeReadings);
@@ -1295,6 +1400,9 @@ export function PlayerProfile() {
     if (!byDomain.has(domain)) byDomain.set(domain, []);
     byDomain.get(domain)!.push([attr, merged.get(attr)]);
   }
+  const unknownAttributeCount = Object.keys(ATTRIBUTE_DOMAINS).filter(
+    (attribute) => !merged.has(attribute),
+  ).length;
 
   // Aggregate ability readings using shared helper
   const allObs = Object.values(gameState.observations);
@@ -1365,6 +1473,14 @@ export function PlayerProfile() {
 
   // Specialization-specific data
   const specialization = gameState.scout.primarySpecialization;
+  const reportableEvidenceCount = Object.values(gameState.reflectionJournal ?? {})
+    .flatMap((entry) => entry.evidenceCards ?? [])
+    .filter((card) => relatedPlayerIds.has(card.playerId)).length;
+  const needsReportableYouthEvidence = specialization === "youth"
+    && reportableEvidenceCount === 0;
+  const canStartReport = !isRetired
+    && observations.length > 0
+    && !needsReportableYouthEvidence;
   const clubId = gameState.scout.currentClubId ?? "";
   const fitCacheKey = `${canonicalPlayerId}:${clubId}`;
   const systemFit = specialization === "firstTeam"
@@ -1479,6 +1595,8 @@ export function PlayerProfile() {
   const nextDecision =
     observations.length === 0
       ? "Get a live view before you commit."
+      : reports.length === 0 && needsReportableYouthEvidence
+      ? "Return with one question to answer."
       : reports.length === 0
       ? "Turn the read into a report."
       : foreignYouthCountry && !unsignedYouthRecord?.placed
@@ -1489,8 +1607,10 @@ export function PlayerProfile() {
   const nextDecisionReason =
     observations.length === 0
       ? "You still need first-hand evidence."
+      : reports.length === 0 && needsReportableYouthEvidence
+      ? "The existing view did not leave a classified cue you can defend. Plan a focused observation and save the moment that answers your question."
       : reports.length === 0
-      ? `${observations.length} observation${observations.length === 1 ? "" : "s"} are ready to be formalized.`
+      ? `${observations.length} observation${observations.length === 1 ? "" : "s"} and ${reportableEvidenceCount} saved cue${reportableEvidenceCount === 1 ? "" : "s"} are ready to become a report.`
       : unsignedYouthRecord && !unsignedYouthRecord.placed
       ? "Placement is the next professional call in this youth dossier."
       : unansweredAttributes.length > 0
@@ -1506,7 +1626,7 @@ export function PlayerProfile() {
 
   return (
     <GameLayout>
-      <div className="p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
+      <div className="p-4 pb-32 sm:p-6 sm:pb-8 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
         {/* Back button */}
         <button
           onClick={() => setScreen(specialization === "youth" ? "youthScouting" : "playerDatabase")}
@@ -1604,9 +1724,14 @@ export function PlayerProfile() {
             </div>
         </div>
           <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap xl:max-w-xl xl:justify-end [&>button]:min-h-11 [&>button]:w-full sm:[&>button]:w-auto">
-            <Button onClick={() => startReport(canonicalPlayerId)} disabled={isRetired || observations.length === 0}>
+            <Button
+              onClick={() => startReport(canonicalPlayerId)}
+              disabled={!canStartReport}
+              title={needsReportableYouthEvidence ? "Complete a focused observation and save at least one classified cue first." : undefined}
+              className="fixed inset-x-3 bottom-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] z-40 min-h-12 !w-auto shadow-2xl shadow-black/50 sm:static sm:z-auto sm:min-h-10 sm:!w-auto sm:shadow-none"
+            >
               <FileText size={14} className="mr-2" />
-              Write Report
+              {needsReportableYouthEvidence ? "Build report evidence first" : "Write Report"}
             </Button>
             {club && (
               <Button
@@ -1754,6 +1879,45 @@ export function PlayerProfile() {
           </div>
         </div>
 
+        <nav
+          aria-label="Player profile views"
+          className="sticky top-2 z-20 mb-5 rounded-2xl border border-white/10 bg-[#0d1216]/95 p-2 shadow-xl shadow-black/30 backdrop-blur"
+        >
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-4">
+            {PLAYER_PROFILE_VIEWS.map((view) => {
+              const selected = profileView === view.id;
+              return (
+                <button
+                  key={view.id}
+                  type="button"
+                  aria-label={view.label}
+                  aria-pressed={selected}
+                  aria-describedby={`player-profile-view-${view.id}-description`}
+                  onClick={() => setProfileView(view.id)}
+                  className={`min-h-11 rounded-xl px-3 py-2 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+                    selected
+                      ? "bg-emerald-400/12 text-emerald-100 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]"
+                      : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">{view.label}</span>
+                  <span
+                    id={`player-profile-view-${view.id}-description`}
+                    className="sr-only"
+                  >
+                    {view.description}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <section
+          aria-label="Player decision"
+          hidden={profileView !== "decision"}
+        >
+
         <Card className="mb-5 overflow-hidden border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.1),transparent_42%),rgba(17,22,28,0.96)]">
           <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
             <div>
@@ -1775,7 +1939,7 @@ export function PlayerProfile() {
             <Button
               className="min-h-11 w-full lg:w-auto"
               onClick={() => {
-                if (observations.length > 0 && reports.length === 0) {
+                if (canStartReport && reports.length === 0) {
                   startReport(canonicalPlayerId);
                   return;
                 }
@@ -1784,6 +1948,8 @@ export function PlayerProfile() {
             >
               {observations.length === 0
                 ? "Plan first observation"
+                : needsReportableYouthEvidence
+                  ? "Plan focused observation"
                 : reports.length === 0
                   ? "Write the report"
                   : "Plan next action"}
@@ -1944,6 +2110,12 @@ export function PlayerProfile() {
           </section>
         )}
 
+        </section>
+
+        <section
+          aria-label="Player development"
+          hidden={profileView !== "development"}
+        >
         {/* Overview */}
         <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Card>
@@ -2194,7 +2366,7 @@ export function PlayerProfile() {
                     Pitch Filed Report
                   </Button>
                 )}
-                {!unsignedYouthRecord.placed && !latestReport && observations.length > 0 && (
+                {!unsignedYouthRecord.placed && !latestReport && canStartReport && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -2205,14 +2377,14 @@ export function PlayerProfile() {
                     File Report First
                   </Button>
                 )}
-                {!unsignedYouthRecord.placed && observations.length === 0 && (
+                {!unsignedYouthRecord.placed && !latestReport && !canStartReport && (
                   <Button
                     variant="outline"
                     size="sm"
                     className="mt-4 min-h-11"
                     onClick={() => setScreen("calendar")}
                   >
-                    Plan First Observation
+                    {observations.length === 0 ? "Plan First Observation" : "Plan Focused Observation"}
                   </Button>
                 )}
               </CardContent>
@@ -2220,7 +2392,10 @@ export function PlayerProfile() {
           </div>
         )}
 
+        </section>
+
         {/* Ability Assessment */}
+        <div hidden={profileView !== "evidence"}>
         {aggregatedAbility && (
           <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card>
@@ -2273,14 +2448,33 @@ export function PlayerProfile() {
             </Card>
           </div>
         )}
+        </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <section
+          aria-label={profileView === "history" ? "Player history" : "Player evidence"}
+          hidden={profileView !== "evidence" && profileView !== "history"}
+          className={profileView === "evidence" ? "grid grid-cols-1 gap-6 lg:grid-cols-3" : ""}
+        >
           {/* Attribute table */}
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-zinc-500">
-              Scouting Data
-              <HelpTooltip text="Confidence shows how certain you are about this player's attributes. Higher confidence means more accurate readings. Observe in multiple contexts to increase confidence." />
-            </h2>
+          <div className={profileView === "evidence" ? "space-y-4 lg:col-span-2" : "hidden"}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider text-zinc-500">
+                Scouting Data
+                <HelpTooltip text="Confidence shows how certain you are about this player's attributes. Higher confidence means more accurate readings. Observe in multiple contexts to increase confidence." />
+              </h2>
+              {unknownAttributeCount > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={showUnknownAttributes}
+                  onClick={() => setShowUnknownAttributes((current) => !current)}
+                  className="min-h-10 rounded-lg border border-white/10 px-3 text-xs font-medium text-zinc-300 transition hover:border-white/20 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                >
+                  {showUnknownAttributes
+                    ? "Hide unobserved attributes"
+                    : `Show ${unknownAttributeCount} unobserved attribute${unknownAttributeCount === 1 ? "" : "s"}`}
+                </button>
+              )}
+            </div>
             {DOMAIN_ORDER.map((domain) => {
               const domainAttrs = byDomain.get(domain) ?? [];
               if (domainAttrs.length === 0) return null;
@@ -2293,7 +2487,9 @@ export function PlayerProfile() {
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
                     <div className="space-y-2">
-                      {domainAttrs.map(([attr, reading]) => (
+                      {domainAttrs
+                        .filter(([, reading]) => showUnknownAttributes || Boolean(reading))
+                        .map(([attr, reading]) => (
                         <div key={attr} className="flex items-center gap-3">
                           <Tooltip content="Your estimated reading of this attribute. Accuracy depends on observations, lens focus, and scout skills." side="right">
                             <span className="w-32 shrink-0 text-xs capitalize text-zinc-400">
@@ -2526,7 +2722,7 @@ export function PlayerProfile() {
                 unknowns={unansweredAttributes.slice(0, 6).map((attribute) =>
                   `${attribute} has not been observed with enough clarity.`,
                 )}
-                onStartReport={() => startReport(canonicalPlayerId)}
+                onStartReport={canStartReport ? () => startReport(canonicalPlayerId) : undefined}
               />
             </div>
 
@@ -2753,9 +2949,14 @@ export function PlayerProfile() {
           </div>
 
           {/* Sidebar: observations & reports */}
-          <div className="space-y-4">
+          <div className={profileView === "history" ? "grid gap-4 md:grid-cols-2 xl:grid-cols-3" : "space-y-4"}>
+            {profileView === "evidence" && (
+              <>
             {/* Observation history */}
-            <ObservationsSidebar observations={observations} />
+            <ObservationsSidebar
+              observations={observations}
+              trendHistoryDepth={trendHistoryDepth}
+            />
 
             {/* First-team: System Fit */}
             {specialization === "firstTeam" && (
@@ -2769,12 +2970,21 @@ export function PlayerProfile() {
                 anomalies={playerAnomalies}
               />
             )}
+              </>
+            )}
 
+            {profileView === "history" && (
+              <>
             {/* Injury Status & History */}
             <InjuryStatusCard player={player} />
 
             {/* Form & Performance */}
             <FormPerformanceCard player={player} />
+
+            <RetirementOutlookCard
+              player={player}
+              currentSeason={gameState.currentSeason}
+            />
 
             {/* Discipline */}
             <DisciplinaryCard
@@ -2789,37 +2999,36 @@ export function PlayerProfile() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {movementHistory.slice(0, 12).map((event) => {
-                    const labels: Record<string, string> = {
-                      youthSigning: "Signed from youth football",
-                      permanentTransfer: "Permanent transfer",
-                      loanStart: "Loan started",
-                      loanReturn: "Returned from loan",
-                      loanRecall: "Recalled from loan",
-                      loanBuyOption: "Loan made permanent",
-                      release: "Released",
-                      freeAgentSigning: "Signed as a free agent",
-                      contractRenewal: "Contract renewed",
-                      retirement: "Retired",
-                      footballExit: "Left professional football",
-                    };
                     const fromName = event.fromClubId ? gameState.clubs[event.fromClubId]?.name : undefined;
                     const toName = event.toClubId ? gameState.clubs[event.toClubId]?.name : undefined;
+                    const presentation = buildPlayerMovementPresentation({
+                      movement: event,
+                      loanDeal: event.loanDealId ? loanDealsById.get(event.loanDealId) : undefined,
+                      resolveClubName: (clubId) => clubId ? gameState.clubs[clubId]?.name : undefined,
+                    });
                     const route = fromName && toName
                       ? `${fromName} → ${toName}`
-                      : toName ?? fromName;
+                      : undefined;
                     return (
                       <div key={event.id} className="rounded-md border border-[#27272a] bg-[#111] px-3 py-2">
                         <div className="flex items-center justify-between gap-3">
-                          <p className="text-xs font-medium text-zinc-200">{labels[event.type] ?? event.type}</p>
+                          <p className="text-xs font-medium text-zinc-200">{presentation.title}</p>
                           <span className="text-[10px] text-zinc-500">S{event.season} W{event.week}</span>
                         </div>
-                        {(route || event.fee !== undefined) && (
-                          <p className="mt-1 text-[11px] text-zinc-400">
+                        <p className="mt-1 text-[11px] text-zinc-400">{presentation.summary}</p>
+                        {presentation.details.map((detail, index) => (
+                          <p
+                            key={`${event.id}-detail-${index}`}
+                            className="mt-1 text-[10px] text-zinc-500"
+                          >
+                            {detail}
+                          </p>
+                        ))}{/*
                             {route}{route && event.fee !== undefined ? " · " : ""}
                             {event.fee !== undefined ? formatMarketValue(event.fee) : ""}
                           </p>
                         )}
-                        {event.reason && <p className="mt-1 text-[10px] text-zinc-500">{event.reason}</p>}
+                        */}
                       </div>
                     );
                   })}
@@ -2872,8 +3081,10 @@ export function PlayerProfile() {
                 )}
               </CardContent>
             </Card>
+              </>
+            )}
           </div>
-        </div>
+        </section>
       </div>
       {loanDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setLoanDialogOpen(false)}>

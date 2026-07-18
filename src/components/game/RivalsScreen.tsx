@@ -43,9 +43,9 @@ const THREAT_STYLES = {
 };
 
 const THREAT_LABELS = {
-  low: "Low Threat",
-  medium: "Medium Threat",
-  high: "High Threat",
+  low: "Low pressure",
+  medium: "Active pressure",
+  high: "Immediate pressure",
 };
 
 const PERSONALITY_LABELS: Record<string, string> = {
@@ -668,7 +668,8 @@ export function RivalsScreen() {
                 Openings you can exploit
               </h2>
               <p className="mt-1 text-sm text-zinc-400">
-                These windows are created by rival moves. Their outcomes are fixed when they appear, so reloading cannot reroll the result.
+                These windows exist because a competitor has overreached, moved too early, or left a relationship exposed.
+                Acting can win ground, but it also makes your intentions visible.
               </p>
             </div>
             <div className="grid gap-3 lg:grid-cols-2">
@@ -695,7 +696,7 @@ export function RivalsScreen() {
                   Recruitment organizations
                 </h2>
                 <p className="mt-1 text-sm text-zinc-400">
-                  Each organization pursues a seed-locked agenda, accumulates influence, and changes weekly competitive pressure.
+                  Each organization has a long-term agenda, a distinct network, and its own way of applying pressure.
                 </p>
               </div>
               {rivalOrganizationState.currentPressure.sourceOrganizationId && (
@@ -735,7 +736,7 @@ export function RivalsScreen() {
           <div className="rounded-lg border border-red-500/30 bg-red-500/5 px-4 py-3">
             <div className="flex items-center gap-2 mb-1">
               <Swords size={16} className="text-red-400" aria-hidden="true" />
-              <span className="text-sm font-semibold text-red-400">Your Nemesis</span>
+              <span className="text-sm font-semibold text-red-400">Closest rival</span>
             </div>
             <div className="flex items-center justify-between">
               <div>

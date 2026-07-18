@@ -95,7 +95,7 @@ export const insightPointsArticles: WikiArticle[] = [
     summary:
       "Complete reference for all 12 insight actions: 4 universal and 8 specialization-locked (2 per specialization).",
     searchText:
-      "There are 12 insight actions divided into universal and specialization-locked categories. Universal actions available to all scouts: Clarity of Vision costs 25 IP and dramatically narrows the confidence interval on your next set of observations, giving you a much clearer read on a player's true attributes. Hidden Nature costs 25 IP and reveals one hidden attribute (Injury Proneness, Consistency, Big Game Temperament, or Professionalism) for a player you have observed at least once. The Verdict costs 20 IP and provides an immediate quality assessment of your most recent report before submission, letting you know if it is worth submitting or needs more observation. Second Look costs 20 IP and lets you re-observe a player you have already watched, resetting your observation with fresh eyes and potentially correcting earlier misreadings. Youth Scout specialization actions: Diamond in the Rough costs 30 IP and flags a youth player in your current region who has exceptional hidden potential that would otherwise be easy to miss. Generational Whisper costs 25 IP and reveals the full potential ability range of a youth player, removing uncertainty about their ceiling. First Team specialization actions: Perfect Fit costs 25 IP and analyses how well a player would integrate into a specific club's tactical system, considering personality, playing style, and team needs. Pressure Test costs 25 IP and reveals how a player performs under high-stakes conditions by simulating a big match scenario. Regional Expert specialization actions: Network Pulse costs 25 IP and taps your regional contacts for reliable insider information about a player's contract situation, injury history, or transfer willingness. Territory Mastery costs 30 IP and grants a temporary large boost to your familiarity with a specific country, improving all observations and reducing foreign scouting penalties for several weeks. Data Scout specialization actions: Algorithmic Epiphany costs 25 IP and runs an advanced statistical model over a player's data to identify hidden patterns in their performance that observations alone would miss. Market Blindspot costs 30 IP and reveals undervalued players in the transfer market whose statistical profiles suggest they are better than their current market value indicates.",
+      "Insight actions sharpen attention, recover overlooked visible leads, improve report craft, or create bounded follow-up signals. They never reveal hidden ratings or confirm a player's future. Youth actions surface a player or passage worth testing again; universal actions improve the quality and context of evidence already available.",
     content: (
       <SectionBlock>
         <Para>
@@ -115,7 +115,7 @@ export const insightPointsArticles: WikiArticle[] = [
             [
               "Hidden Nature",
               "25 IP",
-              "Reveals one hidden attribute for an observed player",
+              "Creates a bounded character lead and a follow-up question",
             ],
             [
               "The Verdict",
@@ -136,12 +136,12 @@ export const insightPointsArticles: WikiArticle[] = [
             [
               "Diamond in the Rough",
               "30 IP",
-              "Flags a hidden-gem youth player in your current region",
+              "Surfaces an overlooked visible youth signal for follow-up",
             ],
             [
               "Generational Whisper",
               "25 IP",
-              "Reveals the full potential ability range of a youth player",
+              "Produces a fallible upside signal and a specific next test",
             ],
           ]}
         />

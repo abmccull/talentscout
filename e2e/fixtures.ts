@@ -110,7 +110,13 @@ export class GamePage {
           name: /^(Incredible!|Continue|Close week summary|Continue to promotion|Continue to milestone)$/,
         });
         if (!(await dismissButton.isVisible({ timeout: 250 }).catch(() => false))) continue;
-        await dismissButton.click();
+        // A milestone acknowledgement can replace the entire dialog on the
+        // same render turn. Bound the click so Playwright cannot keep retrying
+        // a control that already dispatched and detached.
+        const clicked = await dismissButton.click({ timeout: 1_500 })
+          .then(() => true)
+          .catch(() => false);
+        if (!clicked) continue;
         await this.page.waitForTimeout(150);
         dismissed = true;
         break;
@@ -194,7 +200,7 @@ export class GamePage {
       .locator('input#scout-last-name, input[placeholder="Morgan"]')
       .fill(lastName);
     if (youthEarlyAccess) {
-      const deskOpening = this.page.getByRole("radio", { name: /Start at the Desk/i });
+      const deskOpening = this.page.getByRole("radio", { name: /Plan the week yourself/i });
       if (await deskOpening.isVisible({ timeout: 1_000 }).catch(() => false)) {
         await deskOpening.evaluate((input: HTMLInputElement) => input.click());
       }
@@ -389,24 +395,166 @@ export class GamePage {
 
   async openFirstYouthPlayerProfile(): Promise<void> {
     await this.navigateTo("youthScouting");
-    await this.page.locator('button[aria-label^="View profile for "]').first().click();
+    const reportReadyPlayer = await this.page.evaluate(() => {
+      const state = (window as any).__GAME_STORE__.getState().gameState;
+      const evidencePlayerIds = new Set(
+        Object.values(state.reflectionJournal ?? {})
+          .flatMap((entry: any) => entry.evidenceCards ?? [])
+          .map((card: any) => card.playerId),
+      );
+      const candidates = [
+        ...Object.values(state.unsignedYouth ?? {}).map((record: any) => record.player),
+        ...Object.values(state.players ?? {}),
+      ] as any[];
+      const player = candidates.find((candidate) => evidencePlayerIds.has(candidate?.id));
+      return player ? {
+        id: player.id,
+        name: `${player.firstName} ${player.lastName}`,
+      } : null;
+    });
+    const profileButton = reportReadyPlayer
+      ? this.page.getByRole("button", {
+          name: `View profile for ${reportReadyPlayer.name}`,
+          exact: true,
+        })
+      : this.page.locator('button[aria-label^="View profile for "]').first();
+    if (await profileButton.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await profileButton.click({ timeout: 3_000 });
+    } else if (reportReadyPlayer) {
+      // A stale filter can hide an otherwise report-ready prospect. Keep this
+      // fallback bounded and preserve the selected evidence owner.
+      await this.page.evaluate((playerId) => {
+        const store = (window as any).__GAME_STORE__;
+        store.getState().selectPlayer(playerId);
+        store.getState().setScreen("playerProfile");
+      }, reportReadyPlayer.id);
+    } else {
+      throw new Error("No Youth prospect profile is available");
+    }
     await this.waitForScreen("playerProfile");
   }
 
   async submitCurrentReportViaUI(
     conviction: "note" | "recommend" | "strongRecommend" | "tablePound" = "recommend",
+    options: { submit?: boolean } = {},
   ): Promise<void> {
+    const shouldSubmit = options.submit ?? true;
     const convictionLabels: Record<typeof conviction, string> = {
       note: "Note",
       recommend: "Recommend",
       strongRecommend: "Strong Recommend",
       tablePound: "Table Pound",
     };
+    await this.page.getByRole("heading", { name: "Write Scouting Report" }).waitFor({
+      state: "visible",
+      timeout: 15_000,
+    });
+    const fileInitialAssessment = this.page.getByRole("button", { name: /^File initial assessment$/ });
+    if (await fileInitialAssessment.isVisible({ timeout: 500 }).catch(() => false)) {
+      await this.page.getByRole("group", { name: "Saved evidence" }).getByRole("radio").first().locator("..").click();
+      await this.page.getByRole("group", { name: "What it suggests" }).getByRole("radio").first().locator("..").click();
+      await this.page.getByRole("group", { name: "What remains untested" }).getByRole("radio").first().locator("..").click();
+      await this.page.getByRole("group", { name: "Next test" }).getByRole("radio").first().locator("..").click();
+      const recommendationName = conviction === "note"
+        ? /^Monitor\b/
+        : conviction === "recommend"
+          ? /^Invite for trial\b/i
+          : /^Offer academy place\b/i;
+      await this.page.getByRole("group", { name: "Recommended action" }).getByRole("radio", { name: recommendationName }).locator("..").click();
+      const confidenceName = conviction === "note" ? /^Tentative\b/i : conviction === "recommend" ? /^Working\b/i : /^Supported\b/i;
+      await this.page.getByRole("group", { name: "Confidence" }).getByRole("radio", { name: confidenceName }).locator("..").click();
+      if (shouldSubmit) await fileInitialAssessment.click();
+      return;
+    }
 
-    await this.page
-      .getByRole("radio", { name: new RegExp(`^${convictionLabels[conviction]}\\b`) })
-      .click();
-    await this.page.getByRole("button", { name: /^Submit Report$/ }).click();
+    const professionalReport = this.page.getByRole("heading", { name: "Answer a real club need" });
+    if (await professionalReport.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await expect(this.page.getByLabel("Recruitment brief")).not.toHaveValue("");
+      await this.page.waitForTimeout(100);
+      const buildCaseStep = this.page.getByRole("button", { name: /^Build the case\./ });
+      if (await buildCaseStep.isVisible({ timeout: 500 }).catch(() => false)) {
+        await buildCaseStep.click();
+      }
+
+      const estimatedWeeklyWage = this.page.getByLabel("Estimated weekly wage");
+      if (Number(await estimatedWeeklyWage.inputValue()) <= 0) {
+        await estimatedWeeklyWage.fill("500");
+      }
+
+      const recommendationName = conviction === "note"
+        ? /^Monitor\b/
+        : conviction === "recommend"
+          ? /^Invite for trial\b/i
+          : /^Offer academy place\b/i;
+      const recommendedAction = this.page
+        .getByRole("radio", { name: recommendationName });
+      if (!await recommendedAction.isChecked()) {
+        await recommendedAction.click();
+      }
+
+      const categoryNames = [
+        "Development potential",
+        "Tactical role fit",
+        "Character and adaptation risk",
+      ];
+      for (const categoryName of categoryNames) {
+        const category = this.page.getByRole("group", { name: categoryName, exact: true });
+        const makeClaim = category.getByRole("radio", { name: "Make a claim", exact: true });
+        const canAssess = await makeClaim.isEnabled().catch(() => false);
+        if (canAssess) {
+          await makeClaim.locator("..").click();
+          await expect(makeClaim).toBeChecked();
+          await category.getByLabel("Supporting cue").selectOption({ index: 1 });
+          const interpretation = category.getByRole("group", { name: "Interpretation" }).getByRole("radio").first();
+          await interpretation.locator("..").click();
+          await expect(interpretation).toBeChecked();
+        } else {
+          const leaveUnassessed = category.getByRole("radio", { name: "Leave unassessed", exact: true });
+          await leaveUnassessed.locator("..").click();
+          await expect(leaveUnassessed).toBeChecked();
+        }
+        const unknown = category.getByRole("group", { name: "What remains unknown" }).getByRole("radio").first();
+        await unknown.locator("..").click();
+        // Completing the final category intentionally advances to Risk and
+        // unmounts the case controls. Assert while the workflow remains on
+        // this step, but do not wait on a control after it has advanced.
+        if (await unknown.isVisible({ timeout: 100 }).catch(() => false)) {
+          await expect(unknown).toBeChecked();
+        }
+      }
+
+      const riskStep = this.page.getByRole("button", { name: /^Risk\./ });
+      await expect(riskStep).toBeEnabled();
+      await riskStep.click();
+      const noSpecificRisk = this.page.getByRole("checkbox", { name: "Make no specific risk claim" });
+      await noSpecificRisk.locator("..").click();
+
+      const finalReviewStep = this.page.getByRole("button", { name: /^Final review\./ });
+      await expect(finalReviewStep).toBeEnabled();
+      await finalReviewStep.click();
+      const convictionRadio = this.page.getByRole("radio", {
+        name: new RegExp(`^${convictionLabels[conviction]}\\b`),
+      });
+      if (!await convictionRadio.isChecked()) {
+        await convictionRadio.click();
+      }
+      await expect(
+        this.page.getByRole("button", { name: /^Submit Report$/ }),
+        "Structured report should be valid at final review",
+      ).toBeEnabled();
+      if (shouldSubmit) {
+        await this.page.getByRole("button", { name: /^Submit Report$/ }).click();
+      }
+      return;
+    }
+
+    const convictionRadio = this.page.getByRole("radio", {
+      name: new RegExp(`^${convictionLabels[conviction]}\\b`),
+    });
+    if (!await convictionRadio.isChecked()) {
+      await convictionRadio.click();
+    }
+    if (shouldSubmit) await this.page.getByRole("button", { name: /^Submit Report$/ }).click();
   }
 
   async completeObservationViaUI(): Promise<void> {
@@ -442,6 +590,13 @@ export class GamePage {
       // phase transition. Keep gameplay assertions independent from tutorial
       // pointer interception at every interaction boundary.
       await dismissTutorials(this.page);
+      const halftimeApproach = this.page.getByRole("button", { name: /^Confirm the first read\b/ });
+      if (
+        await halftimeApproach.isVisible({ timeout: 300 }).catch(() => false)
+        && await halftimeApproach.isEnabled()
+      ) {
+        await halftimeApproach.click();
+      }
       const strategicChoice = this.page
         .getByRole("group", { name: /^(Strategic choices|Response options|Data points)$/ })
         .locator("button:not(:disabled)")
@@ -474,6 +629,12 @@ export class GamePage {
     }
 
     await dismissTutorials(this.page);
+    const evidenceClassification = this.page
+      .getByRole("group", { name: "What did this passage show?" })
+      .first();
+    if (await evidenceClassification.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await evidenceClassification.getByRole("radio").first().check();
+    }
     const completeReflection = this.page.getByRole("button", {
       name: /^Complete (Reflection|Session)$/,
     });

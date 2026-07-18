@@ -29,6 +29,11 @@ import {
   consumeInsightQueryAccuracyEffect,
   getPendingInsightQueryAccuracyEffect,
 } from "@/engine/insight/effects";
+import { getActiveToolBonuses } from "@/engine/tools/unlockables";
+import {
+  checkMasteryPerkUnlocks,
+  getMasteryPerkModifiers,
+} from "@/engine/specializations/masteryPerks";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -83,6 +88,10 @@ export function processWeeklyDataObservationActivities(
   const infrastructureDataQualityBonus = calculateInfrastructureEffects(
     stateWithScheduleApplied.scoutingInfrastructure,
   ).dataQualityBonus;
+  const toolBonuses = getActiveToolBonuses(stateWithScheduleApplied.unlockedTools ?? []);
+  const masteryBonuses = getMasteryPerkModifiers(
+    checkMasteryPerkUnlocks(currentScout),
+  );
 
   // --- Database Query: generate statistical profiles for league players ---
   if (weekResult.databaseQueriesExecuted > 0) {
@@ -95,7 +104,8 @@ export function processWeeklyDataObservationActivities(
       stateWithScheduleApplied.scout.insightState,
     );
     let queryProfileMod = choiceProfileMod("databaseQuery") + (dbDataAccBonus > 0 ? Math.round(dbDataAccBonus * 5) : 0);
-    const queryAnomalyMod = choiceAnomalyMod("databaseQuery");
+    const queryAnomalyMod = choiceAnomalyMod("databaseQuery")
+      + (masteryBonuses.canBreakPatterns ? 1 : 0);
     const leagueIds = Object.keys(stateWithScheduleApplied.leagues);
     if (leagueIds.length > 0) {
       const targetLeagueId = pendingQueryInsight?.leagueId
@@ -128,7 +138,8 @@ export function processWeeklyDataObservationActivities(
           {
             accuracyBonus:
               (pendingQueryInsight?.accuracyBonus ?? 0)
-              + infrastructureDataQualityBonus,
+              + infrastructureDataQualityBonus
+              + (toolBonuses.accuracyBonus ?? 0),
           },
         );
         let effectiveProfiles = [...queryResult.profiles];
@@ -174,6 +185,7 @@ export function processWeeklyDataObservationActivities(
                 0.5
                   + dataPresence.effects.dataConfidenceBonus
                   + dbDataAccBonus
+                  + (toolBonuses.accuracyBonus ?? 0)
                   + (pendingQueryInsight?.accuracyBonus ?? 0) * 0.5,
               ),
               accessTier: dataPresence.accessTier,

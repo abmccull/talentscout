@@ -1,4 +1,5 @@
 import { test, expect } from "../fixtures";
+import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
 test.describe("Academy placement case", () => {
   test.setTimeout(180_000);
@@ -73,6 +74,7 @@ test.describe("Academy placement case", () => {
       store.getState().setScreen("playerProfile");
       return { playerId: player.id, briefId: brief.id, clubId: brief.clubId };
     });
+    await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
 
     await gamePage.waitForScreen("playerProfile");
     await expect(gamePage.page.getByRole("heading", { name: "Brief fit and opportunity cost" })).toBeVisible();

@@ -35,7 +35,7 @@ export function WikiArticlePage({ slug, onNavigate }: WikiArticlePageProps) {
           onClick={() => onNavigate({ mode: "index" })}
           className="transition hover:text-zinc-300"
         >
-          Wiki
+          Handbook
         </button>
         <ChevronRight size={10} aria-hidden="true" />
         {category && (

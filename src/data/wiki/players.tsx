@@ -319,7 +319,7 @@ export const playersArticles: WikiArticle[] = [
     category: "players",
     order: 3,
     summary:
-      "Behavioral traits describe what players do on the pitch. They are generated from attributes and discovered through match observation events.",
+      "Behavioral traits describe what players repeatedly do on the pitch. Different match situations and follow-up observations reveal how dependable those patterns are.",
     searchText:
       "Behavioral traits are distinct from personality traits. They describe what a player does on the pitch: places shots, tries tricks, cuts inside, runs with ball, moves into channels, shoots from distance, tries killer balls, stays back, dives straight in, marks player tightly, dictates tempo, plays short passes, switches play to flank, plays one-twos, holds up ball, brings others into play, arrives late in box, plays with back to goal, drifts wide, drops deep. There are 20 behavioral traits total. Each player receives 2 to 4 traits at generation based on their attributes meeting minimum thresholds. For example places shots requires finishing and composure averaging at least 12. Traits have position biases giving 1.5x weight for favoured positions. Some traits conflict and cannot coexist: stays back conflicts with arrives late in box, cuts inside conflicts with drifts wide. Traits are discovered during match observation when matching events occur. The base reveal chance is 12% per matching event. Scouts with tactical understanding 12 or higher get an extra 5% chance. Trait-event affinities determine which match events can reveal which traits. Goals and shots can reveal places shots. Dribbles can reveal tries tricks and cuts inside.",
     content: (

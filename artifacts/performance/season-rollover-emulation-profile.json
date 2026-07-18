@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16T19:42:31.613Z",
+  "generatedAt": "2026-07-18T05:55:29.782Z",
   "evidenceClass": "chromium-emulation-season-boundary-stress-not-physical-low-end-hardware",
   "profile": "coherent-warmed-season-rollover",
   "emulation": {
@@ -18,33 +18,33 @@
   },
   "budgetMs": 15000,
   "measured": {
-    "elapsedMs": 5103,
+    "elapsedMs": 3281.6,
     "weeklyWorker": {
-      "computeMs": 1778.699999988079,
-      "changedFieldCount": 46,
-      "changedEntryCount": 10408,
-      "totalFieldCount": 98,
-      "responseBytes": 6775734,
+      "computeMs": 942.0999999940395,
+      "changedFieldCount": 47,
+      "changedEntryCount": 10385,
+      "totalFieldCount": 101,
+      "responseBytes": 9939876,
       "phaseTimings": [
         {
           "phase": "activity-resolution",
-          "elapsedMs": 88.09999999403954
+          "elapsedMs": 57.1000000089407
         },
         {
           "phase": "world-systems",
-          "elapsedMs": 39.30000001192093
+          "elapsedMs": 23.299999997019768
         },
         {
           "phase": "core-world-tick",
-          "elapsedMs": 1405.300000011921
+          "elapsedMs": 771.2000000029802
         },
         {
           "phase": "post-tick-accountability",
-          "elapsedMs": 1
+          "elapsedMs": 0.7000000029802322
         },
         {
           "phase": "season-rollover",
-          "elapsedMs": 228.59999999403954
+          "elapsedMs": 88.29999999701977
         },
         {
           "phase": "finalize",
@@ -55,46 +55,46 @@
         {
           "field": "players",
           "strategy": "record-delta",
-          "bytes": 2234880
+          "bytes": 3206532
         },
         {
           "field": "retiredPlayers",
           "strategy": "replace",
-          "bytes": 1686240
-        },
-        {
-          "field": "worldHistory",
-          "strategy": "replace",
-          "bytes": 889147
-        },
-        {
-          "field": "fixtures",
-          "strategy": "replace",
-          "bytes": 843416
-        },
-        {
-          "field": "clubs",
-          "strategy": "record-delta",
-          "bytes": 367234
-        },
-        {
-          "field": "playerMovementHistory",
-          "strategy": "replace",
-          "bytes": 314086
+          "bytes": 2484277
         },
         {
           "field": "unsignedYouth",
           "strategy": "record-delta",
-          "bytes": 204489
+          "bytes": 1303075
+        },
+        {
+          "field": "worldHistory",
+          "strategy": "replace",
+          "bytes": 979534
+        },
+        {
+          "field": "fixtures",
+          "strategy": "replace",
+          "bytes": 850236
+        },
+        {
+          "field": "playerMovementHistory",
+          "strategy": "replace",
+          "bytes": 395865
+        },
+        {
+          "field": "clubs",
+          "strategy": "record-delta",
+          "bytes": 392481
         },
         {
           "field": "inbox",
           "strategy": "replace",
-          "bytes": 75330
+          "bytes": 86275
         }
       ],
       "route": "worker",
-      "roundTripMs": 4130.5999999940395
+      "roundTripMs": 2756.5999999940395
     }
   },
   "simulationContext": {
@@ -102,7 +102,7 @@
       "season": 1,
       "week": 46,
       "seasonLength": 46,
-      "fixtureCount": 3490
+      "fixtureCount": 3543
     },
     "after": {
       "season": 2,

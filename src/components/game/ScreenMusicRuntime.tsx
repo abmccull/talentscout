@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { useScreenMusic } from "@/lib/audio/useScreenMusic";
+import { useAudio } from "@/lib/audio/useAudio";
 import { classifyNarrativeAudioMoment } from "@/lib/audio/audioDirector";
 import { selectNextCareerMoment } from "@/engine/career/careerMoments";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -11,6 +13,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
  * remain lazy inside AudioEngine and screen changes still update ambience.
  */
 export function ScreenMusicRuntime() {
+  const { playSFX } = useAudio();
   const cinematicMoments = useSettingsStore((state) => state.cinematicMoments);
   const currentScreen = useGameStore((state) => state.currentScreen);
   const matchWeather = useGameStore((state) => {
@@ -41,5 +44,24 @@ export function ScreenMusicRuntime() {
     careerMomentCue,
     isTraveling,
   });
+
+  useEffect(() => {
+    function handleInterfaceClick(event: MouseEvent) {
+      if (event.defaultPrevented || !(event.target instanceof Element)) return;
+
+      const control = event.target.closest<HTMLElement>(
+        'button, a[href], summary, select, [role="button"], input[type="checkbox"], input[type="radio"]',
+      );
+      if (!control) return;
+      if (control.matches(":disabled") || control.getAttribute("aria-disabled") === "true") return;
+      if (control.closest('[data-audio-feedback="off"]')) return;
+
+      playSFX("click");
+    }
+
+    document.addEventListener("click", handleInterfaceClick);
+    return () => document.removeEventListener("click", handleInterfaceClick);
+  }, [playSFX]);
+
   return null;
 }

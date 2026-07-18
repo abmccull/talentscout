@@ -36,7 +36,10 @@ export function LegacyTab({ awards, finances, currentSeason }: LegacyTabProps) {
     finances.placementFeeRevenue;
 
   const totalReports =
-    finances.employees.reduce((sum, e) => sum + e.reportsGenerated.length, 0);
+    finances.employees.reduce(
+      (sum, employee) => sum + (employee.workProductsGenerated ?? employee.reportsGenerated ?? []).length,
+      0,
+    );
 
   const peakEmployeeCount = finances.employees.length; // approximate — would need historical tracking
 

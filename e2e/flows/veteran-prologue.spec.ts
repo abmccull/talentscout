@@ -9,16 +9,16 @@ test.describe("veteran career prologue", () => {
     gamePage,
   }) => {
     await gamePage.goto();
-    await page.getByRole("button", { name: /Start Youth Career|New Game/ }).first().click();
+    await page.getByRole("button", { name: /Start Youth Scout Career|New Game/ }).first().click();
 
-    await expect(page.getByRole("radio", { name: /Dynamic Prologue/i })).toBeChecked();
-    await expect(page.getByRole("radio", { name: /Start at the Desk/i })).toBeVisible();
-    await expect(page.getByRole("radio", { name: /Replay Tutorial/i })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Follow a fresh lead/i })).toBeChecked();
+    await expect(page.getByRole("radio", { name: /Plan the week yourself/i })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Replay guided assignment/i })).toBeVisible();
 
     await page.locator("#scout-first-name").fill("Mara");
     await page.locator("#scout-last-name").fill("Voss");
     await page.getByRole("button", { name: /Field Investigator/ }).first().click();
-    await page.getByRole("button", { name: /Follow a fresh lead/ }).evaluate((button) => {
+    await page.getByRole("button", { name: /Follow the new lead/ }).evaluate((button) => {
       (button as HTMLButtonElement).click();
       (button as HTMLButtonElement).click();
     });
@@ -133,14 +133,14 @@ test.describe("veteran career prologue", () => {
     gamePage,
   }) => {
     await gamePage.goto();
-    await page.getByRole("button", { name: /Start Youth Career|New Game/ }).first().click();
-    await page.getByText("Replay tutorial", { exact: true }).click();
-    await expect(page.getByRole("radio", { name: /Replay tutorial/i })).toBeChecked();
+    await page.getByRole("button", { name: /Start Youth Scout Career|New Game/ }).first().click();
+    await page.getByText("Replay guided assignment", { exact: true }).click();
+    await expect(page.getByRole("radio", { name: /Replay guided assignment/i })).toBeChecked();
 
     await page.locator("#scout-first-name").fill("Inez");
     await page.locator("#scout-last-name").fill("Cole");
     await page.getByRole("button", { name: /Technical Spotter/ }).first().click();
-    await page.getByRole("button", { name: /Replay the discovery case/ }).click();
+    await page.getByRole("button", { name: /Replay guided assignment/ }).click();
 
     await gamePage.waitForScreen("observation", 60_000);
     await expect(page.getByRole("heading", { name: "The match started early." })).toBeVisible();

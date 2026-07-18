@@ -21,7 +21,12 @@ import {
   Wand2,
 } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
-import type { Activity, ActivityType } from "@/engine/core/types";
+import type {
+  Activity,
+  ActivityType,
+  PlacementPitchPosture,
+  PlacementSupportCondition,
+} from "@/engine/core/types";
 import {
   getUpcomingSeasonEvents,
   isInternationalBreak,
@@ -46,6 +51,10 @@ import { BatchSummary } from "./BatchSummary";
 import { ScreenBackground } from "@/components/ui/screen-background";
 import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
 import { getEligibleClubsForPlacement } from "@/engine/youth/placement";
+import { assessYouthMobility } from "@/engine/youth/youthMobility";
+import { projectProspectiveDevelopmentEnvironment } from "@/engine/world/developmentEnvironment";
+import { getWorldConditionModifiers } from "@/engine/world";
+import { normalizeCountryKey } from "@/lib/country";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { normalizeWeeklyStrategyState } from "@/engine/core/weeklyStrategy";
 
@@ -127,6 +136,8 @@ export function CalendarScreen() {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedPendingDay, setSelectedPendingDay] = useState<number | null>(null);
   const [placementYouthId, setPlacementYouthId] = useState<string | null>(null);
+  const [placementPitchPosture, setPlacementPitchPosture] = useState<PlacementPitchPosture>("evidenceLed");
+  const [placementSupportCondition, setPlacementSupportCondition] = useState<PlacementSupportCondition>("none");
 
   // Drag-and-drop state
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
@@ -301,18 +312,61 @@ export function CalendarScreen() {
         || right.id.localeCompare(left.id)
       )[0]
     : undefined;
-  const placementClubTargets = selectedPlacementYouth
+  const placementClubShortlist = selectedPlacementYouth
     ? getEligibleClubsForPlacement(
         selectedPlacementYouth,
         Object.values(gameState.clubs),
         gameState.scout,
         gameState.leagues,
         { preferredClubId: placementSourceReport?.intendedClubId },
-      ).map((club) => ({
-        id: club.id,
-        name: club.name,
-        description: `Academy ${club.youthAcademyRating}/20 · Reputation ${club.reputation}/100`,
-      }))
+      ).map((club) => {
+        const league = gameState.leagues[club.leagueId];
+        const countryKey = normalizeCountryKey(league?.country);
+        const regionalKnowledge = countryKey
+          ? gameState.regionalKnowledge[countryKey]
+            ?? Object.values(gameState.regionalKnowledge).find(
+              (knowledge) => normalizeCountryKey(knowledge.countryId) === countryKey,
+            )
+          : undefined;
+        const developmentEnvironment = projectProspectiveDevelopmentEnvironment(
+          gameState,
+          selectedPlacementYouth.player,
+          club.id,
+        );
+        const mobility = league
+          ? assessYouthMobility({
+              youth: selectedPlacementYouth,
+              targetClub: club,
+              targetLeague: league,
+              targetRegionalKnowledge: regionalKnowledge,
+              worldContext: getWorldConditionModifiers(gameState, league.country),
+              developmentEnvironment,
+            })
+          : undefined;
+        const relationship = Math.max(
+          0,
+          ...Object.values(gameState.contacts)
+            .filter((contact) =>
+              contact.organization === club.name
+              || (countryKey && normalizeCountryKey(contact.country ?? contact.region) === countryKey),
+            )
+            .map((contact) => contact.relationship),
+        );
+        const squadCount = club.playerIds.length + (club.academyPlayerIds?.length ?? 0);
+        const coverageTier = league?.coverageTier
+          ?? (Object.values(gameState.fixtures).some((fixture) => fixture.leagueId === league?.id)
+            ? "full"
+            : "abstract");
+        return {
+          club,
+          league,
+          developmentEnvironment,
+          mobility,
+          relationship,
+          squadCount,
+          coverageTier,
+        };
+      })
     : [];
 
   const canScheduleAt = (activity: Activity, dayIndex: number): boolean => {
@@ -658,12 +712,6 @@ export function CalendarScreen() {
           </div>
         )}
 
-        <WeeklyStrategyPanel
-          strategy={weeklyStrategy}
-          onSelectIntent={setWeeklyIntent}
-          onSelectPolicy={setDelegationPolicy}
-        />
-
         {/* The itinerary is the Planner's persistent attention budget. It stays
             available while the player compares opportunities below. */}
         <section
@@ -821,6 +869,12 @@ export function CalendarScreen() {
             </div>
           )}
         </section>
+
+        <WeeklyStrategyPanel
+          strategy={weeklyStrategy}
+          onSelectIntent={setWeeklyIntent}
+          onSelectPolicy={setDelegationPolicy}
+        />
 
         {/* Week Preview Panel (F16) */}
         {(weekPreview.relevantMatches.length > 0 || weekPreview.suggestions.length > 0 || weekPreview.fatigueWarning) && (
@@ -1341,39 +1395,129 @@ export function CalendarScreen() {
       {selectedActivity?.type === "writePlacementReport" &&
         selectedPendingDay != null &&
         placementYouthId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="w-full max-w-sm mx-4 rounded-lg border border-[#27272a] bg-[#0a0a0a] p-3">
-              <div className="mb-3">
-                <p className="text-xs font-semibold text-white">Choose the destination club</p>
-                <p className="mt-1 text-xs text-zinc-300">
-                  The club will evaluate the filed report, its evidence, and the conviction you chose.
-                </p>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 backdrop-blur-sm">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="placement-shortlist-heading"
+              className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl border border-[#2f3338] bg-[#0a0d10] p-4 shadow-2xl shadow-black/60 sm:p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">Placement shortlist</p>
+                  <h2 id="placement-shortlist-heading" className="mt-1 text-lg font-bold text-white">Choose the academy and shape the pitch</h2>
+                  <p className="mt-1 max-w-2xl text-xs leading-5 text-zinc-300">
+                    Compare pathway, competition coverage, mobility risk, squad room, and your access. The club receives the filed report; this choice decides how you open the conversation and what support you ask it to guarantee.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close placement shortlist"
+                  onClick={() => {
+                    setSelectedActivity(null);
+                    setSelectedPendingDay(null);
+                    setPlacementYouthId(null);
+                  }}
+                  className="rounded-lg p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300"
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
               </div>
-              <TargetPicker
-                inline
-                targets={placementClubTargets}
-                mode="option"
-                onSelect={(destinationClubId) => {
-                  handleSchedule(
-                    {
-                      ...selectedActivity,
-                      targetId: placementYouthId,
-                      destinationClubId,
-                      targetPool: undefined,
-                    },
-                    selectedPendingDay,
-                  );
-                  setSelectedActivity(null);
-                  setSelectedPendingDay(null);
-                  setPlacementYouthId(null);
-                  setHoverDay(null);
-                }}
-                onClose={() => {
-                  setSelectedActivity(null);
-                  setSelectedPendingDay(null);
-                  setPlacementYouthId(null);
-                }}
-              />
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-medium text-zinc-300">
+                  Pitch posture
+                  <select
+                    value={placementPitchPosture}
+                    onChange={(event) => setPlacementPitchPosture(event.target.value as PlacementPitchPosture)}
+                    className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
+                  >
+                    <option value="evidenceLed">Lead with evidence and uncertainty</option>
+                    <option value="pathwayLed">Lead with role and pathway fit</option>
+                    <option value="relationshipLed">Use trust to secure the hearing</option>
+                  </select>
+                </label>
+                <label className="text-xs font-medium text-zinc-300">
+                  Support condition
+                  <select
+                    value={placementSupportCondition}
+                    onChange={(event) => setPlacementSupportCondition(event.target.value as PlacementSupportCondition)}
+                    className="mt-1 min-h-11 w-full rounded-lg border border-white/10 bg-black/30 px-3 text-sm text-white"
+                  >
+                    <option value="none">No extra condition</option>
+                    <option value="educationPlan">Protect the education plan</option>
+                    <option value="playingPathway">Require a credible playing pathway</option>
+                    <option value="familySupport">Require family and settlement support</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                {placementClubShortlist.map((option) => (
+                  <article key={option.club.id} className="rounded-xl border border-white/10 bg-white/[0.025] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-bold text-white">{option.club.name}</h3>
+                        <p className="mt-0.5 text-[11px] text-zinc-400">
+                          {option.league?.name ?? "Competition"} · {option.coverageTier === "full" ? "Full match coverage" : option.coverageTier === "abstract" ? "Results and player records" : "Contact coverage only"}
+                        </p>
+                      </div>
+                      <Badge variant={option.mobility?.status === "blocked" ? "destructive" : option.mobility?.status === "conditional" ? "warning" : "outline"} className="text-[9px]">
+                        {option.mobility ? `${option.mobility.riskBand} mobility risk` : "Route unclear"}
+                      </Badge>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                        <dt className="text-zinc-500">Development pathway</dt>
+                        <dd className="mt-1 font-medium text-zinc-100">{option.developmentEnvironment.headline}</dd>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                        <dt className="text-zinc-500">Squad room</dt>
+                        <dd className="mt-1 font-medium text-zinc-100">{Math.max(0, 40 - option.squadCount)} places before capacity</dd>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                        <dt className="text-zinc-500">Academy</dt>
+                        <dd className="mt-1 font-medium text-zinc-100">{option.club.youthAcademyRating}/20</dd>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                        <dt className="text-zinc-500">Your access</dt>
+                        <dd className="mt-1 font-medium text-zinc-100">{option.relationship > 0 ? `Relationship ${option.relationship}/100` : "No established club contact"}</dd>
+                      </div>
+                    </dl>
+                    {option.mobility?.visibleReasons[0] && (
+                      <p className="mt-3 text-[11px] leading-5 text-zinc-400">{option.mobility.visibleReasons[0]}</p>
+                    )}
+                    <Button
+                      className="mt-4 min-h-11 w-full"
+                      disabled={option.mobility?.status === "blocked"}
+                      onClick={() => {
+                        handleSchedule(
+                          {
+                            ...selectedActivity,
+                            targetId: placementYouthId,
+                            destinationClubId: option.club.id,
+                            placementPitchPosture,
+                            placementSupportCondition,
+                            targetPool: undefined,
+                          },
+                          selectedPendingDay,
+                        );
+                        setSelectedActivity(null);
+                        setSelectedPendingDay(null);
+                        setPlacementYouthId(null);
+                        setHoverDay(null);
+                      }}
+                    >
+                      {option.mobility?.status === "blocked" ? "Resolve route first" : `Pitch ${option.club.name}`}
+                    </Button>
+                  </article>
+                ))}
+              </div>
+              {placementClubShortlist.length === 0 && (
+                <p className="mt-5 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
+                  No academy currently offers a credible route for this player. Build access, gather route information, or wait for a better brief.
+                </p>
+              )}
             </div>
           </div>
         )}

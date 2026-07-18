@@ -24,7 +24,7 @@ export const careerProgressionArticles: WikiArticle[] = [
     summary:
       "The five career tiers from Freelance Scout to Director of Football.",
     searchText:
-      "Tier 1: Freelance Scout. Self-employed. No club retainer. Must sell reports on the open market or take club commissions. Tier 2: Part-Time Regional Scout. Contracted to one club for a defined region. Limited salary but growing reputation. Tier 3: Full-Time Club Scout. Core scouting staff. Regular directives from the manager, full salary, performance reviews. Tier 4: Head of Scouting. Manages NPC scouts, assigns territories, responsible for club-wide scouting strategy. Tier 5: Director of Football. Top role. Board presentations, strategic transfer influence, global network.",
+      "Tier 1: Freelance Scout. Self-employed and building a first body of work. Tier 2: Part-Time Regional Scout. Trusted with a defined patch and a steady club connection. Tier 3: Club Scout. A regular member of a professional scouting department. Tier 4: Head of Scouting. Responsible for territory coverage and department direction. Tier 5: Director of Football. The strategic football leadership role.",
     content: (
       <SectionBlock>
         <Table
@@ -42,7 +42,7 @@ export const careerProgressionArticles: WikiArticle[] = [
             ],
             [
               "3",
-              "Full-Time Club Scout",
+              "Club Scout",
               "Core scouting staff. Regular directives from the manager, full salary, performance reviews.",
             ],
             [
@@ -178,7 +178,7 @@ export const careerProgressionArticles: WikiArticle[] = [
     summary:
       "Specialization levels 1-20: how depth increases, what it unlocks, and secondary specialization at tier 4+.",
     searchText:
-      "Your primary specialization has a depth level (1-20). It increases as you perform activities aligned with your specialization. Higher levels: Unlock new perks in your specialization tree. Provide a passive accuracy bonus on all readings (+1% reduction in error per level above 1). Increase your credibility in job applications. At tier 4+ you can unlock a secondary specialization, which gives access to the first few perks of a second tree.",
+      "Your primary specialization has a depth level (1-20). It increases as you perform activities aligned with your specialization. Higher levels unlock new perks, sharpen the reliability of your read, and increase your credibility in job applications. At tier 4+ you can unlock a secondary specialization, which gives access to the first few perks of a second tree.",
     content: (
       <SectionBlock>
         <Para>
@@ -189,7 +189,7 @@ export const careerProgressionArticles: WikiArticle[] = [
         <BulletList
           items={[
             "Unlock new perks in your specialization tree",
-            "Provide a passive accuracy bonus on all readings (+1% reduction in error per level above 1)",
+            "Sharpen the reliability of your read in that specialty",
             "Increase your credibility in job applications",
           ]}
         />

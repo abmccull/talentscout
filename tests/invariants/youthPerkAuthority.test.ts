@@ -292,7 +292,7 @@ function makePlacementReport(): ScoutReport {
 }
 
 describe("youth perk authority", () => {
-  it("makes Grassroots Access unlock grassroots tournaments and street football", () => {
+  it("[youth_grassroots_access] makes Grassroots Access unlock grassroots tournaments and street football", () => {
     const tournaments = { "tournament-1": makeGrassrootsTournament() };
     const subRegions = {
       "region-1": {
@@ -338,7 +338,7 @@ describe("youth perk authority", () => {
     expect(youthActivities.some((activity) => activity.type === "academyVisit")).toBe(true);
   });
 
-  it("makes Raw Potential Reading unlock the youth upside range", () => {
+  it("[youth_raw_potential_reading] makes Raw Potential Reading unlock the youth upside range", () => {
     const player = makeYouthPlayer();
     const observations = [makeObservation(player.id)];
 
@@ -357,7 +357,7 @@ describe("youth perk authority", () => {
     expect(afterUnlock.perceivedPARange).toEqual([4, 4.5]);
   });
 
-  it("makes Instinct Sharpening increase youth gut-feeling trigger odds", () => {
+  it("[youth_instinct_sharpening] makes Instinct Sharpening increase youth gut-feeling trigger odds", () => {
     const scout = makeScout("youth", 5);
     const youth = makeUnsignedYouth();
     const modifiers = resolveScoutPerkModifiers(scout);
@@ -392,7 +392,7 @@ describe("youth perk authority", () => {
     expect(perkChance / baselineChance).toBeGreaterThan(1.35);
   });
 
-  it("makes Youth Network tips appear only after the perk unlocks", () => {
+  it("[youth_network_expansion] makes Youth Network tips appear only after the perk unlocks", () => {
     const withoutPerk = maybeGenerateYouthTip(
       makeYouthTipState(6),
       deterministicRng(true),
@@ -406,7 +406,7 @@ describe("youth perk authority", () => {
     expect(withPerk?.relatedId).toBe("player-1");
   });
 
-  it("makes Placement Reputation change academy club decisions", () => {
+  it("[youth_placement_reputation] makes Placement Reputation change academy club decisions", () => {
     const shared = {
       report: makePlacementReport(),
       brief: makePlacementBrief(),
@@ -502,7 +502,7 @@ describe("youth perk authority", () => {
     expect(decision.reasons.join(" ")).toMatch(/must not proceed/i);
   });
 
-  it("makes Wonderkid Radar produce evidence-based alerts", () => {
+  it("[youth_wonderkid_radar] makes Wonderkid Radar produce evidence-based alerts", () => {
     const youth = makeUnsignedYouth();
     const observations = [makeObservation(youth.player.id)];
 
@@ -525,7 +525,7 @@ describe("youth perk authority", () => {
     expect(afterUnlock?.title).toContain("High-Upside Signal");
   });
 
-  it("makes Academy Whisperer unlock academy trial days", () => {
+  it("[youth_academy_whisperer] makes Academy Whisperer unlock academy trial days", () => {
     const contacts = [makeAcademyContact()];
 
     const beforeUnlock = getAvailableActivities(
@@ -559,7 +559,7 @@ describe("youth perk authority", () => {
     expect(afterUnlock.some((activity) => activity.type === "academyTrialDay")).toBe(true);
   });
 
-  it("makes Generational Eye reveal a bounded PA estimate during reflection", () => {
+  it("[youth_generational_eye] makes Generational Eye reveal a broad cue-derived projection signal", () => {
     const session = makeReflectionSession();
     const players = { "player-1": makeYouthPlayer() };
     const noPerk = checkGutFeelingTrigger(
@@ -584,8 +584,22 @@ describe("youth perk authority", () => {
       0,
       players,
     );
+    const changedHiddenPotential = checkGutFeelingTrigger(
+      deterministicRng(true),
+      session,
+      40,
+      18,
+      {
+        paEstimate: modifiers.hasPAEstimate,
+        paEstimateMargin: modifiers.paEstimateMargin,
+      },
+      0,
+      { "player-1": makeYouthPlayer({ potentialAbility: 80 }) },
+    );
 
     expect(noPerk?.paEstimate).toBeUndefined();
-    expect(withPerk?.paEstimate).toEqual({ low: 151, high: 161 });
+    expect(withPerk?.paEstimate).toBeDefined();
+    expect((withPerk?.paEstimate?.high ?? 0) - (withPerk?.paEstimate?.low ?? 0)).toBeGreaterThanOrEqual(40);
+    expect(changedHiddenPotential?.paEstimate).toEqual(withPerk?.paEstimate);
   });
 });

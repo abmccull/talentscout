@@ -46,12 +46,13 @@ import {
   type LifecycleWorldState,
 } from "@/engine/world/playerLifecycle";
 import {
-  getRivalPlayerEvidence,
+  getEffectiveRivalPlayerEvidence,
   getRivalShortlistCapacity,
   isRivalTargetEligible,
   observePlayerForRival,
   scoreRivalTargetCandidate,
 } from "./rivalEvidence";
+import type { RivalMarketCounterplayAssessment } from "./organizations";
 
 // =============================================================================
 // PUBLIC RESULT TYPES
@@ -92,6 +93,8 @@ export interface RivalSimulationModifiers {
     rival: RivalScout,
     playerId?: string,
   ) => number;
+  /** Player decisions projected by the rival-market model, keyed by player. */
+  marketCounterplayByPlayerId?: Readonly<Record<string, RivalMarketCounterplayAssessment>>;
 }
 
 function modifiedChance(base: number, multiplier = 1): number {
@@ -103,7 +106,11 @@ function contextualPressure(
   rival: RivalScout,
   playerId?: string,
 ): number {
-  const value = modifiers.contextualPressureMultiplier?.(rival, playerId) ?? 1;
+  const regionalValue = modifiers.contextualPressureMultiplier?.(rival, playerId) ?? 1;
+  const counterplayValue = playerId
+    ? modifiers.marketCounterplayByPlayerId?.[playerId]?.rivalPressureMultiplier ?? 1
+    : 1;
+  const value = regionalValue * counterplayValue;
   return Number.isFinite(value) ? Math.min(1.5, Math.max(0.7, value)) : 1;
 }
 
@@ -712,7 +719,7 @@ export function processRivalScoutWeek(
       ? POACH_SIGNING_CHANCE + SHARED_TARGET_URGENCY_BOOST
       : POACH_SIGNING_CHANCE;
     const evidenceQualifiedSharedIds = updatedRival.targetPlayerIds.filter((playerId) => {
-      const evidence = getRivalPlayerEvidence(updatedRival, playerId);
+      const evidence = getEffectiveRivalPlayerEvidence(updatedRival, playerId, state);
       return reportedPlayerIds.has(playerId)
         && (evidence?.observations ?? 0) > 0
         && (evidence?.confidence ?? 0) >= 0.2;
@@ -1289,7 +1296,7 @@ function computeSigningChance(
 ): number {
   const player = state.players[playerId];
   if (!player) return 0;
-  const evidence = getRivalPlayerEvidence(rival, playerId);
+  const evidence = getEffectiveRivalPlayerEvidence(rival, playerId, state);
   const qualityBonus = (clamp(rival.quality, 1, 5) - 1) * 0.03;
   const progressBonus = clamp(progress / SCOUTING_COMPLETION_THRESHOLD, 0, 1) * 0.08;
   const confidenceBonus = (evidence?.confidence ?? 0.05) * 0.16;

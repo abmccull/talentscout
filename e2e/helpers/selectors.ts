@@ -181,9 +181,9 @@ export const NETWORK_SELECTORS = {
 
 export const SELECTORS = {
   // Main Menu
-  newGameButton: 'button:has-text("New Game"), button:has-text("Start Youth Career")',
+  newGameButton: 'button:has-text("New Game"), button:has-text("Start Youth Scout Career")',
   continueButton: 'button:has-text("Continue")',
-  loadGameButton: 'button:has-text("Load Game")',
+  loadGameButton: 'button:has-text("Load Career")',
 
   // New Game Wizard
   wizardContinueButton: 'button:has-text("Continue")',

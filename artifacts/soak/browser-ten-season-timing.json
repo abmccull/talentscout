@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T13:45:26.069Z",
-  "profile": "browser-every-week-ten-season",
+  "generatedAt": "2026-07-18T05:51:07.865Z",
+  "profile": "browser-every-week-10-season",
   "reachedSeason": 11,
   "targetSeason": 11,
   "batchCount": 60,
@@ -12,71 +12,71 @@
       "season": 1,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5239,
-      "maxBatchMs": 1137.5
+      "elapsedMs": 53685.2,
+      "maxBatchMs": 13056.7
     },
     {
       "season": 2,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 4936.8,
-      "maxBatchMs": 1115.9
+      "elapsedMs": 74205,
+      "maxBatchMs": 15630.8
     },
     {
       "season": 3,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5078.4,
-      "maxBatchMs": 939.8
+      "elapsedMs": 83427.4,
+      "maxBatchMs": 15424.2
     },
     {
       "season": 4,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5223.4,
-      "maxBatchMs": 1048.5
+      "elapsedMs": 88903.5,
+      "maxBatchMs": 17028.1
     },
     {
       "season": 5,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5154.9,
-      "maxBatchMs": 987
+      "elapsedMs": 92669.9,
+      "maxBatchMs": 20182.3
     },
     {
       "season": 6,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5279.5,
-      "maxBatchMs": 1000.9
+      "elapsedMs": 92616.2,
+      "maxBatchMs": 20347.6
     },
     {
       "season": 7,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5292.1,
-      "maxBatchMs": 1010.1
+      "elapsedMs": 83678.1,
+      "maxBatchMs": 16958.1
     },
     {
       "season": 8,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5258.3,
-      "maxBatchMs": 1067.1
+      "elapsedMs": 75395.4,
+      "maxBatchMs": 15129.2
     },
     {
       "season": 9,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 5565.7,
-      "maxBatchMs": 1068.3
+      "elapsedMs": 63883.3,
+      "maxBatchMs": 13500.3
     },
     {
       "season": 10,
       "batches": 6,
       "weeksAdvanced": 46,
-      "elapsedMs": 6587.6,
-      "maxBatchMs": 1319.6
+      "elapsedMs": 60303.1,
+      "maxBatchMs": 11674.6
     }
   ],
   "batchTimings": [
@@ -86,7 +86,83 @@
       "endSeason": 1,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 1137.5
+      "elapsedMs": 6403.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 482.20000000298023,
+        "roundTripMs": 953.6999999880791,
+        "responseBytes": 4243129,
+        "changedFieldCount": 27,
+        "changedEntryCount": 4888,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 37.900000005960464
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 15.099999994039536
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 424
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 2.2000000029802322
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2022736
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 820780
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 779524
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 203748
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 156726
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 88613
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 70554
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 61133
+          }
+        ]
+      }
     },
     {
       "startSeason": 1,
@@ -94,7 +170,83 @@
       "endSeason": 1,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 747.1
+      "elapsedMs": 7080.2,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 346.29999999701977,
+        "roundTripMs": 973.4000000059605,
+        "responseBytes": 4542497,
+        "changedFieldCount": 28,
+        "changedEntryCount": 5159,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 31.700000002980232
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 25.900000005960464
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 284.20000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.3999999910593033
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 2.2000000029802322
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2317677
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 808950
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 765700
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 202930
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 162129
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 73450
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 70297
+          },
+          {
+            "field": "consequenceState",
+            "strategy": "record-delta",
+            "bytes": 54182
+          }
+        ]
+      }
     },
     {
       "startSeason": 1,
@@ -102,7 +254,83 @@
       "endSeason": 1,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 909.9
+      "elapsedMs": 9225.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 304,
+        "roundTripMs": 1112,
+        "responseBytes": 5805924,
+        "changedFieldCount": 30,
+        "changedEntryCount": 6132,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 38.3999999910593
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 28.700000002980232
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 233.40000000596046
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.199999988079071
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2863196
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 1111557
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 1057508
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 275197
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 182915
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 103731
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 69211
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 69121
+          }
+        ]
+      }
     },
     {
       "startSeason": 1,
@@ -110,7 +338,83 @@
       "endSeason": 1,
       "endWeek": 31,
       "weeksAdvanced": 6,
-      "elapsedMs": 590
+      "elapsedMs": 7199,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 304.09999999403954,
+        "roundTripMs": 1055.7000000029802,
+        "responseBytes": 4331629,
+        "changedFieldCount": 29,
+        "changedEntryCount": 4728,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 24.700000002980232
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 270.70000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.8999999910593033
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 2.800000011920929
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2431375
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 670399
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 634256
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 186593
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 143294
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 90285
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 72138
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 52436
+          }
+        ]
+      }
     },
     {
       "startSeason": 1,
@@ -118,7 +422,83 @@
       "endSeason": 1,
       "endWeek": 39,
       "weeksAdvanced": 8,
-      "elapsedMs": 850.6
+      "elapsedMs": 10720.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 327.29999999701977,
+        "roundTripMs": 1162.0999999940395,
+        "responseBytes": 3891011,
+        "changedFieldCount": 25,
+        "changedEntryCount": 4387,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.699999988079071
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 23.80000001192093
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 296.29999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 2
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2358799
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 514402
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 483179
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 152633
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 147898
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 64963
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 63220
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 37097
+          }
+        ]
+      }
     },
     {
       "startSeason": 1,
@@ -126,7 +506,83 @@
       "endSeason": 2,
       "endWeek": 1,
       "weeksAdvanced": 8,
-      "elapsedMs": 1003.9
+      "elapsedMs": 13056.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1254.7999999970198,
+        "roundTripMs": 2347,
+        "responseBytes": 11382516,
+        "changedFieldCount": 40,
+        "changedEntryCount": 9325,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.5999999940395355
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 52.900000005960464
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 949.3999999910593
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.9000000059604645
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 244.29999999701977
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 4605959
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "replace",
+            "bytes": 2604095
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 1839372
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "replace",
+            "bytes": 935845
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 546974
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 334072
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "array-delta",
+            "bytes": 296112
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 77225
+          }
+        ]
+      }
     },
     {
       "startSeason": 2,
@@ -134,7 +590,83 @@
       "endSeason": 2,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 1115.9
+      "elapsedMs": 11066,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 500.3999999910593,
+        "roundTripMs": 1165.9000000059605,
+        "responseBytes": 4695660,
+        "changedFieldCount": 29,
+        "changedEntryCount": 5197,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.3999999910593033
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 29.600000008940697
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 440.09999999403954
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5999999940395355
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 25.600000008940697
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2448879
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 812988
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 771864
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 203378
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 138362
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 119322
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 72406
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "array-delta",
+            "bytes": 60944
+          }
+        ]
+      }
     },
     {
       "startSeason": 2,
@@ -142,7 +674,83 @@
       "endSeason": 2,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 722.9
+      "elapsedMs": 9836.2,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 350.59999999403954,
+        "roundTripMs": 1146.2000000029802,
+        "responseBytes": 4811846,
+        "changedFieldCount": 28,
+        "changedEntryCount": 5004,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 7.200000002980232
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 46.20000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 278.40000000596046
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 16.299999997019768
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2583358
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 804213
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 762726
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 201399
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 149941
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 113752
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73830
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 49935
+          }
+        ]
+      }
     },
     {
       "startSeason": 2,
@@ -150,7 +758,83 @@
       "endSeason": 2,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 795.2
+      "elapsedMs": 12275.5,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 360,
+        "roundTripMs": 1229,
+        "responseBytes": 6025069,
+        "changedFieldCount": 27,
+        "changedEntryCount": 5999,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.8999999910593033
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 38.900000005960464
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 298.8999999910593
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.6000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 16.599999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 3106547
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 1117419
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 1064609
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 277980
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 132000
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 118144
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73166
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 52150
+          }
+        ]
+      }
     },
     {
       "startSeason": 2,
@@ -158,7 +842,83 @@
       "endSeason": 2,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 836.7
+      "elapsedMs": 11859.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 321.70000000298023,
+        "roundTripMs": 1248.2999999970198,
+        "responseBytes": 4596625,
+        "changedFieldCount": 25,
+        "changedEntryCount": 4693,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.2999999970197678
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 48.5
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 258.30000001192093
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 9.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2734638
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 658154
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 622734
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 171227
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 146691
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 98240
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73384
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "array-delta",
+            "bytes": 35682
+          }
+        ]
+      }
     },
     {
       "startSeason": 2,
@@ -166,7 +926,83 @@
       "endSeason": 2,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 787.5
+      "elapsedMs": 13536.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 397.79999999701977,
+        "roundTripMs": 1414.2000000029802,
+        "responseBytes": 4512524,
+        "changedFieldCount": 25,
+        "changedEntryCount": 4449,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.6000000089406967
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 102.79999999701977
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 275.79999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.6000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 10.899999991059303
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2821885
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 593212
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 562815
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 181688
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 117254
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73789
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 68801
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 24491
+          }
+        ]
+      }
     },
     {
       "startSeason": 2,
@@ -174,7 +1010,83 @@
       "endSeason": 3,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 678.6
+      "elapsedMs": 15630.8,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 4852,
+        "roundTripMs": 6068,
+        "responseBytes": 13087171,
+        "changedFieldCount": 41,
+        "changedEntryCount": 9332,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 4.600000008940697
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 79
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 4532.29999999702
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.2000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 232.3999999910593
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0.10000000894069672
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 5756248
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "replace",
+            "bytes": 2326431
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "replace",
+            "bytes": 1930874
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 1274672
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 552381
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "array-delta",
+            "bytes": 525659
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 316774
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 180886
+          }
+        ]
+      }
     },
     {
       "startSeason": 3,
@@ -182,7 +1094,83 @@
       "endSeason": 3,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 777.1
+      "elapsedMs": 14585.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 654.9000000059605,
+        "roundTripMs": 1423.199999988079,
+        "responseBytes": 4780332,
+        "changedFieldCount": 28,
+        "changedEntryCount": 4972,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.4000000059604645
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 63
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 569.9000000059605
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 15.399999991059303
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2569963
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 815024
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 773370
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 195102
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 102822
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 89809
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 71625
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 34273
+          }
+        ]
+      }
     },
     {
       "startSeason": 3,
@@ -190,7 +1178,83 @@
       "endSeason": 3,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 795.7
+      "elapsedMs": 10784,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 470,
+        "roundTripMs": 1504.5,
+        "responseBytes": 4771012,
+        "changedFieldCount": 28,
+        "changedEntryCount": 4813,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 95.19999998807907
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 345.20000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.9000000059604645
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 22.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2685324
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 800624
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 759568
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 181218
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 102872
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 73511
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 71474
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "array-delta",
+            "bytes": 22455
+          }
+        ]
+      }
     },
     {
       "startSeason": 3,
@@ -198,7 +1262,83 @@
       "endSeason": 3,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 924.9
+      "elapsedMs": 15424.2,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 358.59999999403954,
+        "roundTripMs": 1298.0999999940395,
+        "responseBytes": 6175555,
+        "changedFieldCount": 28,
+        "changedEntryCount": 5839,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 4.5999999940395355
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 122.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 219.5
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 9.600000008940697
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 3290359
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 1101157
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 1049733
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 284612
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 137878
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 99821
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 71902
+          },
+          {
+            "field": "activeLoans",
+            "strategy": "replace",
+            "bytes": 30700
+          }
+        ]
+      }
     },
     {
       "startSeason": 3,
@@ -206,7 +1346,83 @@
       "endSeason": 3,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 939.8
+      "elapsedMs": 12897.1,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 305.19999998807907,
+        "roundTripMs": 1236.9000000059605,
+        "responseBytes": 4872300,
+        "changedFieldCount": 25,
+        "changedEntryCount": 4535,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.9000000059604645
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 82.3999999910593
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 206.90000000596046
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 8.900000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2920137
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 653633
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 619094
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 187613
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 156885
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83945
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 75117
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73844
+          }
+        ]
+      }
     },
     {
       "startSeason": 3,
@@ -214,7 +1430,83 @@
       "endSeason": 3,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 865.7
+      "elapsedMs": 14425.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 452.5,
+        "roundTripMs": 1449.7999999970198,
+        "responseBytes": 4766280,
+        "changedFieldCount": 26,
+        "changedEntryCount": 4481,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.0999999940395355
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 114.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 327
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.4000000059604645
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 5.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 3041177
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 590019
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 559725
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 183216
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 118496
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83194
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 55973
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 55884
+          }
+        ]
+      }
     },
     {
       "startSeason": 3,
@@ -222,7 +1514,83 @@
       "endSeason": 4,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 775.2
+      "elapsedMs": 15310.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 4627,
+        "roundTripMs": 5762.300000011921,
+        "responseBytes": 14469239,
+        "changedFieldCount": 41,
+        "changedEntryCount": 8119,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 30.400000005960464
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 144.8999999910593
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 4199.20000000298
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.2000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 249.09999999403954
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 6790086
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 2351860
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 2075533
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 1250394
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 659865
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 546107
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 302166
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 222537
+          }
+        ]
+      }
     },
     {
       "startSeason": 4,
@@ -230,7 +1598,83 @@
       "endSeason": 4,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 1048.5
+      "elapsedMs": 16735.2,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1295.2999999970198,
+        "roundTripMs": 2198.5,
+        "responseBytes": 4691827,
+        "changedFieldCount": 30,
+        "changedEntryCount": 4728,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 21
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 105.59999999403954
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 1139.2000000029802
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 4.299999997019768
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 24
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2451333
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 799606
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 757503
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 196857
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 96849
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83616
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73484
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 43467
+          }
+        ]
+      }
     },
     {
       "startSeason": 4,
@@ -238,7 +1682,83 @@
       "endSeason": 4,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 894.9
+      "elapsedMs": 10613.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 392.29999999701977,
+        "roundTripMs": 1160.7999999970198,
+        "responseBytes": 4789993,
+        "changedFieldCount": 29,
+        "changedEntryCount": 4661,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 27.399999991059303
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 113.30000001192093
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 231.79999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5999999940395355
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 17.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2652894
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 784606
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 744582
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 189652
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 84118
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 71645
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 71152
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 65989
+          }
+        ]
+      }
     },
     {
       "startSeason": 4,
@@ -246,7 +1766,83 @@
       "endSeason": 4,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 857.9
+      "elapsedMs": 17028.1,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 350.90000000596046,
+        "roundTripMs": 1339.7999999970198,
+        "responseBytes": 6019443,
+        "changedFieldCount": 26,
+        "changedEntryCount": 5625,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 26.200000002980232
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 106.40000000596046
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 199.79999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 15.899999991059303
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 3213443
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 1084438
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 1031987
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 289983
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83938
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73259
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 70036
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 62690
+          }
+        ]
+      }
     },
     {
       "startSeason": 4,
@@ -254,7 +1850,83 @@
       "endSeason": 4,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 748.4
+      "elapsedMs": 13767.4,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 396.70000000298023,
+        "roundTripMs": 1225.2999999970198,
+        "responseBytes": 4519937,
+        "changedFieldCount": 25,
+        "changedEntryCount": 4391,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 23.599999994039536
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 162.40000000596046
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 198.79999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 9.599999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2778398
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 629921
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 593582
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 170411
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82786
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 62395
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 60136
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 47774
+          }
+        ]
+      }
     },
     {
       "startSeason": 4,
@@ -262,7 +1934,83 @@
       "endSeason": 4,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 786.9
+      "elapsedMs": 14732.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 427.70000000298023,
+        "roundTripMs": 1403.5,
+        "responseBytes": 4498423,
+        "changedFieldCount": 27,
+        "changedEntryCount": 4241,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 22.700000002980232
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 177
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 213.5
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 10.299999997019768
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2847987
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 567296
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 537598
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 159001
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83474
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 63301
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 61537
+          },
+          {
+            "field": "unsignedYouth",
+            "strategy": "record-delta",
+            "bytes": 57733
+          }
+        ]
+      }
     },
     {
       "startSeason": 4,
@@ -270,7 +2018,83 @@
       "endSeason": 5,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 886.8
+      "elapsedMs": 16026.5,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 5206.600000008941,
+        "roundTripMs": 6429.699999988079,
+        "responseBytes": 14247007,
+        "changedFieldCount": 41,
+        "changedEntryCount": 7330,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 28.400000005960464
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 241.5
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 4677.20000000298
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.8999999910593033
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 256.20000000298023
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 6647121
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 2485690
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 2206812
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 1426384
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 531157
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 286713
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 276464
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82696
+          }
+        ]
+      }
     },
     {
       "startSeason": 5,
@@ -278,7 +2102,83 @@
       "endSeason": 5,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 987
+      "elapsedMs": 17618,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1278.9000000059605,
+        "roundTripMs": 1930.0999999940395,
+        "responseBytes": 4606072,
+        "changedFieldCount": 29,
+        "changedEntryCount": 4637,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 19.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 121.59999999403954
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 1122.9000000059605
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.2000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 11.700000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2414029
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 751077
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 709703
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 182527
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 122931
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82494
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 63887
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 60954
+          }
+        ]
+      }
     },
     {
       "startSeason": 5,
@@ -286,7 +2186,83 @@
       "endSeason": 5,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 748.3
+      "elapsedMs": 11018.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 387.1000000089407,
+        "roundTripMs": 1151.1000000089407,
+        "responseBytes": 4915421,
+        "changedFieldCount": 31,
+        "changedEntryCount": 4628,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 29.399999991059303
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 104.5
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 238.6000000089407
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.8999999910593033
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 11.799999997019768
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2587363
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 755678
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 714643
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 211201
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 193357
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83946
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 68879
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 62675
+          }
+        ]
+      }
     },
     {
       "startSeason": 5,
@@ -294,7 +2270,83 @@
       "endSeason": 5,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 962.7
+      "elapsedMs": 20182.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 581.3999999910593,
+        "roundTripMs": 1628.5999999940395,
+        "responseBytes": 5639354,
+        "changedFieldCount": 26,
+        "changedEntryCount": 5184,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 27.80000001192093
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 251.5
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 283
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.5999999940395355
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 14.900000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 3062294
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 1013075
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 961109
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 252529
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82586
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 72225
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 61482
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 50920
+          }
+        ]
+      }
     },
     {
       "startSeason": 5,
@@ -302,7 +2354,83 @@
       "endSeason": 5,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 834.9
+      "elapsedMs": 13344.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 536.0999999940395,
+        "roundTripMs": 1407.1000000089407,
+        "responseBytes": 4434840,
+        "changedFieldCount": 27,
+        "changedEntryCount": 4031,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 27.099999994039536
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 277.29999999701977
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 215.29999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 13.200000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2759512
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 594787
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 559711
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 159664
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83608
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 74794
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 60583
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 40955
+          }
+        ]
+      }
     },
     {
       "startSeason": 5,
@@ -310,7 +2438,83 @@
       "endSeason": 5,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 812.6
+      "elapsedMs": 13273.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 327.29999999701977,
+        "roundTripMs": 1164.5999999940395,
+        "responseBytes": 4157353,
+        "changedFieldCount": 26,
+        "changedEntryCount": 3923,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 18.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 139.1000000089407
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 161.20000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 6.0999999940395355
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2677568
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 525710
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 495784
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 137098
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82901
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 64549
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 58770
+          },
+          {
+            "field": "consequenceState",
+            "strategy": "record-delta",
+            "bytes": 27400
+          }
+        ]
+      }
     },
     {
       "startSeason": 5,
@@ -318,7 +2522,83 @@
       "endSeason": 6,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 809.4
+      "elapsedMs": 17232.4,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 5446.399999991059,
+        "roundTripMs": 6853.79999999702,
+        "responseBytes": 14930188,
+        "changedFieldCount": 40,
+        "changedEntryCount": 6955,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 299.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 4917.399999991059
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.6000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 222.79999999701977
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 5957852
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 3290405
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 2613120
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 1536424
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 522560
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 375133
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 250174
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82560
+          }
+        ]
+      }
     },
     {
       "startSeason": 6,
@@ -326,7 +2606,83 @@
       "endSeason": 6,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 945.7
+      "elapsedMs": 20347.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1298.5,
+        "roundTripMs": 1941.8999999910593,
+        "responseBytes": 4692027,
+        "changedFieldCount": 27,
+        "changedEntryCount": 4315,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 137.5
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 1146.0999999940395
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 11.400000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2127302
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 679881
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 639254
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 600901
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 160814
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 122657
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83430
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 68591
+          }
+        ]
+      }
     },
     {
       "startSeason": 6,
@@ -334,7 +2690,83 @@
       "endSeason": 6,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 797.9
+      "elapsedMs": 11356,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 588.6999999880791,
+        "roundTripMs": 1275.300000011921,
+        "responseBytes": 5120361,
+        "changedFieldCount": 28,
+        "changedEntryCount": 4532,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.7000000029802322
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 259.3999999910593
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 312.5
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.6000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 11.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2251481
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 938097
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 682696
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 640094
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 169776
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82821
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 67743
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 56935
+          }
+        ]
+      }
     },
     {
       "startSeason": 6,
@@ -342,7 +2774,83 @@
       "endSeason": 6,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 904
+      "elapsedMs": 17430.8,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 510.30000001192093,
+        "roundTripMs": 1255.5999999940395,
+        "responseBytes": 4912630,
+        "changedFieldCount": 25,
+        "changedEntryCount": 4415,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 5.299999997019768
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 285
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 207.20000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.699999988079071
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 10.200000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2626094
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 896907
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 844149
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 220713
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83541
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 75015
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 54837
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 43540
+          }
+        ]
+      }
     },
     {
       "startSeason": 6,
@@ -350,7 +2858,83 @@
       "endSeason": 6,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 785.6
+      "elapsedMs": 12093.1,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 407.79999999701977,
+        "roundTripMs": 1260.7000000029802,
+        "responseBytes": 3751271,
+        "changedFieldCount": 26,
+        "changedEntryCount": 3406,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.7999999970197678
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 258.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 134.79999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.9000000059604645
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 8.599999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2288695
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 520645
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 485102
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 139292
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83763
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 76184
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 54848
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 27356
+          }
+        ]
+      }
     },
     {
       "startSeason": 6,
@@ -358,7 +2942,83 @@
       "endSeason": 6,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 845.4
+      "elapsedMs": 13806.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 518.8999999910593,
+        "roundTripMs": 1307.5999999940395,
+        "responseBytes": 3677140,
+        "changedFieldCount": 25,
+        "changedEntryCount": 3253,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.699999988079071
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 343.90000000596046
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 161.09999999403954
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 8.200000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2363660
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 451929
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 420025
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 123168
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83364
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 76197
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 55152
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 44753
+          }
+        ]
+      }
     },
     {
       "startSeason": 6,
@@ -366,7 +3026,83 @@
       "endSeason": 7,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 1000.9
+      "elapsedMs": 17582,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 5718.20000000298,
+        "roundTripMs": 7046.29999999702,
+        "responseBytes": 13936913,
+        "changedFieldCount": 39,
+        "changedEntryCount": 6446,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.2999999970197678
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 397.29999999701977
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 5096.4000000059605
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.8999999910593033
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 217.90000000596046
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 5106217
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 2799104
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 2782605
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 1672123
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 523672
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 432579
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 202471
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83793
+          }
+        ]
+      }
     },
     {
       "startSeason": 7,
@@ -374,7 +3110,83 @@
       "endSeason": 7,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 881.5
+      "elapsedMs": 16837.2,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1298.1000000089407,
+        "roundTripMs": 1811.699999988079,
+        "responseBytes": 4461620,
+        "changedFieldCount": 29,
+        "changedEntryCount": 3804,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.6000000089406967
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 297
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 975.3999999910593
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.300000011920929
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 20.099999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1666914
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 1073794
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 538659
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 496414
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 148705
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 122453
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82860
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73135
+          }
+        ]
+      }
     },
     {
       "startSeason": 7,
@@ -382,7 +3194,83 @@
       "endSeason": 7,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 906.8
+      "elapsedMs": 10904.4,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 695.7999999970198,
+        "roundTripMs": 1470.2999999970198,
+        "responseBytes": 4668911,
+        "changedFieldCount": 34,
+        "changedEntryCount": 3896,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 6.5999999940395355
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 447
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 210.70000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 27.799999997019768
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1803179
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 1156631
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 558693
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 516401
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 138850
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 84296
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 70722
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 70688
+          }
+        ]
+      }
     },
     {
       "startSeason": 7,
@@ -390,7 +3278,83 @@
       "endSeason": 7,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 1010.1
+      "elapsedMs": 16958.1,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 576.7999999970198,
+        "roundTripMs": 1217.9000000059605,
+        "responseBytes": 3818189,
+        "changedFieldCount": 28,
+        "changedEntryCount": 3479,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.2999999970197678
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 421.6000000089407
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 138.29999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.4000000059604645
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 12.299999997019768
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2022312
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 705064
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 652056
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 159950
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82895
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 60463
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 54535
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 28023
+          }
+        ]
+      }
     },
     {
       "startSeason": 7,
@@ -398,7 +3362,83 @@
       "endSeason": 7,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 878.3
+      "elapsedMs": 10599,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 541.8000000119209,
+        "roundTripMs": 1075.2999999970198,
+        "responseBytes": 2927808,
+        "changedFieldCount": 23,
+        "changedEntryCount": 2722,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.3999999910593033
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 406.6000000089407
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 120.8999999910593
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.6000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 9.399999991059303
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1751929
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 413704
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 378550
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 105203
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83776
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 62294
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 53638
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 47764
+          }
+        ]
+      }
     },
     {
       "startSeason": 7,
@@ -406,7 +3446,83 @@
       "endSeason": 7,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 810.7
+      "elapsedMs": 13143.8,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 559.7000000029802,
+        "roundTripMs": 1169.3999999910593,
+        "responseBytes": 2789909,
+        "changedFieldCount": 25,
+        "changedEntryCount": 2341,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 4.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 432.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 111.5
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5999999940395355
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 8.599999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1736495
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 347384
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 317591
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 84519
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 84230
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 77206
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 52732
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 47723
+          }
+        ]
+      }
     },
     {
       "startSeason": 7,
@@ -414,7 +3530,83 @@
       "endSeason": 8,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 804.7
+      "elapsedMs": 15235.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 3970.8999999910593,
+        "roundTripMs": 4996.4000000059605,
+        "responseBytes": 12957749,
+        "changedFieldCount": 38,
+        "changedEntryCount": 5687,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 10.599999994039536
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 372.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 3406.2000000029802
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 177.8999999910593
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0.10000000894069672
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 3873358
+          },
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 3846069
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 2281215
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 1570017
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 511818
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 276028
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 158822
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83144
+          }
+        ]
+      }
     },
     {
       "startSeason": 8,
@@ -422,7 +3614,83 @@
       "endSeason": 8,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 1067.1
+      "elapsedMs": 15129.2,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1088.7000000029802,
+        "roundTripMs": 1566.2999999970198,
+        "responseBytes": 3417938,
+        "changedFieldCount": 29,
+        "changedEntryCount": 3050,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 11.900000005960464
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 346
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 711.1999999880791
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.4000000059604645
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 17.400000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1314505
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 726899
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 442084
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 401018
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 104927
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 87725
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82961
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 56823
+          }
+        ]
+      }
     },
     {
       "startSeason": 8,
@@ -430,7 +3698,83 @@
       "endSeason": 8,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 838.8
+      "elapsedMs": 8380.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 518.9000000059605,
+        "roundTripMs": 1011.5,
+        "responseBytes": 3637198,
+        "changedFieldCount": 27,
+        "changedEntryCount": 3038,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 6.9000000059604645
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 333.8999999910593
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 152.90000000596046
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.8999999910593033
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 22.700000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1349282
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 938413
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 456196
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 415149
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 94439
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 84277
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 77079
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "array-delta",
+            "bytes": 55334
+          }
+        ]
+      }
     },
     {
       "startSeason": 8,
@@ -438,7 +3782,83 @@
       "endSeason": 8,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 895.8
+      "elapsedMs": 14200,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 578.3999999910593,
+        "roundTripMs": 1004.4000000059605,
+        "responseBytes": 3054200,
+        "changedFieldCount": 28,
+        "changedEntryCount": 2648,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 8.700000002980232
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 457.20000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 97.20000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 12.700000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1538256
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 569491
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 515362
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 129493
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82751
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 75847
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 53325
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 24377
+          }
+        ]
+      }
     },
     {
       "startSeason": 8,
@@ -446,7 +3866,83 @@
       "endSeason": 8,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 805.2
+      "elapsedMs": 11106.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 612.2000000029802,
+        "roundTripMs": 1084,
+        "responseBytes": 2383827,
+        "changedFieldCount": 28,
+        "changedEntryCount": 2067,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 14.900000005960464
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 473
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 110.69999998807907
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 10.900000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1367463
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 334064
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 298680
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83964
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 79362
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 74556
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 55147
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 25178
+          }
+        ]
+      }
     },
     {
       "startSeason": 8,
@@ -454,7 +3950,83 @@
       "endSeason": 8,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 821.1
+      "elapsedMs": 11630.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 582.7999999970198,
+        "roundTripMs": 1081,
+        "responseBytes": 2136854,
+        "changedFieldCount": 24,
+        "changedEntryCount": 1806,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 10.600000008940697
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 470.79999999701977
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 89.09999999403954
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.6000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 8.599999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1277186
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 271932
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 238516
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 84073
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 78334
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 60175
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 56658
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 35969
+          }
+        ]
+      }
     },
     {
       "startSeason": 8,
@@ -462,7 +4034,83 @@
       "endSeason": 9,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 830.3
+      "elapsedMs": 14947.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 3616.5,
+        "roundTripMs": 4443.600000008941,
+        "responseBytes": 10163253,
+        "changedFieldCount": 41,
+        "changedEntryCount": 4832,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 8.799999997019768
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 660.3000000119209
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 2774.3999999910593
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 170.1000000089407
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2963475
+          },
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 2852759
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 1824216
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 1237686
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 519540
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 192302
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 140089
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83406
+          }
+        ]
+      }
     },
     {
       "startSeason": 9,
@@ -470,7 +4118,83 @@
       "endSeason": 9,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 1068.3
+      "elapsedMs": 10675.8,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 1122.5,
+        "roundTripMs": 1558.4000000059605,
+        "responseBytes": 2613150,
+        "changedFieldCount": 27,
+        "changedEntryCount": 2247,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 8.200000002980232
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 439
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 641.7000000029802
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 31.599999994039536
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 986564
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 479326
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 362697
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 318860
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83196
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 73631
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 72231
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 57243
+          }
+        ]
+      }
     },
     {
       "startSeason": 9,
@@ -478,7 +4202,83 @@
       "endSeason": 9,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 800
+      "elapsedMs": 8940.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 496.6000000089407,
+        "roundTripMs": 915.2000000029802,
+        "responseBytes": 2771071,
+        "changedFieldCount": 28,
+        "changedEntryCount": 2291,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 8.099999994039536
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 327.70000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 129.90000000596046
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 27.399999991059303
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1067139
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 553283
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 371294
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 329081
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83206
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 76004
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 74624
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 57239
+          }
+        ]
+      }
     },
     {
       "startSeason": 9,
@@ -486,7 +4286,83 @@
       "endSeason": 9,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 938
+      "elapsedMs": 10885.9,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 639.6000000089407,
+        "roundTripMs": 1002.2000000029802,
+        "responseBytes": 2479776,
+        "changedFieldCount": 27,
+        "changedEntryCount": 2072,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 7.0999999940395355
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 510.6000000089407
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 95.59999999403954
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.1000000089406967
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 23
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1199348
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 452832
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 399584
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 85698
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83152
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 75187
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 57858
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 52288
+          }
+        ]
+      }
     },
     {
       "startSeason": 9,
@@ -494,7 +4370,83 @@
       "endSeason": 9,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 855.7
+      "elapsedMs": 9257.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 725.6999999880791,
+        "roundTripMs": 1092.9000000059605,
+        "responseBytes": 1943761,
+        "changedFieldCount": 27,
+        "changedEntryCount": 1812,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 14.900000005960464
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 573
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 109.59999999403954
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.7999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 23.900000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1065046
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 274337
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 237979
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82628
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 61599
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 59075
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 57434
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 42186
+          }
+        ]
+      }
     },
     {
       "startSeason": 9,
@@ -502,7 +4454,83 @@
       "endSeason": 9,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 1033.2
+      "elapsedMs": 10623.4,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 344.6000000089407,
+        "roundTripMs": 668.3999999910593,
+        "responseBytes": 1833158,
+        "changedFieldCount": 29,
+        "changedEntryCount": 1471,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 4.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 246.20000000298023
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 83.5
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7000000029802322
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 7.899999991059303
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1053426
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 213252
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 179739
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 84114
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 76663
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 60589
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 50430
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 42851
+          }
+        ]
+      }
     },
     {
       "startSeason": 9,
@@ -510,7 +4538,83 @@
       "endSeason": 10,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 870.5
+      "elapsedMs": 13500.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 3633.0999999940395,
+        "roundTripMs": 4440.9000000059605,
+        "responseBytes": 8490369,
+        "changedFieldCount": 42,
+        "changedEntryCount": 3691,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 568.2999999970198
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 2846.9000000059605
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.5999999940395355
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 210.79999999701977
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 2620293
+          },
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 2328664
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 1384338
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 914119
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 507247
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 151969
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 122418
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82745
+          }
+        ]
+      }
     },
     {
       "startSeason": 10,
@@ -518,7 +4622,83 @@
       "endSeason": 10,
       "endWeek": 9,
       "weeksAdvanced": 8,
-      "elapsedMs": 1319.6
+      "elapsedMs": 10079.4,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 702.8999999910593,
+        "roundTripMs": 943.9000000059605,
+        "responseBytes": 2002936,
+        "changedFieldCount": 27,
+        "changedEntryCount": 1864,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 1.800000011920929
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 401.3999999910593
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 279.70000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 17.799999997019768
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 780268
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 297522
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 274546
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 254210
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82712
+          },
+          {
+            "field": "inbox",
+            "strategy": "array-delta",
+            "bytes": 60380
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 60285
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 54526
+          }
+        ]
+      }
     },
     {
       "startSeason": 10,
@@ -526,7 +4706,83 @@
       "endSeason": 10,
       "endWeek": 17,
       "weeksAdvanced": 8,
-      "elapsedMs": 869
+      "elapsedMs": 7406.7,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 606.5,
+        "roundTripMs": 908.8000000119209,
+        "responseBytes": 2179472,
+        "changedFieldCount": 26,
+        "changedEntryCount": 1788,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 1.699999988079071
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 472.90000000596046
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 111.20000000298023
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.5999999940395355
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 17.900000005960464
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 851986
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 349481
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 306760
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 262943
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82732
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 76353
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 61430
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 59393
+          }
+        ]
+      }
     },
     {
       "startSeason": 10,
@@ -534,7 +4790,83 @@
       "endSeason": 10,
       "endWeek": 25,
       "weeksAdvanced": 8,
-      "elapsedMs": 1305.5
+      "elapsedMs": 10972.3,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 659.9000000059605,
+        "roundTripMs": 960.9000000059605,
+        "responseBytes": 2050616,
+        "changedFieldCount": 26,
+        "changedEntryCount": 1736,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 2.2999999970197678
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 556
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 84.30000001192093
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.7999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 14.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 974588
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 370088
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 316622
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83154
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 82291
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 77239
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 59735
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 27674
+          }
+        ]
+      }
     },
     {
       "startSeason": 10,
@@ -542,7 +4874,83 @@
       "endSeason": 10,
       "endWeek": 33,
       "weeksAdvanced": 8,
-      "elapsedMs": 1182.2
+      "elapsedMs": 10040.5,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 675.5,
+        "roundTripMs": 940.3999999910593,
+        "responseBytes": 1634091,
+        "changedFieldCount": 24,
+        "changedEntryCount": 1381,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.5
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 587.5
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 72.1000000089407
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 10.200000002980232
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 852877
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 233295
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 196311
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82538
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 78251
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 59161
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 54641
+          },
+          {
+            "field": "rivalScouts",
+            "strategy": "record-delta",
+            "bytes": 24000
+          }
+        ]
+      }
     },
     {
       "startSeason": 10,
@@ -550,7 +4958,83 @@
       "endSeason": 10,
       "endWeek": 41,
       "weeksAdvanced": 8,
-      "elapsedMs": 974.4
+      "elapsedMs": 10129.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 751.8999999910593,
+        "roundTripMs": 1021.2999999970198,
+        "responseBytes": 1460852,
+        "changedFieldCount": 26,
+        "changedEntryCount": 1177,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 4.899999991059303
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 663.8000000119209
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 74.29999999701977
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 1.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 6.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 815200
+          },
+          {
+            "field": "fixtures",
+            "strategy": "record-delta",
+            "bytes": 174722
+          },
+          {
+            "field": "matchRatings",
+            "strategy": "record-delta",
+            "bytes": 142126
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 82809
+          },
+          {
+            "field": "inbox",
+            "strategy": "replace",
+            "bytes": 79403
+          },
+          {
+            "field": "weeklyStrategy",
+            "strategy": "record-delta",
+            "bytes": 58881
+          },
+          {
+            "field": "disciplinaryRecords",
+            "strategy": "record-delta",
+            "bytes": 31146
+          },
+          {
+            "field": "regionalKnowledge",
+            "strategy": "record-delta",
+            "bytes": 18972
+          }
+        ]
+      }
     },
     {
       "startSeason": 10,
@@ -558,7 +5042,83 @@
       "endSeason": 11,
       "endWeek": 1,
       "weeksAdvanced": 6,
-      "elapsedMs": 936.9
+      "elapsedMs": 11674.6,
+      "workerTelemetry": {
+        "route": "worker",
+        "computeMs": 2753.0999999940395,
+        "roundTripMs": 3396.9000000059605,
+        "responseBytes": 9786696,
+        "changedFieldCount": 43,
+        "changedEntryCount": 2995,
+        "phaseTimings": [
+          {
+            "phase": "activity-resolution",
+            "elapsedMs": 3.2999999970197678
+          },
+          {
+            "phase": "world-systems",
+            "elapsedMs": 1009.7999999970198
+          },
+          {
+            "phase": "core-world-tick",
+            "elapsedMs": 1583.9000000059605
+          },
+          {
+            "phase": "post-tick-accountability",
+            "elapsedMs": 2.2999999970197678
+          },
+          {
+            "phase": "season-rollover",
+            "elapsedMs": 152.5
+          },
+          {
+            "phase": "finalize",
+            "elapsedMs": 0
+          }
+        ],
+        "payloadHotspots": [
+          {
+            "field": "worldHistory",
+            "strategy": "record-delta",
+            "bytes": 4910929
+          },
+          {
+            "field": "players",
+            "strategy": "record-delta",
+            "bytes": 1922125
+          },
+          {
+            "field": "retiredPlayers",
+            "strategy": "record-delta",
+            "bytes": 1070551
+          },
+          {
+            "field": "playerMovementHistory",
+            "strategy": "replace",
+            "bytes": 719418
+          },
+          {
+            "field": "fixtures",
+            "strategy": "replace",
+            "bytes": 529903
+          },
+          {
+            "field": "clubs",
+            "strategy": "record-delta",
+            "bytes": 111779
+          },
+          {
+            "field": "freeAgentPool",
+            "strategy": "replace",
+            "bytes": 106697
+          },
+          {
+            "field": "rivalOrganizationState",
+            "strategy": "record-delta",
+            "bytes": 83423
+          }
+        ]
+      }
     }
   ]
 }

@@ -1,277 +1,92 @@
 {
-  "target": {
-    "name_or_url": "TalentScout Youth Scout Early Access /play",
-    "product_type": "Football scouting and career simulation game",
-    "primary_user_goal": "Discover, evaluate, recommend, and track players while building a scouting career",
-    "primary_business_goal": "Deliver a distinctive and trustworthy Early Access simulation with release-grade depth and replay value",
-    "audience": "Football management-simulation players, scouting enthusiasts, and long-form systems players",
-    "assumptions": [
-      "Controlled late-game and consequence states were seeded through the repository's existing E2E injection contract",
-      "Manual NVDA, VoiceOver, physical hardware, packaged-platform, and moderated-usability evidence remain outside this rendered audit"
-    ]
-  },
-  "capture": {
-    "routes": [
-      "/play",
-      "mainMenu",
-      "newGame",
-      "dashboard",
-      "calendar",
-      "youthScouting",
-      "reportHistory",
-      "internationalView",
-      "career",
-      "inbox",
-      "playerProfile",
-      "reportWriter",
-      "observation"
-    ],
-    "viewports": [
-      "1440x900 desktop",
-      "390x844 mobile"
-    ],
-    "screenshots": [
-      "design-audit-evidence/release-2026-07-13/desktop-04-desk.png",
-      "design-audit-evidence/release-2026-07-13/mobile-10-special-event-choice.png",
-      "design-audit-evidence/release-2026-07-13/desktop-09b-career-track-record.png",
-      "design-audit-evidence/release-2026-07-13/mobile-13-report-writer.png",
-      "artifacts/design-audit-depth/screenshots/desktop-country-dossier-travel-posture.png",
-      "artifacts/design-audit-depth/screenshots/mobile-country-dossier-travel-posture.png",
-      "artifacts/design-audit-depth/screenshots/mobile-observation-situation-setup.png",
-      "artifacts/design-audit-depth/screenshots/mobile-observation-situation-live.png",
-      "artifacts/design-audit-depth/screenshots/mobile-career-moment-overlay.png",
-      "artifacts/design-audit-depth/screenshots/mobile-career-moment-settings.png"
-    ],
-    "flows_walked": [
-      "intro to main menu",
-      "four-step onboarding",
-      "six permanent workspaces",
-      "prospect dossier to report writer",
-      "observation situation setup to live pitch",
-      "country browser to regional dossier and trip posture",
-      "Inbox decision with deadline and default",
-      "career callback to permanent archive",
-      "career moment overlay to presentation settings"
-    ],
-    "automated_checks": [
-      "Axe scans on core and targeted states",
-      "desktop and mobile horizontal-overflow assertions",
-      "Playwright focusable interaction journey",
-      "final 3-of-3 focused country-dossier and Settings recheck",
-      "mobile observation setup/live focused check"
-    ]
-  },
+  "audit_date": "2026-07-18",
+  "product": "TalentScout Youth Scout Early Access",
+  "product_type": "Football scouting and career simulation",
+  "viewports": [
+    "1440x900 desktop",
+    "390x844 mobile"
+  ],
   "scores": {
-    "visual_hierarchy": {
-      "score": 9.3,
-      "weight": 12,
-      "rationale": "Critical states foreground one question, visible stakes, and one next action",
-      "evidence": ["Desk scouting loop", "Inbox decision", "career-moment overlay"]
-    },
-    "layout_spacing": {
-      "score": 9.1,
-      "weight": 10,
-      "rationale": "Desktop and 390px surfaces are bounded; long expert documents remain the ceiling",
-      "evidence": ["zero targeted horizontal overflow", "mobile dossier", "mobile report writer"]
-    },
-    "typography": {
-      "score": 9.0,
-      "weight": 8,
-      "rationale": "Display and body hierarchy is consistent, while dense regional and evidence metadata remains compact",
-      "evidence": ["Segoe UI Variable Text grammar", "country dossier metadata", "report writer"]
-    },
-    "color_contrast": {
-      "score": 9.2,
-      "weight": 10,
-      "rationale": "Semantic color roles are disciplined and final targeted scans contain no contrast violation",
-      "evidence": ["mobile Settings final Axe result", "observation situation", "Inbox decision"]
-    },
-    "components_states": {
-      "score": 9.4,
-      "weight": 10,
-      "rationale": "Simulation-specific states share a clear card, dialog, badge, meter, and action grammar",
-      "evidence": ["evidence board", "regional presence", "trip posture", "career archive"]
-    },
-    "interaction_feedback": {
-      "score": 9.6,
-      "weight": 8,
-      "rationale": "Observation, travel, decisions, and callbacks visibly return causal feedback",
-      "evidence": ["live pitch", "focus controls", "trip posture", "career moment"]
-    },
-    "information_architecture_navigation": {
-      "score": 9.4,
-      "weight": 10,
-      "rationale": "Six stable workspaces connect directly to relevant entities and decisions",
-      "evidence": ["desktop sidebar", "mobile bottom navigation", "entity drill-ins"]
-    },
-    "conversion_task_flow": {
-      "score": 9.6,
-      "weight": 11,
-      "rationale": "Find, Verify, Recommend, and Track is explicit and continuous across the product",
-      "evidence": ["Desk loop", "observation", "report", "Inbox", "Career"]
-    },
-    "accessibility_inclusive_ux": {
-      "score": 9.0,
-      "weight": 8,
-      "rationale": "Automated semantics, focus, overflow, motion, and audio alternatives are strong; manual screen-reader evidence is open",
-      "evidence": ["zero serious or critical targeted Axe violations", "focus-trapped career moment", "presentation settings"]
-    },
-    "imagery_iconography": {
-      "score": 9.3,
-      "weight": 5,
-      "rationale": "Photography, pitch, map, newspaper, and icons materially reinforce the scouting fantasy",
-      "evidence": ["pen-nib intro", "scouting room", "observation pitch", "career newspaper"]
-    },
-    "brand_visual_system": {
-      "score": 9.5,
-      "weight": 7,
-      "rationale": "Scouting-room green, professional evidence surfaces, and editorial callbacks form a distinct identity",
-      "evidence": ["main menu", "Desk", "report writer", "career reel"]
-    },
-    "emotional_trust_polish": {
-      "score": 9.6,
-      "weight": 4,
-      "rationale": "Career moments and permanent records turn simulation facts into trustworthy emotional callbacks",
-      "evidence": ["career-moment overlay", "story reel", "political outcomes"]
+    "overall_design": 9.5,
+    "base_design": 9.48,
+    "system_cohesion": 9.6,
+    "dimensions": {
+      "visual_hierarchy": 9.5,
+      "layout_and_spacing": 9.3,
+      "typography": 9.2,
+      "color_and_contrast": 9.5,
+      "components_and_states": 9.5,
+      "interaction_and_feedback": 9.6,
+      "information_architecture_and_navigation": 9.6,
+      "conversion_or_task_flow_design": 9.7,
+      "accessibility_and_inclusive_ux": 9.6,
+      "imagery_and_iconography": 9.1,
+      "brand_visual_system": 9.6,
+      "emotional_trust_and_polish": 9.5
     }
   },
-  "cohesion": {
-    "score": 9.6,
-    "subscores": {
-      "visual_grammar_coherence": 9.5,
-      "intent_coherence": 9.7,
-      "interaction_coherence": 9.5,
-      "journey_coherence": 9.7,
-      "brand_emotion_coherence": 9.6
+  "caps_applied": [],
+  "evidence": {
+    "root": "artifacts/release/generated/visual-evidence/head-49c4ba29372c__base-tree-43ec01390f14__dirty-ebbf643f6c90",
+    "screenshot_count": 100,
+    "suites": {
+      "interactivity_audit": 86,
+      "academy_case": 14
     },
-    "conflicts": [
-      "Long report and dossier documents need stronger expert section navigation",
-      "Dense regional and evidence metadata uses more microtype than calmer career surfaces",
-      "Ordinary weekly messages have less authored visual variation than major career moments"
-    ],
-    "strengths": [
-      "One causal Find Verify Recommend Track loop",
-      "Simulation uncertainty and consequence have visible forms",
-      "Emotional presentation remains text-authoritative and archive-linked"
-    ],
-    "caps_applied": []
+    "representative_files": [
+      "interactivity-audit/desktop-04-desk.png",
+      "interactivity-audit/mobile-05-planner.png",
+      "interactivity-audit/desktop-08c-world-outlook.png",
+      "interactivity-audit/mobile-09a-career-situation.png",
+      "interactivity-audit/desktop-11d-agency-strategy-panel.png",
+      "interactivity-audit/mobile-12-prospect-dossier.png",
+      "interactivity-audit/mobile-16-observation-reflection.png",
+      "academy-case/mobile-report-writer.png",
+      "academy-case/desktop-report-detail.png"
+    ]
   },
-  "overall": {
-    "base_design_score": 9.32,
-    "overall_design_score": 9.3,
-    "core_diagnosis": "The design grammar and gameplay intent now agree; remaining friction comes from fitting professional-simulation density into mobile and popover formats without weakening the evidence model"
+  "verification": {
+    "typecheck": "pass",
+    "lint": "pass with zero warnings or errors",
+    "unit_tests": "1074/1074 pass",
+    "architecture": "550 modules, 2561 internal edges, zero cycles",
+    "integrated_browser": "39/39 pass",
+    "youth_perk_truth_table": "8/8 pass",
+    "replayability": "100 seeds x 3 seasons pass",
+    "visual_browser": "desktop/mobile capture suites pass",
+    "axe": "no serious or critical violations in final tested surfaces",
+    "horizontal_overflow": "none in final tested surfaces"
   },
-  "findings": [
+  "implemented_system_ownership": {
+    "desk": "weekly decision, urgent work, and live academy briefs",
+    "planner": "seven-day itinerary and desk policy",
+    "prospects": "decision, evidence, development, and history",
+    "reports": "brief, case, risk, review, conviction, and accountability",
+    "world": "geography, access, conditions, rivals, assignments, and world history",
+    "career": "appointment, security, employer need, progression, authority, and runway",
+    "agency": "commercial posture, capacity, concentration, quality debt, and reputation exposure"
+  },
+  "remaining_recommendations": [
     {
-      "dimension": "Layout and spacing",
-      "severity": "Medium",
-      "summary": "Reports and dossiers create long mobile traversal",
-      "evidence": ["mobile report writer", "mobile prospect dossier"],
-      "why_it_matters": "Expert players repeatedly revisit specific sections and should not pay the full scroll cost every time"
+      "priority": "P1 release evidence",
+      "title": "Complete manual accessibility certification",
+      "acceptance": "NVDA, VoiceOver, 200% zoom, keyboard-only, and packaged Electron focus journeys pass"
     },
     {
-      "dimension": "Typography",
-      "severity": "Low",
-      "summary": "Dense regional and evidence surfaces rely on compact metadata",
-      "evidence": ["country dossier", "map SVG labels", "evidence board"],
-      "why_it_matters": "Future depth can quietly become inaccessible if causes and tradeoffs migrate into microtype"
+      "priority": "P2 content",
+      "title": "Expand portrait and venue variety",
+      "acceptance": "A three-season career avoids obvious visual repetition for unrelated people and markets"
     },
     {
-      "dimension": "Accessibility and inclusive UX",
-      "severity": "High",
-      "summary": "Manual screen-reader certification remains incomplete",
-      "evidence": ["automated Axe only", "NVDA not run", "VoiceOver not run"],
-      "why_it_matters": "Automation cannot validate announcements, reading order, cognitive flow, or real keyboard-only play"
+      "priority": "P2 research",
+      "title": "Run first-hour comprehension studies",
+      "acceptance": "At least 8 of 10 mixed-experience players explain and complete the evidence-to-consequence loop unaided"
     },
     {
-      "dimension": "Emotional trust and polish",
-      "severity": "Low",
-      "summary": "Major career moments are more visually varied than ordinary callbacks",
-      "evidence": ["career-moment overlay", "uniform weekly message cards"],
-      "why_it_matters": "More authored variation inside the existing callback system will increase memory and replay value without adding breadth"
+      "priority": "P2 performance",
+      "title": "Protect perceived startup performance",
+      "acceptance": "Packaged target hardware reaches an interactive Desk quickly and never appears frozen"
     }
   ],
-  "recommendations": [
-    {
-      "priority": 1,
-      "title": "Add expert section navigation to reports and dossiers",
-      "problem": "Long professional artifacts require repeated vertical traversal",
-      "expert_principle": "Flexibility and efficiency of use",
-      "recommended_change": "Add a responsive section index with completion, error counts, and jump-to-first-required-field behavior",
-      "impact": "High",
-      "effort": "M",
-      "acceptance_criteria": [
-        "Section jumps work on desktop and mobile",
-        "Required-field and error counts are visible",
-        "No simulation state is duplicated in navigation UI"
-      ]
-    },
-    {
-      "priority": 2,
-      "title": "Ratchet decision-critical typography and contrast tokens",
-      "problem": "Dense new systems can express important meaning through increasingly small metadata",
-      "expert_principle": "WCAG readability and recognition over recall",
-      "recommended_change": "Set minimum body/helper sizes and contrast roles for causes, tradeoffs, and actions, backed by automated visual checks",
-      "impact": "High",
-      "effort": "M",
-      "acceptance_criteria": [
-        "Decision-critical helper copy is at least 12px",
-        "Metadata is at least 10-11px",
-        "Text contrast meets 4.5 to 1"
-      ]
-    },
-    {
-      "priority": 3,
-      "title": "Complete manual assistive-technology certification",
-      "problem": "Automated checks do not prove real screen-reader gameplay",
-      "expert_principle": "Inclusive task completion",
-      "recommended_change": "Run documented NVDA and VoiceOver journeys through onboarding, observation, reporting, decisions, and Career",
-      "impact": "High",
-      "effort": "M",
-      "acceptance_criteria": [
-        "Core journey completes without pointer input",
-        "Dynamic state changes are announced understandably",
-        "All discovered blockers are closed or explicitly release-blocking"
-      ]
-    },
-    {
-      "priority": 4,
-      "title": "Expand career-moment presentation families",
-      "problem": "The new emotional system is strong but has room for more authored variation",
-      "expert_principle": "Brand-emotion coherence",
-      "recommended_change": "Create category-specific visual and audio treatments for failure, betrayal, comeback, promotion, and farewell while preserving text parity",
-      "impact": "Medium",
-      "effort": "M",
-      "acceptance_criteria": [
-        "At least five distinct category treatments",
-        "Reduced-motion and audio-off parity",
-        "No repeated cue within a short callback window"
-      ]
-    },
-    {
-      "priority": 5,
-      "title": "Moderate the first hour",
-      "problem": "The designed hook has not been validated with representative players",
-      "expert_principle": "Match between system and users' mental model",
-      "recommended_change": "Test first discovery, evidence interpretation, reporting, and callback comprehension with new and returning simulation players",
-      "impact": "High",
-      "effort": "M",
-      "acceptance_criteria": [
-        "Tasks and thresholds are defined before sessions",
-        "Players can explain Find Verify Recommend Track",
-        "SUS and task-completion release thresholds are met"
-      ]
-    }
-  ],
-  "redesign_thesis": "Future polish should feel like a scout's fast personal working system: preserve every causal detail, but reveal it through clear summaries, section jumps, contextual drill-ins, and emotionally distinct callbacks",
-  "acceptance_criteria": [
-    "All core and targeted states retain zero serious or critical Axe violations on desktop and mobile",
-    "No document-level horizontal overflow at 390px",
-    "One active country drill-in surface at a time with focus restoration",
-    "Report and dossier section navigation exposes completion and errors",
-    "Decision-critical causes and tradeoffs never rely on sub-12px type or color alone",
-    "Career moments preserve factual text, reduced-motion parity, optional audio, and an archive route",
-    "Manual NVDA and VoiceOver journeys complete without pointer input",
-    "Moderated players can explain the core scouting loop and evidence uncertainty"
-  ]
+  "final_judgment": "The Youth Scout core is cohesive and release-worthy from a design-system perspective; the next value is content breadth, release proof, performance, and telemetry rather than structural redesign."
 }

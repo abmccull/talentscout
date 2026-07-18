@@ -1,22 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
   Sparkles,
   Brain,
-  CheckCircle,
-  XCircle,
   Flag,
   MessageSquarePlus,
   ChevronRight,
+  Crosshair,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import type { ObservationSession, Hypothesis, SessionFlaggedMoment } from "@/engine/observation/types";
+import type { ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
 import { MODE_FLAGGED_LABEL } from "@/engine/observation/types";
 import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/observation/reflection";
+import type { EvidenceClassificationId, ScoutCueReading } from "@/engine/core/types";
+import { resolveObservationSignalAssessment } from "@/engine/observation/questions";
 
 // =============================================================================
 // PROP TYPES
@@ -25,8 +26,8 @@ import { formatObservationActivityLabel, type ReflectionResult } from "@/engine/
 interface ReflectionScreenProps {
   session: ObservationSession;
   reflectionResult: ReflectionResult;
-  onAddHypothesis: (playerId: string, text: string, domain: string) => void;
   onAddNote: (note: string) => void;
+  onClassifyEvidence: (cueId: string, classification: EvidenceClassificationId) => void;
   onComplete: () => void;
 }
 
@@ -71,66 +72,105 @@ const REACTION_COLORS: Record<SessionFlaggedMoment["reaction"], string> = {
   needs_more_data:"border-zinc-500/40 bg-zinc-500/10 text-zinc-400",
 };
 
-// =============================================================================
-// HYPOTHESIS CARD
-// =============================================================================
+const CLASSIFICATION_COPY: Record<EvidenceClassificationId, { label: string; description: string }> = {
+  technicalExecution: { label: "Technical execution", description: "Body shape, touch, pass, strike, or control." },
+  preReceiveDecision: { label: "Decision before receiving", description: "Scanning and option selection happened before the ball arrived." },
+  offBallMovement: { label: "Off-ball movement", description: "Timing or positioning created value away from the ball." },
+  pressureResponse: { label: "Response to pressure", description: "The action changed when contact, risk, or a setback arrived." },
+  physicalRepeatability: { label: "Physical repeatability", description: "Balance, recovery, movement quality, or repeated output mattered." },
+  anomaly: { label: "Unusual signal", description: "Worth keeping because it did not fit the surrounding level or pattern." },
+  noConclusion: { label: "No reliable conclusion", description: "Keep the passage, but do not turn it into a trait claim yet." },
+};
 
-interface HypothesisCardProps {
-  hypothesis: Hypothesis;
-  playerName: string;
-  onAccept: () => void;
-  onDismiss: () => void;
+function cueReason(cue: ScoutCueReading): string {
+  const positives: string[] = [];
+  const limits: string[] = [];
+  if (cue.factors.focus > 0) positives.push("focused attention");
+  if (cue.factors.questionAlignment > 0) positives.push("a question that matched the action");
+  if (cue.factors.domainSkill >= 0.14) positives.push("a developed scouting strength");
+  if (cue.factors.regionalContext > 0.03) positives.push("a useful local reference base");
+  if (cue.factors.fatigue < -0.04) limits.push("fatigue");
+  if (cue.factors.conditions < -0.03) limits.push("difficult viewing conditions");
+  if (cue.factors.focus < 0) limits.push("peripheral attention");
+  const clear = positives.length > 0 ? `Sharpened by ${positives.join(", ")}.` : "No major clarity advantage.";
+  return limits.length > 0 ? `${clear} Limited by ${limits.join(" and ")}.` : clear;
 }
 
-function HypothesisCard({ hypothesis, playerName, onAccept, onDismiss }: HypothesisCardProps) {
-  const [dismissed, setDismissed] = useState(false);
-  const [accepted, setAccepted] = useState(false);
-
-  if (dismissed || accepted) {
-    return (
-      <div className="flex items-center gap-3 rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 opacity-50">
-        {accepted
-          ? <CheckCircle size={14} className="shrink-0 text-emerald-400" aria-hidden="true" />
-          : <XCircle size={14} className="shrink-0 text-zinc-600" aria-hidden="true" />}
-        <p className="text-xs text-zinc-500 line-through">{hypothesis.text}</p>
-      </div>
-    );
-  }
+function EvidenceSynthesisPanel({
+  session,
+  onClassify,
+}: {
+  session: ObservationSession;
+  onClassify: ReflectionScreenProps["onClassifyEvidence"];
+}) {
+  const flaggedMomentIds = useMemo(
+    () => new Set(session.flaggedMoments.map((flagged) => flagged.moment.id)),
+    [session.flaggedMoments],
+  );
+  const cues = (session.cueReadings ?? []).filter((cue) => flaggedMomentIds.has(cue.momentId));
+  if (cues.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-[#27272a] bg-[#141414] p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1.5 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-semibold text-white">{playerName}</span>
-            <DomainBadge domain={hypothesis.domain} />
-          </div>
-          <p className="text-sm text-zinc-300 leading-relaxed">{hypothesis.text}</p>
+    <section aria-labelledby="evidence-synthesis-heading">
+      <div className="mb-3 flex items-center gap-2">
+        <Crosshair size={14} className="text-cyan-300" aria-hidden="true" />
+        <div>
+          <h2 id="evidence-synthesis-heading" className="text-xs font-semibold uppercase tracking-widest text-cyan-200">
+            Interpret what you kept
+          </h2>
+          <p className="mt-1 text-xs leading-5 text-zinc-400">
+            Classify at least one passage. This choice becomes report evidence; your private notes do not.
+          </p>
         </div>
       </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          className="flex-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300"
-          onClick={() => { setAccepted(true); onAccept(); }}
-          aria-label={`Accept hypothesis: ${hypothesis.text}`}
-        >
-          <CheckCircle size={13} className="mr-1.5" aria-hidden="true" />
-          Accept
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="flex-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800"
-          onClick={() => setDismissed(true)}
-          aria-label={`Dismiss hypothesis: ${hypothesis.text}`}
-        >
-          <XCircle size={13} className="mr-1.5" aria-hidden="true" />
-          Dismiss
-        </Button>
+      <div className="space-y-3">
+        {cues.map((cue) => {
+          const selected = session.evidenceDecisions?.[cue.id]?.classification;
+          return (
+            <article key={cue.id} className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-white">{cue.minute}&apos; · {cue.summary}</p>
+                  <p className="mt-1 text-xs leading-5 text-zinc-300">{cue.detail}</p>
+                </div>
+                <span className="rounded-full border border-cyan-300/25 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+                  {cue.clarity} read
+                </span>
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-zinc-400">{cueReason(cue)}</p>
+              <fieldset className="mt-3">
+                <legend className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">What did this passage show?</legend>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {cue.suggestedClassifications.map((classification) => {
+                    const copy = CLASSIFICATION_COPY[classification];
+                    return (
+                      <label
+                        key={classification}
+                        className={`relative min-h-16 cursor-pointer rounded-lg border p-3 transition focus-within:ring-2 focus-within:ring-cyan-300 ${
+                          selected === classification
+                            ? "border-cyan-300/60 bg-cyan-300/12"
+                            : "border-white/10 bg-black/20 hover:border-white/25"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`cue-classification-${cue.id}`}
+                          checked={selected === classification}
+                          onChange={() => onClassify(cue.id, classification)}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                        />
+                        <span className="block text-xs font-semibold text-white">{copy.label}</span>
+                        <span className="mt-1 block text-[10px] leading-4 text-zinc-400">{copy.description}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </article>
+          );
+        })}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -192,17 +232,37 @@ function MomentTimeline({ flaggedMoments }: { flaggedMoments: SessionFlaggedMome
 export function ReflectionScreen({
   session,
   reflectionResult,
-  onAddHypothesis,
   onAddNote,
+  onClassifyEvidence,
   onComplete,
 }: ReflectionScreenProps) {
   const [noteInput, setNoteInput] = useState("");
+  const completeButtonRef = useRef<HTMLButtonElement>(null);
+  const flaggedCueIds = useMemo(() => {
+    const momentIds = new Set(session.flaggedMoments.map((flagged) => flagged.moment.id));
+    return (session.cueReadings ?? [])
+      .filter((cue) => momentIds.has(cue.momentId))
+      .map((cue) => cue.id);
+  }, [session.cueReadings, session.flaggedMoments]);
+  const requiresEvidenceInterpretation = session.specialization === "youth"
+    && flaggedCueIds.length > 0
+    && !flaggedCueIds.some((cueId) => session.evidenceDecisions?.[cueId]);
+  const signalAssessment = session.mode === "fullObservation"
+    ? resolveObservationSignalAssessment(session)
+    : null;
+
+  useEffect(() => {
+    if (requiresEvidenceInterpretation) return;
+    const frame = requestAnimationFrame(() => {
+      completeButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [requiresEvidenceInterpretation]);
 
   const {
     sessionSummary,
     insightPointsFromReflection,
     gutFeelingCandidate,
-    suggestedHypotheses,
     reflectionPrompts,
   } = reflectionResult;
 
@@ -247,8 +307,42 @@ export function ReflectionScreen({
         <Card className="border-[#27272a] bg-[#141414] shadow-md">
           <CardContent className="p-5 space-y-3">
             <p className="text-sm leading-relaxed text-zinc-300">{sessionSummary}</p>
+            {signalAssessment && (
+              <div className={`rounded-xl border p-3 ${signalAssessment.outcome === "clear"
+                ? "border-emerald-400/20 bg-emerald-400/[0.05]"
+                : signalAssessment.outcome === "weak"
+                  ? "border-amber-400/20 bg-amber-400/[0.05]"
+                  : "border-zinc-500/20 bg-zinc-500/[0.05]"}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className={`text-xs font-semibold ${signalAssessment.outcome === "clear"
+                    ? "text-emerald-200"
+                    : signalAssessment.outcome === "weak"
+                      ? "text-amber-200"
+                      : "text-zinc-300"}`}
+                  >
+                    {signalAssessment.outcome === "clear"
+                      ? "A usable signal"
+                      : signalAssessment.outcome === "weak"
+                        ? "A tentative signal"
+                        : "No reliable signal today"}
+                  </p>
+                  {signalAssessment.comparisonReady && (
+                    <span className="rounded-full border border-cyan-300/20 bg-cyan-300/[0.06] px-2 py-1 text-[10px] text-cyan-100">
+                      New comparison available
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-zinc-300">{signalAssessment.summary}</p>
+                {signalAssessment.reasons.length > 0 && (
+                  <p className="mt-1 text-[11px] leading-4 text-zinc-500">
+                    {signalAssessment.reasons[0]}
+                  </p>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-2 pt-1">
-              <span className="text-xs text-zinc-500">Insight Points earned:</span>
+              <span className="text-xs text-zinc-500">Reflection bonus:</span>
               <span className="text-sm font-bold text-amber-400">
                 +{insightPointsFromReflection} IP
               </span>
@@ -256,6 +350,8 @@ export function ReflectionScreen({
           </CardContent>
         </Card>
       </section>
+
+      <EvidenceSynthesisPanel session={session} onClassify={onClassifyEvidence} />
 
       {/* ── Gut Feeling ── */}
       {gutFeelingCandidate !== null && (
@@ -322,11 +418,11 @@ export function ReflectionScreen({
                 <div className="flex items-center gap-2">
                   <Brain size={14} className="shrink-0 text-amber-500/70" aria-hidden="true" />
                   <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-500/70">
-                    Potential Estimate
+                    Projection signal
                   </span>
                 </div>
                 <p className="text-sm font-semibold text-amber-200">
-                  Estimated PA: {gutFeelingCandidate.paEstimate.low} &ndash; {gutFeelingCandidate.paEstimate.high}
+                  Broad range: {gutFeelingCandidate.paEstimate.low} &ndash; {gutFeelingCandidate.paEstimate.high}
                 </p>
                 {/* Visual range bar on a 1–200 scale */}
                 <div className="relative h-2 w-full rounded-full bg-zinc-800/80">
@@ -344,38 +440,10 @@ export function ReflectionScreen({
                   <span>200</span>
                 </div>
                 <p className="text-[10px] text-amber-500/50 italic">
-                  Heuristic estimate based on instinct — not a data-driven assessment.
+                  Built from the cues you noticed. It is deliberately broad and can be wrong.
                 </p>
               </div>
             )}
-          </div>
-        </section>
-      )}
-
-      {/* ── Suggested Hypotheses ── */}
-      {suggestedHypotheses.length > 0 && (
-        <section aria-labelledby="hypotheses-heading">
-          <h2 id="hypotheses-heading" className="mb-3 text-xs font-semibold uppercase tracking-widest text-zinc-500">
-            Suggested Hypotheses
-          </h2>
-          <div className="space-y-3">
-            {suggestedHypotheses.map((hypothesis) => {
-              const player = session.players.find((p) => p.playerId === hypothesis.playerId);
-              const playerName = player?.name ?? hypothesis.playerId;
-              return (
-                <HypothesisCard
-                  key={hypothesis.id}
-                  hypothesis={hypothesis}
-                  playerName={playerName}
-                  onAccept={() =>
-                    onAddHypothesis(hypothesis.playerId, hypothesis.text, hypothesis.domain)
-                  }
-                  onDismiss={() => {
-                    /* state is managed locally inside HypothesisCard */
-                  }}
-                />
-              );
-            })}
           </div>
         </section>
       )}
@@ -430,7 +498,7 @@ export function ReflectionScreen({
             id="notes-heading"
             className="text-xs font-semibold uppercase tracking-widest text-zinc-500"
           >
-            Personal Notes
+            Private notebook
           </h2>
         </div>
 
@@ -458,14 +526,14 @@ export function ReflectionScreen({
             value={noteInput}
             onChange={(e) => setNoteInput(e.target.value)}
             onKeyDown={handleNoteKeyDown}
-            placeholder="Add a note about what you observed… (Ctrl+Enter to save)"
+            placeholder="Optional private note — this is not scored or parsed (Ctrl+Enter to save)"
             rows={3}
             className="w-full resize-none rounded-lg border border-[#27272a] bg-[#141414] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-zinc-500 focus:ring-1 focus:ring-zinc-600"
             aria-describedby="reflection-note-hint"
           />
           <div className="flex items-center justify-between gap-2">
             <p id="reflection-note-hint" className="text-[10px] text-zinc-600">
-              Ctrl+Enter to save quickly
+              Private notes are archival only · Ctrl+Enter to save
             </p>
             <Button
               size="sm"
@@ -484,15 +552,18 @@ export function ReflectionScreen({
       {/* ── Complete Button ── */}
       <div className="pt-2">
         <Button
+          ref={completeButtonRef}
           size="lg"
           className="w-full bg-emerald-600 text-white shadow-md hover:bg-emerald-500 focus-visible:ring-emerald-500"
           onClick={onComplete}
+          disabled={requiresEvidenceInterpretation}
+          data-tutorial-id="observation-complete-reflection"
         >
-          Complete Reflection
+          {requiresEvidenceInterpretation ? "Classify one saved passage" : "Complete Reflection"}
           <ChevronRight size={16} className="ml-2" aria-hidden="true" />
         </Button>
         <p className="mt-2 text-center text-[11px] text-zinc-500">
-          Saved notes, accepted hypotheses, and gut-feeling output carry forward after completion and can be reviewed later in Report History.
+          Your classified evidence carries into the next assessment. Private notes remain in your notebook and never affect scoring.
         </p>
       </div>
     </div>

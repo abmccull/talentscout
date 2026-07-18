@@ -48,6 +48,7 @@ export type { GutFeelingPerkModifiers } from "./gutFeeling";
 
 export {
   advanceYouthRecruitmentBriefs,
+  deriveYouthRecruitmentBriefCapacity,
   fulfillYouthRecruitmentBrief,
   generateYouthRecruitmentBriefs,
   scoreAcademyClubDecision,

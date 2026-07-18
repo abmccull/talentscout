@@ -66,10 +66,10 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
     return (
       <section className="md:col-span-3" aria-labelledby="seasonal-world-heading">
         <h3 id="seasonal-world-heading" className="text-sm font-semibold text-white">
-          Seasonal football context
+          Seasonal football outlook
         </h3>
         <p className="mt-2 text-sm text-zinc-400">
-          No seasonal condition record is available for this imported career yet.
+          No seasonal briefing is available for this older career yet.
         </p>
       </section>
     );
@@ -100,8 +100,8 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
             Season {state.currentSeason} live conditions
           </h3>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-400">
-            These seeded conditions are part of the simulation, not flavour text. They change regional discovery,
-            evidence, opportunities, development, recruitment pressure, travel, and market finances.
+            These shifts change where prospects emerge, how dependable local intelligence is,
+            where rivals concentrate, and what each trip demands from you.
           </p>
         </div>
         <span className="rounded-full border border-cyan-400/20 bg-cyan-400/[0.07] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-cyan-200">
@@ -141,8 +141,8 @@ export function WorldConditionPanel({ state }: WorldConditionPanelProps) {
                   {selectedChoice
                     ? selectedChoice.label
                     : arc.phase === "decision"
-                      ? "A time-limited choice is waiting in your Desk inbox."
-                      : "Watch your Desk inbox as this condition develops."}
+                      ? "A time-limited decision is waiting on your Desk."
+                      : "Your contacts will update you as the situation develops."}
                 </p>
                 {selectedChoice && (
                   <ul className="mt-2 space-y-1 text-xs leading-5 text-zinc-400">

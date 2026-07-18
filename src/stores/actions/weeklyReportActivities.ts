@@ -1,21 +1,8 @@
-import type { GameState, InboxMessage, ScoutReport } from "@/engine/core/types";
-import { recordDiscovery, updateReputation } from "@/engine/career";
-import { calculateInfrastructureEffects } from "@/engine/finance";
+import type { GameState, InboxMessage, ReportWorkItem } from "@/engine/core/types";
 import {
-  calculateReportCraftQualityDetailed,
-  finalizeReport,
-  generateReportContent,
-} from "@/engine/reports/reporting";
-import {
-  attachReportEvidence,
   getFreshReportObservationIds,
   getLatestReportInScope,
 } from "@/engine/reports/reportAccountability";
-import { ensureScoutingCaseForReport } from "@/engine/reports/scoutingCases";
-import {
-  calculatePublicRevisionReputationCost,
-  scaleReputationChange,
-} from "@/engine/core/difficulty";
 
 export interface WeeklyReportActivitiesInput {
   state: GameState;
@@ -24,31 +11,38 @@ export interface WeeklyReportActivitiesInput {
   equipmentQualityBonus: number;
 }
 
-/** Turn scheduled report work into evidence-linked, revision-safe artifacts. */
+/**
+ * Turn scheduled desk time into prepared, evidence-linked work.
+ *
+ * A calendar entry cannot choose a conviction or file a report on the
+ * player's behalf. The prepared item is consumed only when the player opens
+ * the report writer, makes a structured judgment, and submits it.
+ */
 export function processWeeklyReportActivities(
   input: WeeklyReportActivitiesInput,
 ): GameState {
   if (input.playerIds.length === 0) return input.state;
-  const reports = { ...input.state.reports };
-  let cases = { ...(input.state.scoutingCases ?? {}) };
-  let scout = { ...input.state.scout };
-  let discoveries = [...(input.state.discoveryRecords ?? [])];
+
+  const reportWorkItems = { ...(input.state.reportWorkItems ?? {}) };
   const messages: InboxMessage[] = [];
 
-  for (const playerId of input.playerIds) {
+  for (const playerId of new Set(input.playerIds)) {
     const player = input.state.players[playerId];
     if (!player) continue;
+
     const observations = Object.values(input.state.observations).filter(
-      (observation) => observation.playerId === playerId && observation.scoutId === scout.id,
+      (observation) =>
+        observation.playerId === playerId
+        && observation.scoutId === input.state.scout.id,
     );
     if (observations.length === 0) {
       messages.push({
-        id: `report-noobs-${playerId}-w${input.state.currentWeek}`,
+        id: `report-noobs-${playerId}-s${input.state.currentSeason}w${input.state.currentWeek}`,
         week: input.state.currentWeek,
         season: input.state.currentSeason,
         type: "feedback",
-        title: `Report Failed: ${player.firstName} ${player.lastName}`,
-        body: `You attempted to write a report on ${player.firstName} ${player.lastName}, but you have no observations on this player yet. Scout them first through match attendance, training visits, or venue activities before writing a report.`,
+        title: `No evidence to review: ${player.firstName} ${player.lastName}`,
+        body: `You set aside desk time for ${player.firstName} ${player.lastName}, but you have not observed them yet. Watch a match, visit training, or review valid footage before preparing a professional judgment.`,
         read: false,
         actionRequired: false,
         relatedId: playerId,
@@ -58,18 +52,19 @@ export function processWeeklyReportActivities(
     }
 
     const previousReport = getLatestReportInScope(
-      Object.values(reports),
-      scout.id,
+      Object.values(input.state.reports),
+      input.state.scout.id,
       playerId,
     );
-    if (getFreshReportObservationIds(observations, previousReport).length === 0) {
+    const freshObservationIds = getFreshReportObservationIds(observations, previousReport);
+    if (freshObservationIds.length === 0) {
       messages.push({
-        id: `report-no-new-evidence-${playerId}-w${input.state.currentWeek}-s${input.state.currentSeason}`,
+        id: `report-no-new-evidence-${playerId}-s${input.state.currentSeason}w${input.state.currentWeek}`,
         week: input.state.currentWeek,
         season: input.state.currentSeason,
         type: "feedback",
-        title: `Report Deferred: ${player.firstName} ${player.lastName}`,
-        body: `Your existing case already contains all available observations on ${player.firstName} ${player.lastName}. Gather new evidence before scheduling another revision; repeat paperwork does not create reputation or performance credit.`,
+        title: `Gather another look: ${player.firstName} ${player.lastName}`,
+        body: `Your filed judgment already includes every available observation on ${player.firstName} ${player.lastName}. A meaningful revision needs fresh evidence from another match, training visit, or review context.`,
         read: false,
         actionRequired: false,
         relatedId: playerId,
@@ -78,95 +73,37 @@ export function processWeeklyReportActivities(
       continue;
     }
 
-    const draft = generateReportContent(player, observations, scout);
-    const finalized = attachReportEvidence(finalizeReport(
-      draft,
-      "recommend",
-      `Scouting report on ${player.firstName} ${player.lastName} based on ${observations.length} observation${observations.length === 1 ? "" : "s"}.`,
-      draft.suggestedStrengths ?? [],
-      draft.suggestedWeaknesses ?? [],
-      scout,
-      input.state.currentWeek,
-      input.state.currentSeason,
+    const id = `report-work:${input.state.scout.id}:${playerId}`;
+    const existing = reportWorkItems[id];
+    const workItem: ReportWorkItem = {
+      id,
       playerId,
-    ), observations, previousReport);
-    const infrastructureBonus = calculateInfrastructureEffects(
-      input.state.scoutingInfrastructure,
-    ).reportQualityBonus;
-    const craft = calculateReportCraftQualityDetailed(
-      finalized,
-      observations,
-      scout,
-      player,
-      infrastructureBonus + input.equipmentQualityBonus,
-    );
-    const quality = Math.max(0, Math.min(100, craft.score + input.qualityModifier));
-    const isNewCase = previousReport === undefined;
-    const reputationBefore = scout.reputation;
-    if (isNewCase) {
-      const reputationResult = updateReputation(scout, { type: "reportSubmitted", quality });
-      const rawGain = reputationResult.reputation - scout.reputation;
-      scout = {
-        ...reputationResult,
-        reputation: Math.max(
-          0,
-          Math.min(100, scout.reputation + scaleReputationChange(rawGain, input.state.difficulty)),
-        ),
-        reportsSubmitted: reputationResult.reportsSubmitted + 1,
-      };
-    } else {
-      const publicRevisionCost = calculatePublicRevisionReputationCost(
-        previousReport,
-        finalized,
-        input.state.difficulty,
-      );
-      if (publicRevisionCost > 0) {
-        scout = {
-          ...scout,
-          reputation: Math.max(0, scout.reputation - publicRevisionCost),
-        };
-      }
-    }
-    const reputationDelta = +(scout.reputation - reputationBefore).toFixed(1);
-    let report: ScoutReport = {
-      ...finalized,
-      qualityScore: quality,
-      reputationDelta,
-      craftBreakdown: craft.breakdown,
-      validationSnapshot: Object.fromEntries(
-        finalized.attributeAssessments.map((assessment) => [
-          assessment.attribute,
-          player.attributes[assessment.attribute],
-        ]),
+      scoutId: input.state.scout.id,
+      createdWeek: input.state.currentWeek,
+      createdSeason: input.state.currentSeason,
+      status: "ready",
+      sourceActivity: "writeReport",
+      preparationQualityPoints: Math.max(
+        existing?.preparationQualityPoints ?? 0,
+        Math.max(0, Math.min(8, Math.round(input.qualityModifier))),
       ),
+      preparationQualityBonus: Math.max(
+        existing?.preparationQualityBonus ?? 0,
+        Math.max(0, Math.min(0.2, input.equipmentQualityBonus)),
+      ),
+      freshObservationIds,
     };
-    const caseLink = ensureScoutingCaseForReport(cases, report);
-    cases = caseLink.scoutingCases;
-    report = caseLink.report;
-    reports[report.id] = report;
+    reportWorkItems[id] = workItem;
 
-    if (!discoveries.some((discovery) => discovery.playerId === playerId)) {
-      discoveries = [
-        ...discoveries,
-        recordDiscovery(
-          player,
-          scout,
-          input.state.currentWeek,
-          input.state.currentSeason,
-        ),
-      ];
-    }
     messages.push({
-      id: `auto-report-${playerId}-w${input.state.currentWeek}`,
+      id: `report-work-ready-${playerId}-s${input.state.currentSeason}w${input.state.currentWeek}`,
       week: input.state.currentWeek,
       season: input.state.currentSeason,
       type: "feedback",
-      title: `${isNewCase ? "Report Filed" : `Revision ${report.revision ?? 1} Filed`}: ${player.firstName} ${player.lastName}`,
-      body: isNewCase
-        ? `Your scouting report on ${player.firstName} ${player.lastName} has been filed.\nQuality: ${quality}/100 | Reputation ${reputationDelta >= 0 ? "+" : ""}${reputationDelta}`
-        : `New evidence has been preserved as revision ${report.revision ?? 1} of this case.\nQuality: ${quality}/100 | ${reputationDelta < 0 ? `Materially changing the filed stance cost ${Math.abs(reputationDelta)} reputation on ${input.state.difficulty} difficulty.` : "The filed stance remained consistent, so this evidence-backed clarification carried no public revision cost."}`,
+      title: `Your notes are ready: ${player.firstName} ${player.lastName}`,
+      body: `You organized ${freshObservationIds.length} fresh observation${freshObservationIds.length === 1 ? "" : "s"}. Open the player and make the judgment yourself; no recommendation has been filed yet.`,
       read: false,
-      actionRequired: false,
+      actionRequired: true,
       relatedId: playerId,
       relatedEntityType: "player",
     });
@@ -174,10 +111,12 @@ export function processWeeklyReportActivities(
 
   return {
     ...input.state,
-    reports,
-    scoutingCases: cases,
-    scout,
-    discoveryRecords: discoveries,
-    inbox: [...input.state.inbox, ...messages],
+    reportWorkItems,
+    inbox: [
+      ...input.state.inbox,
+      ...messages.filter((message) =>
+        !input.state.inbox.some((existing) => existing.id === message.id),
+      ),
+    ],
   };
 }

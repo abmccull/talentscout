@@ -9,8 +9,10 @@ import {
 } from "@/engine/core/weeklyTransactionProtocol";
 import {
   compactWeeklyWorkerCommit,
+  materializeWeeklyWorkerCommit,
   runHeadlessWeeklyTransaction,
 } from "@/stores/actions/weeklyHeadlessTransaction";
+import { createWeeklyWorkerWireState } from "@/stores/actions/weeklyWorkerSync";
 import type {
   WeeklyWorkerCommit,
   WeeklyWorkerExecution,
@@ -40,6 +42,7 @@ interface PendingTransaction {
 }
 
 let worker: Worker | null = null;
+let workerBaseState: WeeklyWorkerInput["gameState"] | null = null;
 let transactionSequence = 0;
 const pendingTransactions = new Map<string, PendingTransaction>();
 
@@ -54,6 +57,7 @@ function rejectAllPending(error: Error): void {
 function disposeWorker(reason?: Error): void {
   worker?.terminate();
   worker = null;
+  workerBaseState = null;
   if (reason) rejectAllPending(reason);
 }
 
@@ -79,19 +83,13 @@ function getWorker(): Worker | null {
       pending.reject(error);
       return;
     }
-    try {
-      pending.resolve({
-        protocolVersion: message.protocolVersion,
-        kind: message.kind,
-        jobId: message.jobId,
-        source: message.source,
-        state: JSON.parse(message.stateJson) as WeeklyWorkerCommit,
-      });
-    } catch (error) {
-      pending.reject(new Error(
-        `Weekly simulation worker returned invalid JSON: ${String(error)}`,
-      ));
-    }
+    pending.resolve({
+      protocolVersion: message.protocolVersion,
+      kind: message.kind,
+      jobId: message.jobId,
+      source: message.source,
+      state: message.state,
+    });
   });
   worker.addEventListener("error", (event) => {
     disposeWorker(new Error(event.message || "Weekly simulation worker failed."));
@@ -125,7 +123,7 @@ const dispatcher: WeeklyTransactionWorkerDispatcher<WeeklyWorkerInput, WeeklyWor
         kind: request.kind,
         protocolVersion: request.protocolVersion,
         job: request.job,
-        stateJson: JSON.stringify(request.state),
+        state: createWeeklyWorkerWireState(workerBaseState, request.state),
       };
       activeWorker.postMessage(wireRequest);
     });
@@ -157,8 +155,24 @@ export async function runWeeklyWorkerTransaction(
     ? undefined
     : result.fallbackReason;
   const route = result.route === "worker" ? "worker" : "main-thread-fallback";
+  let materializedCommit;
+  try {
+    materializedCommit = materializeWeeklyWorkerCommit(
+      input.gameState,
+      result.state,
+    );
+  } catch (error) {
+    disposeWorker();
+    throw error;
+  }
+  if (route === "worker") {
+    workerBaseState = materializedCommit.patch.gameState ?? null;
+  } else {
+    disposeWorker();
+  }
   return {
     commit: result.state,
+    materializedCommit,
     route,
     fallbackReason,
     telemetry: {

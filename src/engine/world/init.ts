@@ -5,8 +5,8 @@
  * populate leagues, clubs, players, fixtures, and territories from multiple nations.
  * Defaults to ["england"] for full backward compatibility.
  *
- * Secondary countries (countryData.secondary === true) generate clubs and players
- * but do NOT get fixture schedules — they are talent pools only.
+ * Secondary countries use canonical abstract competition: players receive
+ * fixtures and participation without paying the full match-engine cost.
  */
 
 import type { RNG } from "@/engine/rng";
@@ -159,7 +159,7 @@ export async function initializeWorld(
   // RNG advances in a deterministic order regardless of I/O timing.
   const countryDataList = await loadCountries(allCountryKeys);
 
-  // Track which countries are secondary so we can skip fixtures for them.
+  // Secondary countries use lightweight canonical competition.
   const secondarySet = new Set(secondaryKeys);
 
   for (const countryData of countryDataList) {
@@ -167,7 +167,8 @@ export async function initializeWorld(
     territories[`territory_${countryData.key}`] = buildTerritory(countryData, countryLeagueIds);
   }
 
-  // Generate fixtures only for core country leagues (skip secondary).
+  // Generate detailed fixtures for core leagues. Abstract leagues create
+  // their canonical weekly rows through abstractCompetition.ts.
   for (const league of Object.values(leagues)) {
     // Derive the country key from the territory mapping
     const territoryEntry = Object.values(territories).find(
@@ -177,7 +178,8 @@ export async function initializeWorld(
       ?? territoryEntry?.id.replace("territory_", "")
       ?? "";
 
-    if (secondarySet.has(countryKey)) continue; // Skip fixture generation
+    league.coverageTier = secondarySet.has(countryKey) ? "abstract" : "full";
+    if (league.coverageTier === "abstract") continue;
 
     const seasonFixtures = generateSeasonFixtures(rng, league, 1);
     for (const fixture of seasonFixtures) {

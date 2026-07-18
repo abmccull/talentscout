@@ -9,12 +9,18 @@ import type {
   ReportListing,
   ScoutReport,
   ScoutingCase,
+  ScoutingQuestionId,
 } from "@/engine/core/types";
 import {
   addGameWeeksWithSeasonLength,
   isGameDateAtOrAfter,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
+import {
+  buildFollowUpObservationComparisons,
+  type FollowUpObservationComparison,
+  type ObservationContextChange,
+} from "@/engine/observation/informationGain";
 
 function appendUnique(values: string[], value: string): string[] {
   return values.includes(value) ? values : [...values, value];
@@ -104,6 +110,421 @@ function createCase(
   };
 }
 
+export interface ScoutingCaseQuestion {
+  text: string;
+  source: "professionalContext" | "structuredAssessment" | "recruitmentNeed" | "caseFallback";
+  persistent: boolean;
+  questionId?: ScoutingQuestionId;
+  reportId?: string;
+}
+
+export interface ScoutingCaseUnknownSummary {
+  id: string;
+  statement: string;
+  category?: string;
+  status: "open" | "reframed";
+  firstRaisedReportId: string;
+  latestReportId: string;
+  sourceEvidenceIds: string[];
+}
+
+export interface ScoutingCaseContextChange extends ObservationContextChange {
+  comparisonId: string;
+  observationId: string;
+  week: number;
+  season: number;
+}
+
+export interface ScoutingCaseCallbackSummary {
+  id: string;
+  week: number;
+  season: number;
+  kind: "professionalConsequence" | "pathwayFollowUp";
+  title: string;
+  detail: string;
+}
+
+export interface ScoutingCaseAccountability {
+  status:
+    | "buildingEvidence"
+    | "awaitingDecision"
+    | "activeDecision"
+    | "awaitingOutcome"
+    | "vindicated"
+    | "mixed"
+    | "challenged"
+    | "closed";
+  stakedConviction?: ScoutReport["conviction"];
+  latestDecisionId?: string;
+  latestDecisionOutcome?: ClubDecision["outcome"];
+  latestReviewId?: string;
+  latestReviewScore?: number;
+  summary: string;
+}
+
+/** Derived longitudinal state; persisted observations and reports remain authoritative. */
+export interface ScoutingCaseDepth {
+  caseId: string;
+  playerId: string;
+  centralQuestion: ScoutingCaseQuestion;
+  questionHistory: ScoutingCaseQuestion[];
+  unknowns: ScoutingCaseUnknownSummary[];
+  comparisons: FollowUpObservationComparison[];
+  contextChanges: ScoutingCaseContextChange[];
+  callbacks: ScoutingCaseCallbackSummary[];
+  accountability: ScoutingCaseAccountability;
+}
+
+export interface ScoutingCaseDepthIndex {
+  reportsByCaseId: Map<string, ScoutReport[]>;
+  decisionsByCaseId: Map<string, ClubDecision[]>;
+  observationsByPlayerId: Map<string, Array<GameState["observations"][string]>>;
+  reviewsByCaseId: Map<string, Array<GameState["recommendationReviews"][string]>>;
+  professionalFactsByCaseId: Map<
+    string,
+    Array<GameState["consequenceState"]["facts"][string]>
+  >;
+  followUpMessagesByCaseId: Map<string, GameState["inbox"]>;
+}
+
+function pushIndexed<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const values = map.get(key) ?? [];
+  values.push(value);
+  map.set(key, values);
+}
+
+/** Enumerate the casebook once for screens or weekly projections that open many cases. */
+export function buildScoutingCaseDepthIndex(state: GameState): ScoutingCaseDepthIndex {
+  const reportsByCaseId = new Map<string, ScoutReport[]>();
+  for (const report of Object.values(state.reports ?? {})) {
+    if (report.caseId) pushIndexed(reportsByCaseId, report.caseId, report);
+  }
+  const decisionsByCaseId = new Map<string, ClubDecision[]>();
+  for (const decision of Object.values(state.clubDecisions ?? {})) {
+    if (decision.caseId) pushIndexed(decisionsByCaseId, decision.caseId, decision);
+  }
+  const observationsByPlayerId = new Map<string, Array<GameState["observations"][string]>>();
+  for (const observation of Object.values(state.observations ?? {})) {
+    pushIndexed(observationsByPlayerId, observation.playerId, observation);
+  }
+  const reviewsByCaseId = new Map<string, Array<GameState["recommendationReviews"][string]>>();
+  for (const review of Object.values(state.recommendationReviews ?? {})) {
+    if (review.caseId) pushIndexed(reviewsByCaseId, review.caseId, review);
+  }
+  const professionalFactsByCaseId = new Map<
+    string,
+    Array<GameState["consequenceState"]["facts"][string]>
+  >();
+  for (const fact of Object.values(state.consequenceState?.facts ?? {})) {
+    const caseId = fact.kind === "professionalCaseCallback"
+      && typeof fact.metadata?.caseId === "string"
+      ? fact.metadata.caseId
+      : undefined;
+    if (caseId) pushIndexed(professionalFactsByCaseId, caseId, fact);
+  }
+  const followUpMessagesByCaseId = new Map<string, GameState["inbox"]>();
+  for (const message of state.inbox ?? []) {
+    if (!message.id.startsWith("prospect-follow-up:")) continue;
+    const caseId = message.id.slice("prospect-follow-up:".length).split(":", 1)[0];
+    if (caseId) pushIndexed(followUpMessagesByCaseId, caseId, message);
+  }
+  return {
+    reportsByCaseId,
+    decisionsByCaseId,
+    observationsByPlayerId,
+    reviewsByCaseId,
+    professionalFactsByCaseId,
+    followUpMessagesByCaseId,
+  };
+}
+
+const ASSESSMENT_QUESTION_TEXT: Record<ScoutingQuestionId, string> = {
+  execution: "Will the player's technique hold when time and space shrink?",
+  decisions: "Will the player's decisions remain sound when the picture changes faster?",
+  movement: "Will the player's movement still create value in a different tactical role?",
+  pressure: "What changes when pressure, mistakes, and setbacks accumulate?",
+  repeatability: "Can the player repeat the useful action across a full and different test?",
+  projection: "Which current quality is most likely to translate to the next level?",
+};
+
+function isOnOrAfterCase(
+  week: number,
+  season: number,
+  scoutingCase: ScoutingCase,
+): boolean {
+  return season > scoutingCase.openedSeason
+    || (season === scoutingCase.openedSeason && week >= scoutingCase.openedWeek);
+}
+
+function reportsForCase(
+  state: GameState,
+  scoutingCase: ScoutingCase,
+  index: ScoutingCaseDepthIndex,
+): ScoutReport[] {
+  const reports = new Map(
+    (index.reportsByCaseId.get(scoutingCase.id) ?? []).map((report) => [report.id, report]),
+  );
+  for (const reportId of scoutingCase.reportIds ?? []) {
+    const report = state.reports?.[reportId];
+    if (report) reports.set(report.id, report);
+  }
+  return [...reports.values()]
+    .sort((left, right) =>
+      left.submittedSeason - right.submittedSeason
+      || left.submittedWeek - right.submittedWeek
+      || (left.revision ?? 1) - (right.revision ?? 1)
+      || left.id.localeCompare(right.id),
+    );
+}
+
+function questionFromReport(report: ScoutReport): ScoutingCaseQuestion | undefined {
+  const questionId = report.evidenceAssessment?.nextTest.questionId
+    ?? report.evidenceAssessment?.questionId;
+  if (questionId) {
+    return {
+      text: ASSESSMENT_QUESTION_TEXT[questionId],
+      source: "structuredAssessment",
+      persistent: true,
+      questionId,
+      reportId: report.id,
+    };
+  }
+  const need = report.recruitmentNeed?.trim();
+  if (!need) return undefined;
+  return {
+    text: `Can this player meet ${need.toLowerCase()} without the recommendation outrunning the evidence?`,
+    source: "recruitmentNeed",
+    persistent: true,
+    reportId: report.id,
+  };
+}
+
+function deriveQuestions(
+  scoutingCase: ScoutingCase,
+  reports: readonly ScoutReport[],
+): { centralQuestion: ScoutingCaseQuestion; history: ScoutingCaseQuestion[] } {
+  const professionalQuestion = scoutingCase.professionalContext?.centralQuestion.trim();
+  const history: ScoutingCaseQuestion[] = [];
+  if (professionalQuestion) {
+    history.push({
+      text: professionalQuestion,
+      source: "professionalContext",
+      persistent: true,
+    });
+  }
+  for (const report of reports) {
+    const question = questionFromReport(report);
+    if (question && !history.some((candidate) =>
+      candidate.text === question.text && candidate.questionId === question.questionId,
+    )) {
+      history.push(question);
+    }
+  }
+  const centralQuestion = history[0] ?? {
+    text: "What new evidence would change the current recommendation?",
+    source: "caseFallback" as const,
+    persistent: false,
+  };
+  return { centralQuestion, history: history.length > 0 ? history : [centralQuestion] };
+}
+
+function deriveUnknowns(reports: readonly ScoutReport[]): ScoutingCaseUnknownSummary[] {
+  const latest = reports.at(-1);
+  const activeIds = new Set(latest?.evidenceAssessment?.unknowns.map((unknown) => unknown.id) ?? []);
+  const byId = new Map<string, ScoutingCaseUnknownSummary>();
+  for (const report of reports) {
+    for (const unknown of report.evidenceAssessment?.unknowns ?? []) {
+      const existing = byId.get(unknown.id);
+      byId.set(unknown.id, {
+        id: unknown.id,
+        statement: unknown.statement,
+        category: unknown.category,
+        status: activeIds.has(unknown.id) ? "open" : "reframed",
+        firstRaisedReportId: existing?.firstRaisedReportId ?? report.id,
+        latestReportId: report.id,
+        sourceEvidenceIds: [...new Set([
+          ...(existing?.sourceEvidenceIds ?? []),
+          ...unknown.sourceEvidenceIds,
+        ])],
+      });
+    }
+  }
+  return [...byId.values()].sort((left, right) =>
+    (left.status === "open" ? 0 : 1) - (right.status === "open" ? 0 : 1)
+    || left.id.localeCompare(right.id),
+  );
+}
+
+function deriveCallbacks(
+  scoutingCase: ScoutingCase,
+  index: ScoutingCaseDepthIndex,
+): ScoutingCaseCallbackSummary[] {
+  const callbacks: ScoutingCaseCallbackSummary[] = [];
+  for (const fact of index.professionalFactsByCaseId.get(scoutingCase.id) ?? []) {
+    callbacks.push({
+      id: fact.id,
+      week: fact.observedAt.week,
+      season: fact.observedAt.season,
+      kind: "professionalConsequence",
+      title: fact.metadata?.outcome === "setback" || fact.value === "setback"
+        ? "The accepted risk came due"
+        : "The earlier judgment created an opening",
+      detail: typeof fact.metadata?.detail === "string"
+        ? fact.metadata.detail
+        : "A delayed consequence entered the permanent case record.",
+    });
+  }
+  for (const message of index.followUpMessagesByCaseId.get(scoutingCase.id) ?? []) {
+    callbacks.push({
+      id: message.id,
+      week: message.week,
+      season: message.season,
+      kind: "pathwayFollowUp",
+      title: message.title,
+      detail: message.body,
+    });
+  }
+  return callbacks.sort((left, right) =>
+    left.season - right.season
+    || left.week - right.week
+    || left.id.localeCompare(right.id),
+  );
+}
+
+function deriveAccountability(
+  state: GameState,
+  scoutingCase: ScoutingCase,
+  reports: readonly ScoutReport[],
+  index: ScoutingCaseDepthIndex,
+): ScoutingCaseAccountability {
+  const decisionMap = new Map(
+    (index.decisionsByCaseId.get(scoutingCase.id) ?? []).map((decision) => [decision.id, decision]),
+  );
+  for (const decisionId of scoutingCase.decisionIds ?? []) {
+    const decision = state.clubDecisions?.[decisionId];
+    if (decision) decisionMap.set(decision.id, decision);
+  }
+  const decisions = [...decisionMap.values()]
+    .sort((left, right) =>
+      left.decidedSeason - right.decidedSeason
+      || left.decidedWeek - right.decidedWeek
+      || left.id.localeCompare(right.id),
+    );
+  const reviewMap = new Map(
+    (index.reviewsByCaseId.get(scoutingCase.id) ?? []).map((review) => [review.id, review]),
+  );
+  for (const reviewId of scoutingCase.reviewIds ?? []) {
+    const review = state.recommendationReviews?.[reviewId];
+    if (review) reviewMap.set(review.id, review);
+  }
+  const reviews = [...reviewMap.values()]
+    .sort((left, right) =>
+      (left.completedSeason ?? left.dueSeason) - (right.completedSeason ?? right.dueSeason)
+      || (left.completedWeek ?? left.dueWeek) - (right.completedWeek ?? right.dueWeek)
+      || left.id.localeCompare(right.id),
+    );
+  const latestReport = reports.at(-1);
+  const latestDecision = decisions.at(-1);
+  const latestReview = reviews.filter((review) => review.status === "complete").at(-1);
+  const reviewScore = latestReview?.overallScore;
+
+  if (reviewScore !== undefined) {
+    const status = reviewScore >= 70 ? "vindicated" : reviewScore < 50 ? "challenged" : "mixed";
+    return {
+      status,
+      stakedConviction: latestReport?.conviction,
+      latestDecisionId: latestDecision?.id,
+      latestDecisionOutcome: latestDecision?.outcome,
+      latestReviewId: latestReview?.id,
+      latestReviewScore: reviewScore,
+      summary: status === "vindicated"
+        ? "Later observable career evidence supported the recommendation, and the original stake remains on record."
+        : status === "challenged"
+          ? "Later observable career evidence challenged the recommendation; the miss remains part of the scout's record."
+          : "The later evidence is mixed, so the recommendation remains a qualified lesson rather than a clean win or miss.",
+    };
+  }
+  if (latestDecision?.outcome === "accepted") {
+    return {
+      status: "awaitingOutcome",
+      stakedConviction: latestReport?.conviction,
+      latestDecisionId: latestDecision.id,
+      latestDecisionOutcome: latestDecision.outcome,
+      summary: "The recommendation produced a placement, but the long-term review has not settled the quality of the judgment.",
+    };
+  }
+  if (latestDecision?.outcome === "trial" || latestDecision?.outcome === "followUpRequested") {
+    return {
+      status: "activeDecision",
+      stakedConviction: latestReport?.conviction,
+      latestDecisionId: latestDecision.id,
+      latestDecisionOutcome: latestDecision.outcome,
+      summary: "The recommendation remains active and the next evidence test can still change the club's decision.",
+    };
+  }
+  if (latestDecision?.outcome === "rejected") {
+    return {
+      status: "closed",
+      stakedConviction: latestReport?.conviction,
+      latestDecisionId: latestDecision.id,
+      latestDecisionOutcome: latestDecision.outcome,
+      summary: "The club declined the recommendation; the case preserves what was known and what remained uncertain at the time.",
+    };
+  }
+  return latestReport
+    ? {
+        status: "awaitingDecision",
+        stakedConviction: latestReport.conviction,
+        summary: "A judgment has been filed and remains accountable to the next club decision and later career evidence.",
+      }
+    : {
+        status: "buildingEvidence",
+        summary: "The case is still building evidence and no formal recommendation has been staked.",
+      };
+}
+
+export function buildScoutingCaseDepth(
+  state: GameState,
+  caseId: string,
+  providedIndex?: ScoutingCaseDepthIndex,
+): ScoutingCaseDepth | null {
+  const scoutingCase = state.scoutingCases?.[caseId];
+  if (!scoutingCase) return null;
+  const index = providedIndex ?? buildScoutingCaseDepthIndex(state);
+  const reports = reportsForCase(state, scoutingCase, index);
+  const questions = deriveQuestions(scoutingCase, reports);
+  const observations = (index.observationsByPlayerId.get(scoutingCase.playerId) ?? []).filter((observation) =>
+    observation.playerId === scoutingCase.playerId
+    && isOnOrAfterCase(observation.week, observation.season, scoutingCase),
+  );
+  const comparisons = buildFollowUpObservationComparisons(
+    observations,
+    scoutingCase.playerId,
+    4,
+  );
+  const contextChanges = comparisons.flatMap((comparison) =>
+    comparison.contextChanges.map((change) => ({
+      ...change,
+      comparisonId: comparison.id,
+      observationId: comparison.secondObservationId,
+      week: comparison.secondDate.week,
+      season: comparison.secondDate.season,
+    })),
+  );
+
+  return {
+    caseId: scoutingCase.id,
+    playerId: scoutingCase.playerId,
+    centralQuestion: questions.centralQuestion,
+    questionHistory: questions.history,
+    unknowns: deriveUnknowns(reports),
+    comparisons,
+    contextChanges,
+    callbacks: deriveCallbacks(scoutingCase, index),
+    accountability: deriveAccountability(state, scoutingCase, reports, index),
+  };
+}
+
 export interface OpenProfessionalScoutingCaseInput {
   scoutingCases: Record<string, ScoutingCase>;
   scoutId: string;
@@ -136,7 +557,7 @@ export function openProfessionalScoutingCase(
     ...base,
     briefId: input.briefId ?? base.briefId,
     professionalContext: {
-      ...input.context,
+      ...(priorContext ?? input.context),
       stakeholderRefs: [
         ...new Set([
           ...(priorContext?.stakeholderRefs ?? []),

@@ -124,6 +124,21 @@ export type {
 export type { InternationalAssignment } from '@/engine/core/types';
 
 export {
+  ABSTRACT_COMPETITION_SIMULATION_DETAIL,
+  isAbstractCompetitionLeague,
+  getAbstractLeagueSeasonLength,
+  simulateAbstractCompetitionWeek,
+} from './abstractCompetition';
+export type {
+  CompetitionCoverageTier,
+  AbstractCompetitionLeague,
+  AbstractCompetitionFixture,
+  AbstractPlayedFixture,
+  AbstractCompetitionWeekInput,
+  AbstractCompetitionWeekResult,
+} from './abstractCompetition';
+
+export {
   WORLD_CONDITION_DECK,
   WORLD_CONDITION_HISTORY_LIMIT,
   createWorldConditionState,

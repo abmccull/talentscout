@@ -54,11 +54,29 @@ async function authorReportsToCount(page: Page, targetCount: number) {
         if (moment) {
           store.getState().flagSessionMoment(moment.id, "promising");
         }
+        const beforeAdvance = store.getState().activeSession;
+        const atHalftime = Boolean(
+          beforeAdvance?.phases[beforeAdvance.currentPhaseIndex]?.isHalfTime,
+        ) || Boolean(
+          beforeAdvance
+          && beforeAdvance.phases.length >= 3
+          && beforeAdvance.currentPhaseIndex === Math.floor(beforeAdvance.phases.length / 2),
+        );
+        if (atHalftime && !beforeAdvance?.halftimeApproach) {
+          store.getState().setSessionHalftimeApproach("broaden");
+        }
         store.getState().advanceSessionPhase();
       }
 
       if (store.getState().activeSession?.state !== "reflection") {
         throw new Error(`Observation did not reach reflection for ${player.id}`);
+      }
+      for (const cue of store.getState().activeSession?.cueReadings ?? []) {
+        if (cue.clarity === "missed") continue;
+        const classification = cue.suggestedClassifications.find(
+          (candidate: string) => candidate !== "noConclusion",
+        ) ?? "noConclusion";
+        store.getState().classifySessionEvidence(cue.id, classification);
       }
       store.getState().endObservationSession();
       store.getState().startReport(player.id);
@@ -284,6 +302,19 @@ async function earnCourseQualification(page: Page, courseId: string) {
       (window as any).__GAME_STORE__.getState().gameState.finances.completedCourses.includes(id),
     courseId);
     if (completed) return;
+    await page.evaluate((id) => {
+      const store = (window as any).__GAME_STORE__;
+      const schedule = store.getState().gameState.schedule.activities;
+      const studyDay = schedule.findIndex((activity: unknown) => activity === null);
+      if (studyDay < 0) {
+        throw new Error(`No planner day remained for course study: ${id}`);
+      }
+      store.getState().scheduleActivity({
+        type: "study",
+        slots: 1,
+        description: `Study toward ${id}`,
+      }, studyDay);
+    }, courseId);
     await advanceCanonicalEmptyWeek(page);
   }
 
@@ -349,10 +380,28 @@ async function earnAcceptedYouthPlacement(page: Page) {
             (candidate: any) => candidate.playerId === player.id,
           );
           if (moment) store.getState().flagSessionMoment(moment.id, "promising");
+          const beforeAdvance = store.getState().activeSession;
+          const atHalftime = Boolean(
+            beforeAdvance?.phases[beforeAdvance.currentPhaseIndex]?.isHalfTime,
+          ) || Boolean(
+            beforeAdvance
+            && beforeAdvance.phases.length >= 3
+            && beforeAdvance.currentPhaseIndex === Math.floor(beforeAdvance.phases.length / 2),
+          );
+          if (atHalftime && !beforeAdvance?.halftimeApproach) {
+            store.getState().setSessionHalftimeApproach("broaden");
+          }
           store.getState().advanceSessionPhase();
         }
         if (store.getState().activeSession?.state !== "reflection") {
           throw new Error(`Placement observation did not reach reflection for ${player.id}`);
+        }
+        for (const cue of store.getState().activeSession?.cueReadings ?? []) {
+          if (cue.clarity === "missed") continue;
+          const classification = cue.suggestedClassifications.find(
+            (candidate: string) => candidate !== "noConclusion",
+          ) ?? "noConclusion";
+          store.getState().classifySessionEvidence(cue.id, classification);
         }
         store.getState().endObservationSession();
       }
@@ -373,16 +422,42 @@ async function earnAcceptedYouthPlacement(page: Page) {
         throw new Error(`Organic placement report was not filed for ${player.id}`);
       }
 
+      const normalizeCountry = (value: unknown) => String(value ?? "")
+        .toLocaleLowerCase()
+        .replace(/[^a-z]/g, "");
+      const youthCountry = normalizeCountry(youth.country);
+      const targetClub = (Object.values(reportState.clubs) as any[])
+        .filter((club) =>
+          club.youthAcademyRating >= 5
+          && club.playerIds.length + (club.academyPlayerIds?.length ?? 0) < 40
+        )
+        .sort((left, right) => {
+          const leftDomestic = normalizeCountry(reportState.leagues[left.leagueId]?.country)
+            === youthCountry;
+          const rightDomestic = normalizeCountry(reportState.leagues[right.leagueId]?.country)
+            === youthCountry;
+          return Number(rightDomestic) - Number(leftDomestic)
+            || right.youthAcademyRating - left.youthAcademyRating
+            || left.id.localeCompare(right.id);
+        })[0];
+      if (!targetClub) {
+        throw new Error(`No credible academy destination remained for ${player.id}`);
+      }
+
       store.getState().scheduleActivity({
         type: "writePlacementReport",
-        slots: 4,
+        slots: 1,
         targetId: player.id,
+        destinationClubId: targetClub.id,
+        placementPitchPosture: "evidenceLed",
+        placementSupportCondition: "playingPathway",
         description: `Pitch the organic case for ${player.firstName} ${player.lastName}`,
       }, 0);
       store.getState().setScreen("calendar");
       return {
         youthId: youth.id,
         playerId: player.id,
+        targetClubId: targetClub.id,
         reputationBeforeDecision: reportState.scout.reputation,
       };
     }, attempt);
@@ -558,8 +633,8 @@ test.describe("Organic career journey", () => {
 
     // Study and a lapsed early client can reduce current standing. Rebuild it
     // through fresh, evidence-backed work before claiming a leadership tier.
-    const tierFourWork = await authorReportsToCount(gamePage.page, 60);
-    expect(tierFourWork.reportCount).toBe(60);
+    const tierFourWork = await authorReportsToCount(gamePage.page, 66);
+    expect(tierFourWork.reportCount).toBe(66);
     expect(tierFourWork.reputation).toBeGreaterThanOrEqual(55);
     const placementOutcome = await earnAcceptedYouthPlacement(gamePage.page);
     expect(placementOutcome.reputation).toBeGreaterThanOrEqual(60);

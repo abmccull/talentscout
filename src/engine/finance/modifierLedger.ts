@@ -1,6 +1,7 @@
 import type {
   FinancialRecord,
   ScoutingInfrastructure,
+  ToolId,
 } from "@/engine/core/types";
 import {
   ALL_EQUIPMENT_SLOTS,
@@ -9,6 +10,11 @@ import {
   type EquipmentEffectType,
 } from "./equipmentCatalog";
 import { calculateInfrastructureEffects } from "./scoutingInvestment";
+import {
+  getToolDefinition,
+  getToolPassiveBonus,
+  type ToolPassiveBonus,
+} from "@/engine/tools/unlockables";
 
 export type ModifierLedgerStatus = "active" | "conditional" | "inactive";
 
@@ -25,6 +31,84 @@ export interface AgencyModifierLedgerEntry {
 export interface AgencyModifierLedgerInput {
   scoutingInfrastructure?: ScoutingInfrastructure;
   finances: Pick<FinancialRecord, "office" | "satelliteOffices" | "equipment">;
+  /** Career milestone tools are projected here alongside purchased systems. */
+  unlockedTools?: ToolId[];
+}
+
+const TOOL_EFFECT_PRESENTATION: Record<
+  keyof ToolPassiveBonus,
+  { effect: string; affectedActions: string[]; conditional?: string }
+> = {
+  fatigueReduction: {
+    effect: "Report-writing stamina",
+    affectedActions: ["Scheduled report-writing blocks"],
+    conditional: "Applies in weeks where report work is scheduled.",
+  },
+  accuracyBonus: {
+    effect: "Data-reading precision",
+    affectedActions: ["Database queries", "Statistical evidence"],
+  },
+  confidenceBonus: {
+    effect: "Video evidence confidence",
+    affectedActions: ["Video observations"],
+  },
+  relationshipGainBonus: {
+    effect: "Relationship development",
+    affectedActions: ["Contact meetings", "Network development"],
+  },
+  travelFatigueReduction: {
+    effect: "Travel fatigue",
+    affectedActions: ["Domestic and international travel"],
+  },
+  workflowFatigueReduction: {
+    effect: "Busy-week organisation",
+    affectedActions: ["Weeks containing at least three work blocks"],
+    conditional: "Applies only in a genuinely busy week.",
+  },
+  youthDiscoveryBonus: {
+    effect: "Youth search coverage",
+    affectedActions: ["Eligible youth venue searches"],
+  },
+  trendHistoryDepth: {
+    effect: "Long-term observation history",
+    affectedActions: ["Tracked-player development view"],
+  },
+};
+
+function toolBonusValue(key: keyof ToolPassiveBonus, value: number): string {
+  if (
+    key === "accuracyBonus"
+    || key === "confidenceBonus"
+    || key === "relationshipGainBonus"
+    || key === "travelFatigueReduction"
+  ) {
+    const sign = key === "travelFatigueReduction" ? "-" : "+";
+    return `${sign}${Math.round(value * 100)}%`;
+  }
+  if (key === "trendHistoryDepth") return `${value} seasons visible`;
+  if (key === "youthDiscoveryBonus") return `+${value} candidate per eligible search`;
+  return `${value > 0 ? "-" : "+"}${Math.abs(value)} fatigue`;
+}
+
+function buildToolLedgerEntries(unlockedTools: ToolId[]): AgencyModifierLedgerEntry[] {
+  return unlockedTools.flatMap((toolId) => {
+    const definition = getToolDefinition(toolId);
+    const bonus = getToolPassiveBonus(toolId);
+    return (Object.entries(bonus) as [keyof ToolPassiveBonus, number][]).map(
+      ([key, value]) => {
+        const presentation = TOOL_EFFECT_PRESENTATION[key];
+        return {
+          id: `career-tool-${toolId}-${key}`,
+          source: definition?.name ?? toolId,
+          effect: presentation.effect,
+          formula: presentation.conditional ?? "Applies while this career tool is unlocked.",
+          currentValue: toolBonusValue(key, value),
+          affectedActions: presentation.affectedActions,
+          status: presentation.conditional ? "conditional" as const : "active" as const,
+        };
+      },
+    );
+  });
 }
 
 const PERCENT_EFFECTS = new Set<EquipmentEffectType>([
@@ -142,7 +226,7 @@ export function buildAgencyModifierLedger(
       id: "infrastructure-data",
       source: `Data subscription (${input.scoutingInfrastructure?.dataSubscription ?? "none"})`,
       effect: "Data evidence quality",
-      formula: "Base evidence × (1 + subscription bonus)",
+      formula: "Improves the confidence of data work while the subscription is active.",
       currentValue: signedPercent(infrastructure.dataQualityBonus),
       affectedActions: ["Database queries", "Stats briefings", "Deep video", "Analyst evidence"],
       status: infrastructure.dataQualityBonus > 0 ? "active" : "inactive",
@@ -151,7 +235,7 @@ export function buildAgencyModifierLedger(
       id: "infrastructure-travel",
       source: `Travel budget (${input.scoutingInfrastructure?.travelBudget ?? "economy"})`,
       effect: "Travel fatigue",
-      formula: "Base travel fatigue × tier multiplier",
+      formula: "Reduces fatigue added by each travel block.",
       currentValue: infrastructure.travelFatigueMultiplier < 1
         ? `-${Math.round((1 - infrastructure.travelFatigueMultiplier) * 100)}%`
         : "No reduction",
@@ -162,18 +246,18 @@ export function buildAgencyModifierLedger(
       id: "infrastructure-report",
       source: `Office equipment (${input.scoutingInfrastructure?.officeEquipment ?? "basic"})`,
       effect: "Scout report craft",
-      formula: "Report craft + equipment tier bonus",
+      formula: "Supports the craft of reports you personally author and submit.",
       currentValue: signedPercent(infrastructure.reportQualityBonus),
-      affectedActions: ["Manual and scheduled reports"],
+      affectedActions: ["Authored report submissions"],
       status: infrastructure.reportQualityBonus > 0 ? "active" : "inactive",
     },
     {
       id: "agency-office",
       source: `Agency office (${input.finances.office.tier})`,
-      effect: "Employee report quality",
-      formula: "Employee quality score + office bonus",
+      effect: "Staff work quality",
+      formula: "Improves the clarity of reviewable leads prepared by headquarters staff.",
       currentValue: `+${Math.round(input.finances.office.qualityBonus * 100)} points`,
-      affectedActions: ["Headquarters employee reports"],
+      affectedActions: ["Headquarters staff work"],
       status: input.finances.office.qualityBonus > 0 ? "active" : "inactive",
     },
   ];
@@ -184,11 +268,11 @@ export function buildAgencyModifierLedger(
       id: `satellite-office-${office.id}`,
       source: `Satellite office (${office.region})`,
       effect: "Local staff quality and route access",
-      formula: "Assigned employee quality + office bonus; staffed route −1 travel slot",
+      formula: "Supports assigned staff and keeps a staffed regional route available.",
       currentValue: staffed
         ? `+${Math.round(office.qualityBonus * 100)} points; staffed route active`
         : "Awaiting assigned staff",
-      affectedActions: ["Assigned employee reports", "Regional access", "Travel planning", "Passive knowledge"],
+      affectedActions: ["Assigned staff work", "Regional access", "Travel planning", "Passive knowledge"],
       status: staffed ? "active" : "conditional",
     });
   }
@@ -199,8 +283,8 @@ export function buildAgencyModifierLedger(
       source: effect.sources.join(" + "),
       effect: EQUIPMENT_EFFECT_LABELS[effect.type],
       formula: effect.homeRegionOnly
-        ? "Equipped values add only when work country = scout home country"
-        : "Active equipped values add together",
+        ? "Applies only when the work takes place in your home country."
+        : "Applies while this item is equipped.",
       currentValue: equipmentValue(effect.type, effect.value),
       affectedActions: effect.activityTypes.length > 0
         ? effect.activityTypes
@@ -208,6 +292,8 @@ export function buildAgencyModifierLedger(
       status: effect.homeRegionOnly ? "conditional" : "active",
     });
   }
+
+  entries.push(...buildToolLedgerEntries(input.unlockedTools ?? []));
 
   return entries;
 }

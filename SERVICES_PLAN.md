@@ -61,7 +61,7 @@ The key principle: **offline-first**. IndexedDB remains the primary store. Cloud
 | Component | File | Status |
 |-----------|------|--------|
 | Cloud save interface | `src/lib/cloudSave.ts` | Abstract provider + types defined |
-| Local cloud save impl | `src/lib/localCloudSave.ts` | Working IndexedDB fallback |
+| Local save journal | `src/lib/saveProvider.ts` + `src/lib/db.ts` | Active IndexedDB journal, backup, and recovery path |
 | Auth store | `src/stores/authStore.ts` | State shape ready, no auth logic |
 | Local leaderboard | `src/lib/leaderboard.ts` | Fully functional, IndexedDB-backed |
 | Leaderboard UI | `src/components/game/LeaderboardScreen.tsx` | Complete, local-only |

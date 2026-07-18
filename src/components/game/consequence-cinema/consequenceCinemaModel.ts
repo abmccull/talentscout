@@ -182,7 +182,7 @@ const MOMENT_CALLBACK_LINES: Record<CareerMomentCategory, readonly string[]> = {
   ],
   comeback: [
     "The return mattered because the fall remained visible.",
-    "A closed door became a different route through the game.",
+    "A closed door became a different route through football.",
     "The comeback changed what success meant afterward.",
   ],
   promotion: [
@@ -329,7 +329,7 @@ function reportContext(report: ScoutReport): CareerStoryContext {
     report.projectedRole ? `Projected role: ${humanize(report.projectedRole)}` : undefined,
     report.intendedAudience ? `Audience: ${humanize(report.intendedAudience)}` : undefined,
     report.riskFactors?.length
-      ? `Risks recorded: ${report.riskFactors.join(", ")}`
+      ? `Warnings noted: ${report.riskFactors.join(", ")}`
       : undefined,
   ].filter((detail): detail is string => Boolean(detail));
 
@@ -337,7 +337,7 @@ function reportContext(report: ScoutReport): CareerStoryContext {
     label: "Original report",
     dateLabel: dateLabel(report.submittedSeason, report.submittedWeek),
     headline: convictionLabel(report),
-    body: report.summary.trim() || "No authored report summary was preserved.",
+    body: report.summary.trim() || "No written summary survived in your file.",
     details,
   };
 }
@@ -346,9 +346,9 @@ function discoveryContext(record: DiscoveryRecord): CareerStoryContext {
   return {
     label: "Original discovery",
     dateLabel: dateLabel(record.discoveredSeason, record.discoveredWeek),
-    headline: "Added to the scouting record",
-    body: "No authored report predating this movement is linked in the current save.",
-    details: ["No evidence-backed potential projection was preserved for this discovery."],
+    headline: "Flagged on your radar",
+    body: "No earlier written report is tied to this move in your case file.",
+    details: ["No earlier upside projection is attached to this discovery."],
   };
 }
 
@@ -519,7 +519,7 @@ function recommendationStories(source: ConsequenceCinemaSource): CareerStory[] {
           headline: score === undefined ? "Review completed" : `${score}/100 overall`,
           body: review.findings?.length
             ? review.findings.join(" ")
-            : "The completed review preserved scores but no written findings.",
+            : "The review closed without any written findings reaching your file.",
           details: [
             review.clubFitScore === undefined ? undefined : `Club fit: ${review.clubFitScore}/100`,
             review.timingScore === undefined ? undefined : `Timing: ${review.timingScore}/100`,
@@ -615,10 +615,10 @@ function decisionSecondaryEvents(
         (consequence.resolvedAt ?? consequence.dueAt).week,
       ),
       summary: consequence.status === "applied"
-        ? "A promised consequence entered the permanent career record."
+        ? "A promised consequence finally caught up with your career."
         : consequence.status === "pending"
           ? "The decision still has a scheduled consequence ahead."
-          : `The consequence record closed as ${humanize(consequence.status).toLowerCase()}.`,
+          : `That thread closed as ${humanize(consequence.status).toLowerCase()}.`,
       tone: consequence.status === "applied"
         ? "positive" as const
         : consequence.status === "failed" || consequence.status === "cancelled"
@@ -645,8 +645,8 @@ function movementStories(source: ConsequenceCinemaSource): CareerStory[] {
     const stakeholder = stakeholderRecords(source, decisionIds, movement.playerId);
     const details = [
       `Route: ${fromClub} → ${toClub}`,
-      movement.fee === undefined ? undefined : `Recorded fee: ${formatMoney(movement.fee)}`,
-      movement.reason ? `Recorded reason: ${movement.reason}` : undefined,
+      movement.fee === undefined ? undefined : `Reported fee: ${formatMoney(movement.fee)}`,
+      movement.reason ? `Stated reason: ${movement.reason}` : undefined,
     ].filter((detail): detail is string => Boolean(detail));
     const tone = movementTone(movement.type);
 
@@ -669,7 +669,7 @@ function movementStories(source: ConsequenceCinemaSource): CareerStory[] {
         headline: humanize(move),
         body: movement.reason
           ? movement.reason
-          : `The canonical movement ledger records this player moving from ${fromClub} to ${toClub}.`,
+          : `${fromClub} to ${toClub} went through and became part of the player's career trail.`,
         details,
       },
       callbackLine: selectCareerStoryCallback(
@@ -754,7 +754,7 @@ function decisionStories(source: ConsequenceCinemaSource): CareerStory[] {
         week: decision.resolvedAt.week,
         eyebrow: decision.selectionKind === "default" ? "Deadline decision" : "Career decision",
         title,
-        subtitle: `${selected.label} was locked in; its persisted consequence record is shown below.`,
+        subtitle: `${selected.label} was the line you backed; the fallout is shown below.`,
         playerId,
         reportId,
         original: {
@@ -776,7 +776,7 @@ function decisionStories(source: ConsequenceCinemaSource): CareerStory[] {
           dateLabel: dateLabel(decision.resolvedAt.season, decision.resolvedAt.week),
           headline: presentedFact ? humanize(presentedFact.fact.kind) : "Decision resolved",
           body: presentation?.body
-            ?? (fallbackBody || "The decision is marked resolved with no player-facing outcome fact preserved."),
+            ?? (fallbackBody || "The decision resolved, but no clear public follow-up reached your file."),
           details: presentation?.details ?? [],
         },
         callbackLine: selectCareerStoryCallback(
@@ -828,10 +828,10 @@ function careerMomentStories(source: ConsequenceCinemaSource): CareerStory[] {
       reportId: moment.reportId,
       momentCategory: moment.category,
       original: {
-        label: "Causal record",
+        label: "How it started",
         dateLabel: dateLabel(moment.occurredAt.season, moment.occurredAt.week),
         headline: humanize(moment.source.kind),
-        body: `This presentation was generated from the persisted ${humanize(moment.source.kind).toLowerCase()} record, not from hidden simulation truth.`,
+        body: `This reel is drawn from your ${humanize(moment.source.kind).toLowerCase()} file and the football world's later response.`,
         details: moment.tags.slice(0, 6).map(humanize),
       },
       outcome: {
@@ -893,8 +893,8 @@ function archivedDecisionStories(source: ConsequenceCinemaSource): CareerStory[]
       eyebrow: record.selectionKind === "default" ? "Deadline decision" : "Career archive",
       title: record.title,
       subtitle: record.selectedOptionLabel
-        ? `${record.selectedOptionLabel} became part of your permanent record.`
-        : "This material decision remains part of your permanent record.",
+        ? `${record.selectedOptionLabel} stayed on your career file.`
+        : "This material decision still lives in your career file.",
       playerId: record.playerId,
       reportId: record.reportId,
       original: {
@@ -902,8 +902,8 @@ function archivedDecisionStories(source: ConsequenceCinemaSource): CareerStory[]
         dateLabel: dateLabel(record.offeredAt.season, record.offeredAt.week),
         headline: record.selectedOptionLabel ?? record.title,
         body: record.status === "expired"
-          ? "The deadline passed and the recorded default became the decision."
-          : "The selected course was recorded in the career consequence ledger.",
+          ? "The deadline passed, so the standing option became the decision."
+          : "That course was locked into your career file.",
         details: record.knownTradeoffs,
       },
       outcome: {
@@ -913,8 +913,8 @@ function archivedDecisionStories(source: ConsequenceCinemaSource): CareerStory[]
           ? humanize(record.outcomeFacts[0].kind)
           : record.status === "expired" ? "Decision expired" : "Decision resolved",
         body: record.outcomeFacts.length > 0
-          ? `${record.outcomeFacts.length} player-safe outcome fact${record.outcomeFacts.length === 1 ? "" : "s"} and ${record.stakeholderReactions.length} stakeholder reaction${record.stakeholderReactions.length === 1 ? "" : "s"} were preserved.`
-          : "The decision and its relationship consequences were preserved before simulation compaction.",
+          ? `${record.outcomeFacts.length} outcome note${record.outcomeFacts.length === 1 ? "" : "s"} and ${record.stakeholderReactions.length} stakeholder reaction${record.stakeholderReactions.length === 1 ? "" : "s"} carried forward into the archive.`
+          : "The decision and its relationship fallout were carried forward into the archive.",
         details: record.obligations.map((item) => `${item.status}: ${item.terms}`).slice(0, 5),
       },
       memories: record.stakeholderReactions.map((reaction, index) => ({

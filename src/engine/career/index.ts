@@ -136,3 +136,4 @@ export * from "./chronology";
 export * from "./careerMoments";
 export * from "./lateCareerDilemmas";
 export * from "./lateCareerDilemmaMaterializer";
+export * from "./roleProfile";

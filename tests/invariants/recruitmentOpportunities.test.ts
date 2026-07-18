@@ -384,6 +384,82 @@ describe("recruitment opportunity causality", () => {
       true,
     )).toBe(3_000);
   });
+
+  it("indexes a large recruitment archive without rescanning fixtures per delivery", () => {
+    let fixtureEnumerations = 0;
+    const fixtures = Object.fromEntries(
+      Array.from({ length: 1_000 }, (_, index) => {
+        const season = index % 2 === 0 ? 2 : 3;
+        const week = (index % 38) + 1;
+        const id = `fixture-s${season}-${index}`;
+        return [id, {
+          id,
+          season,
+          week,
+          leagueId: "league",
+          homeClubId: "home",
+          awayClubId: "away",
+          played: true,
+        }];
+      }),
+    ) as GameState["fixtures"];
+    const reports: Record<string, ScoutReport> = {};
+    const reportDeliveries: Record<string, ReportDelivery> = {};
+    const movements: PlayerMovementEvent[] = [];
+    for (let index = 0; index < 80; index += 1) {
+      const reportId = `report-${index}`;
+      const deliveryId = `delivery-${index}`;
+      const playerId = `player-${index}`;
+      const clubId = `club-${index}`;
+      reports[reportId] = {
+        ...REPORT,
+        id: reportId,
+        caseId: `case-${index}`,
+        playerId,
+        decisionDeadlineWeek: undefined,
+        decisionDeadlineSeason: undefined,
+      };
+      reportDeliveries[deliveryId] = {
+        ...DELIVERY,
+        id: deliveryId,
+        caseId: `case-${index}`,
+        reportId,
+        clubId,
+        deliveredSeason: 2,
+        deliveredWeek: 30,
+        listingId: undefined,
+        bidId: undefined,
+        channel: "directPlacement",
+      };
+      movements.push({
+        ...MOVEMENT,
+        id: `movement-${index}`,
+        playerId,
+        toClubId: clubId,
+        season: 3,
+        week: 1,
+      });
+    }
+
+    const projected = deriveRecruitmentOpportunities({
+      currentSeason: 3,
+      currentWeek: 1,
+      fixtures: new Proxy(fixtures, {
+        ownKeys: (target) => {
+          fixtureEnumerations += 1;
+          return Reflect.ownKeys(target);
+        },
+      }),
+      reports,
+      reportDeliveries,
+      clubDecisions: {},
+      playerMovementHistory: movements,
+    });
+
+    expect(projected).toHaveLength(80);
+    expect(projected.every((opportunity) => opportunity.outcome === "signed")).toBe(true);
+    expect(fixtureEnumerations).toBe(1);
+  });
 });
 
 function weeklyState(input: { includeDestinationDelivery: boolean }): GameState {

@@ -157,17 +157,16 @@ export const worldTravelArticles: WikiArticle[] = [
     category: "world-travel",
     order: 2,
     summary:
-      "Regional knowledge (0-100) combines with contacts, travel, and infrastructure to shape access and evidence confidence.",
+      "Regional knowledge, contacts, travel, and infrastructure shape your reach and how firmly local reads land.",
     searchText:
-      "Regional knowledge is a 0-100 record of how well you understand a country's football environment. Visits, observations, reports, relationships, and maintained local infrastructure build it over time. Knowledge is one source of operational presence alongside your home base, current location, trusted contacts, satellite offices, and assigned staff. Stronger presence expands the prospect pool you can reach, improves the confidence of contextual evidence, creates more relevant local opportunities, and reduces travel friction. It never reveals a player's hidden true ability. The country dossier explains the current access tier and the sources producing it.",
+      "Regional knowledge reflects how well you understand a country's football environment. Visits, observations, reports, relationships, and maintained local infrastructure build it over time. Knowledge is one source of operational presence alongside your home base, current location, trusted contacts, satellite offices, and assigned staff. Stronger presence expands the prospect pool you can reach, improves the confidence of contextual evidence, creates more relevant local opportunities, and reduces travel friction. It never reveals a player's hidden true ability. The country dossier explains your current access tier and why your read carries more or less local weight.",
     content: (
       <SectionBlock>
         <Para>
-          Regional knowledge is a <Tag color="emerald">0–100 rating</Tag> for
-          each country. It records how well you understand its football
-          culture, players, and competitions. Your home country starts with an
-          advantage; foreign markets must be learned through work and
-          relationships.
+          Regional knowledge is your running feel for each country. It reflects
+          how well you understand the football culture, players, and
+          competitions there. Your home country starts with an advantage;
+          foreign markets must be learned through work and relationships.
         </Para>
         <Subheading>Building Knowledge and Presence</Subheading>
         <BulletList
@@ -180,12 +179,12 @@ export const worldTravelArticles: WikiArticle[] = [
         />
         <Subheading>Knowledge Levels</Subheading>
         <Table
-          headers={["Level", "Familiarity Range"]}
+          headers={["Level", "What it means"]}
           rows={[
-            ["Novice", "0 – 24"],
-            ["Intermediate", "25 – 49"],
-            ["Expert", "50 – 79"],
-            ["Master", "80 – 100"],
+            ["Novice", "First foothold with limited local feel."],
+            ["Connected", "Usable context, but you still need confirmation."],
+            ["Established", "Reliable routes, contacts, and sharper local reads."],
+            ["Embedded", "The market feels familiar and your instincts travel well."],
           ]}
         />
         <Subheading>Impact on Scouting</Subheading>
@@ -233,7 +232,7 @@ export const worldTravelArticles: WikiArticle[] = [
     summary:
       "A staffed satellite office creates durable overseas access, evidence, opportunity, travel, and knowledge advantages.",
     searchText:
-      "International offices, also called satellite offices, provide a permanent scouting presence in a generated country. They cost 8000 to establish and 1200 per month to maintain, and can hold up to three employees. An empty office establishes a foothold, but assigned staff unlock its strongest route-planning and evidence benefits. Offices and staff add passive regional knowledge, expand discovery access, improve contextual and data confidence, increase the flow of local leads, and reduce travel cost and fatigue. A staffed office can also shorten a long route and recover a planning slot. Opening an office requires at least a Professional Office tier, and the game prevents duplicate or unsupported country offices.",
+      "International offices, also called satellite offices, provide a permanent scouting foothold in another country. They cost 8000 to establish and 1200 per month to maintain, and can hold up to three employees. An empty office establishes a foothold, but assigned staff unlock its strongest route-planning and evidence benefits. Offices and staff add passive regional knowledge, expand discovery access, improve contextual and data confidence, increase the flow of local leads, and reduce travel cost and fatigue. A staffed office can also shorten a long route and recover a planning slot. Opening an office requires at least a Professional Office tier, and duplicate or unsupported offices are blocked.",
     content: (
       <SectionBlock>
         <Para>

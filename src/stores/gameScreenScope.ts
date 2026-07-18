@@ -96,7 +96,6 @@ export const YOUTH_EARLY_ACCESS_SCREEN_SCOPE = {
     access: "support",
     workspaceParent: "futureRoadmap",
     availableWithoutCareer: true,
-    navigation: { group: "support", label: "Roadmap", order: 1 },
   },
   achievements: { access: "detail", workspaceParent: "career" },
   scenarioSelect: { access: "future", workspaceParent: null, fallback: "mainMenu" },

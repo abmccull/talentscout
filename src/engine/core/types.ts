@@ -449,6 +449,13 @@ export interface Player {
   injured: boolean;
   injuryWeeksRemaining: number;
 
+  /** Player-facing late-career outlook refreshed at each season boundary. */
+  retirementOutlook?: {
+    status: "settled" | "considering" | "ready";
+    reasons: string[];
+    updatedSeason: number;
+  };
+
   /** Current active injury (if any). */
   currentInjury?: Injury;
   /** Full injury history for this player. */
@@ -662,6 +669,8 @@ export interface Club {
   loanedInPlayerIds?: string[];
 }
 
+export type LeagueCoverageTier = "full" | "abstract" | "contactOnly";
+
 export interface League {
   id: string;
   name: string;
@@ -672,6 +681,8 @@ export interface League {
   tier: number;
   clubIds: string[];
   season: number;
+  /** Simulation fidelity; legacy saves are inferred during migration. */
+  coverageTier?: LeagueCoverageTier;
 }
 
 export type Weather =
@@ -701,6 +712,8 @@ export interface Fixture {
   awayGoals?: number;
   attendance?: number;
   weather?: Weather;
+  /** Full match-engine record or canonical lightweight world participation. */
+  simulationDetail?: "full" | "abstract";
 }
 
 // =============================================================================
@@ -1087,6 +1100,8 @@ export interface ScoutReport {
   submittedSeason: number;
   /** Observation records consumed by this immutable report revision. */
   evidenceObservationIds?: string[];
+  /** Scheduled desk preparation consumed by this authored revision. */
+  preparationWorkItemId?: string;
 
   attributeAssessments: AttributeAssessment[];
   strengths: string[];
@@ -1094,6 +1109,14 @@ export interface ScoutReport {
   conviction: ConvictionLevel;
   /** Free-text narrative written by the scout. */
   summary: string;
+  /**
+   * Canonical evidence-backed judgment. The summary above is a generated
+   * presentation of this state for new reports and a legacy display field for
+   * older saves.
+   */
+  evidenceAssessment?: StructuredScoutingAssessment;
+  /** Optional private notebook text. It is never scored or parsed by gameplay. */
+  privateNotes?: string[];
   /** ID of a known player the scout compares the subject to. */
   comparisonPlayerId?: string;
   estimatedValue: number;
@@ -1109,6 +1132,7 @@ export interface ScoutReport {
   projectedRole?: PlayerRole;
   recommendedAction?: ReportRecommendedAction;
   riskFactors?: string[];
+  riskAssessments?: ReportRiskAssessment[];
   estimatedWeeklyWage?: number;
   decisionDeadlineWeek?: number;
   decisionDeadlineSeason?: number;
@@ -1171,6 +1195,28 @@ export interface ScoutReport {
    * player development is not mistaken for an inaccurate original report.
    */
   validationSnapshot?: Partial<Record<PlayerAttribute, number>>;
+}
+
+/**
+ * Prepared desk work created by a scheduled report-writing block.
+ *
+ * It is deliberately not a ScoutReport: scheduling can organize evidence and
+ * improve craft, but the player must still make and submit every judgment.
+ */
+export interface ReportWorkItem {
+  id: string;
+  playerId: string;
+  scoutId: string;
+  createdWeek: number;
+  createdSeason: number;
+  status: "ready" | "consumed";
+  sourceActivity: "writeReport";
+  /** Bounded additive craft points earned through focused preparation. */
+  preparationQualityPoints: number;
+  /** Equipment preparation bonus retained until the report is submitted. */
+  preparationQualityBonus: number;
+  freshObservationIds: string[];
+  consumedByReportId?: string;
 }
 
 /** The persistent spine that connects a discovery opinion to its consequences. */
@@ -1298,6 +1344,28 @@ export interface ReportCategoryVerdict {
   hypothesisIds: string[];
   /** Explicitly records what the scout still does not know. */
   acknowledgedUncertainty: string;
+  /** Structured evidence authority for reports written after the evidence-RPG migration. */
+  status?: "assessed" | "notAssessed";
+  evidenceIds?: string[];
+  classification?: EvidenceClassificationId;
+  claimSupport?: StructuredClaimSupport;
+  unknownOptionId?: string;
+}
+
+export type YouthReportRiskId =
+  | "injuryAvailability"
+  | "physicalDevelopment"
+  | "pressureResponse"
+  | "roleTranslation"
+  | "adaptationMobility"
+  | "competitionTranslation"
+  | "noMaterialSignal";
+
+export interface ReportRiskAssessment {
+  id: YouthReportRiskId;
+  label: string;
+  status: "observed" | "untested" | "noSignal";
+  evidenceIds: string[];
 }
 
 /** Player-authored professional context attached to a generated report draft. */
@@ -1316,6 +1384,10 @@ export interface StructuredReportInput {
   decisionDeadlineSeason: number;
   categoryVerdicts: Record<JudgmentCategory, ReportCategoryVerdict>;
   alternativePlayerIds: string[];
+  /** Present when the report was authored from deterministic evidence choices. */
+  evidenceVersion?: 1;
+  evidenceIds?: string[];
+  riskAssessments?: ReportRiskAssessment[];
 }
 
 export type YouthBriefPriority =
@@ -1654,6 +1726,164 @@ export interface ScoutEvidenceClaim {
 }
 
 // =============================================================================
+// STRUCTURED SCOUTING EVIDENCE
+// =============================================================================
+
+/** The question the scout deliberately carries into an observation. */
+export type ScoutingQuestionId =
+  | "execution"
+  | "decisions"
+  | "movement"
+  | "pressure"
+  | "repeatability"
+  | "projection";
+
+/** Football interpretation chosen by the player after seeing a passage. */
+export type EvidenceClassificationId =
+  | "technicalExecution"
+  | "preReceiveDecision"
+  | "offBallMovement"
+  | "pressureResponse"
+  | "physicalRepeatability"
+  | "anomaly"
+  | "noConclusion";
+
+export type EvidenceClarity =
+  | "missed"
+  | "glimpse"
+  | "usable"
+  | "strong"
+  | "exceptional";
+
+export type EvidenceConfidenceBand =
+  | "tentative"
+  | "working"
+  | "supported"
+  | "robust";
+
+export type ObservationHalftimeApproach = "confirm" | "challenge" | "broaden";
+
+/** Player-visible factor trail for one deterministic cue resolution. */
+export interface ScoutCueFactorBreakdown {
+  domainSkill: number;
+  judgment: number;
+  focus: number;
+  questionAlignment: number;
+  eventSignal: number;
+  regionalContext: number;
+  fatigue: number;
+  conditions: number;
+  boundedUncertainty: number;
+}
+
+/** A possible cue during a live session. It never exposes hidden player truth. */
+export interface ScoutCueReading {
+  id: string;
+  sessionId: string;
+  momentId: string;
+  playerId: string;
+  phaseIndex: number;
+  minute: number;
+  questionId: ScoutingQuestionId;
+  lens: "technical" | "physical" | "mental" | "tactical" | "general";
+  clarity: EvidenceClarity;
+  score: number;
+  confidence: number;
+  confidenceBand: EvidenceConfidenceBand;
+  direction: ScoutEvidenceDirection;
+  summary: string;
+  detail: string;
+  suggestedClassifications: EvidenceClassificationId[];
+  attributesHinted: PlayerAttribute[];
+  pressureContext: boolean;
+  contextKey: string;
+  countryId?: string;
+  regionalContext?: string;
+  factors: ScoutCueFactorBreakdown;
+}
+
+/** The player's locked interpretation of a cue during reflection. */
+export interface ScoutingEvidenceDecision {
+  cueId: string;
+  classification: EvidenceClassificationId;
+}
+
+/** Durable, first-hand evidence that may support a report claim. */
+export interface ScoutingEvidenceCard extends ScoutCueReading {
+  version: 1;
+  sourceType: "liveObservation";
+  classification: EvidenceClassificationId;
+  independenceKey: string;
+}
+
+export type StructuredClaimSupport = "supported" | "stretch" | "withheld";
+
+/** A report claim with explicit provenance and visible calibration risk. */
+export interface StructuredScoutingClaim {
+  id: string;
+  category: JudgmentCategory;
+  statement: string;
+  evidenceIds: string[];
+  hypothesisIds: string[];
+  confidence: EvidenceConfidenceBand;
+  support: StructuredClaimSupport;
+  classification: EvidenceClassificationId;
+}
+
+export interface StructuredScoutingUnknown {
+  id: string;
+  category: JudgmentCategory;
+  statement: string;
+  sourceEvidenceIds: string[];
+}
+
+export interface StructuredScoutingNextTest {
+  id: string;
+  label: string;
+  description: string;
+  questionId: ScoutingQuestionId;
+  activityType: ActivityType;
+  contextRequirement: string;
+}
+
+export interface StructuredAssessmentScore {
+  evidenceSufficiency: number;
+  claimEvidenceFit: number;
+  contextDiversity: number;
+  calibration: number;
+  unknownHandling: number;
+  briefFit: number;
+  deliveryFit: number;
+  total: number;
+}
+
+/** Authoritative judgment state for both an initial read and a formal report. */
+export interface StructuredScoutingAssessment {
+  version: 1;
+  kind: "initial" | "formal";
+  questionId: ScoutingQuestionId;
+  evidenceIds: string[];
+  claims: StructuredScoutingClaim[];
+  unknowns: StructuredScoutingUnknown[];
+  nextTest: StructuredScoutingNextTest;
+  recommendation: ReportRecommendedAction;
+  confidence: EvidenceConfidenceBand;
+  overclaimCount: number;
+  score: StructuredAssessmentScore;
+  generatedSummary: string;
+}
+
+/** Compact player input used to construct a deterministic initial assessment. */
+export interface InitialAssessmentInput {
+  evidenceCardId: string;
+  claimOptionId: string;
+  unknownOptionId: string;
+  nextTestId: string;
+  recommendation: ReportRecommendedAction;
+  confidence: EvidenceConfidenceBand;
+}
+
+// =============================================================================
 // CALENDAR / SCHEDULE
 // =============================================================================
 
@@ -1733,6 +1963,10 @@ export interface Activity {
   targetId?: string;
   /** Explicit destination club for placement/loan activities. */
   destinationClubId?: string;
+  /** How the scout frames a youth placement pitch to the destination club. */
+  placementPitchPosture?: PlacementPitchPosture;
+  /** Safeguard or pathway commitment attached to a youth placement pitch. */
+  placementSupportCondition?: PlacementSupportCondition;
   /** Recruitment brief this scheduled work advances. */
   briefId?: string;
   description: string;
@@ -2175,6 +2409,8 @@ export interface GameState {
   // Scout's personal working data keyed by entity ID
   observations: Record<string, Observation>;
   reports: Record<string, ScoutReport>;
+  /** Pending desk preparation that still requires a player-authored judgment. */
+  reportWorkItems: Record<string, ReportWorkItem>;
   /** Causal history connecting reports, delivery, club decisions, and outcomes. */
   scoutingCases: Record<string, ScoutingCase>;
   /** Authoritative discovery case for an authored tutorial or generated career prologue. */
@@ -3012,7 +3248,10 @@ export interface AgencyEmployee {
   hiredSeason: number;
   regionSpecialization?: string;
   positionSpecialization?: string;
-  reportsGenerated: string[];
+  /** IDs of bounded staff work products awaiting or completing player review. */
+  workProductsGenerated?: string[];
+  /** @deprecated Migrated to workProductsGenerated at the save boundary. */
+  reportsGenerated?: string[];
   currentAssignment?: EmployeeAssignment;
   experience: number;
   weeklyLog: EmployeeLogEntry[];
@@ -3039,7 +3278,58 @@ export interface EmployeeLogEntry {
   season: number;
   action: string;
   result?: string;
+  workProductId?: string;
+  /** @deprecated Legacy employee reports only. */
   reportId?: string;
+}
+
+export type StaffScoutingSignalCategory =
+  | "role"
+  | "performance"
+  | "pathway"
+  | "availability"
+  | "market";
+
+export interface StaffScoutingSignal {
+  id: string;
+  category: StaffScoutingSignalCategory;
+  statement: string;
+  source:
+    | "competitionRecord"
+    | "liveCoverage"
+    | "videoReview"
+    | "networkCheck"
+    | "legacyEstimate";
+  confidence: "limited" | "working" | "strong";
+}
+
+/**
+ * Employee scouting never enters the player's authored report history.
+ * These bounded leads use public football context and require one explicit
+ * player review before they can satisfy agency-client work.
+ */
+export interface StaffScoutingWorkProduct {
+  id: string;
+  playerId: string;
+  employeeId: string;
+  employeeName: string;
+  clientClubId?: string;
+  createdWeek: number;
+  createdSeason: number;
+  status: "awaitingReview" | "approved" | "rejected" | "delivered" | "archived";
+  qualityScore: number;
+  signals: StaffScoutingSignal[];
+  limitation: string;
+  suggestedConviction: "monitor" | "investigate" | "priorityFollowUp";
+  reviewerId?: string;
+  reviewedWeek?: number;
+  reviewedSeason?: number;
+  reviewPriority?: "critical" | "high" | "standard" | "internal";
+  reviewDebtPenalty?: number;
+  signedOffQualityScore?: number;
+  reviewPriorityReason?: string;
+  reviewDeadlineWeek?: number;
+  reviewDeadlineSeason?: number;
 }
 
 export type AnalystEvidenceCategory =
@@ -3196,6 +3486,10 @@ export interface CourseEnrollment {
   startSeason: number;
   completionWeek: number;
   completionSeason: number;
+  /** Study sessions completed through the Planner. */
+  studyWeeksCompleted: number;
+  /** Required study sessions; normally the catalog duration. */
+  requiredStudyWeeks: number;
 }
 
 export type LifestyleLevel = 1 | 2 | 3 | 4 | 5;
@@ -3456,6 +3750,8 @@ export interface FinancialRecord {
   // Assets
   office: Office;
   employees: AgencyEmployee[];
+  /** Employee scouting leads kept separate from player-authored reports. */
+  staffWorkProducts: StaffScoutingWorkProduct[];
   /** Bounded review queue and recent consumption audit for agency analysts. */
   analystReviews: AnalystReviewArtifact[];
   /** Last employee lifecycle tick, preventing duplicate manual/batch processing. */
@@ -3871,6 +4167,8 @@ export interface PlacementReport {
   briefId?: string;
   unsignedYouthId: string;
   targetClubId: string;
+  pitchPosture?: PlacementPitchPosture;
+  supportCondition?: PlacementSupportCondition;
   scoutId: string;
   conviction: ConvictionLevel;
   clubResponse?: "pending" | "accepted" | "rejected" | "trial" | "followUpRequested";
@@ -3882,6 +4180,9 @@ export interface PlacementReport {
   responseDueWeek?: number;
   responseDueSeason?: number;
 }
+
+export type PlacementPitchPosture = "evidenceLed" | "pathwayLed" | "relationshipLed";
+export type PlacementSupportCondition = "none" | "educationPlan" | "playingPathway" | "familySupport";
 
 export interface GutFeeling {
   id: string;
@@ -3955,6 +4256,11 @@ export interface ReflectionJournalEntry {
   flaggedMoments?: ReflectionFlaggedMomentRecord[];
   /** Canonical numeric observations generated by this session. */
   observationIds?: string[];
+  /** Versioned structured evidence emitted by the observation RPG. */
+  evidenceVersion?: 1;
+  scoutingQuestionId?: ScoutingQuestionId;
+  evidenceCards?: ScoutingEvidenceCard[];
+  evidenceDecisions?: Record<string, ScoutingEvidenceDecision>;
   gutFeelingId?: string;
   summary?: string;
   createdAt: number;
@@ -4010,6 +4316,8 @@ export interface AlumniSeasonStats {
   assists: number;
   avgRating: number;
   clubId: string;
+  /** Canonical participation or an explicitly labelled pre-migration estimate. */
+  source?: "canonicalCompetition" | "legacyEstimate";
 }
 
 export interface AlumniRecord {

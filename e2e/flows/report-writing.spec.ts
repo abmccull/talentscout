@@ -1,5 +1,6 @@
 import type { GamePage } from "../fixtures";
 import { test, expect } from "../fixtures";
+import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
 async function prepareObservedYouthPlayer(gamePage: GamePage) {
   await gamePage.goto();
@@ -34,8 +35,71 @@ async function prepareObservedYouthPlayer(gamePage: GamePage) {
 }
 
 test.describe("Report Writing", () => {
+  test("a Youth report cannot begin without a classified scouting cue", async ({ gamePage }) => {
+    await gamePage.goto();
+    await gamePage.injectState({ scout: { primarySpecialization: "youth" } });
+
+    const playerId = await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      const youth = Object.values(state.unsignedYouth ?? {})[0] as any;
+      if (!youth?.player?.id) throw new Error("Evidence gate test needs an unsigned youth player");
+      const id = youth.player.id;
+      store.getState().loadGame({
+        ...state,
+        observations: {
+          ...state.observations,
+          evidence_gate_observation: {
+            id: "evidence_gate_observation",
+            playerId: id,
+            scoutId: state.scout.id,
+            week: state.currentWeek,
+            season: state.currentSeason,
+            context: "schoolMatch",
+            attributeReadings: [],
+            notes: [],
+            flaggedMoments: [],
+            abilityReading: {
+              perceivedCA: 1,
+              caConfidence: 0.3,
+              perceivedPALow: 1,
+              perceivedPAHigh: 2,
+              paConfidence: 0.25,
+            },
+          },
+        },
+      });
+      store.getState().selectPlayer(id);
+      store.getState().setScreen("playerProfile");
+      return id;
+    });
+
+    await gamePage.waitForScreen("playerProfile");
+    await expect(
+      gamePage.page.getByRole("button", { name: "Build report evidence first" }),
+    ).toBeDisabled();
+    await expect(
+      gamePage.page.getByRole("heading", { name: "Return with one question to answer." }),
+    ).toBeVisible();
+
+    await gamePage.page.evaluate((id) => {
+      (window as any).__GAME_STORE__.getState().startReport(id);
+    }, playerId);
+    await gamePage.waitForScreen("reportWriter");
+    await expect(
+      gamePage.page.getByRole("heading", { name: "Return with one question to answer" }),
+    ).toBeVisible();
+    await expect(
+      gamePage.page.getByRole("button", { name: "Plan focused observation" }),
+    ).toBeVisible();
+
+    gamePage.expectNoConsoleErrors();
+  });
+
   test("report writer exposes only valid conviction options", async ({ gamePage }) => {
     await prepareObservedYouthPlayer(gamePage);
+
+    await gamePage.submitCurrentReportViaUI("recommend", { submit: false });
 
     const note = gamePage.page.getByRole("radio", { name: /^Note\b/ });
     const recommend = gamePage.page.getByRole("radio", { name: /^Recommend\b/ });
@@ -43,6 +107,13 @@ test.describe("Report Writing", () => {
     await expect(recommend).toBeVisible();
     await expect(gamePage.page.getByRole("radio", { name: /^Strong Recommend\b/ })).toBeVisible();
     await expect(gamePage.page.getByRole("radio", { name: /^Table Pound\b/ })).toBeVisible();
+
+    await expect(note).toHaveJSProperty("tagName", "INPUT");
+    await note.focus();
+    await gamePage.page.keyboard.press("ArrowRight");
+    await expect(recommend).toBeChecked();
+
+    await gamePage.page.getByRole("button", { name: /^Build the case\./ }).click();
 
     const monitor = gamePage.page.getByRole("radio", { name: /^Monitor\b/ });
     const inviteForTrial = gamePage.page.getByRole("radio", { name: /^Invite for trial\b/ });
@@ -53,10 +124,7 @@ test.describe("Report Writing", () => {
     await gamePage.page.keyboard.press("ArrowRight");
     await expect(inviteForTrial).toBeChecked();
 
-    await expect(note).toHaveJSProperty("tagName", "INPUT");
-    await note.focus();
-    await gamePage.page.keyboard.press("ArrowRight");
-    await expect(recommend).toBeChecked();
+    await gamePage.page.getByRole("button", { name: /^Final review\./ }).click();
     await expect(gamePage.page.getByRole("button", { name: /^Submit Report$/ })).toBeEnabled();
 
     gamePage.expectNoConsoleErrors();
@@ -155,7 +223,10 @@ test.describe("Report Writing", () => {
       store.getState().startReport(playerId);
     });
 
+    await seedStructuredEvidenceForPlayer(gamePage.page);
+
     await gamePage.waitForScreen("reportWriter");
+    await gamePage.page.locator("details#report-dossier > summary").click();
     await expect(gamePage.page.getByText(/does not infer unobserved shot-stopping/i)).toBeVisible();
     await gamePage.submitCurrentReportViaUI("note");
 

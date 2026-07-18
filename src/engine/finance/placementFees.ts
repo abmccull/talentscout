@@ -16,7 +16,10 @@ import type {
   RecruitmentOpportunityState,
   RecruitmentTransfer,
 } from "../recruitment";
-import { findCausalRecruitmentOpportunity } from "../recruitment";
+import {
+  findCausalRecruitmentOpportunity,
+  findCausalRecruitmentOpportunityIn,
+} from "../recruitment";
 import { applyFirstPlacementBonus } from "./expenses";
 
 // ---------------------------------------------------------------------------
@@ -199,8 +202,11 @@ export function checkPlacementFeeEligibility(
   state: RecruitmentOpportunityState,
   transfer: RecruitmentTransfer,
   scoutId: string,
+  opportunities?: readonly RecruitmentOpportunity[],
 ): { report: ScoutReport; opportunity: RecruitmentOpportunity } | undefined {
-  const opportunity = findCausalRecruitmentOpportunity(state, transfer, scoutId);
+  const opportunity = opportunities
+    ? findCausalRecruitmentOpportunityIn(opportunities, transfer, scoutId)
+    : findCausalRecruitmentOpportunity(state, transfer, scoutId);
   if (!opportunity) return undefined;
   const report = state.reports[opportunity.reportId];
   return report ? { report, opportunity } : undefined;

@@ -17,6 +17,7 @@ import type {
   RetainerContract,
   ConsultingContract,
   ClientRelationship,
+  CourseEnrollment,
 } from "../core/types";
 import type { RNG } from "../rng/index";
 import { ensureEmployeeSkills } from "./employeeSkills";
@@ -48,6 +49,24 @@ const DEFAULT_OFFICE: Office = {
   qualityBonus: 0,
   maxEmployees: 0,
 };
+
+function normalizeCourseEnrollment(
+  enrollment: CourseEnrollment | undefined,
+): CourseEnrollment | undefined {
+  if (!enrollment) return undefined;
+  const legacyDuration = Math.max(
+    1,
+    (enrollment.completionSeason - enrollment.startSeason)
+      * LEGACY_SEASON_LENGTH_WEEKS
+      + enrollment.completionWeek
+      - enrollment.startWeek,
+  );
+  return {
+    ...enrollment,
+    studyWeeksCompleted: Math.max(0, enrollment.studyWeeksCompleted ?? 0),
+    requiredStudyWeeks: Math.max(1, enrollment.requiredStudyWeeks ?? legacyDuration),
+  };
+}
 
 function normalizeRetainerContract(contract: RetainerContract): RetainerContract {
   return {
@@ -331,11 +350,18 @@ export function migrateFinancialRecord(
     reportListings: array(legacy.reportListings),
     consultingContracts: array(legacy.consultingContracts).map(normalizeConsultingContract),
     office: legacy.office ?? DEFAULT_OFFICE,
-    employees: array(legacy.employees),
+    employees: array(legacy.employees).map((employee) => ({
+      ...employee,
+      workProductsGenerated: Array.from(new Set([
+        ...(employee.workProductsGenerated ?? []),
+        ...(employee.reportsGenerated ?? []),
+      ])),
+    })),
+    staffWorkProducts: array(legacy.staffWorkProducts),
     analystReviews: normalizeAnalystReviewHistory(array(legacy.analystReviews)),
     lifestyle: legacy.lifestyle ?? defaultLifestyle(scout.careerTier ?? 1),
     completedCourses: array(legacy.completedCourses),
-    activeEnrollment: legacy.activeEnrollment,
+    activeEnrollment: normalizeCourseEnrollment(legacy.activeEnrollment),
     ownedVehicle: legacy.ownedVehicle,
     pendingRetainerOffers: array(legacy.pendingRetainerOffers).map(normalizeRetainerContract),
     pendingConsultingOffers: array(legacy.pendingConsultingOffers).map(normalizeConsultingContract),

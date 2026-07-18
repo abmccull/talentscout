@@ -2,6 +2,7 @@ export {
   DEFAULT_RECRUITMENT_OPPORTUNITY_WEEKS,
   deriveRecruitmentOpportunities,
   findCausalRecruitmentOpportunity,
+  findCausalRecruitmentOpportunityIn,
   getRecruitmentOpportunityTransferReference,
 } from "./recruitmentOpportunities";
 

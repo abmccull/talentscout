@@ -8,6 +8,16 @@ import {
   buildRecommendationReviewTimelineDescription,
   buildRecommendationReviewTimelineDetails,
 } from "@/engine/reports/recommendationReviewDisplay";
+import { buildPlayerMovementPresentation } from "@/engine/transfers";
+import {
+  buildScoutingCaseDepth,
+  type ScoutingCaseAccountability,
+  type ScoutingCaseCallbackSummary,
+  type ScoutingCaseContextChange,
+  type ScoutingCaseQuestion,
+  type ScoutingCaseUnknownSummary,
+} from "@/engine/reports/scoutingCases";
+import type { FollowUpObservationComparison } from "@/engine/observation/informationGain";
 
 export type ScoutingCaseTimelineEntryKind =
   | "discovery"
@@ -44,6 +54,13 @@ export interface ScoutingCaseTimeline {
   status: ScoutingCaseStatus;
   openedWeek: number;
   openedSeason: number;
+  centralQuestion: ScoutingCaseQuestion;
+  questionHistory: ScoutingCaseQuestion[];
+  unknowns: ScoutingCaseUnknownSummary[];
+  comparisons: FollowUpObservationComparison[];
+  contextChanges: ScoutingCaseContextChange[];
+  callbacks: ScoutingCaseCallbackSummary[];
+  accountability: ScoutingCaseAccountability;
   entries: ScoutingCaseTimelineEntry[];
 }
 
@@ -143,6 +160,8 @@ export function buildScoutingCaseTimeline(
 ): ScoutingCaseTimeline | null {
   const scoutingCase = state.scoutingCases?.[caseId];
   if (!scoutingCase) return null;
+  const depth = buildScoutingCaseDepth(state, caseId);
+  if (!depth) return null;
 
   const entries: ScoutingCaseTimelineEntry[] = [];
   const caseReportIds = new Set(scoutingCase.reportIds ?? []);
@@ -341,13 +360,21 @@ export function buildScoutingCaseTimeline(
     movements.map((movement) => `${movement.season}:${movement.week}`),
   );
   for (const movement of movements) {
+    const presentation = buildPlayerMovementPresentation({
+      movement,
+      loanDeal: movement.loanDealId
+        ? [...(state.activeLoans ?? []), ...(state.loanHistory ?? [])].find((deal) => deal.id === movement.loanDealId)
+        : undefined,
+      resolveClubName: (clubId) => clubId ? clubName(state, clubId) : undefined,
+    });
     entries.push({
       id: `movement:${movement.id}`,
       kind: "movement",
       week: movement.week,
       season: movement.season,
-      title: movementTitle(movement),
-      description: movementDescription(state, movement),
+      title: presentation.title,
+      description: presentation.summary,
+      details: presentation.details.length > 0 ? presentation.details : undefined,
       clubId: movement.toClubId ?? movement.fromClubId ?? movement.contractClubId,
       movementId: movement.id,
     });
@@ -419,6 +446,13 @@ export function buildScoutingCaseTimeline(
     status: scoutingCase.status,
     openedWeek: scoutingCase.openedWeek,
     openedSeason: scoutingCase.openedSeason,
+    centralQuestion: depth.centralQuestion,
+    questionHistory: depth.questionHistory,
+    unknowns: depth.unknowns,
+    comparisons: depth.comparisons,
+    contextChanges: depth.contextChanges,
+    callbacks: depth.callbacks,
+    accountability: depth.accountability,
     entries,
   };
 }

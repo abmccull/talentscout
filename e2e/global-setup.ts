@@ -14,7 +14,7 @@ async function globalSetup(config: FullConfig) {
       timeout: 120_000,
       waitUntil: "domcontentloaded",
     });
-    await page.getByRole("button", { name: /Start Youth Career|New Game/ }).waitFor({
+    await page.getByRole("button", { name: /Start Youth Scout Career|New Game/ }).waitFor({
       state: "visible",
       timeout: 120_000,
     });

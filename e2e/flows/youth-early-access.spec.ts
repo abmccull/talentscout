@@ -76,6 +76,9 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
         && !observation.sourceSessionId,
     );
     const journalEntries = Object.values(state?.reflectionJournal ?? {}) as any[];
+    const evidencePlayerIds = new Set(
+      journalEntries.flatMap((entry) => (entry.evidenceCards ?? []).map((card: any) => card.playerId)),
+    );
     return {
       observationCount: observations.length,
       discoveryCount: (state?.discoveryRecords ?? []).length,
@@ -92,6 +95,10 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
         (total, entry) => total + (entry.observationIds?.length ?? 0),
         0,
       ),
+      reportablePipelineCount: Object.values(state?.unsignedYouth ?? {}).filter((youth: any) =>
+        evidencePlayerIds.has(youth.player.id)
+        && youth.discoveredBy.includes(state.scout.id),
+      ).length,
       specializationXp: state?.scout.specializationXp ?? 0,
       unlockedPerks: state?.scout.unlockedPerks ?? [],
     };
@@ -107,6 +114,7 @@ async function createListedFirstReport(gamePage: GamePage, scoutLastName: string
   expect(sessionOutcome.linkedObservationCount).toBe(
     sessionOutcome.interactiveObservationCount,
   );
+  expect(sessionOutcome.reportablePipelineCount).toBeGreaterThan(0);
   expect(sessionOutcome.specializationXp).toBeGreaterThan(0);
   expect(sessionOutcome.unlockedPerks).toContain("youth_grassroots_access");
   expect(sessionOutcome.unlockedPerks).not.toContain("youth_academy_access");

@@ -155,4 +155,92 @@ describe("weekly worker state delta", () => {
     expect(materialized.patch.gameState?.playerMovementHistory)
       .toBe(source.playerMovementHistory);
   });
+
+  it("sends changed player fields instead of retransmitting every full player", () => {
+    const players = Object.fromEntries(
+      Array.from({ length: 1_200 }, (_, index) => {
+        const player = {
+          id: `player-${index}`,
+          firstName: "Payload",
+          lastName: `Player ${index}`,
+          form: 0,
+          attributes: Object.fromEntries(
+            Array.from({ length: 30 }, (__, attribute) => [
+              `attribute-${attribute}`,
+              5 + ((index + attribute) % 15),
+            ]),
+          ),
+          recentMatchRatings: Array.from({ length: 6 }, (__, rating) => ({
+            fixtureId: `fixture-${rating}`,
+            week: rating + 1,
+            season: 1,
+            rating: 6 + rating / 10,
+          })),
+          developmentHistory: Array.from({ length: 8 }, (__, season) => ({
+            season: season + 1,
+            clubId: `club-${index % 40}`,
+            environment: "stable",
+          })),
+        };
+        return [player.id, player];
+      }),
+    );
+    const nextPlayers = Object.fromEntries(
+      Object.entries(players).map(([id, player], index) => [
+        id,
+        {
+          ...player,
+          form: (index % 7) / 10,
+          recentMatchRatings: [
+            ...player.recentMatchRatings.slice(1),
+            {
+              fixtureId: `new-fixture-${index}`,
+              week: 7,
+              season: 1,
+              rating: 7.1,
+            },
+          ],
+        },
+      ]),
+    );
+    const source = {
+      seed: "player-field-delta",
+      currentSeason: 1,
+      currentWeek: 7,
+      players,
+    } as unknown as GameState;
+    const next = {
+      ...source,
+      currentWeek: 8,
+      players: nextPlayers,
+    } as unknown as GameState;
+
+    const compact = compactWeeklyWorkerCommit(source, {
+      patch: { gameState: next },
+      tutorialCommands: [],
+    }, 20);
+    const materialized = materializeWeeklyWorkerCommit(source, compact);
+
+    expect(compact.gameState.kind).toBe("delta");
+    if (compact.gameState.kind !== "delta") return;
+    const playerDelta = compact.gameState.recordDeltas.players;
+    expect(playerDelta).toBeDefined();
+    expect(playerDelta?.changedEntries["player-1"]).toMatchObject({
+      kind: "record",
+      delta: {
+        changedEntries: {
+          form: { kind: "replace", value: 0.1 },
+          recentMatchRatings: {
+            kind: "array-window",
+            dropFirst: 1,
+            append: [{ fixtureId: "new-fixture-1" }],
+          },
+        },
+      },
+    });
+    const fullPlayerPayloadBytes = new TextEncoder()
+      .encode(JSON.stringify(nextPlayers)).byteLength;
+    expect(compact.metrics.responseBytes).toBeLessThan(fullPlayerPayloadBytes * 0.3);
+    expect(materialized.patch.gameState).toEqual(next);
+  });
 });

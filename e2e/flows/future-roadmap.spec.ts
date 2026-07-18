@@ -15,7 +15,7 @@ test.describe("Future product roadmap", () => {
     gamePage,
   }) => {
     await openMainMenu(gamePage);
-    await gamePage.page.getByRole("button", { name: "Future roadmap" }).click();
+    await gamePage.page.getByRole("button", { name: "What's Coming" }).click();
     await gamePage.waitForScreen("futureRoadmap");
 
     await expect(gamePage.page.getByTestId("future-roadmap-screen")).toBeVisible();
@@ -119,13 +119,13 @@ test.describe("Future product roadmap", () => {
     });
 
     await expect(
-      gamePage.page.getByRole("button", { name: "Continue from verified backup" }),
+      gamePage.page.getByRole("button", { name: "Continue Career from Verified Backup" }),
     ).toBeEnabled();
     await expect(
-      gamePage.page.getByText(/Continue will load the last verified backup/i),
+      gamePage.page.getByText(/Continue Career will use the last safe backup/i),
     ).toBeVisible();
 
-    await gamePage.page.getByRole("button", { name: "Load Game" }).click();
+    await gamePage.page.getByRole("button", { name: "Load Career" }).click();
     await expect(
       gamePage.page.getByRole("button", { name: "Load Autosave from verified backup" }),
     ).toBeEnabled();

@@ -52,19 +52,19 @@ export const OPENING_CASE_CHOICES: ReadonlyArray<OpeningCaseChoiceProjection> = 
     id: "protect",
     label: "Keep the name private",
     description: "Protect the source and arrange a second look before the wider market notices.",
-    knownTradeoffs: ["Lowest leak risk", "More time to verify", "A rival may still arrive first"],
+    knownTradeoffs: ["Keeps the name quiet", "Time for a second look", "A rival may still get there first"],
   },
   {
     id: "callClub",
     label: "Call a club now",
-    description: "Move before certainty. Early access can become influence, but attention follows the call.",
-    knownTradeoffs: ["Fastest route to action", "Creates club pressure", "Raises visibility and rival risk"],
+    description: "Move before you are certain. Being first can earn influence with the club, but the call puts the player on more radars.",
+    knownTradeoffs: ["Fastest path to a club", "Your judgment is on record", "More scouts may hear the name"],
   },
   {
     id: "verify",
     label: "Ask your source to verify",
     description: "Use the relationship to test your read without presenting it as a finished judgment.",
-    knownTradeoffs: ["Adds an independent source", "Strengthens the relationship", "Costs some information control"],
+    knownTradeoffs: ["A second opinion", "Builds trust with your source", "The name may travel"],
   },
 ] as const;
 
@@ -292,9 +292,9 @@ export function buildOpeningCaseProjection(
     sourceContactName: openingCase.sourceContactName,
     stage: openingCase.stage,
     selectedChoiceId: openingCase.selectedChoiceId,
-    eyebrow: prologue?.presentation.eyebrow ?? "Your first discovery",
+    eyebrow: prologue?.presentation.eyebrow ?? "Your first live lead",
     venueLabel: prologue?.presentation.venue ?? "School ground",
-    headline: prologue?.presentation.headline ?? "You saw it before the room changed",
+    headline: prologue?.presentation.headline ?? "You saw the moment before anyone knew the name",
     uncertainty: prologue?.presentation.uncertainty
       ?? "One exceptional action is a lead, not proof. What you do next determines who hears the name and how much evidence you can gather first.",
     signalLabel: prologue?.presentation.signalLabel ?? "The signal",

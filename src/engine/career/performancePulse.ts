@@ -59,7 +59,7 @@ export function generatePerformancePulse(
   // Count cases first opened in the last 4 weeks. Revisions retain their value
   // as improved judgments, but cannot be recycled into monthly volume rewards.
   const recentReports = selectLatestReportsByCaseOpenedInRange(
-    Object.values(state.reports),
+    Object.values(state.reports).filter((report) => report.scoutId === scout.id),
     {
       submittedSeason: state.currentSeason,
       submittedWeek: Math.max(1, state.currentWeek - PULSE_INTERVAL_WEEKS + 1),
@@ -101,7 +101,9 @@ export function generatePerformancePulse(
 
   // Average fatigue over the period (rough estimate from current)
   const fatigueAvg = scout.fatigue;
-  const professionalDevelopment = Boolean(state.finances?.activeEnrollment)
+  const professionalDevelopment = (state.schedule?.activities ?? []).some(
+    (activity) => activity?.type === "study",
+  )
     || state.inbox?.some((message) =>
       message.title === "Course Completed"
       && message.week === state.currentWeek

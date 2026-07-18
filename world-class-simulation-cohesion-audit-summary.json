@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 2,
+  "auditDate": "2026-07-17",
+  "implementationVerifiedAt": "2026-07-18",
+  "repository": "abmccull/talentscout",
+  "branch": "agent/youth-scout-early-access",
+  "commitBase": "49c4ba29372c873ab7bee09191bf555a42d657cb",
+  "product": "Youth Scout Early Access",
+  "decision": "local-gameplay-candidate-complete-commercial-certification-pending",
+  "decisionReason": "All five P0 simulation-authority breaks and the connected progression, transfer, finance, geography, UI, save, and long-career issues are implemented and locally verified. Commercial certification still requires a clean tagged candidate plus platform, accessibility, failure-mode, and moderated-player evidence.",
+  "overallLocalEarlyAccessReadiness": 9.1,
+  "literalTenOutOfTenClaimed": false,
+  "scores": {
+    "liveObservationAndEvidence": 9.3,
+    "structuredReportWriting": 9.4,
+    "weeklyPlanningAndWorkload": 9.0,
+    "worldGeographyAndRegions": 9.1,
+    "transfersContractsLoansAndRetirement": 9.1,
+    "scoutCareerAndProgression": 9.0,
+    "agencyAndFinance": 9.0,
+    "relationshipsAndConsequences": 8.9,
+    "rivalsAndMarketPressure": 8.9,
+    "longTermAccountabilityAndAlumni": 9.2,
+    "uiOnboardingAccessibilityAndAudio": 9.2,
+    "engineeringAssurance": 9.4,
+    "replayability": 9.0
+  },
+  "authorityBreaks": [
+    {
+      "id": "player-report-auto-finalization",
+      "status": "resolved",
+      "authority": "Only explicit structured submission creates a player-authored report; weekly report work remains pending and accountable.",
+      "proof": [
+        "src/stores/actions/weeklyReportActivities.ts",
+        "src/stores/actions/reportActions.ts",
+        "tests/invariants/reportWorkAuthority.test.ts",
+        "e2e/flows/report-writing.spec.ts"
+      ]
+    },
+    {
+      "id": "employee-report-authority",
+      "status": "resolved",
+      "authority": "Staff work has separate provenance, preview, review, and sign-off and cannot silently become personal authorship.",
+      "proof": [
+        "src/engine/finance/staffWorkReview.ts",
+        "src/engine/finance/employeeWork.ts",
+        "tests/invariants/staffWorkReviewActions.test.ts",
+        "tests/invariants/staffWorkReviewPreview.test.ts"
+      ]
+    },
+    {
+      "id": "secondary-league-participation",
+      "status": "resolved",
+      "authority": "Bounded abstract competition writes canonical participation and ratings for secondary worlds, including depleted-roster behavior.",
+      "proof": [
+        "src/engine/world/abstractCompetition.ts",
+        "tests/invariants/abstractCompetitionCrossConsumers.test.ts",
+        "tests/invariants/abstractCompetitionPersistence.test.ts",
+        "tests/invariants/abstractCompetitionPerformance.test.ts"
+      ]
+    },
+    {
+      "id": "alumni-synthetic-history",
+      "status": "resolved",
+      "authority": "Alumni and all downstream reviews project the canonical appearance ledger rather than generating a second history.",
+      "proof": [
+        "src/engine/youth/alumni.ts",
+        "src/engine/transfers/appearanceLedger.ts",
+        "tests/invariants/abstractCompetitionCrossConsumers.test.ts"
+      ]
+    },
+    {
+      "id": "legacy-hypothesis-authority",
+      "status": "resolved",
+      "authority": "New cases use versioned structured evidence; migrated legacy hypotheses are read-only and cannot award a second reward path.",
+      "proof": [
+        "src/engine/scout/evidenceModel.ts",
+        "src/engine/scout/evidenceMigration.ts",
+        "tests/invariants/structuredEvidenceModel.test.ts",
+        "tests/persistence/structuredEvidenceMigration.test.ts"
+      ]
+    }
+  ],
+  "verifiedPassing": {
+    "typecheck": true,
+    "lint": true,
+    "architecture": {
+      "modules": 544,
+      "internalEdges": 2509,
+      "cycles": 0
+    },
+    "unit": {
+      "files": 191,
+      "tests": 1034
+    },
+    "criticalCoverage": {
+      "tests": 60,
+      "statements": 85.47,
+      "branches": 69.28,
+      "functions": 89.93,
+      "lines": 86.91
+    },
+    "retentionCoverage": {
+      "tests": 19,
+      "statements": 74.02,
+      "branches": 74.49,
+      "functions": 56.15,
+      "lines": 81.84
+    },
+    "youthPerks": "8/8",
+    "replayability": {
+      "seeds": 100,
+      "seasons": 3,
+      "broadEventRepeatRate": 0.1719
+    },
+    "assets": {
+      "tracked": 135,
+      "total": 135,
+      "blockers": 0
+    },
+    "criticalRenderedE2E": "13/13",
+    "youthEaCoreE2E": "53/53",
+    "organicCareerE2E": "passed in 5.3 minutes",
+    "e2eRetries": 0,
+    "visualEvidenceJourneys": "3/3 current desktop/mobile journeys",
+    "browserTenSeasonSoak": {
+      "status": "passed",
+      "batches": 60,
+      "simulatedWeeks": 460,
+      "reachedSeason": 11,
+      "elapsedMinutes": 13.2,
+      "workerFallbacks": 0,
+      "maximumWorkerRoundTripMs": 7046.3
+    },
+    "productionBuild": {
+      "status": "passed",
+      "playBundleKb": 768,
+      "firstLoadKb": 875,
+      "output": "out"
+    },
+    "windowsDistribution": {
+      "status": "supporting-pass",
+      "installer": "dist/TalentScout-Setup-1.0.0.exe",
+      "slimPackage": true,
+      "packagedNodeModules": [
+        "steamworks.js"
+      ],
+      "runtimeEvidence": "artifacts/release/packages/49c4ba29372c873ab7bee09191bf555a42d657cb/windows-x64/supporting-runtime-evidence.json"
+    }
+  },
+  "commercialCertification": {
+    "status": "pending",
+    "releaseEvidenceFailures": 26,
+    "reason": "The worktree is dirty, the previous manifest is bound to another candidate, and required external attestations are intentionally absent.",
+    "remainingGates": [
+      "Commit and tag an exact clean candidate and regenerate SHA-bound package evidence",
+      "Windows Authenticode and installed standard-user failure-mode matrix",
+      "macOS signed/notarized DMG and zip runtime verification",
+      "Linux AppImage and deb runtime verification",
+      "NVDA and VoiceOver human journeys",
+      "Moderated first-season testing with Football Manager players and genre newcomers",
+      "Live Steam Cloud conflict and reconnect",
+      "Legacy golden-save and destructive I/O recovery matrix",
+      "Policy-grade 20-seed 30-season isolated-process release soak"
+    ]
+  },
+  "report": "WORLD_CLASS_SIMULATION_COHESION_AUDIT_2026-07-17.md"
+}

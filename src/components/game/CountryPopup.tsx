@@ -91,13 +91,13 @@ function familiarityBarGradient(familiarity: number): string {
 }
 
 function contentTierLabel(contentTier: CountryPopupProps["contentTier"]): string {
-  return contentTier === "fullWorld" ? "Full world" : "Talent pool";
+  return contentTier === "fullWorld" ? "Live calendar" : "Scouting network";
 }
 
 function contentTierDetail(contentTier: CountryPopupProps["contentTier"]): string {
   return contentTier === "fullWorld"
-    ? "Clubs and fixtures are actively simulated here."
-    : "This is a youth and local-talent pool; it does not have a simulated fixture calendar.";
+    ? "Clubs and fixtures are tracked week by week here."
+    : "Prospects and local contacts are active here, but there is no weekly domestic fixture calendar.";
 }
 
 // =============================================================================
@@ -335,7 +335,7 @@ export function CountryPopup({
           <div className="mx-4 mb-3 rounded-lg border border-zinc-800 bg-zinc-900/55 px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-400">
-                World coverage
+                Football coverage
               </p>
               <span className={contentTier === "fullWorld" ? "text-[10px] font-medium text-emerald-200" : "text-[10px] font-medium text-indigo-200"}>
                 {contentTierLabel(contentTier)}
@@ -346,7 +346,7 @@ export function CountryPopup({
             </p>
             {contentTier === "fullWorld" && fixtureCount !== undefined && (
               <p className="mt-1 text-[10px] text-zinc-500">
-                {fixtureCount.toLocaleString()} generated fixture{fixtureCount === 1 ? "" : "s"} in this save.
+                {fixtureCount.toLocaleString()} fixture{fixtureCount === 1 ? "" : "s"} currently on the calendar.
               </p>
             )}
           </div>

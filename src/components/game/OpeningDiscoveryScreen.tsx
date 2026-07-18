@@ -84,7 +84,7 @@ export function OpeningDiscoveryScreen() {
           </div>
           <div className="hidden items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-xs text-zinc-300 sm:flex">
             <Eye size={14} className="text-emerald-300" aria-hidden="true" />
-            First recorded by you
+            You were first to notice
           </div>
         </header>
 
@@ -157,14 +157,15 @@ export function OpeningDiscoveryScreen() {
 
           <div className="mx-auto w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0d1210]/95 p-4 shadow-2xl backdrop-blur sm:p-6">
             <div className="mb-5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Your reputation decision</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Your next move</p>
               <h2 className="mt-2 text-2xl font-bold text-white">{projection.questionLabel}</h2>
               <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Each choice changes access, certainty, visibility, and who remembers how this case began.
+                The call you make now will shape who gets access, how quickly the name spreads,
+                and whether people trust your judgment later.
               </p>
             </div>
 
-            <div className="space-y-3" role="group" aria-label="Choose what to do with the discovery">
+            <div className="space-y-3" role="group" aria-label="Choose what to do with the lead">
               {choices.map((choice) => {
                 const Icon = CHOICE_ICONS[choice.id];
                 const choiceLabel = !veteranPrologue && choice.id === "verify"
@@ -188,7 +189,7 @@ export function OpeningDiscoveryScreen() {
                       <span className="mt-1.5 block text-sm leading-5 text-zinc-400">{choice.description}</span>
                       {choice.effect && (
                         <span className="mt-1.5 block text-xs leading-5 text-emerald-200/80">
-                          Consequence: {choice.effect}
+                          What this means: {choice.effect}
                         </span>
                       )}
                       <span className="mt-2 flex flex-wrap gap-1.5">
@@ -205,7 +206,8 @@ export function OpeningDiscoveryScreen() {
             </div>
 
             <p className="mt-4 text-center text-[11px] leading-5 text-zinc-400">
-              The game has not confirmed this player’s future. Your evidence, judgment, and follow-through will decide whether this becomes vindication or a lesson.
+              No one knows what this player will become. What you record, who you tell, and
+              whether you return will decide whether this first read earns trust or becomes a lesson.
             </p>
           </div>
         </section>

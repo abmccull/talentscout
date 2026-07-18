@@ -1,5 +1,3 @@
-import type { StructuredReportInput } from "@/engine/core/types";
-
 export interface ConciseOpeningReportModeInput {
   isYouthScout: boolean;
   openingStage?: string | null;
@@ -10,39 +8,20 @@ export interface ConciseOpeningReportModeInput {
   contextCount: number;
 }
 
-export const CONCISE_OPENING_ACTION_OPTIONS: Array<{
-  value: StructuredReportInput["recommendedAction"];
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "monitor",
-    label: "Keep private",
-    description: "Protect the name and schedule another look before escalating it.",
-  },
-  {
-    value: "inviteForTrial",
-    label: "Test next",
-    description: "Push for another live context that can prove the first read wrong.",
-  },
-  {
-    value: "offerAcademyPlace",
-    label: "Escalate now",
-    description: "Share it as an actionable lead even though the case is still thin.",
-  },
-];
+export interface ReportWorkflowStep {
+  id: string;
+  complete: boolean;
+  required?: boolean;
+  decisionsRemaining?: number;
+}
 
-const FULL_REPORT_ACTION_LABELS: Record<StructuredReportInput["recommendedAction"], string> = {
-  monitor: "Monitor",
-  inviteForTrial: "Invite for trial",
-  offerAcademyPlace: "Offer academy place",
-};
-
-const CONCISE_OPENING_ACTION_LABELS: Record<StructuredReportInput["recommendedAction"], string> = {
-  monitor: "Keep private and plan another look",
-  inviteForTrial: "Test the read in another context",
-  offerAcademyPlace: "Escalate the lead now",
-};
+export interface ReportWorkflowProgress {
+  activeStepId: string | null;
+  completedRequiredSteps: number;
+  decisionsRemaining: number;
+  nextRequiredStepId: string | null;
+  requiredSteps: number;
+}
 
 export function isConciseOpeningReportMode(input: ConciseOpeningReportModeInput): boolean {
   if (!input.isYouthScout) return false;
@@ -52,23 +31,50 @@ export function isConciseOpeningReportMode(input: ConciseOpeningReportModeInput)
   return input.observationCount <= 1 && input.contextCount <= 1;
 }
 
-export function getRecommendedActionLabel(
-  action: StructuredReportInput["recommendedAction"],
-  conciseOpeningMode = false,
-): string {
-  return conciseOpeningMode
-    ? CONCISE_OPENING_ACTION_LABELS[action]
-    : FULL_REPORT_ACTION_LABELS[action];
+/**
+ * Keeps the writer on the next unfinished decision while still allowing players
+ * to reopen completed or optional work. An unfinished future step cannot be
+ * selected ahead of the current decision.
+ */
+export function resolveReportWorkflow(
+  steps: ReportWorkflowStep[],
+  requestedStepId: string | null = null,
+): ReportWorkflowProgress {
+  const requiredSteps = steps.filter((step) => step.required !== false);
+  const nextRequiredStep = requiredSteps.find((step) => !step.complete) ?? null;
+  const requestedStep = requestedStepId
+    ? steps.find((step) => step.id === requestedStepId) ?? null
+    : null;
+  const requestedStepCanOpen = Boolean(
+    requestedStep
+      && (
+        requestedStep.required === false
+        || requestedStep.complete
+        || requestedStep.id === nextRequiredStep?.id
+      ),
+  );
+  const finalStep = steps.find((step) => step.id === "final") ?? null;
+  const activeStep = requestedStepCanOpen
+    ? requestedStep
+    : nextRequiredStep ?? finalStep ?? steps[0] ?? null;
+
+  return {
+    activeStepId: activeStep?.id ?? null,
+    completedRequiredSteps: requiredSteps.filter((step) => step.complete).length,
+    decisionsRemaining: requiredSteps.reduce(
+      (total, step) => total + Math.max(0, step.decisionsRemaining ?? (step.complete ? 0 : 1)),
+      0,
+    ),
+    nextRequiredStepId: nextRequiredStep?.id ?? null,
+    requiredSteps: requiredSteps.length,
+  };
 }
 
-export function buildConciseOpeningSummary(input: {
-  currentRead: string;
-  keyUncertainty: string;
-  recommendedActionLabel: string;
-}): string {
-  return [
-    `Current read: ${input.currentRead.trim()}`,
-    `Key uncertainty: ${input.keyUncertainty.trim()}`,
-    `Recommended next step: ${input.recommendedActionLabel}.`,
-  ].join(" ");
+export function canOpenReportWorkflowStep(
+  step: ReportWorkflowStep,
+  nextRequiredStepId: string | null,
+): boolean {
+  return step.required === false
+    || step.complete
+    || step.id === nextRequiredStepId;
 }

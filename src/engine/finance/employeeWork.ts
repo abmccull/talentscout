@@ -12,11 +12,10 @@ import type {
   Club,
   Scout,
   ScoutReport,
-  AttributeAssessment,
-  PlayerAttribute,
   Position,
+  StaffScoutingSignal,
+  StaffScoutingWorkProduct,
 } from "../core/types";
-import { ATTRIBUTE_DOMAINS } from "../core/types";
 import {
   appendAnalystReview,
   createAnalystReviewArtifact,
@@ -32,7 +31,7 @@ import { addGameWeeksWithSeasonLength } from "../core/gameDate";
 
 export interface EmployeeWorkResult {
   finances: FinancialRecord;
-  generatedReports: ScoutReport[];
+  generatedWorkProducts: StaffScoutingWorkProduct[];
   logEntries: EmployeeLogEntry[];
   inboxMessages: Array<{ title: string; body: string }>;
 }
@@ -73,25 +72,6 @@ export function getEmployeeOfficeQualityBonus(
 // ---------------------------------------------------------------------------
 // Internal: scout work
 // ---------------------------------------------------------------------------
-
-/**
- * A small subset of observable attributes that field scouts can assess in one week.
- * Hidden attributes are excluded — they require sustained observation.
- */
-const OBSERVABLE_ATTRIBUTES: readonly PlayerAttribute[] = [
-  "firstTouch",
-  "passing",
-  "dribbling",
-  "shooting",
-  "pace",
-  "strength",
-  "stamina",
-  "composure",
-  "positioning",
-  "workRate",
-  "offTheBall",
-  "vision",
-];
 
 function processScoutWork(
   rng: RNG,
@@ -168,56 +148,87 @@ function processScoutWork(
 
   const target = rng.pick(candidates);
 
-  // Build attribute assessments for a sample of observable attributes
-  const numAttributes = Math.max(2, Math.round(3 + emp.quality * 0.3));
-  const shuffled = rng.shuffle(OBSERVABLE_ATTRIBUTES).slice(0, numAttributes);
-
-  const assessments: AttributeAssessment[] = shuffled.map((attr) => {
-    const trueVal = target.attributes[attr] ?? rng.nextInt(5, 15);
-    // Error range narrows as accuracy skill (skill2) improves; acc 3 → ±4, acc 15 → ±1
-    const accuracy = emp.skills?.skill2 ?? emp.quality;
-    const error = Math.max(1, Math.round(4 - (accuracy / 20) * 3));
-    const estimate = Math.max(1, Math.min(20, trueVal + rng.nextInt(-error, error)));
-    const halfWidth = Math.max(1, error);
-    return {
-      attribute: attr,
-      estimatedValue: estimate,
-      confidenceRange: [Math.max(1, estimate - halfWidth), Math.min(20, estimate + halfWidth)] as [number, number],
-      domain: ATTRIBUTE_DOMAINS[attr],
-    };
-  });
-
-  // Office quality bonus applies a small upward nudge to report quality score
+  // Office support and employee condition improve a lead's clarity. Staff do
+  // not read hidden attributes and cannot author the player's report.
   const officeBonus = getEmployeeOfficeQualityBonus(result.finances, emp.id);
   const qualityScore = Math.min(100, Math.round(
     (emp.quality / 20) * 60 + efficiency * 30 + officeBonus * 100,
   ));
-
-  const reportId = `rpt_emp_${emp.id}_${week}_${season}_${rng.nextInt(1000, 9999)}`;
-
-  const report: ScoutReport = {
-    id: reportId,
+  const latestSeason = [...(target.seasonRatings ?? [])]
+    .sort((left, right) => right.season - left.season)[0];
+  const currentClub = clubs[target.clubId];
+  const confidence: StaffScoutingSignal["confidence"] = qualityScore >= 75
+    ? "strong"
+    : qualityScore >= 50
+      ? "working"
+      : "limited";
+  const signals: StaffScoutingSignal[] = [
+    {
+      id: `role:${target.id}`,
+      category: "role",
+      statement: `${target.age}-year-old ${target.position}${currentClub ? ` with ${currentClub.name}` : ""}.`,
+      source: assignment?.type === "scoutPlayer" ? "liveCoverage" : "videoReview",
+      confidence,
+    },
+    latestSeason && latestSeason.appearances > 0
+      ? {
+          id: `performance:${target.id}:s${latestSeason.season}`,
+          category: "performance",
+          statement: `${latestSeason.appearances} recorded appearances at ${latestSeason.avgRating.toFixed(2)} in season ${latestSeason.season}.`,
+          source: "competitionRecord",
+          confidence: latestSeason.appearances >= 12 ? "strong" : "working",
+        }
+      : {
+          id: `performance:${target.id}:unverified`,
+          category: "performance",
+          statement: "There is not yet enough recorded senior participation to judge consistency.",
+          source: "competitionRecord",
+          confidence: "limited",
+        },
+    {
+      id: `availability:${target.id}`,
+      category: "availability",
+      statement: target.onLoan
+        ? `Currently on loan; the contract remains with ${clubs[target.contractClubId ?? ""]?.name ?? "the parent club"}.`
+        : `Contract runs to season ${target.contractExpiry}; any approach needs a fresh availability check.`,
+      source: "networkCheck",
+      confidence: "working",
+    },
+  ];
+  const productId = `staff-work:${emp.id}:${target.id}:s${season}w${week}`;
+  const product: StaffScoutingWorkProduct = {
+    id: productId,
     playerId: target.id,
-    scoutId: emp.id,
-    submittedWeek: week,
-    submittedSeason: season,
-    attributeAssessments: assessments,
-    strengths: [],
-    weaknesses: [],
-    conviction: (emp.skills?.skill3 ?? emp.quality) >= 14 ? "recommend" : "note",
-    summary: `Employee scout report on ${target.firstName} ${target.lastName} filed by ${emp.name}.`,
-    estimatedValue: target.marketValue,
+    employeeId: emp.id,
+    employeeName: emp.name,
+    clientClubId: activeClient?.clubId ?? assignment?.targetClubId,
+    createdWeek: week,
+    createdSeason: season,
+    status: "awaitingReview",
     qualityScore,
-    intendedClubId: activeClient?.clubId ?? assignment?.targetClubId,
-    intendedAudience: activeClient ? "client" : undefined,
+    signals,
+    limitation: "This is a staff lead from observable context, not your authored judgment. Review it before it can be delivered or used as career evidence.",
+    suggestedConviction: qualityScore >= 78
+      ? "priorityFollowUp"
+      : qualityScore >= 52
+        ? "investigate"
+        : "monitor",
   };
 
-  result.generatedReports.push(report);
+  if (!result.finances.staffWorkProducts.some((candidate) => candidate.id === productId)) {
+    result.generatedWorkProducts.push(product);
+  }
 
-  // Track report IDs on the employee
+  // Track work-product IDs without mixing them into report history.
   const updatedEmployees = result.finances.employees.map((e) =>
     e.id === emp.id
-      ? { ...e, reportsGenerated: [...e.reportsGenerated, reportId] }
+      ? {
+          ...e,
+          workProductsGenerated: Array.from(new Set([
+            ...(e.workProductsGenerated ?? []),
+            productId,
+          ])),
+        }
       : e,
   );
   result.finances = { ...result.finances, employees: updatedEmployees };
@@ -225,9 +236,13 @@ function processScoutWork(
   result.logEntries.push({
     week,
     season,
-    action: `${emp.name} filed a report on ${target.firstName} ${target.lastName}.`,
-    result: `Quality score: ${qualityScore}`,
-    reportId,
+    action: `${emp.name} prepared a review lead on ${target.firstName} ${target.lastName}.`,
+    result: `Staff work quality: ${qualityScore}`,
+    workProductId: productId,
+  });
+  result.inboxMessages.push({
+    title: "Staff scouting ready for review",
+    body: `${emp.name} has prepared a lead on ${target.firstName} ${target.lastName}. Review the evidence before it can count toward a client commitment.`,
   });
 }
 
@@ -466,7 +481,7 @@ function processRelationshipManagerWork(
 
 /**
  * Process all active employee assignments for one week.
- * Returns updated finances, any generated scout reports, log entries, and inbox messages.
+ * Returns updated finances, reviewable staff work, log entries, and inbox messages.
  */
 export function processEmployeeWork(
   rng: RNG,
@@ -482,8 +497,9 @@ export function processEmployeeWork(
     finances: {
       ...finances,
       analystReviews: finances.analystReviews ?? [],
+      staffWorkProducts: finances.staffWorkProducts ?? [],
     },
-    generatedReports: [],
+    generatedWorkProducts: [],
     logEntries: [],
     inboxMessages: [],
   };

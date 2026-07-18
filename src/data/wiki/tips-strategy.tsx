@@ -139,7 +139,7 @@ export const tipsStrategyArticles: WikiArticle[] = [
     summary:
       "The three-observation rule and when to use each conviction level, from Note through Table Pound.",
     searchText:
-      "Building Conviction. Never submit a report with a strong conviction level based on a single session. The three-observation rule is a safe baseline. Note is for one session, wide confidence ranges, limited phase coverage. Recommend is for two to three sessions, multiple phase types seen. Strong Recommend is for three or more sessions across different contexts, confidence intervals narrowed. Table Pound is for five or more sessions, training visit if possible, near-certainty on key attributes. Named for the tradition of scouts banging the table to convince the manager, your strongest possible recommendation. A Table Pound with insufficient observation depth is the fastest way to destroy your reputation. Clubs remember wrong calls.",
+      "Building Conviction. Never submit a strong recommendation from one passage. More observations, independent contexts, explicit unknowns, and a well-matched next test improve calibration. A Table Pound is your strongest reputational stake, not a claim of certainty; clubs remember both disciplined calls and reckless ones.",
     content: (
       <SectionBlock>
         <Para>
@@ -163,8 +163,8 @@ export const tipsStrategyArticles: WikiArticle[] = [
             </>,
             <>
               <Tag color="rose">Table Pound</Tag> {"\u2014"} Five or more
-              sessions, training visit if possible, near-certainty on key
-              attributes. (Named for the tradition of scouts banging the table to
+              sessions, independent contexts, and no unresolved contradiction in
+              the core claim. (Named for the tradition of scouts banging the table to
               convince the manager {"\u2014"} your strongest possible
               recommendation.)
             </>,

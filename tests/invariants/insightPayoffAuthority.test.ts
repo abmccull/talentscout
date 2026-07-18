@@ -7,12 +7,13 @@ import type {
   ManagerProfile,
   NewGameConfig,
   Observation,
+  PlayerAttribute,
   Player,
   Scout,
   UnsignedYouth,
 } from "@/engine/core/types";
 import { executeDatabaseQuery } from "@/engine/data/dataActivities";
-import type { InsightActionContext } from "@/engine/insight/actions";
+import { executeInsightAction, type InsightActionContext } from "@/engine/insight/actions";
 import {
   applyInsightActionResult,
   consumeInsightQueryAccuracyEffect,
@@ -258,7 +259,376 @@ function applyResult(
   }).state;
 }
 
+function controlledSession(
+  actionId: string,
+  players: Array<{ playerId: string; name: string; position: string; focusedPhases?: number[] }>,
+  phases: Array<{
+    minute: number;
+    moments: Array<{
+      playerId: string;
+      quality: number;
+      attributesHinted: PlayerAttribute[];
+      pressureContext?: boolean;
+      isStandout?: boolean;
+      momentType?: "technicalAction" | "physicalTest" | "mentalResponse" | "tacticalDecision" | "characterReveal";
+    }>;
+  }>,
+): ObservationSession {
+  const base = createSession({
+    activityType: "schoolMatch",
+    specialization: "youth",
+    playerPool: players.map((player) => ({
+      playerId: player.playerId,
+      name: player.name,
+      position: player.position,
+    })),
+    targetPlayerId: players[0]?.playerId,
+    seed: `controlled-${actionId}`,
+    week: 6,
+    season: 2,
+    countryId: "england",
+  }, new RNG(`controlled-${actionId}`));
+
+  return {
+    ...base,
+    players: players.map((player) => ({
+      playerId: player.playerId,
+      name: player.name,
+      position: player.position,
+      isFocused: (player.focusedPhases?.length ?? 0) > 0,
+      focusedPhases: player.focusedPhases ?? [],
+      focusHistory: (player.focusedPhases ?? []).map((phaseIndex) => ({
+        phaseIndex,
+        lens: "general" as const,
+      })),
+      currentLens: (player.focusedPhases?.length ?? 0) > 0 ? "general" as const : undefined,
+    })),
+    phases: phases.map((phase, phaseIndex) => ({
+      index: phaseIndex,
+      minute: phase.minute,
+      description: `Phase ${phaseIndex + 1}`,
+      moments: phase.moments.map((moment, momentIndex) => ({
+        id: `${actionId}-phase-${phaseIndex}-moment-${momentIndex}`,
+        playerId: moment.playerId,
+        momentType: moment.momentType ?? "technicalAction",
+        quality: moment.quality,
+        attributesHinted: moment.attributesHinted,
+        description: `${moment.playerId} moment ${momentIndex}`,
+        vagueDescription: `${moment.playerId} vague moment ${momentIndex}`,
+        pressureContext: moment.pressureContext ?? false,
+        isStandout: moment.isStandout ?? false,
+      })),
+    })),
+  };
+}
+
+function actionContext(
+  data: Fixture,
+  activeSession: ObservationSession,
+  targetPlayerId = data.prospect.id,
+  specialization: Scout["primarySpecialization"] = "youth",
+): InsightActionContext {
+  return {
+    scout: {
+      ...data.state.scout,
+      primarySpecialization: specialization,
+    },
+    session: activeSession,
+    targetPlayerId,
+    players: data.state.players,
+    contacts: data.state.contacts,
+    subRegionId: "subregion-1",
+    leagueId: "league-1",
+    leaguePlayers: Object.values(data.state.players),
+    week: data.state.currentWeek,
+    season: data.state.currentSeason,
+  };
+}
+
+function executeAction(
+  actionId: InsightActionId,
+  context: InsightActionContext,
+  fizzled = false,
+  seed = `${actionId}-seed`,
+): InsightActionResult {
+  return executeInsightAction(actionId, context, new RNG(seed), fizzled);
+}
+
 describe("Insight payoff authority", () => {
+  it("persists bounded uncertainty for hidden and retroactive insight reads", () => {
+    const data = fixture();
+    const peripheral = {
+      ...player("insight-peripheral", "club-1", 120_000, 120),
+      id: "peripheral",
+    };
+    const state = {
+      ...data.state,
+      players: {
+        ...data.state.players,
+        [peripheral.id]: peripheral,
+      },
+    };
+    const activeSession = controlledSession(
+      "bounded-observations",
+      [
+        { playerId: data.prospect.id, name: "Insight Prospect", position: "CM", focusedPhases: [0, 1] },
+        { playerId: peripheral.id, name: "Peripheral Lead", position: "LW" },
+      ],
+      [
+        {
+          minute: 18,
+          moments: [
+            {
+              playerId: peripheral.id,
+              quality: 8,
+              attributesHinted: ["firstTouch", "vision"],
+              isStandout: true,
+            },
+          ],
+        },
+        {
+          minute: 61,
+          moments: [
+            {
+              playerId: peripheral.id,
+              quality: 7,
+              attributesHinted: ["vision"],
+              pressureContext: true,
+            },
+          ],
+        },
+      ],
+    );
+
+    const clarity = executeAction(
+      "clarityOfVision",
+      actionContext({ ...data, state }, activeSession, peripheral.id, "youth"),
+    );
+    expect(clarity.success).toBe(true);
+    expect(clarity.observations).toBeDefined();
+    expect(clarity.observations!.every((reading) => (reading.confidence ?? 1) < 1)).toBe(true);
+    expect(clarity.narrative).toMatch(/bounded/i);
+
+    const hiddenNature = executeAction(
+      "hiddenNature",
+      actionContext(data, activeSession, data.prospect.id, "youth"),
+    );
+    expect(hiddenNature.revealedAttributes).toBeUndefined();
+    expect(hiddenNature.observations).toBeDefined();
+    expect(hiddenNature.observations!.length).toBeLessThanOrEqual(2);
+    expect(hiddenNature.observations!.every((reading) => (reading.confidence ?? 1) < 1)).toBe(true);
+    expect(hiddenNature.narrative).toMatch(/Next test:/);
+
+    const afterHiddenNature = applyInsightActionResult({
+      state,
+      session: activeSession,
+      context: actionContext(data, activeSession, data.prospect.id, "youth"),
+      result: hiddenNature,
+      insightState: state.scout.insightState ?? createInsightState(),
+    }).state;
+    const hiddenReading = Object.values(afterHiddenNature.observations)
+      .flatMap((observation) => observation.attributeReadings)
+      .find((reading) => [
+        "injuryProneness",
+        "consistency",
+        "bigGameTemperament",
+        "professionalism",
+      ].includes(reading.attribute));
+    expect(hiddenReading).toBeDefined();
+    expect(hiddenReading!.confidence).toBeLessThan(1);
+    expect(hiddenReading!.rangeLow ?? 0).toBeLessThan(hiddenReading!.rangeHigh ?? 0);
+
+    const secondLook = executeAction(
+      "secondLook",
+      actionContext({ ...data, state }, activeSession, data.prospect.id, "youth"),
+    );
+    expect(secondLook.discoveredPlayerId).toBe(peripheral.id);
+    expect(secondLook.observations!.every((reading) => (reading.confidence ?? 1) < 1)).toBe(true);
+    expect(secondLook.narrative).toMatch(/Overlooked lead recovered/);
+
+    const afterSecondLook = applyInsightActionResult({
+      state,
+      session: activeSession,
+      context: actionContext({ ...data, state }, activeSession, data.prospect.id, "youth"),
+      result: secondLook,
+      insightState: state.scout.insightState ?? createInsightState(),
+    }).state;
+    const secondLookReading = Object.values(afterSecondLook.observations)
+      .find((observation) => observation.playerId === peripheral.id);
+    expect(secondLookReading).toBeDefined();
+    expect(secondLookReading!.attributeReadings.every((reading) => (reading.rangeLow ?? 0) < (reading.rangeHigh ?? 0))).toBe(true);
+  });
+
+  it("ranks youth insight leads from visible evidence instead of hidden potential ability", () => {
+    const data = fixture();
+    const visibleLead = {
+      ...player("insight-visible-lead", "club-1", 200_000, 118),
+      id: "visible-lead",
+    };
+    const hiddenAce = {
+      ...player("insight-hidden-ace", "club-1", 200_000, 195),
+      id: "hidden-ace",
+    };
+    const state = {
+      ...data.state,
+      players: {
+        [visibleLead.id]: visibleLead,
+        [hiddenAce.id]: hiddenAce,
+      },
+    };
+    const activeSession = controlledSession(
+      "lead-ranking",
+      [
+        { playerId: visibleLead.id, name: "Visible Lead", position: "RW" },
+        { playerId: hiddenAce.id, name: "Hidden Ace", position: "ST" },
+      ],
+      [
+        {
+          minute: 12,
+          moments: [
+            {
+              playerId: visibleLead.id,
+              quality: 9,
+              attributesHinted: ["firstTouch", "vision"],
+              isStandout: true,
+              pressureContext: true,
+            },
+            {
+              playerId: hiddenAce.id,
+              quality: 5,
+              attributesHinted: ["finishing"],
+            },
+          ],
+        },
+        {
+          minute: 54,
+          moments: [
+            {
+              playerId: visibleLead.id,
+              quality: 8,
+              attributesHinted: ["decisionMaking", "vision"],
+              isStandout: true,
+            },
+            {
+              playerId: hiddenAce.id,
+              quality: 4,
+              attributesHinted: ["offTheBall"],
+            },
+          ],
+        },
+      ],
+    );
+    const youthContext = actionContext(
+      { ...data, state },
+      activeSession,
+      visibleLead.id,
+      "youth",
+    );
+
+    const diamond = executeAction("diamondInTheRough", youthContext, false, "diamond-visible");
+    const whisper = executeAction("generationalWhisper", youthContext, false, "whisper-visible");
+    expect(diamond.discoveredPlayerId).toBe(visibleLead.id);
+    expect(whisper.discoveredPlayerId).toBe(visibleLead.id);
+
+    const swappedState = {
+      ...state,
+      players: {
+        [visibleLead.id]: { ...visibleLead, potentialAbility: 195 },
+        [hiddenAce.id]: { ...hiddenAce, potentialAbility: 118 },
+      },
+    };
+    const swappedContext = actionContext(
+      { ...data, state: swappedState },
+      activeSession,
+      visibleLead.id,
+      "youth",
+    );
+    const swappedDiamond = executeAction("diamondInTheRough", swappedContext, false, "diamond-visible");
+    const swappedWhisper = executeAction("generationalWhisper", swappedContext, false, "whisper-visible");
+
+    expect(swappedDiamond.discoveredPlayerId).toBe(visibleLead.id);
+    expect(swappedWhisper.discoveredPlayerId).toBe(visibleLead.id);
+    expect(swappedWhisper.wonderkidSignal).toEqual(whisper.wonderkidSignal);
+  });
+
+  it("makes The Verdict bounded and evidence-dependent instead of flat +30", () => {
+    const data = fixture();
+    const thinSession = controlledSession(
+      "verdict-thin",
+      [{ playerId: data.prospect.id, name: "Insight Prospect", position: "CM", focusedPhases: [0] }],
+      [
+        {
+          minute: 16,
+          moments: [
+            {
+              playerId: data.prospect.id,
+              quality: 4,
+              attributesHinted: ["passing"],
+            },
+          ],
+        },
+      ],
+    );
+    const richSession = controlledSession(
+      "verdict-rich",
+      [{ playerId: data.prospect.id, name: "Insight Prospect", position: "CM", focusedPhases: [0, 1, 2] }],
+      [
+        {
+          minute: 11,
+          moments: [
+            {
+              playerId: data.prospect.id,
+              quality: 8,
+              attributesHinted: ["passing", "vision"],
+              isStandout: true,
+            },
+          ],
+        },
+        {
+          minute: 38,
+          moments: [
+            {
+              playerId: data.prospect.id,
+              quality: 8,
+              attributesHinted: ["decisionMaking", "positioning"],
+              pressureContext: true,
+            },
+          ],
+        },
+        {
+          minute: 74,
+          moments: [
+            {
+              playerId: data.prospect.id,
+              quality: 7,
+              attributesHinted: ["firstTouch", "workRate"],
+            },
+          ],
+        },
+      ],
+    );
+
+    const thinVerdict = executeAction("theVerdict", actionContext(data, thinSession, data.prospect.id, "firstTeam"));
+    const richVerdict = executeAction("theVerdict", actionContext(data, richSession, data.prospect.id, "firstTeam"));
+    expect(thinVerdict.reportQualityBonus).toBeGreaterThanOrEqual(4);
+    expect(thinVerdict.reportQualityBonus).toBeLessThan(30);
+    expect(richVerdict.reportQualityBonus).toBeGreaterThan(thinVerdict.reportQualityBonus!);
+    expect(richVerdict.reportQualityBonus).toBeLessThanOrEqual(14);
+    expect(richVerdict.narrative).toMatch(/Next test:/);
+
+    const queuedState = applyInsightActionResult({
+      state: data.state,
+      session: richSession,
+      context: actionContext(data, richSession, data.prospect.id, "firstTeam"),
+      result: richVerdict,
+      insightState: data.state.scout.insightState ?? createInsightState(),
+    }).state;
+    expect(getPendingInsightReportQualityEffect(
+      queuedState.scout.insightState,
+      data.prospect.id,
+    )?.bonusPoints).toBe(richVerdict.reportQualityBonus);
+  });
+
   it("persists all twelve action payoffs into their canonical gameplay systems", () => {
     const data = fixture();
     const p = data.prospect;
@@ -279,8 +649,8 @@ describe("Insight payoff authority", () => {
       [{
         actionId: "theVerdict",
         success: true,
-        narrative: "The next report will be a masterwork.",
-        reportQualityBonus: 30,
+        narrative: "The next report has stronger support.",
+        reportQualityBonus: 12,
       }, "schoolMatch"],
       [{
         actionId: "secondLook",
@@ -385,7 +755,7 @@ describe("Insight payoff authority", () => {
       attribute: "consistency",
     }));
     expect(state.subRegions["subregion-1"].familiarity).toBe(45);
-    expect(getPendingInsightReportQualityEffect(state.scout.insightState, p.id)?.bonusPoints).toBe(30);
+    expect(getPendingInsightReportQualityEffect(state.scout.insightState, p.id)?.bonusPoints).toBe(12);
     expect(getPendingInsightQueryAccuracyEffect(state.scout.insightState)).toMatchObject({
       accuracyBonus: 1,
       leagueId: "league-1",
@@ -404,13 +774,13 @@ describe("Insight payoff authority", () => {
       actionId: "theVerdict",
       success: true,
       narrative: "First verdict.",
-      reportQualityBonus: 30,
+      reportQualityBonus: 12,
     });
     state = applyResult(data, state, {
       actionId: "theVerdict",
       success: false,
       narrative: "Replacement partial verdict.",
-      reportQualityBonus: 18,
+      reportQualityBonus: 6,
     });
     state = applyResult(data, state, {
       actionId: "algorithmicEpiphany",
@@ -431,7 +801,7 @@ describe("Insight payoff authority", () => {
     const queryEffect = getPendingInsightQueryAccuracyEffect(state.scout.insightState)!;
     expect(state.scout.insightState?.persistedEffects?.pendingReportQuality).toHaveLength(1);
     expect(state.scout.insightState?.persistedEffects?.pendingQueryAccuracy).toHaveLength(1);
-    expect(reportEffect.bonusPoints).toBe(18);
+    expect(reportEffect.bonusPoints).toBe(6);
     expect(queryEffect.accuracyBonus).toBe(0.6);
 
     const afterReport = consumeInsightReportQualityEffect(state.scout.insightState!, reportEffect.id);
@@ -522,8 +892,8 @@ describe("Insight payoff authority", () => {
     }, {
       actionId: "theVerdict",
       success: true,
-      narrative: "A masterwork report is ready.",
-      reportQualityBonus: 30,
+      narrative: "A stronger report is ready.",
+      reportQualityBonus: 12,
     });
     const draft = generateReportContent(data.prospect, [observation], state.scout);
     const summary = "A concise evidence-backed assessment with a clear recommendation.";
@@ -541,7 +911,7 @@ describe("Insight payoff authority", () => {
       playerId: data.prospect.id,
       observations: [observation],
       playerContext: data.prospect,
-      reportQualityBonus: 0.3,
+      reportQualityBonus: 0.12,
     }).quality.score;
     let store = {
       gameState: state,

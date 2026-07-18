@@ -15,7 +15,13 @@
 
 import type { RNG } from "@/engine/rng";
 import type { Player, PlayerAttribute } from "@/engine/core/types";
-import type { PlayerMoment, SessionPlayer, VenueAtmosphere } from "./types";
+import type {
+  ObservationOpponentContext,
+  PlayerMoment,
+  SessionPlayer,
+  VenueAtmosphere,
+} from "./types";
+import type { ObservationSituationSnapshot } from "./situations";
 
 // =============================================================================
 // TYPES
@@ -24,6 +30,31 @@ import type { PlayerMoment, SessionPlayer, VenueAtmosphere } from "./types";
 type MomentType = PlayerMoment["momentType"];
 
 type MomentTypeWeights = Record<MomentType, number>;
+
+const POSITION_MOMENT_MULTIPLIERS: Record<string, Partial<MomentTypeWeights>> = {
+  GK: { technicalAction: 0.9, physicalTest: 0.75, mentalResponse: 1.25, tacticalDecision: 1.35 },
+  CB: { technicalAction: 0.85, physicalTest: 1.15, mentalResponse: 1.1, tacticalDecision: 1.35 },
+  LB: { technicalAction: 1.05, physicalTest: 1.25, tacticalDecision: 1.2 },
+  RB: { technicalAction: 1.05, physicalTest: 1.25, tacticalDecision: 1.2 },
+  CDM: { mentalResponse: 1.15, tacticalDecision: 1.4 },
+  CM: { technicalAction: 1.15, mentalResponse: 1.05, tacticalDecision: 1.3 },
+  CAM: { technicalAction: 1.3, tacticalDecision: 1.2 },
+  LW: { technicalAction: 1.3, physicalTest: 1.2, tacticalDecision: 1.05 },
+  RW: { technicalAction: 1.3, physicalTest: 1.2, tacticalDecision: 1.05 },
+  ST: { technicalAction: 1.25, physicalTest: 1.1, mentalResponse: 1.1, tacticalDecision: 1.15 },
+};
+
+const FRAME_MOMENT_MULTIPLIERS: Record<
+  ObservationSituationSnapshot["tacticalFrame"],
+  Partial<MomentTypeWeights>
+> = {
+  unstructured: { technicalAction: 1.3, physicalTest: 1.2, tacticalDecision: 0.72 },
+  direct: { physicalTest: 1.3, mentalResponse: 1.15, tacticalDecision: 1.05 },
+  transitionHeavy: { physicalTest: 1.25, mentalResponse: 1.1, tacticalDecision: 1.25 },
+  possession: { technicalAction: 1.2, tacticalDecision: 1.3, physicalTest: 0.85 },
+  pressing: { technicalAction: 1.08, mentalResponse: 1.2, tacticalDecision: 1.3 },
+  structured: { mentalResponse: 1.05, tacticalDecision: 1.3 },
+};
 
 // =============================================================================
 // MOMENT TYPE WEIGHTS BY VENUE
@@ -405,14 +436,70 @@ export function formatMomentDescription(
 export function selectMomentType(
   rng: RNG,
   venueType: string,
+  player?: SessionPlayer,
+  situation?: ObservationSituationSnapshot,
+  opponent?: ObservationOpponentContext,
 ): MomentType {
-  const weights = MOMENT_TYPE_WEIGHTS[venueType] ?? MOMENT_TYPE_WEIGHTS["_default"];
+  const baseWeights = MOMENT_TYPE_WEIGHTS[venueType] ?? MOMENT_TYPE_WEIGHTS["_default"];
+  const positionWeights = player ? POSITION_MOMENT_MULTIPLIERS[player.position] ?? {} : {};
+  const frameWeights = situation ? FRAME_MOMENT_MULTIPLIERS[situation.tacticalFrame] : {};
+  const highStakes = situation?.stakes === "selection"
+    || situation?.stakes === "knockout"
+    || situation?.stakes === "careerDefining";
 
   const items = (
-    Object.entries(weights) as [MomentType, number][]
-  ).map(([momentType, weight]) => ({ item: momentType, weight }));
+    Object.entries(baseWeights) as [MomentType, number][]
+  ).map(([momentType, weight]) => {
+    let multiplier = (positionWeights[momentType] ?? 1) * (frameWeights[momentType] ?? 1);
+    if (highStakes && (momentType === "mentalResponse" || momentType === "characterReveal")) {
+      multiplier *= 1.22;
+    }
+    if (opponent?.relativeStrength === "stronger" && (momentType === "mentalResponse" || momentType === "tacticalDecision")) {
+      multiplier *= 1.18;
+    }
+    if (player?.naturalRole === "ballPlayingDefender" && momentType === "technicalAction") multiplier *= 1.25;
+    if (player?.naturalRole === "pressingForward" && (momentType === "physicalTest" || momentType === "mentalResponse")) multiplier *= 1.2;
+    if (player?.naturalRole === "sweeper" && momentType === "tacticalDecision") multiplier *= 1.2;
+    if (player?.naturalRole === "targetMan" && momentType === "physicalTest") multiplier *= 1.25;
+    return { item: momentType, weight: Math.max(0.1, weight * multiplier) };
+  });
 
   return rng.pickWeighted(items);
+}
+
+function getRoleAttributePriorities(player: SessionPlayer): Set<PlayerAttribute> {
+  const byPosition: Record<string, readonly PlayerAttribute[]> = {
+    GK: ["composure", "positioning", "anticipation", "passing", "decisionMaking", "agility"],
+    CB: ["positioning", "defensiveAwareness", "marking", "heading", "strength", "anticipation"],
+    LB: ["pace", "stamina", "crossing", "positioning", "offTheBall", "tackling"],
+    RB: ["pace", "stamina", "crossing", "positioning", "offTheBall", "tackling"],
+    CDM: ["positioning", "decisionMaking", "anticipation", "passing", "defensiveAwareness", "teamwork"],
+    CM: ["passing", "firstTouch", "decisionMaking", "vision", "teamwork", "stamina"],
+    CAM: ["firstTouch", "passing", "dribbling", "vision", "offTheBall", "decisionMaking"],
+    LW: ["dribbling", "pace", "crossing", "offTheBall", "agility", "decisionMaking"],
+    RW: ["dribbling", "pace", "crossing", "offTheBall", "agility", "decisionMaking"],
+    ST: ["finishing", "offTheBall", "composure", "heading", "strength", "anticipation"],
+  };
+  const priorities = new Set<PlayerAttribute>(byPosition[player.position] ?? []);
+  const roleAdditions: Partial<Record<NonNullable<SessionPlayer["naturalRole"]>, readonly PlayerAttribute[]>> = {
+    ballPlayingDefender: ["passing", "firstTouch", "vision", "composure"],
+    sweeper: ["anticipation", "decisionMaking", "positioning", "pace"],
+    wingBack: ["stamina", "pace", "crossing", "offTheBall"],
+    invertedFullBack: ["passing", "vision", "decisionMaking", "positioning"],
+    deepLyingPlaymaker: ["passing", "vision", "decisionMaking", "composure"],
+    boxToBox: ["stamina", "workRate", "teamwork", "offTheBall"],
+    advancedPlaymaker: ["firstTouch", "passing", "vision", "decisionMaking"],
+    shadowStriker: ["offTheBall", "finishing", "anticipation", "composure"],
+    winger: ["crossing", "pace", "dribbling", "offTheBall"],
+    insideForward: ["finishing", "dribbling", "offTheBall", "composure"],
+    targetMan: ["heading", "strength", "teamwork", "composure"],
+    pressingForward: ["pressing", "workRate", "stamina", "teamwork"],
+    poacher: ["finishing", "offTheBall", "anticipation", "composure"],
+  };
+  for (const attribute of player.naturalRole ? roleAdditions[player.naturalRole] ?? [] : []) {
+    priorities.add(attribute);
+  }
+  return priorities;
 }
 
 // =============================================================================
@@ -443,6 +530,8 @@ export function generateMoments(
   totalPhases: number,
   atmosphere?: VenueAtmosphere,
   playerProfiles?: Readonly<Record<string, Player>>,
+  situation?: ObservationSituationSnapshot,
+  opponent?: ObservationOpponentContext,
 ): PlayerMoment[] {
   const [minMoments, maxMoments] = getMomentCountRange(venueType);
   const momentCount = rng.nextInt(minMoments, maxMoments);
@@ -461,7 +550,7 @@ export function generateMoments(
     const player = selectMomentPlayer(rng, players, phaseIndex, i, momentCount);
 
     // --- Select moment type weighted by venue ---
-    const momentType = selectMomentType(rng, venueType);
+    const momentType = selectMomentType(rng, venueType, player, situation, opponent);
 
     // --- Generate quality (1–10, gaussian-biased toward 5) ---
     // Quality is resolved after the hinted attributes and pressure context are known.
@@ -469,7 +558,10 @@ export function generateMoments(
     // --- Sample 1–3 attribute hints from the relevant pool ---
     const hintPool = getMomentAttributeHints(momentType);
     const hintCount = rng.nextInt(1, Math.min(3, hintPool.length));
-    const shuffledPool = rng.shuffle(hintPool);
+    const rolePriorities = getRoleAttributePriorities(player);
+    const preferred = rng.shuffle(hintPool.filter((attribute) => rolePriorities.has(attribute)));
+    const remaining = rng.shuffle(hintPool.filter((attribute) => !rolePriorities.has(attribute)));
+    const shuffledPool = [...preferred, ...remaining];
     const attributesHinted = shuffledPool.slice(0, hintCount) as PlayerAttribute[];
 
     const pressureContext = rng.chance(pressureProbability);

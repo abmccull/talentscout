@@ -1,0 +1,37 @@
+{
+  "scope": "Youth Scout evidence, reporting, onboarding, and connected core UI",
+  "overallScore": 9.2,
+  "baseDesignScore": 9.1,
+  "systemCohesionScore": 9.4,
+  "capsApplied": [],
+  "scores": {
+    "visualHierarchy": 9.2,
+    "layoutAndSpacing": 9.0,
+    "typography": 8.9,
+    "colorAndContrast": 8.9,
+    "componentsAndStates": 9.3,
+    "interactionAndFeedback": 9.4,
+    "informationArchitectureAndNavigation": 9.2,
+    "conversionOrTaskFlowDesign": 9.5,
+    "accessibilityAndInclusiveUx": 9.3,
+    "imageryAndIconography": 8.1,
+    "brandVisualSystem": 9.0,
+    "emotionalTrustAndPolish": 9.1
+  },
+  "renderedEvidence": "artifacts/release/generated/visual-evidence/head-49c4ba29372c__base-tree-43ec01390f14__dirty-9dfcc7f1fc9c",
+  "verification": {
+    "typecheck": "passed",
+    "lint": "passed",
+    "unit": "191 files, 1034 tests passed",
+    "criticalRendered": "13 tests passed",
+    "accessibility": "6 dedicated scenarios passed",
+    "visualEvidenceJourneys": "3 current desktop/mobile journeys passed",
+    "youthEaCore": "53 tests passed",
+    "organicCareer": "1 multi-season journey passed in 5.3 minutes",
+    "browserSoak": "60 batches and 460 weeks reached season 11 with zero fallback",
+    "retries": 0,
+    "productionBuild": "passed",
+    "windowsDistribution": "supporting packaged-runtime pass"
+  },
+  "primaryResidualOpportunity": "Improve player portrait variety and validate optional report-section collapsing with repeat players"
+}

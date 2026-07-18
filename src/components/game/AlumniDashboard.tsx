@@ -151,7 +151,14 @@ function SeasonStatsTable({ stats }: { stats: AlumniSeasonStats[] }) {
           <tbody>
             {sorted.map((s) => (
               <tr key={s.season} className="border-b border-[#27272a]/50">
-                <td className="py-1 pr-3 text-zinc-300">S{s.season}</td>
+                <td className="py-1 pr-3 text-zinc-300">
+                  S{s.season}
+                  {s.source === "legacyEstimate" && (
+                    <span className="ml-1 text-[9px] uppercase tracking-wide text-amber-400" title="Estimate retained from an older save">
+                      estimate
+                    </span>
+                  )}
+                </td>
                 <td className="py-1 px-2 text-right text-zinc-400">{s.appearances}</td>
                 <td className="py-1 px-2 text-right text-zinc-400">{s.goals}</td>
                 <td className="py-1 px-2 text-right text-zinc-400">{s.assists}</td>

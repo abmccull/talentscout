@@ -192,6 +192,7 @@ import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 import { generateManagerProfiles } from "@/engine/analytics";
 import {
   advanceYouthRecruitmentBriefs,
+  deriveYouthRecruitmentBriefCapacity,
   directWeeklyYouthProfessionalCase,
   generateYouthRecruitmentBriefs,
 } from "@/engine/youth";
@@ -199,6 +200,7 @@ import {
   completeAcademyRecommendationReview,
 } from "@/engine/youth/recommendationReviews";
 import { calibrateSourceEvidenceFromReview } from "@/engine/scout/sourceCalibration";
+import { applyScoutSkillXp } from "@/engine/scout/progression";
 import { getCountryDataSync, getAvailableCountries } from "@/data/index";
 import {
   useTutorialStore,
@@ -879,8 +881,18 @@ export function createWeeklyActions(
 
     // Issue 5c+5d: Apply tool fatigue reduction bonuses
     const weekToolBonuses = getActiveToolBonuses(gameState.unlockedTools);
-    const fatigueReduction = weekToolBonuses.fatigueReduction ?? 0;
-    const travelFatigueReduction = weekToolBonuses.travelFatigueReduction ?? 0;
+    const hasReportActivity = gameState.schedule.activities.some(
+      (activity) => activity?.type === "writeReport" || activity?.type === "writePlacementReport",
+    );
+    const workActivityCount = gameState.schedule.activities.filter(
+      (activity) => activity !== null && activity.type !== "rest",
+    ).length;
+    const fatigueReduction = hasReportActivity
+      ? weekToolBonuses.fatigueReduction ?? 0
+      : 0;
+    const workflowFatigueReduction = workActivityCount >= 3
+      ? weekToolBonuses.workflowFatigueReduction ?? 0
+      : 0;
 
       // Equipment fatigueReduction: per-activity-type reductions from equipped items
       let equipFatigueReduction = 0;
@@ -912,15 +924,26 @@ export function createWeeklyActions(
 
     if (
       fatigueReduction > 0
-      || travelFatigueReduction > 0
+      || (weekToolBonuses.travelFatigueReduction ?? 0) > 0
+      || workflowFatigueReduction > 0
       || equipFatigueReduction > 0
     ) {
       // Check if any travel activities were scheduled this week
       const hasTravelActivity = gameState.schedule.activities.some(
         (a) => a?.type === "internationalTravel" || a?.type === "travel",
       );
+      const travelFatigueReduction = hasTravelActivity
+        ? Math.max(
+            0,
+            Math.round(
+              Math.max(0, weekResult.fatigueChange)
+              * (weekToolBonuses.travelFatigueReduction ?? 0),
+            ),
+          )
+        : 0;
       const totalReduction = fatigueReduction
-        + (hasTravelActivity ? travelFatigueReduction : 0)
+        + workflowFatigueReduction
+        + travelFatigueReduction
         + equipFatigueReduction;
       if (totalReduction > 0) {
         updatedScout = {
@@ -1113,11 +1136,15 @@ export function createWeeklyActions(
       stateWithScheduleApplied.currentSeason,
       academyBriefSeasonLength,
     );
+    const academyBriefCapacity = deriveYouthRecruitmentBriefCapacity(
+      getWorldConditionModifiers(stateWithScheduleApplied).opportunityMultiplier,
+    );
     const briefCycle = advanceYouthRecruitmentBriefs(
       stateWithScheduleApplied.youthRecruitmentBriefs,
       academyBriefDate.week,
       academyBriefDate.season,
       academyBriefSeasonLength,
+      academyBriefCapacity,
     );
     const replacementBriefs = generateYouthRecruitmentBriefs(
       createRNG(`${stateWithScheduleApplied.seed}-academy-brief-refresh-s${academyBriefDate.season}w${academyBriefDate.week}`),
@@ -1126,13 +1153,7 @@ export function createWeeklyActions(
       academyBriefDate.week,
       academyBriefDate.season,
       briefCycle.briefs,
-      Math.max(
-        6,
-        Math.round(
-          12 * getWorldConditionModifiers(stateWithScheduleApplied)
-            .opportunityMultiplier,
-        ),
-      ),
+      academyBriefCapacity,
       academyBriefSeasonLength,
       stateWithScheduleApplied.seed,
     );
@@ -1179,6 +1200,7 @@ export function createWeeklyActions(
     let recommendationReviews = { ...stateWithScheduleApplied.recommendationReviews };
     let calibratedNPCReports = stateWithScheduleApplied.npcReports;
     let calibratedContactIntel = stateWithScheduleApplied.contactIntel;
+    let recommendationCalibrationXp = 0;
     const reviewMessages: InboxMessage[] = [];
     for (const review of Object.values(recommendationReviews)) {
       if (review.status !== "scheduled") continue;
@@ -1232,6 +1254,11 @@ export function createWeeklyActions(
       });
       calibratedNPCReports = sourceCalibration.npcReports;
       calibratedContactIntel = sourceCalibration.contactIntel;
+      recommendationCalibrationXp += result.review.confidenceCalibration === undefined
+        ? 1
+        : result.review.confidenceCalibration >= 75
+          ? 5
+          : 3;
       reviewMessages.push({
         id: `recommendation-review-${result.review.id}`,
         week: stateWithScheduleApplied.currentWeek,
@@ -1250,6 +1277,12 @@ export function createWeeklyActions(
       recommendationReviews,
       npcReports: calibratedNPCReports,
       contactIntel: calibratedContactIntel,
+      scout: recommendationCalibrationXp > 0
+        ? applyScoutSkillXp(stateWithScheduleApplied.scout, {
+            playerJudgment: recommendationCalibrationXp,
+            potentialAssessment: Math.max(1, Math.floor(recommendationCalibrationXp / 2)),
+          })
+        : stateWithScheduleApplied.scout,
       inbox: reviewMessages.length > 0
         ? [...stateWithScheduleApplied.inbox, ...reviewMessages]
         : stateWithScheduleApplied.inbox,
@@ -2102,6 +2135,49 @@ export function createWeeklyActions(
       return;
     }
     newState = seasonRollover.state;
+
+    // The season-opening world condition is selected inside the core rollover,
+    // after the ordinary brief refresh above. Reconcile once more against that
+    // new market so a contraction cannot leave more open work than the player
+    // is told the market supports.
+    if (tickResult.endOfSeasonTriggered) {
+      const seasonOpeningBriefCapacity = deriveYouthRecruitmentBriefCapacity(
+        getWorldConditionModifiers(newState).opportunityMultiplier,
+      );
+      const seasonOpeningBriefCycle = advanceYouthRecruitmentBriefs(
+        newState.youthRecruitmentBriefs,
+        newState.currentWeek,
+        newState.currentSeason,
+        getSeasonLength(newState.fixtures, newState.currentSeason),
+        seasonOpeningBriefCapacity,
+      );
+      if (seasonOpeningBriefCycle.expiredIds.length > 0) {
+        const existingMessageIds = new Set(newState.inbox.map((message) => message.id));
+        const capacityMessages: InboxMessage[] = seasonOpeningBriefCycle.expiredIds
+          .flatMap((briefId): InboxMessage[] => {
+            const messageId = `academy-brief-expired-${briefId}`;
+            if (existingMessageIds.has(messageId)) return [];
+            const brief = seasonOpeningBriefCycle.briefs[briefId];
+            return [{
+              id: messageId,
+              week: newState.currentWeek,
+              season: newState.currentSeason,
+              type: "event" as const,
+              title: "Academy Brief Closed",
+              body: `${newState.clubs[brief?.clubId ?? ""]?.name ?? "A client club"} closed its ${brief?.requiredPositions.join("/") ?? "youth"} request as the market shifted at the start of the season.`,
+              read: false,
+              actionRequired: false,
+            }];
+          });
+        newState = {
+          ...newState,
+          youthRecruitmentBriefs: seasonOpeningBriefCycle.briefs,
+          inbox: capacityMessages.length > 0
+            ? [...newState.inbox, ...capacityMessages]
+            : newState.inbox,
+        };
+      }
+    }
 
     // Resolved or orphaned narrative prompts must not remain permanently pinned
     // as action-required messages in long-running saves.

@@ -45,9 +45,9 @@ export interface GutFeelingCandidate {
   /** Short explanation of what triggered the feeling. */
   triggerReason: string;
   /**
-   * Optional PA estimate range, present only when the scout has the
-   * "Generational Eye" perk (paEstimate effect). Shows a heuristic
-   * low–high range around the player's true potential ability.
+   * Optional projection-signal range, present only when the scout has the
+   * "Generational Eye" perk. It is derived from visible cue quality and stays
+   * deliberately broad; hidden potential is never consulted.
    */
   paEstimate?: { low: number; high: number };
 }
@@ -57,7 +57,7 @@ export interface GutFeelingCandidate {
  * Consumed by the session completion pipeline and the UI reflection screen.
  */
 export interface ReflectionResult {
-  /** Auto-generated hypotheses derived from session moments. */
+  /** Legacy read-only field. New sessions use structured evidence cards. */
   suggestedHypotheses: Hypothesis[];
   /** A gut feeling candidate if one triggered, otherwise null. */
   gutFeelingCandidate: GutFeelingCandidate | null;
@@ -466,7 +466,8 @@ function describeSessionTakeaway(session: ObservationSession): string {
  * the same player and domain. The hypothesis text is assembled from the
  * dominant reaction type and domain label.
  */
-function buildHypothesisFromMoments(
+/** @deprecated Historical save compatibility only; new reflections do not call this. */
+export function buildHypothesisFromMoments(
   playerId: string,
   playerName: string,
   domain: AttributeDomain,
@@ -613,7 +614,7 @@ export function checkGutFeelingTrigger(
   scoutSpecLevel: number,
   perkModifiers?: { paEstimate: boolean; paEstimateMargin?: number },
   paEstimateAccuracyBonus?: number,
-  players?: Record<string, Player>,
+  _players?: Record<string, Player>,
 ): GutFeelingCandidate | null {
   const flaggedCount = session.flaggedMoments.length;
 
@@ -695,22 +696,29 @@ export function checkGutFeelingTrigger(
       ? `Triggered by: ${triggerReasonParts.join(", ")}.`
       : "Triggered during general reflection.";
 
-  // --- Optional PA estimate when perk is active ---
+  // --- Optional broad projection signal when the perk is active ---
   let paEstimate: { low: number; high: number } | undefined;
-  if (perkModifiers?.paEstimate === true && players) {
-    const player = players[targetPlayer.playerId];
-    if (player) {
-      const pa = player.potentialAbility;
-      const baseMargin = perkModifiers.paEstimateMargin ?? 5;
-      const margin = Math.max(
-        1,
-        Math.floor(baseMargin * (1 - (paEstimateAccuracyBonus ?? 0))),
-      );
-      paEstimate = {
-        low: Math.max(1, pa - margin),
-        high: Math.min(200, pa + margin),
-      };
-    }
+  if (perkModifiers?.paEstimate === true) {
+    const visibleCues = (session.cueReadings ?? []).filter(
+      (cue) => cue.playerId === targetPlayer.playerId && cue.clarity !== "missed",
+    );
+    const cueSignal = visibleCues.length > 0
+      ? visibleCues.reduce((sum, cue) => sum + cue.score, 0) / visibleCues.length
+      : targetMoments.reduce((sum, moment) => sum + moment.moment.quality / 10, 0)
+        / Math.max(1, targetMoments.length);
+    const hash = [...`${session.id}:${targetPlayer.playerId}`].reduce(
+      (total, character) => total + character.charCodeAt(0),
+      0,
+    );
+    const drift = ((hash % 9) - 4) * (1 - reliability) * 3;
+    const center = Math.max(45, Math.min(175, 70 + cueSignal * 85 + reliability * 12 + drift));
+    const equipmentPrecision = Math.min(8, (paEstimateAccuracyBonus ?? 0) * 20);
+    const perkPrecision = Math.min(4, Math.max(0, 10 - (perkModifiers.paEstimateMargin ?? 10)));
+    const margin = Math.max(20, Math.round(38 - reliability * 10 - equipmentPrecision - perkPrecision));
+    paEstimate = {
+      low: Math.max(1, Math.floor((center - margin) / 5) * 5),
+      high: Math.min(200, Math.ceil((center + margin) / 5) * 5),
+    };
   }
 
   return {
@@ -810,7 +818,7 @@ export function generateSessionSummary(session: ObservationSession): string {
 /**
  * Processes a completed ObservationSession and produces a ReflectionResult.
  *
- * Auto-generates hypotheses from flagged moments grouped by player + domain.
+ * Builds structured evidence and a bounded reflection reward.
  * Checks for a gut feeling trigger. Generates narrative prompts and a session summary.
  * Awards bonus insight points based on session quality.
  */
@@ -823,49 +831,6 @@ export function generateReflection(
   paEstimateAccuracyBonus?: number,
   players?: Record<string, Player>,
 ): ReflectionResult {
-  // --- Auto-generate hypotheses from flagged moments ---
-  // Group flagged moments by playerId + domain, then build one hypothesis per group.
-  const momentsByPlayerDomain = new Map<string, SessionFlaggedMoment[]>();
-  for (const fm of session.flaggedMoments) {
-    const domain = momentTypeToDomain(fm.moment.momentType);
-    const key = `${fm.moment.playerId}::${domain}`;
-    const existing = momentsByPlayerDomain.get(key) ?? [];
-    existing.push(fm);
-    momentsByPlayerDomain.set(key, existing);
-  }
-
-  const suggestedHypotheses: Hypothesis[] = [];
-  // Only propose hypotheses for groups with at least 2 flagged moments,
-  // unless the moment is standout quality (isStandout === true).
-  for (const [key, moments] of momentsByPlayerDomain) {
-    const hasStandout = moments.some((m) => m.moment.isStandout);
-    if (moments.length < 2 && !hasStandout) continue;
-
-    const [playerId, domain] = key.split("::") as [string, AttributeDomain];
-    const player = session.players.find((p) => p.playerId === playerId);
-    const playerName = player?.name ?? playerId;
-
-    // Skip if this hypothesis already exists in the session.
-    const alreadyExists = session.hypotheses.some(
-      (h) => h.playerId === playerId && h.domain === domain,
-    );
-    if (alreadyExists) continue;
-
-    suggestedHypotheses.push(
-      buildHypothesisFromMoments(
-        playerId,
-        playerName,
-        domain,
-        moments,
-        session.startedAtWeek,
-        session.startedAtSeason,
-        session.id,
-        session.activityType,
-        rng,
-      ),
-    );
-  }
-
   // --- Check for gut feeling ---
   const gutFeelingCandidate = checkGutFeelingTrigger(
     rng,
@@ -881,17 +846,17 @@ export function generateReflection(
   const reflectionPrompts = generateReflectionPrompts(session, rng);
 
   // --- Bonus insight points ---
-  // Base: 5 IP for reflecting. +2 per hypothesis suggested. +3 if gut feeling triggers.
+  // Reflection rewards completion and a rare gut insight. Structured evidence
+  // has its own bounded progression path and cannot be farmed as hypotheses.
   const insightPointsFromReflection =
     5 +
-    suggestedHypotheses.length * 2 +
     (gutFeelingCandidate !== null ? 3 : 0);
 
   // --- Session summary ---
   const sessionSummary = generateSessionSummary(session);
 
   return {
-    suggestedHypotheses,
+    suggestedHypotheses: [],
     gutFeelingCandidate,
     reflectionPrompts,
     insightPointsFromReflection,

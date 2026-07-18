@@ -17,12 +17,16 @@ import {
 } from "lucide-react";
 import {
   COURSE_CATALOG,
+  countScheduledStudySessions,
   getAvailableCourses,
+  getCoursePlannerStatusModel,
   getCourseEffects,
+  getCourseStudyProgress,
   hasRequiredCoursesForTier,
+  type CoursePlannerStatusModel,
 } from "@/engine/career/courses";
-import type { Course, CourseEffect } from "@/engine/core/types";
-import { gameWeeksBetween } from "@/engine/core/gameDate";
+import type { Course, CourseEffect, CourseEnrollment } from "@/engine/core/types";
+import { getSeasonLength } from "@/engine/core/gameDate";
 import { ScreenBackground } from "@/components/ui/screen-background";
 
 // Category labels and tab keys
@@ -56,8 +60,37 @@ function effectLabel(effect: CourseEffect): string {
   }
 }
 
+export type TrainingCourseStatusModel = CoursePlannerStatusModel;
+
+export function getTrainingCourseStatusModel(input: {
+  activeCourse: Course | null | undefined;
+  activeEnrollment: CourseEnrollment | null | undefined;
+  currentWeek: number;
+  currentSeason: number;
+  scheduledStudySessions: number;
+  seasonLength: number;
+}): TrainingCourseStatusModel | null {
+  const {
+    activeCourse,
+    activeEnrollment,
+    currentWeek,
+    currentSeason,
+    scheduledStudySessions,
+    seasonLength,
+  } = input;
+  if (!activeCourse || !activeEnrollment) return null;
+  return getCoursePlannerStatusModel({
+    activeEnrollment,
+    courseDurationWeeks: activeCourse.durationWeeks,
+    currentWeek,
+    currentSeason,
+    scheduledStudySessions,
+    seasonLength,
+  });
+}
+
 export function TrainingScreen() {
-  const { gameState, enrollInCourse } = useGameStore();
+  const { gameState, enrollInCourse, setScreen } = useGameStore();
   const [activeTab, setActiveTab] = useState<CategoryKey>("scouting");
 
   if (!gameState?.finances) {
@@ -86,20 +119,25 @@ export function TrainingScreen() {
   const activeCourse = activeEnrollment
     ? COURSE_CATALOG.find((c) => c.id === activeEnrollment.courseId)
     : null;
-
-  // Calculate progress for active course
-  const weeksElapsed = activeEnrollment
-    ? Math.max(0, gameWeeksBetween(
-        gameState.fixtures,
-        {
-          season: activeEnrollment.startSeason,
-          week: activeEnrollment.startWeek,
-        },
-        { season: gameState.currentSeason, week: gameState.currentWeek },
-      ))
-    : 0;
-  const totalWeeks = activeCourse?.durationWeeks ?? 1;
-  const progressPct = Math.min(100, Math.round((weeksElapsed / totalWeeks) * 100));
+  const scheduledStudySessions = countScheduledStudySessions(gameState.schedule);
+  const activeCourseProgress = activeEnrollment
+    ? getCourseStudyProgress(activeEnrollment, {
+      courseDurationWeeks: activeCourse?.durationWeeks,
+      currentWeek: gameState.currentWeek,
+      currentSeason: gameState.currentSeason,
+      seasonLength: getSeasonLength(gameState.fixtures, gameState.currentSeason),
+    })
+    : null;
+  const weeksElapsed = activeCourseProgress?.studyWeeksCompleted ?? 0;
+  const totalWeeks = activeCourseProgress?.requiredStudyWeeks ?? activeCourse?.durationWeeks ?? 1;
+  const activeCourseStatus = getTrainingCourseStatusModel({
+    activeCourse,
+    activeEnrollment,
+    currentWeek: gameState.currentWeek,
+    currentSeason: gameState.currentSeason,
+    scheduledStudySessions,
+    seasonLength: getSeasonLength(gameState.fixtures, gameState.currentSeason),
+  });
 
   // Completed course effects
   const completedEffects = getCourseEffects(completedCourses);
@@ -145,29 +183,76 @@ export function TrainingScreen() {
         </div>
 
         {/* Active Course */}
-        {activeCourse && activeEnrollment && (
+        {activeCourse && activeEnrollment && activeCourseStatus && (
           <Card className="border-emerald-500/30 bg-emerald-500/5" data-tutorial-id="training-progress">
             <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-sm">
-                <BookOpen size={14} className="text-emerald-400" />
-                Active Course
-              </CardTitle>
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <BookOpen size={14} className="text-emerald-400" />
+                  Active Course
+                </CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 border-white/10 bg-white/5 text-xs text-zinc-200 hover:bg-white/10"
+                  onClick={() => setScreen("calendar")}
+                >
+                  Open Planner
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between mb-2">
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-medium text-white">
                   {activeCourse.name}
                 </span>
                 <span className="text-xs text-zinc-400">
-                  {weeksElapsed}/{totalWeeks} weeks
+                  {activeCourseStatus.progressLabel}
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-800 mb-2">
                 <div
                   className="h-full rounded-full bg-emerald-500 transition-all"
-                  style={{ width: `${progressPct}%` }}
+                  style={{ width: `${activeCourseStatus.progressPct}%` }}
                 />
               </div>
+              <div className="grid gap-2 text-xs text-zinc-300 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Planner</div>
+                  <div className="mt-1 font-medium text-white">
+                    {activeCourseStatus.scheduledStudySessions} study session{activeCourseStatus.scheduledStudySessions === 1 ? "" : "s"} scheduled
+                  </div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Pace</div>
+                  <div className="mt-1 font-medium text-white">
+                    {activeCourseStatus.paceLabel}
+                  </div>
+                  <div className="mt-1 text-[11px] text-zinc-400">
+                    {activeCourseStatus.studyWeeksPlanned} study week{activeCourseStatus.studyWeeksPlanned === 1 ? "" : "s"} planned this cycle
+                  </div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Workload</div>
+                  <div className="mt-1 font-medium text-white">
+                    {activeCourseStatus.workloadLabel}
+                  </div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Forecast</div>
+                  <div className="mt-1 font-medium text-white">
+                    {activeCourseStatus.projectedCompletionLabel}
+                  </div>
+                </div>
+              </div>
+              <p className={`text-xs ${activeCourseStatus.scheduledStudySessions > 0 ? "text-emerald-300" : "text-amber-200"}`}>
+                {activeCourseStatus.guidance}
+              </p>
+              {educationBudgetAvailable > 0 && scout.careerPath === "club" && (
+                <p className="text-xs text-sky-200/80">
+                  Employer support available: up to {formatCurrency(educationBudgetAvailable)} of club education budget can cover fees, but study time still has to be scheduled in the Planner.
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 {activeCourse.effects.map((e, i) => (
                   <span
@@ -407,7 +492,7 @@ export function TrainingScreen() {
                             </span>
                           ) : isActive ? (
                             <span className="text-[11px] text-emerald-400 font-medium">
-                              In Progress — {weeksElapsed}/{totalWeeks} weeks
+                              In Progress — {weeksElapsed}/{totalWeeks} study weeks banked
                             </span>
                           ) : isLocked ? (
                             <span className="text-[11px] text-zinc-600">

@@ -183,7 +183,7 @@ function MinorCelebration({
       role="status"
       aria-live="polite"
       aria-label={`Unlocked: ${title}`}
-      className="fixed bottom-8 left-1/2 z-50 -translate-x-1/2"
+      className="pointer-events-none fixed bottom-8 left-1/2 z-50 -translate-x-1/2"
     >
       <div
         className="flex items-center gap-3 rounded-2xl border border-emerald-500/40 bg-zinc-900 px-6 py-4 shadow-2xl"

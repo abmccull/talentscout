@@ -34,7 +34,7 @@ const YOUTH_MAX_AGE = 21;
  */
 function getSeasonReports(state: GameState, season: number): ScoutReport[] {
   return selectLatestReportsByCaseOpenedInRange(
-    Object.values(state.reports),
+    Object.values(state.reports).filter((report) => report.scoutId === state.scout.id),
     { submittedSeason: season, submittedWeek: Number.MIN_SAFE_INTEGER },
     { submittedSeason: season, submittedWeek: Number.MAX_SAFE_INTEGER },
   );

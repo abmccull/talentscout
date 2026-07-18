@@ -33,9 +33,9 @@ export type PerkEffect =
   | { type: "alertSystem"; alertType: string }
   /** Predict how a player's development curve will unfold over future seasons. */
   | { type: "developmentPrediction"; enabled: true }
-  /** Automatically flag players whose hidden WonderkidTier is generational or worldClass. */
+  /** Flag high-upside patterns only when visible observations support the signal. */
   | { type: "wonderkidDetection"; enabled: true }
-  /** Directly expose specific hidden attributes without needing to infer them. */
+  /** Unlock dedicated context lanes for traits that still require corroboration. */
   | { type: "hiddenAttributeAccess"; attributes: PlayerAttribute[] }
   /** Amplify the conviction level's influence on club transfer decision weight. */
   | { type: "convictionMultiplier"; factor: number }
@@ -53,7 +53,7 @@ export type PerkEffect =
   | { type: "placementReputationBonus"; factor: number }
   /** Scout can request clubs to hold dedicated trial days for recommended youth. */
   | { type: "trialDayAccess"; enabled: true }
-  /** Gut feelings include a PA estimate within a given margin of the true value. */
+  /** Gut feelings may include a broad projection signal derived from visible cues. */
   | { type: "paEstimate"; enabled: true; margin: number }
   /** Flat bonus to Insight Points earned per observation activity. */
   | { type: "insightBonus"; bonus: number }
@@ -93,7 +93,7 @@ export interface PerkModifiers {
   networkBonuses: Record<ContactType, number>;
   /** Whether the scout can predict a player's multi-season development trajectory */
   canPredictDevelopment: boolean;
-  /** Whether the scout can automatically detect players of generational/worldClass tier */
+  /** Whether visible high-upside evidence can trigger a follow-up alert. */
   canDetectWonderkids: boolean;
   /**
    * Multiplier applied to the conviction level's weight on club transfer decisions.
@@ -105,10 +105,7 @@ export interface PerkModifiers {
    * decision process (0 = none; 0.3 = meaningful lobbying power).
    */
   transferInfluenceFactor: number;
-  /**
-   * Hidden player attributes that are directly visible to this scout without
-   * needing to infer them through repeated observation.
-   */
+  /** Trait families unlocked for dedicated contextual investigation. */
   hiddenAttributeAccess: PlayerAttribute[];
   /** Whether grassroots venues (streetFootball, grassrootsTournament) are unlocked */
   hasGrassrootsAccess: boolean;
@@ -122,9 +119,9 @@ export interface PerkModifiers {
   placementReputationBonus: number;
   /** Whether scout can request trial days */
   hasTrialDayAccess: boolean;
-  /** Whether gut feelings include PA estimate */
+  /** Whether gut feelings include a broad, fallible projection signal. */
   hasPAEstimate: boolean;
-  /** Margin of error for PA estimate */
+  /** Legacy precision input; the rendered signal remains deliberately broad. */
   paEstimateMargin: number;
   /** Flat IP bonus earned per observation activity (stacks additively) */
   insightPointBonus: number;
@@ -211,7 +208,7 @@ export const ALL_PERKS: Perk[] = [
     id: "youth_generational_eye",
     name: "Generational Eye",
     description:
-      "The pinnacle of youth scouting intuition. Gut feelings now include a PA estimate within ±5 of the true value.",
+      "The pinnacle of youth scouting intuition. Strong live cues can produce a broad upside range, but it remains a fallible hypothesis that needs repeat evidence.",
     level: 18,
     specialization: "youth",
     effect: { type: "paEstimate", enabled: true, margin: 5 },
@@ -427,7 +424,7 @@ export const ALL_PERKS: Perk[] = [
     id: "regional_territory_mastery",
     name: "Territory Mastery",
     description:
-      "You know your home region as well as anyone alive. Observations made on home soil carry a 70 % accuracy bonus, narrowing confidence intervals to near-certainty and making your regional reports the most authoritative in the game.",
+      "You know your home region as well as anyone alive. Familiar opposition, venues, and development pathways make home-soil readings more stable, but never remove uncertainty.",
     level: 15,
     specialization: "regional",
     effect: {
@@ -438,9 +435,9 @@ export const ALL_PERKS: Perk[] = [
   },
   {
     id: "regional_hidden_attribute_revealer",
-    name: "Hidden Attribute Revealer",
+    name: "Character Context Network",
     description:
-      "Years of intimate knowledge of players in your territory — their training habits, personal lives, and dressing-room reputations — means consistency and professionalism are no longer hidden to you. You read them directly from sustained observation.",
+      "Years of trusted regional relationships open better questions about consistency and professionalism. Those traits still require repeat observation and independent corroboration before they belong in a report.",
     level: 18,
     specialization: "regional",
     effect: {

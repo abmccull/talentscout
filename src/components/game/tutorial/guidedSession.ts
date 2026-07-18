@@ -17,8 +17,8 @@ import { useGameStore } from "@/stores/gameStore";
 
 export interface GuidedMilestoneDefinition {
   id: GuidedMilestoneId;
-  /** data-tutorial-id of the element to spotlight */
-  target: string;
+  /** data-tutorial-id values to spotlight, in priority order when a step evolves */
+  target: string | readonly string[];
   /** Short title for the checklist */
   title: string;
   /** Mentor speech for the club path (Margaret Chen) */
@@ -59,7 +59,7 @@ const DEFAULT_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   },
   {
     id: "openedCalendar",
-    target: "nav-calendar",
+    target: ["mobile-nav-calendar", "nav-calendar"],
     title: "Open the calendar",
     mentorText:
       "Open your calendar. Every week you'll plan what to do — attend matches, scout players, rest. " +
@@ -213,26 +213,34 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   },
   {
     id: "flaggedBreakthrough",
-    target: "observation-evidence-feed",
-    title: "Write the moment down",
+    target: [
+      "observation-promising-reaction",
+      "observation-flag-moment",
+      "observation-advance-to-standout",
+    ],
+    title: "Record the standout moment",
     mentorText:
-      "There it is—the action that changes the question. Flag the moment as promising. " +
-      "You have not proved the player is special; you have earned a reason to build the case.",
+      "There it is—the action that changes the question. Select Flag moment, then mark it Promising. " +
+      "You have not proved the player is special; you have earned a reason to keep watching.",
     mentorTextFreelance:
-      "That is why we came. Flag the breakthrough while it is fresh. " +
-      "Remember: you found a signal, not an answer. The next context decides whether you were early or merely impressed.",
+      "That is why we came. Select Flag moment, then mark it Promising while it is fresh. " +
+      "You found a signal, not an answer. The next context decides whether you were early or merely impressed.",
     position: "left",
     interactive: true,
     screen: "observation",
   },
   {
     id: "completedMatch",
-    target: "observation-session-controls",
+    target: [
+      "observation-halftime-approach",
+      "observation-complete-reflection",
+      "observation-session-controls",
+    ],
     title: "Complete the observation session",
     mentorText:
-      "Now test the first impression against the rest of the match. Finish the reflection and preserve the uncertainty, not just the highlight.",
+      "Now test the first impression against the rest of the match. Choose how you will watch the second half, then finish the reflection and preserve the uncertainty, not just the highlight.",
     mentorTextFreelance:
-      "Watch what happens after the standout moment. Finish the reflection and decide what you actually believe.",
+      "Choose how you will challenge the first read in the second half. Then finish the reflection and decide what you actually believe.",
     position: "top",
     interactive: true,
     screen: "observation",
@@ -275,7 +283,7 @@ const YOUTH_GUIDED_MILESTONES: GuidedMilestoneDefinition[] = [
   },
   {
     id: "openedCalendar",
-    target: "nav-calendar",
+    target: ["mobile-nav-calendar", "nav-calendar"],
     title: "Plan the second look",
     mentorText:
       "The first report preserves what you saw; it does not end the case. Open the Planner and choose the next context before the trail cools.",

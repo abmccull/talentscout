@@ -29,6 +29,7 @@ import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import { resolveInternationalAssignment } from "@/engine/world/internationalDeliverables";
 import {
   deriveRegionalPresence,
+  getForeignScoutingPenalty,
   getScoutHomeCountry as getScoutHome,
   isScoutAbroad,
 } from "@/engine/world/index";
@@ -411,6 +412,7 @@ export function buildScoutQualityDataForState(
 ): ScoutQualityData {
   const presenceMultiplier = countryKey
     ? deriveRegionalPresence(state, countryKey).effects.discoveryMultiplier
+      * (1 - getForeignScoutingPenalty(state.scout, countryKey))
     : 1;
   return buildScoutQualityData(
     state.scout,

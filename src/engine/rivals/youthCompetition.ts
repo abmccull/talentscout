@@ -15,6 +15,12 @@ import type {
   RivalScout,
   UnsignedYouth,
 } from "@/engine/core/types";
+import {
+  assessRivalMarketCounterplay,
+  type RivalMarketCounterplayAssessment,
+  type RivalMarketPressureSnapshot,
+  type ScoutMarketCounterplay,
+} from "./organizations";
 
 const MAX_RIVAL_ACTIVITY_HISTORY = 50;
 const MAX_SCOUTING_PROGRESS = 5;
@@ -71,6 +77,8 @@ export interface ResolveRivalYouthClaimRequest {
   week: number;
   season: number;
   scoutHasInterest: boolean;
+  /** Optional bounded influence from an explicit scout market response. */
+  marketCounterplay?: RivalMarketCounterplayAssessment;
   placementReports?: Readonly<Record<string, PlacementReport>>;
   existingActivities?: readonly RivalActivity[];
   existingMessages?: readonly InboxMessage[];
@@ -90,6 +98,10 @@ export interface RivalYouthClaimResult {
   newMessages: InboxMessage[];
   activities: RivalActivity[];
   messages: InboxMessage[];
+  /** The explicit or placement-derived response that changed this attempt. */
+  marketCounterplay?: RivalMarketCounterplayAssessment;
+  marketCounterplaySource?: "explicit" | "placementReport";
+  marketCounterplaySourceId?: string;
   rejectionReason?: string;
 }
 
@@ -239,6 +251,77 @@ export function getYouthRivalPressureBand(pressure: number): YouthRivalPressureB
   return "watching";
 }
 
+function placementMarketResponse(report: PlacementReport): ScoutMarketCounterplay {
+  if (report.conviction === "tablePound" || report.conviction === "strongRecommend") {
+    return "advocate";
+  }
+  if (
+    report.pitchPosture === "relationshipLed"
+    || report.supportCondition === "familySupport"
+  ) return "protect";
+  return report.conviction === "recommend" || report.pitchPosture === "pathwayLed"
+    ? "advocate"
+    : "verify";
+}
+
+function placementCounterplayPressure(
+  rival: RivalScout,
+  youth: UnsignedYouth,
+): RivalMarketPressureSnapshot {
+  const score = getYouthRivalPressure(rival, youth);
+  return {
+    playerId: youth.player.id,
+    score,
+    band: score >= 70 ? "closing" : score >= 45 ? "contested" : score >= 20 ? "watched" : "uncontested",
+    watchers: [{
+      rivalId: rival.id,
+      rivalName: rival.name,
+      clubId: rival.clubId,
+      scoutingProgress: clamp(rival.scoutingProgress?.[youth.player.id] ?? 0, 0, MAX_SCOUTING_PROGRESS),
+      evidenceConfidence: 0,
+      urgency: score,
+    }],
+    informationExposure: youth.buzzLevel >= 45 || youth.discoveredBy.length >= 2
+      ? "circulating"
+      : "contained",
+    leakSourceIds: [],
+    family: {
+      preference: "unverified",
+      explanation: "No recorded family preference is available to this claim resolver.",
+    },
+    reasons: ["The pressure comes from visible unsigned-youth market activity."],
+  };
+}
+
+function derivePlacementMarketCounterplay(request: ResolveRivalYouthClaimRequest): {
+  assessment: RivalMarketCounterplayAssessment;
+  sourceId: string;
+} | undefined {
+  const report = Object.values(request.placementReports ?? {})
+    .filter((candidate) =>
+      candidate.unsignedYouthId === request.youth.id
+      && (
+        candidate.clubResponse === undefined
+        || candidate.clubResponse === "pending"
+        || candidate.clubResponse === "trial"
+        || candidate.clubResponse === "followUpRequested"
+      )
+    )
+    .sort((left, right) =>
+      right.season - left.season
+      || right.week - left.week
+      || right.id.localeCompare(left.id)
+    )[0];
+  if (!report) return undefined;
+  return {
+    sourceId: report.id,
+    assessment: assessRivalMarketCounterplay({
+      pressure: placementCounterplayPressure(request.rival, request.youth),
+      response: placementMarketResponse(report),
+    }),
+  };
+}
+
 function appendActivities(
   existing: readonly RivalActivity[],
   additions: readonly RivalActivity[],
@@ -382,6 +465,7 @@ export function advanceYouthRivalPressure(
 export function getRivalYouthClaimEligibility(
   rival: RivalScout,
   youth: UnsignedYouth,
+  marketCounterplay?: RivalMarketCounterplayAssessment,
 ): RivalYouthClaimEligibility {
   const pressure = getYouthRivalPressure(rival, youth);
   if (rival.specialization !== "youth") {
@@ -400,11 +484,12 @@ export function getRivalYouthClaimEligibility(
   // This chance uses public pressure and rival characteristics only. Hidden PA
   // and true player attributes are deliberately absent.
   const chance = roundHundredth(clamp(
-    0.15
+    (0.15
       + pressure / 200
       + (rival.quality - 1) * 0.04
-      + clamp(rival.aggressiveness, 0, 1) * 0.12,
-    0.15,
+      + clamp(rival.aggressiveness, 0, 1) * 0.12)
+      * (marketCounterplay?.rivalPressureMultiplier ?? 1),
+    0.08,
     0.9,
   ));
   return { eligible: true, chance, pressure };
@@ -417,7 +502,15 @@ export function resolveRivalYouthClaim(
 ): RivalYouthClaimResult {
   const existingActivities = [...(request.existingActivities ?? [])];
   const existingMessages = [...(request.existingMessages ?? [])];
-  const eligibility = getRivalYouthClaimEligibility(request.rival, request.youth);
+  const placementCounterplay = request.marketCounterplay
+    ? undefined
+    : derivePlacementMarketCounterplay(request);
+  const marketCounterplay = request.marketCounterplay ?? placementCounterplay?.assessment;
+  const eligibility = getRivalYouthClaimEligibility(
+    request.rival,
+    request.youth,
+    marketCounterplay,
+  );
   const baseResult = {
     chance: eligibility.chance,
     updatedRival: request.rival,
@@ -427,6 +520,13 @@ export function resolveRivalYouthClaim(
     newMessages: [] as InboxMessage[],
     activities: existingActivities,
     messages: existingMessages,
+    marketCounterplay,
+    marketCounterplaySource: request.marketCounterplay
+      ? "explicit" as const
+      : placementCounterplay
+        ? "placementReport" as const
+        : undefined,
+    marketCounterplaySourceId: placementCounterplay?.sourceId,
   };
 
   if (!eligibility.eligible) {
@@ -506,6 +606,7 @@ export function resolveRivalYouthClaim(
   };
 
   return {
+    ...baseResult,
     attempted: true,
     success: true,
     chance: eligibility.chance,

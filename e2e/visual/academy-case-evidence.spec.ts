@@ -4,6 +4,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "../fixtures";
 import type { GamePage } from "../fixtures";
 import { getVisualEvidenceDirectory } from "../helpers/releaseEvidencePath";
+import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
 const evidenceDir = getVisualEvidenceDirectory("academy-case");
 
@@ -94,7 +95,7 @@ async function prepareAcademyCase(gamePage: GamePage) {
     },
   });
 
-  return gamePage.page.evaluate(() => {
+  const setup = await gamePage.page.evaluate(() => {
     const store = (window as any).__GAME_STORE__;
     const state = store.getState().gameState;
     const youth = Object.values(state.unsignedYouth)[0] as any;
@@ -154,6 +155,8 @@ async function prepareAcademyCase(gamePage: GamePage) {
     store.getState().selectPlayer(player.id);
     return { playerId: player.id };
   });
+  await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
+  return setup;
 }
 
 test.describe("Academy case rendered evidence", () => {
@@ -186,8 +189,12 @@ test.describe("Academy case rendered evidence", () => {
 
       await gamePage.page.getByRole("button", { name: /^Write Report$/ }).click();
       await gamePage.waitForScreen("reportWriter");
+      await expect.poll(() => gamePage.page.evaluate(() => ({
+        document: window.scrollY,
+        workspace: document.querySelector<HTMLElement>("#game-main")?.scrollTop ?? 0,
+      }))).toEqual({ document: 0, workspace: 0 });
       await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();
-      await expect(gamePage.page.getByTestId("recruitment-identity-briefing")).toBeVisible();
+      await expect(gamePage.page.getByTestId("report-presentation-room")).toBeVisible();
       await capture(gamePage, viewport.name, "report-writer");
       await capture(gamePage, viewport.name, "report-writer", true);
       await assertRenderedIntegrity(gamePage, `${viewport.name} recruitment report writer`);

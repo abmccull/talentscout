@@ -77,6 +77,7 @@ export const SHARED_CAREER_STATE_KEYS = [
   "finances",
   "observations",
   "reports",
+  "reportWorkItems",
   "scoutingCases",
   "reportDeliveries",
   "clubDecisions",
@@ -163,16 +164,29 @@ export interface GameStatePartitions<Mode extends Specialization = Specializatio
   rebuildableCaches: RebuildableGameStateCaches;
 }
 
-/** Return a read-only ownership facade over the canonical persisted object. */
+function pickStateKeys<Keys extends readonly (keyof GameState)[]>(
+  state: GameState,
+  keys: Keys,
+): Readonly<Pick<GameState, Keys[number]>> {
+  return Object.fromEntries(keys.map((key) => [key, state[key]])) as Readonly<
+    Pick<GameState, Keys[number]>
+  >;
+}
+
+/**
+ * Return narrow read-only ownership views over the canonical persisted object.
+ * Nested authorities retain identity, but a consumer can no longer reach an
+ * unrelated domain merely because every partition used to return GameState.
+ */
 export function partitionGameState<Mode extends Specialization>(
   state: GameState,
   mode: Mode = state.runManifest.specialization as Mode,
 ): GameStatePartitions<Mode> {
   return {
-    sharedWorld: state,
-    sharedCareer: state,
-    mode: state as ModeStateBySpecialization[Mode],
-    rebuildableCaches: state,
+    sharedWorld: pickStateKeys(state, SHARED_WORLD_STATE_KEYS),
+    sharedCareer: pickStateKeys(state, SHARED_CAREER_STATE_KEYS),
+    mode: pickStateKeys(state, MODE_STATE_KEYS[mode]) as ModeStateBySpecialization[Mode],
+    rebuildableCaches: pickStateKeys(state, REBUILDABLE_GAME_STATE_CACHE_KEYS),
   };
 }
 

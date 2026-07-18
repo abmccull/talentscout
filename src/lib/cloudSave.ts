@@ -2,8 +2,8 @@
  * Cloud save abstraction layer.
  *
  * Defines the provider interface that all save backends must implement.
- * The local (IndexedDB) implementation is used by default until a cloud
- * backend (e.g. Supabase) is configured.
+ * Local save journaling is owned by saveProvider/db. Remote implementations
+ * use this smaller contract only for authenticated mirror operations.
  */
 
 import type { GameState } from "@/engine/core/types";
@@ -48,10 +48,11 @@ export interface ConflictResult {
 /**
  * CloudSaveProvider defines the contract every save backend must fulfil.
  *
- * Implementations:
- *  - LocalCloudSaveProvider  (src/lib/localCloudSave.ts) — delegates to IndexedDB,
- *    used as the default before authentication is configured.
- *  - SupabaseCloudSaveProvider (future) — persists to Supabase storage / database.
+ * Active implementation:
+ *  - SupabaseCloudSaveProvider — authenticated remote mirror used by saveProvider.
+ *
+ * Offline/local saves do not pretend to be a cloud provider; saveProvider and
+ * db own their journal, backup generations, and recovery behavior directly.
  */
 export interface CloudSaveProvider {
   /** Returns true when the user has an active cloud session. */

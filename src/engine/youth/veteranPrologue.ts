@@ -488,12 +488,12 @@ function replaceTokens(text: string, input: {
 
 function choiceEffect(id: OpeningCaseChoiceId): string {
   if (id === "protect") {
-    return "Keeps visibility low and protects source trust while the opportunity clock continues.";
+    return "Keeps the name quiet and protects your source, but the window may close while you wait.";
   }
   if (id === "callClub") {
-    return "Raises visibility and stakes your reputation behind an early recommendation.";
+    return "Puts your reputation behind the recommendation and brings more eyes to the player.";
   }
-  return "Opens an additional evidence route but spends scarce time and information control.";
+  return "Gives you another line of evidence, but costs time and some control over the name.";
 }
 
 type VeteranLeadOutcomeBand = "breakout" | "ambiguous" | "false-positive";

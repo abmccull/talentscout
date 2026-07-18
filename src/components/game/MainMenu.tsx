@@ -215,7 +215,7 @@ export function MainMenu() {
       <div className="relative z-10 mb-10 text-center md:mb-14">
         {IS_YOUTH_EARLY_ACCESS && (
           <Badge className="mb-4 border border-emerald-400/30 bg-emerald-500/15 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-300">
-            Youth Scout Early Access
+            Youth Scout Career · Early Access
           </Badge>
         )}
         <h1 className="mb-2 text-6xl font-bold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)]">
@@ -228,8 +228,9 @@ export function MainMenu() {
         </p>
         {IS_YOUTH_EARLY_ACCESS && (
           <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-zinc-400">
-            This Early Access build is focused on one complete scouting specialization: Youth Scout.
-            Other scouting specializations will return after this core loop is proven.
+            Begin as a Youth Scout. Follow leads, watch young players, build trusted reports,
+            and grow from an unknown observer into a sought-after talent expert. More scouting
+            careers will arrive as Early Access grows.
           </p>
         )}
       </div>
@@ -249,7 +250,7 @@ export function MainMenu() {
               setScreen("newGame");
             }}
           >
-            {IS_YOUTH_EARLY_ACCESS ? "Start Youth Career" : "New Game"}
+            {IS_YOUTH_EARLY_ACCESS ? "Start Youth Scout Career" : "New Game"}
           </Button>
           <Button
             variant="secondary"
@@ -259,10 +260,10 @@ export function MainMenu() {
             onClick={() => void handleContinue()}
           >
             {continueSave?.recovery
-              ? "Continue from verified backup"
+              ? "Continue Career from Verified Backup"
               : continueSave?.localUnavailable
-                ? "Continue from cloud recovery"
-                : "Continue"}
+                ? "Continue Career from Cloud Recovery"
+                : "Continue Career"}
           </Button>
           <Button
             variant="outline"
@@ -271,7 +272,7 @@ export function MainMenu() {
             disabled={!hasSaveEntries}
             onClick={() => setShowLoadPicker(true)}
           >
-            Load Game
+            Load Career
           </Button>
           <Button
             variant="ghost"
@@ -280,7 +281,7 @@ export function MainMenu() {
             onClick={() => setScreen("futureRoadmap")}
           >
             <Map size={16} className="mr-2" aria-hidden="true" />
-            Future roadmap
+            What&apos;s Coming
           </Button>
 
           {continueSave?.recovery && (
@@ -294,7 +295,7 @@ export function MainMenu() {
                 aria-hidden="true"
               />
               <p className="text-xs leading-relaxed text-amber-100">
-                Continue will load the last verified backup because the newest local generation is damaged.
+                Your newest local save could not be verified, so Continue Career will use the last safe backup.
               </p>
             </div>
           )}
@@ -309,7 +310,7 @@ export function MainMenu() {
                 aria-hidden="true"
               />
               <p className="text-xs leading-relaxed text-sky-100">
-                Continue will load the verified remote copy because the local copy is unavailable.
+                The local save is unavailable, so Continue Career will use the verified cloud copy.
               </p>
             </div>
           )}
@@ -324,7 +325,7 @@ export function MainMenu() {
                 aria-hidden="true"
               />
               <p className="text-xs leading-relaxed text-red-100">
-                No verified copy can be loaded. Open Load Game to review the damaged save and its recovery message.
+                No safe copy can be loaded. Open Load Career to see which save needs attention.
               </p>
             </div>
           )}
@@ -353,9 +354,9 @@ export function MainMenu() {
 
           {IS_YOUTH_EARLY_ACCESS && unsupportedSaveCount > 0 && (
             <p className="rounded-md border border-zinc-700/70 bg-zinc-900/80 px-3 py-2 text-center text-[11px] leading-relaxed text-zinc-400">
-              {unsupportedSaveCount} save{unsupportedSaveCount === 1 ? "" : "s"} from an
-              unsupported specialization {unsupportedSaveCount === 1 ? "is" : "are"} safely
-              preserved and hidden in this Youth Early Access build.
+              {unsupportedSaveCount} career save{unsupportedSaveCount === 1 ? "" : "s"} from
+              another scouting path {unsupportedSaveCount === 1 ? "is" : "are"} safely stored
+              and hidden while you play as a Youth Scout.
             </p>
           )}
 
@@ -407,7 +408,7 @@ export function MainMenu() {
       ) : (
         <div className="relative z-10 w-full max-w-md space-y-3 px-4">
           <h2 className="text-center text-lg font-semibold text-white">
-            Load Game
+            Load Career
           </h2>
 
           {autosave && (
@@ -452,13 +453,13 @@ export function MainMenu() {
 
           {compatibleSaveSlots.length === 0 && (
             <p className="text-center text-sm text-zinc-500">
-              No compatible Youth Scout saves found.
+              No Youth Scout career saves found.
             </p>
           )}
 
           {IS_YOUTH_EARLY_ACCESS && unsupportedSaveCount > 0 && (
             <p className="text-center text-xs leading-relaxed text-zinc-500">
-              Other-specialization saves remain stored and will be available when full-game mode returns.
+              Saves from other scouting careers remain safely stored and will reappear when those careers are available.
             </p>
           )}
 

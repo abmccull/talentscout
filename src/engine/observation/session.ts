@@ -23,10 +23,20 @@ import type {
   HypothesisState,
   LensType,
 } from "@/engine/observation/types";
-import type { AttributeDomain } from "@/engine/core/types";
+import type {
+  AttributeDomain,
+  EvidenceClassificationId,
+  ObservationHalftimeApproach,
+  ScoutCueReading,
+  ScoutingQuestionId,
+} from "@/engine/core/types";
 import { ACTIVITY_MODE_MAP, VENUE_PHASE_RANGES } from "@/engine/observation/types";
 import { getStrategicChoiceResolutions } from "@/engine/observation/quickInteraction";
 import { createObservationSituation } from "@/engine/observation/situations";
+import {
+  buildContextualScoutingQuestions,
+  resolveObservationSignalAssessment,
+} from "@/engine/observation/questions";
 
 // =============================================================================
 // CONSTANTS
@@ -57,9 +67,24 @@ const QUALITY_NORMALIZATION: Record<ObservationMode, number> = {
 };
 
 /** Insight points awarded for specific scout actions during a session. */
-const IP_PER_FLAGGED_MOMENT = 5;
+export const IP_PER_FLAGGED_MOMENT = 5;
 const IP_PER_HYPOTHESIS_RESOLVED = 10;
-const IP_PER_REFLECTION_NOTE = 3;
+
+const DEFAULT_QUESTION_BY_SPECIALIZATION: Record<
+  SessionConfig["specialization"],
+  ScoutingQuestionId
+> = {
+  youth: "projection",
+  firstTeam: "decisions",
+  regional: "pressure",
+  data: "repeatability",
+};
+
+export function getDefaultScoutingQuestion(
+  specialization: SessionConfig["specialization"],
+): ScoutingQuestionId {
+  return DEFAULT_QUESTION_BY_SPECIALIZATION[specialization];
+}
 
 // =============================================================================
 // HELPERS
@@ -159,6 +184,7 @@ function buildSessionPlayers(config: SessionConfig): SessionPlayer[] {
     playerId: p.playerId,
     name: p.name,
     position: p.position,
+    naturalRole: p.naturalRole,
     isFocused: false,
     focusedPhases: [],
     currentLens: undefined,
@@ -214,6 +240,18 @@ export function createSession(
     culturalInsights: config.culturalInsights,
     travelPosture: config.travelPosture,
   });
+  const players = buildSessionPlayers(config);
+  const targetPlayer = players.find((player) => player.playerId === config.targetPlayerId)
+    ?? players[0];
+  const questionOptions = targetPlayer
+    ? buildContextualScoutingQuestions({
+        player: targetPlayer,
+        activityType: config.activityType,
+        situation,
+        opponent: config.opponentContext,
+        observer: config.observerContext,
+      })
+    : [];
 
   return {
     id: sessionId,
@@ -237,6 +275,23 @@ export function createSession(
     })),
     insightPointsEarned: 0,
     reflectionNotes: [],
+    scoutingQuestionId:
+      config.scoutingQuestionId
+      ?? questionOptions[0]?.id
+      ?? getDefaultScoutingQuestion(config.specialization),
+    questionOptions,
+    cueReadings: [],
+    evidenceDecisions: {},
+    observerContext: config.observerContext
+      ? {
+          ...config.observerContext,
+          skillByQuestion: { ...(config.observerContext.skillByQuestion ?? {}) },
+          priorQuestionIds: [...(config.observerContext.priorQuestionIds ?? [])],
+          openQuestionIds: [...(config.observerContext.openQuestionIds ?? [])],
+          priorContextKeys: [...(config.observerContext.priorContextKeys ?? [])],
+        }
+      : undefined,
+    opponentContext: config.opponentContext ? { ...config.opponentContext } : undefined,
     venueAtmosphere: undefined,
     situation,
     countryId: config.countryId,
@@ -252,7 +307,7 @@ export function createSession(
           }
         : undefined,
     })),
-    players: buildSessionPlayers(config),
+    players,
     startedAtWeek: config.week,
     startedAtSeason: config.season,
     careerPath: config.careerPath,
@@ -300,8 +355,18 @@ export function advanceSessionPhase(
   if (session.state !== "active") {
     return session;
   }
+  if (session.mode === "fullObservation" && !session.scoutingQuestionId) {
+    return session;
+  }
 
   if (!isCurrentSessionPhaseResolved(session)) {
+    return session;
+  }
+  if (
+    session.mode === "fullObservation"
+    && isHalfTimePhase(session, session.currentPhaseIndex)
+    && !session.halftimeApproach
+  ) {
     return session;
   }
 
@@ -384,6 +449,55 @@ export function advanceSessionPhase(
     currentPhaseIndex: nextPhaseIndex,
     focusTokens: updatedFocusTokens,
     players: updatedPlayers,
+  };
+}
+
+/** Lock the deliberate question and its deterministic cue preview before play starts. */
+export function setSessionScoutingQuestion(
+  session: ObservationSession,
+  questionId: ScoutingQuestionId,
+  cueReadings: ScoutCueReading[],
+): ObservationSession {
+  if (session.state !== "setup") return session;
+  return {
+    ...session,
+    scoutingQuestionId: questionId,
+    cueReadings,
+    evidenceDecisions: {},
+  };
+}
+
+/** Lock one mid-session attention adjustment. */
+export function setSessionHalftimeApproach(
+  session: ObservationSession,
+  approach: ObservationHalftimeApproach,
+  cueReadings: ScoutCueReading[],
+): ObservationSession {
+  if (
+    session.state !== "active"
+    || !isHalfTimePhase(session, session.currentPhaseIndex)
+  ) {
+    return session;
+  }
+  if (session.halftimeApproach) return session;
+  return { ...session, halftimeApproach: approach, cueReadings };
+}
+
+/** Record the player's football interpretation of one saved cue. */
+export function classifySessionEvidence(
+  session: ObservationSession,
+  cueId: string,
+  classification: EvidenceClassificationId,
+): ObservationSession {
+  if (session.state !== "reflection") return session;
+  const cue = session.cueReadings?.find((candidate) => candidate.id === cueId);
+  if (!cue || !cue.suggestedClassifications.includes(classification)) return session;
+  return {
+    ...session,
+    evidenceDecisions: {
+      ...(session.evidenceDecisions ?? {}),
+      [cueId]: { cueId, classification },
+    },
   };
 }
 
@@ -749,10 +863,7 @@ export function updateHypothesis(
   };
 }
 
-/**
- * Appends a free-text reflection note to the session.
- * Only callable during the 'reflection' phase.
- */
+/** Append an optional private note. Notes are persisted but never scored. */
 export function addReflectionNote(
   session: ObservationSession,
   note: string,
@@ -769,8 +880,6 @@ export function addReflectionNote(
   return {
     ...session,
     reflectionNotes: [...session.reflectionNotes, trimmed],
-    insightPointsEarned:
-      session.insightPointsEarned + IP_PER_REFLECTION_NOTE,
   };
 }
 
@@ -827,6 +936,9 @@ export function getSessionResult(session: ObservationSession): SessionResult {
   // Only hypotheses that were added or updated in this session are included.
   // For now, include all hypotheses tracked on this session object.
   const hypothesesUpdated = session.hypotheses;
+  const signalAssessment = session.mode === "fullObservation"
+    ? resolveObservationSignalAssessment(session)
+    : undefined;
 
   return {
     sessionId: session.id,
@@ -840,6 +952,18 @@ export function getSessionResult(session: ObservationSession): SessionResult {
     fatigueDelta,
     qualityModifier,
     reflectionNotes: session.reflectionNotes,
+    scoutingQuestionId: session.scoutingQuestionId,
+    evidenceConfidence: (() => {
+      const flaggedIds = new Set(session.flaggedMoments.map((flagged) => flagged.moment.id));
+      const cues = (session.cueReadings ?? []).filter((cue) => flaggedIds.has(cue.momentId));
+      if (cues.length === 0) return undefined;
+      const average = cues.reduce((sum, cue) => sum + cue.confidence, 0) / cues.length;
+      if (average < 0.38) return "tentative" as const;
+      if (average < 0.58) return "working" as const;
+      if (average < 0.76) return "supported" as const;
+      return "robust" as const;
+    })(),
+    signalAssessment,
     qualityTier,
     phasesCompleted,
     totalPhases: session.phases.length,

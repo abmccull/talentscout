@@ -296,3 +296,211 @@ export function getHighestValueNextContext(
 ): ObservationContextInformationGain | null {
   return rankNextObservationContexts(request)[0] ?? null;
 }
+
+export type ObservationComparisonVerdict =
+  | "supportsPattern"
+  | "challengesPattern"
+  | "inconclusive";
+
+export interface ObservationContextChange {
+  kind: "context" | "competition" | "stakes" | "tacticalFrame" | "country" | "conditions";
+  from: string;
+  to: string;
+  explanation: string;
+}
+
+/** A player-safe comparison between two independent observation records. */
+export interface FollowUpObservationComparison {
+  id: string;
+  playerId: string;
+  firstObservationId: string;
+  secondObservationId: string;
+  firstDate: { week: number; season: number };
+  secondDate: { week: number; season: number };
+  verdict: ObservationComparisonVerdict;
+  sharedAttributeCount: number;
+  averageConfidence: number;
+  confidenceDelta: number;
+  contextChanges: ObservationContextChange[];
+  contextChanged: boolean;
+  independent: boolean;
+  summary: string;
+}
+
+function displayValue(value: string | undefined): string {
+  if (!value) return "unrecorded";
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").toLowerCase();
+}
+
+function addContextChange(
+  changes: ObservationContextChange[],
+  kind: ObservationContextChange["kind"],
+  from: string | undefined,
+  to: string | undefined,
+  explanation: string,
+): void {
+  if (!from || !to || from === to) return;
+  changes.push({ kind, from: displayValue(from), to: displayValue(to), explanation });
+}
+
+function deriveContextChanges(
+  first: Observation,
+  second: Observation,
+): ObservationContextChange[] {
+  const changes: ObservationContextChange[] = [];
+  addContextChange(
+    changes,
+    "context",
+    first.context,
+    second.context,
+    "The follow-up used a different evidence source or football setting.",
+  );
+  addContextChange(
+    changes,
+    "competition",
+    first.situation?.competitionLevel,
+    second.situation?.competitionLevel,
+    "The level of opposition changed the translation test.",
+  );
+  addContextChange(
+    changes,
+    "stakes",
+    first.situation?.stakes,
+    second.situation?.stakes,
+    "The personal or competitive stakes changed the pressure around each action.",
+  );
+  addContextChange(
+    changes,
+    "tacticalFrame",
+    first.situation?.tacticalFrame,
+    second.situation?.tacticalFrame,
+    "The team shape asked the player to solve a different football problem.",
+  );
+  addContextChange(
+    changes,
+    "country",
+    first.situation?.countryId,
+    second.situation?.countryId,
+    "The regional reference point changed and should be interpreted with local knowledge.",
+  );
+  const firstConditions = first.situation?.repetitionKey;
+  const secondConditions = second.situation?.repetitionKey;
+  if (
+    firstConditions
+    && secondConditions
+    && firstConditions !== secondConditions
+    && changes.length === 0
+  ) {
+    changes.push({
+      kind: "conditions",
+      from: displayValue(firstConditions),
+      to: displayValue(secondConditions),
+      explanation: "Visible match conditions changed enough to make this a new comparison.",
+    });
+  }
+  return changes;
+}
+
+function averageReadingConfidence(observation: Observation): number {
+  if (observation.attributeReadings.length === 0) return 0;
+  return observation.attributeReadings.reduce((sum, reading) => sum + reading.confidence, 0)
+    / observation.attributeReadings.length;
+}
+
+/**
+ * Compare two observations without consulting player truth. Agreement means
+ * the scout's independent estimates held; it never confirms future ability.
+ */
+export function compareObservationEvidence(
+  first: Observation,
+  second: Observation,
+): FollowUpObservationComparison {
+  if (first.playerId !== second.playerId) {
+    throw new RangeError("Observation comparisons require the same player.");
+  }
+  const firstByAttribute = new Map(
+    first.attributeReadings.map((reading) => [reading.attribute, reading]),
+  );
+  const shared = second.attributeReadings.flatMap((reading) => {
+    const prior = firstByAttribute.get(reading.attribute);
+    return prior ? [{ first: prior, second: reading }] : [];
+  });
+  const confidence = shared.length > 0
+    ? shared.reduce((sum, pair) => sum + (pair.first.confidence + pair.second.confidence) / 2, 0) / shared.length
+    : (averageReadingConfidence(first) + averageReadingConfidence(second)) / 2;
+  const averageDifference = shared.length > 0
+    ? shared.reduce(
+        (sum, pair) => sum + Math.abs(pair.second.perceivedValue - pair.first.perceivedValue),
+        0,
+      ) / shared.length
+    : Number.POSITIVE_INFINITY;
+  const independent = getObservationIndependenceKey(first) !== getObservationIndependenceKey(second);
+  const verdict: ObservationComparisonVerdict = !independent
+    || shared.length === 0
+    || confidence < 0.42
+      ? "inconclusive"
+      : averageDifference <= 1.75
+        ? "supportsPattern"
+        : averageDifference >= 3
+          ? "challengesPattern"
+          : "inconclusive";
+  const contextChanges = deriveContextChanges(first, second);
+  const firstConfidence = averageReadingConfidence(first);
+  const secondConfidence = averageReadingConfidence(second);
+  const summary = verdict === "supportsPattern"
+    ? contextChanges.length > 0
+      ? "The scout's read held across a materially different context, strengthening it as a working pattern."
+      : "The follow-up broadly agreed, but the repeated context limits how much new certainty it adds."
+    : verdict === "challengesPattern"
+      ? "The follow-up challenged the earlier estimate; the disagreement should remain open until another independent test."
+      : shared.length === 0
+        ? "The two observations covered different questions, so they cannot yet be treated as confirmation or contradiction."
+        : !independent
+          ? "Both records came from the same source and cannot count as independent confirmation."
+          : "The shared evidence is too weak or mixed to settle whether the pattern held.";
+
+  return {
+    id: `comparison:${first.id}:${second.id}`,
+    playerId: first.playerId,
+    firstObservationId: first.id,
+    secondObservationId: second.id,
+    firstDate: { week: first.week, season: first.season },
+    secondDate: { week: second.week, season: second.season },
+    verdict,
+    sharedAttributeCount: shared.length,
+    averageConfidence: roundHundredth(clamp01(confidence)),
+    confidenceDelta: roundHundredth(secondConfidence - firstConfidence),
+    contextChanges,
+    contextChanged: contextChanges.length > 0,
+    independent,
+    summary,
+  };
+}
+
+/** Build the latest bounded sequence of independent, chronological comparisons. */
+export function buildFollowUpObservationComparisons(
+  observations: readonly Observation[],
+  playerId: string,
+  limit = 3,
+): FollowUpObservationComparison[] {
+  if (limit <= 0) return [];
+  const seenSources = new Set<string>();
+  const independent = observations
+    .filter((observation) => observation.playerId === playerId)
+    .sort((left, right) =>
+      left.season - right.season
+      || left.week - right.week
+      || left.id.localeCompare(right.id),
+    )
+    .filter((observation) => {
+      const source = getObservationIndependenceKey(observation);
+      if (seenSources.has(source)) return false;
+      seenSources.add(source);
+      return true;
+    });
+  const comparisons: FollowUpObservationComparison[] = [];
+  for (let index = 1; index < independent.length; index += 1) {
+    comparisons.push(compareObservationEvidence(independent[index - 1], independent[index]));
+  }
+  return comparisons.slice(-limit);
+}

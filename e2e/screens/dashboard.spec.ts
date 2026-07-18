@@ -30,6 +30,26 @@ test.describe("Dashboard Screen", () => {
       gamePage.expectNoConsoleErrors();
     });
 
+    test("dashboard keeps the core decision and brief queue ahead of supporting detail", async ({ gamePage }) => {
+      await expect(gamePage.page.getByTestId("desk-primary-decision")).toHaveCount(1);
+      await expect(gamePage.page.getByTestId("desk-week-status")).toContainText(/Week 1/);
+      await expect(gamePage.page.getByTestId("desk-week-status")).toContainText(/fatigue/);
+
+      const urgentItems = gamePage.page.getByTestId("desk-urgent-item");
+      expect(await urgentItems.count()).toBeLessThanOrEqual(3);
+
+      const briefQueue = gamePage.page.getByTestId("desk-top-briefs");
+      await expect(briefQueue).toBeVisible();
+      expect(await briefQueue.getByTestId("desk-brief").count()).toBeLessThanOrEqual(3);
+
+      const supportingContext = gamePage.page.locator("details#desk-supporting-context");
+      await expect(supportingContext).not.toHaveAttribute("open", "");
+      await supportingContext.locator("summary").focus();
+      await gamePage.page.keyboard.press("Enter");
+      await expect(supportingContext).toHaveAttribute("open", "");
+      await expect(gamePage.page.getByRole("heading", { name: "Your scouting loop" })).toBeVisible();
+    });
+
     test("dashboard shows scout name in sidebar", async ({ gamePage }) => {
       // The sidebar footer shows "FirstName LastName" under Scout section
       const sidebarText = await gamePage.page.innerText("aside");

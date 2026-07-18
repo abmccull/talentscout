@@ -37,6 +37,7 @@ import type {
   WorldFact,
 } from "@/engine/consequences/types";
 import {
+  adaptLegacyStoryCandidate,
   createStoryDirectorStateV2,
   migrateStoryDirectorStateV2,
   recordStorySelectionV2,
@@ -516,6 +517,38 @@ describe("Story Director v2", () => {
       { kind: "contact", id: "reporter" },
     ]);
     expect(refs.topics).toContainEqual({ kind: "entity", id: "unknown" });
+  });
+
+  it("classifies receipt callbacks even when the legacy adapter calls them standalone", () => {
+    const event = narrativeEvent(
+      "callback:rival:rival-activity:rival-1:targetAcquired:prospect:s1:w8",
+      { type: "rivalPoach", relatedIds: ["prospect"] },
+    );
+    const adapted = adaptLegacyStoryCandidate({
+      source: event,
+      kind: "standalone",
+      templateId: event.type,
+      category: event.type,
+      semanticSignature: `standalone:${event.type}`,
+    });
+
+    expect(adapted).toMatchObject({
+      kind: "callback",
+      templateId: "callback:rival",
+      category: "callback:rival",
+      semanticSignature: "callback:rival",
+      callbackFingerprint: event.id,
+    });
+    const recorded = recordStorySelectionV2(
+      createStoryDirectorStateV2(),
+      adapted,
+      { season: 1, week: 8 },
+    );
+    expect(scoreStoryCandidatesV2({
+      state: recorded,
+      now: { season: 1, week: 13 },
+      candidates: [adapted],
+    })[0].blockedReasons).toContain("callback-already-shown");
   });
 });
 

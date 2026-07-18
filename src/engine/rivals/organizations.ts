@@ -8,12 +8,15 @@
  * from the run seed and game date and is safe to persist verbatim.
  */
 
-import type { InboxMessage, RivalScout } from "@/engine/core/types";
+import type { GameState, InboxMessage, RivalScout } from "@/engine/core/types";
 import type { WorldFact } from "@/engine/consequences/types";
+import { gameWeeksBetween, isGameDateAtOrAfter } from "@/engine/core/gameDate";
+import type { TransferAgreementProposal } from "@/engine/transfers/transferAgreement";
 import {
   createDeterministicRunId,
   createNamedRNG,
 } from "@/engine/run/runManifest";
+import { getEffectiveRivalPlayerEvidence } from "./rivalEvidence";
 
 export type RivalOrganizationArchetypeId =
   | "academy-conglomerate"
@@ -60,6 +63,80 @@ export interface RivalOrganizationPressure {
   youthProgressBonus: number;
   sourceOrganizationId?: string;
   sourceAction?: RivalOrganizationActionKind;
+}
+
+export type RivalMarketPressureBand =
+  | "uncontested"
+  | "watched"
+  | "contested"
+  | "closing";
+
+export type RivalInformationExposureBand =
+  | "contained"
+  | "circulating"
+  | "leaking";
+
+export type FamilyMarketPreference =
+  | "unverified"
+  | "prefers-stability"
+  | "open-to-move"
+  | "club-specific";
+
+export interface RivalMarketWatcher {
+  rivalId: string;
+  rivalName: string;
+  clubId: string;
+  organizationId?: string;
+  scoutingProgress: number;
+  evidenceConfidence: number;
+  evidenceAgeWeeks?: number;
+  urgency: number;
+}
+
+export interface FamilyMarketSignal {
+  preference: FamilyMarketPreference;
+  /** Only a canonical consequence fact can move this away from unverified. */
+  sourceFactId?: string;
+  explanation: string;
+}
+
+/**
+ * Player-safe projection of existing rival, information, and stakeholder state.
+ * This never decides a transfer and never reads hidden player ability.
+ */
+export interface RivalMarketPressureSnapshot {
+  playerId: string;
+  score: number;
+  band: RivalMarketPressureBand;
+  watchers: RivalMarketWatcher[];
+  informationExposure: RivalInformationExposureBand;
+  leakSourceIds: string[];
+  family: FamilyMarketSignal;
+  reasons: string[];
+}
+
+export type ScoutMarketCounterplay =
+  | "advocate"
+  | "verify"
+  | "protect"
+  | "withdraw";
+
+export type RivalTransferContestAuthority = Pick<
+  TransferAgreementProposal,
+  "viable" | "affordability" | "registration" | "willingness"
+>;
+
+export interface RivalMarketCounterplayAssessment {
+  response: ScoutMarketCounterplay;
+  /** Bounded input for rival scouting pressure; it is not a transfer probability. */
+  rivalPressureMultiplier: number;
+  scoutInfluence: number;
+  fatigueCost: number;
+  reputationExposure: number;
+  visibilityDelta: number;
+  transferAuthorityStatus: "unassessed" | "blocked" | "live";
+  knownTradeoffs: string[];
+  constraints: string[];
 }
 
 interface OrganizationActionDefinition {
@@ -499,6 +576,282 @@ function addWeeks(
     }
   }
   return { season: nextSeason, week: nextWeek };
+}
+
+function familyPreferenceFromValue(value: unknown): FamilyMarketPreference | undefined {
+  const raw = typeof value === "string"
+    ? value
+    : value && typeof value === "object" && !Array.isArray(value)
+      ? (value as { preference?: unknown }).preference
+      : undefined;
+  switch (raw) {
+    case "prefers-stability":
+    case "open-to-move":
+    case "club-specific":
+      return raw;
+    default:
+      return undefined;
+  }
+}
+
+function deriveFamilyMarketSignal(state: GameState, playerId: string): FamilyMarketSignal {
+  const fact = Object.values(state.consequenceState?.facts ?? {})
+    .filter((candidate) =>
+      (candidate.kind === "FamilyMarketPreferenceRecorded"
+        || candidate.kind === "familyMarketPreference")
+      && candidate.subject?.kind === "player"
+      && candidate.subject.id === playerId
+      && familyPreferenceFromValue(candidate.value) !== undefined
+    )
+    .sort((left, right) =>
+      right.observedAt.season - left.observedAt.season
+      || right.observedAt.week - left.observedAt.week
+      || right.id.localeCompare(left.id)
+    )[0];
+  const preference = fact ? familyPreferenceFromValue(fact.value) : undefined;
+  if (!fact || !preference) {
+    return {
+      preference: "unverified",
+      explanation: "No recorded family preference exists; market pressure must not be mistaken for consent.",
+    };
+  }
+  const explanation: Record<FamilyMarketPreference, string> = {
+    unverified: "No recorded family preference exists; market pressure must not be mistaken for consent.",
+    "prefers-stability": "A recorded family conversation prioritizes continuity and stability.",
+    "open-to-move": "A recorded family conversation confirms openness to a suitable move.",
+    "club-specific": "A recorded family conversation limits interest to a specific pathway or club.",
+  };
+  return {
+    preference,
+    sourceFactId: fact.id,
+    explanation: explanation[preference],
+  };
+}
+
+function pressureBand(score: number): RivalMarketPressureBand {
+  if (score >= 70) return "closing";
+  if (score >= 45) return "contested";
+  if (score >= 20) return "watched";
+  return "uncontested";
+}
+
+/**
+ * Project visible rival-market pressure for one player. Rival estimates are
+ * already noisy and decay through rivalEvidence; no hidden CA/PA is read here.
+ */
+export function deriveRivalMarketPressure(
+  state: GameState,
+  playerId: string,
+): RivalMarketPressureSnapshot {
+  const now = { season: state.currentSeason, week: state.currentWeek };
+  const watchers = Object.values(state.rivalScouts ?? {})
+    .filter((rival) =>
+      rival.currentTarget === playerId
+      || rival.targetPlayerIds.includes(playerId)
+      || (rival.scoutingProgress?.[playerId] ?? 0) > 0
+    )
+    .map((rival): RivalMarketWatcher => {
+      const evidence = getEffectiveRivalPlayerEvidence(rival, playerId, state);
+      const progress = clamp(rival.scoutingProgress?.[playerId] ?? 0, 0, 5);
+      const urgency = Math.round(clamp(
+        progress * 10
+          + rival.quality * 5
+          + clamp(rival.aggressiveness, 0, 1) * 16
+          + (evidence?.confidence ?? 0) * 18
+          + (rival.currentTarget === playerId ? 8 : 0)
+          + (rival.competingForPlayers.includes(playerId) ? 6 : 0),
+        0,
+        100,
+      ));
+      return {
+        rivalId: rival.id,
+        rivalName: rival.name,
+        clubId: rival.clubId,
+        organizationId: getOrganizationForRival(
+          state.rivalOrganizationState ?? createRivalOrganizationState(),
+          rival.id,
+        )?.id,
+        scoutingProgress: progress,
+        evidenceConfidence: roundHundredth(evidence?.confidence ?? 0),
+        evidenceAgeWeeks: evidence?.ageWeeks,
+        urgency,
+      };
+    })
+    .sort((left, right) => right.urgency - left.urgency
+      || left.rivalId.localeCompare(right.rivalId));
+
+  const recentOrganizationLeaks = (state.rivalOrganizationState?.activities ?? [])
+    .filter((activity) => {
+      const age = gameWeeksBetween(state.fixtures, {
+        season: activity.season,
+        week: activity.week,
+      }, now);
+      return age >= 0
+        && age <= 4
+        && activity.action === "whisper-campaign"
+        && activity.relatedPlayerId === playerId;
+    })
+    .map((activity) => activity.id);
+  const gossipLeaks = Object.values(state.contacts ?? {}).flatMap((contact) =>
+    (contact.gossipQueue ?? [])
+      .filter((gossip) =>
+        !gossip.dismissed
+        && gossip.playerId === playerId
+        && (gossip.type === "transferRumor" || gossip.type === "youthProspect")
+        && isGameDateAtOrAfter(gossip.expiresAt, now)
+      )
+      .map((gossip) => `gossip:${contact.id}:${gossip.id}`)
+  );
+  const leakSourceIds = [...new Set([
+    ...recentOrganizationLeaks,
+    ...gossipLeaks,
+  ])].sort();
+  const youth = Object.values(state.unsignedYouth ?? {}).find((candidate) =>
+    candidate.id === playerId || candidate.player.id === playerId
+  );
+  const publicExposure = Boolean(
+    youth
+    && (youth.buzzLevel >= 45 || youth.discoveredBy.length >= 2),
+  );
+  const informationExposure: RivalInformationExposureBand = leakSourceIds.length > 0
+    ? "leaking"
+    : watchers.length > 0 || publicExposure
+      ? "circulating"
+      : "contained";
+  const strongestUrgency = watchers[0]?.urgency ?? 0;
+  const activeOrganizationId = state.rivalOrganizationState?.currentPressure?.sourceOrganizationId;
+  const hasOrganizationBackedWatcher = Boolean(
+    activeOrganizationId
+    && watchers.some((watcher) => watcher.organizationId === activeOrganizationId),
+  );
+  const organizationMultiplier = hasOrganizationBackedWatcher
+    ? Math.max(
+      1,
+      state.rivalOrganizationState?.currentPressure?.signingChanceMultiplier ?? 1,
+      state.rivalOrganizationState?.currentPressure?.poachChanceMultiplier ?? 1,
+    )
+    : 1;
+  const score = Math.round(clamp(
+    strongestUrgency
+      + Math.max(0, watchers.length - 1) * 9
+      + (organizationMultiplier - 1) * 35
+      + (informationExposure === "leaking" ? 8 : informationExposure === "circulating" ? 3 : 0),
+    0,
+    100,
+  ));
+  const reasons = [
+    ...(watchers.length > 0
+      ? [`${watchers.length} rival scout${watchers.length === 1 ? " is" : "s are"} actively tracking the player.`]
+      : ["No rival is currently recorded as tracking the player."]),
+    ...(leakSourceIds.length > 0
+      ? ["A live rumor or organization leak is widening access to the name."]
+      : []),
+    ...(organizationMultiplier > 1.05
+      ? ["An organization-backed rival action is accelerating market pressure."]
+      : []),
+  ];
+
+  return {
+    playerId,
+    score,
+    band: pressureBand(score),
+    watchers,
+    informationExposure,
+    leakSourceIds,
+    family: deriveFamilyMarketSignal(state, playerId),
+    reasons,
+  };
+}
+
+/**
+ * Translate a scout response into bounded rival pressure. The canonical
+ * transfer proposal remains the sole authority for affordability,
+ * registration, willingness, and whether a deal is viable.
+ */
+export function assessRivalMarketCounterplay(input: {
+  pressure: RivalMarketPressureSnapshot;
+  response: ScoutMarketCounterplay;
+  transfer?: RivalTransferContestAuthority;
+}): RivalMarketCounterplayAssessment {
+  const leaking = input.pressure.informationExposure === "leaking";
+  const familyPrefersStability = input.pressure.family.preference === "prefers-stability";
+  const base = {
+    advocate: {
+      multiplier: familyPrefersStability ? 0.94 : leaking ? 0.92 : 0.88,
+      influence: 12,
+      fatigue: 4,
+      reputation: 5,
+      visibility: 8,
+      tradeoffs: [
+        "Makes your recommendation harder for clubs to ignore",
+        "Raises visibility and puts your reputation behind the call",
+      ],
+    },
+    verify: {
+      multiplier: 1,
+      influence: 3,
+      fatigue: 3,
+      reputation: 0,
+      visibility: 0,
+      tradeoffs: [
+        "Improves the next decision without pretending the market will wait",
+        "Rivals keep building their own case while you verify",
+      ],
+    },
+    protect: {
+      multiplier: leaking ? 0.97 : 0.92,
+      influence: 5,
+      fatigue: 2,
+      reputation: 1,
+      visibility: -4,
+      tradeoffs: [
+        "Limits avoidable exposure around the player and source",
+        "A quieter route gives rivals more time to build direct access",
+      ],
+    },
+    withdraw: {
+      multiplier: 1.08,
+      influence: -8,
+      fatigue: 0,
+      reputation: 0,
+      visibility: -3,
+      tradeoffs: [
+        "Ends further personal exposure on a case you no longer support",
+        "Rival momentum continues without your advocacy",
+      ],
+    },
+  } as const;
+  const selected = base[input.response];
+  const constraints: string[] = [];
+  let transferAuthorityStatus: RivalMarketCounterplayAssessment["transferAuthorityStatus"] = "unassessed";
+  if (input.transfer) {
+    const affordable = input.transfer.affordability.result.affordable;
+    const registered = input.transfer.registration.eligible;
+    const willing = input.transfer.willingness.willingToJoin;
+    transferAuthorityStatus = input.transfer.viable && affordable && registered && willing
+      ? "live"
+      : "blocked";
+    if (!affordable) constraints.push(...input.transfer.affordability.reasons.slice(0, 2));
+    if (!registered) constraints.push(...input.transfer.registration.reasons.slice(0, 2));
+    if (!willing) {
+      constraints.push(...input.transfer.willingness.reasons.slice(0, 2));
+    }
+  }
+  if (input.pressure.family.preference === "unverified") {
+    constraints.push(input.pressure.family.explanation);
+  }
+
+  return {
+    response: input.response,
+    rivalPressureMultiplier: roundHundredth(clamp(selected.multiplier, 0.75, 1.2)),
+    scoutInfluence: selected.influence,
+    fatigueCost: selected.fatigue,
+    reputationExposure: selected.reputation,
+    visibilityDelta: selected.visibility,
+    transferAuthorityStatus,
+    knownTradeoffs: [...selected.tradeoffs],
+    constraints: [...new Set(constraints)],
+  };
 }
 
 export function createRivalOrganizationState(

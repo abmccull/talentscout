@@ -13,6 +13,12 @@ import type {
   Player,
   TravelPosture,
 } from "@/engine/core/types";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
+import {
+  deriveRivalMarketPressure,
+  type RivalInformationExposureBand,
+  type RivalMarketPressureBand,
+} from "@/engine/rivals/organizations";
 import { normalizeCountryKey } from "@/lib/country";
 import { getTravelEligibleCountryKeys } from "./countryAvailability";
 import {
@@ -27,6 +33,7 @@ import {
   getWorldConditionDefinition,
   getWorldConditionModifiers,
 } from "./worldConditions";
+import { isFixtureInSeason } from "./fixtures";
 
 export type RegionalAccessTier =
   | "remote"
@@ -79,6 +86,53 @@ export interface RegionalPresenceEffects {
   passiveKnowledgeGain: number;
 }
 
+export type RegionalCalendarIntensity = "quiet" | "active" | "crowded";
+export type RegionalRulesClimate = "stable" | "fluid" | "restricted" | "uncertain";
+export type RegionalIntelFreshness = "live" | "aging" | "stale" | "unknown";
+export type RegionalLanguageBridge = "home" | "embedded" | "supported" | "limited";
+
+export interface RegionalTerritorialContext {
+  calendar: {
+    intensity: RegionalCalendarIntensity;
+    visibleFixtureWindows: number;
+    visibleTournamentWindows: number;
+    activeSeasonEventNames: string[];
+    opportunityMultiplier: number;
+  };
+  rules: {
+    climate: RegionalRulesClimate;
+    signals: string[];
+    opportunityMultiplier: number;
+  };
+  languageAndCulture: {
+    bridge: RegionalLanguageBridge;
+    culturalInsightCount: number;
+    trustedContactCount: number;
+    confidenceMultiplier: number;
+  };
+  contacts: {
+    count: number;
+    depthScore: number;
+  };
+  intel: {
+    freshness: RegionalIntelFreshness;
+    ageWeeks?: number;
+    reliabilityMultiplier: number;
+  };
+  regionalReputation: {
+    score: number;
+    reportsSubmitted: number;
+    successfulFinds: number;
+  };
+  rivalMarket: {
+    watcherCount: number;
+    pressureScore: number;
+    pressureBand: RivalMarketPressureBand;
+    informationExposure: RivalInformationExposureBand;
+    opportunityMultiplier: number;
+  };
+}
+
 export interface RegionalPresenceSnapshot {
   countryId: string;
   generatedWorldEligible: boolean;
@@ -92,9 +146,42 @@ export interface RegionalPresenceSnapshot {
   contactIds: string[];
   /** Global and local seasonal context currently changing these effects. */
   worldConditionNames: string[];
+  territorialContext: RegionalTerritorialContext;
   sources: RegionalPresenceSource[];
   effects: RegionalPresenceEffects;
   summary: string;
+}
+
+export type TerritorialStrategyPosture =
+  | "specialist"
+  | "selective"
+  | "network"
+  | "overextended";
+
+export interface TerritorialStrategySnapshot {
+  posture: TerritorialStrategyPosture;
+  primaryCountryId?: string;
+  eligibleCountryCount: number;
+  coveredCountryCount: number;
+  deepCountryCount: number;
+  activeCalendarCountryCount: number;
+  staleCountryIds: string[];
+  contestedCountryIds: string[];
+  operatingCapacity: number;
+  committedCountryCount: number;
+  capacityStrain: number;
+  depthScore: number;
+  breadthScore: number;
+  strengths: string[];
+  tradeoffs: string[];
+  markets: Array<{
+    countryId: string;
+    accessScore: number;
+    accessTier: RegionalAccessTier;
+    calendarIntensity: RegionalCalendarIntensity;
+    intelFreshness: RegionalIntelFreshness;
+    rivalPressure: RivalMarketPressureBand;
+  }>;
 }
 
 export interface RegionalTravelQuote {
@@ -163,6 +250,190 @@ function contactCountryMatches(
 
 function assignmentCountryMatches(value: string | undefined, countryId: string): boolean {
   return canonicalCountry(value) === countryId;
+}
+
+function contactDepthScore(
+  contacts: readonly GameState["contacts"][string][],
+): number {
+  if (contacts.length === 0) return 0;
+  const depth = contacts.reduce((sum, contact) => {
+    const trust = contact.trustLevel ?? contact.relationship;
+    return sum
+      + contact.relationship * 0.4
+      + trust * 0.35
+      + contact.reliability * 0.25;
+  }, 0) / contacts.length;
+  return Math.round(clamp(depth + Math.min(12, (contacts.length - 1) * 3), 0, 100));
+}
+
+function latestRegionalIntelAge(input: {
+  state: GameState;
+  contacts: readonly GameState["contacts"][string][];
+  knowledge?: GameState["regionalKnowledge"][string];
+  maintainedCoverage: boolean;
+}): { freshness: RegionalIntelFreshness; ageWeeks?: number; multiplier: number } {
+  if (input.maintainedCoverage) {
+    return { freshness: "live", ageWeeks: 0, multiplier: 1.03 };
+  }
+  const current = {
+    season: input.state.currentSeason,
+    week: input.state.currentWeek,
+  };
+  const dates = [
+    ...input.contacts.flatMap((contact) => contact.lastInteractionAt
+      ? [contact.lastInteractionAt]
+      : []),
+    ...(input.knowledge?.knowledgeLedger ?? []).map((entry) => ({
+      season: entry.season,
+      week: entry.week,
+    })),
+  ];
+  const ages = dates
+    .map((date) => gameWeeksBetween(input.state.fixtures, date, current))
+    .filter((age) => age >= 0);
+  if (ages.length === 0) {
+    // Legacy knowledge/contact records did not persist dates. Treat them as
+    // unknown rather than rewriting an old save into an arbitrary penalty.
+    return { freshness: "unknown", multiplier: 1 };
+  }
+  const ageWeeks = Math.min(...ages);
+  if (ageWeeks <= 3) return { freshness: "live", ageWeeks, multiplier: 1.03 };
+  if (ageWeeks <= 11) return { freshness: "aging", ageWeeks, multiplier: 0.96 };
+  return { freshness: "stale", ageWeeks, multiplier: 0.82 };
+}
+
+function calendarContext(
+  state: GameState,
+  countryId: string,
+): RegionalTerritorialContext["calendar"] {
+  const leagueIds = new Set(Object.values(state.leagues ?? {})
+    .filter((league) => canonicalCountry(league.country) === countryId)
+    .map((league) => league.id));
+  const visibleFixtureWindows = Object.values(state.fixtures ?? {}).filter((fixture) =>
+    leagueIds.has(fixture.leagueId)
+    && Number.isFinite(fixture.week)
+    && isFixtureInSeason(fixture, state.currentSeason)
+    && Math.abs(fixture.week - state.currentWeek) <= 2
+  ).length;
+  const visibleTournamentWindows = Object.values(state.youthTournaments ?? {}).filter((event) =>
+    event.discovered
+    && canonicalCountry(event.countryKey ?? event.country) === countryId
+    && event.season === state.currentSeason
+    && event.endWeek >= state.currentWeek - 1
+    && event.startWeek <= state.currentWeek + 4
+  ).length;
+  const activeSeasonEvents = (state.seasonEvents ?? []).filter((event) =>
+    event.startWeek <= state.currentWeek && event.endWeek >= state.currentWeek
+  );
+  const activeSeasonEventNames = activeSeasonEvents.map((event) => event.name);
+  const congestion = activeSeasonEvents.some((event) =>
+    event.type === "fixtureCongestion"
+    || event.type === "domesticCupRounds"
+    || event.type === "youthCup"
+  );
+  const score = visibleFixtureWindows
+    + visibleTournamentWindows * 3
+    + (congestion ? 4 : 0);
+  const intensity: RegionalCalendarIntensity = score >= 8
+    ? "crowded"
+    : score >= 2
+      ? "active"
+      : "quiet";
+  return {
+    intensity,
+    visibleFixtureWindows,
+    visibleTournamentWindows,
+    activeSeasonEventNames,
+    opportunityMultiplier: intensity === "crowded" ? 1.08 : intensity === "active" ? 1 : 0.92,
+  };
+}
+
+function rulesContext(
+  state: GameState,
+  countryId: string,
+): RegionalTerritorialContext["rules"] {
+  const activeConditions = (state.worldConditionState?.active ?? []).filter((condition) =>
+    condition.scope === "global" || condition.countryId === countryId
+  );
+  const conditionIds = new Set(activeConditions.map((condition) => condition.definitionId));
+  const fluid = conditionIds.has("open-transfer-market")
+    || conditionIds.has("registration-easing");
+  const restricted = conditionIds.has("agent-exclusivity-wave")
+    || conditionIds.has("data-rights-dispute");
+  const transferWindowOpen = state.transferWindow?.isOpen === true;
+  const deadlinePressure = (state.seasonEvents ?? []).some((event) =>
+    event.startWeek <= state.currentWeek
+    && event.endWeek >= state.currentWeek
+    && (event.type === "transferDeadlineDrama" || event.type === "januaryWindowFrenzy")
+  );
+  const climate: RegionalRulesClimate = (fluid && restricted) || deadlinePressure
+    ? "uncertain"
+    : restricted
+      ? "restricted"
+      : fluid
+        ? "fluid"
+        : "stable";
+  const signals = [
+    ...activeConditions.flatMap((condition) => {
+      const definition = getWorldConditionDefinition(condition.definitionId);
+      return definition ? [definition.name] : [];
+    }),
+    ...(transferWindowOpen ? ["Transfer window open"] : []),
+    ...(deadlinePressure ? ["Deadline pressure"] : []),
+  ];
+  return {
+    climate,
+    signals: [...new Set(signals)],
+    opportunityMultiplier: climate === "fluid"
+      ? 1.05
+      : climate === "restricted"
+        ? 0.92
+        : climate === "uncertain"
+          ? 0.97
+          : 1,
+  };
+}
+
+function rivalMarketContext(
+  state: GameState,
+  countryId: string,
+): RegionalTerritorialContext["rivalMarket"] {
+  const trackedPlayerIds = [...new Set(Object.values(state.rivalScouts ?? {}).flatMap((rival) => [
+    ...(rival.currentTarget ? [rival.currentTarget] : []),
+    ...rival.targetPlayerIds,
+  ]))];
+  const snapshots = trackedPlayerIds
+    .filter((playerId) => getPlayerScoutingCountry(state, playerId) === countryId)
+    .map((playerId) => deriveRivalMarketPressure(state, playerId));
+  const watcherCount = snapshots.reduce((sum, snapshot) => sum + snapshot.watchers.length, 0);
+  const pressureScore = snapshots.length > 0
+    ? Math.round(Math.max(...snapshots.map((snapshot) => snapshot.score)))
+    : 0;
+  const pressureBand: RivalMarketPressureBand = pressureScore >= 70
+    ? "closing"
+    : pressureScore >= 45
+      ? "contested"
+      : pressureScore >= 20
+        ? "watched"
+        : "uncontested";
+  const exposureRank: Record<RivalInformationExposureBand, number> = {
+    contained: 0,
+    circulating: 1,
+    leaking: 2,
+  };
+  const informationExposure = snapshots.reduce<RivalInformationExposureBand>(
+    (strongest, snapshot) => exposureRank[snapshot.informationExposure] > exposureRank[strongest]
+      ? snapshot.informationExposure
+      : strongest,
+    "contained",
+  );
+  return {
+    watcherCount,
+    pressureScore,
+    pressureBand,
+    informationExposure,
+    opportunityMultiplier: clamp(1 - pressureScore * 0.0015, 0.85, 1),
+  };
 }
 
 /** Resolve the football environment in which a player is currently observed. */
@@ -238,6 +509,8 @@ export function deriveRegionalPresence(
       (entry) => canonicalCountry(entry.countryId) === countryId,
     );
   const knowledgeLevel = clamp(knowledge?.knowledgeLevel ?? 0, 0, 100);
+  const localContactCount = (knowledge?.localContacts ?? []).length;
+  const culturalInsightCount = (knowledge?.culturalInsights ?? []).length;
 
   const sources: RegionalPresenceSource[] = [];
   if (isHomeBase) {
@@ -297,18 +570,18 @@ export function deriveRegionalPresence(
       dimensions: { access: delegatedCount * 5 },
     });
   }
-  if (contacts.length > 0 || (knowledge?.localContacts.length ?? 0) > 0) {
+  if (contacts.length > 0 || localContactCount > 0) {
     const relationshipWeight = contacts.reduce((sum, contact) =>
       sum + clamp((contact.relationship + (contact.trustLevel ?? contact.relationship)) / 200, 0.1, 1), 0);
-    const localContactWeight = (knowledge?.localContacts.length ?? 0) * 0.4;
+    const localContactWeight = localContactCount * 0.4;
     const contactScore = clamp((relationshipWeight + localContactWeight) * 4, 0, 15);
     sources.push({
       kind: "localContacts",
-      label: `${contacts.length + (knowledge?.localContacts.length ?? 0)} local relationship${contacts.length + (knowledge?.localContacts.length ?? 0) === 1 ? "" : "s"}`,
+      label: `${contacts.length + localContactCount} local relationship${contacts.length + localContactCount === 1 ? "" : "s"}`,
       score: contactScore,
       dimensions: {
-        access: relationshipWeight * 7 + (knowledge?.localContacts.length ?? 0) * 2,
-        relationships: relationshipWeight * 20 + (knowledge?.localContacts.length ?? 0) * 4,
+        access: relationshipWeight * 7 + localContactCount * 2,
+        relationships: relationshipWeight * 20 + localContactCount * 4,
       },
     });
   }
@@ -333,8 +606,72 @@ export function deriveRegionalPresence(
   ).length;
   const relationshipStrength = contacts.reduce((sum, contact) =>
     sum + clamp((contact.relationship + (contact.trustLevel ?? contact.relationship)) / 200, 0.1, 1), 0);
-  const localContactCount = knowledge?.localContacts.length ?? 0;
   const officeQuality = office?.qualityBonus ?? 0;
+  const countryReputation = state.scout.countryReputations?.[countryId]
+    ?? Object.values(state.scout.countryReputations ?? {}).find((entry) =>
+      canonicalCountry(entry.country) === countryId
+    );
+  const regionalReputationScore = Math.round(clamp(
+    (countryReputation?.familiarity ?? 0) * 0.55
+      + Math.min(20, (countryReputation?.reportsSubmitted ?? 0) * 1.2)
+      + Math.min(18, (countryReputation?.successfulFinds ?? 0) * 4.5)
+      + Math.min(7, (countryReputation?.contactCount ?? 0) * 1.75),
+    0,
+    100,
+  ));
+  const trustedContactCount = contacts.filter((contact) =>
+    Math.max(contact.relationship, contact.trustLevel ?? 0) >= 60
+  ).length;
+  const intel = latestRegionalIntelAge({
+    state,
+    contacts,
+    knowledge,
+    maintainedCoverage: isActiveLocation
+      || assignedEmployees.length > 0
+      || delegatedCount > 0,
+  });
+  const languageBridge: RegionalLanguageBridge = isHomeBase
+    ? "home"
+    : culturalInsightCount >= 2 && trustedContactCount >= 2
+      ? "embedded"
+      : culturalInsightCount > 0 || trustedContactCount > 0
+        ? "supported"
+        : "limited";
+  const languageConfidenceMultiplier = languageBridge === "home"
+    ? 1.04
+    : languageBridge === "embedded"
+      ? 1.03
+      : languageBridge === "supported"
+        ? 0.98
+        : 0.9;
+  const calendar = calendarContext(state, countryId);
+  const rules = rulesContext(state, countryId);
+  const rivalMarket = rivalMarketContext(state, countryId);
+  const territorialContext: RegionalTerritorialContext = {
+    calendar,
+    rules,
+    languageAndCulture: {
+      bridge: languageBridge,
+      culturalInsightCount,
+      trustedContactCount,
+      confidenceMultiplier: languageConfidenceMultiplier,
+    },
+    contacts: {
+      count: contacts.length + localContactCount,
+      depthScore: contactDepthScore(contacts),
+    },
+    intel: {
+      freshness: intel.freshness,
+      ageWeeks: intel.ageWeeks,
+      reliabilityMultiplier: intel.multiplier,
+    },
+    regionalReputation: {
+      score: regionalReputationScore,
+      reportsSubmitted: countryReputation?.reportsSubmitted ?? 0,
+      successfulFinds: countryReputation?.successfulFinds ?? 0,
+    },
+    rivalMarket,
+  };
 
   const dimensions: RegionalPresenceDimensions = generatedWorldEligible
     ? {
@@ -355,7 +692,8 @@ export function deriveRegionalPresence(
             + (office ? 5 : 0)
             + scoutCount * 5
             + analystCount * 12
-            + officeQuality * 25,
+            + officeQuality * 25
+            + regionalReputationScore * 0.05,
           0,
           100,
         )),
@@ -364,7 +702,8 @@ export function deriveRegionalPresence(
             + localContactCount * 4
             + relationshipManagerCount * 15
             + (office ? 8 : 0)
-            + (isActiveLocation ? 8 : 0),
+            + (isActiveLocation ? 8 : 0)
+            + regionalReputationScore * 0.12,
           0,
           100,
         )),
@@ -438,13 +777,17 @@ export function deriveRegionalPresence(
       : 0,
     observationConfidenceBonus: clamp(
       observationConfidenceBonus
-        * conditionModifiers.observationConfidenceMultiplier,
+        * conditionModifiers.observationConfidenceMultiplier
+        * territorialContext.intel.reliabilityMultiplier
+        * territorialContext.languageAndCulture.confidenceMultiplier,
       0,
       0.18,
     ),
     dataConfidenceBonus: clamp(
       dataConfidenceBonus
-        * conditionModifiers.observationConfidenceMultiplier,
+        * conditionModifiers.observationConfidenceMultiplier
+        * territorialContext.intel.reliabilityMultiplier
+        * territorialContext.languageAndCulture.confidenceMultiplier,
       0,
       0.13,
     ),
@@ -455,7 +798,11 @@ export function deriveRegionalPresence(
           + ((dimensions.access * 0.45 + dimensions.relationships * 0.55) / 100) * 0.7
         )
           * conditionModifiers.opportunityMultiplier
-          * activeTravelPosture.opportunityMultiplier,
+          * activeTravelPosture.opportunityMultiplier
+          * territorialContext.calendar.opportunityMultiplier
+          * territorialContext.rules.opportunityMultiplier
+          * territorialContext.rivalMarket.opportunityMultiplier
+          * clamp(0.96 + regionalReputationScore * 0.001, 0.96, 1.06),
         0.5,
         1.8,
       )
@@ -481,9 +828,9 @@ export function deriveRegionalPresence(
     ? "No generated scouting surface exists in this career."
     : strongest.length === 0
       ? "Remote coverage only; access and evidence remain limited."
-      : `${titleCase(tier)} presence from ${strongest.map((source) => source.label.toLowerCase()).join(" and ")}.${worldConditionNames.length > 0 ? ` Seasonal context: ${worldConditionNames.join(" and ")}.` : ""}`;
+      : `${titleCase(tier)} presence from ${strongest.map((source) => source.label.toLowerCase()).join(" and ")}.${worldConditionNames.length > 0 ? ` Seasonal context: ${worldConditionNames.join(" and ")}.` : ""}${territorialContext.intel.freshness === "stale" ? " Local intelligence needs refreshing." : ""}${territorialContext.rivalMarket.pressureBand === "contested" || territorialContext.rivalMarket.pressureBand === "closing" ? ` Rival pressure is ${territorialContext.rivalMarket.pressureBand}.` : ""}`;
 
-  return {
+  const snapshot: RegionalPresenceSnapshot = {
     countryId,
     generatedWorldEligible,
     accessScore,
@@ -495,10 +842,12 @@ export function deriveRegionalPresence(
     assignedEmployeeIds,
     contactIds: contacts.map((contact) => contact.id),
     worldConditionNames,
+    territorialContext,
     sources,
     effects,
     summary,
   };
+  return snapshot;
 }
 
 export function deriveRegionalPresenceIndex(
@@ -510,6 +859,130 @@ export function deriveRegionalPresenceIndex(
       return [snapshot.countryId, snapshot];
     }),
   );
+}
+
+/**
+ * Summarize the real depth-versus-breadth position created by offices, staff,
+ * contacts, knowledge, calendars, and rival pressure. This is derived rather
+ * than saved, so old careers gain strategy context without a migration meter.
+ */
+export function deriveTerritorialStrategy(
+  state: GameState,
+): TerritorialStrategySnapshot {
+  const markets = Object.values(deriveRegionalPresenceIndex(state))
+    .filter((presence) => presence.generatedWorldEligible)
+    .sort((left, right) => right.accessScore - left.accessScore
+      || left.countryId.localeCompare(right.countryId));
+  const covered = markets.filter((presence) => presence.accessTier !== "remote");
+  const deep = markets.filter((presence) =>
+    presence.accessTier === "field" || presence.accessTier === "established"
+  );
+  const committed = markets.filter((presence) => presence.sources.some((source) =>
+    source.kind !== "regionalKnowledge"
+  ));
+  const fieldEmployees = (state.finances?.employees ?? []).filter((employee) =>
+    employee.role === "scout"
+    || employee.role === "mentee"
+    || employee.role === "relationshipManager"
+  ).length;
+  const operatingCapacity = Math.max(
+    1,
+    1
+      + fieldEmployees
+      + (state.assistantScouts?.length ?? 0)
+      + Object.keys(state.npcScouts ?? {}).length,
+  );
+  const capacityStrain = Math.round((committed.length / operatingCapacity) * 100) / 100;
+  const staleCountryIds = markets
+    .filter((presence) => presence.territorialContext.intel.freshness === "stale")
+    .map((presence) => presence.countryId);
+  const contestedCountryIds = markets
+    .filter((presence) =>
+      presence.territorialContext.rivalMarket.pressureBand === "contested"
+      || presence.territorialContext.rivalMarket.pressureBand === "closing"
+    )
+    .map((presence) => presence.countryId);
+  const activeCalendarCountryCount = markets.filter((presence) =>
+    presence.territorialContext.calendar.intensity !== "quiet"
+  ).length;
+  const depthScore = markets[0]?.accessScore ?? 0;
+  const breadthScore = markets.length > 0
+    ? Math.round((covered.length / markets.length) * 100)
+    : 0;
+  const runnerUpGap = depthScore - (markets[1]?.accessScore ?? 0);
+  const staleLoad = covered.length > 0 ? staleCountryIds.length / covered.length : 0;
+  const concentratedNetwork = covered.length === 1
+    && depthScore >= 40
+    && runnerUpGap >= 15;
+  const posture: TerritorialStrategyPosture = capacityStrain > 1.2
+      || (covered.length >= 2 && staleLoad >= 0.5)
+    ? "overextended"
+    : concentratedNetwork
+        || (deep.length === 1 && (covered.length <= 1 || runnerUpGap >= 15))
+      ? "specialist"
+      : markets.length >= 2
+          && covered.length >= Math.min(3, markets.length)
+          && capacityStrain <= 1
+        ? "network"
+        : "selective";
+  const strengths = posture === "specialist"
+    ? [
+        `A ${depthScore}/100 peak presence creates the strongest local evidence and access edge.`,
+        "Concentrated relationships are easier to keep current and defend from rivals.",
+      ]
+    : posture === "network"
+      ? [
+          `${covered.length} markets can produce credible leads without a fresh trip.`,
+          "Calendar shocks in one territory can be absorbed by work elsewhere.",
+        ]
+      : posture === "overextended"
+        ? ["The network reaches several markets, but capacity is spread beyond its current support base."]
+        : ["Coverage is deliberately selective, preserving room to deepen the best live opportunities."];
+  const tradeoffs = posture === "specialist"
+    ? [
+        `${Math.max(0, markets.length - covered.length)} eligible market${markets.length - covered.length === 1 ? " remains" : "s remain"} dependent on remote access.`,
+        "A quiet calendar or closed pathway in the primary territory can leave the pipeline exposed.",
+      ]
+    : posture === "network"
+      ? [
+          `Peak depth is ${depthScore}/100; broad reach does not equal insider-level certainty everywhere.`,
+          "Every additional territory creates contact-maintenance and stale-intelligence risk.",
+        ]
+      : posture === "overextended"
+        ? [
+            `${committed.length} committed markets are being supported by ${operatingCapacity} units of field capacity.`,
+            `${staleCountryIds.length} market${staleCountryIds.length === 1 ? " has" : "s have"} intelligence old enough to weaken decisions.`,
+          ]
+        : [
+            "Selective coverage preserves capacity but leaves some calendar windows and relationships unused.",
+            "The next office, delegate, or contact decision will determine whether the network specializes or broadens.",
+          ];
+
+  return {
+    posture,
+    primaryCountryId: markets[0]?.countryId,
+    eligibleCountryCount: markets.length,
+    coveredCountryCount: covered.length,
+    deepCountryCount: deep.length,
+    activeCalendarCountryCount,
+    staleCountryIds,
+    contestedCountryIds,
+    operatingCapacity,
+    committedCountryCount: committed.length,
+    capacityStrain,
+    depthScore,
+    breadthScore,
+    strengths,
+    tradeoffs,
+    markets: markets.map((presence) => ({
+      countryId: presence.countryId,
+      accessScore: presence.accessScore,
+      accessTier: presence.accessTier,
+      calendarIntensity: presence.territorialContext.calendar.intensity,
+      intelFreshness: presence.territorialContext.intel.freshness,
+      rivalPressure: presence.territorialContext.rivalMarket.pressureBand,
+    })),
+  };
 }
 
 /** Quote logistics after regional presence, before equipment discounts. */

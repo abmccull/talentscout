@@ -105,7 +105,7 @@ describe("report case accountability", () => {
     expect(pulse.reportQualityAvg).toBe(72);
   });
 
-  it("treats active professional study as neutral work rather than inactivity", () => {
+  it("treats scheduled professional study as neutral work rather than inactivity", () => {
     const scout = {
       id: "scout-learning",
       fatigue: 20,
@@ -119,6 +119,9 @@ describe("report case accountability", () => {
       reports: {},
       discoveryRecords: [],
       inbox: [],
+      schedule: {
+        activities: [{ type: "study" }],
+      },
       finances: {
         activeEnrollment: {
           courseId: "fa_level_1",

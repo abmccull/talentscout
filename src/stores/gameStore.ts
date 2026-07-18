@@ -79,6 +79,7 @@ import { checkToolUnlocks } from "@/engine/tools";
 import { classifyStandingZone } from "@/engine/world/index";
 import { isFixtureInSeason } from "@/engine/world/fixtures";
 import {
+  deriveYouthRecruitmentBriefCapacity,
   generateSeasonTournaments,
   generateYouthRecruitmentBriefs,
 } from "@/engine/youth";
@@ -579,12 +580,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         1,
         1,
         {},
-        Math.max(
-          8,
-          Math.round(
-            12 * getWorldConditionModifiers({ worldConditionState })
-              .opportunityMultiplier,
-          ),
+        deriveYouthRecruitmentBriefCapacity(
+          getWorldConditionModifiers({ worldConditionState }).opportunityMultiplier,
         ),
         getSeasonLength(fixtures, 1),
         effectiveConfig.worldSeed,
@@ -605,6 +602,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       fixtures,
       observations: {},
       reports: {},
+      reportWorkItems: {},
       scoutingCases: {},
       reportDeliveries: {},
       clubDecisions: {},

@@ -5,6 +5,7 @@ import type {
   FinancialRecord,
   GameState,
   NewGameConfig,
+  Player,
   ScoutReport,
 } from "@/engine/core/types";
 import {
@@ -85,6 +86,29 @@ function analyst(id = "analyst-1"): AgencyEmployee {
   };
 }
 
+function staffScout(id = "staff-scout-1"): AgencyEmployee {
+  return {
+    ...analyst(id),
+    name: "Taylor Moss",
+    role: "scout",
+    quality: 20,
+    currentAssignment: {
+      type: "scoutPlayer",
+      targetPlayerId: "player-staff-lead",
+      assignedWeek: 1,
+      assignedSeason: 1,
+    },
+    skills: {
+      skill1: 20,
+      skill2: 16,
+      skill3: 14,
+      xp1: 0,
+      xp2: 0,
+      xp3: 0,
+    },
+  };
+}
+
 function filedReport(scoutId: string): ScoutReport {
   return {
     id: "report-source",
@@ -133,6 +157,67 @@ function reviewFixture(
 }
 
 describe("analyst review integrity", () => {
+  it("keeps staff scouting on visible context and produces a review lead rather than a filed report", () => {
+    const scout = createScout(CONFIG, new RNG("staff-authority-scout"));
+    const player = {
+      id: "player-staff-lead",
+      firstName: "Ari",
+      lastName: "Vale",
+      age: 17,
+      position: "CM",
+      nationality: "England",
+      clubId: "club-1",
+      contractClubId: "club-1",
+      contractExpiry: 4,
+      onLoan: false,
+      seasonRatings: [{ season: 1, appearances: 14, avgRating: 7.1 }],
+      get attributes(): never {
+        throw new Error("staff work must not read hidden attributes");
+      },
+      get currentAbility(): never {
+        throw new Error("staff work must not read current ability");
+      },
+      get potentialAbility(): never {
+        throw new Error("staff work must not read potential ability");
+      },
+    } as unknown as Player;
+    const finances: FinancialRecord = {
+      ...initializeFinances(scout, "independent", "normal"),
+      office: { tier: "small", monthlyCost: 500, qualityBonus: 0.05, maxEmployees: 3 },
+      employees: [staffScout()],
+    };
+    const deterministicRng = {
+      chance: () => true,
+      pick: <T,>(items: T[]) => items[0],
+    } as unknown as RNG;
+
+    const result = processEmployeeWork(
+      deterministicRng,
+      finances,
+      { [player.id]: player },
+      {
+        "club-1": {
+          id: "club-1",
+          name: "Pathway FC",
+        },
+      } as unknown as Parameters<typeof processEmployeeWork>[3],
+      scout,
+      {},
+      1,
+      1,
+    );
+
+    expect(result.generatedWorkProducts).toHaveLength(1);
+    expect(result.generatedWorkProducts[0]).toMatchObject({
+      playerId: player.id,
+      employeeId: "staff-scout-1",
+      status: "awaitingReview",
+    });
+    expect(result.generatedWorkProducts[0].signals.map((signal) => signal.source))
+      .toEqual(["liveCoverage", "competitionRecord", "networkCheck"]);
+    expect(result.finances.staffWorkProducts).toEqual([]);
+  });
+
   it("persists bounded, idempotent weekly analyst work based only on visible report evidence", () => {
     const scout = createScout(CONFIG, new RNG("analyst-review-scout"));
     const source = filedReport(scout.id);

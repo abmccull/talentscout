@@ -13,10 +13,15 @@ import type {
   CourseEnrollment,
   CourseEffect,
   CareerTier,
+  WeekSchedule,
 } from "@/engine/core/types";
 import {
+  ACTIVITY_FATIGUE_COSTS,
+  ACTIVITY_SLOT_COSTS,
+} from "@/engine/core/calendar";
+import {
   addGameWeeksWithSeasonLength,
-  isGameDateAtOrAfter,
+  gameWeeksBetweenWithSeasonLength,
   LEGACY_SEASON_LENGTH_WEEKS,
 } from "@/engine/core/gameDate";
 
@@ -255,6 +260,239 @@ export type EnrollmentResult =
     }
   | { success: false; reason: string };
 
+type ProgressAwareCourseEnrollment = CourseEnrollment & {
+  studyWeeksCompleted?: number;
+  requiredStudyWeeks?: number;
+};
+
+export interface CourseStudyProgress {
+  studyWeeksCompleted: number;
+  requiredStudyWeeks: number;
+  remainingStudyWeeks: number;
+  estimatedFromCalendar: boolean;
+}
+
+export interface CoursePlannerStatusModel {
+  progressPct: number;
+  progressLabel: string;
+  scheduledStudySessions: number;
+  studyWeeksPlanned: number;
+  paceLabel: string;
+  workloadLabel: string;
+  projectedCompletionLabel: string;
+  guidance: string;
+}
+
+interface CourseStudyProgressOptions {
+  courseDurationWeeks?: number;
+  currentWeek?: number;
+  currentSeason?: number;
+  seasonLength?: number;
+}
+
+function clampStudyWeeks(value: number, requiredStudyWeeks: number): number {
+  return Math.max(0, Math.min(requiredStudyWeeks, Math.floor(value)));
+}
+
+function asProgressAwareEnrollment(
+  enrollment: CourseEnrollment,
+): ProgressAwareCourseEnrollment {
+  return enrollment as ProgressAwareCourseEnrollment;
+}
+
+const NORMAL_STUDY_WEEKS_PER_CYCLE = 1;
+const MAX_STUDY_WEEKS_PER_CYCLE = 2;
+
+export function getCourseStudyWeeksPlanned(
+  studySessions: number,
+  remainingStudyWeeks = Number.MAX_SAFE_INTEGER,
+): number {
+  const sanitizedStudySessions = Math.max(0, Math.floor(studySessions));
+  const boundedRemainingStudyWeeks = Math.max(0, Math.floor(remainingStudyWeeks));
+  if (sanitizedStudySessions === 0 || boundedRemainingStudyWeeks === 0) return 0;
+
+  const plannedStudyWeeks = sanitizedStudySessions >= 2
+    ? MAX_STUDY_WEEKS_PER_CYCLE
+    : NORMAL_STUDY_WEEKS_PER_CYCLE;
+  return Math.min(boundedRemainingStudyWeeks, plannedStudyWeeks);
+}
+
+export function countScheduledStudySessions(
+  schedule?: WeekSchedule | null,
+): number {
+  return (schedule?.activities ?? []).filter((activity) => activity?.type === "study").length;
+}
+
+export function getCourseStudyProgress(
+  enrollment: CourseEnrollment | undefined,
+  options: CourseStudyProgressOptions = {},
+): CourseStudyProgress | null {
+  if (!enrollment) return null;
+
+  const progressAwareEnrollment = asProgressAwareEnrollment(enrollment);
+  const requiredStudyWeeks = Math.max(
+    1,
+    Math.floor(
+      progressAwareEnrollment.requiredStudyWeeks
+      ?? options.courseDurationWeeks
+      ?? 1,
+    ),
+  );
+
+  const storedProgress = progressAwareEnrollment.studyWeeksCompleted;
+  if (storedProgress !== undefined) {
+    const studyWeeksCompleted = clampStudyWeeks(storedProgress, requiredStudyWeeks);
+    return {
+      studyWeeksCompleted,
+      requiredStudyWeeks,
+      remainingStudyWeeks: Math.max(0, requiredStudyWeeks - studyWeeksCompleted),
+      estimatedFromCalendar: false,
+    };
+  }
+
+  if (
+    options.currentWeek !== undefined
+    && options.currentSeason !== undefined
+  ) {
+    const studyWeeksCompleted = clampStudyWeeks(
+      gameWeeksBetweenWithSeasonLength(
+        {
+          season: enrollment.startSeason,
+          week: enrollment.startWeek,
+        },
+        {
+          season: options.currentSeason,
+          week: options.currentWeek,
+        },
+        options.seasonLength ?? LEGACY_SEASON_LENGTH_WEEKS,
+      ),
+      requiredStudyWeeks,
+    );
+    return {
+      studyWeeksCompleted,
+      requiredStudyWeeks,
+      remainingStudyWeeks: Math.max(0, requiredStudyWeeks - studyWeeksCompleted),
+      estimatedFromCalendar: true,
+    };
+  }
+
+  return {
+    studyWeeksCompleted: 0,
+    requiredStudyWeeks,
+    remainingStudyWeeks: requiredStudyWeeks,
+    estimatedFromCalendar: false,
+  };
+}
+
+export function getProjectedCourseCompletionDate(
+  enrollment: CourseEnrollment,
+  currentWeek: number,
+  currentSeason: number,
+  studySessionsScheduledThisWeek: number,
+  options: CourseStudyProgressOptions = {},
+): { week: number; season: number } {
+  const progress = getCourseStudyProgress(enrollment, {
+    ...options,
+    currentWeek,
+    currentSeason,
+  });
+  if (!progress) {
+    return { season: currentSeason, week: currentWeek };
+  }
+
+  const projectedStudyWeeksCompleted = Math.min(
+    progress.requiredStudyWeeks,
+    progress.studyWeeksCompleted
+      + getCourseStudyWeeksPlanned(
+        studySessionsScheduledThisWeek,
+        progress.remainingStudyWeeks,
+      ),
+  );
+
+  return addGameWeeksWithSeasonLength(
+    { season: currentSeason, week: currentWeek },
+    Math.max(0, progress.requiredStudyWeeks - projectedStudyWeeksCompleted),
+    options.seasonLength ?? LEGACY_SEASON_LENGTH_WEEKS,
+  );
+}
+
+function formatSeasonWeekLabel(season: number, week: number): string {
+  return `Season ${season}, Week ${week}`;
+}
+
+export function getCoursePlannerStatusModel(input: {
+  activeEnrollment: CourseEnrollment | null | undefined;
+  courseDurationWeeks?: number;
+  currentWeek: number;
+  currentSeason: number;
+  scheduledStudySessions: number;
+  seasonLength: number;
+}): CoursePlannerStatusModel | null {
+  const {
+    activeEnrollment,
+    courseDurationWeeks,
+    currentWeek,
+    currentSeason,
+    scheduledStudySessions,
+    seasonLength,
+  } = input;
+  if (!activeEnrollment) return null;
+
+  const progress = getCourseStudyProgress(activeEnrollment, {
+    courseDurationWeeks,
+    currentWeek,
+    currentSeason,
+    seasonLength,
+  });
+  if (!progress) return null;
+
+  const projectedCompletion = getProjectedCourseCompletionDate(
+    activeEnrollment,
+    currentWeek,
+    currentSeason,
+    scheduledStudySessions,
+    {
+      courseDurationWeeks,
+      seasonLength,
+    },
+  );
+  const progressPct = Math.min(
+    100,
+    Math.round((progress.studyWeeksCompleted / progress.requiredStudyWeeks) * 100),
+  );
+  const studyWeeksPlanned = getCourseStudyWeeksPlanned(
+    scheduledStudySessions,
+    progress.remainingStudyWeeks,
+  );
+  const slotCost = scheduledStudySessions * ACTIVITY_SLOT_COSTS.study;
+  const fatigueCost = scheduledStudySessions * ACTIVITY_FATIGUE_COSTS.study;
+  const paceLabel = studyWeeksPlanned >= 2
+    ? "Intensive pace"
+    : studyWeeksPlanned === 1
+      ? "Normal pace"
+      : "No study booked";
+  const workloadLabel = studyWeeksPlanned === 0
+    ? "0 planner slots reserved for study"
+    : `${slotCost} planner slot${slotCost === 1 ? "" : "s"} and ${fatigueCost} fatigue routed through weekly study activities`;
+
+  return {
+    progressPct,
+    progressLabel: `${progress.studyWeeksCompleted}/${progress.requiredStudyWeeks} study weeks banked`,
+    scheduledStudySessions,
+    studyWeeksPlanned,
+    paceLabel,
+    workloadLabel,
+    projectedCompletionLabel: scheduledStudySessions > 0
+      ? `Projected finish ${formatSeasonWeekLabel(projectedCompletion.season, projectedCompletion.week)}`
+      : `No study booked. Finish slips to ${formatSeasonWeekLabel(projectedCompletion.season, projectedCompletion.week)}`,
+    guidance: studyWeeksPlanned >= 2
+      ? `Planner ready. Close the week with ${scheduledStudySessions} scheduled Study sessions to bank 2 study weeks. This intensive pace costs extra planner capacity and fatigue through the existing weekly study activities.`
+      : studyWeeksPlanned === 1
+        ? "Planner ready. Close the week with 1 scheduled Study session to bank the normal 1 study week."
+        : "Open Planner and schedule at least one Study session this week or this course will not advance.",
+  };
+}
+
 /**
  * Enroll in a course. Deducts the cost and sets the active enrollment.
  * Validates prerequisites, tier requirements, affordability, and enrollment state.
@@ -320,16 +558,19 @@ export function enrollInCourse(
 
   const completion = addGameWeeksWithSeasonLength(
     { season, week },
-    course.durationWeeks,
+    Math.max(0, course.durationWeeks - 1),
     seasonLength,
   );
-  const enrollment: CourseEnrollment = {
+  const enrollment = {
     courseId,
     startWeek: week,
     startSeason: season,
     completionWeek: completion.week,
     completionSeason: completion.season,
-  };
+  } as CourseEnrollment;
+  const progressAwareEnrollment = asProgressAwareEnrollment(enrollment);
+  progressAwareEnrollment.studyWeeksCompleted = 0;
+  progressAwareEnrollment.requiredStudyWeeks = Math.max(1, course.durationWeeks);
 
   return {
     success: true,
@@ -369,24 +610,54 @@ export function processWeeklyCourseProgress(
   week: number,
   season: number,
   seasonLength = LEGACY_SEASON_LENGTH_WEEKS,
+  studySessions = 0,
 ): FinancialRecord {
   if (!finances.activeEnrollment) return finances;
 
   const enrollment = finances.activeEnrollment;
+  const course = COURSE_CATALOG.find((candidate) => candidate.id === enrollment.courseId);
+  const progress = getCourseStudyProgress(enrollment, {
+    courseDurationWeeks: course?.durationWeeks,
+    currentWeek: week,
+    currentSeason: season,
+    seasonLength,
+  });
+  if (!progress) return finances;
 
-  // Normalize old enrollments whose completion week overflowed a season.
-  const completion = addGameWeeksWithSeasonLength(
-    { season: enrollment.completionSeason, week: 1 },
-    Math.max(0, enrollment.completionWeek - 1),
+  const studyWeeksEarned = getCourseStudyWeeksPlanned(
+    studySessions,
+    progress.remainingStudyWeeks,
+  );
+  const updatedStudyWeeksCompleted = Math.min(
+    progress.requiredStudyWeeks,
+    progress.studyWeeksCompleted + studyWeeksEarned,
+  );
+
+  if (updatedStudyWeeksCompleted >= progress.requiredStudyWeeks) {
+    return {
+      ...finances,
+      completedCourses: [...finances.completedCourses, enrollment.courseId],
+      activeEnrollment: undefined,
+    };
+  }
+
+  const projectedCompletion = addGameWeeksWithSeasonLength(
+    { season, week },
+    Math.max(0, progress.requiredStudyWeeks - updatedStudyWeeksCompleted),
     seasonLength,
   );
-  if (!isGameDateAtOrAfter({ season, week }, completion)) return finances;
+  const updatedEnrollment = {
+    ...enrollment,
+    completionWeek: projectedCompletion.week,
+    completionSeason: projectedCompletion.season,
+  } as CourseEnrollment;
+  const progressAwareEnrollment = asProgressAwareEnrollment(updatedEnrollment);
+  progressAwareEnrollment.studyWeeksCompleted = updatedStudyWeeksCompleted;
+  progressAwareEnrollment.requiredStudyWeeks = progress.requiredStudyWeeks;
 
-  // Course completed
   return {
     ...finances,
-    completedCourses: [...finances.completedCourses, enrollment.courseId],
-    activeEnrollment: undefined,
+    activeEnrollment: updatedEnrollment,
   };
 }
 

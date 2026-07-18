@@ -76,4 +76,51 @@ describe("transfer accountability history", () => {
       transferSeason: 3,
     });
   });
+
+  it("enumerates the report archive once for a multi-transfer batch", () => {
+    let reportEnumerations = 0;
+    const reports = Object.fromEntries(
+      Array.from({ length: 80 }, (_, index) => {
+        const playerId = `player-${index}`;
+        return [`report-${index}`, {
+          id: `report-${index}`,
+          playerId,
+          scoutId: "scout",
+          conviction: "recommend" as const,
+          clubResponse: "shortlisted",
+          submittedWeek: 4,
+          submittedSeason: 2,
+        }];
+      }),
+    );
+    const players = Object.fromEntries(
+      Array.from({ length: 80 }, (_, index) => {
+        const playerId = `player-${index}`;
+        return [playerId, { ...player, id: playerId }];
+      }),
+    );
+    const transfers = Array.from({ length: 80 }, (_, index) => ({
+      playerId: `player-${index}`,
+      fromClubId: `source-${index}`,
+      toClubId: `destination-${index}`,
+      fee: 10_000 + index,
+    }));
+
+    expect(linkReportsToTransfers(
+      createRNG("indexed-report-archive"),
+      transfers,
+      new Proxy(reports, {
+        ownKeys: (target) => {
+          reportEnumerations += 1;
+          return Reflect.ownKeys(target);
+        },
+      }),
+      players,
+      "scout",
+      5,
+      2,
+      new Set(),
+    )).toHaveLength(80);
+    expect(reportEnumerations).toBe(1);
+  });
 });

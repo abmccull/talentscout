@@ -6,6 +6,7 @@ import { test, expect } from "../fixtures";
 import type { GamePage } from "../fixtures";
 import { getVisualEvidenceDirectory } from "../helpers/releaseEvidencePath";
 import { SELECTORS } from "../helpers/selectors";
+import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
 const evidenceDir = getVisualEvidenceDirectory("interactivity-audit");
 
@@ -310,7 +311,7 @@ test.describe("Interactivity audit rendered evidence", () => {
     await gamePage.page.getByRole("button", { name: "Skip intro" }).click();
     await expect(gamePage.page.getByTestId("main-menu-actions")).toBeVisible();
     await captureBoth(gamePage, "01-main-menu", { axe: true });
-    await gamePage.page.getByRole("button", { name: "Future roadmap" }).click();
+    await gamePage.page.getByRole("button", { name: "What's Coming" }).click();
     await gamePage.waitForScreen("futureRoadmap");
     await expect(gamePage.page.getByTestId("future-roadmap-screen")).toBeVisible();
     await captureBoth(gamePage, "01b-future-roadmap-overview", {
@@ -372,6 +373,11 @@ test.describe("Interactivity audit rendered evidence", () => {
       if (screen === "internationalView") {
         const assignmentPanel = gamePage.page.getByTestId("international-assignment-panel");
         await expectNoVisualOverlap(
+          gamePage.page.getByTestId("open-world-outlook"),
+          gamePage.page.getByRole("button", { name: /World Archive/i }),
+          "mobile World outlook and World Archive",
+        );
+        await expectNoVisualOverlap(
           assignmentPanel,
           gamePage.page.getByRole("button", { name: /World Archive/i }),
           "mobile World Archive and assignment panel",
@@ -388,7 +394,14 @@ test.describe("Interactivity audit rendered evidence", () => {
     await captureSurfaceBoth(gamePage, "05b-weekly-strategy", "weekly-strategy-panel");
 
     await gamePage.setScreen("career");
-    await captureSurfaceBoth(gamePage, "09a-world-conditions", "world-condition-panel");
+    await captureSurfaceBoth(gamePage, "09a-career-situation", "career-situation-panel");
+
+    await gamePage.setScreen("internationalView");
+    await gamePage.page.getByTestId("open-world-outlook").click();
+    await captureSurfaceBoth(gamePage, "08c-world-outlook", "world-outlook-drawer");
+    await gamePage.page.getByRole("button", { name: "Close world outlook" }).click();
+
+    await gamePage.setScreen("career");
     await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
@@ -545,6 +558,34 @@ test.describe("Interactivity audit rendered evidence", () => {
       "rival-operations-network",
     );
 
+    await gamePage.page.evaluate(() => {
+      const store = (window as any).__GAME_STORE__;
+      const state = store.getState().gameState;
+      if (!state.finances) throw new Error("Agency strategy audit fixture needs finances");
+      store.getState().loadGame({
+        ...state,
+        scout: {
+          ...state.scout,
+          careerPath: "independent",
+          careerPathChosen: true,
+          careerTier: 3,
+          independentTier: 3,
+        },
+        finances: {
+          ...state.finances,
+          careerPath: "independent",
+          independentTier: 3,
+        },
+      });
+    });
+    await gamePage.setScreen("agency");
+    await captureBoth(gamePage, "11c-agency-strategy", {
+      fullPage: true,
+      axe: true,
+      assertResponsiveWidth: true,
+    });
+    await captureSurfaceBoth(gamePage, "11d-agency-strategy-panel", "agency-strategy-panel");
+
     gamePage.expectNoConsoleErrors();
   });
 
@@ -567,8 +608,13 @@ test.describe("Interactivity audit rendered evidence", () => {
       const store = (window as any).__GAME_STORE__;
       const state = store.getState().gameState;
       const youth = Object.values(state.unsignedYouth)[0] as any;
-      const playerId = youth?.player?.id ?? Object.keys(state.players)[0];
+      const observedPlayerId = (Object.values(state.observations) as any[])
+        .find((observation) => state.players[observation.playerId])?.playerId;
+      const playerId = observedPlayerId ?? youth?.player?.id ?? Object.keys(state.players)[0];
       if (!playerId) throw new Error("Prospect dossier audit fixture is unavailable");
+      const player = state.players[playerId] ?? youth?.player;
+      if (!player) throw new Error("Prospect dossier audit player is unavailable");
+      const observationId = `audit_report_observation_${playerId}`;
       const contactId = Object.keys(state.contacts)[0] ?? "audit-contact";
       const contactName = state.contacts[contactId]?.name ?? "Academy contact";
       const contactPerspective = {
@@ -633,6 +679,28 @@ test.describe("Interactivity audit rendered evidence", () => {
       };
       store.getState().loadGame({
         ...state,
+        observations: {
+          ...state.observations,
+          [observationId]: {
+            id: observationId,
+            playerId,
+            scoutId: state.scout.id,
+            sourceSessionId: "audit_report_session",
+            week: state.currentWeek,
+            season: state.currentSeason,
+            context: "schoolMatch",
+            attributeReadings: ["firstTouch", "offTheBall", "composure"].map((attribute) => ({
+              attribute,
+              perceivedValue: player.attributes[attribute],
+              confidence: 0.8,
+              observationCount: 2,
+              rangeLow: Math.max(1, player.attributes[attribute] - 1),
+              rangeHigh: Math.min(20, player.attributes[attribute] + 1),
+            })),
+            notes: ["Independent live evidence for the visual report case."],
+            flaggedMoments: [],
+          },
+        },
         contactIntel: {
           ...state.contactIntel,
           [playerId]: [
@@ -676,10 +744,13 @@ test.describe("Interactivity audit rendered evidence", () => {
       axe: true,
       assertResponsiveWidth: true,
     });
+    await gamePage.page.getByRole("button", { name: "Development", exact: true }).click();
     await captureSurfaceBoth(gamePage, "12a-development-environment", "development-environment");
+    await gamePage.page.getByRole("button", { name: "Evidence", exact: true }).click();
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText("Morgan Vale");
     await expect(gamePage.page.getByTestId("evidence-board")).toContainText(/conflict/i);
     await captureSurfaceBoth(gamePage, "12b-evidence-board", "evidence-board");
+    await seedStructuredEvidenceForPlayer(gamePage.page);
     await gamePage.setScreen("reportWriter");
     await gamePage.waitForScreen("reportWriter");
     await gamePage.page.waitForTimeout(250);
@@ -719,20 +790,53 @@ test.describe("Interactivity audit rendered evidence", () => {
     await captureSurfaceBoth(gamePage, "15b-observation-pitch", "observation-pitch");
 
     await gamePage.page.setViewportSize({ width: 1440, height: 900 });
+    let reachedReflection = false;
     for (let phase = 0; phase < 30; phase++) {
+      const halftimeApproach = gamePage.page.getByRole("button", {
+        name: /^Confirm the first read\b/,
+      });
+      if (
+        await halftimeApproach.isVisible({ timeout: 300 }).catch(() => false)
+        && await halftimeApproach.isEnabled()
+      ) {
+        await halftimeApproach.click();
+      }
+      const strategicChoice = gamePage.page
+        .getByRole("group", { name: /^(Strategic choices|Response options|Data points)$/ })
+        .locator("button:not(:disabled)")
+        .first();
+      if (
+        await strategicChoice.isVisible({ timeout: 300 }).catch(() => false)
+        && await strategicChoice.isEnabled()
+      ) {
+        await strategicChoice.click();
+      }
       const reflection = gamePage.page.getByRole("button", { name: /^Go to Reflection$/ });
       if (await reflection.isVisible({ timeout: 250 }).catch(() => false)) {
         await reflection.click();
+        reachedReflection = true;
         break;
       }
       const next = gamePage.page.getByRole("button", { name: /^Next Phase$/ });
       if (await next.isVisible({ timeout: 250 }).catch(() => false)) {
         await next.click();
       }
+      await gamePage.page.waitForTimeout(100);
     }
+    expect(reachedReflection, "Visual evidence journey never reached reflection").toBe(true);
     await captureBoth(gamePage, "16-observation-reflection", { fullPage: true });
     await gamePage.page.setViewportSize({ width: 1440, height: 900 });
-    await gamePage.page.getByRole("button", { name: /^Complete (Reflection|Session)$/ }).click();
+    const evidenceClassification = gamePage.page
+      .getByRole("group", { name: "What did this passage show?" })
+      .first();
+    if (await evidenceClassification.isVisible({ timeout: 1_000 }).catch(() => false)) {
+      await evidenceClassification.getByRole("radio").first().check();
+    }
+    const completeReflection = gamePage.page.getByRole("button", {
+      name: /^Complete (Reflection|Session)$/,
+    });
+    await expect(completeReflection).toBeEnabled();
+    await completeReflection.click();
     await captureBoth(gamePage, "17-observation-complete");
     const continueButton = gamePage.page.getByRole("button", { name: /^Continue$/ });
     if (await continueButton.isVisible({ timeout: 2_000 }).catch(() => false)) {

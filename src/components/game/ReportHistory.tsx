@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
@@ -29,6 +30,8 @@ import {
   formatAnalystEvidenceCategory,
   formatAnalystReviewBias,
 } from "@/engine/finance";
+import { getSeasonLength } from "@/engine/core/gameDate";
+import { rankStaffWorkProducts } from "@/engine/finance/staffWorkReview";
 import { StarRating, StarRatingRange } from "@/components/ui/StarRating";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ScreenBackground } from "@/components/ui/screen-background";
@@ -99,15 +102,34 @@ function ReportDetailModal({
   opportunityHistory,
   onClose,
 }: ReportDetailModalProps) {
-  return (
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, [onClose]);
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/80 sm:flex sm:items-center sm:justify-center sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label={`Report for ${playerName}`}
     >
-      <div className="w-full max-w-3xl max-h-[85vh] overflow-auto rounded-xl border border-[#27272a] bg-[#0a0a0a] shadow-2xl [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-        <div className="flex items-center justify-between border-b border-[#27272a] p-5">
+      <div className="min-h-[100dvh] w-full border-[#27272a] bg-[#0a0a0a] shadow-2xl sm:min-h-0 sm:max-h-[85dvh] sm:max-w-3xl sm:overflow-auto sm:rounded-xl sm:border [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
+        <div className="sticky top-0 z-20 flex items-center justify-between border-b border-[#27272a] bg-[#0a0a0a]/95 p-4 backdrop-blur sm:p-5">
           <div>
             <h2 className="text-lg font-bold">{playerName}</h2>
             <p className="text-xs text-zinc-500">
@@ -115,27 +137,28 @@ function ReportDetailModal({
             </p>
           </div>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
-            className="rounded-md p-1.5 text-zinc-500 hover:bg-[#27272a] hover:text-white transition"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-md text-zinc-400 transition hover:bg-[#27272a] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
             aria-label="Close report"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
+        <div className="space-y-5 p-4 pb-[max(2rem,env(safe-area-inset-bottom))] sm:p-5">
           {/* Conviction & quality */}
           <div className="flex items-center gap-3 flex-wrap">
             <Badge variant={CONVICTION_VARIANT[report.conviction]}>
               {CONVICTION_LABELS[report.conviction]}
             </Badge>
-            {report.perceivedCAStars != null && (
+            {!report.evidenceAssessment && report.perceivedCAStars != null && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-zinc-500">Current read:</span>
                 <StarRating rating={report.perceivedCAStars} size="sm" />
               </div>
             )}
-            {report.perceivedPARange && (
+            {!report.evidenceAssessment && report.perceivedPARange && (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] text-zinc-500">Upside read:</span>
                 <StarRatingRange
@@ -155,7 +178,7 @@ function ReportDetailModal({
             ) : (
               <span className="text-xs text-zinc-500">Accuracy pending career evidence</span>
             )}
-            {report.craftBreakdown && (
+            {!report.evidenceAssessment && report.craftBreakdown && (
               <div className="w-full mt-2 space-y-1 text-[10px] text-zinc-500">
                 <div className="flex justify-between"><span>Observation depth</span><span>{report.craftBreakdown.observationDepth}/25</span></div>
                 <div className="flex justify-between"><span>Evidence confidence</span><span>{report.craftBreakdown.confidenceLevel}/20</span></div>
@@ -217,11 +240,93 @@ function ReportDetailModal({
             </section>
           )}
 
+          {report.evidenceAssessment && (
+            <section className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.05] p-4" aria-labelledby="evidence-assessment-heading">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-300">
+                    {report.evidenceAssessment.kind === "initial" ? "Initial evidence assessment" : "Formal evidence assessment"}
+                  </p>
+                  <h3 id="evidence-assessment-heading" className="mt-1 text-base font-bold text-white">
+                    What you can defend now
+                  </h3>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="border-emerald-300/30 text-emerald-100">
+                    {report.evidenceAssessment.confidence} confidence
+                  </Badge>
+                  <Badge variant="outline" className="border-cyan-300/30 text-cyan-100">
+                    {report.evidenceAssessment.evidenceIds.length} saved cue{report.evidenceAssessment.evidenceIds.length === 1 ? "" : "s"}
+                  </Badge>
+                  <Badge variant={report.evidenceAssessment.overclaimCount > 0 ? "warning" : "success"}>
+                    {report.evidenceAssessment.score.total}/100 craft
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-200">Supported claims</p>
+                  <div className="mt-2 space-y-3">
+                    {report.evidenceAssessment.claims.map((claim) => (
+                      <div key={claim.id}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant="outline" className="text-[10px] capitalize">{claim.category.replace(/([A-Z])/g, " $1")}</Badge>
+                          <span className="text-[10px] capitalize text-zinc-400">{claim.support} · {claim.confidence}</span>
+                        </div>
+                        <p className="mt-1 text-xs leading-5 text-zinc-200">{claim.statement}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-lg border border-amber-300/15 bg-black/20 p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-200">Still unknown</p>
+                  <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-300">
+                    {[...new Map(
+                      report.evidenceAssessment.unknowns.map((unknown) => [unknown.statement, unknown]),
+                    ).values()].map((unknown) => (
+                      <li key={unknown.id}>{unknown.statement}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="mt-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-cyan-200">Next test</p>
+                <p className="mt-1 text-sm font-semibold text-white">{report.evidenceAssessment.nextTest.label}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-300">{report.evidenceAssessment.nextTest.description}</p>
+                <p className="mt-1 text-[10px] leading-4 text-zinc-400">Needed context: {report.evidenceAssessment.nextTest.contextRequirement}</p>
+              </div>
+
+              <dl className="mt-3 grid grid-cols-2 gap-2 text-[10px] sm:grid-cols-4 lg:grid-cols-7">
+                {([
+                  ["Evidence", report.evidenceAssessment.score.evidenceSufficiency],
+                  ["Claim fit", report.evidenceAssessment.score.claimEvidenceFit],
+                  ["Contexts", report.evidenceAssessment.score.contextDiversity],
+                  ["Calibration", report.evidenceAssessment.score.calibration],
+                  ["Unknowns", report.evidenceAssessment.score.unknownHandling],
+                  ["Brief fit", report.evidenceAssessment.score.briefFit],
+                  ["Delivery", report.evidenceAssessment.score.deliveryFit],
+                ] as const).map(([label, value]) => (
+                  <div key={label} className="rounded-md bg-black/20 p-2">
+                    <dt className="text-zinc-500">{label}</dt>
+                    <dd className="mt-1 font-semibold text-white">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {report.evidenceAssessment.overclaimCount > 0 && (
+                <p className="mt-3 rounded-lg border border-amber-400/25 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">
+                  {report.evidenceAssessment.overclaimCount} choice{report.evidenceAssessment.overclaimCount === 1 ? "" : "s"} pushed beyond the current evidence. That calibration risk remains attached to the career outcome.
+                </p>
+              )}
+            </section>
+          )}
+
           {report.briefId && (
             <section className="rounded-xl border border-sky-400/20 bg-sky-400/[0.05] p-4" aria-labelledby="professional-artifact-heading">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-300">Professional artifact · Revision {report.revision ?? 1}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-sky-300">Filed club report · Revision {report.revision ?? 1}</p>
                   <h3 id="professional-artifact-heading" className="mt-1 text-base font-bold text-white">{clubName ?? "Academy client"} recruitment recommendation</h3>
                 </div>
                 {brief && <Badge variant={brief.status === "fulfilled" ? "success" : brief.status === "expired" ? "destructive" : "warning"}>{brief.status}</Badge>}
@@ -386,7 +491,7 @@ function ReportDetailModal({
           )}
 
           {/* Strengths & weaknesses */}
-          <div className="grid grid-cols-2 gap-4">
+          {!report.evidenceAssessment && <div className="grid grid-cols-2 gap-4">
             {report.strengths.length > 0 && (
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
@@ -415,10 +520,11 @@ function ReportDetailModal({
                 </ul>
               </div>
             )}
-          </div>
+          </div>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -624,6 +730,7 @@ export function ReportHistory() {
     acceptMarketplaceBid, declineMarketplaceBid, acceptExclusiveUpgradeBid,
     comparisonReportIds, addToComparison, removeFromComparison, clearComparison,
     pendingListingReportId, dismissPendingListing,
+    approveStaffWorkProduct, rejectStaffWorkProduct,
   } = useGameStore(useShallow((state) => ({
     gameState: state.gameState,
     selectPlayer: state.selectPlayer,
@@ -639,6 +746,8 @@ export function ReportHistory() {
     clearComparison: state.clearComparison,
     pendingListingReportId: state.pendingListingReportId,
     dismissPendingListing: state.dismissPendingListing,
+    approveStaffWorkProduct: state.approveStaffWorkProduct,
+    rejectStaffWorkProduct: state.rejectStaffWorkProduct,
   })));
   const [selectedReport, setSelectedReport] = useState<ScoutReport | null>(null);
   const [listingReport, setListingReport] = useState<ScoutReport | null>(null);
@@ -660,8 +769,30 @@ export function ReportHistory() {
     return acc;
   }, {});
 
-  const reports = Object.values(gameState.reports).sort(
+  const reports = Object.values(gameState.reports)
+    .filter((report) => report.scoutId === gameState.scout.id)
+    .sort(
     (a, b) => b.submittedWeek - a.submittedWeek || b.submittedSeason - a.submittedSeason
+  );
+  const seasonLength = getSeasonLength(gameState.fixtures, gameState.currentSeason);
+  const staffWorkQueue = gameState.finances
+    ? rankStaffWorkProducts(
+        (gameState.finances.staffWorkProducts ?? []).filter(
+          (product) => product.status === "awaitingReview",
+        ),
+        gameState.finances,
+        {
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+        },
+        seasonLength,
+      )
+    : [];
+  const staffReviewUsedThisWeek = (gameState.finances?.staffWorkProducts ?? []).some(
+    (product) =>
+      product.reviewerId === gameState.scout.id
+      && product.reviewedSeason === gameState.currentSeason
+      && product.reviewedWeek === gameState.currentWeek,
   );
 
   // Build lookup of transfer records by report ID for outcome display
@@ -1125,6 +1256,113 @@ export function ReportHistory() {
             </>
           )}
         </div>
+
+        {staffWorkQueue.length > 0 && (
+          <Card className="mb-6 border-sky-800/60 bg-sky-950/20" data-testid="staff-work-review-queue">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Staff leads awaiting your review</CardTitle>
+              <p className="text-sm text-zinc-300">
+                Agency scale now creates sign-off pressure: you can review one work product per week, and delayed client work loses sign-off quality before it reaches a club.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {staffWorkQueue.slice(0, 4).map(({ product, preview }) => {
+                const player = resolvePlayerEntity(gameState, product.playerId)?.player;
+                return (
+                  <article key={product.id} className="rounded-lg border border-zinc-700 bg-zinc-950/75 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-white">
+                            {player ? `${player.firstName} ${player.lastName}` : "Unknown player"}
+                          </p>
+                          <Badge variant="outline">{product.employeeName}</Badge>
+                          <Badge variant="secondary">Work quality {product.qualityScore}</Badge>
+                          <Badge
+                            variant={
+                              preview.priority === "critical"
+                                ? "destructive"
+                                : preview.priority === "high"
+                                  ? "warning"
+                                  : preview.priority === "standard"
+                                    ? "secondary"
+                                    : "outline"
+                            }
+                          >
+                            {preview.priorityLabel}
+                          </Badge>
+                          <Badge
+                            variant={
+                              preview.deliveryRisk === "blocked"
+                                ? "destructive"
+                                : preview.deliveryRisk === "atRisk"
+                                  ? "warning"
+                                  : preview.deliveryRisk === "safe"
+                                    ? "success"
+                                    : "outline"
+                            }
+                          >
+                            {preview.deliveryRiskLabel}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-zinc-400">{preview.priorityReason}</p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-300">
+                          <span className="rounded-full border border-zinc-700 px-2 py-1">
+                            Sign-off now {preview.signedOffQualityScore}/100
+                          </span>
+                          <span className="rounded-full border border-zinc-700 px-2 py-1">
+                            Next week {preview.nextWeekSignedOffQualityScore}/100
+                          </span>
+                          {preview.reviewDebtPenalty > 0 && (
+                            <span className="rounded-full border border-amber-500/40 bg-amber-950/20 px-2 py-1 text-amber-200">
+                              Review debt -{preview.reviewDebtPenalty}
+                            </span>
+                          )}
+                          {preview.deadline && (
+                            <span className="rounded-full border border-zinc-700 px-2 py-1">
+                              Client checkpoint S{preview.deadline.season} W{preview.deadline.week}
+                            </span>
+                          )}
+                        </div>
+                        <ul className="mt-3 space-y-1 text-sm text-zinc-300">
+                          {product.signals.map((signal) => (
+                            <li key={signal.id}>
+                              <span className="font-medium capitalize text-zinc-200">{signal.category}:</span>{" "}
+                              {signal.statement} <span className="text-zinc-500">({signal.confidence})</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-3 text-xs text-amber-200/80">{product.limitation}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          className="min-h-11"
+                          disabled={staffReviewUsedThisWeek}
+                          onClick={() => approveStaffWorkProduct(product.id)}
+                        >
+                          Approve lead
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={staffReviewUsedThisWeek}
+                          onClick={() => rejectStaffWorkProduct(product.id)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+              {staffReviewUsedThisWeek && (
+                <p className="text-xs text-zinc-400">You have used this week&apos;s sign-off slot. Remaining leads stay in queue, but client-linked items will keep losing sign-off quality while they wait.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="mb-6 border-emerald-900/50 bg-zinc-950/70">
           <CardHeader className="pb-3">

@@ -57,7 +57,7 @@ test.describe("Youth geography and travel", () => {
     gamePage.expectNoConsoleErrors();
   });
 
-  test("country browser exposes generated destinations, world tier, and earned local intelligence", async ({ gamePage }) => {
+  test("country browser exposes active destinations, football coverage, and earned local intelligence", async ({ gamePage }) => {
     await gamePage.goto();
     await gamePage.injectState({
       currentWeek: 1,
@@ -93,15 +93,15 @@ test.describe("Youth geography and travel", () => {
     await gamePage.page.getByRole("button", { name: /Browse countries/i }).click();
     const browser = gamePage.page.getByTestId("country-browser");
     await expect(browser).toBeVisible();
-    await expect(browser.getByRole("button", { name: /England, Full world/i })).toBeVisible();
-    const nigeria = browser.getByRole("button", { name: /Nigeria, Talent pool/i });
+    await expect(browser.getByRole("button", { name: /England, Live calendar/i })).toBeVisible();
+    const nigeria = browser.getByRole("button", { name: /Nigeria, Scouting network/i });
     await expect(nigeria).toBeVisible();
 
     await nigeria.click();
     await expect(browser).toBeHidden();
     const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });
-    await expect(dossier).toContainText("World coverage");
-    await expect(dossier).toContainText("Talent pool");
+    await expect(dossier).toContainText("Football coverage");
+    await expect(dossier).toContainText("Scouting network");
     await expect(dossier).toContainText("Knowledge");
     await expect(dossier).toContainText("38/100");
     await expect(dossier).toContainText("Nigeria National League");
@@ -120,9 +120,9 @@ test.describe("Youth geography and travel", () => {
     await browserTrigger.click();
     await expect(browser).toBeVisible();
 
-    const search = browser.getByRole("textbox", { name: "Search generated countries" });
+    const search = browser.getByRole("textbox", { name: "Search active countries" });
     await search.fill("england");
-    await expect(browser.getByRole("button", { name: /England, Full world/i })).toBeVisible();
+    await expect(browser.getByRole("button", { name: /England, Live calendar/i })).toBeVisible();
     await expect(nigeria).toHaveCount(0);
     gamePage.expectNoConsoleErrors();
   });
@@ -152,7 +152,7 @@ test.describe("Youth geography and travel", () => {
     expect(browserBox?.x).toBeGreaterThanOrEqual(0);
     expect(browserBox?.width).toBeLessThanOrEqual(390);
 
-    const nigeria = browser.getByRole("button", { name: /Nigeria, Talent pool/i });
+    const nigeria = browser.getByRole("button", { name: /Nigeria, Scouting network/i });
     await nigeria.click();
     await expect(browser).toBeHidden();
     const dossier = gamePage.page.getByRole("dialog", { name: "Nigeria intel dossier" });

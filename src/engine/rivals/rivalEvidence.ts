@@ -5,6 +5,7 @@ import type {
   RivalScout,
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
+import { gameWeeksBetween } from "@/engine/core/gameDate";
 
 const MIN_ABILITY = 1;
 const MAX_ABILITY = 200;
@@ -12,6 +13,8 @@ const MAX_EVIDENCE_CONFIDENCE = 0.9;
 const MAX_EVIDENCE_HISTORY = 24;
 const MIN_SHORTLIST_CAPACITY = 3;
 const MAX_SHORTLIST_CAPACITY = 8;
+const EVIDENCE_FRESH_WEEKS = 4;
+const EVIDENCE_STALE_WEEKS = 12;
 
 /**
  * A rival's fallible assessment of a player. Hidden ability is sampled only
@@ -19,6 +22,11 @@ const MAX_SHORTLIST_CAPACITY = 8;
  * these estimates rather than true CA/PA.
  */
 export type { RivalPlayerEvidence } from "@/engine/core/types";
+
+export interface EffectiveRivalPlayerEvidence extends RivalPlayerEvidence {
+  ageWeeks: number;
+  stale: boolean;
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -134,6 +142,52 @@ export function getRivalPlayerEvidence(
 }
 
 /**
+ * Rival observations age just like the player's regional intelligence. The
+ * persisted reading remains untouched; decisions consume this derived view so
+ * save migration cannot rewrite history.
+ */
+export function getEffectiveRivalPlayerEvidence(
+  rival: RivalScout,
+  playerId: string,
+  state: Pick<GameState, "fixtures" | "currentSeason" | "currentWeek">,
+): EffectiveRivalPlayerEvidence | undefined {
+  const evidence = getRivalPlayerEvidence(rival, playerId);
+  if (!evidence) return undefined;
+  if (
+    !Number.isFinite(evidence.lastObservedSeason)
+    || !Number.isFinite(evidence.lastObservedWeek)
+  ) {
+    return { ...evidence, ageWeeks: 0, stale: false };
+  }
+  const ageWeeks = Math.max(0, gameWeeksBetween(
+    state.fixtures,
+    {
+      season: evidence.lastObservedSeason,
+      week: evidence.lastObservedWeek,
+    },
+    { season: state.currentSeason, week: state.currentWeek },
+  ));
+  const decayWeeks = Math.max(0, ageWeeks - EVIDENCE_FRESH_WEEKS);
+  const savedConfidence = clamp(evidence.confidence, 0, MAX_EVIDENCE_CONFIDENCE);
+  const confidence = clamp(
+    savedConfidence * Math.pow(0.94, decayWeeks),
+    Math.min(0.08, savedConfidence),
+    savedConfidence,
+  );
+  return {
+    ...evidence,
+    confidence,
+    errorMargin: Math.round(clamp(
+      evidence.errorMargin + decayWeeks * 0.8,
+      evidence.errorMargin,
+      60,
+    )),
+    ageWeeks,
+    stale: ageWeeks >= EVIDENCE_STALE_WEEKS,
+  };
+}
+
+/**
  * Create one noisy rival observation. Quality, specialty and difficulty improve
  * the estimate, while repeated observations reduce uncertainty without ever
  * reaching perfect confidence.
@@ -243,7 +297,7 @@ export function scoreRivalTargetCandidate(
   state: GameState,
   rivalIntelligence: number,
 ): number {
-  const evidence = getRivalPlayerEvidence(rival, player.id);
+  const evidence = getEffectiveRivalPlayerEvidence(rival, player.id, state);
   const intelligence = clamp(rivalIntelligence, 0.5, 1.75);
   const evidenceWeight = evidence
     ? clamp(evidence.confidence * (0.75 + intelligence * 0.2), 0, 0.88)

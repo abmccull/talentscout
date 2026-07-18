@@ -10,7 +10,9 @@ import type {
 } from "@/engine/core/types";
 import type { RNG } from "@/engine/rng";
 import {
+  createGameCalendarIndex,
   gameWeeksBetween,
+  gameWeeksBetweenWithCalendar,
   getCareerElapsedWeeks,
 } from "@/engine/core/gameDate";
 import { getAchievementProgress } from "@/engine/core/achievementEngine";
@@ -95,10 +97,17 @@ describe.each(CALENDAR_LENGTHS)("remaining calendar authority (%i-week season)",
   const fixtures = fixturesFor(seasonLength);
 
   it("measures career, report, and tenure age across the real rollover", () => {
+    const start = { season: 1, week: seasonLength - 2 };
+    const end = { season: 2, week: 3 };
     expect(gameWeeksBetween(
       fixtures,
-      { season: 1, week: seasonLength - 2 },
-      { season: 2, week: 3 },
+      start,
+      end,
+    )).toBe(5);
+    expect(gameWeeksBetweenWithCalendar(
+      createGameCalendarIndex(fixtures),
+      start,
+      end,
     )).toBe(5);
     expect(getCareerElapsedWeeks(
       fixtures,
@@ -224,19 +233,36 @@ describe.each(CALENDAR_LENGTHS)("remaining calendar authority (%i-week season)",
     if (!enrollment.success) return;
     expect(enrollment.finances.activeEnrollment).toMatchObject({
       completionSeason: 2,
-      completionWeek: 3,
+      completionWeek: 2,
     });
-    expect(processWeeklyCourseProgress(
+    const afterWeek37 = processWeeklyCourseProgress(
       enrollment.finances,
+      seasonLength - 1,
+      1,
+      seasonLength,
+      1,
+    );
+    const afterWeek38 = processWeeklyCourseProgress(
+      afterWeek37,
+      seasonLength,
+      1,
+      seasonLength,
+      1,
+    );
+    const afterSeason2Week1 = processWeeklyCourseProgress(
+      afterWeek38,
+      1,
+      2,
+      seasonLength,
+      1,
+    );
+    expect(afterSeason2Week1.activeEnrollment).toBeDefined();
+    expect(processWeeklyCourseProgress(
+      afterSeason2Week1,
       2,
       2,
       seasonLength,
-    ).activeEnrollment).toBeDefined();
-    expect(processWeeklyCourseProgress(
-      enrollment.finances,
-      3,
-      2,
-      seasonLength,
+      1,
     ).completedCourses).toContain("business_fundamentals");
 
     const awardFinances = {

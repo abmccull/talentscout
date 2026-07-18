@@ -2,8 +2,8 @@
  * Insight Action Implementations
  *
  * Each insight action is a special "eureka moment" that provides
- * dramatically enhanced scouting outcomes. Actions guarantee accuracy
- * but not value — the risk is in WHEN and WHERE you deploy them.
+ * enhanced, bounded scouting outcomes. Actions improve the quality or scope
+ * of a read, but they never guarantee hidden truth.
  */
 
 import type { RNG } from "@/engine/rng";
@@ -15,13 +15,7 @@ import {
   type ContentValidationIssue,
 } from "@/engine/content/contracts";
 import { resolveCareerPathText } from "@/engine/utils/textResolution";
-import {
-  HIDDEN_ATTRIBUTES,
-  TECHNICAL_ATTRIBUTES,
-  PHYSICAL_ATTRIBUTES,
-  MENTAL_ATTRIBUTES,
-  TACTICAL_ATTRIBUTES,
-} from "@/engine/core/types";
+import { HIDDEN_ATTRIBUTES } from "@/engine/core/types";
 import type { ObservationSession, PlayerMoment } from "@/engine/observation/types";
 import {
   INSIGHT_ACTIONS,
@@ -45,11 +39,7 @@ export interface InsightActionContext {
   session: ObservationSession;
   /** Primary player the action targets (where applicable). */
   targetPlayerId?: string;
-  /**
-   * Full player records — true attributes are visible here.
-   * The engine has access to ground truth; scout perception is bypassed
-   * intentionally for insight actions.
-   */
+  /** Full player records used internally to produce bounded scout estimates. */
   players: Record<string, Player>;
   /** All contacts available in the current region. */
   contacts?: Record<string, Contact>;
@@ -106,18 +96,18 @@ export const INSIGHT_NARRATIVES: Record<
   clarityOfVision: {
     universal: [
       "The noise falls away. Every touch, every movement — brutally clear.",
-      "A moment of perfect stillness. The player's true qualities lay bare.",
-      "You stop second-guessing. What you see is exactly what is there.",
+      "A moment of stillness. The visible cues become easier to separate from the noise.",
+      "You stop chasing every possibility and make a cleaner bounded read.",
     ],
     youth: [
-      "The boy's raw talent snaps into focus. No more guessing — you see him.",
-      "Your instincts quiet. His real ability shines through the clutter.",
-      "It clicks. This kid is exactly what your eye told you he was.",
+      "The young player's strongest visible passage snaps into focus.",
+      "Your instincts quiet. The useful cue separates from the surrounding clutter.",
+      "It clicks: you have a clearer question to carry into the next watch.",
     ],
     firstTeam: [
-      "Signal cuts through noise. His true attribute values are unambiguous.",
-      "The assessment calcifies into certainty. No margin for misreading.",
-      "Professional clarity: the player's ceiling is now precisely measurable.",
+      "Signal cuts through noise. The observable attributes become easier to grade.",
+      "The assessment sharpens without pretending the margin has disappeared.",
+      "Professional clarity: a tighter read with the remaining doubt still visible.",
     ],
     regional: [
       "Local familiarity strips the veil. You know this type — you see him clearly.",
@@ -125,106 +115,106 @@ export const INSIGHT_NARRATIVES: Record<
       "You've watched hundreds of players here. This one's truth is plain.",
     ],
     data: [
-      "The perceptual noise collapses to zero. Pure signal. Perfect reading.",
-      "Algorithmic clarity: every attribute value resolves to ground truth.",
-      "The filter cuts in. True values, no distortion. Clean output.",
+      "The perceptual noise drops. The usable signal is easier to isolate.",
+      "Algorithmic clarity narrows the range without turning an estimate into truth.",
+      "The filter cuts in: cleaner output, with uncertainty retained.",
     ],
   },
 
   hiddenNature: {
     universal: [
-      "You sense something beneath the surface — and for once, you are right.",
-      "The mask slips. A glimpse of the player's true character.",
-      "Hidden for a reason. Now it is yours to know.",
+      "You sense something beneath the surface and leave with a sharper question.",
+      "The mask slips just enough for a sharper character read.",
+      "What was vague is now directional, not settled.",
     ],
     youth: [
-      "Every young player hides who they really are. Tonight, this one does not.",
-      "You've learned to read the signs early. This kid cannot hide from you.",
-      "Underneath the potential, you sense the character. It is not what most would see.",
+      "Every young player hides part of themselves. Tonight you narrow the question.",
+      "You've learned to read the signs early. This kid gives you a stronger angle, not certainty.",
+      "Underneath the potential, a clearer character signal starts to form.",
     ],
     firstTeam: [
-      "Character under contract pressure reveals everything. You see it clearly.",
-      "Proven professionals still hide. Your read strips that defence away.",
+      "Contract pressure exposes a little more than usual. You come away with a firmer read.",
+      "Proven professionals still hide things. Your read narrows the live concern.",
       "The hidden architecture of his mentality — exposed.",
     ],
     regional: [
-      "People around here talk. You already had suspicions. Now you have truth.",
-      "Years of relationships in this region tell you what the eye can't see.",
-      "Your network has whispered. Your instinct has now confirmed.",
+      "People around here talk. You now have a direction worth testing.",
+      "Years of relationships in this region sharpen what the eye cannot prove alone.",
+      "Your network has whispered. Your instinct can finally ask a better question.",
     ],
     data: [
-      "Statistical outliers sometimes point inward. The pattern reveals character.",
-      "Hidden attributes leave footprints in the numbers. The algorithm found them.",
-      "Variance analysis flags the anomaly. The hidden truth emerges.",
+      "Statistical outliers sometimes point inward. The pattern narrows the character question.",
+      "Hidden traits leave footprints in the numbers. The algorithm surfaces a lead, not a verdict.",
+      "Variance analysis flags an anomaly worth testing in another context.",
     ],
   },
 
   theVerdict: {
     universal: [
-      "You know exactly what to write. Every word lands with authority.",
+      "You know what the report should emphasize, and where it still needs restraint.",
       "The report writes itself — the evidence is too clear to misstate.",
-      "Your pen moves with conviction. This is the definitive assessment.",
+      "Your pen moves with conviction, but only as far as the evidence allows.",
     ],
     youth: [
-      "This kid's potential deserves the full weight of your judgment. You deliver it.",
-      "You've seen enough. The report becomes a statement of belief.",
-      "Every parent, every coach, every director should read this. You make it worthy.",
+      "This kid's potential deserves a cleaner report, not a louder one.",
+      "You've seen enough to sharpen the recommendation, not to skip the caveats.",
+      "Parents, coaches, and directors can use this report because it stays evidence-led.",
     ],
     firstTeam: [
-      "The verdict is professional-grade. Unambiguous. Decision-ready.",
-      "You lay out the case. The report is a masterclass in observed evidence.",
-      "Clear prose, clear evidence, clear conclusion. The club will act on this.",
+      "The verdict is professional-grade because it stays within the evidence lane.",
+      "You lay out the case with clearer structure and cleaner support.",
+      "Clear prose, clear evidence, and a conclusion that still respects uncertainty.",
     ],
     regional: [
-      "Local knowledge deepens every line. The report carries real texture.",
-      "You write with the authority of someone who knows this territory.",
+      "Local knowledge deepens every line without pretending to close every gap.",
+      "You write with the authority of someone who knows this territory and its blind spots.",
       "The report feels authentic — because it is. Every detail is earned.",
     ],
     data: [
-      "Data-backed, narrative-rich. The report sets a new benchmark.",
-      "Statistical rigour meets readable prose. The result is exceptional.",
-      "The algorithm supplements the eye. The output is flawless.",
+      "Data-backed and narrative-aware. The report is sharper, not magical.",
+      "Statistical rigour meets readable prose. The result is decision-useful.",
+      "The algorithm supplements the eye. The output is tighter and more honest.",
     ],
   },
 
   secondLook: {
     universal: [
       "Out of the corner of your eye — you almost missed him entirely.",
-      "There was something there. You circle back. You were right.",
-      "Your peripheral read was sharper than you realised. A second look confirms it.",
+      "There was something there. You circle back for a bounded second pass.",
+      "Your peripheral read was sharper than you realised. A second look preserves the lead.",
     ],
     youth: [
-      "The boy on the left. Quiet. You nearly walked past. You didn't.",
-      "A flicker in your memory: that kid in the 18th minute. You go back.",
+      "The boy on the left. Quiet. You nearly walked past. Now he earns a better question.",
+      "A flicker in your memory: that kid in the 18th minute. You go back carefully.",
       "He wasn't your focus — but he was worth focusing on. You know that now.",
     ],
     firstTeam: [
       "The analysis doubles back. Player two deserved more time than you gave him.",
-      "You revisit the footage in your mind. He was there. He was good.",
-      "A professional second read. The overlooked player earns attention.",
+      "You revisit the footage in your mind and recover a narrower, usable lead.",
+      "A professional second read. The overlooked player earns bounded attention.",
     ],
     regional: [
-      "Old habits: always watch the one everyone ignores. Pays off again.",
-      "Local knowledge flags him. The unfocused player has a name here.",
+      "Old habits: always watch the one everyone ignores. It pays off in leads, not guarantees.",
+      "Local knowledge flags him. The unfocused player finally has a clearer profile.",
       "You've seen this before — the quiet one is often the real one.",
     ],
     data: [
-      "A secondary data signature stands out on review. You go back to the source.",
-      "Pattern matching flags an anomaly in your peripheral data. Worth a look.",
-      "The secondary subject's metrics warrant a second analytical pass.",
+      "A secondary data signature stands out on review. You go back to the source with limits.",
+      "Pattern matching flags an anomaly in your peripheral data. Worth a narrower look.",
+      "The secondary subject's metrics warrant a second analytical pass, not a leap.",
     ],
   },
 
   diamondInTheRough: {
     universal: [
-      "Somewhere in this match, there is someone special. You will find them.",
-      "The best player here isn't the one everyone is watching.",
-      "You scan the pitch with purpose. One name will leave with you.",
+      "Somewhere in this match, there is a lead worth pulling forward.",
+      "The player worth tracking next is not always the one everyone is watching.",
+      "You scan the pitch with purpose. One name leaves with you for a reason.",
     ],
     youth: [
-      "Somewhere in this rabble of kids is one who is genuinely different. You find him.",
-      "Every youth session has a diamond if you know how to look. You do.",
-      "Your eye catches on something real. The potential is unmistakable.",
+      "Somewhere in this rabble of kids is one who merits a stronger follow-up.",
+      "Every youth session has a player who earns another trip if you know how to look.",
+      "Your eye catches on something real. The upside is promising, not proven.",
     ],
     firstTeam: [
       "Not the headline act — the one who quietly outperforms his surroundings.",
@@ -237,37 +227,37 @@ export const INSIGHT_NARRATIVES: Record<
       "They play for no one important. But their potential is enormous.",
     ],
     data: [
-      "The statistical outlier stands out from every angle. This one is different.",
-      "Every metric flags the same player. The model is confident. So are you.",
-      "Data doesn't lie. The highest ceiling in this squad just revealed itself.",
+      "The visible outlier stands out from every angle. This one deserves another pass.",
+      "Every metric flags the same player. The model gives you a lead worth preserving.",
+      "The data points to the squad's strongest follow-up candidate, not a guaranteed ceiling.",
     ],
   },
 
   generationalWhisper: {
     universal: [
-      "You've never felt this before. This isn't a good player. This is history.",
-      "The hairs on the back of your neck. A certainty beyond evidence.",
-      "You have seen talent. You have never seen this.",
+      "You do not get this feeling often, and you still treat it as a lead.",
+      "The hairs on the back of your neck. Strong instinct, still subject to evidence.",
+      "You have seen talent. This one demands another look fast.",
     ],
     youth: [
-      "This kid. This specific kid. He is going to be something that doesn't happen often.",
-      "Your career has been worth it just for this moment. The generational read.",
-      "You don't tell him. You won't tell anyone yet. But you know.",
+      "This kid. This specific passage. It may be something that does not happen often.",
+      "Your career teaches you to notice these moments without pretending they are settled.",
+      "You do not tell him. You do not tell anyone yet. You verify.",
     ],
     firstTeam: [
-      "The professional certainty is total. This player will be spoken about in decades.",
-      "No hesitation. No caveats. You are looking at an elite talent.",
-      "Assessment complete. Tier: exceptional. Confidence: absolute.",
+      "The upside signal is rare enough to demand immediate verification.",
+      "No complacency, no myth-making. You are looking at a lead with rare upside.",
+      "Assessment held open. Signal: exceptional. Confidence: bounded.",
     ],
     regional: [
-      "This territory has never produced anything like this. Until now.",
+      "This territory rarely produces signals like this, which is why you verify them fast.",
       "You've watched players in this region for years. This one is different in every way.",
-      "The network already has rumours. You now have certainty.",
+      "The network already has rumours. You now have a stronger lead to test.",
     ],
     data: [
-      "The model flags a six-sigma outlier. This talent doesn't exist statistically. It does.",
-      "No comparable in the dataset. This player resets the baseline.",
-      "Algorithmic confidence: maximum. This is a generational talent.",
+      "The model flags a rare outlier. That earns a harder follow-up, not automatic certainty.",
+      "Few comparables appear in the dataset. The signal is strong enough to preserve.",
+      "Algorithmic confidence is high enough to prioritize the next observation.",
     ],
   },
 
@@ -301,28 +291,28 @@ export const INSIGHT_NARRATIVES: Record<
 
   pressureTest: {
     universal: [
-      "You put him in the biggest moment you can imagine. Watch how he responds.",
+      "You put him in the biggest moment you can imagine and narrow the question.",
       "The lights come on in your mind. He doesn't flinch. Or he does.",
-      "You've seen pressure break better players. The question is whether it breaks this one.",
+      "You've seen pressure break better players. This gives you a sharper test plan.",
     ],
     youth: [
       "Big games expose young players. You know this boy's truth now.",
-      "He'll face moments that define careers. How will he stand up? You know.",
-      "The fantasy scenario plays out in your mind. His character emerges.",
+      "He'll face moments that define careers. Now you know what to test next.",
+      "The fantasy scenario plays out in your mind and gives the character read more shape.",
     ],
     firstTeam: [
       "High-stakes simulation: the player's big-game response, projected with accuracy.",
-      "You've watched him in the biggest moments. The assessment is categorical.",
+      "You've watched him in big moments. The assessment is stronger, not categorical.",
       "Pressure response grade confirmed. The verdict is in.",
     ],
     regional: [
-      "Players from this region carry pressure differently. You know the signs.",
+      "Players from this region carry pressure differently. You know the signs well enough to follow them.",
       "You've seen him in tight moments. Now you know exactly what they reveal.",
       "Local derbies, title deciders — you've seen how this type responds.",
     ],
     data: [
-      "Pressure performance metrics cross-referenced. Big-game temperament: quantified.",
-      "The high-leverage data cluster isolates the variable. Clear read.",
+      "Pressure performance metrics cross-referenced. The pressure picture sharpens.",
+      "The high-leverage data cluster isolates the variable enough to guide the next watch.",
       "Statistical pressure model confirms the assessment. Temperament score locked.",
     ],
   },
@@ -385,8 +375,8 @@ export const INSIGHT_NARRATIVES: Record<
 
   algorithmicEpiphany: {
     universal: [
-      "The model runs clean. Every parameter aligns. The output is perfect.",
-      "A moment of mathematical clarity. The query returns truth.",
+      "The model runs clean. The strongest signals separate from the noise.",
+      "A moment of mathematical clarity. The query returns a sharper shortlist.",
       "You've been waiting for this. The algorithm delivers.",
     ],
     youth: [
@@ -395,9 +385,9 @@ export const INSIGHT_NARRATIVES: Record<
       "Data and instinct in perfect agreement. A rare and powerful moment.",
     ],
     firstTeam: [
-      "Analytical precision: maximum. The query surface is noise-free.",
+      "Analytical precision rises. The query surface is unusually clean.",
       "The model runs at capacity. The output is as clean as data gets.",
-      "Perfect recall meets perfect analysis. The epiphany delivers.",
+      "Strong recall meets disciplined analysis. The epiphany delivers.",
     ],
     regional: [
       "Regional data combined with local knowledge. The result is unprecedented.",
@@ -405,9 +395,9 @@ export const INSIGHT_NARRATIVES: Record<
       "Data precision, earned by presence. The two reinforce each other.",
     ],
     data: [
-      "Algorithmic epiphany achieved. Query accuracy: 100%. Model confidence: maximum.",
+      "Algorithmic epiphany achieved. Query noise falls and the best leads become clearer.",
       "The dataset resolves without distortion. This is what the system was built for.",
-      "Perfect query cycle. Every variable controlled. Output: ground truth.",
+      "A disciplined query cycle controls the known variables and exposes the remaining uncertainty.",
     ],
   },
 
@@ -555,51 +545,117 @@ function getMomentsForPlayer(
   return result;
 }
 
-/**
- * Returns the IDs of players in the session who were NOT focused on at all,
- * ordered by descending average moment quality so the best unfocused player
- * floats to the top.
- */
-function getUnfocusedPlayersByQuality(session: ObservationSession): string[] {
-  const focusedSet = new Set(
-    session.players
-      .filter((sp) => sp.focusedPhases.length > 0)
-      .map((sp) => sp.playerId),
-  );
+interface SessionLeadSignal {
+  playerId: string;
+  momentCount: number;
+  totalQuality: number;
+  avgQuality: number;
+  standoutCount: number;
+  pressureCount: number;
+  focusedPhaseCount: number;
+  attributeScores: Map<string, number>;
+  leadScore: number;
+  overlookedScore: number;
+}
 
-  // Aggregate moment quality per unfocused player
-  const qualityMap = new Map<string, { total: number; count: number }>();
+function compareSignals(
+  left: { playerId: string; score: number; avgQuality: number; standoutCount: number },
+  right: { playerId: string; score: number; avgQuality: number; standoutCount: number },
+): number {
+  if (right.score !== left.score) return right.score - left.score;
+  if (right.standoutCount !== left.standoutCount) return right.standoutCount - left.standoutCount;
+  if (right.avgQuality !== left.avgQuality) return right.avgQuality - left.avgQuality;
+  return left.playerId.localeCompare(right.playerId);
+}
+
+function collectSessionLeadSignals(session: ObservationSession): SessionLeadSignal[] {
+  const focusedCounts = new Map(
+    session.players.map((player) => [player.playerId, player.focusedPhases.length]),
+  );
+  const signals = new Map<string, {
+    momentCount: number;
+    totalQuality: number;
+    standoutCount: number;
+    pressureCount: number;
+    attributeScores: Map<string, number>;
+  }>();
+
   for (const phase of session.phases) {
     for (const moment of phase.moments) {
-      if (focusedSet.has(moment.playerId)) continue;
-      const existing = qualityMap.get(moment.playerId) ?? { total: 0, count: 0 };
-      qualityMap.set(moment.playerId, {
-        total: existing.total + moment.quality,
-        count: existing.count + 1,
-      });
+      const existing = signals.get(moment.playerId) ?? {
+        momentCount: 0,
+        totalQuality: 0,
+        standoutCount: 0,
+        pressureCount: 0,
+        attributeScores: new Map<string, number>(),
+      };
+      existing.momentCount += 1;
+      existing.totalQuality += moment.quality;
+      if (moment.isStandout) existing.standoutCount += 1;
+      if (moment.pressureContext) existing.pressureCount += 1;
+      const attributeSignal = moment.quality + (moment.isStandout ? 2 : 0) + (moment.pressureContext ? 1 : 0);
+      for (const attribute of moment.attributesHinted) {
+        existing.attributeScores.set(
+          attribute,
+          (existing.attributeScores.get(attribute) ?? 0) + attributeSignal,
+        );
+      }
+      signals.set(moment.playerId, existing);
     }
   }
 
-  return Array.from(qualityMap.entries())
-    .map(([playerId, { total, count }]) => ({
-      playerId,
-      avgQuality: count > 0 ? total / count : 0,
-    }))
-    .sort((a, b) => b.avgQuality - a.avgQuality)
-    .map((entry) => entry.playerId);
+  return Array.from(signals.entries())
+    .map(([playerId, signal]) => {
+      const focusedPhaseCount = focusedCounts.get(playerId) ?? 0;
+      const avgQuality = signal.momentCount > 0 ? signal.totalQuality / signal.momentCount : 0;
+      const attributeVariety = signal.attributeScores.size;
+      const leadScore = Math.round(
+        avgQuality * 4
+        + signal.standoutCount * 5
+        + signal.pressureCount * 2
+        + attributeVariety * 2
+        + Math.min(3, signal.momentCount),
+      );
+      return {
+        playerId,
+        momentCount: signal.momentCount,
+        totalQuality: signal.totalQuality,
+        avgQuality,
+        standoutCount: signal.standoutCount,
+        pressureCount: signal.pressureCount,
+        focusedPhaseCount,
+        attributeScores: signal.attributeScores,
+        leadScore,
+        overlookedScore: leadScore - focusedPhaseCount * 4,
+      };
+    })
+    .sort((left, right) => compareSignals(
+      {
+        playerId: left.playerId,
+        score: left.overlookedScore,
+        avgQuality: left.avgQuality,
+        standoutCount: left.standoutCount,
+      },
+      {
+        playerId: right.playerId,
+        score: right.overlookedScore,
+        avgQuality: right.avgQuality,
+        standoutCount: right.standoutCount,
+      },
+    ));
 }
 
-/**
- * Derives a WonderkidTier label from a raw potentialAbility value.
- * Mirrors the tier boundaries defined in core/types.ts.
- */
-function paToWonderkidTier(
-  pa: number,
-): "generational" | "worldClass" | "qualityPro" | "journeyman" {
-  if (pa >= 180) return "generational";
-  if (pa >= 150) return "worldClass";
-  if (pa >= 100) return "qualityPro";
-  return "journeyman";
+function getTopSignalAttributes(
+  signal: SessionLeadSignal,
+  limit: number,
+): string[] {
+  return Array.from(signal.attributeScores.entries())
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    })
+    .slice(0, limit)
+    .map(([attribute]) => attribute);
 }
 
 /**
@@ -644,6 +700,179 @@ function describeHiddenIntel(
         ? "The player is regarded internally as exceptionally diligent and coachable."
         : "Daily habits and preparation standards remain a concern behind the scenes.";
   }
+}
+
+function clampAttributeValue(value: number): number {
+  return Math.max(1, Math.min(20, Math.round(value)));
+}
+
+function estimateAttributeValue(
+  actualValue: number,
+  confidence: number,
+): number {
+  const clamped = clampAttributeValue(actualValue);
+  const bucketSize = confidence >= 0.8 ? 3 : confidence >= 0.7 ? 4 : 5;
+  const bucketStart = Math.floor((clamped - 1) / bucketSize) * bucketSize + 1;
+  const bucketEnd = Math.min(20, bucketStart + bucketSize - 1);
+  return clampAttributeValue((bucketStart + bucketEnd) / 2);
+}
+
+function buildEstimatedObservation(
+  playerId: string,
+  attribute: string,
+  actualValue: number,
+  confidence: number,
+): NonNullable<InsightActionResult["observations"]>[number] {
+  return {
+    playerId,
+    attribute,
+    trueValue: estimateAttributeValue(actualValue, confidence),
+    confidence,
+  };
+}
+
+function describeNextTest(attribute: string): string {
+  switch (attribute) {
+    case "injuryProneness":
+      return "Verify it over a second live watch after repeated high-intensity actions and ask for a fresh fitness reference.";
+    case "consistency":
+      return "Compare two more sessions and check whether the same habits hold from first whistle to final phase.";
+    case "bigGameTemperament":
+      return "Prioritise late-game, derby, or elimination pressure before hardening the report.";
+    case "professionalism":
+      return "Follow with a training-ground or coach-reference session before treating the character read as settled.";
+    case "composure":
+      return "Watch the player immediately after a turnover or concession to see whether the decision speed holds.";
+    case "leadership":
+      return "Track how teammates react when the game state turns against them before drawing a strong dressing-room conclusion.";
+    case "decisionMaking":
+      return "Stay on the player through a faster second viewing to confirm the first read under reduced time and space.";
+    case "positioning":
+      return "Check the player without the ball for a full additional phase to see if the spacing repeats.";
+    case "vision":
+      return "Review another spell with more touches to confirm whether the passing picture keeps opening early.";
+    case "firstTouch":
+      return "Watch the next receiving sequence in traffic to confirm the touch survives real pressure.";
+    default:
+      return "Use one more focused live sample before turning the signal into certainty.";
+  }
+}
+
+function buildPressureConcern(
+  player: Player,
+): { concern: string; nextTest: string } {
+  const temperament = player.attributes.bigGameTemperament ?? 1;
+  const composure = player.attributes.composure ?? 1;
+  const leadership = player.attributes.leadership ?? 1;
+  if (temperament <= 8 || composure <= 8) {
+    return {
+      concern: "pressure resistance still looks fragile when the stakes spike",
+      nextTest: describeNextTest("bigGameTemperament"),
+    };
+  }
+  if (leadership <= 8) {
+    return {
+      concern: "the player may carry their own game without settling the group around them",
+      nextTest: describeNextTest("leadership"),
+    };
+  }
+  return {
+    concern: "the pressure profile is encouraging, but the sample is still situational rather than complete",
+    nextTest: describeNextTest("composure"),
+  };
+}
+
+function perceivedTierFromSignal(
+  signal: SessionLeadSignal,
+): "generational" | "worldClass" | "qualityPro" | "journeyman" {
+  if (signal.leadScore >= 55 && signal.standoutCount >= 2 && signal.attributeScores.size >= 3) {
+    return "generational";
+  }
+  if (signal.leadScore >= 42 && signal.standoutCount >= 1) {
+    return "worldClass";
+  }
+  if (signal.leadScore >= 28) {
+    return "qualityPro";
+  }
+  return "journeyman";
+}
+
+function buildVerdictSupport(
+  session: ObservationSession,
+  targetPlayerId?: string,
+): { bonus: number; supportLabel: string; nextTest: string } {
+  if (session.mode === "analysis") {
+    let highlightedPoints = 0;
+    let relevantPoints = 0;
+    let relatedAttributes = new Set<string>();
+    for (const phase of session.phases) {
+      for (const point of phase.dataPoints ?? []) {
+        if (targetPlayerId && point.playerId && point.playerId !== targetPlayerId) continue;
+        relevantPoints += 1;
+        if (point.isHighlighted) highlightedPoints += 1;
+        for (const attribute of point.relatedAttributes ?? []) {
+          relatedAttributes.add(attribute);
+        }
+      }
+    }
+    const evidenceScore = highlightedPoints * 3 + relatedAttributes.size * 2 + Math.min(3, relevantPoints);
+    const bonus = Math.max(4, Math.min(12, 4 + Math.floor(evidenceScore / 3)));
+    const supportLabel = highlightedPoints >= 2
+      ? "model support is coherent enough to sharpen the write-up"
+      : "model support is useful but still thin";
+    const nextTest = highlightedPoints >= 2
+      ? "Pair the model lead with one live follow-up before locking in a strong recommendation."
+      : "Add another live or video follow-up before treating the database case as settled.";
+    return { bonus, supportLabel, nextTest };
+  }
+
+  if (!targetPlayerId) {
+    return {
+      bonus: 4,
+      supportLabel: "the draft has structure, but not enough player-specific evidence to push harder",
+      nextTest: "Anchor the next report in a focused player sample before escalating conviction.",
+    };
+  }
+
+  const moments = getMomentsForPlayer(session, targetPlayerId);
+  const attributeSet = new Set<string>();
+  let standoutCount = 0;
+  let pressureCount = 0;
+  let totalQuality = 0;
+  for (const moment of moments) {
+    totalQuality += moment.quality;
+    if (moment.isStandout) standoutCount += 1;
+    if (moment.pressureContext) pressureCount += 1;
+    for (const attribute of moment.attributesHinted) {
+      attributeSet.add(attribute);
+    }
+  }
+  const avgQuality = moments.length > 0 ? totalQuality / moments.length : 0;
+  const evidenceScore = avgQuality + attributeSet.size * 2 + standoutCount * 3 + pressureCount;
+  const bonus = Math.max(4, Math.min(14, 4 + Math.floor(evidenceScore / 3)));
+  if (moments.length === 0) {
+    return {
+      bonus: 4,
+      supportLabel: "the draft can be cleaner, but it cannot outrun the lack of direct evidence",
+      nextTest: "Take another focused live sample before using a strong conviction.",
+    };
+  }
+  if (attributeSet.size >= 4 && standoutCount >= 1) {
+    return {
+      bonus,
+      supportLabel: "the evidence base is broad enough to support a firmer report",
+      nextTest: pressureCount > 0
+        ? "Use the existing pressure clips in the summary, then decide whether one more follow-up is needed."
+        : "If the recommendation matters financially, add one pressure-context watch before final sign-off.",
+    };
+  }
+  return {
+    bonus,
+    supportLabel: "the report can be tightened, but it still needs another angle before it becomes definitive",
+    nextTest: pressureCount > 0
+      ? "Add one more phase on the ball to widen the evidence set."
+      : "Find a pressure or late-game sample before overcommitting to the current read.",
+  };
 }
 
 /**
@@ -793,316 +1022,39 @@ function clarityOfVision(
     keyof typeof player.attributes
   >;
 
-  // If no moments hinted at attributes (edge case), fall back to all non-hidden attributes
+  // No visible moment means there is no legitimate scope for this insight.
   if (attributeScope.length === 0) {
-    attributeScope = [
-      ...TECHNICAL_ATTRIBUTES,
-      ...PHYSICAL_ATTRIBUTES,
-      ...MENTAL_ATTRIBUTES,
-      ...TACTICAL_ATTRIBUTES,
-    ] as Array<keyof typeof player.attributes>;
+    return {
+      actionId: "clarityOfVision",
+      success: false,
+      narrative: `${narrative} — but no visible passage supplied a legitimate attribute cue.`,
+    };
   }
 
-  // Fizzle: reveal only half the attributes at reduced confidence
-  const confidence = fizzled ? 0.7 : 1.0;
+  // Clarity improves a bounded estimate; it never resolves hidden truth.
+  const confidence = fizzled ? 0.68 : 0.84;
   const revealCount = fizzled
     ? Math.max(1, Math.floor(attributeScope.length / 2))
     : attributeScope.length;
 
   const shuffled = rng.shuffle(attributeScope).slice(0, revealCount);
 
-  const observations = shuffled.map((attr) => ({
-    playerId: targetPlayerId,
-    attribute: attr as string,
-    trueValue: player.attributes[attr as keyof typeof player.attributes] ?? 1,
+  const observations = shuffled.map((attr) => buildEstimatedObservation(
+    targetPlayerId,
+    attr as string,
+    player.attributes[attr as keyof typeof player.attributes] ?? 1,
     confidence,
-  }));
+  ));
 
   const outcomeNote = fizzled
-    ? ` (fizzled — ${revealCount} of ${attributeScope.length} attributes revealed at ${confidence} confidence)`
-    : ` — all ${revealCount} visible attributes perfectly read.`;
+    ? ` (fizzled — ${revealCount} of ${attributeScope.length} visible cues retained at ${Math.round(confidence * 100)}% confidence)`
+    : ` — ${revealCount} visible attribute reads tightened to a bounded ${Math.round(confidence * 100)}% confidence.`;
 
   return {
     actionId: "clarityOfVision",
     success: !fizzled,
     narrative: narrative + outcomeNote,
     observations,
-  };
-}
-
-function hiddenNature(
-  context: InsightActionContext,
-  rng: RNG,
-  fizzled: boolean,
-): InsightActionResult {
-  const { targetPlayerId, players, scout } = context;
-  const narrative = selectNarrative("hiddenNature", scout.primarySpecialization, rng, scout.careerPath);
-
-  if (!targetPlayerId) {
-    return {
-      actionId: "hiddenNature",
-      success: false,
-      narrative: `${narrative} — but there was no player to reveal.`,
-    };
-  }
-
-  const player = players[targetPlayerId];
-  if (!player) {
-    return {
-      actionId: "hiddenNature",
-      success: false,
-      narrative: `${narrative} — but the player data was unavailable.`,
-    };
-  }
-
-  const allHidden = [...HIDDEN_ATTRIBUTES]; // ["injuryProneness","consistency","bigGameTemperament","professionalism"]
-  const revealCount = fizzled ? 2 : allHidden.length;
-  const chosen = rng.shuffle(allHidden).slice(0, revealCount);
-
-  const revealedAttributes = chosen.map((attr) => ({
-    playerId: targetPlayerId,
-    attribute: attr as string,
-    value: player.attributes[attr as keyof typeof player.attributes] ?? 1,
-  }));
-
-  const outcomeNote = fizzled
-    ? ` (fizzled — ${revealCount} of ${allHidden.length} hidden attributes revealed)`
-    : ` — all four hidden attributes exposed.`;
-
-  return {
-    actionId: "hiddenNature",
-    success: !fizzled,
-    narrative: narrative + outcomeNote,
-    revealedAttributes,
-  };
-}
-
-function theVerdict(
-  context: InsightActionContext,
-  rng: RNG,
-  fizzled: boolean,
-): InsightActionResult {
-  const { scout } = context;
-  const narrative = selectNarrative("theVerdict", scout.primarySpecialization, rng, scout.careerPath);
-  const bonus = fizzled ? 18 : 30;
-
-  const outcomeNote = fizzled
-    ? ` (fizzled — +${bonus} report quality bonus instead of +30)`
-    : ` (+${bonus} report quality bonus applied)`;
-
-  return {
-    actionId: "theVerdict",
-    success: !fizzled,
-    narrative: narrative + outcomeNote,
-    reportQualityBonus: bonus,
-  };
-}
-
-function secondLook(
-  context: InsightActionContext,
-  rng: RNG,
-  fizzled: boolean,
-): InsightActionResult {
-  const { session, players, scout } = context;
-  const narrative = selectNarrative("secondLook", scout.primarySpecialization, rng, scout.careerPath);
-
-  const unfocusedByQuality = getUnfocusedPlayersByQuality(session);
-  if (unfocusedByQuality.length === 0) {
-    return {
-      actionId: "secondLook",
-      success: false,
-      narrative: `${narrative} — but every player in the session was already focused on.`,
-    };
-  }
-
-  const chosenPlayerId = unfocusedByQuality[0];
-  const player = players[chosenPlayerId];
-  if (!player) {
-    return {
-      actionId: "secondLook",
-      success: false,
-      narrative: `${narrative} — but the player's data could not be retrieved.`,
-    };
-  }
-
-  // Collect attributes hinted at in that player's moments
-  const playerMoments = getMomentsForPlayer(session, chosenPlayerId);
-  const attrSet = new Set<string>();
-  for (const m of playerMoments) {
-    for (const attr of m.attributesHinted) {
-      attrSet.add(attr as string);
-    }
-  }
-
-  const attributeScope = Array.from(attrSet) as Array<
-    keyof typeof player.attributes
-  >;
-
-  if (attributeScope.length === 0) {
-    return {
-      actionId: "secondLook",
-      success: false,
-      narrative: `${narrative} — but there were no observable moments for that player.`,
-    };
-  }
-
-  const confidence = fizzled ? 0.6 : 1.0;
-  const revealCount = fizzled
-    ? Math.max(1, Math.floor(attributeScope.length / 2))
-    : attributeScope.length;
-
-  const shuffled = rng.shuffle(attributeScope).slice(0, revealCount);
-  const observations = shuffled.map((attr) => ({
-    playerId: chosenPlayerId,
-    attribute: attr as string,
-    trueValue: player.attributes[attr as keyof typeof player.attributes] ?? 1,
-    confidence,
-  }));
-
-  const outcomeNote = fizzled
-    ? ` (fizzled — ${revealCount} attributes at ${confidence} confidence for player ${chosenPlayerId})`
-    : ` — ${revealCount} attributes retroactively read for player ${chosenPlayerId}.`;
-
-  return {
-    actionId: "secondLook",
-    success: !fizzled,
-    narrative: narrative + outcomeNote,
-    observations,
-    discoveredPlayerId: chosenPlayerId,
-  };
-}
-
-function diamondInTheRough(
-  context: InsightActionContext,
-  rng: RNG,
-  fizzled: boolean,
-): InsightActionResult {
-  const { session, players, scout } = context;
-  const narrative = selectNarrative("diamondInTheRough", scout.primarySpecialization, rng, scout.careerPath);
-
-  // Scan every player visible in the session
-  const sessionPlayerIds = session.players.map((sp) => sp.playerId);
-  let bestPlayerId: string | undefined;
-  let bestPA = -1;
-
-  for (const pid of sessionPlayerIds) {
-    const p = players[pid];
-    if (!p) continue;
-    if (p.potentialAbility > bestPA) {
-      bestPA = p.potentialAbility;
-      bestPlayerId = pid;
-    }
-  }
-
-  if (!bestPlayerId) {
-    return {
-      actionId: "diamondInTheRough",
-      success: false,
-      narrative: `${narrative} — but no player data was available.`,
-    };
-  }
-
-  const player = players[bestPlayerId];
-
-  // Provide a strong signal: true value of one important attribute + PA tier hint
-  const tier = paToWonderkidTier(bestPA);
-  const tierPhrase = tierToSignalPhrase(tier);
-
-  if (fizzled) {
-    // Vague signal: just flag the player, no attribute reads
-    return {
-      actionId: "diamondInTheRough",
-      success: false,
-      narrative: `${narrative} — a vague feeling about player ${bestPlayerId}. Something is there, but you can't pin it down.`,
-      discoveredPlayerId: bestPlayerId,
-    };
-  }
-
-  // Strong signal: one confirmed top attribute + PA tier
-  const nonHiddenAttrs: Array<keyof typeof player.attributes> = [
-    ...TECHNICAL_ATTRIBUTES,
-    ...PHYSICAL_ATTRIBUTES,
-    ...MENTAL_ATTRIBUTES,
-    ...TACTICAL_ATTRIBUTES,
-  ] as Array<keyof typeof player.attributes>;
-
-  // Find the player's best visible attribute
-  let bestAttr = nonHiddenAttrs[0];
-  let bestAttrValue = 0;
-  for (const attr of nonHiddenAttrs) {
-    const val = player.attributes[attr] ?? 0;
-    if (val > bestAttrValue) {
-      bestAttrValue = val;
-      bestAttr = attr;
-    }
-  }
-
-  const observations = [
-    {
-      playerId: bestPlayerId,
-      attribute: bestAttr as string,
-      trueValue: bestAttrValue,
-      confidence: 1,
-    },
-  ];
-
-  return {
-    actionId: "diamondInTheRough",
-    success: true,
-    narrative: `${narrative} — ${tierPhrase} identified. Their ${bestAttr as string} is exceptional (${bestAttrValue}).`,
-    observations,
-    discoveredPlayerId: bestPlayerId,
-  };
-}
-
-function generationalWhisper(
-  context: InsightActionContext,
-  rng: RNG,
-  fizzled: boolean,
-): InsightActionResult {
-  const { session, players, scout } = context;
-  const narrative = selectNarrative("generationalWhisper", scout.primarySpecialization, rng, scout.careerPath);
-
-  // Identify the highest-PA player in the session
-  const sessionPlayerIds = session.players.map((sp) => sp.playerId);
-  let bestPlayerId: string | undefined;
-  let bestPA = -1;
-
-  for (const pid of sessionPlayerIds) {
-    const p = players[pid];
-    if (!p) continue;
-    if (p.potentialAbility > bestPA) {
-      bestPA = p.potentialAbility;
-      bestPlayerId = pid;
-    }
-  }
-
-  if (!bestPlayerId) {
-    return {
-      actionId: "generationalWhisper",
-      success: false,
-      narrative: `${narrative} — but you could not isolate the signal.`,
-    };
-  }
-
-  const tier = paToWonderkidTier(bestPA);
-  const tierPhrase = tierToSignalPhrase(tier);
-  const reliability = fizzled ? 0.6 : rng.nextFloat(0.9, 1.0);
-
-  const outcomeNote = fizzled
-    ? ` (fizzled — reliability reduced to ${reliability.toFixed(2)}): ${tierPhrase} (player ${bestPlayerId})`
-    : ` — reliability ${reliability.toFixed(2)}: ${tierPhrase} (player ${bestPlayerId})`;
-
-  return {
-    actionId: "generationalWhisper",
-    success: !fizzled,
-    narrative: narrative + outcomeNote,
-    discoveredPlayerId: bestPlayerId,
-    wonderkidSignal: {
-      playerId: bestPlayerId,
-      perceivedTier: tier,
-      reliability,
-    },
   };
 }
 
@@ -1155,7 +1107,220 @@ function perfectFit(
   };
 }
 
-function pressureTest(
+function hiddenNatureBounded(
+  context: InsightActionContext,
+  rng: RNG,
+  fizzled: boolean,
+): InsightActionResult {
+  const { targetPlayerId, players, scout } = context;
+  const narrative = selectNarrative("hiddenNature", scout.primarySpecialization, rng, scout.careerPath);
+
+  if (!targetPlayerId) {
+    return {
+      actionId: "hiddenNature",
+      success: false,
+      narrative: `${narrative} but there was no player to assess.`,
+    };
+  }
+
+  const player = players[targetPlayerId];
+  if (!player) {
+    return {
+      actionId: "hiddenNature",
+      success: false,
+      narrative: `${narrative} but the player data was unavailable.`,
+    };
+  }
+
+  const revealCount = fizzled ? 1 : 2;
+  const baseConfidence = fizzled ? 0.62 : 0.74;
+  const chosen = rng.shuffle([...HIDDEN_ATTRIBUTES]).slice(0, revealCount);
+  const observations = chosen.map((attribute, index) =>
+    buildEstimatedObservation(
+      targetPlayerId,
+      attribute,
+      player.attributes[attribute as keyof typeof player.attributes] ?? 1,
+      Math.max(0.55, baseConfidence - index * 0.06),
+    ));
+  const primaryAttribute = chosen[0];
+  const guidance = primaryAttribute
+    ? `${describeHiddenIntel(primaryAttribute, player.attributes[primaryAttribute] ?? 1)} Next test: ${describeNextTest(primaryAttribute)}`
+    : "The player remains difficult to read.";
+
+  return {
+    actionId: "hiddenNature",
+    success: !fizzled,
+    narrative: `${narrative} ${guidance}`.trim(),
+    observations,
+  };
+}
+
+function theVerdictBounded(
+  context: InsightActionContext,
+  rng: RNG,
+  fizzled: boolean,
+): InsightActionResult {
+  const { scout, session, targetPlayerId } = context;
+  const narrative = selectNarrative("theVerdict", scout.primarySpecialization, rng, scout.careerPath);
+  const support = buildVerdictSupport(session, targetPlayerId);
+  const bonus = fizzled
+    ? Math.max(3, Math.min(8, support.bonus - 3))
+    : support.bonus;
+
+  return {
+    actionId: "theVerdict",
+    success: !fizzled,
+    narrative: `${narrative} Report support settles at +${bonus} because ${support.supportLabel}. Next test: ${support.nextTest}`,
+    reportQualityBonus: bonus,
+  };
+}
+
+function secondLookBounded(
+  context: InsightActionContext,
+  rng: RNG,
+  fizzled: boolean,
+): InsightActionResult {
+  const { session, players, scout } = context;
+  const narrative = selectNarrative("secondLook", scout.primarySpecialization, rng, scout.careerPath);
+  const overlookedSignals = collectSessionLeadSignals(session)
+    .filter((signal) => signal.focusedPhaseCount === 0);
+
+  if (overlookedSignals.length === 0) {
+    return {
+      actionId: "secondLook",
+      success: false,
+      narrative: `${narrative} but every player in the session was already focused on.`,
+    };
+  }
+
+  const chosenSignal = overlookedSignals[0];
+  const player = players[chosenSignal.playerId];
+  if (!player) {
+    return {
+      actionId: "secondLook",
+      success: false,
+      narrative: `${narrative} but the player's data could not be retrieved.`,
+    };
+  }
+
+  const attributes = getTopSignalAttributes(chosenSignal, fizzled ? 1 : 2) as Array<
+    keyof typeof player.attributes
+  >;
+  if (attributes.length === 0) {
+    return {
+      actionId: "secondLook",
+      success: false,
+      narrative: `${narrative} but there were no observable moments for that player.`,
+    };
+  }
+
+  const baseConfidence = fizzled ? 0.68 : 0.82;
+  const observations = attributes.map((attribute, index) =>
+    buildEstimatedObservation(
+      chosenSignal.playerId,
+      attribute as string,
+      player.attributes[attribute] ?? 1,
+      Math.max(0.58, baseConfidence - index * 0.08),
+    ));
+
+  return {
+    actionId: "secondLook",
+    success: !fizzled,
+    narrative: `${narrative} Overlooked lead recovered from ${chosenSignal.momentCount} visible moments. Next test: ${describeNextTest(attributes[0] as string)}`,
+    observations,
+    discoveredPlayerId: chosenSignal.playerId,
+  };
+}
+
+function diamondInTheRoughBounded(
+  context: InsightActionContext,
+  rng: RNG,
+  fizzled: boolean,
+): InsightActionResult {
+  const { session, players, scout } = context;
+  const narrative = selectNarrative("diamondInTheRough", scout.primarySpecialization, rng, scout.careerPath);
+  const rankedSignals = collectSessionLeadSignals(session);
+  const chosenSignal = rankedSignals.find((signal) => signal.focusedPhaseCount === 0)
+    ?? rankedSignals[0];
+
+  if (!chosenSignal) {
+    return {
+      actionId: "diamondInTheRough",
+      success: false,
+      narrative: `${narrative} but no player data was available.`,
+    };
+  }
+
+  const player = players[chosenSignal.playerId];
+  if (!player) {
+    return {
+      actionId: "diamondInTheRough",
+      success: false,
+      narrative: `${narrative} but the lead could not be matched to player data.`,
+    };
+  }
+
+  const attributes = getTopSignalAttributes(chosenSignal, fizzled ? 1 : 2) as Array<
+    keyof typeof player.attributes
+  >;
+  const observations = attributes.map((attribute, index) =>
+    buildEstimatedObservation(
+      chosenSignal.playerId,
+      attribute as string,
+      player.attributes[attribute] ?? 1,
+      Math.max(0.6, (fizzled ? 0.66 : 0.8) - index * 0.08),
+    ));
+  const primaryAttribute = (attributes[0] ?? "decisionMaking") as string;
+
+  return {
+    actionId: "diamondInTheRough",
+    success: !fizzled,
+    narrative: `${narrative} Visible lead score ${chosenSignal.overlookedScore} keeps resurfacing around ${primaryAttribute}. Next test: ${describeNextTest(primaryAttribute)}`,
+    observations,
+    discoveredPlayerId: chosenSignal.playerId,
+  };
+}
+
+function generationalWhisperBounded(
+  context: InsightActionContext,
+  rng: RNG,
+  fizzled: boolean,
+): InsightActionResult {
+  const { session, players, scout } = context;
+  const narrative = selectNarrative("generationalWhisper", scout.primarySpecialization, rng, scout.careerPath);
+  const chosenSignal = collectSessionLeadSignals(session)[0];
+
+  if (!chosenSignal || !players[chosenSignal.playerId]) {
+    return {
+      actionId: "generationalWhisper",
+      success: false,
+      narrative: `${narrative} but you could not isolate the signal.`,
+    };
+  }
+
+  const tier = perceivedTierFromSignal(chosenSignal);
+  const reliabilityFloor = fizzled ? 0.55 : 0.68;
+  const reliabilityCeiling = fizzled ? 0.68 : 0.84;
+  const reliability = Math.min(
+    reliabilityCeiling,
+    Math.max(reliabilityFloor, reliabilityFloor + chosenSignal.leadScore / 100),
+  );
+  const primaryAttribute = getTopSignalAttributes(chosenSignal, 1)[0] ?? "decisionMaking";
+
+  return {
+    actionId: "generationalWhisper",
+    success: !fizzled,
+    narrative: `${narrative} Reliability ${reliability.toFixed(2)} points to ${tierToSignalPhrase(tier)} around player ${chosenSignal.playerId}. Next test: ${describeNextTest(primaryAttribute)}`,
+    discoveredPlayerId: chosenSignal.playerId,
+    wonderkidSignal: {
+      playerId: chosenSignal.playerId,
+      perceivedTier: tier,
+      reliability,
+    },
+  };
+}
+
+function pressureTestBounded(
   context: InsightActionContext,
   rng: RNG,
   fizzled: boolean,
@@ -1167,7 +1332,7 @@ function pressureTest(
     return {
       actionId: "pressureTest",
       success: false,
-      narrative: `${narrative} — but no target player was specified.`,
+      narrative: `${narrative} but no target player was specified.`,
     };
   }
 
@@ -1176,49 +1341,28 @@ function pressureTest(
     return {
       actionId: "pressureTest",
       success: false,
-      narrative: `${narrative} — but player data was unavailable.`,
+      narrative: `${narrative} but player data was unavailable.`,
     };
   }
 
-  const a = player.attributes;
-
-  if (fizzled) {
-    // Fizzle: only bigGameTemperament
-    return {
-      actionId: "pressureTest",
-      success: false,
-      narrative: `${narrative} (fizzled — only big-game temperament revealed)`,
-      revealedAttributes: [
-        {
-          playerId: targetPlayerId,
-          attribute: "bigGameTemperament",
-          value: a.bigGameTemperament,
-        },
-      ],
-    };
-  }
+  const attributes = fizzled
+    ? ["bigGameTemperament", "composure"]
+    : ["bigGameTemperament", "composure", "leadership"];
+  const baseConfidence = fizzled ? 0.66 : 0.8;
+  const observations = attributes.map((attribute, index) =>
+    buildEstimatedObservation(
+      targetPlayerId,
+      attribute,
+      player.attributes[attribute as keyof typeof player.attributes] ?? 1,
+      Math.max(0.58, baseConfidence - index * 0.07),
+    ));
+  const pressureRead = buildPressureConcern(player);
 
   return {
     actionId: "pressureTest",
-    success: true,
-    narrative: `${narrative} — big-game temperament, composure, and leadership exposed.`,
-    revealedAttributes: [
-      {
-        playerId: targetPlayerId,
-        attribute: "bigGameTemperament",
-        value: a.bigGameTemperament,
-      },
-      {
-        playerId: targetPlayerId,
-        attribute: "composure",
-        value: a.composure,
-      },
-      {
-        playerId: targetPlayerId,
-        attribute: "leadership",
-        value: a.leadership,
-      },
-    ],
+    success: !fizzled,
+    narrative: `${narrative} Pressure read suggests ${pressureRead.concern}. Next test: ${pressureRead.nextTest}`,
+    observations,
   };
 }
 
@@ -1411,13 +1555,13 @@ type ActionHandler = (
 
 const ACTION_HANDLERS: Record<InsightActionId, ActionHandler> = {
   clarityOfVision,
-  hiddenNature,
-  theVerdict,
-  secondLook,
-  diamondInTheRough,
-  generationalWhisper,
+  hiddenNature: hiddenNatureBounded,
+  theVerdict: theVerdictBounded,
+  secondLook: secondLookBounded,
+  diamondInTheRough: diamondInTheRoughBounded,
+  generationalWhisper: generationalWhisperBounded,
   perfectFit,
-  pressureTest,
+  pressureTest: pressureTestBounded,
   networkPulse,
   territoryMastery,
   algorithmicEpiphany,

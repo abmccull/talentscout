@@ -34,7 +34,19 @@ test.describe("Observation Session — Full Lifecycle", () => {
     const maxPhases = session!.totalPhases;
     for (let i = session!.currentPhaseIndex; i < maxPhases; i++) {
       await gamePage.page.evaluate(() => {
-        (window as any).__GAME_STORE__.getState().advanceSessionPhase();
+        const store = (window as any).__GAME_STORE__;
+        const activeSession = store.getState().activeSession;
+        const atHalftime = Boolean(
+          activeSession?.phases[activeSession.currentPhaseIndex]?.isHalfTime,
+        ) || Boolean(
+          activeSession
+          && activeSession.phases.length >= 3
+          && activeSession.currentPhaseIndex === Math.floor(activeSession.phases.length / 2),
+        );
+        if (atHalftime && !activeSession?.halftimeApproach) {
+          store.getState().setSessionHalftimeApproach("confirm");
+        }
+        store.getState().advanceSessionPhase();
       });
       await gamePage.page.waitForTimeout(50);
     }
@@ -387,7 +399,7 @@ test.describe("Observation Session — Full Lifecycle", () => {
 
   // ── Cross-Mode Features ─────────────────────────────────────────────────
 
-  test("hypothesis tracking across session", async ({ gamePage }) => {
+  test("sessions do not accept unscored free-text hypotheses", async ({ gamePage }) => {
     await gamePage.startObservationSession("schoolMatch");
 
     await gamePage.page.evaluate(() => {
@@ -398,48 +410,23 @@ test.describe("Observation Session — Full Lifecycle", () => {
     });
     await gamePage.page.waitForTimeout(200);
 
-    // Add a hypothesis — requires a focused player
-    const added = await gamePage.page.evaluate(() => {
+    const authority = await gamePage.page.evaluate(() => {
       const store = (window as any).__GAME_STORE__;
       const s = store.getState().activeSession;
-      if (!s?.players?.length) return false;
-
-      // Focus a player first (hypothesis needs a focused player)
+      if (!s?.players?.length) return null;
+      const before = s.hypotheses?.length ?? 0;
       if (s.focusTokens?.available > 0) {
         store.getState().allocateSessionFocus(s.players[0].playerId, "technical");
       }
-
-      try {
-        store.getState().addSessionHypothesis(
-          s.players[0].playerId,
-          "This player has exceptional first touch",
-          "technical",
-        );
-        return true;
-      } catch {
-        return false;
-      }
+      return {
+        hasLegacyFreeTextAction: typeof store.getState().addSessionHypothesis === "function",
+        before,
+        after: store.getState().activeSession?.hypotheses?.length ?? 0,
+      };
     });
-
-    if (added) {
-      const session = await gamePage.getActiveSession();
-      expect(session!.hypotheses).toBeGreaterThanOrEqual(0);
-
-      if (session!.hypotheses > 0) {
-        // Verify hypothesis state is "open"
-        const hypothesisState = await gamePage.page.evaluate(() => {
-          const store = (window as any).__GAME_STORE__;
-          const s = store.getState().activeSession;
-          return s?.hypotheses?.[0]?.state ?? null;
-        });
-        expect(hypothesisState).toBe("open");
-      }
-    } else {
-      // addSessionHypothesis may require additional conditions (certain phase, focused player, etc.)
-      // Verify no crash
-      const session = await gamePage.getActiveSession();
-      expect(session).not.toBeNull();
-    }
+    expect(authority).not.toBeNull();
+    expect(authority?.hasLegacyFreeTextAction).toBe(false);
+    expect(authority?.after).toBe(authority?.before);
   });
 
   test("reflection notes added during reflection phase", async ({ gamePage }) => {

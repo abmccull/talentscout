@@ -26,7 +26,6 @@ import {
   Minus,
   BarChart3,
   Shield,
-  Swords,
   Trophy,
   Building2,
 } from "lucide-react";
@@ -41,6 +40,7 @@ import type {
   ManagerMeetingApproach,
   BoardMeetingApproach,
   Scout,
+  CourseEnrollment,
 } from "@/engine/core/types";
 import { MASTERY_PERKS, checkMasteryPerkUnlocks } from "@/engine/specializations/masteryPerks";
 import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/engine/tools/index";
@@ -48,7 +48,11 @@ import { TOOL_DEFINITIONS, getToolDefinition, getActiveToolBonuses } from "@/eng
 import { Tooltip } from "@/components/ui/tooltip";
 import { ScoutAvatar } from "@/components/game/ScoutAvatar";
 import { canChooseIndependentPath } from "@/engine/career/pathChoice";
-import { COURSE_CATALOG } from "@/engine/career/courses";
+import {
+  countScheduledStudySessions,
+  COURSE_CATALOG,
+  getCoursePlannerStatusModel,
+} from "@/engine/career/courses";
 import { calculatePreferenceAlignment } from "@/engine/analytics/dataTension";
 import {
   getBoardMeetingEligibility,
@@ -58,14 +62,11 @@ import { LIFESTYLE_TIERS } from "@/engine/finance/lifestyle";
 import { calculateMonthlyRunRate } from "@/engine/finance/dashboard";
 import type { CareerPath, LifestyleLevel } from "@/engine/core/types";
 import { ScreenBackground } from "@/components/ui/screen-background";
-import {
-  formatRunFingerprint,
-  getWorldTraitDefinitions,
-} from "@/engine/run";
+import { getSeasonLength } from "@/engine/core/gameDate";
 import { ConsequenceCinema } from "./consequence-cinema/ConsequenceCinema";
 import { LeadershipPortfolioPanel } from "./career/LeadershipPortfolioPanel";
 import { CareerRecoveryPanel } from "./career/CareerRecoveryPanel";
-import { WorldConditionPanel } from "./career/WorldConditionPanel";
+import { CareerSituationPanel } from "./career/CareerSituationPanel";
 import { getPlayerFacingDiscoverySummaries } from "@/engine/career/playerFacingDiscovery";
 import {
   TOTAL_ACHIEVEMENT_COUNT,
@@ -78,6 +79,8 @@ import {
   CAREER_RECORD_DRILLDOWNS,
 } from "./career/careerDrilldowns";
 import { PoliticalMeetingCards } from "./career/PoliticalMeetingCards";
+import { usePersistentDisclosure } from "@/lib/usePersistentDisclosure";
+import { deriveCareerRoleProfile } from "@/engine/career/roleProfile";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -100,14 +103,6 @@ const ATTRIBUTE_LABELS: Record<ScoutAttribute, string> = {
   intuition: "Intuition",
 };
 
-const TIER_LABELS: Record<number, string> = {
-  1: "Freelance Scout",
-  2: "Part-Time Regional Scout",
-  3: "Full-Time Club Scout",
-  4: "Head of Scouting",
-  5: "Director of Football",
-};
-
 const SPEC_LABELS: Record<string, string> = {
   youth: "Youth Scout",
   firstTeam: "First Team Scout",
@@ -122,6 +117,50 @@ interface CareerMetricTileProps {
   value: string;
   helper?: string;
   tone?: "default" | "emerald" | "amber" | "blue" | "red";
+}
+
+export function getCareerCourseSummary(input: {
+  activeCourseDurationWeeks?: number;
+  activeEnrollment?: CourseEnrollment | null;
+  completedCourseCount: number;
+  currentWeek: number;
+  currentSeason: number;
+  scheduledStudySessions: number;
+  seasonLength: number;
+}): string {
+  const {
+    activeCourseDurationWeeks,
+    activeEnrollment,
+    completedCourseCount,
+    currentWeek,
+    currentSeason,
+    scheduledStudySessions,
+    seasonLength,
+  } = input;
+
+  if (!activeEnrollment) {
+    return `${completedCourseCount} completed`;
+  }
+
+  const status = getCoursePlannerStatusModel({
+    activeEnrollment,
+    courseDurationWeeks: activeCourseDurationWeeks,
+    currentWeek,
+    currentSeason,
+    scheduledStudySessions,
+    seasonLength,
+  });
+  if (!status) {
+    return "Training enrolled - Planner study required";
+  }
+
+  if (status.studyWeeksPlanned >= 2) {
+    return `${status.progressLabel} - intensive pace booked`;
+  }
+  if (status.studyWeeksPlanned === 1) {
+    return `${status.progressLabel} - normal pace booked`;
+  }
+  return `${status.progressLabel} - Planner study required`;
 }
 
 interface CareerTimelineEntry {
@@ -164,6 +203,11 @@ function formatExpenseLabel(label: string): string {
   return label
     .replace(/([A-Z])/g, " $1")
     .replace(/^./, (char) => char.toUpperCase());
+}
+
+function getCareerBaseLabel(scout: Scout, clubName?: string): string {
+  if (clubName) return clubName;
+  return scout.careerPath === "independent" ? "Own practice" : "Available";
 }
 
 function formatMovementLabel(type: string): string {
@@ -361,6 +405,9 @@ export function CareerScreen() {
   const unlockedAchievements = useAchievementStore(
     (state) => state.unlockedAchievements,
   );
+  const [careerMetricsOpen, setCareerMetricsOpen] = usePersistentDisclosure(
+    "career.record-summary",
+  );
 
   const { scout, currentSeason, jobOffers, performanceReviews } = gameState ?? {
     scout: undefined,
@@ -390,6 +437,23 @@ export function CareerScreen() {
   // Phase 2: tools and finances — call hooks/derived values before early return
   const unlockedTools = gameState?.unlockedTools ?? [];
   const finances = gameState?.finances ?? null;
+  const scheduledStudySessions = gameState
+    ? countScheduledStudySessions(gameState.schedule)
+    : 0;
+  const activeCourseDurationWeeks = finances?.activeEnrollment
+    ? COURSE_CATALOG.find((course) => course.id === finances.activeEnrollment?.courseId)?.durationWeeks
+    : undefined;
+  const courseSummary = gameState
+    ? getCareerCourseSummary({
+      activeCourseDurationWeeks,
+      activeEnrollment: finances?.activeEnrollment,
+      completedCourseCount: finances?.completedCourses.length ?? 0,
+      currentWeek: gameState.currentWeek,
+      currentSeason: gameState.currentSeason,
+      scheduledStudySessions,
+      seasonLength: getSeasonLength(gameState.fixtures, gameState.currentSeason),
+    })
+    : "0 completed";
 
   // Career path choice eligibility — derive before early return
   const showPathChoice =
@@ -452,7 +516,12 @@ export function CareerScreen() {
 
   if (!gameState || !scout) return null;
 
-  const runTraits = getWorldTraitDefinitions(gameState.runManifest.worldTraitIds);
+  const careerRoleLabel = deriveCareerRoleProfile({
+    scout,
+    finances: finances ?? undefined,
+    club: currentClub,
+  }).title;
+  const careerBaseLabel = getCareerBaseLabel(scout, currentClub?.name);
   const consequenceCinemaSource = {
     rootSeed: gameState.runManifest.rootSeed,
     players: gameState.players,
@@ -484,13 +553,6 @@ export function CareerScreen() {
       || (right.selectedAt?.week ?? right.offeredAt.week) - (left.selectedAt?.week ?? left.offeredAt.week),
     )
     .slice(0, 8);
-  const rivalOrganizationCount = Object.keys(
-    gameState.rivalOrganizationState?.organizations ?? {},
-  ).length;
-  const openRivalOpportunityCount = Object.values(
-    gameState.rivalOrganizationState?.opportunities ?? {},
-  ).filter((opportunity) => opportunity.status === "open").length;
-
   const youthPlacementReports = Object.values(gameState.placementReports ?? {}).filter(
     (report) => report.scoutId === scout.id,
   );
@@ -592,9 +654,9 @@ export function CareerScreen() {
                       {scout.firstName} {scout.lastName}
                     </h1>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-zinc-300">
-                      <span>{TIER_LABELS[scout.careerTier]}</span>
+                      <span>{careerRoleLabel}</span>
                       <span aria-hidden="true" className="text-zinc-600">·</span>
-                      <span>{currentClub?.name ?? "Independent"}</span>
+                      <span>{careerBaseLabel}</span>
                       <span aria-hidden="true" className="text-zinc-600">·</span>
                       <span>Season {currentSeason}</span>
                     </p>
@@ -641,80 +703,34 @@ export function CareerScreen() {
               <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
                 <h2 className="sr-only">Career overview</h2>
                 <CareerRecoveryPanel state={gameState} onChoose={chooseCareerRecovery} />
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  <CareerMetricTile label="Reputation" value={`${Math.round(scout.reputation)}/100`} helper="Trust earned through decisions" tone="emerald" />
-                  <CareerMetricTile label="Placements" value={`${acceptedPlacements}`} helper={`${pendingPlacements} awaiting response`} tone="blue" />
-                  <CareerMetricTile label="Discoveries" value={`${youthDiscoveryRecords.length}`} helper={`${scout.discoveryCredits.length} credited outcomes`} tone="amber" />
-                  <CareerMetricTile label="Skill Average" value={`${averageSkill.toFixed(1)}/20`} helper={`${scout.reportsSubmitted} reports submitted`} />
-                </div>
-
-                <Card className="border-fuchsia-400/20 bg-[radial-gradient(circle_at_top_right,rgba(217,70,239,0.09),transparent_42%),rgba(17,22,28,0.95)]">
-                  <CardHeader className="pb-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <CardTitle className="flex items-center gap-2 text-base">
-                          <Shield size={17} className="text-fuchsia-300" aria-hidden="true" />
-                          This career&apos;s world conditions
-                        </CardTitle>
-                        <p className="mt-1 text-sm leading-6 text-zinc-400">
-                          These seed-locked conditions shape talent, competition, markets, and story pacing for the full career.
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="border-fuchsia-400/25 font-mono text-[10px] text-fuchsia-200">
-                        {formatRunFingerprint(gameState.runManifest.fingerprint)}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 md:grid-cols-3">
-                    {runTraits.length === 0 ? (
-                      <p className="text-sm text-zinc-400 md:col-span-3">
-                        This imported career predates seeded world conditions, so its original simulation rules are preserved.
-                      </p>
-                    ) : runTraits.map((trait) => (
-                      <div key={trait.id} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-fuchsia-300">
-                          {trait.dimension}
-                        </p>
-                        <p className="mt-1 font-semibold text-white">{trait.name}</p>
-                        <p className="mt-2 text-xs leading-5 text-zinc-400">{trait.description}</p>
-                        <ul className="mt-3 space-y-1 text-[11px] leading-5 text-zinc-300">
-                          {trait.playerFacingEffects.map((effect) => (
-                            <li key={effect} className="flex gap-2">
-                              <span aria-hidden="true" className="text-fuchsia-300">&bull;</span>
-                              <span>{effect}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    ))}
-                    <WorldConditionPanel state={gameState} />
-                    {rivalOrganizationCount > 0 && (
-                      <div className="flex flex-col gap-3 rounded-xl border border-fuchsia-400/15 bg-fuchsia-400/[0.04] p-4 md:col-span-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="flex items-center gap-2 text-sm font-semibold text-white">
-                            <Swords size={15} className="text-fuchsia-300" aria-hidden="true" />
-                            Competitive recruitment landscape
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-zinc-400">
-                            {rivalOrganizationCount} persistent organization{rivalOrganizationCount === 1 ? "" : "s"} are pursuing their own agendas
-                            {openRivalOpportunityCount > 0
-                              ? `, with ${openRivalOpportunityCount} opening${openRivalOpportunityCount === 1 ? "" : "s"} available now.`
-                              : "."}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant={openRivalOpportunityCount > 0 ? "default" : "outline"}
-                          className="min-h-11 shrink-0"
-                          onClick={() => setScreen("rivals")}
-                        >
-                          {openRivalOpportunityCount > 0 ? "Respond to openings" : "View rival landscape"}
-                          <ArrowRight size={15} className="ml-2" aria-hidden="true" />
-                        </Button>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                <CareerSituationPanel
+                  scout={scout}
+                  finances={finances}
+                  currentSeason={currentSeason}
+                  currentClub={currentClub}
+                  jobOfferCount={jobOffers.length}
+                  latestReview={latestPerformanceReview}
+                  monthlyIncome={monthlyIncome}
+                  monthlyExpenses={monthlyExpenses}
+                  onPlanWeek={() => setScreen("calendar")}
+                />
+                <details
+                  className="group rounded-xl border border-white/10 bg-black/20"
+                  open={careerMetricsOpen}
+                  onToggle={(event) => setCareerMetricsOpen(event.currentTarget.open)}
+                >
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-zinc-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300">
+                    Career record at a glance
+                    <span className="text-xs font-normal text-zinc-400 group-open:hidden">Show four measures</span>
+                    <span className="hidden text-xs font-normal text-zinc-400 group-open:inline">Hide measures</span>
+                  </summary>
+                  <div className="grid grid-cols-2 gap-3 border-t border-white/10 p-3 lg:grid-cols-4">
+                    <CareerMetricTile label="Reputation" value={`${Math.round(scout.reputation)}/100`} helper="Trust earned through decisions" tone="emerald" />
+                    <CareerMetricTile label="Placements" value={`${acceptedPlacements}`} helper={`${pendingPlacements} awaiting response`} tone="blue" />
+                    <CareerMetricTile label="Discoveries" value={`${youthDiscoveryRecords.length}`} helper={`${scout.discoveryCredits.length} credited outcomes`} tone="amber" />
+                    <CareerMetricTile label="Skill Average" value={`${averageSkill.toFixed(1)}/20`} helper={`${scout.reportsSubmitted} reports submitted`} />
+                  </div>
+                </details>
 
                 {scout.careerTier >= 4 && (
                   <LeadershipPortfolioPanel
@@ -735,7 +751,7 @@ export function CareerScreen() {
                   <Card className="border-amber-400/25 bg-amber-400/[0.06]">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-base text-amber-200">Choose your career path</CardTitle>
-                      <p className="text-sm leading-6 text-zinc-300">This determines how you earn, who you answer to, and which long-term systems open up.</p>
+                      <p className="text-sm leading-6 text-zinc-300">This determines how you earn, who you answer to, and which long-term opportunities become available.</p>
                     </CardHeader>
                     <CardContent className="grid gap-3 sm:grid-cols-2">
                       <button
@@ -918,7 +934,7 @@ export function CareerScreen() {
                   </Card>
                   <div className="space-y-3">
                     <button onClick={() => setScreen("training")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-amber-400/25 hover:bg-amber-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
-                      <span><span className="block font-semibold text-white">Courses & qualifications</span><span className="mt-1 block text-xs text-zinc-400">{finances?.activeEnrollment ? "Training in progress" : `${finances?.completedCourses.length ?? 0} completed`}</span></span>
+                      <span><span className="block font-semibold text-white">Courses & qualifications</span><span className="mt-1 block text-xs text-zinc-400">{courseSummary}</span></span>
                       <ChevronRight size={18} className="text-zinc-400" aria-hidden="true" />
                     </button>
                     <button onClick={() => setScreen("equipment")} className="flex min-h-20 w-full items-center justify-between rounded-xl border border-white/10 bg-[#11161c]/95 p-4 text-left transition hover:border-emerald-400/25 hover:bg-emerald-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400">
@@ -949,7 +965,7 @@ export function CareerScreen() {
                   <CareerMetricTile label="Reports Filed" value={`${youthPlacementReports.length}`} helper="Placement recommendations" />
                   <CareerMetricTile label="Accepted" value={`${acceptedPlacements}`} helper="Trials and academy offers" tone="emerald" />
                   <CareerMetricTile label="Tracked Players" value={`${discoveredPlayerIds.size}`} helper="Across full careers" tone="blue" />
-                  <CareerMetricTile label="Legacy" value={`${gameState.legacyScore.totalScore}`} helper="Outcome-weighted impact" tone="amber" />
+                  <CareerMetricTile label="Legacy" value={`${gameState.legacyScore.totalScore}`} helper="How your calls held up over time" tone="amber" />
                 </div>
                 <section
                   aria-labelledby="career-records-relationships-title"
@@ -1121,8 +1137,8 @@ export function CareerScreen() {
                       <CareerMetricTile label="Monthly Costs" value={formatBalance(monthlyExpenses)} helper="Lifestyle, travel, and tools" tone="red" />
                       <CareerMetricTile
                         label="Weekly Pay"
-                        value={scout.salary > 0 ? formatSalary(scout.salary) : "Freelance"}
-                        helper={scout.employmentContract?.role ?? "Independent practice"}
+                        value={scout.salary > 0 ? formatSalary(scout.salary) : scout.careerPath === "independent" ? "Retainers vary" : "No salary"}
+                        helper={scout.employmentContract?.role ?? careerBaseLabel}
                       />
                     </div>
                     <button
@@ -1264,7 +1280,7 @@ export function CareerScreen() {
                   <div>
                     <span className="text-zinc-500">Role: </span>
                     <span className="text-white font-medium">
-                      {TIER_LABELS[scout.careerTier]}
+                      {careerRoleLabel}
                     </span>
                   </div>
                   <div>
@@ -1655,6 +1671,9 @@ export function CareerScreen() {
                   if (bonuses.fatigueReduction) parts.push(`-${bonuses.fatigueReduction} fatigue/report`);
                   if (bonuses.travelFatigueReduction) parts.push(`-${Math.round(bonuses.travelFatigueReduction * 100)}% travel fatigue`);
                   if (bonuses.relationshipGainBonus) parts.push(`+${Math.round(bonuses.relationshipGainBonus * 100)}% relationship gains`);
+                  if (bonuses.workflowFatigueReduction) parts.push(`-${bonuses.workflowFatigueReduction} fatigue in busy weeks`);
+                  if (bonuses.youthDiscoveryBonus) parts.push(`+${bonuses.youthDiscoveryBonus} youth candidate/search`);
+                  if (bonuses.trendHistoryDepth) parts.push(`${bonuses.trendHistoryDepth}-season evidence trends`);
                   if (parts.length === 0) return null;
                   return (
                     <div className="mb-3 rounded-md border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">

@@ -31,6 +31,31 @@ test.describe("Calendar Screen", () => {
     await expect(itinerary.getByRole("button", { name: /open day/i })).toHaveCount(7);
   });
 
+  test("Planner puts the itinerary before the collapsed desk policy", async ({ gamePage }) => {
+    await gamePage.navigateTo("calendar");
+
+    const itinerary = gamePage.page.locator('[data-tutorial-id="calendar-grid"]');
+    const policyPanel = gamePage.page.getByTestId("weekly-strategy-panel");
+    await expect(itinerary).toBeVisible();
+    await expect(policyPanel).toBeVisible();
+
+    const itineraryComesFirst = await itinerary.evaluate((element, policyTestId) => {
+      const policy = document.querySelector(`[data-testid="${policyTestId}"]`);
+      return !!policy && !!(element.compareDocumentPosition(policy) & Node.DOCUMENT_POSITION_FOLLOWING);
+    }, "weekly-strategy-panel");
+    expect(itineraryComesFirst).toBe(true);
+
+    const policyControl = policyPanel.locator("summary");
+    await expect(policyControl).toContainText("Change desk policy");
+    await expect(policyControl).toContainText(/how your desk prioritizes work/i);
+    await expect(policyPanel.getByRole("radio", { name: /Chase an edge/i })).toBeHidden();
+
+    await policyControl.focus();
+    await gamePage.page.keyboard.press("Enter");
+    await expect(policyPanel.locator("details")).toHaveAttribute("open", "");
+    await expect(policyPanel.getByRole("radio", { name: /Chase an edge/i })).toBeVisible();
+  });
+
   test("advance week button exists on calendar", async ({ gamePage }) => {
     await gamePage.navigateTo("calendar");
     await gamePage.page.waitForTimeout(500);

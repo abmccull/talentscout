@@ -39,6 +39,7 @@ import { recordDiscovery } from "@/engine/career";
 import { buildScoutQualityDataForState } from "./weeklySimulationSupport";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import { produceWeeklyVenueObservation } from "./weeklyObservationProducer";
+import { getActiveToolBonuses } from "@/engine/tools/unlockables";
 
 type CompletedWeekResult = ReturnType<typeof processCompletedWeek>;
 type EquipmentBonuses = ReturnType<typeof getActiveEquipmentBonuses>;
@@ -413,7 +414,8 @@ export function processWeeklyYouthObservationActivities(
     const equipBonuses = stateWithScheduleApplied.finances?.equipment
       ? getActiveEquipmentBonuses(stateWithScheduleApplied.finances.equipment.loadout)
       : { youthDiscoveryBonus: 0 };
-    const youthBonus = equipBonuses.youthDiscoveryBonus ?? 0;
+    const youthBonus = (equipBonuses.youthDiscoveryBonus ?? 0)
+      + (getActiveToolBonuses(stateWithScheduleApplied.unlockedTools).youthDiscoveryBonus ?? 0);
 
     // agencyShowcase uses youthFestival venue mechanics
     const effectiveVenueType = venueType === "agencyShowcase" ? "youthFestival" as const : venueType;

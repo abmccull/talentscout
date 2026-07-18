@@ -134,9 +134,9 @@ export interface InsightUseRecord extends Omit<CoreInsightUseRecord, "actionId">
  *
  * | Field                | Action(s)                          |
  * |----------------------|------------------------------------|
- * | observations         | clarityOfVision, diamondInTheRough |
- * | revealedAttributes   | hiddenNature                       |
- * | discoveredPlayerId   | diamondInTheRough                  |
+ * | observations         | clarityOfVision, hiddenNature, secondLook, diamondInTheRough, pressureTest |
+ * | revealedAttributes   | legacy exact hiddenNature payloads |
+ * | discoveredPlayerId   | secondLook, diamondInTheRough      |
  * | reportQualityBonus   | theVerdict                         |
  * | systemFitData        | perfectFit                         |
  * | contactIntel         | networkPulse                       |
@@ -152,7 +152,7 @@ export interface InsightActionResult {
   narrative: string;
 
   // --- clarityOfVision / diamondInTheRough ---
-  /** Perfect attribute reads that bypass perception noise. */
+  /** Authoritative insight readings persisted with confidence and bounded ranges. */
   observations?: Array<{
     playerId: string;
     attribute: string;
@@ -162,7 +162,7 @@ export interface InsightActionResult {
   }>;
 
   // --- hiddenNature ---
-  /** True values of hidden attributes (injuryProneness, consistency, etc.). */
+  /** Legacy exact hidden-attribute payloads. Prefer `observations` for new effects. */
   revealedAttributes?: Array<{
     playerId: string;
     attribute: string;
@@ -170,11 +170,11 @@ export interface InsightActionResult {
   }>;
 
   // --- diamondInTheRough ---
-  /** ID of the highest-PA undiscovered prospect found at the venue. */
+  /** ID of the lead surfaced by the action's deterministic evidence ranking. */
   discoveredPlayerId?: string;
 
   // --- theVerdict ---
-  /** Flat bonus applied to report quality score (e.g. +30). */
+  /** Bounded craft bonus applied to the next matching report submission. */
   reportQualityBonus?: number;
 
   // --- perfectFit ---
@@ -271,7 +271,7 @@ export const INSIGHT_ACTIONS: InsightAction[] = [
     id: "hiddenNature",
     name: "Hidden Nature",
     description:
-      "Reveals true values for hidden attributes: injuryProneness, consistency, bigGameTemperament, and professionalism.",
+      "Narrows hidden-trait reads into bounded observations and concrete follow-up guidance.",
     cost: 25,
     cooldown: 2,
     specialization: "universal",
@@ -282,31 +282,31 @@ export const INSIGHT_ACTIONS: InsightAction[] = [
       "quickInteraction",
     ],
     riskDescription:
-      "Hidden traits might confirm what you already suspected — no new info.",
+      "A thin sample can still leave the character picture unresolved.",
   },
   {
     id: "theVerdict",
     name: "The Verdict",
     description:
-      "Produces a masterwork report (+30 quality) with narrative excellence.",
+      "Sharpens the next report with bounded, evidence-dependent craft support.",
     cost: 20,
     cooldown: 2,
     specialization: "universal",
     availableDuring: ["fullObservation", "analysis"],
     riskDescription:
-      "Report quality is great but the player might not warrant it.",
+      "Thin evidence still limits how much the write-up can improve.",
   },
   {
     id: "secondLook",
     name: "Second Look",
     description:
-      "Retroactively observe an unfocused player from the session with full detail.",
+      "Recovers an overlooked player as a bounded follow-up lead from visible moments.",
     cost: 20,
     cooldown: 2,
     specialization: "universal",
     availableDuring: ["fullObservation"],
     riskDescription:
-      "Player might have had a quiet session — nothing to see.",
+      "The peripheral lead might stay ambiguous if the original sample was quiet.",
   },
 
   // ---------------------------------------------------------------------------
@@ -316,7 +316,7 @@ export const INSIGHT_ACTIONS: InsightAction[] = [
     id: "diamondInTheRough",
     name: "Diamond in the Rough",
     description:
-      "Scans all players at the venue and identifies the highest-PA undiscovered prospect.",
+      "Surfaces an overlooked lead from visible session evidence without guaranteeing best hidden upside.",
     cost: 30,
     cooldown: 2,
     specialization: "youth",
@@ -328,13 +328,13 @@ export const INSIGHT_ACTIONS: InsightAction[] = [
     id: "generationalWhisper",
     name: "Generational Whisper",
     description:
-      "Enhanced gut feeling with wonderkid-tier specificity and reliability 0.9+.",
+      "Produces a deterministic upside signal with bounded reliability and no hidden-PA certainty.",
     cost: 25,
     cooldown: 2,
     specialization: "youth",
     availableDuring: ["fullObservation"],
     riskDescription:
-      "Triggers on the highest-potential player present, but might fire on one you have already scouted.",
+      "A strong instinct can still point at a player who needs more proof.",
   },
 
   // ---------------------------------------------------------------------------
@@ -356,7 +356,7 @@ export const INSIGHT_ACTIONS: InsightAction[] = [
     id: "pressureTest",
     name: "Pressure Test",
     description:
-      "Mentally simulate a high-pressure scenario to reveal the player's true big-game temperament value.",
+      "Narrows the player's pressure response into bounded reads plus a next-test plan.",
     cost: 25,
     cooldown: 2,
     specialization: "firstTeam",

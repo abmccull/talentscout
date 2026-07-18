@@ -1,11 +1,15 @@
 import type { GameScreen } from "@/stores/gameStore";
 import type { GuidedMilestoneId } from "@/stores/tutorialStore";
 import type { SessionState } from "@/engine/observation/types";
+import type { ObservationHalftimeApproach } from "@/engine/core/types";
 
 export interface GuidedMilestoneInstructionInput {
   milestoneId: GuidedMilestoneId;
   currentScreen: GameScreen;
   observationState?: SessionState | null;
+  observationPhaseIndex?: number | null;
+  observationIsHalfTime?: boolean;
+  observationHalftimeApproach?: ObservationHalftimeApproach | null;
 }
 
 export function getGuidedMilestoneInstruction(
@@ -13,10 +17,18 @@ export function getGuidedMilestoneInstruction(
 ): string {
   switch (input.milestoneId) {
     case "flaggedBreakthrough":
-      return "Flag the standout moment, then classify it as Promising.";
+      if ((input.observationPhaseIndex ?? 0) < 1) {
+        return "Select Next phase to keep watching for the key moment.";
+      }
+      return "Select Flag moment on the Standout card, then choose Promising.";
     case "completedMatch":
       if (input.currentScreen === "observation" && input.observationState === "reflection") {
         return "Complete Reflection to lock the read and the remaining doubt.";
+      }
+      if (input.currentScreen === "observation" && input.observationIsHalfTime) {
+        return input.observationHalftimeApproach
+          ? "Select Next phase to apply your second-half plan."
+          : "Choose how to watch the second half: confirm, challenge, or broaden the first read.";
       }
       return "Advance through the remaining phases until Reflection is available.";
     case "wroteReport":

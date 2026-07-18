@@ -8,6 +8,7 @@ import type {
 import { createConsequenceEngineState } from "@/engine/consequences";
 import type { ObservationSession } from "@/engine/observation/types";
 import {
+  OPENING_CASE_CHOICES,
   buildOpeningCaseProjection,
   claimOpeningDiscovery,
   createOpeningCase,
@@ -125,6 +126,14 @@ describe("opening discovery case", () => {
     expect(playerSafeJson).not.toContain("potentialAbility");
     expect(playerSafeJson).not.toContain("currentAbility");
     expect(playerSafeJson).not.toContain("attributes");
+  });
+
+  it("keeps player-facing opening copy inside the scouting fiction", () => {
+    const { openingCase, unsignedYouth } = setup();
+    const projection = buildOpeningCaseProjection({ openingCase, unsignedYouth });
+    const playerFacingCopy = JSON.stringify({ projection, choices: OPENING_CASE_CHOICES });
+
+    expect(playerFacingCopy).not.toMatch(/\bthe game\b|early access|core loop|generated case/i);
   });
 
   it("starts locally when the selected world has enough eligible prospects", () => {

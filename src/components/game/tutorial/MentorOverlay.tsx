@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useTutorialStore } from "@/stores/tutorialStore";
-import { useGameStore } from "@/stores/gameStore";
+import { useGameStore, type GameScreen } from "@/stores/gameStore";
+import { ArrowLeft } from "lucide-react";
 import { getSequenceById } from "./tutorialSteps";
 import type { TutorialStep } from "./tutorialSteps";
 import { getGuidedMilestone } from "./guidedSession";
@@ -10,6 +11,7 @@ import type { GuidedMilestoneDefinition } from "./guidedSession";
 import { getGuidedMilestoneInstruction } from "./guidedMilestoneInstruction";
 import type { GuidedMilestoneId } from "@/stores/tutorialStore";
 import { parseConceptText } from "@/components/ui/GameTerm";
+import { isHalfTimePhase } from "@/engine/observation/session";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -102,6 +104,32 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+const TARGET_SELECTOR_SEPARATOR = "\u001f";
+
+function findVisibleTutorialTarget(selectorKey: string): HTMLElement | null {
+  if (!selectorKey) return null;
+
+  for (const selector of selectorKey.split(TARGET_SELECTOR_SEPARATOR)) {
+    const matches = document.querySelectorAll<HTMLElement>(
+      `[data-tutorial-id="${selector}"]`,
+    );
+    for (const match of matches) {
+      const rect = match.getBoundingClientRect();
+      const style = window.getComputedStyle(match);
+      if (
+        rect.width > 0
+        && rect.height > 0
+        && style.display !== "none"
+        && style.visibility !== "hidden"
+      ) {
+        return match;
+      }
+    }
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -111,7 +139,18 @@ const NON_GAME_SCREENS = new Set(["mainMenu", "newGame", "scenarioSelect", "hall
 export function MentorOverlay() {
   const gameState = useGameStore((s) => s.gameState);
   const currentGameScreen = useGameStore((s) => s.currentScreen);
+  const setScreen = useGameStore((s) => s.setScreen);
   const observationState = useGameStore((s) => s.activeSession?.state ?? null);
+  const observationPhaseIndex = useGameStore(
+    (s) => s.activeSession?.currentPhaseIndex ?? null,
+  );
+  const observationIsHalfTime = useGameStore((s) => Boolean(
+    s.activeSession
+    && isHalfTimePhase(s.activeSession, s.activeSession.currentPhaseIndex),
+  ));
+  const observationHalftimeApproach = useGameStore(
+    (s) => s.activeSession?.halftimeApproach ?? null,
+  );
   const tutorialActive = useTutorialStore((s) => s.tutorialActive);
   const currentSequence = useTutorialStore((s) => s.currentSequence);
   const currentStep = useTutorialStore((s) => s.currentStep);
@@ -159,14 +198,18 @@ export function MentorOverlay() {
   // Target selector resolution
   // ---------------------------------------------------------------------------
 
-  const targetSelector = ((): string | null => {
+  const targetSelectorKey = ((): string => {
     switch (activeMode.kind) {
       case "tutorial":
         return activeMode.step.targetSelector;
-      case "guided":
-        return activeMode.milestone.target;
+      case "guided": {
+        const targets = typeof activeMode.milestone.target === "string"
+          ? [activeMode.milestone.target]
+          : activeMode.milestone.target;
+        return targets.join(TARGET_SELECTOR_SEPARATOR);
+      }
       default:
-        return null;
+        return "";
     }
   })();
 
@@ -186,14 +229,20 @@ export function MentorOverlay() {
   // ---------------------------------------------------------------------------
 
   const measure = useCallback(() => {
-    if (!targetSelector) {
+    if (!targetSelectorKey) {
       setTargetRect(null);
       return;
     }
 
-    const el = document.querySelector(`[data-tutorial-id="${targetSelector}"]`);
+    const el = findVisibleTutorialTarget(targetSelectorKey);
     if (!el) {
       setTargetRect(null);
+      const cardWidth = cardRef.current?.offsetWidth ?? 360;
+      const cardHeight = cardRef.current?.offsetHeight ?? 220;
+      setPopupPos({
+        top: Math.max(8, (window.innerHeight - cardHeight) / 2),
+        left: Math.max(8, (window.innerWidth - cardWidth) / 2),
+      });
       return;
     }
 
@@ -210,19 +259,79 @@ export function MentorOverlay() {
     const cardWidth = cardRef.current?.offsetWidth ?? 360;
     const cardHeight = cardRef.current?.offsetHeight ?? 220;
     setPopupPos(computePopupPosition(rect, preferredSide, cardWidth, cardHeight));
-  }, [targetSelector, preferredSide]);
+  }, [targetSelectorKey, preferredSide]);
 
   useEffect(() => {
     if (activeMode.kind === "none") return;
+    measure();
     const id = window.setTimeout(measure, 80);
     return () => window.clearTimeout(id);
   }, [activeMode.kind, measure]);
 
   useEffect(() => {
+    if (activeMode.kind === "none" || typeof ResizeObserver === "undefined") return;
+    const card = cardRef.current;
+    if (!card) return;
+
+    const observer = new ResizeObserver(() => measure());
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [activeMode.kind, measure]);
+
+  useEffect(() => {
     if (activeMode.kind === "none") return;
     window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+
+    let frame = 0;
+    const observer = new MutationObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(measure);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, [activeMode.kind, measure]);
+
+  useEffect(() => {
+    if (activeMode.kind === "none" || !targetSelectorKey) return;
+
+    let settleId: number | null = null;
+    const id = window.setTimeout(() => {
+      const target = findVisibleTutorialTarget(targetSelectorKey);
+      if (!target) return;
+
+      const rect = target.getBoundingClientRect();
+      const outsideViewport = rect.top < 12 || rect.bottom > window.innerHeight - 12;
+      if (!outsideViewport) return;
+
+      target.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "center",
+        inline: "nearest",
+      });
+      settleId = window.setTimeout(measure, 0);
+    }, 100);
+
+    return () => {
+      window.clearTimeout(id);
+      if (settleId !== null) window.clearTimeout(settleId);
+    };
+  }, [
+    activeMode.kind,
+    currentGameScreen,
+    measure,
+    observationPhaseIndex,
+    observationState,
+    targetSelectorKey,
+  ]);
 
   // Recompute popup position after card renders with real dimensions.
   useEffect(() => {
@@ -259,11 +368,19 @@ export function MentorOverlay() {
   // ---------------------------------------------------------------------------
 
   const isAha = activeMode.kind === "tutorial" && activeMode.isAha;
+  const isOffGuidedScreen = activeMode.kind === "guided"
+    && currentGameScreen !== activeMode.milestone.screen;
+  const isWaitingForStandout = activeMode.kind === "guided"
+    && activeMode.milestone.id === "flaggedBreakthrough"
+    && currentGameScreen === "observation"
+    && (observationPhaseIndex ?? 0) < 1;
 
   const title = ((): string => {
     switch (activeMode.kind) {
       case "tutorial":    return activeMode.step.title;
-      case "guided":      return activeMode.milestone.title;
+      case "guided":      return isWaitingForStandout
+        ? "Keep watching"
+        : activeMode.milestone.title;
       default:            return "";
     }
   })();
@@ -272,6 +389,11 @@ export function MentorOverlay() {
     if (activeMode.kind === "tutorial") return activeMode.step.description;
     if (activeMode.kind === "guided") {
       const isFreelance = mentorName === "Tommy Reyes";
+      if (isWaitingForStandout) {
+        return isFreelance
+          ? "You have chosen who to watch. Select Next phase and stay with the play—the key moment is still ahead."
+          : "Your focus is set. Select Next phase and keep watching—the action that tests your first read is still ahead.";
+      }
       return isFreelance
         ? activeMode.milestone.mentorTextFreelance
         : activeMode.milestone.mentorText;
@@ -313,12 +435,20 @@ export function MentorOverlay() {
     if (activeMode.kind === "tutorial") skipTutorial();
   }
 
+  function handleReturnToGuidedStep() {
+    if (activeMode.kind !== "guided") return;
+    setScreen(activeMode.milestone.screen as GameScreen);
+  }
+
   const showSkipControls = activeMode.kind === "tutorial";
   const actionInstruction = activeMode.kind === "guided"
     ? getGuidedMilestoneInstruction({
         milestoneId: activeMode.milestone.id,
         currentScreen: currentGameScreen,
         observationState,
+        observationPhaseIndex,
+        observationIsHalfTime,
+        observationHalftimeApproach,
       })
     : "Complete the highlighted action to continue.";
 
@@ -412,6 +542,15 @@ export function MentorOverlay() {
           <p className="text-sm leading-relaxed text-zinc-400">{parseConceptText(description)}</p>
         </div>
 
+        {isOffGuidedScreen && (
+          <p
+            role="status"
+            className="mb-4 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100"
+          >
+            This guided step is still waiting on the previous screen. Return there to continue where you left off.
+          </p>
+        )}
+
         {/* Progress dots (tutorial + screen guide only) */}
         {totalDots > 1 && (
           <div className="mb-4 flex items-center gap-1.5">
@@ -461,7 +600,16 @@ export function MentorOverlay() {
             )}
           </div>
 
-          {isInteractive || activeMode.kind === "guided" ? (
+          {isOffGuidedScreen ? (
+            <button
+              type="button"
+              onClick={handleReturnToGuidedStep}
+              className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-zinc-950 transition hover:bg-emerald-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+            >
+              <ArrowLeft size={14} aria-hidden="true" />
+              Return to guided step
+            </button>
+          ) : isInteractive || activeMode.kind === "guided" ? (
             <span className={`text-xs italic ${interactiveTextClass}`}>
               {activeMode.kind === "guided" ? actionInstruction : "Complete the action to continue"}
             </span>

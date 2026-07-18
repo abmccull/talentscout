@@ -461,12 +461,78 @@ export function Dashboard() {
   if (IS_YOUTH_EARLY_ACCESS && specialization === "youth") {
     const club = scout.currentClubId ? gameState.clubs[scout.currentClubId] : undefined;
     const deskProspects = (evidenceQueue.length > 0 ? evidenceQueue : observedYouthEvidence).slice(0, 4);
+    const activeSeasonDecisions = gameState.seasonEvents.filter(
+      (event) => event.startWeek <= currentWeek
+        && currentWeek <= event.endWeek
+        && !!event.choices?.length
+        && !event.resolved,
+    );
     const loopSteps = [
       { label: "Find", detail: "Discover a lead", complete: youthDiscoveredCount > 0 },
       { label: "Verify", detail: "Build repeat evidence", complete: multiViewCount > 0 },
       { label: "Recommend", detail: "Back your judgment", complete: youthReportedCount > 0 },
       { label: "Track", detail: "Follow the outcome", complete: placedYouthCount > 0 },
     ];
+    const revealDeskSection = (sectionId: string): void => {
+      const section = document.getElementById(sectionId);
+      if (!(section instanceof HTMLDetailsElement)) return;
+      section.open = true;
+      window.requestAnimationFrame(() => section.scrollIntoView({ behavior: "smooth", block: "start" }));
+    };
+    const urgentDeskItems: Array<{
+      id: string;
+      title: string;
+      detail: string;
+      label: string;
+      onActivate: () => void;
+    }> = [];
+
+    if (activeSeasonDecisions.length > 0) {
+      urgentDeskItems.push({
+        id: "season-decision",
+        title: `${activeSeasonDecisions.length} season decision${activeSeasonDecisions.length === 1 ? "" : "s"} waiting`,
+        detail: "An active football event needs your response before the week moves on.",
+        label: "Review",
+        onActivate: () => revealDeskSection("desk-season-context"),
+      });
+    }
+    if (dueRecommendationReviews.length > 0) {
+      urgentDeskItems.push({
+        id: "recommendation-review",
+        title: `${dueRecommendationReviews.length} recommendation review${dueRecommendationReviews.length === 1 ? "" : "s"} complete`,
+        detail: "See how an earlier judgment held up over time.",
+        label: "See outcome",
+        onActivate: () => setScreen("reportHistory"),
+      });
+    }
+    if (scout.fatigue >= 70) {
+      urgentDeskItems.push({
+        id: "fatigue-risk",
+        title: "Your read is at risk",
+        detail: `${Math.round(scout.fatigue)}% fatigue can reduce observation accuracy.`,
+        label: "Plan recovery",
+        onActivate: () => setScreen("calendar"),
+      });
+    }
+    if (unreadMessages.length > 0) {
+      urgentDeskItems.push({
+        id: "unread-messages",
+        title: `${unreadMessages.length} unread message${unreadMessages.length === 1 ? "" : "s"}`,
+        detail: "Club responses and career updates are waiting in your inbox.",
+        label: "Open inbox",
+        onActivate: () => setScreen("inbox"),
+      });
+    }
+    if (nextTournament && nextTournament.startWeek <= currentWeek + 1) {
+      urgentDeskItems.push({
+        id: "tournament-window",
+        title: nextTournament.startWeek <= currentWeek ? "A youth event is live" : "A youth event starts next week",
+        detail: `${nextTournament.name} is a time-sensitive chance to see a wider field.`,
+        label: "Plan coverage",
+        onActivate: () => setScreen("calendar"),
+      });
+    }
+    const visibleUrgentDeskItems = urgentDeskItems.slice(0, 3);
 
     return (
       <GameLayout>
@@ -492,21 +558,29 @@ export function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2" data-testid="desk-week-status">
                 <span className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${phaseClass[seasonPhase]}`}>
                   {tCal(`seasonPhases.${seasonPhase}` as Parameters<typeof tCal>[0])}
                 </span>
-                <Button className="min-h-11" variant="outline" onClick={() => setScreen("calendar")}>
-                  <Calendar size={16} className="mr-2" aria-hidden="true" />
-                  Planner
-                </Button>
-                <Button className="min-h-11 border border-white/10 bg-white/5 text-white hover:bg-white/10" variant="secondary" onClick={() => requestWeekAdvance()}>
-                  Advance Week
-                </Button>
+                <span className="inline-flex min-h-9 items-center rounded-full border border-white/10 bg-white/5 px-3 text-xs font-semibold text-zinc-200">
+                  Week {currentWeek} of {seasonLength}
+                </span>
+                <span
+                  aria-label={`${Math.round(scout.fatigue)} percent fatigue`}
+                  className={`inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold ${
+                    scout.fatigue >= 70
+                      ? "border-red-400/30 bg-red-400/10 text-red-200"
+                      : scout.fatigue >= 40
+                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200"
+                        : "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+                  }`}
+                >
+                  {Math.round(scout.fatigue)}% fatigue
+                </span>
               </div>
             </header>
 
-            <Card className="relative mb-5 overflow-hidden border-emerald-400/25 bg-[#101820]/95 shadow-2xl shadow-black/30">
+            <Card data-testid="desk-primary-decision" className="relative mb-5 overflow-hidden border-emerald-400/25 bg-[#101820]/95 shadow-2xl shadow-black/30">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(52,211,153,0.14),transparent_36%)]" aria-hidden="true" />
               <CardContent className="relative grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:p-8">
                 <div>
@@ -541,75 +615,86 @@ export function Dashboard() {
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-3 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-400">The scout&apos;s loop</p>
-                      <p className="mt-1 text-sm text-zinc-200">Every name must earn the next step.</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-200">Urgent now</p>
+                      <p className="mt-1 text-sm text-zinc-300">Only the items that may change your next move.</p>
                     </div>
-                    <Target size={20} className="text-emerald-300" aria-hidden="true" />
+                    <AlertTriangle size={19} className="shrink-0 text-amber-300" aria-hidden="true" />
                   </div>
-                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-                    {loopSteps.map((step, index) => (
-                      <li
-                        key={step.label}
-                        className={`rounded-lg border p-3 ${
-                          step.complete
-                            ? "border-emerald-400/30 bg-emerald-400/10"
-                            : "border-white/10 bg-white/[0.025]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
-                          }`}>
-                            {step.complete ? "✓" : index + 1}
-                          </span>
-                          <span className="text-xs font-semibold text-white">{step.label}</span>
-                        </div>
-                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
+                  <ul className="space-y-2" data-testid="desk-urgent-list" aria-label="Urgent desk items">
+                    {visibleUrgentDeskItems.length === 0 ? (
+                      <li className="rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] p-3 text-sm text-emerald-100">
+                        No urgent interruptions. Protect the decision in front of you.
+                      </li>
+                    ) : visibleUrgentDeskItems.map((item) => (
+                      <li key={item.id} data-testid="desk-urgent-item" className="rounded-lg border border-white/10 bg-white/[0.025] p-3">
+                        <p className="text-sm font-semibold text-white">{item.title}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-400">{item.detail}</p>
+                        <button
+                          type="button"
+                          onClick={item.onActivate}
+                          className="mt-2 min-h-11 rounded-md px-1 text-xs font-semibold text-emerald-200 underline decoration-emerald-400/40 underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                        >
+                          {item.label}
+                        </button>
                       </li>
                     ))}
-                  </ol>
+                  </ul>
                 </div>
               </CardContent>
             </Card>
 
-            {gameState.seasonEvents.length > 0 && (
-              <div className="mb-5">
-                <SeasonTimeline
-                  seasonEvents={gameState.seasonEvents}
-                  currentWeek={currentWeek}
-                  seasonLength={seasonLength}
-                  onResolveEvent={(eventId, choiceIndex) => {
-                    useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
-                  }}
-                />
+            <details
+              id="desk-season-context"
+              className="group mb-5 overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/90"
+            >
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden sm:px-5">
+                <span>
+                  <span className="block text-sm font-semibold text-white">Season and pipeline</span>
+                  <span className="mt-1 block text-xs text-zinc-400">
+                    {youthDiscoveredCount} known · {multiViewCount} repeat looks · {decisionReadyYouth.length} decisions ready
+                  </span>
+                </span>
+                <ChevronDown size={18} className="shrink-0 text-zinc-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <div className="border-t border-white/10 p-4 sm:p-5">
+                {gameState.seasonEvents.length > 0 && (
+                  <SeasonTimeline
+                    seasonEvents={gameState.seasonEvents}
+                    currentWeek={currentWeek}
+                    seasonLength={seasonLength}
+                    onResolveEvent={(eventId, choiceIndex) => {
+                      useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
+                    }}
+                  />
+                )}
+
+                <section aria-label="Youth pipeline snapshot" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {[
+                    { label: "Known prospects", value: youthDiscoveredCount, detail: `${youthList.length} in your active world`, icon: Users, tone: "text-emerald-300" },
+                    { label: "Repeat looks", value: multiViewCount, detail: `${firmReadCount} with a firm read`, icon: Eye, tone: "text-sky-300" },
+                    { label: "Decisions ready", value: decisionReadyYouth.length, detail: `${pendingPlacementCount} awaiting club response`, icon: ClipboardList, tone: "text-amber-300" },
+                    { label: "Placed", value: placedYouthCount, detail: `${gameState.legacyScore.totalScore} legacy points`, icon: Trophy, tone: "text-violet-300" },
+                  ].map(({ label, value, detail, icon: Icon, tone }) => (
+                    <Card key={label} className="border-white/10 bg-black/20 shadow-lg shadow-black/10">
+                      <CardContent className="p-4 sm:p-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</p>
+                            <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{value}</p>
+                          </div>
+                          <Icon size={19} className={tone} aria-hidden="true" />
+                        </div>
+                        <p className="mt-2 text-xs text-zinc-400">{detail}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </section>
               </div>
-            )}
+            </details>
 
-            <section aria-label="Youth pipeline snapshot" className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {[
-                { label: "Known prospects", value: youthDiscoveredCount, detail: `${youthList.length} in your active world`, icon: Users, tone: "text-emerald-300" },
-                { label: "Repeat looks", value: multiViewCount, detail: `${firmReadCount} with a firm read`, icon: Eye, tone: "text-sky-300" },
-                { label: "Decisions ready", value: decisionReadyYouth.length, detail: `${pendingPlacementCount} awaiting club response`, icon: ClipboardList, tone: "text-amber-300" },
-                { label: "Placed", value: placedYouthCount, detail: `${gameState.legacyScore.totalScore} legacy points`, icon: Trophy, tone: "text-violet-300" },
-              ].map(({ label, value, detail, icon: Icon, tone }) => (
-                <Card key={label} className="border-white/10 bg-[#11161c]/90 shadow-lg shadow-black/10">
-                  <CardContent className="p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">{label}</p>
-                        <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{value}</p>
-                      </div>
-                      <Icon size={19} className={tone} aria-hidden="true" />
-                    </div>
-                    <p className="mt-2 text-xs text-zinc-400">{detail}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </section>
-
-            <Card className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
+            <Card data-testid="desk-top-briefs" className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
               <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base text-white">
@@ -632,7 +717,7 @@ export function Dashboard() {
                         ? deriveBriefRecruitmentIdentity(receivingClub, brief)
                         : undefined;
                       return (
-                        <article key={brief.id} className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-black/20 p-4">
+                        <article key={brief.id} data-testid="desk-brief" className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-black/20 p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">{receivingClub?.name ?? "Academy client"}</p>
@@ -689,7 +774,52 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
+            <details
+              id="desk-supporting-context"
+              className="group overflow-hidden rounded-xl border border-white/10 bg-[#11161c]/90"
+            >
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 marker:hidden focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 [&::-webkit-details-marker]:hidden sm:px-5">
+                <span>
+                  <span className="block text-sm font-semibold text-white">Open the full desk overview</span>
+                  <span className="mt-1 block text-xs text-zinc-400">Itinerary, priority prospects, opportunities, inbox, and scout condition</span>
+                </span>
+                <ChevronDown size={18} className="shrink-0 text-zinc-400 transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+
+              <div className="border-t border-white/10 p-4 sm:p-5">
+                <section aria-labelledby="scout-loop-heading" className="mb-5 rounded-xl border border-white/10 bg-black/20 p-4 sm:p-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 id="scout-loop-heading" className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-300">Your scouting loop</h2>
+                      <p className="mt-1 text-sm text-zinc-300">Every name must earn the next step.</p>
+                    </div>
+                    <Target size={20} className="text-emerald-300" aria-hidden="true" />
+                  </div>
+                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {loopSteps.map((step, index) => (
+                      <li
+                        key={step.label}
+                        className={`rounded-lg border p-3 ${
+                          step.complete
+                            ? "border-emerald-400/30 bg-emerald-400/10"
+                            : "border-white/10 bg-white/[0.025]"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
+                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
+                          }`}>
+                            {step.complete ? "✓" : index + 1}
+                          </span>
+                          <span className="text-xs font-semibold text-white">{step.label}</span>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+
+                <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
               <div className="space-y-5">
                 <Card className="border-white/10 bg-[#11161c]/95">
                   <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
@@ -906,8 +1036,10 @@ export function Dashboard() {
                     </Button>
                   </CardContent>
                 </Card>
-              </aside>
-            </div>
+                  </aside>
+                </div>
+              </div>
+            </details>
           </div>
         </section>
       </GameLayout>

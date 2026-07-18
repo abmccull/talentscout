@@ -16,6 +16,7 @@ import {
   processRivalScoutWeek,
 } from "@/engine/rivals/rivalScouts";
 import {
+  getEffectiveRivalPlayerEvidence,
   getRivalPlayerEvidence,
   getRivalShortlistCapacity,
   observePlayerForRival,
@@ -365,6 +366,66 @@ describe("fair senior rival decisions", () => {
     expect(alreadyOverdue.newActivities.some(
       (activity) => activity.type === "reportSubmitted",
     )).toBe(true);
+  });
+
+  it("decays old rival observations without mutating the saved evidence", () => {
+    const savedEvidence = {
+      playerId: "young",
+      estimatedCurrentAbility: 125,
+      estimatedPotentialAbility: 170,
+      confidence: 0.8,
+      errorMargin: 8,
+      observations: 4,
+      specialtyFit: 1.1,
+      lastObservedSeason: 1,
+      lastObservedWeek: 1,
+    };
+    const evidenceRival = rival({
+      personality: "methodical",
+      evidenceByPlayer: { young: savedEvidence },
+    });
+    const freshState = gameState({ currentWeek: 3 });
+    const staleState = gameState({ currentWeek: 18 });
+    const fresh = getEffectiveRivalPlayerEvidence(evidenceRival, "young", freshState)!;
+    const stale = getEffectiveRivalPlayerEvidence(evidenceRival, "young", staleState)!;
+
+    expect(fresh).toMatchObject({ ageWeeks: 2, stale: false, confidence: 0.8 });
+    expect(stale.stale).toBe(true);
+    expect(stale.confidence).toBeLessThan(fresh.confidence);
+    expect(stale.errorMargin).toBeGreaterThan(fresh.errorMargin);
+    expect(scoreRivalTargetCandidate(
+      evidenceRival,
+      staleState.players.young,
+      staleState,
+      1,
+    )).not.toBe(scoreRivalTargetCandidate(
+      evidenceRival,
+      freshState.players.young,
+      freshState,
+      1,
+    ));
+    expect(evidenceRival.evidenceByPlayer?.young).toBe(savedEvidence);
+  });
+
+  it("keeps undated legacy rival evidence neutral until a real date exists", () => {
+    const legacy = rival({
+      evidenceByPlayer: {
+        young: {
+          playerId: "young",
+          estimatedCurrentAbility: 100,
+          estimatedPotentialAbility: 140,
+          confidence: 0.55,
+          errorMargin: 16,
+          observations: 2,
+          specialtyFit: 1,
+          lastObservedSeason: undefined as unknown as number,
+          lastObservedWeek: undefined as unknown as number,
+        },
+      },
+    });
+
+    expect(getEffectiveRivalPlayerEvidence(legacy, "young", gameState({ currentWeek: 30 })))
+      .toMatchObject({ ageWeeks: 0, stale: false, confidence: 0.55, errorMargin: 16 });
   });
 });
 

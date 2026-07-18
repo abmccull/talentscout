@@ -225,17 +225,17 @@ export function WikiScreen() {
               <button
                 onClick={() => setMobileDrawerOpen(true)}
                 className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-800 text-zinc-400 transition hover:bg-zinc-800"
-                aria-label="Open wiki sidebar"
+                aria-label="Open handbook navigation"
               >
                 <Menu size={16} />
               </button>
               <div className="relative flex-1">
                 <input
                   type="search"
-                  placeholder="Search Youth Scout guide..."
+                  placeholder="Search handbook..."
                   value={searchQuery}
                   onChange={(e) => handleSearchChange(e.target.value)}
-                  aria-label="Search Scout wiki"
+                  aria-label="Search handbook"
                   className="min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 py-2 pl-3 pr-3 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-emerald-500/50"
                 />
               </div>

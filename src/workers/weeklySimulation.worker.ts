@@ -11,8 +11,10 @@ import type {
   WeeklyWorkerMessage,
   WeeklyWorkerWireRequest,
 } from "@/stores/actions/weeklyWorkerTypes";
+import { materializeWeeklyWorkerWireState } from "@/stores/actions/weeklyWorkerSync";
 
 const workerScope = self as DedicatedWorkerGlobalScope;
+let cachedGameState: WeeklyWorkerInput["gameState"] | null = null;
 
 workerScope.addEventListener(
   "message",
@@ -26,7 +28,7 @@ workerScope.addEventListener(
     }
 
     try {
-      const input = JSON.parse(request.stateJson) as WeeklyWorkerInput;
+      const input = materializeWeeklyWorkerWireState(cachedGameState, request.state);
       const startedAt = performance.now();
       const fullCommit = runHeadlessWeeklyTransaction(input);
       const state: WeeklyWorkerCommit = compactWeeklyWorkerCommit(
@@ -34,12 +36,17 @@ workerScope.addEventListener(
         fullCommit,
         performance.now() - startedAt,
       );
+      const nextGameState = fullCommit.patch.gameState;
+      if (!nextGameState) {
+        throw new Error("Weekly simulation worker completed without an active game state.");
+      }
+      cachedGameState = nextGameState;
       const response: WeeklyWorkerMessage = {
         kind: "weekly-transaction-result",
         protocolVersion: WEEKLY_TRANSACTION_PROTOCOL_VERSION,
         jobId: request.job.id,
         source: request.job.source,
-        stateJson: JSON.stringify(state),
+        state,
       };
       workerScope.postMessage(response);
     } catch (error) {

@@ -71,9 +71,9 @@ export const agencyArticles: WikiArticle[] = [
     category: "agency",
     order: 1,
     summary:
-      "Hire scouts, analysts, administrators, relationship managers, and mentees. Each role has a salary range, weekly processing, morale, and fatigue.",
+      "Hire scouts, analysts, administrators, relationship managers, and mentees. Each role has different costs, duties, morale, and fatigue.",
     searchText:
-      "Your agency can employ five types of staff, each serving a distinct function. Scout employees cost 500-2000 per month and produce observation reports autonomously. Analyst employees cost 400-1500 per month and improve data quality on reports and provide statistical analysis. Administrator employees cost 300-1000 per month and reduce administrative overhead and handle scheduling. Relationship Manager employees cost 600-2500 per month and maintain contact networks and negotiate retainer contracts. Mentee employees cost 200-600 per month and are junior staff who learn on the job and improve over time. Each employee has morale, fatigue, experience points, and a quality rating. Every week employees are processed: morale fluctuates based on workload and agency success, fatigue accumulates from assignments and recovers during light weeks, XP is earned from completed tasks improving their quality rating over time. If morale drops too low employees may resign. High-quality employees produce better work but command higher salaries. Mentees start weak but can develop into any of the other four roles given enough time and experience. The number of employees you can hire is capped by your office tier capacity.",
+      "Your agency can employ five types of staff, each serving a distinct function. Scout employees handle direct coverage, analysts improve data interpretation, administrators steady the schedule, relationship managers maintain contacts, and mentees grow into bigger roles over time. Each employee has morale, fatigue, experience, and a standard of work that changes with workload and agency success. If morale drops too low employees may resign. Strong staff produce better work but command higher salaries. The number of employees you can hire is capped by your office tier capacity.",
     content: (
       <SectionBlock>
         <Para>
@@ -97,8 +97,8 @@ export const agencyArticles: WikiArticle[] = [
         />
         <Subheading>Weekly Processing</Subheading>
         <Para>
-          Every week each employee is processed. Their internal stats shift
-          based on workload and agency performance:
+          Every week your staff form shifts with workload and agency
+          performance:
         </Para>
         <BulletList
           items={[
@@ -151,7 +151,7 @@ export const agencyArticles: WikiArticle[] = [
     summary:
       "Retainer contracts with clubs provide steady income. Five tiers from Basic to Platinum, with quarterly renewals based on satisfaction.",
     searchText:
-      "Retainer contracts are the backbone of a stable independent scouting agency. Clubs hire your agency on a retainer basis, paying a monthly fee in exchange for a guaranteed number of scouting reports. Retainer tiers: Basic pays 500-1000 per month for 2 reports per month. Standard pays 1500-3000 per month for 3 reports per month. Premium pays 4000-8000 per month for 5 reports per month. Elite pays 10000-20000 per month for 7 reports per month. Platinum is the highest tier with the best pay and most reports required. The maximum number of retainers you can hold depends on your independent tier: Tier 1 allows 0 retainers, Tier 2 allows 1, Tier 3 allows 3, Tier 4 allows 6, Tier 5 allows unlimited retainers. Retainers renew quarterly based on client satisfaction. If satisfaction is above 70 there is a chance the client upgrades to a higher tier. If satisfaction is between 40 and 70 the retainer renews at the same level. If satisfaction drops below 40 the retainer is cancelled. Satisfaction is driven by report quality, timeliness, and whether your recommendations lead to successful transfers. Building a roster of Premium and Elite retainers is the most reliable way to achieve financial stability as an independent scout.",
+      "Retainer contracts are the backbone of a stable independent scouting agency. Clubs hire your agency on a retainer basis, paying a monthly fee in exchange for a guaranteed number of scouting reports. Retainer tiers: Basic pays 500-1000 per month for 2 reports per month. Standard pays 1500-3000 per month for 3 reports per month. Premium pays 4000-8000 per month for 5 reports per month. Elite pays 10000-20000 per month for 7 reports per month. Platinum is the highest tier with the best pay and most reports required. The maximum number of retainers you can hold depends on your independent tier: Tier 1 allows 0 retainers, Tier 2 allows 1, Tier 3 allows 3, Tier 4 allows 6, Tier 5 allows unlimited retainers. Retainers renew quarterly based on client satisfaction. Strong relationships can lift a club to a richer tier, steady delivery usually keeps the deal alive, and poor service can cost you the contract. Satisfaction is driven by report quality, timeliness, and whether your recommendations lead to successful transfers. Building a roster of Premium and Elite retainers is the most reliable way to achieve financial stability as an independent scout.",
     content: (
       <SectionBlock>
         <Para>
@@ -182,21 +182,19 @@ export const agencyArticles: WikiArticle[] = [
         />
         <Subheading>Quarterly Renewal</Subheading>
         <Para>
-          Retainers are reviewed every quarter based on client satisfaction:
+          Retainers are reviewed every quarter based on how the client feels
+          about the work:
         </Para>
         <BulletList
           items={[
             <>
-              <Tag color="emerald">70+</Tag> satisfaction — chance to upgrade to
-              a higher tier.
+              Strong satisfaction can lift the club into a richer tier.
             </>,
             <>
-              <Tag color="amber">40–70</Tag> satisfaction — retainer renews at
-              the same level.
+              Steady satisfaction usually keeps the current deal in place.
             </>,
             <>
-              <Tag color="rose">Below 40</Tag> satisfaction — retainer is
-              cancelled.
+              A cold relationship can end the retainer altogether.
             </>,
           ]}
         />

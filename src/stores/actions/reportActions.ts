@@ -9,12 +9,19 @@ import type { GetState, SetState } from "./types";
 import type {
   ConvictionLevel,
   FinancialRecord,
+  InitialAssessmentInput,
   InboxMessage,
   Player,
   ScoutReport,
   StructuredReportInput,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
+import {
+  buildFormalAssessment,
+  buildInitialAssessment,
+  calculateAssessmentPracticeXp,
+} from "@/engine/scout/evidenceModel";
+import { applyScoutSkillXp } from "@/engine/scout/progression";
 import { createRNG } from "@/engine/rng";
 import {
   calculatePublicRevisionReputationCost,
@@ -65,6 +72,10 @@ import {
   consumeInsightReportQualityEffect,
   getPendingInsightReportQualityEffect,
 } from "@/engine/insight/effects";
+import {
+  checkMasteryPerkUnlocks,
+  getMasteryPerkModifiers,
+} from "@/engine/specializations/masteryPerks";
 
 export function resolveReportClientClubId(
   report: Pick<ScoutReport, "briefId" | "intendedClubId">,
@@ -102,6 +113,7 @@ export function createReportActions(get: GetState, set: SetState) {
       strengths: string[],
       weaknesses: string[],
       structured?: StructuredReportInput,
+      initialAssessment?: InitialAssessmentInput,
     ) => {
       const { gameState, selectedPlayerId } = get();
       if (!gameState || !selectedPlayerId) return;
@@ -111,6 +123,73 @@ export function createReportActions(get: GetState, set: SetState) {
 
       const player = resolvedPlayer.player;
       const canonicalPlayerId = resolvedPlayer.playerId;
+      const availableEvidenceCards = Object.values(gameState.reflectionJournal ?? {})
+        .flatMap((entry) => entry.evidenceCards ?? [])
+        .filter((card) => card.playerId === canonicalPlayerId);
+      const initialAssessmentResult = initialAssessment
+        ? buildInitialAssessment(
+            initialAssessment,
+            availableEvidenceCards,
+            `${player.firstName} ${player.lastName}`,
+          )
+        : undefined;
+      const formalAssessmentResult = structured?.evidenceVersion === 1
+        ? buildFormalAssessment(
+            structured,
+            availableEvidenceCards,
+            `${player.firstName} ${player.lastName}`,
+            gameState.clubs[structured.intendedClubId]?.name ?? "the academy",
+          )
+        : undefined;
+      if (initialAssessmentResult && !initialAssessmentResult.valid) {
+        const messageId = `initial-assessment-validation-${canonicalPlayerId}-${gameState.currentSeason}-${gameState.currentWeek}`;
+        set({
+          gameState: {
+            ...gameState,
+            inbox: gameState.inbox.some((message) => message.id === messageId)
+              ? gameState.inbox
+              : [...gameState.inbox, {
+                  id: messageId,
+                  week: gameState.currentWeek,
+                  season: gameState.currentSeason,
+                  type: "feedback",
+                  title: "Initial assessment needs one complete judgment",
+                  body: initialAssessmentResult.errors.join("\n"),
+                  read: false,
+                  actionRequired: true,
+                  relatedId: canonicalPlayerId,
+                  relatedEntityType: "player",
+                }],
+          },
+        });
+        return;
+      }
+      if (formalAssessmentResult && !formalAssessmentResult.valid) {
+        const messageId = `formal-assessment-validation-${canonicalPlayerId}-${gameState.currentSeason}-${gameState.currentWeek}`;
+        set({
+          gameState: {
+            ...gameState,
+            inbox: gameState.inbox.some((message) => message.id === messageId)
+              ? gameState.inbox
+              : [...gameState.inbox, {
+                  id: messageId,
+                  week: gameState.currentWeek,
+                  season: gameState.currentSeason,
+                  type: "feedback",
+                  title: "Formal assessment needs traceable evidence",
+                  body: formalAssessmentResult.errors.join("\n"),
+                  read: false,
+                  actionRequired: true,
+                  relatedId: canonicalPlayerId,
+                  relatedEntityType: "player",
+                }],
+          },
+        });
+        return;
+      }
+      const evidenceAssessment = initialAssessmentResult?.assessment
+        ?? formalAssessmentResult?.assessment;
+      const authoritativeSummary = evidenceAssessment?.generatedSummary ?? summary;
 
       if (
         conviction === "tablePound"
@@ -146,6 +225,7 @@ export function createReportActions(get: GetState, set: SetState) {
         const validation = validateStructuredReportInput(
           structured,
           gameState.youthRecruitmentBriefs[structured.briefId],
+          new Set(availableEvidenceCards.map((card) => card.id)),
         );
         if (!validation.valid) {
           const messageId = `report-validation-${canonicalPlayerId}-${gameState.currentSeason}-${gameState.currentWeek}`;
@@ -191,6 +271,17 @@ export function createReportActions(get: GetState, set: SetState) {
           )
         : undefined;
       const freshObservationIds = getFreshReportObservationIds(observations, previousReport);
+      const preparedWorkItem = Object.values(gameState.reportWorkItems ?? {})
+        .filter((item) =>
+          item.status === "ready"
+          && item.playerId === canonicalPlayerId
+          && item.scoutId === gameState.scout.id
+          && item.freshObservationIds.some((id) => freshObservationIds.includes(id))
+        )
+        .sort((left, right) =>
+          right.createdSeason - left.createdSeason
+          || right.createdWeek - left.createdWeek
+        )[0];
       const draft = generateReportContent(player, observations, gameState.scout);
       // F14: Include infrastructure + equipment report quality bonus. This
       // exact preparation path is also used by ReportWriter's live preview.
@@ -205,13 +296,26 @@ export function createReportActions(get: GetState, set: SetState) {
       const insightReportQualityBonus = (
         pendingInsightReportEffect?.bonusPoints ?? 0
       ) / 100;
+      const masteryModifiers = getMasteryPerkModifiers(
+        checkMasteryPerkUnlocks(gameState.scout),
+      );
+      const systemFitCraftBonus = masteryModifiers.canAnalyseSystemFit
+        && structured?.intendedClubId
+        && structured.projectedRole
+          ? 0.03
+          : 0;
       const totalReportQualityBonus = infraEffectsForReport.reportQualityBonus
-        + (submitEquipBonuses?.reportQuality ?? 0)
+        + Math.max(
+            submitEquipBonuses?.reportQuality ?? 0,
+            preparedWorkItem?.preparationQualityBonus ?? 0,
+          )
+        + (preparedWorkItem?.preparationQualityPoints ?? 0) / 100
+        + systemFitCraftBonus
         + insightReportQualityBonus;
       const prepared = prepareReportSubmission({
         draft,
         conviction,
-        summary,
+        summary: authoritativeSummary,
         strengths,
         weaknesses,
         scout: gameState.scout,
@@ -224,13 +328,46 @@ export function createReportActions(get: GetState, set: SetState) {
         analystReviewBonus: analystReview?.craftQualityBonus,
       });
       let report = prepared.report;
+      if (evidenceAssessment) {
+        const claim = evidenceAssessment.claims[0];
+        const unknown = evidenceAssessment.unknowns[0];
+        const evidenceStrengths = evidenceAssessment.claims
+          .filter((assessmentClaim) => assessmentClaim.support !== "withheld")
+          .map((assessmentClaim) => assessmentClaim.statement);
+        const evidenceLimits = [
+          ...evidenceAssessment.unknowns.map((assessmentUnknown) => assessmentUnknown.statement),
+          ...(structured?.riskAssessments ?? [])
+            .filter((risk) => risk.id !== "noMaterialSignal")
+            .map((risk) => `${risk.label}: ${risk.status}.`),
+        ];
+        report = {
+          ...report,
+          summary: evidenceAssessment.generatedSummary,
+          strengths: evidenceStrengths,
+          weaknesses: evidenceLimits,
+          evidenceAssessment,
+          recommendedAction: evidenceAssessment.recommendation,
+          categoryVerdicts: claim ? {
+            [claim.category]: {
+              verdict: claim.statement,
+              confidence: claim.confidence === "tentative"
+                ? "low"
+                : claim.confidence === "working"
+                  ? "medium"
+                  : "high",
+              hypothesisIds: claim.hypothesisIds,
+              acknowledgedUncertainty: unknown?.statement ?? "No further claim was made.",
+            },
+          } : undefined,
+        };
+      }
       if (structured) {
         const duplicate = Object.values(gameState.reports).find((candidate) =>
           candidate.submittedWeek === gameState.currentWeek
           && candidate.submittedSeason === gameState.currentSeason
           && candidate.playerId === canonicalPlayerId
           && candidate.briefId === structured.briefId
-          && candidate.summary === summary
+          && candidate.summary === authoritativeSummary
           && candidate.conviction === conviction
         );
         if (duplicate && freshObservationIds.length === 0) {
@@ -298,15 +435,21 @@ export function createReportActions(get: GetState, set: SetState) {
       const isNewCase = previousReport === undefined;
 
       const qualityDetailed = prepared.quality;
-      const quality = qualityDetailed.score;
+      const quality = evidenceAssessment?.score.total ?? qualityDetailed.score;
 
       const repBefore = gameState.scout.reputation;
       const baseUpdatedScout = isNewCase
         ? updateReputation(gameState.scout, {
             type: "reportSubmitted",
             quality,
-          })
+        })
         : gameState.scout;
+      const practicedScout = evidenceAssessment
+        ? applyScoutSkillXp(
+            baseUpdatedScout,
+            calculateAssessmentPracticeXp(evidenceAssessment),
+          )
+        : baseUpdatedScout;
       // Difficulty is sign-aware: easier modes improve gains and soften
       // losses, while harder modes do the reverse.
       const repDelta = baseUpdatedScout.reputation - gameState.scout.reputation;
@@ -321,15 +464,15 @@ export function createReportActions(get: GetState, set: SetState) {
           - publicRevisionCost,
       ));
       const updatedScout = {
-        ...baseUpdatedScout,
+        ...practicedScout,
         reputation: adjustedRep,
         reportsSubmitted: isNewCase
-          ? baseUpdatedScout.reportsSubmitted + 1
-          : baseUpdatedScout.reportsSubmitted,
-        ...(pendingInsightReportEffect && baseUpdatedScout.insightState
+          ? practicedScout.reportsSubmitted + 1
+          : practicedScout.reportsSubmitted,
+        ...(pendingInsightReportEffect && practicedScout.insightState
           ? {
               insightState: consumeInsightReportQualityEffect(
-                baseUpdatedScout.insightState,
+                practicedScout.insightState,
                 pendingInsightReportEffect.id,
               ),
             }
@@ -338,6 +481,7 @@ export function createReportActions(get: GetState, set: SetState) {
       const reputationDelta = +(updatedScout.reputation - repBefore).toFixed(1);
       let scoredReport: ScoutReport = {
         ...report,
+        preparationWorkItemId: preparedWorkItem?.id,
         qualityScore: quality,
         reputationDelta,
         craftBreakdown: qualityDetailed.breakdown,
@@ -570,6 +714,20 @@ export function createReportActions(get: GetState, set: SetState) {
       set({
         gameState: synchronizeInternationalAssignmentProgress({
           ...gameState,
+          reportWorkItems: preparedWorkItem
+            ? Object.fromEntries(
+                Object.entries(gameState.reportWorkItems ?? {}).map(([id, item]) => [
+                  id,
+                  id === preparedWorkItem.id
+                    ? {
+                        ...item,
+                        status: "consumed" as const,
+                        consumedByReportId: scoredReport.id,
+                      }
+                    : item,
+                ]),
+              )
+            : gameState.reportWorkItems,
           reports: { ...gameState.reports, [scoredReport.id]: scoredReport },
           scoutingCases: caseLink.scoutingCases,
           scout: updatedScoutAfterResponse,

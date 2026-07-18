@@ -28,6 +28,7 @@ import {
 import { getHiddenLeaguesForCountry } from "@/engine/world/hiddenLeagues";
 import { getCountryMapLabel, getCountryMapPosition } from "@/engine/world/mapCountryRegistry";
 import { getCountryDisplayName } from "@/lib/country";
+import { WorldOutlookDrawer } from "./world/WorldOutlookDrawer";
 
 // ---------------------------------------------------------------------------
 // Country metadata resolver — works for both core and secondary countries
@@ -149,8 +150,8 @@ const CONTINENT_NAMES: Record<string, string> = {
 };
 
 function countryContentLabel(contentTier: WorldCountryAvailability["contentTier"]): string {
-  if (contentTier === "fullWorld") return "Full world";
-  if (contentTier === "talentPool") return "Talent pool";
+  if (contentTier === "fullWorld") return "Live calendar";
+  if (contentTier === "talentPool") return "Scouting network";
   return "Unavailable";
 }
 
@@ -270,10 +271,10 @@ function CountryBrowser({
                 World access
               </p>
               <h2 id="country-browser-title" className="mt-1 text-base font-semibold text-white">
-                Browse generated countries
+                Browse active countries
               </h2>
               <p id="country-browser-description" className="mt-1 text-xs leading-relaxed text-zinc-400">
-                Only countries with real scouting content in this career are listed.
+                Only countries with active scouting opportunities in this career are listed.
               </p>
             </div>
             <button
@@ -288,7 +289,7 @@ function CountryBrowser({
 
           <div className="border-b border-zinc-800 px-4 py-3">
             <label className="relative block">
-              <span className="sr-only">Search generated countries</span>
+              <span className="sr-only">Search active countries</span>
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={16} aria-hidden="true" />
               <input
                 ref={searchRef}
@@ -299,11 +300,11 @@ function CountryBrowser({
               />
             </label>
             <p className="mt-2 text-[10px] text-zinc-500" aria-live="polite">
-              {visibleCountries.length} destination{visibleCountries.length === 1 ? "" : "s"} shown · Full world countries include a fixture calendar; talent pools do not.
+              {visibleCountries.length} destination{visibleCountries.length === 1 ? "" : "s"} shown · Live-calendar countries track fixtures week by week; scouting-network countries focus on prospects and local intelligence.
             </p>
           </div>
 
-          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" aria-label="Generated scouting destinations">
+          <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" aria-label="Active scouting destinations">
             {visibleCountries.map((country) => {
               const countryName = getCountryMeta(country.countryKey).name;
               const continent = CONTINENT_NAMES[getContinentId(country.countryKey)] ?? "Other regions";
@@ -353,9 +354,9 @@ function CountryBrowser({
 
           {visibleCountries.length === 0 && (
             <div className="border-t border-zinc-800 px-4 py-5 text-center">
-              <p className="text-sm font-medium text-zinc-200">No generated destination matches that search.</p>
+              <p className="text-sm font-medium text-zinc-200">No country matches that search.</p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                Try a country name, continent, or world type.
+                Try a country name, continent, or coverage type.
               </p>
             </div>
           )}
@@ -586,6 +587,7 @@ export function InternationalScreen() {
   const bookTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focusRestoreRafRef = useRef<number | null>(null);
   const popupTriggerRef = useRef<HTMLElement | SVGElement | null>(null);
+  const worldOutlookTriggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => () => {
     clearTimeout(bookTimerRef.current);
@@ -600,6 +602,12 @@ export function InternationalScreen() {
   const [popupAnchor, setPopupAnchor] = useState<"map" | "browser" | null>(null);
   const [justBooked, setJustBooked] = useState(false);
   const [travelPosture, setTravelPosture] = useState<TravelPosture>("assignmentFirst");
+  const [worldOutlookOpen, setWorldOutlookOpen] = useState(false);
+
+  const closeWorldOutlook = useCallback(() => {
+    setWorldOutlookOpen(false);
+    requestAnimationFrame(() => worldOutlookTriggerRef.current?.focus({ preventScroll: true }));
+  }, []);
 
   const rememberPopupTrigger = useCallback((candidate: Element | null) => {
     const container = containerRef.current;
@@ -962,8 +970,8 @@ export function InternationalScreen() {
     : [];
   const selectedWorldActivitySummary = selectedAvailability
     ? selectedAvailability.contentTier === "fullWorld"
-      ? `${selectedAvailability.clubCount} generated clubs and ${selectedAvailability.fixtureCount} fixtures are simulated in this career.`
-      : `${selectedAvailability.unsignedYouthCount} youth prospects and ${selectedAvailability.subRegionCount} regional scouting areas are available here. This country has no simulated fixture calendar.`
+      ? `${selectedAvailability.clubCount} active clubs and ${selectedAvailability.fixtureCount} playable fixtures are on the calendar here.`
+      : `${selectedAvailability.unsignedYouthCount} youth prospects and ${selectedAvailability.subRegionCount} regional scouting areas are active here. This country is tracked through local intel rather than a weekly fixture calendar.`
     : undefined;
 
   // Container rect for popup clamping
@@ -1011,6 +1019,18 @@ export function InternationalScreen() {
         <LocationHUD location={locationName} week={currentWeek} />
         </div>
         <BudgetHUD balance={scoutBalance} />
+        <button
+          ref={worldOutlookTriggerRef}
+          type="button"
+          aria-expanded={worldOutlookOpen}
+          aria-controls="world-outlook-drawer"
+          onClick={() => setWorldOutlookOpen(true)}
+          className="absolute left-3 top-16 z-30 flex min-h-11 items-center gap-2 rounded-lg border border-emerald-500/35 bg-zinc-950/90 px-3 py-2 text-xs font-semibold text-emerald-100 shadow-lg backdrop-blur-md transition hover:border-emerald-300/65 hover:bg-zinc-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 md:left-auto md:right-[10.5rem]"
+          data-testid="open-world-outlook"
+        >
+          <Globe2 size={16} aria-hidden="true" />
+          World outlook
+        </button>
         <WorldHistoryDrawer
           history={gameState.worldHistory}
           currentSeason={gameState.currentSeason}
@@ -1090,6 +1110,18 @@ export function InternationalScreen() {
             onBookTravel={handleBookTravel}
             onClose={handleClose}
           />
+        )}
+        {worldOutlookOpen && (
+          <div id="world-outlook-drawer">
+            <WorldOutlookDrawer
+              state={gameState}
+              onClose={closeWorldOutlook}
+              onOpenRivals={() => {
+                setWorldOutlookOpen(false);
+                setScreen("rivals");
+              }}
+            />
+          </div>
         )}
       </div>
     </GameLayout>

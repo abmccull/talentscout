@@ -19,7 +19,7 @@ vi.mock("@/lib/db", () => ({
 }));
 
 describe("professional development progression", () => {
-  it("does not classify an active or just-completed qualification as an idle week", async () => {
+  it("does not treat enrollment alone as professional development, but respects a completed qualification", async () => {
     const { useGameStore } = await import("@/stores/gameStore");
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Learning",
@@ -65,6 +65,8 @@ describe("professional development progression", () => {
             startSeason: 1,
             completionWeek: 5,
             completionSeason: 1,
+            studyWeeksCompleted: 1,
+            requiredStudyWeeks: 4,
           },
         },
       },
@@ -88,9 +90,9 @@ describe("professional development progression", () => {
     );
 
     expect(idle.reputationChange).toBe(-1);
-    expect(studying.reputationChange).toBe(0);
+    expect(studying.reputationChange).toBe(-1);
     expect(completed.reputationChange).toBe(0);
-    expect(studying.satisfactionDeltas).not.toContainEqual(
+    expect(studying.satisfactionDeltas).toContainEqual(
       expect.objectContaining({ reason: "Idle week (no scouting activity)" }),
     );
   }, 60_000);

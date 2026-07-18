@@ -6,10 +6,29 @@ const timingOutputPath = resolve(
   process.env.LONG_CAREER_TIMING_OUTPUT
     ?? "artifacts/soak/browser-ten-season-timing.json",
 );
+const progressOutputPath = timingOutputPath.replace(/\.json$/i, ".progress.json");
+const requestedSeasonCount = Math.max(
+  1,
+  Number.parseInt(process.env.LONG_CAREER_SEASON_COUNT ?? "10", 10) || 10,
+);
 
 test.describe("Long-career world invariants", () => {
   test("youth world remains coherent across ten seasons", async ({ gamePage }) => {
     test.setTimeout(900_000);
+    const recordedBatchTimings: unknown[] = [];
+    await mkdir(dirname(progressOutputPath), { recursive: true });
+    await writeFile(progressOutputPath, "[]\n", "utf8");
+    await gamePage.page.exposeFunction(
+      "__recordLongCareerBatch",
+      async (timing: unknown) => {
+        recordedBatchTimings.push(timing);
+        await writeFile(
+          progressOutputPath,
+          `${JSON.stringify(recordedBatchTimings, null, 2)}\n`,
+          "utf8",
+        );
+      },
+    );
     await gamePage.goto();
     await gamePage.injectState({
       currentWeek: 1,
@@ -24,7 +43,7 @@ test.describe("Long-career world invariants", () => {
       },
     });
 
-    const result = await gamePage.page.evaluate(() => {
+    const result = await gamePage.page.evaluate(async ({ seasonCount }) => {
       const store = (window as any).__GAME_STORE__;
       const initial = store.getState().gameState;
       const initialYouth = new Map(
@@ -45,6 +64,7 @@ test.describe("Long-career world invariants", () => {
         endWeek: number;
         weeksAdvanced: number;
         elapsedMs: number;
+        workerTelemetry: Record<string, unknown> | null;
       }> = [];
       const seasonTimingBySeason = new Map<number, {
         batches: number;
@@ -54,7 +74,7 @@ test.describe("Long-career world invariants", () => {
       }>();
       let batchCount = 0;
 
-      const advanceSafely = (requestedWeeks: number) => {
+      const advanceSafely = async (requestedWeeks: number) => {
         if (batchCount >= MAX_BATCHES) {
           const stalled = store.getState().gameState;
           throw new Error(
@@ -75,9 +95,24 @@ test.describe("Long-career world invariants", () => {
         }
         const ready = store.getState().gameState;
         const started = performance.now();
-        store.getState().batchAdvance(Math.min(8, Math.max(1, requestedWeeks)));
+        await store.getState().batchAdvance(Math.min(8, Math.max(1, requestedWeeks)));
         const elapsedMs = performance.now() - started;
-        const after = store.getState().gameState;
+        const transactionState = store.getState();
+        const after = transactionState.gameState;
+        if (transactionState.weeklyTransactionError) {
+          const depletedClubs = Object.values(after.clubs)
+            .map((club: any) => ({
+              id: club.id,
+              senior: (club.playerIds ?? []).length,
+              academy: (club.academyPlayerIds ?? []).length,
+              loanedIn: (club.loanedInPlayerIds ?? []).length,
+            }))
+            .filter((club: any) => club.senior + club.academy + club.loanedIn < 11)
+            .slice(0, 12);
+          throw new Error(
+            `Weekly transaction failed at S${ready.currentSeason} W${ready.currentWeek}: ${transactionState.weeklyTransactionError}; depleted clubs: ${JSON.stringify(depletedClubs)}`,
+          );
+        }
         const weeksAdvanced = Math.max(
           0,
           (after.totalWeeksPlayed ?? 0) - (ready.totalWeeksPlayed ?? 0),
@@ -99,8 +134,22 @@ test.describe("Long-career world invariants", () => {
           endWeek: after.currentWeek,
           weeksAdvanced,
           elapsedMs: Math.round(elapsedMs * 100) / 100,
+          workerTelemetry: transactionState.lastWeeklyWorkerTelemetry
+            ? {
+                route: transactionState.lastWeeklyWorkerTelemetry.route,
+                fallbackReason: transactionState.lastWeeklyWorkerTelemetry.fallbackReason,
+                computeMs: transactionState.lastWeeklyWorkerTelemetry.computeMs,
+                roundTripMs: transactionState.lastWeeklyWorkerTelemetry.roundTripMs,
+                responseBytes: transactionState.lastWeeklyWorkerTelemetry.responseBytes,
+                changedFieldCount: transactionState.lastWeeklyWorkerTelemetry.changedFieldCount,
+                changedEntryCount: transactionState.lastWeeklyWorkerTelemetry.changedEntryCount,
+                phaseTimings: transactionState.lastWeeklyWorkerTelemetry.phaseTimings,
+                payloadHotspots: transactionState.lastWeeklyWorkerTelemetry.payloadHotspots,
+              }
+            : null,
         };
         batchTimings.push(timing);
+        await (window as any).__recordLongCareerBatch(timing);
         const seasonTiming = seasonTimingBySeason.get(ready.currentSeason) ?? {
           batches: 0,
           weeksAdvanced: 0,
@@ -119,7 +168,7 @@ test.describe("Long-career world invariants", () => {
       while ((store.getState().gameState.totalWeeksPlayed ?? 0) < developmentTargetWeeks) {
         const remaining = developmentTargetWeeks
           - (store.getState().gameState.totalWeeksPlayed ?? 0);
-        advanceSafely(Math.min(8, remaining));
+        await advanceSafely(Math.min(8, remaining));
       }
       const afterThirtyWeeks = store.getState().gameState;
       const developedUnsignedYouth = Object.values(afterThirtyWeeks.unsignedYouth).filter(
@@ -132,9 +181,9 @@ test.describe("Long-career world invariants", () => {
         },
       ).length;
 
-      const targetSeason = initial.currentSeason + 10;
+      const targetSeason = initial.currentSeason + seasonCount;
       while (store.getState().gameState.currentSeason < targetSeason) {
-        advanceSafely(8);
+        await advanceSafely(8);
       }
 
       const state = store.getState().gameState;
@@ -377,12 +426,12 @@ test.describe("Long-career world invariants", () => {
             maxBatchMs: Math.round(timing.maxBatchMs * 100) / 100,
           })),
       };
-    });
+    }, { seasonCount: requestedSeasonCount });
 
     const timingEvidence = {
       schemaVersion: 1,
       generatedAt: new Date().toISOString(),
-      profile: "browser-every-week-ten-season",
+      profile: `browser-every-week-${requestedSeasonCount}-season`,
       reachedSeason: result.reachedSeason,
       targetSeason: result.targetSeason,
       batchCount: result.batchCount,

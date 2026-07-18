@@ -104,7 +104,7 @@ export const MASTERY_PERKS: MasteryPerk[] = [
     requiredSkill: "technicalEye",
     requiredLevel: 15,
     description:
-      "After thousands of hours watching players execute technical actions, your eye now locks onto the movements that belong only to one person — the low-centre-of-gravity dribble, the disguised heel-pass, the trademark snapped finish. Observations can now be tagged with a signatureMove marker, giving reports a dimension that pure statistics can never capture.",
+      "Your eye now locks onto distinctive technical patterns. Live and video work retain one extra detail and flag the pattern for a follow-up check before it becomes a claim.",
     effect: { type: "signatureDetection", enabled: true },
   },
 
@@ -115,7 +115,7 @@ export const MASTERY_PERKS: MasteryPerk[] = [
     requiredSkill: "psychologicalRead",
     requiredLevel: 15,
     description:
-      "Hunched shoulders before a big chance, eyes that dart to the dugout under pressure, a training-ground walk that carries more weight than it should — you read these signals fluently. Unlock direct readings of big-game temperament and composure from body-language analysis during any observation context.",
+      "You read pressure cues more fluently. Live and training observations retain extra mental detail, while reports must still acknowledge the limits of a single cue.",
     effect: {
       type: "bodyLanguageRead",
       attributes: ["bigGameTemperament", "composure"],
@@ -129,7 +129,7 @@ export const MASTERY_PERKS: MasteryPerk[] = [
     requiredSkill: "psychologicalRead",
     requiredLevel: 18,
     description:
-      "True mastery of the psychological read extends beyond match moments into the training ground itself. You assess a player's professionalism — how they respond to coaching, arrive for sessions, and conduct themselves away from the spotlight — and convert those observations into a concrete character assessment on every report.",
+      "Training-ground work retains an additional character cue about response to coaching and professional habits. Repeated contexts are still required for a firm judgment.",
     effect: { type: "characterAssessment", enabled: true },
   },
 
@@ -140,7 +140,7 @@ export const MASTERY_PERKS: MasteryPerk[] = [
     requiredSkill: "tacticalUnderstanding",
     requiredLevel: 15,
     description:
-      "Where others see a player, you see a tactical asset — or liability — within any given system. Your deep understanding of how movements, press triggers, and positional habits interact with different tactical shapes lets you evaluate any player against any formation, not just your current club's preferred one. Every report now includes a system-fit score.",
+      "When a report names a target club and role, your system analysis adds three bounded craft points to the fit judgment.",
     effect: { type: "systemFitAnalysis", enabled: true },
   },
 
@@ -151,7 +151,7 @@ export const MASTERY_PERKS: MasteryPerk[] = [
     requiredSkill: "dataLiteracy",
     requiredLevel: 15,
     description:
-      "Most analysts describe what has happened. You identify what should not have happened — the striker whose xG outperforms his chance quality by a factor the data says is unsustainable, the midfielder whose pressing numbers suggest a ceiling his attributes don't support. Pattern Breaker flags statistical anomalies automatically on every report, separating signal from noise.",
+      "Database work surfaces one additional anomaly candidate for investigation. It remains a lead until another source supports it.",
     effect: { type: "patternBreaking", enabled: true },
   },
 ];

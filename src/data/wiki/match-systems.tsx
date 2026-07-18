@@ -172,9 +172,9 @@ export const matchSystemsArticles: WikiArticle[] = [
     category: "match-systems",
     order: 2,
     summary:
-      "Yellow and red cards affect match ratings and trigger suspensions. 5 yellows equals a 1-match ban; 10 yellows equals a 2-match ban. Red cards bring 1-3 match suspensions.",
+      "Yellow and red cards drag down performances and can rule players out of coming fixtures.",
     searchText:
-      "Discipline events arise from tackle and foul events during matches. Yellow card probability depends on event quality: low quality tackles have a 40% chance of producing a yellow card, moderate quality 12%, and high quality 3%. Players with the Temperamental trait have double the yellow card probability. Accumulation thresholds: 5 yellow cards in a season triggers a 1-match suspension ban. 10 yellow cards in a season triggers a 2-match suspension ban. A red card results in an immediate sending off and a suspension of 1 to 3 matches depending on the reason. The specific red card suspension length: dangerous play is 1 match, violent conduct is 2 matches, and serious foul play is 3 matches. Match rating penalties: a yellow card reduces the match rating by -0.3. A red card caps the match rating at a maximum of 3.0 regardless of other performance. Discipline is an important factor when scouting. A player who consistently picks up yellow cards may be a liability. The Temperamental trait doubles card probability, making it a critical hidden factor. Conversely, disciplined players with high composure rarely get booked. Check a player's card record across multiple matches to assess their discipline risk before committing to a high-conviction report.",
+      "Discipline events arise from tackles and fouls during matches. Rash, poorly timed defending attracts more referee attention than controlled challenges, and temperamental players are more likely to lose the official. Cards drag down match ratings and can spill into suspensions, leaving players unavailable for upcoming fixtures. Discipline matters when scouting: a player who keeps getting booked may be carrying a recurring liability, while composed players usually stay on the right side of the referee. Check the card trail across multiple matches before committing to a high-conviction report.",
     content: (
       <SectionBlock>
         <Para>
@@ -182,42 +182,35 @@ export const matchSystemsArticles: WikiArticle[] = [
           Cards affect match ratings and can trigger suspensions that remove
           players from upcoming fixtures.
         </Para>
-        <Subheading>Yellow Card Probability</Subheading>
+        <Subheading>What Tends to Draw Cards</Subheading>
         <Table
-          headers={["Event Quality", "Yellow Card Chance"]}
+          headers={["Pattern", "Typical outcome"]}
           rows={[
-            ["Low quality", "40%"],
-            ["Moderate quality", "12%"],
-            ["High quality", "3%"],
+            ["Late or reckless defending", "More likely to draw referee attention."],
+            ["Controlled defending", "Less likely to lead to a booking."],
+            ["Temperamental streak", "Raises the risk of repeated cautions."],
           ]}
         />
         <Para>
           Players with the <Tag color="rose">Temperamental</Tag> trait have{" "}
           <span className="font-medium text-zinc-200">
-            double
+            a shorter fuse
           </span>{" "}
-          the yellow card probability.
+          when matches turn heated, so their disciplinary trail deserves extra scrutiny.
         </Para>
         <Subheading>Suspensions</Subheading>
-        <Table
-          headers={["Trigger", "Suspension"]}
-          rows={[
-            ["5 yellow cards in a season", "1-match ban"],
-            ["10 yellow cards in a season", "2-match ban"],
-            ["Red card — dangerous play", "1-match ban"],
-            ["Red card — violent conduct", "2-match ban"],
-            ["Red card — serious foul play", "3-match ban"],
-          ]}
-        />
+        <Para>
+          Accumulated cautions and straight reds can spill into bans, so a messy
+          disciplinary trail can leave a player unavailable when it matters.
+        </Para>
         <Subheading>Rating Impact</Subheading>
         <BulletList
           items={[
             <>
-              Yellow card: <Tag color="amber">-0.3</Tag> to match rating.
+              A yellow card usually takes the shine off an otherwise solid performance.
             </>,
             <>
-              Red card: match rating capped at <Tag color="rose">3.0</Tag>{" "}
-              regardless of other performance.
+              A red card can wreck the match line entirely, no matter how well the player started.
             </>,
           ]}
         />
@@ -253,54 +246,47 @@ export const matchSystemsArticles: WikiArticle[] = [
     category: "match-systems",
     order: 3,
     summary:
-      "Players with CA above 80 can move between countries. Transfers follow real-world flow patterns, with 0-3 moves per week and fees based on market value.",
+      "Cross-border moves follow player level, reputation fit, and the heat of the market.",
     searchText:
-      "The transfer system simulates player movement between clubs and countries. Cross-country transfers are available for players with current ability above 80. Between 0 and 3 transfers occur each week. Transfer fees are calculated as the player's market value multiplied by a random factor between 0.8 and 1.2. The system uses a flow matrix based on real-world transfer patterns. Major flows include Brazil to England at 15% probability, Brazil to Spain at 12%, Brazil to Italy at 10%, Argentina to Spain at 15%, Argentina to Italy at 12%, France to England at 12%, Portugal to England at 10%, and many more. The reputation match window is 20, meaning clubs prefer to sign players whose reputation is within 20 points of their own level. Transfers create scouting opportunities. When a high-ability player moves to a new league they become a potential target for observation. Transfer windows are seasonal, with more activity during the summer and January windows. Market value is calculated using a 5th-power curve based on current ability. A player with CA 160 is worth dramatically more than a player with CA 80. Age, position, and contract status also influence value. Report marketplace prices spike during transfer windows as clubs urgently seek intelligence on potential signings. The market temperature modifier ranges from 0.7x during cold periods to 1.8x near transfer deadline day.",
+      "The transfer system moves players between clubs and countries when level, reputation, opportunity, and market pressure line up. Stronger players are more likely to attract foreign interest, and busy windows create more movement than quiet stretches. Fees lean on market value, age, position, contract leverage, and the urgency of buyer and seller. Transfer routes echo familiar football pathways, with talent flowing from development leagues into richer competitions and from strong domestic clubs into continental stages. Each move can create fresh scouting opportunities, especially when a player lands in a league your clients suddenly care about. Report demand rises when the market is running hot.",
     content: (
       <SectionBlock>
         <Para>
           The transfer system simulates player movement between clubs and
-          countries. Cross-country transfers are available for players with{" "}
-          <Tag color="emerald">current ability above 80</Tag>. Between 0 and 3
-          transfers occur each week.
+          countries. Cross-border moves are most common when a player&apos;s
+          level and reputation fit the buying club and the market turns active.
         </Para>
         <Subheading>Transfer Mechanics</Subheading>
         <BulletList
           items={[
-            "Transfer fee = market value x random factor (0.8 to 1.2).",
-            "Reputation match window of 20 — clubs prefer players near their level.",
-            "Market value follows a 5th-power curve based on current ability.",
-            "Age, position, and contract status also influence value.",
+            "Cross-border moves favour players whose level and reputation fit the buying club.",
+            "Fees rise or soften with market value, age, contract leverage, and window urgency.",
+            "Busy windows create more churn; quiet periods are calmer and more selective.",
+            "A single move can quickly change where your next best lead sits.",
           ]}
         />
         <Subheading>Flow Patterns</Subheading>
         <Para>
-          Transfers follow real-world flow patterns. Major routes include:
+          Transfers follow familiar football pathways:
         </Para>
         <Table
-          headers={["From", "To", "Probability"]}
+          headers={["Route type", "Typical direction"]}
           rows={[
-            ["Brazil", "England", "15%"],
-            ["Brazil", "Spain", "12%"],
-            ["Brazil", "Italy", "10%"],
-            ["Argentina", "Spain", "15%"],
-            ["Argentina", "Italy", "12%"],
-            ["France", "England", "12%"],
-            ["Portugal", "England", "10%"],
+            ["South American standouts", "Into Europe's richer leagues."],
+            ["Selling leagues", "Toward clubs with bigger transfer budgets."],
+            ["Strong domestic performers", "Into higher-prestige regional stages."],
+            ["Established pros", "Into clubs that need ready-made help now."],
           ]}
         />
         <Subheading>Market Temperature</Subheading>
         <Para>
-          Report marketplace prices fluctuate with transfer activity. The
-          market temperature modifier ranges from{" "}
-          <Tag color="blue">0.7x</Tag> during cold periods to{" "}
-          <Tag color="emerald">1.8x</Tag> near transfer deadline day. Time
-          your report sales for maximum revenue.
+          Report marketplace prices fluctuate with transfer activity. Quiet
+          weeks bring calmer prices, while deadline pressure creates urgent
+          calls and stronger bids. Time your report sales for maximum revenue.
         </Para>
         <InfoCard title="Scouting Opportunity" color="emerald">
-          When a high-ability player moves to a new league, they become a prime
-          target for observation. Clubs urgently seek intelligence on potential
-          signings during transfer windows — position yourself to supply it.
+          When a promising player lands in a new league, fresh eyes are needed
+          quickly. Stay close to active markets if you want urgent commissions.
         </InfoCard>
       </SectionBlock>
     ),

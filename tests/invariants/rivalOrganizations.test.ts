@@ -3,7 +3,9 @@ import type { GameState, RivalScout } from "@/engine/core/types";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import {
   RIVAL_ORGANIZATION_DEFINITIONS,
+  assessRivalMarketCounterplay,
   createRivalOrganizationState,
+  deriveRivalMarketPressure,
   getOpenRivalOrganizationOpportunities,
   getOrganizationForRival,
   initializeRivalOrganizations,
@@ -252,6 +254,137 @@ describe("persistent rival organizations", () => {
       4,
     )).toEqual(existing);
   });
+
+  it("projects watchers, leaks, and only recorded family preferences", () => {
+    const tracked = {
+      ...rival("market-watcher", 0),
+      targetPlayerIds: ["target"],
+      currentTarget: "target",
+      competingForPlayers: ["target"],
+      scoutingProgress: { target: 5 },
+      evidenceByPlayer: {
+        target: {
+          playerId: "target",
+          estimatedCurrentAbility: 95,
+          estimatedPotentialAbility: 145,
+          confidence: 0.7,
+          errorMargin: 10,
+          observations: 3,
+          specialtyFit: 1.1,
+          lastObservedSeason: 2,
+          lastObservedWeek: 7,
+        },
+      },
+    };
+    const baseState = {
+      currentSeason: 2,
+      currentWeek: 8,
+      fixtures: {},
+      rivalScouts: { [tracked.id]: tracked },
+      rivalOrganizationState: createRivalOrganizationState(),
+      contacts: {
+        source: {
+          id: "source",
+          gossipQueue: [{
+            id: "rumour",
+            type: "transferRumor",
+            playerId: "target",
+            dismissed: false,
+            expiresAt: { season: 2, week: 10 },
+          }],
+        },
+      },
+      unsignedYouth: {},
+      consequenceState: createConsequenceEngineState(),
+    } as unknown as GameState;
+    const unverified = deriveRivalMarketPressure(baseState, "target");
+    const familyFact = {
+      id: "family-target",
+      kind: "familyMarketPreference",
+      subject: { kind: "player", id: "target" },
+      value: "prefers-stability",
+      observedAt: { season: 2, week: 7 },
+      visibility: "stakeholders" as const,
+    };
+    const recorded = deriveRivalMarketPressure({
+      ...baseState,
+      consequenceState: createConsequenceEngineState({
+        facts: { [familyFact.id]: familyFact },
+      }),
+    }, "target");
+
+    expect(unverified).toMatchObject({
+      informationExposure: "leaking",
+      family: { preference: "unverified" },
+      watchers: [expect.objectContaining({ rivalId: tracked.id })],
+    });
+    expect(recorded.family).toMatchObject({
+      preference: "prefers-stability",
+      sourceFactId: familyFact.id,
+    });
+    expect(recorded.score).toBeGreaterThanOrEqual(unverified.score);
+  });
+
+  it("lets a scout influence pressure without overriding transfer authorities", () => {
+    const pressure = deriveRivalMarketPressure({
+      currentSeason: 1,
+      currentWeek: 5,
+      fixtures: {},
+      rivalScouts: {},
+      contacts: {},
+      unsignedYouth: {},
+      consequenceState: createConsequenceEngineState(),
+      rivalOrganizationState: createRivalOrganizationState(),
+    } as unknown as GameState, "target");
+    const transfer = {
+      viable: false,
+      affordability: {
+        result: { affordable: false },
+        reasons: ["The buying club cannot fund the agreement."],
+      },
+      registration: {
+        eligible: false,
+        reasons: ["The registration route is blocked."],
+      },
+      willingness: {
+        willingToJoin: false,
+        reasons: ["The player has not agreed to the pathway."],
+      },
+    } as Parameters<typeof assessRivalMarketCounterplay>[0]["transfer"];
+    const advocate = assessRivalMarketCounterplay({
+      pressure,
+      response: "advocate",
+      transfer,
+    });
+    const withdraw = assessRivalMarketCounterplay({
+      pressure,
+      response: "withdraw",
+      transfer,
+    });
+
+    expect(advocate.rivalPressureMultiplier).toBeLessThan(withdraw.rivalPressureMultiplier);
+    expect(advocate.scoutInfluence).toBeGreaterThan(withdraw.scoutInfluence);
+    expect(advocate.transferAuthorityStatus).toBe("blocked");
+    expect(advocate.constraints).toEqual(expect.arrayContaining([
+      "The buying club cannot fund the agreement.",
+      "The registration route is blocked.",
+      "The player has not agreed to the pathway.",
+    ]));
+    expect(advocate.rivalPressureMultiplier).toBeGreaterThanOrEqual(0.75);
+    expect(withdraw.rivalPressureMultiplier).toBeLessThanOrEqual(1.2);
+
+    const canonicalVeto = assessRivalMarketCounterplay({
+      pressure,
+      response: "advocate",
+      transfer: {
+        viable: false,
+        affordability: { result: { affordable: true }, reasons: [] },
+        registration: { eligible: true, reasons: [] },
+        willingness: { willingToJoin: true, reasons: [] },
+      } as unknown as Parameters<typeof assessRivalMarketCounterplay>[0]["transfer"],
+    });
+    expect(canonicalVeto.transferAuthorityStatus).toBe("blocked");
+  });
 });
 
 describe("rival organization store projection", () => {
@@ -304,4 +437,3 @@ describe("rival organization store projection", () => {
     expect(open[0].expiresWeek).toBeLessThanOrEqual(open[1].expiresWeek);
   });
 });
-

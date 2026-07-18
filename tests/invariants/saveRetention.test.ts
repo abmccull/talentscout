@@ -13,6 +13,7 @@ import {
   measureSaveRetentionFootprint,
   migrateHistoricalFixtureRetention,
   observeSaveRetentionCompaction,
+  retainMatchRatingsForFixtures,
   retainRequiredFixtureHistory,
   resolvePlacementPlayerId,
   selectWorldHistoryPlayers,
@@ -136,6 +137,16 @@ describe("long-career save retention", () => {
     expect(legacy.fixtures.old).toBeUndefined();
     expect(legacy.matchRatings.old).toBeUndefined();
     expect(legacy.matchRatings.observed).toBeDefined();
+  });
+
+  it("drops raw ratings whenever their fixture leaves the live retention ledger", () => {
+    const sample = state();
+    const retainedFixtures = retainRequiredFixtureHistory(sample);
+
+    expect(retainMatchRatingsForFixtures(retainedFixtures, sample.matchRatings)).toEqual({
+      current: sample.matchRatings.current,
+      observed: sample.matchRatings.observed,
+    });
   });
 
   it("fails safely for pre-fixture saves during canonical migration", () => {

@@ -201,6 +201,7 @@ test.describe("Quick Interaction integrity", () => {
       const session = store.getState().activeSession;
       if (session?.state !== "reflection") throw new Error("Expected reflection");
       const stagedInsight = session.insightPointsEarned;
+      const reflectionInsight = store.getState().lastReflectionResult?.insightPointsFromReflection ?? 0;
       const stagedFatigue = session.phases.reduce(
         (sum: number, phase: any) => sum + (phase.choiceResolution?.fatigueDelta ?? 0),
         0,
@@ -209,6 +210,7 @@ test.describe("Quick Interaction integrity", () => {
       const state = store.getState();
       return {
         stagedInsight,
+        reflectionInsight,
         stagedFatigue,
         fatigue: state.gameState.scout.fatigue,
         lifetimeEarned: state.gameState.scout.insightState?.lifetimeEarned ?? 0,
@@ -216,7 +218,9 @@ test.describe("Quick Interaction integrity", () => {
       };
     });
 
-    expect(completed.lifetimeEarned).toBe(baseline.lifetimeEarned + completed.stagedInsight);
+    expect(completed.lifetimeEarned).toBe(
+      baseline.lifetimeEarned + completed.stagedInsight + completed.reflectionInsight,
+    );
     expect(completed.fatigue).toBe(Math.min(100, baseline.fatigue + completed.stagedFatigue));
     expect(completed.completions).toBe(baseline.completions + 1);
 

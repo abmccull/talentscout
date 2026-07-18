@@ -11,6 +11,7 @@ import { createRNG } from "@/engine/rng";
 import {
   applyRegionalPresenceToObservation,
   deriveRegionalPresence,
+  deriveTerritorialStrategy,
   getRegionalTravelQuote,
 } from "@/engine/world/regionalPresence";
 import {
@@ -472,5 +473,149 @@ describe("regional presence invariants", () => {
     });
     expect(ghost.effects.discoveryMultiplier).toBe(0);
     expect(ghost.effects.opportunityMultiplier).toBe(0);
+  });
+
+  it("ages dated local intelligence without penalizing undated legacy saves", () => {
+    const remoteFinances = { ...finances(), employees: [], satelliteOffices: [] };
+    const baseContact = state().contacts.brazilAgent;
+    const legacy = deriveRegionalPresence(state({
+      finances: remoteFinances,
+      contacts: { brazilAgent: baseContact },
+    }), "brazil");
+    const fresh = deriveRegionalPresence(state({
+      finances: remoteFinances,
+      contacts: {
+        brazilAgent: {
+          ...baseContact,
+          lastInteractionAt: { season: 2, week: 7 },
+        },
+      },
+    }), "brazil");
+    const stale = deriveRegionalPresence(state({
+      finances: remoteFinances,
+      contacts: {
+        brazilAgent: {
+          ...baseContact,
+          lastInteractionAt: { season: 1, week: 25 },
+        },
+      },
+    }), "brazil");
+
+    expect(legacy.territorialContext.intel).toMatchObject({ freshness: "unknown" });
+    expect(fresh.territorialContext.intel).toMatchObject({ freshness: "live", ageWeeks: 1 });
+    expect(stale.territorialContext.intel.freshness).toBe("stale");
+    expect(stale.effects.observationConfidenceBonus)
+      .toBeLessThan(fresh.effects.observationConfidenceBonus);
+  });
+
+  it("derives calendar and rules pressure from the active football world", () => {
+    const contextual = deriveRegionalPresence(state({
+      fixtures: {
+        "bra-fixture": {
+          id: "bra-fixture",
+          leagueId: "bra-league",
+          homeClubId: "bra-club",
+          awayClubId: "eng-club",
+          week: 8,
+          season: 2,
+          played: false,
+        },
+      },
+      youthTournaments: {
+        showcase: {
+          id: "showcase",
+          name: "Brazil Youth Showcase",
+          country: "Brazil",
+          countryKey: "brazil",
+          category: "named",
+          prestige: "national",
+          startWeek: 8,
+          endWeek: 10,
+          season: 2,
+          discovered: true,
+          attended: false,
+          poolSizeMultiplier: 1,
+          observationBonus: 1,
+          extraAttributes: 0,
+        },
+      },
+      seasonEvents: [{
+        id: "youth-cup",
+        type: "youthCup",
+        name: "Youth Cup",
+        startWeek: 7,
+        endWeek: 9,
+        description: "Live youth competition",
+      }, {
+        id: "deadline",
+        type: "transferDeadlineDrama",
+        name: "Transfer Deadline",
+        startWeek: 8,
+        endWeek: 8,
+        description: "Registration decisions are time-sensitive",
+      }],
+    }), "brazil");
+
+    expect(contextual.territorialContext.calendar).toMatchObject({
+      intensity: "crowded",
+      visibleFixtureWindows: 1,
+      visibleTournamentWindows: 1,
+    });
+    expect(contextual.territorialContext.rules).toMatchObject({
+      climate: "uncertain",
+      signals: expect.arrayContaining(["Deadline pressure"]),
+    });
+  });
+
+  it("turns visible rival watchers into territorial market pressure", () => {
+    const contestedState = state({
+      rivalScouts: {
+        watcher: {
+          id: "watcher",
+          name: "Marina Vale",
+          quality: 5,
+          specialization: "youth",
+          clubId: "eng-club",
+          targetPlayerIds: ["prospect"],
+          currentTarget: "prospect",
+          competingForPlayers: ["prospect"],
+          scoutingProgress: { prospect: 5 },
+          reputation: 75,
+          personality: "aggressive",
+          isNemesis: false,
+          aggressiveness: 1,
+          budgetTier: "high",
+          winsAgainstPlayer: 0,
+          lossesToPlayer: 0,
+        },
+      },
+    });
+    const open = deriveRegionalPresence(state({ rivalScouts: {} }), "brazil");
+    const contested = deriveRegionalPresence(contestedState, "brazil");
+
+    expect(contested.territorialContext.rivalMarket.watcherCount).toBe(1);
+    expect(["contested", "closing"]).toContain(
+      contested.territorialContext.rivalMarket.pressureBand,
+    );
+    expect(contested.effects.opportunityMultiplier).toBeLessThan(open.effects.opportunityMultiplier);
+  });
+
+  it("makes deep specialization and supported breadth carry different tradeoffs", () => {
+    const specialistState = state({
+      finances: { ...finances(), employees: [], satelliteOffices: [] },
+      contacts: {},
+      regionalKnowledge: {
+        england: knowledge("england", 90),
+        brazil: knowledge("brazil", 0),
+      },
+    });
+    const specialist = deriveTerritorialStrategy(specialistState);
+    const network = deriveTerritorialStrategy(state());
+
+    expect(specialist.posture).toBe("specialist");
+    expect(network.posture).toBe("network");
+    expect(specialist.depthScore).toBeGreaterThan(specialist.breadthScore / 2);
+    expect(specialist.tradeoffs.join(" ")).toContain("remote access");
+    expect(network.tradeoffs.join(" ")).toContain("stale-intelligence risk");
   });
 });

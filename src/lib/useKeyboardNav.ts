@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useGameStore, type GameScreen } from "@/stores/gameStore";
+import { useTutorialStore } from "@/stores/tutorialStore";
 
 const KEY_TO_SCREEN: Record<string, GameScreen[]> = {
   "1": ["dashboard"],
@@ -115,6 +116,10 @@ export function useKeyboardNav(): void {
       const key = e.key;
 
       if (key === "Escape") {
+        if (useTutorialStore.getState().guidedSessionActive) {
+          e.preventDefault();
+          return;
+        }
         if (ESCAPE_TO_DASHBOARD_SCREENS.has(currentScreen)) {
           e.preventDefault();
           setScreen("dashboard");
@@ -159,6 +164,10 @@ export function useKeyboardNav(): void {
       }
 
       if (key === "F1") {
+        if (useTutorialStore.getState().guidedSessionActive) {
+          e.preventDefault();
+          return;
+        }
         if (!NON_GAME_SCREENS.has(currentScreen) && onFeedbackOpen) {
           e.preventDefault();
           onFeedbackOpen();

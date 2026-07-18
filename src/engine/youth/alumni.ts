@@ -33,6 +33,21 @@ import type {
   InboxMessage,
 } from "@/engine/core/types";
 
+type CanonicalFixtures = Record<string, import("@/engine/core/types").Fixture>;
+type CanonicalRatings = Record<string, Record<string, import("@/engine/core/types").PlayerMatchRating>>;
+
+interface CanonicalSeasonTotals {
+  appearances: number;
+  goals: number;
+  assists: number;
+  ratingTotal: number;
+}
+
+const ALUMNI_SEASON_SUMMARY_CACHE = new WeakMap<
+  CanonicalRatings,
+  WeakMap<CanonicalFixtures, Map<number, Map<string, CanonicalSeasonTotals>>>
+>();
+
 // =============================================================================
 // HELPERS
 // =============================================================================
@@ -75,6 +90,51 @@ function hasCareerUpdate(
   type: AlumniCareerUpdateType,
 ): boolean {
   return record.careerUpdates.some((u) => u.type === type);
+}
+
+function getSeasonPlayerTotals(
+  season: number,
+  fixtures: CanonicalFixtures,
+  matchRatings: CanonicalRatings,
+): Map<string, CanonicalSeasonTotals> {
+  let fixturesCache = ALUMNI_SEASON_SUMMARY_CACHE.get(matchRatings);
+  if (!fixturesCache) {
+    fixturesCache = new WeakMap();
+    ALUMNI_SEASON_SUMMARY_CACHE.set(matchRatings, fixturesCache);
+  }
+
+  let seasonCache = fixturesCache.get(fixtures);
+  if (!seasonCache) {
+    seasonCache = new Map();
+    fixturesCache.set(fixtures, seasonCache);
+  }
+
+  const cached = seasonCache.get(season);
+  if (cached) return cached;
+
+  const totalsByPlayerId = new Map<string, CanonicalSeasonTotals>();
+  for (const [fixtureId, fixtureRatings] of Object.entries(matchRatings)) {
+    const fixture = fixtures[fixtureId];
+    if (!fixture || fixture.played !== true || (fixture.season ?? season) !== season) continue;
+
+    for (const rating of Object.values(fixtureRatings)) {
+      if ((rating.minutesPlayed ?? 0) <= 0) continue;
+      const current = totalsByPlayerId.get(rating.playerId) ?? {
+        appearances: 0,
+        goals: 0,
+        assists: 0,
+        ratingTotal: 0,
+      };
+      current.appearances += 1;
+      current.goals += rating.stats.goals ?? 0;
+      current.assists += rating.stats.assists ?? 0;
+      current.ratingTotal += rating.rating;
+      totalsByPlayerId.set(rating.playerId, current);
+    }
+  }
+
+  seasonCache.set(season, totalsByPlayerId);
+  return totalsByPlayerId;
 }
 
 /**
@@ -526,65 +586,32 @@ export function addAlumniSnapshot(
 /**
  * F12: Generate season summary stats for an alumni.
  *
- * Simulates a season's worth of appearances, goals, assists, and average
- * rating based on the player's current ability and position. Called at end
- * of season for each active alumni.
+ * Consolidates the same explicit fixture participation used by form, loans,
+ * transfers, and season history. No second statistical career is invented.
  *
  * Returns a new record with the season stats appended (or replaced if a
  * summary for that season already exists).
  */
 export function generateAlumniSeasonSummary(
-  rng: RNG,
   record: AlumniRecord,
   player: Player,
   season: number,
+  fixtures: CanonicalFixtures,
+  matchRatings: CanonicalRatings,
 ): AlumniRecord {
-  // Simulated appearances based on ability — higher CA = more playing time
-  const baseAppearances = player.currentAbility >= 100
-    ? rng.nextInt(25, 38)
-    : player.currentAbility >= 80
-      ? rng.nextInt(15, 30)
-      : player.currentAbility >= 60
-        ? rng.nextInt(5, 20)
-        : rng.nextInt(0, 10);
+  const seasonTotals = getSeasonPlayerTotals(season, fixtures, matchRatings).get(player.id);
+  if (!seasonTotals || seasonTotals.appearances === 0) return record;
 
-  // Reduce if injured
-  const appearances = player.injured
-    ? Math.max(0, baseAppearances - rng.nextInt(5, 15))
-    : baseAppearances;
-
-  // Goals and assists depend on position and ability
-  const isAttacker = player.position === "ST" || player.position === "LW" || player.position === "RW";
-  const isMidfielder = player.position === "CM" || player.position === "CAM" || player.position === "CDM";
-
-  let goals = 0;
-  let assists = 0;
-
-  if (appearances > 0) {
-    if (isAttacker) {
-      goals = Math.round(appearances * (0.2 + (player.currentAbility / 200) * 0.4) * (0.7 + rng.next() * 0.6));
-      assists = Math.round(appearances * (0.1 + rng.next() * 0.15));
-    } else if (isMidfielder) {
-      goals = Math.round(appearances * (0.05 + (player.currentAbility / 200) * 0.15) * (0.7 + rng.next() * 0.6));
-      assists = Math.round(appearances * (0.1 + (player.currentAbility / 200) * 0.2) * (0.7 + rng.next() * 0.6));
-    } else {
-      // Defenders and GK
-      goals = rng.chance(0.15) ? rng.nextInt(1, 3) : 0;
-      assists = rng.chance(0.2) ? rng.nextInt(1, 4) : 0;
-    }
-  }
-
-  // Average rating on 1-10 scale, based on ability
-  const baseRating = 5.0 + (player.currentAbility / 200) * 3.5;
-  const avgRating = Math.round((baseRating + (rng.next() - 0.5) * 1.0) * 10) / 10;
+  const avgRating = seasonTotals.ratingTotal / seasonTotals.appearances;
 
   const stats: AlumniSeasonStats = {
     season,
-    appearances,
-    goals,
-    assists,
-    avgRating: Math.max(1, Math.min(10, avgRating)),
+    appearances: seasonTotals.appearances,
+    goals: seasonTotals.goals,
+    assists: seasonTotals.assists,
+    avgRating: Math.round(Math.max(1, Math.min(10, avgRating)) * 10) / 10,
     clubId: player.clubId,
+    source: "canonicalCompetition",
   };
 
   // Replace existing season entry or append

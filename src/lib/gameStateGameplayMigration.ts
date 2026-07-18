@@ -54,6 +54,7 @@ import {
   inferLegacyCareerChronology,
 } from "@/engine/career/chronology";
 import { createCareerMomentState } from "@/engine/career/careerMoments";
+import { migrateStructuredScoutingEvidence } from "@/engine/scout/evidenceMigration";
 
 type LegacyContactInteraction = Omit<ContactInteraction, "occurredAt"> & {
   occurredAt?: GameDate;
@@ -653,7 +654,10 @@ function migrateRivalsContactsAndAlumni(state: GameState): void {
   for (const record of state.alumniRecords) {
     record.careerUpdates ??= [];
     record.currentStatus ??= "academy";
-    record.seasonStats ??= [];
+    record.seasonStats = (record.seasonStats ?? []).map((stats) => ({
+      ...stats,
+      source: stats.source ?? "legacyEstimate",
+    }));
     record.becameContact ??= false;
   }
 }
@@ -672,6 +676,7 @@ function normalizeRequiredStateShape(state: GameState): void {
   state.eventChains ??= [];
   state.satisfactionHistory ??= [];
   state.systemFitCache ??= {};
+  state.reportWorkItems ??= {};
   state.freeAgentNegotiations ??= [];
   state.freeAgentPool ??= createEmptyPool(state.currentSeason);
   state.freeAgentPool.agents ??= [];
@@ -682,6 +687,15 @@ function normalizeRequiredStateShape(state: GameState): void {
   state.createdAt ??= 0;
   state.lastSaved ??= 0;
   state.totalWeeksPlayed ??= 0;
+  const leagueIdsWithFixtures = new Set(
+    Object.values(state.fixtures ?? {}).map((fixture) => fixture.leagueId),
+  );
+  for (const league of Object.values(state.leagues ?? {})) {
+    league.coverageTier ??= leagueIdsWithFixtures.has(league.id) ? "full" : "abstract";
+  }
+  for (const fixture of Object.values(state.fixtures ?? {})) {
+    fixture.simulationDetail ??= "full";
+  }
 
   // Pre-economics saves can have a financial envelope without the later
   // expense map. `migrateFinancialRecord` deliberately retains historical
@@ -689,6 +703,93 @@ function normalizeRequiredStateShape(state: GameState): void {
   // expense categories without inventing spending.
   if (state.finances) {
     state.finances.expenses ??= {} as FinancialRecord["expenses"];
+  }
+}
+
+/**
+ * Older agency saves stored employee output as ordinary ScoutReport records.
+ * Move those records into an explicit, non-authoritative archive so they can
+ * no longer affect awards, listings, performance reviews, or authored cases.
+ */
+function migrateLegacyEmployeeReports(state: GameState): void {
+  if (!state.finances) return;
+  const employeesById = new Map(
+    state.finances.employees.map((employee) => [employee.id, employee] as const),
+  );
+  const legacyReports = Object.values(state.reports).filter((report) =>
+    report.id.startsWith("rpt_emp_") || employeesById.has(report.scoutId)
+  );
+  if (legacyReports.length === 0) return;
+
+  const removedIds = new Set(legacyReports.map((report) => report.id));
+  const existingProductIds = new Set(
+    state.finances.staffWorkProducts.map((product) => product.id),
+  );
+  const migratedProducts = legacyReports
+    .filter((report) => !existingProductIds.has(`legacy-staff-work:${report.id}`))
+    .map((report) => {
+      const employee = employeesById.get(report.scoutId);
+      return {
+        id: `legacy-staff-work:${report.id}`,
+        playerId: report.playerId,
+        employeeId: report.scoutId,
+        employeeName: employee?.name ?? "Former agency employee",
+        clientClubId: report.intendedClubId,
+        createdWeek: report.submittedWeek,
+        createdSeason: report.submittedSeason,
+        status: "archived" as const,
+        qualityScore: report.qualityScore,
+        signals: [{
+          id: `legacy:${report.id}`,
+          category: "performance" as const,
+          statement: "A staff note from an older career version was preserved without treating its estimates as player-authored evidence.",
+          source: "legacyEstimate" as const,
+          confidence: "limited" as const,
+        }],
+        limitation: "Legacy staff estimate. It cannot be delivered, sold, scored, or used in a personal scouting case.",
+        suggestedConviction: "monitor" as const,
+      };
+    });
+
+  state.finances = {
+    ...state.finances,
+    staffWorkProducts: [...state.finances.staffWorkProducts, ...migratedProducts],
+    reportListings: state.finances.reportListings.filter(
+      (listing) => !removedIds.has(listing.reportId),
+    ),
+    employees: state.finances.employees.map((employee) => ({
+      ...employee,
+      workProductsGenerated: Array.from(new Set([
+        ...(employee.workProductsGenerated ?? []),
+        ...legacyReports
+          .filter((report) => report.scoutId === employee.id)
+          .map((report) => `legacy-staff-work:${report.id}`),
+      ])),
+    })),
+  };
+  for (const reportId of removedIds) delete state.reports[reportId];
+  state.transferRecords = (state.transferRecords ?? []).filter(
+    (record) => !removedIds.has(record.reportId),
+  );
+  for (const [caseId, scoutingCase] of Object.entries(state.scoutingCases ?? {})) {
+    const reportIds = scoutingCase.reportIds.filter((id) => !removedIds.has(id));
+    if (
+      reportIds.length === 0
+      && scoutingCase.deliveryIds.length === 0
+      && scoutingCase.placementReportIds.length === 0
+    ) {
+      delete state.scoutingCases[caseId];
+      continue;
+    }
+    state.scoutingCases[caseId] = {
+      ...scoutingCase,
+      reportIds,
+      activeReportId: scoutingCase.activeReportId
+        && !removedIds.has(scoutingCase.activeReportId)
+          ? scoutingCase.activeReportId
+          : reportIds.at(-1),
+      legacyUnlinked: reportIds.length === 0 ? true : scoutingCase.legacyUnlinked,
+    };
   }
 }
 
@@ -756,6 +857,7 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
       state.finances,
       getSeasonLength(state.fixtures, state.currentSeason),
     );
+    migrateLegacyEmployeeReports(state);
   }
 
   migratePlayerRolesAndTraits(state);
@@ -869,8 +971,9 @@ export function applyGameplaySaveMigrations(state: GameState): GameState {
     club.academyPlayerIds ??= [];
   }
 
+  const evidenceMigrated = migrateStructuredScoutingEvidence(state);
   const compacted = reconcileScenarioAuthority(
-    migratePoliticalMeetingState(compactLongCareerHistory(resetRebuildableGameStateCaches(state))),
+    migratePoliticalMeetingState(compactLongCareerHistory(resetRebuildableGameStateCaches(evidenceMigrated))),
   );
   compacted.clubs = normalizeClubEconomicsMap(
     compacted.clubs,

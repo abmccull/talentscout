@@ -7,6 +7,11 @@ import {
   generateNarrativeEventOfType,
   resolveNarrativeTruth,
 } from "@/engine/events";
+import {
+  generateQuietNarrativeCallback,
+  generateWeeklyEvent,
+} from "@/engine/events/narrativeEvents";
+import { getNarrativeCallbackSignals } from "@/engine/events/narrativeTruth";
 import { startChain } from "@/engine/events/eventChains";
 import { processActiveStorylines } from "@/engine/events/storylines";
 import { RNG } from "@/engine/rng";
@@ -346,5 +351,164 @@ describe("narrative truth contracts", () => {
     expect(travelling.events[0]?.description).toContain(
       "trip itself is not observation evidence",
     );
+  });
+
+  it("derives quiet callbacks from real career, prospect, club, and rival receipts", () => {
+    const base = gameState();
+    const callbackState = gameState({
+      currentWeek: 20,
+      scout: {
+        ...base.scout,
+        performancePulses: [{
+          period: 4,
+          season: 1,
+          reportsSubmitted: 3,
+          reportQualityAvg: 78,
+          accuracyRate: 72,
+          signingSuccess: 1,
+          fatigueAvg: 20,
+          grade: "B",
+          trend: "improving",
+        }],
+      },
+      recommendationReviews: {
+        review: {
+          id: "review",
+          caseId: "case-1",
+          reportId: "report-1",
+          playerId: "player-1",
+          clubId: "club-1",
+          checkpoint: "oneSeason",
+          dueWeek: 18,
+          dueSeason: 1,
+          status: "complete",
+          completedWeek: 19,
+          completedSeason: 1,
+          overallScore: 74,
+          playerFacingDimensions: [{
+            key: "pathwayQuality",
+            label: "Pathway quality",
+            status: "positive",
+            evidenceLevel: "full",
+            score: 80,
+            summary: "Senior minutes support the original pathway read.",
+          }],
+        },
+      },
+      clubDecisions: {
+        decision: {
+          id: "decision",
+          caseId: "case-1",
+          deliveryId: "delivery-1",
+          reportId: "report-1",
+          clubId: "club-1",
+          outcome: "followUpRequested",
+          decidedWeek: 17,
+          decidedSeason: 1,
+        },
+      },
+      rivalScouts: {
+        rival: {
+          id: "rival",
+          name: "Rita Vale",
+        } as GameState["rivalScouts"][string],
+      },
+      rivalActivities: [{
+        rivalId: "rival",
+        type: "targetAcquired",
+        playerId: "player-1",
+        week: 18,
+        season: 1,
+      }],
+      eventDirector: {
+        version: 1,
+        tension: 20,
+        quietWeeks: 6,
+        recentEventTypes: [],
+        eventCounts: {},
+        recentSpecialEventIds: [],
+        specialEventCounts: {},
+        totalEvents: 0,
+      },
+    });
+
+    const signals = getNarrativeCallbackSignals(callbackState);
+    expect(new Set(signals.map((signal) => signal.domain)))
+      .toEqual(new Set(["career", "prospect", "club", "rival"]));
+    expect(signals.every((signal) => signal.evidence.sourceId.length > 0)).toBe(true);
+    expect(signals.every((signal) => signal.evidence.relatedIds.length > 0)).toBe(true);
+
+    const direct = generateQuietNarrativeCallback(callbackState);
+    const weekly = generateWeeklyEvent(new RNG("quiet-receipt"), callbackState, {
+      triggerChance: 0,
+    });
+    expect(direct).toMatchObject({
+      id: "callback:prospect:recommendation-review:review",
+      acknowledged: false,
+    });
+    expect(direct?.choices).toBeUndefined();
+    expect(weekly.event).toEqual(direct);
+    expect(direct?.description).toContain("formal review is complete");
+  });
+
+  it("does not fabricate, repeat, or flood quiet callbacks", () => {
+    const director = {
+      version: 1 as const,
+      tension: 20,
+      quietWeeks: 6,
+      recentEventTypes: [],
+      eventCounts: {},
+      recentSpecialEventIds: [],
+      specialEventCounts: {},
+      totalEvents: 0,
+    };
+    expect(generateQuietNarrativeCallback(gameState({ eventDirector: director }))).toBeNull();
+
+    const withReview = gameState({
+      eventDirector: director,
+      recommendationReviews: {
+        review: {
+          id: "review",
+          caseId: "case-1",
+          reportId: "report-1",
+          playerId: "player-1",
+          clubId: "club-1",
+          checkpoint: "oneSeason",
+          dueWeek: 18,
+          dueSeason: 1,
+          status: "complete",
+          completedWeek: 19,
+          completedSeason: 1,
+        },
+      },
+    });
+    const emitted = generateQuietNarrativeCallback(withReview)!;
+    const replayState = gameState({
+      ...withReview,
+      currentWeek: 25,
+      narrativeEvents: [{ ...emitted, week: 20 }],
+      eventDirector: { ...director, quietWeeks: 5 },
+    });
+    expect(getNarrativeCallbackSignals(replayState)).toEqual([]);
+    expect(generateQuietNarrativeCallback(replayState)).toBeNull();
+
+    const overloaded = gameState({
+      ...withReview,
+      narrativeEvents: Array.from({ length: 3 }, (_, index) => ({
+        id: `info-${index}`,
+        type: "exclusiveTip" as const,
+        week: 10 + index,
+        season: 1,
+        title: "Recorded update",
+        description: "A prior update remains unread.",
+        relatedIds: [],
+        acknowledged: false,
+      })),
+    });
+    expect(generateQuietNarrativeCallback(overloaded)).toBeNull();
+    expect(generateQuietNarrativeCallback(gameState({
+      ...withReview,
+      eventDirector: { ...director, tension: 80 },
+    }))).toBeNull();
   });
 });

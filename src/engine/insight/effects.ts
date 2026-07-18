@@ -161,6 +161,32 @@ function resolveObservationContext(session: ObservationSession): ObservationCont
   return "liveMatch";
 }
 
+function clampAttributeReadingValue(value: number): number {
+  return Math.max(1, Math.min(20, Math.round(value)));
+}
+
+function resolveInsightReadingRange(
+  value: number,
+  confidence: number,
+): { perceivedValue: number; rangeLow: number; rangeHigh: number } {
+  const perceivedValue = clampAttributeReadingValue(value);
+  const normalizedConfidence = Number.isFinite(confidence)
+    ? Math.max(0, Math.min(1, confidence))
+    : 1;
+  const radius = normalizedConfidence >= 0.95
+    ? 0
+    : normalizedConfidence >= 0.82
+      ? 1
+      : normalizedConfidence >= 0.7
+        ? 2
+        : 3;
+  return {
+    perceivedValue,
+    rangeLow: clampAttributeReadingValue(perceivedValue - radius),
+    rangeHigh: clampAttributeReadingValue(perceivedValue + radius),
+  };
+}
+
 function createInsightObservations(
   state: GameState,
   session: ObservationSession,
@@ -218,13 +244,14 @@ function createInsightObservations(
             candidate.playerId === playerId
             && candidate.attributeReadings.some((item) => item.attribute === attribute),
         ).length;
+        const resolvedReading = resolveInsightReadingRange(reading.value, reading.confidence);
         return {
           attribute,
-          perceivedValue: reading.value,
+          perceivedValue: resolvedReading.perceivedValue,
           confidence: reading.confidence,
           observationCount: priorCount + 1,
-          rangeLow: reading.value,
-          rangeHigh: reading.value,
+          rangeLow: resolvedReading.rangeLow,
+          rangeHigh: resolvedReading.rangeHigh,
         };
       }),
       notes: [result.narrative],

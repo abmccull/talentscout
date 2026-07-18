@@ -9,9 +9,11 @@ import type {
   ScoutingCase,
 } from "@/engine/core/types";
 import {
-  addGameWeeks,
-  gameWeeksBetween,
+  addGameWeeksWithCalendar,
+  createGameCalendarIndex,
+  gameWeeksBetweenWithCalendar,
   isGameDateAtOrAfter,
+  type GameCalendarIndex,
 } from "@/engine/core/gameDate";
 
 export const DEFAULT_RECRUITMENT_OPPORTUNITY_WEEKS = 16;
@@ -94,6 +96,13 @@ const SIGNING_MOVEMENT_TYPES = new Set<PlayerMovementEvent["type"]>([
   "loanBuyOption",
 ]);
 
+interface RecruitmentProjectionIndex {
+  calendar: GameCalendarIndex;
+  listingsById: Map<string, ReportListing>;
+  decisionsByDeliveryId: Map<string, ClubDecision>;
+  movementsByPlayerAndDestination: Map<string, PlayerMovementEvent[]>;
+}
+
 function compareDates(
   left: { week: number; season: number },
   right: { week: number; season: number },
@@ -103,24 +112,67 @@ function compareDates(
 
 function listingForDelivery(
   delivery: ReportDelivery,
-  listings: readonly ReportListing[],
+  index: RecruitmentProjectionIndex,
 ): ReportListing | undefined {
   if (!delivery.listingId) return undefined;
-  return listings.find((listing) => listing.id === delivery.listingId);
+  return index.listingsById.get(delivery.listingId);
+}
+
+function movementIndexKey(playerId: string, destinationClubId: string): string {
+  return `${playerId}|${destinationClubId}`;
+}
+
+function buildRecruitmentProjectionIndex(
+  fixtures: Record<string, Fixture>,
+  listings: readonly ReportListing[],
+  decisions: Record<string, ClubDecision>,
+  movements: readonly PlayerMovementEvent[],
+): RecruitmentProjectionIndex {
+  const listingsById = new Map<string, ReportListing>();
+  for (const listing of listings) {
+    if (!listingsById.has(listing.id)) listingsById.set(listing.id, listing);
+  }
+
+  const decisionsByDeliveryId = new Map<string, ClubDecision>();
+  for (const decision of Object.values(decisions)) {
+    if (decision.deliveryId && !decisionsByDeliveryId.has(decision.deliveryId)) {
+      decisionsByDeliveryId.set(decision.deliveryId, decision);
+    }
+  }
+
+  const movementsByPlayerAndDestination = new Map<string, PlayerMovementEvent[]>();
+  for (const movement of movements) {
+    if (!SIGNING_MOVEMENT_TYPES.has(movement.type) || !movement.toClubId) continue;
+    const key = movementIndexKey(movement.playerId, movement.toClubId);
+    const matching = movementsByPlayerAndDestination.get(key) ?? [];
+    matching.push(movement);
+    movementsByPlayerAndDestination.set(key, matching);
+  }
+  for (const matching of movementsByPlayerAndDestination.values()) {
+    matching.sort((left, right) =>
+      compareDates(left, right) || left.id.localeCompare(right.id)
+    );
+  }
+
+  return {
+    calendar: createGameCalendarIndex(fixtures),
+    listingsById,
+    decisionsByDeliveryId,
+    movementsByPlayerAndDestination,
+  };
 }
 
 function matchingMovement(
   delivery: ReportDelivery,
   report: ScoutReport,
-  fixtures: Record<string, Fixture>,
-  movements: readonly PlayerMovementEvent[],
+  index: RecruitmentProjectionIndex,
 ): PlayerMovementEvent | undefined {
-  return movements
-    .filter((movement) =>
-      SIGNING_MOVEMENT_TYPES.has(movement.type)
-      && movement.playerId === report.playerId
-      && movement.toClubId === delivery.clubId
-      && isGameDateAtOrAfter(
+  const candidates = index.movementsByPlayerAndDestination.get(
+    movementIndexKey(report.playerId, delivery.clubId),
+  ) ?? [];
+  for (const movement of candidates) {
+    if (
+      isGameDateAtOrAfter(
         { week: movement.week, season: movement.season },
         { week: delivery.deliveredWeek, season: delivery.deliveredSeason },
       )
@@ -134,42 +186,42 @@ function matchingMovement(
               },
               { week: movement.week, season: movement.season },
             )
-          : gameWeeksBetween(
-              fixtures,
+          : gameWeeksBetweenWithCalendar(
+              index.calendar,
               { week: delivery.deliveredWeek, season: delivery.deliveredSeason },
               { week: movement.week, season: movement.season },
             ) <= DEFAULT_RECRUITMENT_OPPORTUNITY_WEEKS
-      ),
-    )
-    .sort((left, right) =>
-      compareDates(left, right) || left.id.localeCompare(right.id)
-    )[0];
+      )
+    ) {
+      return movement;
+    }
+  }
+  return undefined;
 }
 
 function decisionForDelivery(
   delivery: ReportDelivery,
   decisions: Record<string, ClubDecision>,
+  index: RecruitmentProjectionIndex,
 ): ClubDecision | undefined {
   if (delivery.decisionId && decisions[delivery.decisionId]) {
     return decisions[delivery.decisionId];
   }
-  return Object.values(decisions).find(
-    (decision) => decision.deliveryId === delivery.id,
-  );
+  return index.decisionsByDeliveryId.get(delivery.id);
 }
 
 function hasPassedDeadline(
   report: ScoutReport,
   delivery: ReportDelivery,
   current: { week: number; season: number },
-  fixtures: Record<string, Fixture>,
+  calendar: GameCalendarIndex,
 ): boolean {
   if (
     report.decisionDeadlineWeek === undefined
     || report.decisionDeadlineSeason === undefined
   ) {
-    return gameWeeksBetween(
-      fixtures,
+    return gameWeeksBetweenWithCalendar(
+      calendar,
       { week: delivery.deliveredWeek, season: delivery.deliveredSeason },
       current,
     ) > DEFAULT_RECRUITMENT_OPPORTUNITY_WEEKS;
@@ -187,7 +239,7 @@ function deriveOutcome(input: {
   decision?: ClubDecision;
   movement?: PlayerMovementEvent;
   current: { week: number; season: number };
-  fixtures: Record<string, Fixture>;
+  calendar: GameCalendarIndex;
 }): Pick<
   RecruitmentOpportunity,
   "outcome" | "outcomeWeek" | "outcomeSeason" | "decisionId" | "transferMovementId" | "destinationClubId"
@@ -210,9 +262,9 @@ function deriveOutcome(input: {
       decisionId: input.decision.id,
     };
   }
-  if (hasPassedDeadline(input.report, input.delivery, input.current, input.fixtures)) {
-    const defaultExpiry = addGameWeeks(
-      input.fixtures,
+  if (hasPassedDeadline(input.report, input.delivery, input.current, input.calendar)) {
+    const defaultExpiry = addGameWeeksWithCalendar(
+      input.calendar,
       {
         week: input.delivery.deliveredWeek,
         season: input.delivery.deliveredSeason,
@@ -244,6 +296,12 @@ export function deriveRecruitmentOpportunities(
   const decisions = state.clubDecisions ?? {};
   const movements = state.playerMovementHistory ?? [];
   const fixtures = state.fixtures ?? {};
+  const index = buildRecruitmentProjectionIndex(
+    fixtures,
+    listings,
+    decisions,
+    movements,
+  );
   const opportunities: RecruitmentOpportunity[] = [];
 
   for (const delivery of Object.values(state.reportDeliveries)) {
@@ -251,19 +309,19 @@ export function deriveRecruitmentOpportunities(
     const report = state.reports[delivery.reportId];
     if (!report || report.playerId.length === 0 || delivery.clubId.length === 0) continue;
 
-    const listing = listingForDelivery(delivery, listings);
-    const decision = decisionForDelivery(delivery, decisions);
-    const movement = matchingMovement(delivery, report, fixtures, movements);
+    const listing = listingForDelivery(delivery, index);
+    const decision = decisionForDelivery(delivery, decisions, index);
+    const movement = matchingMovement(delivery, report, index);
     const outcome = deriveOutcome({
       report,
       delivery,
       decision,
       movement,
       current: { week: state.currentWeek, season: state.currentSeason },
-      fixtures,
+      calendar: index.calendar,
     });
-    const defaultDeadline = addGameWeeks(
-      fixtures,
+    const defaultDeadline = addGameWeeksWithCalendar(
+      index.calendar,
       { week: delivery.deliveredWeek, season: delivery.deliveredSeason },
       DEFAULT_RECRUITMENT_OPPORTUNITY_WEEKS,
     );
@@ -313,7 +371,20 @@ export function findCausalRecruitmentOpportunity(
   transfer: RecruitmentTransfer,
   scoutId: string,
 ): RecruitmentOpportunity | undefined {
-  return deriveRecruitmentOpportunities(state).find((opportunity) =>
+  return findCausalRecruitmentOpportunityIn(
+    deriveRecruitmentOpportunities(state),
+    transfer,
+    scoutId,
+  );
+}
+
+/** Reuse one canonical opportunity projection across a weekly transfer batch. */
+export function findCausalRecruitmentOpportunityIn(
+  opportunities: readonly RecruitmentOpportunity[],
+  transfer: RecruitmentTransfer,
+  scoutId: string,
+): RecruitmentOpportunity | undefined {
+  return opportunities.find((opportunity) =>
     opportunity.scoutId === scoutId
     && opportunity.playerId === transfer.playerId
     && opportunity.targetClubId === transfer.toClubId

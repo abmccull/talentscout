@@ -20,7 +20,6 @@ describe("Youth Early Access screen scope", () => {
     ]);
     expect(getYouthEarlyAccessNavigationEntries("support")).toEqual([
       { screen: "handbook", label: "Handbook" },
-      { screen: "futureRoadmap", label: "Roadmap" },
       { screen: "settings", label: "Settings" },
     ]);
   });

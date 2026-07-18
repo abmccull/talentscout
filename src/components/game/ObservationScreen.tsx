@@ -42,6 +42,12 @@ import type {
   LensType,
   SessionFlaggedMoment,
 } from "@/engine/observation/types";
+import type {
+  EvidenceClassificationId,
+  ObservationHalftimeApproach,
+  ScoutCueReading,
+  ScoutingQuestionId,
+} from "@/engine/core/types";
 import { MODE_FLAGGED_SHORT_LABEL } from "@/engine/observation/types";
 import type { InsightActionId } from "@/engine/insight/types";
 import {
@@ -59,6 +65,7 @@ import {
 import { ObservationPitch } from "./observation/ObservationPitch";
 import { useAudio } from "@/lib/audio/useAudio";
 import { isOpeningDiscoverySession } from "@/engine/youth/openingCase";
+import { SCOUTING_QUESTIONS } from "@/engine/scout/evidenceModel";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -114,6 +121,7 @@ const MODE_ICONS: Record<ObservationSession["mode"], React.ElementType> = {
 
 interface MomentCardProps {
   moment: PlayerMoment;
+  cue?: ScoutCueReading;
   isFocused: boolean;
   playerName: string;
   canFlag: boolean;
@@ -123,6 +131,7 @@ interface MomentCardProps {
 
 const MomentCard = memo(function MomentCard({
   moment,
+  cue,
   isFocused,
   playerName,
   canFlag,
@@ -160,7 +169,7 @@ const MomentCard = memo(function MomentCard({
                 {playerName}
               </span>
               <Badge variant="secondary" className="text-[10px] py-0">
-                {moment.momentType.replace(/([A-Z])/g, " $1").trim()}
+                {cue?.clarity && cue.clarity !== "missed" ? cue.clarity : "Passage"}
               </Badge>
               {moment.isStandout && (
                 <Badge variant="warning" className="text-[10px] py-0">
@@ -174,11 +183,16 @@ const MomentCard = memo(function MomentCard({
               )}
             </div>
             <p className="text-xs text-zinc-300 leading-snug">
-              {isFocused ? moment.description : moment.vagueDescription}
+              {isFocused && cue ? cue.detail : moment.vagueDescription}
             </p>
-            {isFocused && moment.attributesHinted.length > 0 && (
+            {isFocused && cue && (
+              <p className="mt-1.5 text-[10px] leading-4 text-zinc-400">
+                {cue.regionalContext}
+              </p>
+            )}
+            {isFocused && (cue?.attributesHinted.length ?? 0) > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1">
-                {moment.attributesHinted.map((attr) => (
+                {cue!.attributesHinted.map((attr) => (
                   <span
                     key={attr}
                     className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-400"
@@ -197,11 +211,15 @@ const MomentCard = memo(function MomentCard({
             ) : canFlag ? (
               <button
                 onClick={handleFlagClick}
-                className="flex h-11 w-11 items-center justify-center rounded text-zinc-400 transition hover:text-amber-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-                aria-label="Flag this moment"
+                data-tutorial-id={moment.isStandout ? "observation-flag-moment" : undefined}
+                className={`flex h-11 items-center justify-center gap-2 rounded text-zinc-300 transition hover:bg-amber-400/10 hover:text-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 ${
+                  moment.isStandout ? "px-3" : "w-11"
+                }`}
+                aria-label={moment.isStandout ? "Flag standout moment" : "Flag this moment"}
                 aria-expanded={showReactions}
               >
                 <Flag size={14} aria-hidden="true" />
+                {moment.isStandout && <span className="text-xs font-semibold">Flag moment</span>}
               </button>
             ) : null}
           </div>
@@ -217,6 +235,7 @@ const MomentCard = memo(function MomentCard({
                   <button
                     key={reaction}
                     onClick={() => handleReaction(reaction)}
+                    data-tutorial-id={reaction === "promising" ? "observation-promising-reaction" : undefined}
                     className={`flex min-h-11 items-center gap-1.5 rounded px-2 py-1.5 text-xs transition hover:bg-[#27272a] ${config.className}`}
                   >
                     <Icon size={12} aria-hidden="true" />
@@ -242,6 +261,7 @@ interface PhaseContentProps {
   session: ObservationSession;
   flaggedMomentIds: Set<string>;
   hasPhaseFlag: boolean;
+  requiresStandoutFlag: boolean;
   onFlagMoment: (momentId: string, reaction: SessionFlaggedMoment["reaction"]) => void;
   onDialogueChoice: (nodeId: string, optionId: string) => void;
   onDataPointSelect: (pointId: string) => void;
@@ -253,6 +273,7 @@ const PhaseContent = memo(function PhaseContent({
   session,
   flaggedMomentIds,
   hasPhaseFlag,
+  requiresStandoutFlag,
   onFlagMoment,
   onDialogueChoice,
   onDataPointSelect,
@@ -269,13 +290,15 @@ const PhaseContent = memo(function PhaseContent({
         ) : (
           phase.moments.map((moment) => {
             const sessionPlayer = playerMap.get(moment.playerId);
+            const cue = session.cueReadings?.find((candidate) => candidate.momentId === moment.id);
             return (
               <MomentCard
                 key={moment.id}
                 moment={moment}
+                cue={cue}
                 isFocused={sessionPlayer?.isFocused ?? false}
                 playerName={sessionPlayer?.name ?? moment.playerId}
-                canFlag={!hasPhaseFlag}
+                canFlag={requiresStandoutFlag ? moment.isStandout : !hasPhaseFlag}
                 alreadyFlagged={flaggedMomentIds.has(moment.id)}
                 onFlag={onFlagMoment}
               />
@@ -675,6 +698,7 @@ const MinimalInfoSidebar = memo(function MinimalInfoSidebar({
 interface SetupViewProps {
   session: ObservationSession;
   onBegin: () => void;
+  onQuestionChange: (questionId: ScoutingQuestionId) => void;
 }
 
 function formatSituationLabel(value: string): string {
@@ -683,7 +707,153 @@ function formatSituationLabel(value: string): string {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
-const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) {
+interface ScoutingQuestionSelectorProps {
+  session: ObservationSession;
+  onChange: (questionId: ScoutingQuestionId) => void;
+}
+
+const ScoutingQuestionSelector = memo(function ScoutingQuestionSelector({
+  session,
+  onChange,
+}: ScoutingQuestionSelectorProps) {
+  if (session.mode !== "fullObservation") return null;
+  const selected = session.scoutingQuestionId ?? SCOUTING_QUESTIONS[0].id;
+  const questionOptions = (session.questionOptions?.length
+    ? session.questionOptions.map((option) => {
+      const definition = SCOUTING_QUESTIONS.find((question) => question.id === option.id);
+      return {
+        id: option.id,
+        label: definition?.label ?? formatSituationLabel(option.id),
+        focus: `${option.roleAngle} ${option.contextAngle}`.trim(),
+        prompt: option.prompt,
+        reason: option.reason,
+        recommended: option.recommended,
+      };
+    })
+    : SCOUTING_QUESTIONS.map((question, index) => ({
+      id: question.id,
+      label: question.label,
+      focus: question.matchFocus,
+      prompt: question.prompt,
+      reason: "",
+      recommended: index === 0,
+    })));
+  const selectedDefinition = questionOptions.find((question) => question.id === selected);
+  return (
+    <fieldset className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.05] p-3 sm:p-4">
+      <legend className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200">
+        What are you here to learn?
+      </legend>
+      <p className="mt-1 text-xs leading-5 text-zinc-300">
+        Choose one question to guide your attention. Your focus and scouting strengths decide how clearly you read each passage.
+      </p>
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {questionOptions.map((question) => (
+          <label
+            key={question.id}
+            className={`relative min-h-16 cursor-pointer rounded-lg border px-3 py-2.5 text-left transition focus-within:ring-2 focus-within:ring-cyan-300 ${
+              selected === question.id
+                ? "border-cyan-300/55 bg-cyan-300/10"
+                : "border-white/10 bg-black/20 hover:border-white/25"
+            }`}
+          >
+            <input
+              type="radio"
+              name={`scouting-question-${session.id}`}
+              value={question.id}
+              checked={selected === question.id}
+              onChange={() => onChange(question.id)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+            <span className="flex items-center justify-between gap-2 text-xs font-semibold leading-4 text-white">
+              <span>{question.label}</span>
+              {question.recommended && (
+                <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-1.5 py-0.5 text-[8px] uppercase tracking-wide text-cyan-100">
+                  Best fit
+                </span>
+              )}
+            </span>
+            <span className="mt-1 block text-[10px] leading-4 text-cyan-100/65">{question.focus}</span>
+          </label>
+        ))}
+      </div>
+      {selectedDefinition && (
+        <p className="mt-3 rounded-lg bg-black/20 px-3 py-2 text-[11px] leading-4 text-zinc-300">
+          <span className="block">{selectedDefinition.prompt}</span>
+          {selectedDefinition.reason && (
+            <span className="mt-1 block text-cyan-100/65">Why it fits: {selectedDefinition.reason}</span>
+          )}
+        </p>
+      )}
+    </fieldset>
+  );
+});
+
+const HALFTIME_APPROACHES: Array<{
+  id: ObservationHalftimeApproach;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "confirm",
+    label: "Confirm the first read",
+    description: "Keep the same question and look for a second independent cue.",
+  },
+  {
+    id: "challenge",
+    label: "Try to prove yourself wrong",
+    description: "Prioritise moments that conflict with the impression you already formed.",
+  },
+  {
+    id: "broaden",
+    label: "Broaden the watch",
+    description: "Spend the second half looking beyond the original signal.",
+  },
+];
+
+const HalftimeApproachPanel = memo(function HalftimeApproachPanel({
+  selected,
+  onSelect,
+}: {
+  selected?: ObservationHalftimeApproach;
+  onSelect: (approach: ObservationHalftimeApproach) => void;
+}) {
+  return (
+    <section
+      className="shrink-0 border-b border-amber-300/25 bg-amber-300/[0.06] px-3 py-3 sm:px-4"
+      aria-labelledby="halftime-read-title"
+      data-tutorial-id={selected ? undefined : "observation-halftime-approach"}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-300">Half-time adjustment</p>
+          <h2 id="halftime-read-title" className="mt-0.5 text-sm font-semibold text-white">How will you watch the second half?</h2>
+        </div>
+        {selected && <Badge variant="warning" className="text-[10px]">Locked</Badge>}
+      </div>
+      <div className="mt-2 grid gap-2 md:grid-cols-3">
+        {HALFTIME_APPROACHES.map((approach) => (
+          <button
+            key={approach.id}
+            type="button"
+            onClick={() => onSelect(approach.id)}
+            disabled={Boolean(selected)}
+            className={`min-h-16 rounded-lg border p-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 disabled:cursor-default ${
+              selected === approach.id
+                ? "border-amber-300/60 bg-amber-300/12"
+                : "border-white/10 bg-black/20 hover:border-white/25 disabled:opacity-55"
+            }`}
+          >
+            <span className="block text-xs font-semibold text-white">{approach.label}</span>
+            <span className="mt-1 block text-[10px] leading-4 text-zinc-400">{approach.description}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+});
+
+const SetupView = memo(function SetupView({ session, onBegin, onQuestionChange }: SetupViewProps) {
   const { venueAtmosphere, players, mode, situation } = session;
   const ModeIcon = MODE_ICONS[mode];
   const isOpeningDiscovery = isOpeningDiscoverySession(session);
@@ -712,7 +882,7 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
         : "Watch the live evidence";
 
     return (
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden p-4 sm:p-8">
+      <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
         <ScreenBackground src={background} opacity={0.38} />
         <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-emerald-300/20 bg-[#0a0f0c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
@@ -749,6 +919,7 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
                   <p className="mt-1 text-sm font-semibold text-white">{veteranPrologue.stakeholderConflict}</p>
                 </div>
               </div>
+              <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
               <Button
                 onClick={onBegin}
                 size="lg"
@@ -767,7 +938,7 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
 
   if (isOpeningDiscovery && lead) {
     return (
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden p-4 sm:p-8">
+      <div className="relative flex flex-1 items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-8">
         <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.38} />
         <div className="relative z-10 w-full max-w-3xl rounded-2xl border border-emerald-300/20 bg-[#0a0f0c]/95 p-5 shadow-2xl backdrop-blur sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start">
@@ -792,14 +963,15 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
                   <p className="mt-1 text-sm font-semibold text-white">{lead.name}</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Your constraint</p>
-                  <p className="mt-1 text-sm font-semibold text-white">3 observation beats</p>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">Time available</p>
+                  <p className="mt-1 text-sm font-semibold text-white">Three key passages of play</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-3">
-                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">What is at stake</p>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400">What matters</p>
                   <p className="mt-1 text-sm font-semibold text-white">Being first, not being certain</p>
                 </div>
               </div>
+              <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
               <Button
                 onClick={onBegin}
                 size="lg"
@@ -817,7 +989,7 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center p-4 text-center sm:p-8">
+    <div className="flex flex-1 flex-col items-center justify-start overflow-y-auto p-4 text-center sm:justify-center sm:p-8">
       <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 border border-emerald-500/20">
         <ModeIcon size={24} className="text-emerald-400" aria-hidden="true" />
       </div>
@@ -907,6 +1079,10 @@ const SetupView = memo(function SetupView({ session, onBegin }: SetupViewProps) 
         </div>
       )}
 
+      <div className="w-full max-w-3xl text-left">
+        <ScoutingQuestionSelector session={session} onChange={onQuestionChange} />
+      </div>
+
       <Button
         onClick={onBegin}
         size="lg"
@@ -930,12 +1106,15 @@ interface ReflectionViewProps {
 const ReflectionView = memo(function ReflectionView({ session, onComplete }: ReflectionViewProps) {
   const lastReflectionResult = useGameStore((s) => s.lastReflectionResult) as ReflectionResult | null;
 
-  const handleAddHypothesis = useCallback((playerId: string, text: string, domain: string) => {
-    useGameStore.getState().addSessionHypothesis(playerId, text, domain);
-  }, []);
-
   const handleAddNote = useCallback((note: string) => {
     useGameStore.getState().addSessionNote(note);
+  }, []);
+
+  const handleClassifyEvidence = useCallback((
+    cueId: string,
+    classification: EvidenceClassificationId,
+  ) => {
+    useGameStore.getState().classifySessionEvidence(cueId, classification);
   }, []);
 
   // If we have a full reflection result, render the dedicated ReflectionScreen
@@ -949,8 +1128,8 @@ const ReflectionView = memo(function ReflectionView({ session, onComplete }: Ref
           <ReflectionScreen
             session={session}
             reflectionResult={lastReflectionResult}
-            onAddHypothesis={handleAddHypothesis}
             onAddNote={handleAddNote}
+            onClassifyEvidence={handleClassifyEvidence}
             onComplete={onComplete}
           />
         </div>
@@ -1141,6 +1320,11 @@ export function ObservationScreen() {
   const isLastPhase = activeSession
     ? activeSession.currentPhaseIndex >= activeSession.phases.length - 1
     : false;
+  const requiresHalftimeChoice = Boolean(
+    activeSession?.mode === "fullObservation"
+    && isHalfTime
+    && !activeSession.halftimeApproach,
+  );
   const insightState = (
     gameState?.scout.insightState ?? createInsightState()
   );
@@ -1210,6 +1394,11 @@ export function ObservationScreen() {
     useGameStore.getState().beginSession();
   }, [playSFX]);
 
+  const handleQuestionChange = useCallback((questionId: ScoutingQuestionId) => {
+    playSFX("page-turn");
+    useGameStore.getState().setSessionScoutingQuestion(questionId);
+  }, [playSFX]);
+
   const handleAdvancePhase = useCallback(() => {
     useGameStore.getState().advanceSessionPhase();
   }, []);
@@ -1247,6 +1436,11 @@ export function ObservationScreen() {
     setShowMobileFocus(false);
     requestAnimationFrame(() => mobileFocusToggleRef.current?.focus({ preventScroll: true }));
   }, []);
+
+  const handleHalftimeApproach = useCallback((approach: ObservationHalftimeApproach) => {
+    playSFX("page-turn");
+    useGameStore.getState().setSessionHalftimeApproach(approach);
+  }, [playSFX]);
 
   useEffect(() => {
     if (!showMobileFocus) return;
@@ -1327,7 +1521,7 @@ export function ObservationScreen() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <GameLayout>
-      <div className="relative flex min-h-[calc(100dvh-7.5rem)] min-w-0 flex-col overflow-x-hidden pb-20 md:h-full md:min-h-0 md:pb-20 lg:pb-0">
+      <div className="relative flex min-h-[calc(100dvh-7.5rem)] min-w-0 flex-col overflow-x-hidden pb-20 md:h-full md:min-h-0 md:pb-20 lg:h-[100dvh] lg:min-h-0 lg:overflow-hidden lg:pb-0">
         <ScreenBackground src="/images/backgrounds/match-atmosphere.png" opacity={0.85} />
 
         <div className="relative z-10 flex flex-1 flex-col min-h-0">
@@ -1392,7 +1586,11 @@ export function ObservationScreen() {
           {/* ── State-machine body ──────────────────────────────────────── */}
 
           {state === "setup" && (
-            <SetupView session={activeSession} onBegin={handleBegin} />
+            <SetupView
+              session={activeSession}
+              onBegin={handleBegin}
+              onQuestionChange={handleQuestionChange}
+            />
           )}
 
           {state === "reflection" && (
@@ -1460,6 +1658,13 @@ export function ObservationScreen() {
                   </div>
                 )}
 
+                {mode === "fullObservation" && isHalfTime && (
+                  <HalftimeApproachPanel
+                    selected={activeSession.halftimeApproach}
+                    onSelect={handleHalftimeApproach}
+                  />
+                )}
+
                 {/* Phase content — scrollable */}
                 <div className="min-h-0 flex-none p-3 sm:p-4 lg:flex-1 lg:overflow-y-auto">
                   {mode === "fullObservation" ? (
@@ -1480,7 +1685,7 @@ export function ObservationScreen() {
                             id="observation-evidence-heading"
                             className="text-[10px] font-semibold uppercase tracking-[0.13em] text-zinc-400"
                           >
-                            Evidence feed
+                            What you noticed
                           </h2>
                           <span className="text-[10px] text-zinc-400">
                             {currentPhase.moments.length} {currentPhase.moments.length === 1 ? "moment" : "moments"}
@@ -1491,6 +1696,7 @@ export function ObservationScreen() {
                           session={activeSession}
                           flaggedMomentIds={flaggedMomentIds}
                           hasPhaseFlag={hasPhaseFlag}
+                          requiresStandoutFlag={openingPhaseRequiresFlag}
                           onFlagMoment={handleFlagMoment}
                           onDialogueChoice={handleDialogueChoice}
                           onDataPointSelect={handleDataPointSelect}
@@ -1504,6 +1710,7 @@ export function ObservationScreen() {
                       session={activeSession}
                       flaggedMomentIds={flaggedMomentIds}
                       hasPhaseFlag={hasPhaseFlag}
+                      requiresStandoutFlag={openingPhaseRequiresFlag}
                       onFlagMoment={handleFlagMoment}
                       onDialogueChoice={handleDialogueChoice}
                       onDataPointSelect={handleDataPointSelect}
@@ -1531,7 +1738,7 @@ export function ObservationScreen() {
                 )}
 
                 {/* Insight action button — visible when scout has any IP available */}
-                {insightActions.length > 0 && (
+                {insightActions.length > 0 && !isOpeningDiscoverySession(activeSession) && (
                   <div className="shrink-0 border-t border-[#27272a] px-4 py-2">
                     <button
                       onClick={openInsightOverlay}
@@ -1571,9 +1778,23 @@ export function ObservationScreen() {
                       Go to Reflection
                     </Button>
                   ) : (
-                    <Button className="w-full" onClick={handleAdvancePhase} disabled={openingPhaseRequiresFlag}>
+                    <Button
+                      className="w-full"
+                      onClick={handleAdvancePhase}
+                      disabled={openingPhaseRequiresFlag || requiresHalftimeChoice}
+                      data-tutorial-id={
+                        isOpeningDiscoverySession(activeSession)
+                        && activeSession.currentPhaseIndex === 0
+                          ? "observation-advance-to-standout"
+                          : undefined
+                      }
+                    >
                       <ChevronRight size={14} className="mr-2" aria-hidden="true" />
-                      {openingPhaseRequiresFlag ? "Flag the standout moment" : "Next Phase"}
+                      {openingPhaseRequiresFlag
+                        ? "Flag the standout moment"
+                        : requiresHalftimeChoice
+                          ? "Choose a half-time approach"
+                          : "Next Phase"}
                     </Button>
                   )}
                   {!isOpeningDiscoverySession(activeSession) && (
@@ -1694,7 +1915,7 @@ export function ObservationScreen() {
                       End early
                     </Button>
                   )}
-                  {insightActions.length > 0 && (
+                  {insightActions.length > 0 && !isOpeningDiscoverySession(activeSession) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1712,8 +1933,22 @@ export function ObservationScreen() {
                       Reflect
                     </Button>
                   ) : (
-                    <Button className="min-h-11 flex-[1.35]" onClick={handleAdvancePhase} disabled={openingPhaseRequiresFlag}>
-                      {openingPhaseRequiresFlag ? "Flag the moment" : "Next phase"}
+                    <Button
+                      className="min-h-11 flex-[1.35]"
+                      onClick={handleAdvancePhase}
+                      disabled={openingPhaseRequiresFlag || requiresHalftimeChoice}
+                      data-tutorial-id={
+                        isOpeningDiscoverySession(activeSession)
+                        && activeSession.currentPhaseIndex === 0
+                          ? "observation-advance-to-standout"
+                          : undefined
+                      }
+                    >
+                      {openingPhaseRequiresFlag
+                        ? "Flag the moment"
+                        : requiresHalftimeChoice
+                          ? "Choose half-time approach"
+                          : "Next phase"}
                       <ChevronRight size={14} className="ml-1.5" aria-hidden="true" />
                     </Button>
                   )}

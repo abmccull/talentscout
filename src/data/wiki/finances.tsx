@@ -20,9 +20,9 @@ export const financesArticles: WikiArticle[] = [
     category: "finances",
     order: 0,
     summary:
-      "Earn money through salary, report marketplace sales, retainer contracts, placement fees, consulting, and specialization bonuses.",
+      "Earn money through salary, marketplace sales, retainers, placements, consulting, and reputation-driven opportunities.",
     searchText:
-      "Income arrives from multiple sources depending on your career path. Club scouts receive a weekly salary converted to its calendar-month equivalent; the economy closes 12 financial periods distributed across each competition season. Salary bands by tier: Tier 1 0, Tier 2 500-1500, Tier 3 1500-4000, Tier 4 4000-10000, Tier 5 10000-25000 per week. Independent scouts sell reports on the marketplace, earn retainer fees from clubs, collect placement fees when recommended players transfer, and take consulting contracts. Report marketplace prices are based on conviction level: Note 100-200, Recommend 400-800, Strong Recommend 1200-2000, Table Pound 3000-5000. Prices are further modified by quality score, club tier, exclusivity (1.5x premium), market temperature (cold 0.7x to deadline 1.8x), and scout reputation. Placement fees are 2% of transfer fee base rate multiplied by conviction level (0.5x for Note up to 2x for Table Pound). Retainer contracts pay monthly fees: Basic 500-1000 for 2 reports, Standard 1500-3000 for 3 reports, Premium 4000-8000 for 5 reports, Elite 10000-20000 for 7 reports. Consulting contracts include Transfer Advisory 5000-25000 for 4 weeks, Youth Audit 3000-10000 for 6 weeks, Data Package 2000-8000 for 3 weeks, Talent Workshop 4000-15000 for 2 weeks. First report sale gets a 50% bonus. First placement fee gets a 25% bonus. New scouts receive a starter stipend for the first 4 weeks: 500 on casual, 300 on normal, 200 on hard, 150 on ironman. Starting cash: 4000 casual, 2000 for all other difficulties.",
+      "Income arrives from multiple sources depending on your career path. Club scouts receive regular salary and bonuses tied to trust and responsibility. Independent scouts sell reports on the marketplace, earn retainer fees from clubs, collect placement fees when recommended players move, and take consulting contracts. Final prices rise or fall with report quality, conviction, exclusivity, timing, and reputation. New scouts receive a brief early-career cushion so one slow week does not immediately end a save.",
     content: (
       <SectionBlock>
         <Para>
@@ -58,10 +58,8 @@ export const financesArticles: WikiArticle[] = [
           ]}
         />
         <Para>
-          Final price is modified by report quality, target club tier, market
-          temperature (<Tag color="zinc">cold 0.7x</Tag> to{" "}
-          <Tag color="rose">deadline 1.8x</Tag>), exclusivity (
-          <Tag color="emerald">1.5x premium</Tag>), and your reputation.
+          Final price is shaped by report quality, target club tier, transfer
+          timing, exclusivity, and your reputation.
         </Para>
 
         <Subheading>Retainer Contracts</Subheading>
@@ -80,13 +78,13 @@ export const financesArticles: WikiArticle[] = [
         <BulletList
           items={[
             <>
-              <strong>Placement fees:</strong> 2% of transfer fee, multiplied
-              by conviction level (0.5x Note to 2x Table Pound)
+              <strong>Placement fees:</strong> stronger recommendations and
+              bigger moves generally pay more.
             </>,
             <>
-              <strong>Consulting:</strong> Transfer Advisory (5k-25k / 4 wks),
-              Youth Audit (3k-10k / 6 wks), Data Package (2k-8k / 3 wks),
-              Talent Workshop (4k-15k / 2 wks)
+              <strong>Consulting:</strong> clubs may hire you for short,
+              focused projects such as transfer advice, youth audits, data
+              packages, or workshops.
             </>,
             <>
               <strong>Specialization bonuses:</strong> monthly income adjustments
@@ -96,9 +94,9 @@ export const financesArticles: WikiArticle[] = [
         />
 
         <InfoCard title="Starter Bonuses" color="emerald">
-          Your first report sale earns a 50% bonus. Your first placement fee
-          earns a 25% bonus. New scouts also receive a starter stipend for 4
-          weeks (300 on Normal difficulty).
+          Your first successful sale and first placement both receive an
+          early-career boost. New scouts also receive a short starter stipend
+          to bridge the opening weeks.
         </InfoCard>
       </SectionBlock>
     ),
@@ -210,9 +208,9 @@ export const financesArticles: WikiArticle[] = [
     category: "finances",
     order: 2,
     summary:
-      "Three loan types with dynamic interest rates based on your credit score. Credit score ranges 0-100 and affects loan terms.",
+      "Three loan types help you bridge gaps or invest in growth, with terms shaped by your financial reputation.",
     searchText:
-      "Three loan types are available: Business loan up to 20000 at 5% base monthly interest over 12 months, Equipment loan up to 10000 at 10% over 6 months, Emergency loan up to 2000 at 8% over 4 months. You can only have one active loan at a time. Interest rates are dynamic based on credit score. Better credit reduces rates by up to 40%. Score 100 gets 3% on business loans. Score 50 gets 5%. Score 0 gets 10%. Maximum loan amount is capped at 6 times your monthly income up to 20000. Credit score ranges from 0 to 100 with a default of 50. Positive balance months earn +2 credit. On time loan repayments earn +3. Missed payments cost -5. Loan default costs -10. Negative balance months cost -3. Completed retainer contracts earn +1. Business loans require positive balance and credit score of 30 or higher (40 at Tier 4+). Equipment loans require credit score of 20 or higher. Emergency loans are available when balance is below 500. Loans can be repaid early to save on interest. Existing debt exceeding 50% of monthly income blocks new loans.",
+      "Three loan types are available: business funding for growth, equipment financing for tools, and emergency cover for short-term distress. You can only hold one active loan at a time. Better financial discipline improves your terms, while missed payments and prolonged deficits make borrowing more expensive and more restrictive. Loans can be repaid early to save on interest.",
     content: (
       <SectionBlock>
         <Para>
@@ -233,30 +231,31 @@ export const financesArticles: WikiArticle[] = [
 
         <Subheading>Credit Score System</Subheading>
         <Para>
-          Your credit score ranges from <Tag color="zinc">0 to 100</Tag>{" "}
-          (starting at 50) and directly affects loan interest rates. Better
-          credit can reduce rates by up to 40%.
+          Your credit standing affects loan interest rates, approval chances,
+          and the amount lenders are willing to offer. Reliable cash
+          management improves your terms; missed payments and long negative
+          stretches damage them.
         </Para>
         <Table
           headers={["Event", "Credit Impact"]}
           rows={[
-            ["Positive balance (monthly)", "+2"],
-            ["On-time loan repayment", "+3"],
-            ["Completed retainer", "+1"],
-            ["Missed payment", "-5"],
-            ["Loan default", "-10"],
-            ["Negative balance (monthly)", "-3"],
+            ["Positive balance", "Builds trust with lenders"],
+            ["On-time loan repayment", "Improves future terms"],
+            ["Completed retainer", "Helps your file"],
+            ["Missed payment", "Damages lender confidence"],
+            ["Loan default", "Severely damages trust"],
+            ["Long negative balance", "Pushes rates and restrictions upward"],
           ]}
         />
 
         <Subheading>Eligibility Rules</Subheading>
         <BulletList
           items={[
-            "Business: requires positive balance and credit score 30+ (40+ at Tier 4+)",
-            "Equipment: requires credit score 20+",
-            "Emergency: available when balance drops below 500",
-            "Maximum loan: 6x monthly income, capped at 20,000",
-            "Denied if existing debt exceeds 50% of monthly income",
+            "Business loans suit expansion when your books are in reasonable shape.",
+            "Equipment loans suit tool upgrades and scouting infrastructure.",
+            "Emergency loans are easier to access but usually come with harsher terms.",
+            "Borrowing power scales with income and existing debt load.",
+            "Heavy debt can block fresh borrowing until you stabilise.",
           ]}
         />
 
@@ -290,22 +289,22 @@ export const financesArticles: WikiArticle[] = [
     category: "finances",
     order: 3,
     summary:
-      "List reports for sale with set pricing. AI clubs bid over 1-2 weeks based on positional need, budget, and report quality.",
+      "List reports for sale with set pricing. Clubs respond according to need, budget, and the trust your report inspires.",
     searchText:
-      "The report marketplace allows independent scouts to sell reports to AI clubs. List a report with a set price and optional exclusivity or target club. Listings stay active for up to 8 weeks before expiring. AI clubs evaluate listings and place bids based on need match score combining quality factor up to 30 points, conviction factor up to 20 points, position need up to 35 points, age fit up to 15 points, and budget appropriateness up to 10 points. Clubs only bid when need match exceeds 40. Bid probability factors in club affordability, scout reputation, and market temperature. Bids range from 60% to 250% of listing price based on need priority. Critical need adds 1.3x multiplier. Competition from other bidders adds 10% per existing bid. Bids expire after 2-3 weeks. You can accept or decline each bid. Exclusive listings are sold to one buyer only with a 1.5x price premium. Non-exclusive reports can receive multiple bids and be sold multiple times. Market temperature affects everything: cold reduces prices and bid frequency, hot increases both, deadline day provides a 1.8x multiplier. Listings generate inbox notifications when bids arrive.",
+      "The report marketplace allows independent scouts to sell reports to clubs. List a report with a set price and optional exclusivity or target club. Listings stay active for several weeks before expiring. Clubs weigh report quality, conviction, positional need, age fit, budget, your reputation, and transfer timing before they bid. Exclusive listings command a premium because only one buyer can secure them. Competition, urgency, and market heat all change how quickly offers arrive and how aggressive they become.",
     content: (
       <SectionBlock>
         <Para>
           The Report Marketplace is the primary income source for independent
-          scouts. List completed reports, set your price, and wait for AI clubs
+          scouts. List completed reports, set your price, and wait for clubs
           to bid.
         </Para>
 
         <Subheading>Listing a Report</Subheading>
         <BulletList
           items={[
-            "Set a price based on the suggested calculation",
-            "Choose exclusive (1.5x premium, one buyer only) or open",
+            "Set a price that matches your confidence and the player's appeal",
+            "Choose exclusive (one buyer only) or open",
             "Optionally target a specific club",
             "Listings remain active for up to 8 weeks",
           ]}
@@ -313,41 +312,37 @@ export const financesArticles: WikiArticle[] = [
 
         <Subheading>How Clubs Bid</Subheading>
         <Para>
-          AI clubs evaluate each listing using a need match score (0-110) that
-          combines five factors:
+          Clubs weigh five things before they commit money:
         </Para>
         <Table
-          headers={["Factor", "Max Points"]}
+          headers={["Factor", "Why it matters"]}
           rows={[
-            ["Report quality", "30"],
-            ["Conviction level", "20"],
-            ["Position need (roster gaps)", "35"],
-            ["Age fit for club philosophy", "15"],
-            ["Budget appropriateness", "10"],
+            ["Report quality", "Better craft makes the risk easier to justify"],
+            ["Conviction level", "Stronger calls raise the ceiling and the downside"],
+            ["Position need", "Urgent gaps create urgency"],
+            ["Age fit", "Some clubs buy for now, others buy for the future"],
+            ["Budget fit", "Even a good report dies if the fee feels wrong"],
           ]}
         />
         <Para>
-          Clubs only bid when their need score exceeds 40. Higher scores produce
-          larger bids. Critical need (85+) adds a{" "}
-          <Tag color="amber">1.3x multiplier</Tag>. Competition from other
-          bidders adds 10% per existing pending bid.
+          Stronger overall fit produces faster and larger bids. Competition
+          from rival buyers can also raise the final offer.
         </Para>
 
         <Subheading>Market Temperature</Subheading>
         <Table
-          headers={["Temperature", "Price Multiplier"]}
+          headers={["Market", "What it feels like"]}
           rows={[
-            ["Cold", "0.7x"],
-            ["Normal", "1.0x"],
-            ["Hot", "1.3x"],
-            ["Deadline", "1.8x"],
+            ["Cold", "Fewer buyers and flatter prices"],
+            ["Normal", "Steady demand and fair offers"],
+            ["Hot", "More urgency and stronger bids"],
+            ["Deadline", "Fast, emotional bidding with premium pressure"],
           ]}
         />
 
         <InfoCard title="Pricing Strategy" color="amber">
-          Bid amounts range from 60% to 250% of your listing price. Setting a
-          lower price attracts more bids but may undervalue strong reports.
-          During deadline periods, even moderate reports can fetch premium prices.
+          Lower prices usually attract more attention, but strong reports can
+          justify patience. Busy windows often reward timing as much as talent.
         </InfoCard>
       </SectionBlock>
     ),
@@ -376,9 +371,9 @@ export const financesArticles: WikiArticle[] = [
     category: "finances",
     order: 4,
     summary:
-      "Sustained negative balance triggers escalating distress: warnings, cutbacks, staff loss, and ultimately bankruptcy with a 10-week recovery period.",
+      "Sustained negative balance triggers escalating distress: warnings, cutbacks, staff loss, and eventually bankruptcy.",
     searchText:
-      "Financial distress is an escalating cascade triggered by sustained negative balance. Five levels: Healthy (balance positive, no penalties), Warning (negative balance for 2+ weeks, inbox warning, minus 1 credit per week), Distressed (balance below minus 500 for 4+ weeks, premium subscriptions cancelled, travel budget reduced, minus 2 reputation per week), Critical (balance below minus 2000 for 8+ weeks, assistant scouts quit, lose one retainer client, minus 3 reputation per week), Bankruptcy (balance below minus 5000 for 12+ weeks, forced to Tier 1, all equipment liquidated, contracts terminated, reputation halved, 10 week recovery period). Distress can only escalate one level at a time. Recovery happens when balance returns positive, reducing distress by one level. Recovery suggestions include reducing lifestyle tier, selling equipment for 40% of value, downgrading lifestyle, taking emergency consulting, requesting salary advance from club employer. The broke threshold is minus 500. Starting cash is 2000 on normal difficulty or 4000 on casual. Budget management tip: always maintain a cash buffer above zero. A single bad month can trigger the distress cascade.",
+      "Financial distress is an escalating cascade triggered by sustained negative balance. It moves from warning signs to cutbacks, then to staff and reputation damage, and finally to bankruptcy if the situation keeps worsening. Recovery happens when balance returns positive. Common recovery moves include lowering lifestyle costs, selling equipment, taking emergency consulting, requesting salary support from a club employer, or using short-term borrowing.",
     content: (
       <SectionBlock>
         <Para>

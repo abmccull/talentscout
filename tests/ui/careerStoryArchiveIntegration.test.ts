@@ -101,7 +101,7 @@ describe("career story archive and consequence cinema", () => {
         details: ["Your reputation is attached", "The club commits resources"],
       },
     });
-    expect(story?.outcome.body).toContain("1 player-safe outcome fact");
+    expect(story?.outcome.body).toContain("1 outcome note");
     expect(buildCareerStoryReel(cinemaSource(compacted, archived))).toEqual(
       buildCareerStoryReel(cinemaSource(compacted, archived)),
     );

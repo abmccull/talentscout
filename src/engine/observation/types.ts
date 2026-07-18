@@ -19,6 +19,12 @@ import type {
   AttributeDomain,
   CulturalInsight,
   TravelPosture,
+  EvidenceConfidenceBand,
+  ObservationHalftimeApproach,
+  PlayerRole,
+  ScoutCueReading,
+  ScoutingEvidenceDecision,
+  ScoutingQuestionId,
 } from "@/engine/core/types";
 import type { ObservationSituationSnapshot } from "./situations";
 
@@ -60,6 +66,56 @@ export type HypothesisEvidenceSource =
 
 /** Qualitative signal carried by evidence before it is interpreted against a claim. */
 export type HypothesisEvidenceSignal = "positive" | "negative" | "mixed";
+
+/** Visible opposition descriptors used to tailor a watch without exposing team truth. */
+export interface ObservationOpponentContext {
+  name?: string;
+  relativeStrength?: "weaker" | "even" | "stronger" | "unknown";
+  tacticalFrame?: ObservationSituationSnapshot["tacticalFrame"];
+  familiarity?: "known" | "unfamiliar";
+}
+
+/**
+ * Save-safe context carried into one session. These are snapshots of knowledge
+ * the scout already owns, never a second source of player or report truth.
+ */
+export interface ObservationExperienceSnapshot {
+  /** Question-specific scout skills on the canonical 1-20 scale. */
+  skillByQuestion?: Partial<Record<ScoutingQuestionId, number>>;
+  /** Existing country knowledge on the canonical 0-100 scale. */
+  regionalKnowledgeLevel?: number;
+  priorObservationCount?: number;
+  priorIndependentContextCount?: number;
+  priorEvidenceQuality?: number;
+  priorQuestionIds?: ScoutingQuestionId[];
+  openQuestionIds?: ScoutingQuestionId[];
+  priorContextKeys?: string[];
+}
+
+/** A contextual angle around one canonical scouting question. */
+export interface ContextualScoutingQuestion {
+  id: ScoutingQuestionId;
+  score: number;
+  recommended: boolean;
+  roleAngle: string;
+  contextAngle: string;
+  prompt: string;
+  reason: string;
+}
+
+export type ObservationSignalOutcome = "clear" | "weak" | "noSignal";
+
+/** Player-safe explanation of what this session actually established. */
+export interface ObservationSignalAssessment {
+  outcome: ObservationSignalOutcome;
+  score: number;
+  cueCount: number;
+  usableCueCount: number;
+  comparisonReady: boolean;
+  contextChanged: boolean;
+  summary: string;
+  reasons: string[];
+}
 
 // =============================================================================
 // FOCUS TOKEN SYSTEM
@@ -491,6 +547,8 @@ export interface SessionPlayer {
   name: string;
   /** Playing position (e.g. "CAM", "CB"). */
   position: string;
+  /** Optional tactical role snapshot used only to tailor observation questions. */
+  naturalRole?: PlayerRole;
   /** Whether the scout currently has a focus token allocated to this player. */
   isFocused: boolean;
   /** Phase indices (0-based) during which the scout focused on this player. */
@@ -540,6 +598,20 @@ export interface ObservationSession {
   insightPointsEarned: number;
   /** Reflection notes written by the scout (populated in 'reflection' state). */
   reflectionNotes: string[];
+  /** Deliberate question chosen before the session begins. */
+  scoutingQuestionId?: ScoutingQuestionId;
+  /** Contextual variants of the canonical question set. Optional on old saves. */
+  questionOptions?: ContextualScoutingQuestion[];
+  /** Deterministically resolved, player-safe cue reads for live moments. */
+  cueReadings?: ScoutCueReading[];
+  /** Player interpretations locked during reflection. */
+  evidenceDecisions?: Record<string, ScoutingEvidenceDecision>;
+  /** Mid-session adjustment used to shape second-half attention. */
+  halftimeApproach?: ObservationHalftimeApproach;
+  /** Knowledge snapshot used to calibrate novelty and weak-signal outcomes. */
+  observerContext?: ObservationExperienceSnapshot;
+  /** Visible opponent descriptors used to tailor this watch. */
+  opponentContext?: ObservationOpponentContext;
   /** Environmental/atmospheric context for this session. */
   venueAtmosphere?: VenueAtmosphere;
   /** Persisted context that explains what this specific watch could reveal. */
@@ -581,6 +653,12 @@ export interface SessionConfig {
   activityInstanceId?: string;
   /** The scout's active specialization for this session. */
   specialization: Specialization;
+  /** Optional deliberate question; a specialization-aligned default is used when omitted. */
+  scoutingQuestionId?: ScoutingQuestionId;
+  /** Optional player-safe knowledge snapshot for contextual question selection. */
+  observerContext?: ObservationExperienceSnapshot;
+  /** Optional visible match/opponent context. */
+  opponentContext?: ObservationOpponentContext;
   /** Venue type string for atmosphere generation. Defaults to activityType. */
   venueType?: string;
   /** Country whose football environment shapes this session. */
@@ -592,7 +670,12 @@ export interface SessionConfig {
   /** If set, this session is a follow-up focused on a specific player. */
   targetPlayerId?: string;
   /** The pool of players available to observe in this session. */
-  playerPool: { playerId: string; name: string; position: string }[];
+  playerPool: {
+    playerId: string;
+    name: string;
+    position: string;
+    naturalRole?: PlayerRole;
+  }[];
   /** Unresolved hypotheses carried forward from earlier sessions. */
   initialHypotheses?: Hypothesis[];
   /** RNG seed for deterministic session generation. */
@@ -636,6 +719,10 @@ export interface SessionResult {
   qualityModifier: number;
   /** Reflection notes written during the reflection phase. */
   reflectionNotes: string[];
+  /** Question and calibration state that produced the structured evidence. */
+  scoutingQuestionId?: ScoutingQuestionId;
+  evidenceConfidence?: EvidenceConfidenceBand;
+  signalAssessment?: ObservationSignalAssessment;
   /** Quality tier label from the activity quality system (e.g. "elite", "good"). */
   qualityTier: string;
   /** Number of phases the scout completed before ending the session. */

@@ -1,79 +1,91 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-14T13:04:58.302Z",
+  "generatedAt": "2026-07-17T23:09:26.212Z",
   "summary": {
-    "modules": 465,
-    "internalEdges": 1974,
+    "modules": 537,
+    "internalEdges": 2473,
     "stronglyConnectedComponents": 0,
     "modulesInCycles": 0
   },
   "largestModules": [
     {
-      "file": "src/stores/actions/weeklyActions.ts",
-      "lines": 7467
-    },
-    {
       "file": "src/engine/core/types.ts",
-      "lines": 5248
+      "lines": 5800
     },
     {
       "file": "src/engine/core/gameLoop.ts",
-      "lines": 3797
+      "lines": 4187
     },
     {
       "file": "src/components/game/PlayerProfile.tsx",
-      "lines": 2898
-    },
-    {
-      "file": "src/components/game/Dashboard.tsx",
-      "lines": 2457
-    },
-    {
-      "file": "src/components/game/CareerScreen.tsx",
-      "lines": 2236
-    },
-    {
-      "file": "src/components/game/NewGameScreen.tsx",
-      "lines": 2149
+      "lines": 3007
     },
     {
       "file": "src/components/game/ReportWriter.tsx",
-      "lines": 2057
+      "lines": 2467
+    },
+    {
+      "file": "src/components/game/Dashboard.tsx",
+      "lines": 2459
+    },
+    {
+      "file": "src/stores/actions/weeklyActions.ts",
+      "lines": 2434
+    },
+    {
+      "file": "src/components/game/CareerScreen.tsx",
+      "lines": 2282
+    },
+    {
+      "file": "src/components/game/NewGameScreen.tsx",
+      "lines": 2153
+    },
+    {
+      "file": "src/components/game/ObservationScreen.tsx",
+      "lines": 2020
+    },
+    {
+      "file": "src/components/game/ReportHistory.tsx",
+      "lines": 1981
     },
     {
       "file": "src/engine/observation/investigation.ts",
       "lines": 1950
     },
     {
+      "file": "src/engine/core/calendar.ts",
+      "lines": 1877
+    },
+    {
       "file": "src/engine/events/specialEventDeck.ts",
       "lines": 1832
     },
     {
-      "file": "src/components/game/ReportHistory.tsx",
-      "lines": 1822
-    },
-    {
-      "file": "src/components/game/ObservationScreen.tsx",
-      "lines": 1776
-    },
-    {
-      "file": "src/engine/core/calendar.ts",
-      "lines": 1710
-    },
-    {
       "file": "src/lib/db.ts",
-      "lines": 1634
-    },
-    {
-      "file": "src/engine/events/eventTemplates.ts",
-      "lines": 1602
+      "lines": 1734
     },
     {
       "file": "src/stores/gameStore.ts",
-      "lines": 1552
+      "lines": 1631
+    },
+    {
+      "file": "src/engine/events/eventTemplates.ts",
+      "lines": 1629
     },
     {
       "file": "src/engine/insight/actions.ts",
+      "lines": 1601
+    },
+    {
+      "file": "src/stores/actions/financeActions.ts",
+      "lines": 1542
+    },
+    {
+      "file": "src/engine/events/eventChains.ts",
+      "lines": 1456
+    },
+    {
+      "file": "src/engine/rivals/rivalScouts.ts",
       "lines": 1426
     },
     {
@@ -81,53 +93,42 @@
       "lines": 1383
     },
     {
-      "file": "src/engine/events/eventChains.ts",
-      "lines": 1382
-    },
-    {
-      "file": "src/stores/actions/financeActions.ts",
-      "lines": 1368
-    },
-    {
-      "file": "src/engine/rivals/rivalScouts.ts",
-      "lines": 1365
-    },
-    {
-      "file": "src/components/game/YouthScoutingScreen.tsx",
-      "lines": 1336
+      "file": "src/stores/actions/observationActions.ts",
+      "lines": 1381
     },
     {
       "file": "src/engine/network/contacts.ts",
-      "lines": 1319
+      "lines": 1364
+    },
+    {
+      "file": "src/stores/actions/progressionActions.ts",
+      "lines": 1353
+    },
+    {
+      "file": "src/components/game/YouthScoutingScreen.tsx",
+      "lines": 1343
     },
     {
       "file": "src/engine/reports/reporting.ts",
-      "lines": 1317
+      "lines": 1337
+    },
+    {
+      "file": "src/engine/events/narrativeEvents.ts",
+      "lines": 1319
     },
     {
       "file": "src/engine/rivals/organizations.ts",
       "lines": 1309
     },
     {
-      "file": "src/engine/events/narrativeEvents.ts",
-      "lines": 1285
+      "file": "src/components/game/InboxScreen.tsx",
+      "lines": 1303
     },
     {
       "file": "src/engine/observation/analysis.ts",
       "lines": 1282
-    },
-    {
-      "file": "src/stores/actions/progressionActions.ts",
-      "lines": 1229
-    },
-    {
-      "file": "src/components/game/InboxScreen.tsx",
-      "lines": 1183
-    },
-    {
-      "file": "src/engine/events/storylines.ts",
-      "lines": 1168
     }
   ],
+  "guardedModules": [],
   "cycles": []
 }

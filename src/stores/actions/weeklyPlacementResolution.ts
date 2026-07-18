@@ -129,6 +129,21 @@ export function processWeeklyPlacementResolution(
 
       const targetClubId = sourceReport.intendedClubId
         ?? placementActivity.destinationClubId;
+      if (!targetClubId) {
+        submissionMessages.push({
+          id: `placement-club-required-${youth.id}-s${stateWithScheduleApplied.currentSeason}w${stateWithScheduleApplied.currentWeek}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback",
+          title: "Choose the club you are pitching",
+          body: `Your opinion on ${youth.player.firstName} ${youth.player.lastName} is ready, but a placement pitch needs a named academy. Return to Planner, choose the destination club, and schedule the pitch again.`,
+          read: false,
+          actionRequired: true,
+          relatedId: youth.player.id,
+          relatedEntityType: "player",
+        });
+        continue;
+      }
       const eligibleClubs = getEligibleClubsForPlacement(
         youth,
         Object.values(stateWithScheduleApplied.clubs),
@@ -136,10 +151,22 @@ export function processWeeklyPlacementResolution(
         stateWithScheduleApplied.leagues,
         { preferredClubId: targetClubId },
       );
-      const targetClub = targetClubId
-        ? eligibleClubs.find((club) => club.id === targetClubId)
-        : eligibleClubs[0];
-      if (!targetClub) continue;
+      const targetClub = eligibleClubs.find((club) => club.id === targetClubId);
+      if (!targetClub) {
+        submissionMessages.push({
+          id: `placement-club-ineligible-${youth.id}-${targetClubId}-s${stateWithScheduleApplied.currentSeason}w${stateWithScheduleApplied.currentWeek}`,
+          week: stateWithScheduleApplied.currentWeek,
+          season: stateWithScheduleApplied.currentSeason,
+          type: "feedback",
+          title: "That academy is not a credible destination",
+          body: `The selected club is not currently eligible for this placement. Review the player's route, registration risk, academy fit, and your access before choosing another destination.`,
+          read: false,
+          actionRequired: true,
+          relatedId: youth.player.id,
+          relatedEntityType: "player",
+        });
+        continue;
+      }
 
       const generatedReport = {
         ...generatePlacementReport(
@@ -154,6 +181,8 @@ export function processWeeklyPlacementResolution(
         conviction: sourceReport.conviction,
         qualityScore: sourceReport.qualityScore,
         briefId: sourceReport.briefId,
+        pitchPosture: placementActivity.placementPitchPosture ?? "evidenceLed",
+        supportCondition: placementActivity.placementSupportCondition ?? "none",
       };
       const linked = ensureScoutingCaseForReport(preparedScoutingCases, sourceReport);
       const recorded = recordDirectPlacementDelivery({
@@ -264,6 +293,10 @@ export function processWeeklyPlacementResolution(
               scout: currentScoutForPlacement,
               club,
               relationshipScore,
+              placementStrategy: {
+                pitchPosture: report.pitchPosture,
+                supportCondition: report.supportCondition,
+              },
               mobilityAssessment,
               stakeholderContext: {
                 consequenceState: updatedConsequenceState,

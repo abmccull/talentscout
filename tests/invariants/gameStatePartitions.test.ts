@@ -32,6 +32,9 @@ describe("GameState ownership partitions", () => {
   it("exposes read-only ownership facades without cloning or hiding shared truth", () => {
     const state = migratedState();
     const partitions = partitionGameState(state, "youth");
+    expect(partitions.sharedWorld).not.toBe(state);
+    expect(partitions.sharedCareer).not.toBe(state);
+    expect(partitions.mode).not.toBe(state);
 
     expect(getActiveGameMode(state)).toBe(state.runManifest.specialization);
     expect(getActiveGameModeId(state)).toBe("youth-scout");

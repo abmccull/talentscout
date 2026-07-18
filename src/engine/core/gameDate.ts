@@ -1,5 +1,5 @@
 import type { Fixture, GameDate } from "./types";
-import { isFixtureInSeason } from "../world/fixtures";
+import { getFixtureSeason, isFixtureInSeason } from "../world/fixtures";
 
 export type { GameDate } from "./types";
 export type SeasonWeek = GameDate;
@@ -9,6 +9,51 @@ export type SeasonWeek = GameDate;
  * calendars. Live game paths should pass a season length or fixture map.
  */
 export const LEGACY_SEASON_LENGTH_WEEKS = 38;
+
+/**
+ * Precomputed fixture calendar for consumers that compare many dates against
+ * the same immutable game-state fixture map.
+ */
+export interface GameCalendarIndex {
+  readonly seasonLengths: ReadonlyMap<number, number>;
+  readonly unscopedSeasonLength: number;
+  readonly maxSeasonLength: number;
+}
+
+export function createGameCalendarIndex(
+  fixtures: Record<string, Fixture>,
+): GameCalendarIndex {
+  const seasonLengths = new Map<number, number>();
+  let unscopedSeasonLength = LEGACY_SEASON_LENGTH_WEEKS;
+  let maxSeasonLength = LEGACY_SEASON_LENGTH_WEEKS;
+
+  for (const fixture of Object.values(fixtures)) {
+    const fixtureWeek = Math.max(LEGACY_SEASON_LENGTH_WEEKS, fixture.week);
+    const fixtureSeason = getFixtureSeason(fixture);
+    if (fixtureSeason === undefined) {
+      unscopedSeasonLength = Math.max(unscopedSeasonLength, fixtureWeek);
+    } else {
+      seasonLengths.set(
+        fixtureSeason,
+        Math.max(seasonLengths.get(fixtureSeason) ?? LEGACY_SEASON_LENGTH_WEEKS, fixtureWeek),
+      );
+    }
+    maxSeasonLength = Math.max(maxSeasonLength, fixtureWeek);
+  }
+
+  return { seasonLengths, unscopedSeasonLength, maxSeasonLength };
+}
+
+export function getSeasonLengthFromCalendar(
+  calendar: GameCalendarIndex,
+  season?: number,
+): number {
+  if (season === undefined) return calendar.maxSeasonLength;
+  return Math.max(
+    calendar.unscopedSeasonLength,
+    calendar.seasonLengths.get(season) ?? LEGACY_SEASON_LENGTH_WEEKS,
+  );
+}
 
 /** Return the authoritative fixture-derived length for a season. */
 export function getSeasonLength(
@@ -102,6 +147,52 @@ export function gameWeeksBetween(
     elapsed += getSeasonLength(fixtures, season);
   }
   return elapsed + end.week;
+}
+
+/**
+ * Indexed form of gameWeeksBetween for batch projections. It preserves the
+ * fixture-derived variable-season calendar without rescanning every fixture
+ * once per report, case, contact, or decision.
+ */
+export function gameWeeksBetweenWithCalendar(
+  calendar: GameCalendarIndex,
+  start: SeasonWeek,
+  end: SeasonWeek,
+): number {
+  if (start.season === end.season) return end.week - start.week;
+  if (
+    end.season < start.season
+    || (end.season === start.season && end.week < start.week)
+  ) {
+    return -gameWeeksBetweenWithCalendar(calendar, end, start);
+  }
+
+  let elapsed = getSeasonLengthFromCalendar(calendar, start.season) - start.week;
+  for (let season = start.season + 1; season < end.season; season++) {
+    elapsed += getSeasonLengthFromCalendar(calendar, season);
+  }
+  return elapsed + end.week;
+}
+
+/** Add weeks without rescanning the fixture map for every crossed week. */
+export function addGameWeeksWithCalendar(
+  calendar: GameCalendarIndex,
+  start: SeasonWeek,
+  weeks: number,
+): SeasonWeek {
+  if (!Number.isInteger(weeks) || weeks < 0) {
+    throw new RangeError("weeks must be a non-negative integer");
+  }
+  let season = start.season;
+  let week = start.week;
+  for (let elapsed = 0; elapsed < weeks; elapsed++) {
+    week += 1;
+    if (week > getSeasonLengthFromCalendar(calendar, season)) {
+      season += 1;
+      week = 1;
+    }
+  }
+  return { season, week };
 }
 
 /** One-based number of career weeks played, beginning at season 1, week 1. */

@@ -145,7 +145,7 @@ export const matchObservationArticles: WikiArticle[] = [
     summary:
       "Strategies for building comprehensive player profiles: focus, lens switching, follow-ups, and stacking.",
     searchText:
-      "You can only be focused on one player at a time. To build a comprehensive picture of a player across a full match: Select the player before the match begins. Switch focus lens mid-match when a different phase type starts. Return to the same player in a Follow-Up Session to narrow confidence intervals further. Cross-reference with a Video session on the same fixture after the fact. Repeated observations of the same player stack — each session narrows the confidence range toward the true value. Three or more sessions in different contexts (live + video + training) produce the most reliable reports.",
+      "You can only be focused on one player at a time. Choose a scouting question, match the lens to the phase, classify the passages you keep, and return in a different context to challenge the first read. Repeated observations improve calibration and context coverage, but never guarantee the player's true level or future.",
     content: (
       <SectionBlock>
         <Para>
@@ -161,10 +161,9 @@ export const matchObservationArticles: WikiArticle[] = [
           ]}
         />
         <Para>
-          Repeated observations of the same player stack — each session narrows
-          the confidence range toward the true value. Three or more sessions in
-          different contexts (live + video + training) produce the most reliable
-          reports.
+          Repeated observations improve calibration when they test the same claim
+          in genuinely different contexts. They do not turn uncertainty into hidden
+          truth; the best reports preserve what is still unknown.
         </Para>
       </SectionBlock>
     ),
@@ -191,9 +190,9 @@ export const matchObservationArticles: WikiArticle[] = [
     category: "match-observation",
     order: 3,
     summary:
-      "How live match, video, and training visit observations differ in accuracy, reveals, and fatigue cost.",
+      "How live match, video, and training visit observations differ in feel, visibility, and fatigue cost.",
     searchText:
-      "There are three primary contexts in which you can observe players, each with distinct characteristics. Live Match Observation: Attending a match in person is the primary scouting method. You observe 12-18 phases per match, each revealing attributes based on phase type. Live observation uses a baseline noise multiplier modified by weather, fatigue, and equipment. It costs the most fatigue but provides the widest range of attribute reveals and the most realistic view of a player under competitive pressure. Atmosphere, body language, and off-the-ball movement are all visible live. Video Observation: Watching video of a recorded match provides a controlled environment with no weather impact. However, video carries a x1.5 noise multiplier compared to live attendance — you lose peripheral vision, atmosphere cues, and real-time context. Video is lower fatigue than live attendance and allows you to re-watch the same fixture, stacking readings. Deep Video Analysis (Data Scout exclusive) reduces video noise to x1.1 by combining footage with statistical overlays. Training Visit Observation: Visiting a club's training ground is the most accurate observation context, with a x0.7 noise multiplier. Training reveals technical and physical attributes clearly in a controlled, low-pressure environment. However, it requires facility access (often tied to club relationships or the Youth specialization) and does not expose competitive mental attributes like composure under match pressure. Training visits cost moderate fatigue. Combining Modes: The most reliable reports come from observing a player across multiple modes. A live match reveals competitive behaviour, video lets you re-examine specific moments, and training shows technical polish without match pressure. Three or more sessions across different modes produce the narrowest confidence intervals.",
+      "There are three primary contexts in which you can observe players, each with distinct strengths. Live Match Observation: attending a match in person gives the fullest competitive picture, including atmosphere, body language, tempo shifts, and off-the-ball work, but it costs the most energy and can be shaped by weather, travel, and equipment. Video Observation: watching footage gives you a calmer, repeatable look at key moments, though you lose some peripheral detail and match-day atmosphere. Deep Video Analysis sharpens that footage with added context. Training Visit Observation: visiting a club's training ground gives the cleanest technical and physical read in a controlled setting, but it depends on access and cannot fully recreate match pressure. The strongest dossiers usually come from mixing modes across multiple sessions.",
     content: (
       <SectionBlock>
         <Para>
@@ -203,37 +202,32 @@ export const matchObservationArticles: WikiArticle[] = [
 
         <Subheading>Live Match Observation</Subheading>
         <Para>
-          Attending a match in person is the primary scouting method. You observe
-          12–18 phases per match, each revealing attributes based on phase type.
-          Live observation uses a baseline noise multiplier modified by weather,
-          fatigue, and equipment. It costs the most fatigue but provides the
-          widest range of attribute reveals and the most realistic view of a
-          player under competitive pressure. Atmosphere, body language, and
-          off-the-ball movement are all visible live.
+          Attending a match in person is the primary scouting method. It gives
+          you the fullest competitive picture, with atmosphere, body language,
+          tempo changes, and off-the-ball movement all visible in real time.
+          Live work costs the most fatigue, but it remains the clearest way to
+          judge how a player handles pressure.
         </Para>
 
         <Subheading>Video Observation</Subheading>
         <Para>
           Watching video of a recorded match provides a controlled environment
-          with no weather impact. However, video carries a{" "}
-          <Tag color="zinc">&times;1.5</Tag> noise multiplier compared to live
-          attendance — you lose peripheral vision, atmosphere cues, and real-time
-          context. Video is lower fatigue than live attendance and allows you to
-          re-watch the same fixture, stacking readings.{" "}
+          with no weather impact. You lose some peripheral vision, atmosphere
+          cues, and real-time context, but video is easier on fatigue and lets
+          you revisit the same fixture to study details.{" "}
           <Tag color="zinc">Deep Video Analysis</Tag> (Data Scout exclusive)
-          reduces video noise to <Tag color="zinc">&times;1.1</Tag> by combining
-          footage with statistical overlays.
+          sharpens that footage further by combining it with statistical
+          overlays.
         </Para>
 
         <Subheading>Training Visit Observation</Subheading>
         <Para>
-          Visiting a club&apos;s training ground is the most accurate
-          observation context, with a <Tag color="zinc">&times;0.7</Tag> noise
-          multiplier. Training reveals technical and physical attributes clearly
-          in a controlled, low-pressure environment. However, it requires
-          facility access (often tied to club relationships or the Youth
-          specialization) and does not expose competitive mental attributes like
-          composure under match pressure. Training visits cost moderate fatigue.
+          Visiting a club&apos;s training ground offers the cleanest technical
+          and physical look in a controlled, low-pressure environment. However,
+          it requires facility access (often tied to club relationships or the
+          Youth specialization) and does not expose competitive mental
+          attributes like composure under match pressure. Training visits cost
+          moderate fatigue.
         </Para>
 
         <Subheading>Combining Modes</Subheading>
@@ -241,8 +235,8 @@ export const matchObservationArticles: WikiArticle[] = [
           The most reliable reports come from observing a player across multiple
           modes. A live match reveals competitive behaviour, video lets you
           re-examine specific moments, and training shows technical polish
-          without match pressure. Three or more sessions across different modes
-          produce the narrowest confidence intervals.
+          without match pressure. Several sessions across different modes usually
+          produce the steadiest read.
         </Para>
       </SectionBlock>
     ),

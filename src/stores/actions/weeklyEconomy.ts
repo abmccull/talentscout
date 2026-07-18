@@ -23,17 +23,12 @@ import {
   processRetainerRenewals,
   getLifestyleReputationPenalty,
 } from "@/engine/finance";
-import {
-  expireRetainerOffers,
-  recordRetainerDelivery,
-} from "@/engine/finance/retainers";
-import {
-  expireConsultingOffers,
-  recordConsultingReportDelivery,
-} from "@/engine/finance/consulting";
+import { expireRetainerOffers } from "@/engine/finance/retainers";
+import { expireConsultingOffers } from "@/engine/finance/consulting";
 import { creditForRetainerCompleted } from "@/engine/finance/creditScore";
 import {
   processWeeklyCourseProgress,
+  countScheduledStudySessions,
   COURSE_CATALOG,
 } from "@/engine/career/courses";
 import {
@@ -160,6 +155,7 @@ export function processWeeklyEconomy(
     nextState.currentWeek,
     nextState.currentSeason,
     economicSeasonLength,
+    countScheduledStudySessions(nextState.schedule),
   );
 
   if (econFinances.completedCourses.length > prevCompletedCourses.length) {
@@ -266,28 +262,19 @@ export function processWeeklyEconomy(
     );
     econFinances = workResult.finances;
 
-    if (workResult.generatedReports.length > 0) {
-      const newReports = { ...nextState.reports };
-      for (const report of workResult.generatedReports) {
-        newReports[report.id] = report;
-        const employeeReportPlayer = nextState.players[report.playerId];
-        const clientClubId = report.intendedClubId ?? employeeReportPlayer?.clubId;
-        if (clientClubId) {
-          econFinances = recordRetainerDelivery(
-            econFinances,
-            clientClubId,
-            report,
-            employeeReportPlayer,
-          );
-          econFinances = recordConsultingReportDelivery(
-            econFinances,
-            clientClubId,
-            report,
-            employeeReportPlayer,
-          );
-        }
-      }
-      nextState = { ...nextState, reports: newReports };
+    if (workResult.generatedWorkProducts.length > 0) {
+      const existingIds = new Set(
+        (econFinances.staffWorkProducts ?? []).map((product) => product.id),
+      );
+      econFinances = {
+        ...econFinances,
+        staffWorkProducts: [
+          ...(econFinances.staffWorkProducts ?? []),
+          ...workResult.generatedWorkProducts.filter(
+            (product) => !existingIds.has(product.id),
+          ),
+        ],
+      };
     }
 
     if (workResult.inboxMessages.length > 0) {
@@ -299,7 +286,7 @@ export function processWeeklyEconomy(
         title: message.title,
         body: message.body,
         read: false,
-        actionRequired: false,
+        actionRequired: message.title === "Staff scouting ready for review",
       }));
       nextState = { ...nextState, inbox: [...messages, ...nextState.inbox] };
     }

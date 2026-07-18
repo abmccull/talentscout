@@ -120,6 +120,10 @@ export function runHeadlessWeeklyTransaction(
 
 function estimateResponseBytes(value: unknown): number {
   const serialized = JSON.stringify(value) ?? "undefined";
+  return estimateSerializedBytes(serialized);
+}
+
+function estimateSerializedBytes(serialized: string): number {
   return typeof TextEncoder === "function"
     ? new TextEncoder().encode(serialized).byteLength
     : serialized.length;
@@ -131,13 +135,25 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null;
 }
 
+function areJsonValuesEqual(source: unknown, next: unknown): boolean {
+  if (Object.is(source, next)) return true;
+  if (
+    source === null
+    || next === null
+    || typeof source !== "object"
+    || typeof next !== "object"
+  ) return false;
+  return JSON.stringify(source) === JSON.stringify(next);
+}
+
 function createRecordDelta(
   source: Record<string, unknown>,
   next: Record<string, unknown>,
+  depth: number,
 ): WeeklyRecordDelta {
   const changedEntries: Record<string, WeeklyValueDelta> = {};
   for (const key of Object.keys(next)) {
-    const delta = createValueDelta(source[key], next[key]);
+    const delta = createValueDelta(source[key], next[key], depth + 1);
     if (delta) changedEntries[key] = delta;
   }
   const removedEntries = Object.keys(source)
@@ -148,14 +164,69 @@ function createRecordDelta(
 function createArrayDelta(source: unknown[], next: unknown[]): WeeklyArrayDelta {
   const changedEntries: Record<string, WeeklyValueDelta> = {};
   for (let index = 0; index < next.length; index += 1) {
-    const delta = createValueDelta(source[index], next[index]);
-    if (delta) changedEntries[index] = delta;
+    if (!areJsonValuesEqual(source[index], next[index])) {
+      changedEntries[index] = { kind: "replace", value: next[index] };
+    }
   }
   return { nextLength: next.length, changedEntries };
 }
 
-function createValueDelta(source: unknown, next: unknown): WeeklyValueDelta | null {
+/**
+ * Entity records benefit from one nested field-level delta (for example a
+ * player changing only form and recent ratings). Deeper recursion made the
+ * old compactor repeatedly stringify the same growing histories, so nested
+ * objects below this boundary are compared once and replaced atomically.
+ */
+const MAX_WEEKLY_DELTA_DEPTH = 2;
+
+function createArrayWindowDelta(
+  source: unknown[],
+  next: unknown[],
+): WeeklyValueDelta | null {
+  // Rolling histories are deliberately small. Bounding this optimization
+  // avoids quadratic overlap searches on large presentation arrays.
+  if (source.length > 32 || next.length > 32) return null;
+  const maximumOverlap = Math.min(source.length, next.length);
+  for (let overlap = maximumOverlap; overlap > 0; overlap -= 1) {
+    const sourceStart = source.length - overlap;
+    let matches = true;
+    for (let index = 0; index < overlap; index += 1) {
+      if (!areJsonValuesEqual(source[sourceStart + index], next[index])) {
+        matches = false;
+        break;
+      }
+    }
+    if (!matches) continue;
+    const dropFirst = sourceStart;
+    const append = next.slice(overlap);
+    if (dropFirst === 0 && append.length === 0) return null;
+    const delta: WeeklyValueDelta = {
+      kind: "array-window",
+      dropFirst,
+      append,
+    };
+    return estimateResponseBytes(delta) < estimateResponseBytes(next)
+      ? delta
+      : null;
+  }
+  return null;
+}
+
+function createValueDelta(
+  source: unknown,
+  next: unknown,
+  depth = 0,
+): WeeklyValueDelta | null {
   if (Object.is(source, next)) return null;
+  if (Array.isArray(source) && Array.isArray(next)) {
+    const windowDelta = createArrayWindowDelta(source, next);
+    if (windowDelta) return windowDelta;
+  }
+  if (depth >= MAX_WEEKLY_DELTA_DEPTH) {
+    return areJsonValuesEqual(source, next)
+      ? null
+      : { kind: "replace", value: next };
+  }
   if (Array.isArray(source) && Array.isArray(next)) {
     const delta = createArrayDelta(source, next);
     if (
@@ -165,7 +236,7 @@ function createValueDelta(source: unknown, next: unknown): WeeklyValueDelta | nu
     const nested: WeeklyValueDelta = { kind: "array", delta };
     if (estimateResponseBytes(nested) < estimateResponseBytes(next)) return nested;
   } else if (isPlainRecord(source) && isPlainRecord(next)) {
-    const delta = createRecordDelta(source, next);
+    const delta = createRecordDelta(source, next, depth);
     if (
       Object.keys(delta.changedEntries).length === 0
       && delta.removedEntries.length === 0
@@ -178,6 +249,10 @@ function createValueDelta(source: unknown, next: unknown): WeeklyValueDelta | nu
 
 function materializeValueDelta(source: unknown, delta: WeeklyValueDelta): unknown {
   if (delta.kind === "replace") return delta.value;
+  if (delta.kind === "array-window") {
+    if (!Array.isArray(source)) throw new Error("Cannot materialize array-window delta.");
+    return [...source.slice(delta.dropFirst), ...delta.append];
+  }
   if (delta.kind === "record") {
     if (!isPlainRecord(source)) throw new Error("Cannot materialize nested record delta.");
     const next = { ...source };

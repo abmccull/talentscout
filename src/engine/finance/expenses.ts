@@ -228,6 +228,7 @@ export function initializeFinances(scout: Scout, careerPath?: CareerPath, diffic
     consultingContracts: [],
     office,
     employees: [],
+    staffWorkProducts: [],
     analystReviews: [],
     lifestyle,
     completedCourses: [],

@@ -13,7 +13,7 @@ export const specializationsArticles: WikiArticle[] = [
     summary:
       "Focuses on players under 21. Better at reading potential ability, with access to grassroots venues and unsigned youth circuits.",
     searchText:
-      "Youth Scout. Focuses on players under 21. Better at reading potential ability over current ability. Unlocks grassroots venues and unsigned youth scouting circuits invisible to other specializations. Perks: Grassroots Access (Lv1) opens doors to street football sessions and grassroots tournaments, discover unsigned youth in venues hidden from the mainstream scouting circuit. Raw Potential Reading (Lv3) years of watching rough diamonds gives an instinctive sense of ceilings, unlocks a rough potential ability range indicator on unsigned youth. Instinct Sharpening (Lv5) gut reactions to young talent are sharper, gut feeling trigger rate increased by 40% when observing players under 16. Youth Network (Lv7) contacts begin sharing intel about unsigned youth sightings, network meetings occasionally reveal hidden talents in the region. Placement Reputation (Lv9) clubs trust your recommendations, placement acceptance rate increases by 25% across all conviction levels. Wonderkid Radar (Lv12) pattern recognition for generational talent is razor-sharp, auto-alert when observing an under-16 with generational potential markers. Academy Whisperer (Lv15) reputation opens private academy doors, you can request clubs to hold dedicated trial days for your recommended youth. Generational Eye (Lv18) the pinnacle of youth scouting intuition, gut feelings now include a PA estimate within plus or minus 5 of the true value.",
+      "Youth Scout. Focuses on players under 21, grassroots access, evidence-led projection, and academy pathways. Advanced perks improve access, follow-up signals, and contextual judgment without revealing a player's hidden future.",
     content: (
       <SectionBlock>
         <Para>
@@ -60,7 +60,7 @@ export const specializationsArticles: WikiArticle[] = [
           <PerkCard
             name="Generational Eye"
             level={18}
-            description="The pinnacle of youth scouting intuition. Gut feelings now include a PA estimate within \u00b15 of the true value."
+            description="Strong live cues can produce a broad upside range. It remains a fallible hypothesis that needs repeat evidence."
           />
         </div>
       </SectionBlock>
@@ -166,7 +166,7 @@ export const specializationsArticles: WikiArticle[] = [
     summary:
       "Deep knowledge of one geographic territory. Better accuracy on home soil and the ability to create long-term player pipelines.",
     searchText:
-      "Regional Expert. Deep knowledge of one geographic territory. Better accuracy on home soil, faster contact relationship building, and the ability to create long-term player pipelines from a specific region. Perks: Local Network (Lv1) deep roots in your region mean contacts trust you faster, meetings with regional scouts and journalists yield enhanced relationship gains and more candid intelligence. League Knowledge (Lv3) you know the playing styles, tactical tendencies, and quality variance of every club in your region intimately, attribute readings from regional matches carry a 15% accuracy bonus. Hidden Gem Finder (Lv5) lower leagues hide players no-one else is watching, thorough regional coverage reveals additional layers of mental and tactical attributes on players outside the top two tiers. Cultural Translator (Lv8) understanding regional culture, language, and football philosophy lets you build bridges between players and new clubs, agent contacts in your region yield substantially richer intel. Pipeline Builder (Lv12) establish a formal talent pipeline from your region, receive alerts when contracted players in your territory enter their final contract year or become available for loan. Territory Mastery (Lv15) you know your home region as well as anyone alive, observations made on home soil carry a 70% accuracy bonus, narrowing confidence intervals to near-certainty. Hidden Attribute Revealer (Lv18) years of intimate knowledge of players in your territory means Consistency and Professionalism are no longer hidden to you, you read them directly from sustained observation.",
+      "Regional Expert. Deep knowledge of one geographic territory improves access, comparison context, and relationship-led corroboration. Mastery stabilizes home-soil reads but never removes uncertainty or reveals hidden ratings.",
     content: (
       <SectionBlock>
         <Para>
@@ -203,12 +203,12 @@ export const specializationsArticles: WikiArticle[] = [
           <PerkCard
             name="Territory Mastery"
             level={15}
-            description="You know your home region as well as anyone alive. Observations made on home soil carry a 70% accuracy bonus, narrowing confidence intervals to near-certainty."
+            description="Familiar opposition, venues, and development pathways make home-soil readings more stable, but never remove uncertainty."
           />
           <PerkCard
-            name="Hidden Attribute Revealer"
+            name="Character Context Network"
             level={18}
-            description="Years of intimate knowledge of players in your territory means Consistency and Professionalism are no longer hidden to you \u2014 you read them directly from sustained observation."
+            description="Trusted regional relationships open better questions about consistency and professionalism. Repeat observation and independent corroboration are still required."
           />
         </div>
       </SectionBlock>

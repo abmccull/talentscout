@@ -11,6 +11,7 @@ import type {
 } from "@/engine/core/types";
 import {
   advanceYouthRecruitmentBriefs,
+  deriveYouthRecruitmentBriefCapacity,
   scoreAcademyClubDecision,
 } from "@/engine/youth/academyPlacementCase";
 import {
@@ -425,6 +426,63 @@ describe("academy placement decisions", () => {
     )).toBe(true);
   });
 
+  it("makes the selected placement pitch and support promise matter without overpowering evidence", () => {
+    const authored = report({
+      conviction: "recommend",
+      projectedRole: "boxToBox",
+      recommendedAction: "offerAcademyPlace",
+      estimatedWeeklyWage: 700,
+      riskFactors: ["Family relocation", "Education transition"],
+      categoryVerdicts: structuredInput().categoryVerdicts,
+    });
+    const mobilityAssessment = {
+      status: "conditional",
+      clubDecisionAdjustment: { score: -2, summary: "The move needs a support plan." },
+      visibleReasons: ["Family and education arrangements remain open."],
+      suggestedMitigationActions: ["Agree a family support plan."],
+      dimensions: {
+        registration: { riskScore: 10 },
+        adaptation: { riskScore: 48 },
+        familyEducation: { riskScore: 62 },
+        pathwaySupport: { riskScore: 20 },
+      },
+    } as unknown as NonNullable<
+      Parameters<typeof scoreAcademyClubDecision>[0]["mobilityAssessment"]
+    >;
+    const shared = {
+      report: authored,
+      brief: brief(),
+      player: visiblePlayer,
+      observations: observations(),
+      scout: decisionScout,
+      club: club(),
+      relationshipScore: 20,
+      mobilityAssessment,
+    };
+
+    const aligned = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("placement-strategy"),
+      placementStrategy: {
+        pitchPosture: "evidenceLed",
+        supportCondition: "familySupport",
+      },
+    });
+    const misaligned = scoreAcademyClubDecision({
+      ...shared,
+      rng: new RNG("placement-strategy"),
+      placementStrategy: {
+        pitchPosture: "relationshipLed",
+        supportCondition: "none",
+      },
+    });
+
+    expect(aligned.breakdown.total).toBe(misaligned.breakdown.total + 6);
+    expect(aligned.reasons.join(" ")).toContain("evidence trail");
+    expect(aligned.reasons.join(" ")).toContain("family and settlement support");
+    expect(misaligned.reasons.join(" ")).toContain("secure a fair hearing");
+  });
+
   it("lets the seasonal recruitment climate materially change club evaluation", () => {
     const borderline = report({
       conviction: "recommend",
@@ -475,6 +533,38 @@ describe("academy placement decisions", () => {
 });
 
 describe("academy brief lifecycle invariants", () => {
+  it("uses one bounded capacity rule across changing opportunity markets", () => {
+    expect(deriveYouthRecruitmentBriefCapacity(1)).toBe(12);
+    expect(deriveYouthRecruitmentBriefCapacity(0.92)).toBe(11);
+    expect(deriveYouthRecruitmentBriefCapacity(0)).toBe(7);
+    expect(deriveYouthRecruitmentBriefCapacity(Number.NaN)).toBe(12);
+  });
+
+  it("closes the lowest-pressure overflow when market capacity contracts", () => {
+    const high = brief({ id: "brief-high", competitionPressure: 80 });
+    const medium = brief({ id: "brief-medium", competitionPressure: 55 });
+    const low = brief({ id: "brief-low", competitionPressure: 25 });
+    const contracted = advanceYouthRecruitmentBriefs(
+      { [high.id]: high, [medium.id]: medium, [low.id]: low },
+      2,
+      1,
+      38,
+      2,
+    );
+
+    expect(contracted.briefs[high.id].status).toBe("open");
+    expect(contracted.briefs[medium.id].status).toBe("open");
+    expect(contracted.briefs[low.id].status).toBe("expired");
+    expect(contracted.expiredIds).toEqual([low.id]);
+    expect(advanceYouthRecruitmentBriefs(
+      contracted.briefs,
+      2,
+      1,
+      38,
+      2,
+    ).expiredIds).toEqual([]);
+  });
+
   it("derives weekly pressure deterministically and expires a brief exactly once", () => {
     const original = brief({ competitionPressure: 40 });
     const atCreation = advanceYouthRecruitmentBriefs({ [original.id]: original }, 1, 1);
@@ -584,7 +674,7 @@ describe("structured youth report revisions", () => {
     const incompleteResult = validateStructuredReportInput(incomplete, brief());
     expect(incompleteResult.valid).toBe(false);
     expect(incompleteResult.errors).toContain("Record at least one material risk.");
-    expect(incompleteResult.errors).toContain("Write a characterRisk verdict.");
+    expect(incompleteResult.errors).toContain("Write a character and adaptation risk verdict.");
 
     const closedResult = validateStructuredReportInput(
       structuredInput(),

@@ -9,15 +9,12 @@
  */
 
 import { useSyncExternalStore, useCallback } from "react";
-import { AudioEngine, type AudioChannel, type VolumeState } from "./audioEngine";
-
-const DEFAULT_VOLUMES: VolumeState = {
-  master: 0.8,
-  music: 0.6,
-  sfx: 1.0,
-  ambience: 0.4,
-  muted: false,
-};
+import {
+  AudioEngine,
+  DEFAULT_VOLUMES,
+  type AudioChannel,
+  type VolumeState,
+} from "./audioEngine";
 
 function subscribe(callback: () => void): () => void {
   const engine = AudioEngine.getInstance();

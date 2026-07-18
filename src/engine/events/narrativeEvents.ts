@@ -38,7 +38,10 @@ import {
 import type { ChainStartResult, ChainAdvanceResult } from "./eventChains";
 import { gameWeeksBetween } from "@/engine/core/gameDate";
 import {
+  getNarrativeCallbackSignals,
+  narrativeCallbackEventId,
   resolveNarrativeTruth,
+  type NarrativeCallbackSignal,
   type NarrativeTruthResolution,
 } from "./narrativeTruth";
 
@@ -54,6 +57,10 @@ const WEEKLY_EVENT_CHANCE = 0.12;
  * If an event fired within this many weeks, no new event is generated.
  */
 const EVENT_COOLDOWN_WEEKS = 2;
+
+/** Receipt-backed callbacks are a quiet-period safety net, never weekly filler. */
+const QUIET_CALLBACK_MIN_WEEKS = 4;
+const MAX_UNACKNOWLEDGED_INFORMATIONAL_EVENTS = 3;
 
 /**
  * Multiplier applied to the weight of events that match the scout's
@@ -152,6 +159,65 @@ function toAbsoluteWeek(state: GameState, season: number, week: number): number 
 function mostRecentEventWeek(state: GameState): number {
   if (state.narrativeEvents.length === 0) return -Infinity;
   return Math.max(...state.narrativeEvents.map((e) => toAbsoluteWeek(state, e.season, e.week)));
+}
+
+function quietNarrativeWeeks(state: GameState): number {
+  if ((state.narrativeEvents ?? []).length === 0) {
+    return Math.max(0, state.eventDirector?.quietWeeks ?? 0);
+  }
+  return Math.max(
+    0,
+    toAbsoluteWeek(state, state.currentSeason, state.currentWeek)
+      - mostRecentEventWeek(state),
+  );
+}
+
+function buildQuietCallbackEvent(
+  state: GameState,
+  signal: NarrativeCallbackSignal,
+): NarrativeEvent {
+  return {
+    id: narrativeCallbackEventId(signal),
+    type: signal.narrativeType,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    title: signal.title,
+    description: signal.summary,
+    relatedIds: [...new Set(signal.evidence.relatedIds)],
+    acknowledged: false,
+  };
+}
+
+/**
+ * Surface one completed simulation receipt after a genuine quiet spell. The
+ * normal authored deck, due chains, urgent choices, and high-tension turning
+ * points all retain priority.
+ */
+export function generateQuietNarrativeCallback(state: GameState): NarrativeEvent | null {
+  const quietWeeks = quietNarrativeWeeks(state);
+  if (quietWeeks < QUIET_CALLBACK_MIN_WEEKS) return null;
+
+  const events = state.narrativeEvents ?? [];
+  const unresolvedChoices = events.filter((event) =>
+    !event.acknowledged
+    && event.selectedChoice === undefined
+    && (event.choices?.length ?? 0) > 0
+  ).length;
+  if (unresolvedChoices >= 2) return null;
+
+  const activeInformation = events.filter((event) =>
+    !event.acknowledged && (event.choices?.length ?? 0) === 0
+  ).length;
+  if (activeInformation >= MAX_UNACKNOWLEDGED_INFORMATIONAL_EVENTS) return null;
+
+  // Preserve authored pressure-release weeks for the event director.
+  if (
+    (state.eventDirector?.tension ?? 0) >= 72
+    && (state.eventDirector?.quietWeeks ?? quietWeeks) >= 4
+  ) return null;
+
+  const signal = getNarrativeCallbackSignals(state)[0];
+  return signal ? buildQuietCallbackEvent(state, signal) : null;
 }
 
 /**
@@ -338,7 +404,7 @@ export function generateWeeklyEvent(
     Math.max(0, options.triggerChance ?? WEEKLY_EVENT_CHANCE),
   );
   if (!rng.chance(triggerChance)) {
-    return { event: null };
+    return { event: generateQuietNarrativeCallback(state) };
   }
 
   // Step 2 — cooldown check
@@ -372,7 +438,7 @@ export function generateWeeklyEvent(
     templateIsEligible(template, state)
   );
   if (eligible.length === 0) {
-    return { event: null };
+    return { event: generateQuietNarrativeCallback(state) };
   }
 
   // Step 5 — pick a template with specialization weighting
@@ -387,7 +453,7 @@ export function generateWeeklyEvent(
   const truth = resolveTemplateTruth(template, state);
   return {
     event: truth === null
-      ? null
+      ? generateQuietNarrativeCallback(state)
       : buildTemplateEvent(template, rng, state, truth),
   };
 }

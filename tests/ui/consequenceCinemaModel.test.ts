@@ -224,7 +224,7 @@ describe("career consequence cinema model", () => {
     }))[0];
 
     expect(storyWithLowTruth.original).toEqual(storyWithHighTruth.original);
-    expect(storyWithHighTruth.original.headline).toBe("Added to the scouting record");
+    expect(storyWithHighTruth.original.headline).toBe("Flagged on your radar");
     expect(JSON.stringify(storyWithHighTruth.original)).not.toMatch(/wonderkid|exceptional prospect/i);
   });
 
@@ -357,7 +357,8 @@ describe("career consequence cinema model", () => {
       momentCategory: "farewell",
       title: "The final notebook closes",
     });
-    expect(story.original.body).toContain("not from hidden simulation truth");
+    expect(story.original.body).toContain("retirement file");
+    expect(story.original.body).not.toMatch(/hidden simulation|engine-only/i);
     expect(story.callbackLine).toMatch(/career|recommendations|score|chain|world/i);
   });
 });

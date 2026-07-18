@@ -1,5 +1,6 @@
 import type { GameState, Player, Position } from "@/engine/core/types";
 import { formationPositions, parseFormation } from "@/engine/firstTeam/systemFit";
+import { getCurrentSeasonAppearances } from "@/engine/transfers/appearanceLedger";
 
 export interface TransferMotivation {
   score: number;
@@ -22,32 +23,23 @@ function clamp(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function currentSeasonAppearances(state: GameState, player: Player, clubId: string): number {
-  let appearances = 0;
-  for (const [fixtureId, ratings] of Object.entries(state.matchRatings ?? {})) {
-    const fixture = state.fixtures[fixtureId];
-    if (
-      !fixture?.played
-      || fixture.season !== state.currentSeason
-      || (fixture.homeClubId !== clubId && fixture.awayClubId !== clubId)
-    ) continue;
-    const rating = ratings[player.id];
-    if (!rating) continue;
-    if (rating.minutesPlayed !== undefined ? rating.minutesPlayed > 0 : rating.started ?? true) {
-      appearances += 1;
-    }
-  }
-  return appearances;
-}
+export type TransferMotivationWorldContext =
+  Pick<GameState, "currentSeason" | "players" | "clubs">
+  & Partial<Pick<GameState, "currentWeek" | "fixtures" | "matchRatings" | "managerProfiles">>;
 
-function tacticalPositions(formation: string): ReadonlySet<Position> {
+function tacticalPositions(formation?: string): ReadonlySet<Position> {
+  if (!formation) return new Set<Position>();
   const parsed = parseFormation(formation);
   return parsed
     ? formationPositions(parsed.defenders, parsed.midfielders, parsed.forwards)
     : new Set<Position>();
 }
 
-function positionCoverage(clubId: string, player: Player, state: GameState): number {
+function positionCoverage(
+  clubId: string,
+  player: Player,
+  state: TransferMotivationWorldContext,
+): number {
   const club = state.clubs[clubId];
   if (!club) return 0;
   return club.playerIds.reduce((coverage, playerId) => {
@@ -73,7 +65,10 @@ function careerStagePressure(player: Player, contractYears: number): number {
  * It decides whether a player enters the market; destination selection and the
  * authoritative movement lifecycle remain separate concerns.
  */
-export function calculateTransferMotivation(player: Player, state: GameState): TransferMotivation {
+export function calculateTransferMotivation(
+  player: Player,
+  state: TransferMotivationWorldContext,
+): TransferMotivation {
   const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
   const club = ownerClubId ? state.clubs[ownerClubId] : undefined;
   if (!club || player.onLoan || player.injured || player.age < 16) {
@@ -98,8 +93,8 @@ export function calculateTransferMotivation(player: Player, state: GameState): T
   const contractYears = player.contractExpiry - state.currentSeason;
   const contractPressure = contractYears <= 0 ? 100 : contractYears === 1 ? 78 : contractYears === 2 ? 35 : 8;
   const moralePressure = clamp((6 - (player.morale ?? 5)) * 18);
-  const appearances = currentSeasonAppearances(state, player, club.id);
-  const elapsedWeeks = Math.max(1, state.currentWeek);
+  const appearances = getCurrentSeasonAppearances(player, club.id, state);
+  const elapsedWeeks = Math.max(1, state.currentWeek ?? 0);
   const appearanceShare = appearances / Math.max(1, Math.floor(elapsedWeeks / 2));
   const agePressure = careerStagePressure(player, contractYears);
   const playingTimePressure = player.age <= 20 && appearances === 0
@@ -119,7 +114,7 @@ export function calculateTransferMotivation(player: Player, state: GameState): T
     + personalityPressure * 0.35
     + agePressure * 0.45,
   );
-  const manager = state.managerProfiles[club.id];
+  const manager = state.managerProfiles?.[club.id];
   const requiredPositions = manager
     ? tacticalPositions(manager.preferredFormation)
     : new Set<Position>();

@@ -47,6 +47,7 @@ import type {
   LoanRecommendation,
   LoanOutcome,
   ManagerProfile,
+  TransferAddOn,
 } from "./types";
 import { getDifficultyModifiers, scaleReputationChange } from "./difficulty";
 import {
@@ -56,7 +57,6 @@ import {
 import { evaluateBoardDirectives } from "../career/management";
 import {
   processYouthAging,
-  processPlayerRetirement,
   reconcileYouthSigningPlacements,
 } from "../youth/generation";
 import { processAlumniWeek, generateAlumniSeasonSummary } from "../youth/alumni";
@@ -98,7 +98,6 @@ import { calculateTacticalMatchup } from "../match/tactics";
 import {
   processRelegationPromotionIncludingFixtures,
   applyRelegationResult,
-  getStandingsPriceModifier,
 } from "../world/relegation";
 import type { RelegationResult } from "../world/relegation";
 import { processContractExpiries } from "../freeAgents/expiry";
@@ -149,6 +148,7 @@ import { selectLatestReportsByCaseOpenedInRange } from "../reports/reportAccount
 import { recordCompletedSeasonWorldHistory } from "../world/worldHistory";
 import {
   collectCausallyReferencedPlayerIds,
+  retainMatchRatingsForFixtures,
   retainRequiredFixtureHistory,
 } from "../world/saveRetention";
 import {
@@ -172,6 +172,10 @@ import {
 } from "./standings";
 import { ADJACENT_POSITIONS, calculateSystemFit, getFormationSlots } from "../firstTeam/systemFit";
 import { getCompatibleRoles } from "../players/roles";
+import { simulateAbstractCompetitionWeek } from "../world/abstractCompetition";
+import { proposeTransferAgreement } from "../transfers/transferAgreement";
+import { formatTransferNewsBody } from "../transfers";
+import { assessRetirementIntent } from "../transfers/retirementPlanning";
 
 export { getSeasonLength } from "./gameDate";
 
@@ -184,6 +188,12 @@ export interface Transfer {
   fromClubId: string;
   toClubId: string;
   fee: number;
+  wage?: number;
+  contractLength?: number;
+  signingBonus?: number;
+  addOns?: TransferAddOn[];
+  contingentReserve?: number;
+  agreedRole?: "key" | "regular" | "rotation" | "prospect";
   week: number;
   season: number;
 }
@@ -290,6 +300,7 @@ export interface TickResult {
   /** Player retirements this tick. */
   playerRetirements?: {
     retiredPlayerIds: string[];
+    outlooks: Record<string, NonNullable<Player["retirementOutlook"]>>;
   };
   /** Newly generated unsigned youth this tick. */
   newUnsignedYouth?: UnsignedYouth[];
@@ -1599,27 +1610,6 @@ export function findTransferDestination(
   return rng.pickWeighted(weighted);
 }
 
-function estimateAITransferFee(
-  player: Player,
-  ownerClubId: string,
-  state: GameState,
-  rng: RNG,
-  standingsByLeague: StandingsByLeague,
-): number {
-  const feeVariance = rng.nextFloat(0.8, 1.2);
-  const standingsModifier = getStandingsPriceModifier(
-    ownerClubId,
-    state,
-    standingsByLeague,
-  );
-  const contractYearsRemaining = Math.max(0, player.contractExpiry - state.currentSeason);
-  const contractModifier = contractYearsRemaining === 0 ? 0.35 : contractYearsRemaining === 1 ? 0.7 : 1;
-  return Math.max(
-    0,
-    Math.round(player.marketValue * feeVariance * standingsModifier * contractModifier),
-  );
-}
-
 function isOpportunityDrivenTransferEligible(player: Player): boolean {
   if (player.injured || player.onLoan || player.age < 16) return false;
   return Boolean(player.contractClubId ?? player.clubId);
@@ -1701,11 +1691,6 @@ export function selectOpportunityDrivenTransfers(
 ): Transfer[] {
   const index = options.index ?? createTransferDestinationIndex(state);
   const spentBudget = options.spentBudget ?? new Map<string, number>();
-  const standingsByLeague = options.standingsByLeague ?? buildStandingsByLeague(
-    state.fixtures,
-    state.clubs,
-    state.currentSeason,
-  );
   const candidateKeys = new Set<string>();
   const candidates: Array<{ transfer: Transfer; score: number }> = [];
 
@@ -1725,15 +1710,19 @@ export function selectOpportunityDrivenTransfers(
     const candidateKey = `${player.id}:${destination.id}`;
     if (candidateKeys.has(candidateKey)) continue;
 
-    const fee = estimateAITransferFee(
+    const agreement = proposeTransferAgreement({
       player,
-      ownerClubId,
+      sellingClub: fromClub,
+      buyingClub: destination,
       state,
-      rng,
-      standingsByLeague,
-    );
+    });
+    if (!agreement.viable) continue;
+    const fee = agreement.fee;
+    const committedCost = fee
+      + agreement.signingBonus
+      + agreement.affordability.addOnReserve;
     const alreadySpent = spentBudget.get(destination.id) ?? 0;
-    if (fee <= 0 || destination.budget - alreadySpent < fee) continue;
+    if (fee <= 0 || destination.budget - alreadySpent < committedCost) continue;
 
     const score = scoreOpportunityDrivenTransfer(
       player,
@@ -1761,6 +1750,12 @@ export function selectOpportunityDrivenTransfers(
         fromClubId: fromClub.id,
         toClubId: destination.id,
         fee,
+        wage: agreement.wage,
+        contractLength: agreement.contractLength,
+        signingBonus: agreement.signingBonus,
+        addOns: agreement.addOns,
+        contingentReserve: agreement.affordability.addOnReserve,
+        agreedRole: agreement.role,
         week: state.currentWeek,
         season: state.currentSeason,
       },
@@ -1784,8 +1779,11 @@ export function selectOpportunityDrivenTransfers(
     if (usedPlayers.has(transfer.playerId) || usedDestinations.has(transfer.toClubId)) continue;
     const destination = state.clubs[transfer.toClubId];
     const alreadySpent = spentBudget.get(transfer.toClubId) ?? 0;
-    if (!destination || destination.budget - alreadySpent < transfer.fee) continue;
-    spentBudget.set(transfer.toClubId, alreadySpent + transfer.fee);
+    const committedCost = transfer.fee
+      + (transfer.signingBonus ?? 0)
+      + (transfer.contingentReserve ?? 0);
+    if (!destination || destination.budget - alreadySpent < committedCost) continue;
+    spentBudget.set(transfer.toClubId, alreadySpent + committedCost);
     index.reservedIncomingByClub.set(
       transfer.toClubId,
       (index.reservedIncomingByClub.get(transfer.toClubId) ?? 0) + 1,
@@ -1807,16 +1805,10 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
   const transfers: Transfer[] = [];
   // Track cumulative spending per club to prevent budget overspending
   const spentBudget = new Map<string, number>();
-  const standingsByLeague = buildStandingsByLeague(
-    state.fixtures,
-    state.clubs,
-    state.currentSeason,
-  );
   const destinationIndex = createTransferDestinationIndex(state);
   const recruitmentDrivenTransfers = selectOpportunityDrivenTransfers(state, rng, {
     index: destinationIndex,
     spentBudget,
-    standingsByLeague,
   });
   transfers.push(...recruitmentDrivenTransfers);
   const reservedPlayerIds = new Set(
@@ -1842,21 +1834,23 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
     );
     if (!destination) continue;
 
-    // Transfer fee: market value with ±20% variance, adjusted by standings position.
-    // Bottom 5 clubs sell at -10%, top 3 clubs sell at +10%.
-    const fee = estimateAITransferFee(
+    const agreement = proposeTransferAgreement({
       player,
-      ownerClubId,
+      sellingClub: fromClub,
+      buyingClub: destination,
       state,
-      rng,
-      standingsByLeague,
-    );
+    });
+    if (!agreement.viable) continue;
+    const fee = agreement.fee;
+    const committedCost = fee
+      + agreement.signingBonus
+      + agreement.affordability.addOnReserve;
 
     // Destination must still have budget (accounting for other transfers this tick)
     const alreadySpent = spentBudget.get(destination.id) ?? 0;
-    if (destination.budget - alreadySpent < fee) continue;
+    if (destination.budget - alreadySpent < committedCost) continue;
 
-    spentBudget.set(destination.id, alreadySpent + fee);
+    spentBudget.set(destination.id, alreadySpent + committedCost);
     destinationIndex.reservedIncomingByClub.set(
       destination.id,
       (destinationIndex.reservedIncomingByClub.get(destination.id) ?? 0) + 1,
@@ -1867,6 +1861,12 @@ function processAITransfers(state: GameState, rng: RNG): Transfer[] {
       fromClubId: fromClub.id,
       toClubId: destination.id,
       fee,
+      wage: agreement.wage,
+      contractLength: agreement.contractLength,
+      signingBonus: agreement.signingBonus,
+      addOns: agreement.addOns,
+      contingentReserve: agreement.affordability.addOnReserve,
+      agreedRole: agreement.role,
       week: state.currentWeek,
       season: state.currentSeason,
     });
@@ -2325,7 +2325,7 @@ function computeReputationChangeDetailed(
 
   // ── Reports submitted last week ─────────────────────────────────────────
   const recentReports = selectLatestReportsByCaseOpenedInRange(
-    Object.values(state.reports),
+    Object.values(state.reports).filter((report) => report.scoutId === state.scout.id),
     {
       submittedWeek: state.currentWeek - 1,
       submittedSeason: state.currentSeason,
@@ -2362,7 +2362,9 @@ function computeReputationChangeDetailed(
   const scheduledCount = state.schedule.activities.filter(
     (a) => a !== null,
   ).length;
-  const professionalDevelopment = Boolean(state.finances?.activeEnrollment)
+  const professionalDevelopment = state.schedule.activities.some(
+    (activity) => activity?.type === "study",
+  )
     || state.inbox.some((message) =>
       message.title === "Course Completed"
       && message.week === state.currentWeek
@@ -2608,7 +2610,22 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   const currentDisciplinary = decrementSuspensions(state.disciplinaryRecords ?? {});
 
   // 1. Simulate fixtures (pass decremented disciplinary records so suspended players are excluded)
-  const fixturesPlayed = simulateWeekFixtures(state, rng, currentDisciplinary);
+  const detailedFixturesPlayed = simulateWeekFixtures(state, rng, currentDisciplinary);
+  const abstractWeek = simulateAbstractCompetitionWeek({
+    worldSeed: state.seed,
+    season: state.currentSeason,
+    week: state.currentWeek,
+    seasonLength: getSeasonLength(state.fixtures, state.currentSeason),
+    leagues: state.leagues,
+    clubs: state.clubs,
+    players: state.players,
+    fixtures: state.fixtures,
+    matchRatings: state.matchRatings,
+  });
+  const fixturesPlayed: SimulatedFixture[] = [
+    ...detailedFixturesPlayed,
+    ...abstractWeek.fixturesPlayed,
+  ];
 
   // 2. Check if standings changed (they did if any fixtures were played)
   const standingsUpdated = fixturesPlayed.length > 0;
@@ -2870,7 +2887,26 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
 
   // 12. Player retirement (season-end only)
   const playerRetirements = endOfSeasonTriggered
-    ? processPlayerRetirement(rng, state.players, state.clubs, state.currentSeason)
+    ? Object.values(state.players).reduce<NonNullable<TickResult["playerRetirements"]>>(
+        (result, player) => {
+          const ownerClubId = player.contractClubId ?? player.loanParentClubId ?? player.clubId;
+          if (!ownerClubId || player.age < 31) return result;
+          const assessment = assessRetirementIntent(player, state);
+          result.outlooks[player.id] = {
+            status: assessment.status,
+            reasons: assessment.reasons,
+            updatedSeason: state.currentSeason,
+          };
+          if (
+            player.age >= 40
+            || (player.age >= 32 && rng.chance(assessment.probability))
+          ) {
+            result.retiredPlayerIds.push(player.id);
+          }
+          return result;
+        },
+        { retiredPlayerIds: [], outlooks: {} },
+      )
     : undefined;
   if (playerRetirements) {
     const trackedPlayerIds = new Set([
@@ -2881,13 +2917,14 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
       const player = state.players[playerId];
       if (!player || (!trackedPlayerIds.has(playerId) && player.currentAbility < 110)) continue;
       const club = state.clubs[player.contractClubId ?? player.clubId];
+      const retirementReason = playerRetirements.outlooks[playerId]?.reasons[0];
       newMessages.push({
         id: makeMessageId("retirement", rng),
         week: state.currentWeek,
         season: state.currentSeason,
         type: "news",
         title: `Retirement: ${player.firstName} ${player.lastName}`,
-        body: `${player.firstName} ${player.lastName} has retired from professional football${club ? ` after finishing his career with ${club.name}` : ""}. His full career remains available in your alumni history.`,
+        body: `${player.firstName} ${player.lastName} has retired from professional football${club ? ` after finishing his career with ${club.name}` : ""}.${retirementReason ? ` ${retirementReason}` : ""} His full career remains available in your alumni history.`,
         read: false,
         actionRequired: false,
         relatedId: player.id,
@@ -2913,10 +2950,28 @@ export function processWeeklyTick(state: GameState, rng: RNG): TickResult {
   // 13b. F12: Generate season summaries for all active alumni at end of season
   let alumniWithSeasonStats = alumniResult.updatedAlumni;
   if (endOfSeasonTriggered) {
+    const canonicalSeasonFixtures = {
+      ...state.fixtures,
+      ...Object.fromEntries(fixturesPlayed.map((fixture) => [fixture.id, fixture])),
+    };
+    const canonicalSeasonRatings = {
+      ...state.matchRatings,
+      ...Object.fromEntries(
+        fixturesPlayed
+          .filter((fixture) => fixture.playerRatings)
+          .map((fixture) => [fixture.id, fixture.playerRatings!]),
+      ),
+    };
     alumniWithSeasonStats = alumniWithSeasonStats.map((record) => {
       const player = state.players[record.playerId];
       if (!player) return record;
-      return generateAlumniSeasonSummary(rng, record, player, state.currentSeason);
+      return generateAlumniSeasonSummary(
+        record,
+        player,
+        state.currentSeason,
+        canonicalSeasonFixtures,
+        canonicalSeasonRatings,
+      );
     });
   }
 
@@ -3597,6 +3652,14 @@ export function advanceWeek(
   );
   updatedClubs = triggeredObligations.clubs;
 
+  for (const [playerId, retirementOutlook] of Object.entries(
+    tickResult.playerRetirements?.outlooks ?? {},
+  )) {
+    const player = updatedPlayers[playerId];
+    if (!player) continue;
+    updatedPlayers[playerId] = { ...player, retirementOutlook };
+  }
+
   // ---- Authoritative player lifecycle resolution ----
   const movementIntents: PlayerMovementIntent[] = [];
 
@@ -3690,6 +3753,10 @@ export function advanceWeek(
       fromClubId: transfer.fromClubId,
       toClubId: transfer.toClubId,
       fee: transfer.fee,
+      wage: transfer.wage,
+      contractLength: transfer.contractLength,
+      signingBonus: transfer.signingBonus,
+      addOns: transfer.addOns,
       reason: "AI transfer market agreement",
     });
   }
@@ -4088,6 +4155,10 @@ export function advanceWeek(
       },
       nextSeason,
     );
+    const retainedMatchRatings = retainMatchRatingsForFixtures(
+      retainedFixtures,
+      updatedMatchRatings,
+    );
 
     const seasonStartState: GameState = {
       ...state,
@@ -4126,7 +4197,7 @@ export function advanceWeek(
       alumniRecords: updatedAlumniRecords,
       // Player seasonRatings and WorldHistory now own completed-season facts.
       // Per-fixture ratings are working data and must not grow forever.
-      matchRatings: {},
+      matchRatings: retainedMatchRatings,
       regionalKnowledge: updatedRegionalKnowledge,
       subRegions: synchronizedRegionalState.subRegions,
       disciplinaryRecords: updatedDisciplinaryRecords,

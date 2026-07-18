@@ -15,8 +15,19 @@ export type {
   RivalScoutWeekResult,
   PoachBidResult,
   PoachBidEligibility,
+  RivalSimulationModifiers,
   RivalSigningResult,
 } from "./rivalScouts";
+
+export {
+  getEffectiveRivalPlayerEvidence,
+  getRivalPlayerEvidence,
+} from "./rivalEvidence";
+
+export type {
+  EffectiveRivalPlayerEvidence,
+  RivalPlayerEvidence,
+} from "./rivalEvidence";
 
 export {
   advanceYouthRivalPressure,
@@ -32,6 +43,8 @@ export {
 export {
   RIVAL_ORGANIZATION_DEFINITIONS,
   createRivalOrganizationState,
+  assessRivalMarketCounterplay,
+  deriveRivalMarketPressure,
   getOpenRivalOrganizationOpportunities,
   getOrganizationForRival,
   getRivalOrganizationContentDefinitionIds,
@@ -48,6 +61,13 @@ export type {
   ProcessRivalOrganizationWeekInput,
   ProcessRivalOrganizationWeekResult,
   ResolveRivalOrganizationOpportunityResult,
+  FamilyMarketPreference,
+  FamilyMarketSignal,
+  RivalInformationExposureBand,
+  RivalMarketCounterplayAssessment,
+  RivalMarketPressureBand,
+  RivalMarketPressureSnapshot,
+  RivalMarketWatcher,
   RivalOrganization,
   RivalOrganizationActionKind,
   RivalOrganizationActivity,
@@ -59,6 +79,8 @@ export type {
   RivalOrganizationOpportunityStatus,
   RivalOrganizationPressure,
   RivalOrganizationState,
+  RivalTransferContestAuthority,
+  ScoutMarketCounterplay,
 } from "./organizations";
 
 export type {

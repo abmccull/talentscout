@@ -7,12 +7,17 @@
  */
 import type { GetState, SetState } from "./types";
 import type { GameScreen } from "../gameStoreTypes";
-import type { LensType, ObservationSession, SessionFlaggedMoment } from "@/engine/observation/types";
+import type {
+  LensType,
+  ObservationExperienceSnapshot,
+  ObservationSession,
+  SessionFlaggedMoment,
+} from "@/engine/observation/types";
 import type { InsightActionId } from "@/engine/insight/types";
 import { INSIGHT_FATIGUE_COST } from "@/engine/insight/types";
 import type {
   ActivityType,
-  AttributeDomain,
+  EvidenceClassificationId,
   FlaggedMoment,
   GameState,
   GutFeeling,
@@ -23,9 +28,27 @@ import type {
   ReflectionFlaggedMomentRecord,
   ReflectionJournalEntry,
   ReflectionHypothesisRecord,
+  ScoutingEvidenceCard,
+  ScoutingQuestionId,
+  ObservationHalftimeApproach,
   UnsignedYouth,
 } from "@/engine/core/types";
-import { createSession, startSession, advanceSessionPhase, allocateFocus, removeFocus, flagMoment, addReflectionNote, addHypothesis, acceptHypothesis, completeSession, getSessionResult } from "@/engine/observation/session";
+import {
+  IP_PER_FLAGGED_MOMENT,
+  addReflectionNote,
+  advanceSessionPhase,
+  allocateFocus,
+  completeSession,
+  createSession,
+  flagMoment,
+  getDefaultScoutingQuestion,
+  getSessionResult,
+  removeFocus,
+  classifySessionEvidence,
+  setSessionHalftimeApproach,
+  setSessionScoutingQuestion,
+  startSession,
+} from "@/engine/observation/session";
 import { populateFullObservationPhases } from "@/engine/observation/fullObservation";
 import { populateAnalysisPhases } from "@/engine/observation/analysis";
 import { populateInvestigationPhases } from "@/engine/observation/investigation";
@@ -52,10 +75,17 @@ import { resolveScoutPerkModifiers } from "@/engine/specializations/perks";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import { observePlayerLight } from "@/engine/scout/perception";
 import {
+  buildSessionEvidenceCards,
+  calculateEvidencePracticeXp,
+  resolveSessionCueReadings,
+} from "@/engine/scout/evidenceModel";
+import { buildObservationExperienceSnapshot } from "@/engine/observation/questions";
+import { applyScoutSkillXp } from "@/engine/scout/progression";
+import {
   applyRegionalPresenceToObservation,
   getPlayerScoutingCountry,
 } from "@/engine/world/regionalPresence";
-import { resolvePlayerEntity } from "@/lib/playerResolution";
+import { getResolvedPlayerIds, resolvePlayerEntity } from "@/lib/playerResolution";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 import { isScoutAbroad } from "@/engine/world/travel";
 import { normalizeCountryKey } from "@/lib/country";
@@ -361,14 +391,26 @@ function buildInteractiveObservationBatch(
     if (players[player.id]) players[player.id] = revealedPlayer;
     for (const [youthId, youth] of Object.entries(unsignedYouth)) {
       if (youth.player.id === player.id) {
-        unsignedYouth[youthId] = { ...youth, player: revealedPlayer };
+        unsignedYouth[youthId] = {
+          ...youth,
+          player: revealedPlayer,
+          discoveredBy: youth.discoveredBy.includes(gameState.scout.id)
+            ? youth.discoveredBy
+            : [...youth.discoveredBy, gameState.scout.id],
+        };
         break;
       }
     }
     if (nextSimulatedYouth) {
       for (const [youthId, youth] of Object.entries(nextSimulatedYouth)) {
         if (youth.player.id === player.id) {
-          nextSimulatedYouth[youthId] = { ...youth, player: revealedPlayer };
+          nextSimulatedYouth[youthId] = {
+            ...youth,
+            player: revealedPlayer,
+            discoveredBy: youth.discoveredBy.includes(gameState.scout.id)
+              ? youth.discoveredBy
+              : [...youth.discoveredBy, gameState.scout.id],
+          };
           break;
         }
       }
@@ -430,6 +472,7 @@ function buildReflectionJournalEntry(
   reflectionResult: ReflectionResult | null,
   gutFeelingId: string | undefined,
   observationIds: string[],
+  evidenceCards: ScoutingEvidenceCard[],
 ): ReflectionJournalEntry | null {
   const notes = session.reflectionNotes
     .map((note) => note.trim())
@@ -468,10 +511,40 @@ function buildReflectionJournalEntry(
     hypotheses,
     flaggedMoments,
     observationIds,
+    evidenceVersion: 1,
+    scoutingQuestionId: session.scoutingQuestionId,
+    evidenceCards,
+    evidenceDecisions: session.evidenceDecisions,
     gutFeelingId,
     summary: summary || undefined,
     createdAt: Date.now(),
   };
+}
+
+function sessionRegionalKnowledgeLevel(
+  gameState: GameState,
+  session: ObservationSession,
+): number {
+  if (!session.countryId) return 0;
+  const countryId = normalizeCountryKey(session.countryId);
+  return gameState.regionalKnowledge[countryId ?? session.countryId]?.knowledgeLevel
+    ?? Object.values(gameState.regionalKnowledge).find(
+      (knowledge) => normalizeCountryKey(knowledge.countryId) === countryId,
+    )?.knowledgeLevel
+    ?? 0;
+}
+
+function resolveCuesForSession(
+  gameState: GameState,
+  session: ObservationSession,
+  questionId = session.scoutingQuestionId ?? getDefaultScoutingQuestion(session.specialization),
+) {
+  return resolveSessionCueReadings({
+    session,
+    scout: gameState.scout,
+    questionId,
+    regionalKnowledgeLevel: sessionRegionalKnowledgeLevel(gameState, session),
+  });
 }
 
 function buildInsightPlayerIndex(
@@ -574,6 +647,52 @@ function resolveInsightSubRegionId(
     .sort((left, right) => right.familiarity - left.familiarity || left.id.localeCompare(right.id))[0]?.id;
 }
 
+function buildSessionObserverContext(
+  gameState: GameState,
+  targetPlayerId: string | undefined,
+  regionalKnowledgeLevel: number | undefined,
+): ObservationExperienceSnapshot | undefined {
+  if (!targetPlayerId) return undefined;
+
+  const resolvedIds = new Set(getResolvedPlayerIds(gameState, targetPlayerId));
+  const observations = Object.values(gameState.observations)
+    .filter((observation) => resolvedIds.has(observation.playerId))
+    .map((observation) => observation.playerId === targetPlayerId
+      ? observation
+      : { ...observation, playerId: targetPlayerId });
+  const reflectionEntries = Object.values(gameState.reflectionJournal ?? {})
+    .filter((entry) => entry.playerIds.some((playerId) => resolvedIds.has(playerId)))
+    .map((entry) => ({
+      ...entry,
+      playerIds: entry.playerIds.includes(targetPlayerId)
+        ? entry.playerIds
+        : [...entry.playerIds, targetPlayerId],
+      evidenceCards: entry.evidenceCards?.map((card) =>
+        resolvedIds.has(card.playerId) && card.playerId !== targetPlayerId
+          ? { ...card, playerId: targetPlayerId }
+          : card),
+    }));
+  const latestReport = Object.values(gameState.reports)
+    .filter((report) => resolvedIds.has(report.playerId) && report.evidenceAssessment)
+    .sort((left, right) =>
+      right.submittedSeason - left.submittedSeason
+      || right.submittedWeek - left.submittedWeek
+      || right.id.localeCompare(left.id),
+    )[0];
+  const openQuestionIds = latestReport?.evidenceAssessment?.nextTest.questionId
+    ? [latestReport.evidenceAssessment.nextTest.questionId]
+    : [];
+
+  return buildObservationExperienceSnapshot({
+    scout: gameState.scout,
+    playerId: targetPlayerId,
+    observations,
+    reflectionEntries,
+    regionalKnowledgeLevel,
+    openQuestionIds,
+  });
+}
+
 export function createObservationActions(get: GetState, set: SetState) {
   return {
     startObservationSession: (
@@ -648,6 +767,11 @@ export function createObservationActions(get: GetState, set: SetState) {
         && normalizeCountryKey(gameState.scout.travelBooking.destinationCountry) === countryId
         ? gameState.scout.travelBooking.posture
         : undefined;
+      const observerContext = buildSessionObserverContext(
+        gameState,
+        targetId,
+        regionalKnowledge?.knowledgeLevel,
+      );
 
       const config = {
         activityType: activityType as ActivityType,
@@ -661,6 +785,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         season: gameState.currentSeason,
         countryId,
         culturalInsights: regionalKnowledge?.culturalInsights,
+        observerContext,
         travelPosture: activeTravelPosture,
         careerPath: gameState.scout.careerPath as "club" | "independent" | undefined,
         sourceContactId: sourceContact?.id,
@@ -694,6 +819,15 @@ export function createObservationActions(get: GetState, set: SetState) {
           ? shapeVeteranPrologueSession(session, openingLead, veteranPrologue)
           : shapeOpeningObservationSession(session, openingLead);
       }
+
+      const initialQuestion = session.scoutingQuestionId
+        ?? session.questionOptions?.[0]?.id
+        ?? getDefaultScoutingQuestion(session.specialization);
+      session = setSessionScoutingQuestion(
+        session,
+        initialQuestion,
+        resolveCuesForSession(gameState, session, initialQuestion),
+      );
 
       const completionId = session.activityInstanceId ?? session.id;
       if ((gameState.completedInteractiveSessions ?? []).includes(completionId)) {
@@ -737,6 +871,20 @@ export function createObservationActions(get: GetState, set: SetState) {
       }
     },
 
+    setSessionScoutingQuestion: (questionId: ScoutingQuestionId) => {
+      const { activeSession, gameState } = get();
+      if (!activeSession || !gameState || activeSession.state !== "setup") return;
+      const updatedSession = setSessionScoutingQuestion(
+        activeSession,
+        questionId,
+        resolveCuesForSession(gameState, activeSession, questionId),
+      );
+      set({
+        activeSession: updatedSession,
+        gameState: { ...gameState, activeObservationSession: updatedSession },
+      });
+    },
+
     advanceSessionPhase: () => {
       const { activeSession, gameState } = get();
       if (!activeSession) return;
@@ -746,7 +894,13 @@ export function createObservationActions(get: GetState, set: SetState) {
             createRNG(`${gameState?.seed ?? activeSession.id}-quick-branch-${activeSession.id}`),
           )
         : activeSession;
-      const updated = advanceSessionPhase(sessionForAdvance);
+      const advanced = advanceSessionPhase(sessionForAdvance);
+      const updated = advanced.scoutingQuestionId && gameState
+        ? {
+            ...advanced,
+            cueReadings: resolveCuesForSession(gameState, advanced),
+          }
+        : advanced;
       set({
         activeSession: updated,
         gameState: gameState
@@ -787,9 +941,12 @@ export function createObservationActions(get: GetState, set: SetState) {
 
     allocateSessionFocus: (playerId: string, lens: LensType) => {
       const { activeSession, gameState } = get();
-      if (!activeSession) return;
+      if (!activeSession || !gameState) return;
       const wasFocused = activeSession.players.find((player) => player.playerId === playerId)?.isFocused ?? false;
-      const updatedSession = allocateFocus(activeSession, playerId, lens);
+      const focusedSession = allocateFocus(activeSession, playerId, lens);
+      const updatedSession = focusedSession.scoutingQuestionId
+        ? { ...focusedSession, cueReadings: resolveCuesForSession(gameState, focusedSession) }
+        : focusedSession;
       set({
         activeSession: updatedSession,
         gameState: gameState
@@ -809,7 +966,10 @@ export function createObservationActions(get: GetState, set: SetState) {
     removeSessionFocus: (playerId: string) => {
       const { activeSession, gameState } = get();
       if (!activeSession) return;
-      const updatedSession = removeFocus(activeSession, playerId);
+      const unfocusedSession = removeFocus(activeSession, playerId);
+      const updatedSession = unfocusedSession.scoutingQuestionId && gameState
+        ? { ...unfocusedSession, cueReadings: resolveCuesForSession(gameState, unfocusedSession) }
+        : unfocusedSession;
       set({
         activeSession: updatedSession,
         gameState: gameState
@@ -821,7 +981,32 @@ export function createObservationActions(get: GetState, set: SetState) {
     flagSessionMoment: (momentId: string, reaction: SessionFlaggedMoment['reaction']) => {
       const { activeSession, gameState } = get();
       if (!activeSession) return;
-      const updatedSession = flagMoment(activeSession, momentId, reaction);
+      const currentPhase = activeSession.phases[activeSession.currentPhaseIndex];
+      const requestedMoment = currentPhase?.moments.find((moment) => moment.id === momentId);
+      const existingPhaseFlag = activeSession.flaggedMoments.find(
+        (flagged) => flagged.phaseIndex === activeSession.currentPhaseIndex,
+      );
+      const replacesWrongOpeningFlag = Boolean(
+        gameState?.openingCase
+        && isOpeningDiscoverySession(activeSession)
+        && requestedMoment?.isStandout
+        && requestedMoment.playerId === gameState.openingCase.playerId
+        && existingPhaseFlag
+        && !existingPhaseFlag.moment.isStandout,
+      );
+      const sessionForFlagging = replacesWrongOpeningFlag
+        ? {
+            ...activeSession,
+            flaggedMoments: activeSession.flaggedMoments.filter(
+              (flagged) => flagged.phaseIndex !== activeSession.currentPhaseIndex,
+            ),
+            insightPointsEarned: Math.max(
+              0,
+              activeSession.insightPointsEarned - IP_PER_FLAGGED_MOMENT,
+            ),
+          }
+        : activeSession;
+      const updatedSession = flagMoment(sessionForFlagging, momentId, reaction);
       set({
         activeSession: updatedSession,
         gameState: gameState
@@ -842,6 +1027,34 @@ export function createObservationActions(get: GetState, set: SetState) {
       }
     },
 
+    setSessionHalftimeApproach: (approach: ObservationHalftimeApproach) => {
+      const { activeSession, gameState } = get();
+      if (!activeSession || !gameState) return;
+      const proposed = { ...activeSession, halftimeApproach: approach };
+      const updatedSession = setSessionHalftimeApproach(
+        activeSession,
+        approach,
+        resolveCuesForSession(gameState, proposed),
+      );
+      set({
+        activeSession: updatedSession,
+        gameState: { ...gameState, activeObservationSession: updatedSession },
+      });
+    },
+
+    classifySessionEvidence: (
+      cueId: string,
+      classification: EvidenceClassificationId,
+    ) => {
+      const { activeSession, gameState } = get();
+      if (!activeSession || !gameState) return;
+      const updatedSession = classifySessionEvidence(activeSession, cueId, classification);
+      set({
+        activeSession: updatedSession,
+        gameState: { ...gameState, activeObservationSession: updatedSession },
+      });
+    },
+
     addSessionNote: (note: string) => {
       const { activeSession, gameState } = get();
       if (!activeSession) return;
@@ -852,41 +1065,6 @@ export function createObservationActions(get: GetState, set: SetState) {
           ? { ...gameState, activeObservationSession: updatedSession }
           : gameState,
       });
-    },
-
-    addSessionHypothesis: (playerId: string, text: string, domain: string) => {
-      const { activeSession, gameState, lastReflectionResult } = get();
-      if (!activeSession || !gameState) return;
-      const week = gameState.currentWeek;
-      const suggested = lastReflectionResult?.suggestedHypotheses.find(
-        (hypothesis: ObservationSession["hypotheses"][number]) =>
-          hypothesis.playerId === playerId
-          && hypothesis.text === text
-          && hypothesis.domain === domain,
-      );
-      const updatedSession = suggested
-          ? acceptHypothesis(
-              activeSession,
-              suggested,
-              week,
-              gameState.currentSeason,
-            )
-          : addHypothesis(
-              activeSession,
-              playerId,
-              text,
-              domain as AttributeDomain,
-              week,
-              gameState.currentSeason,
-            );
-      set({
-        activeSession: updatedSession,
-        gameState: {
-          ...gameState,
-          activeObservationSession: updatedSession,
-        },
-      });
-
     },
 
     endObservationSession: () => {
@@ -905,6 +1083,14 @@ export function createObservationActions(get: GetState, set: SetState) {
       ) {
         return;
       }
+      if (
+        activeSession.specialization === "youth"
+        && activeSession.state === "reflection"
+        && buildSessionEvidenceCards(activeSession).length > 0
+        && Object.keys(activeSession.evidenceDecisions ?? {}).length === 0
+      ) {
+        return;
+      }
 
       const sessionWithEvidence = activeSession.state === "reflection"
         ? applySessionEvidenceToHypotheses(activeSession).session
@@ -913,6 +1099,9 @@ export function createObservationActions(get: GetState, set: SetState) {
       const result = getSessionResult(completed);
       const didCompleteLifecycle =
         activeSession.state === "reflection" && completed.state === "complete";
+      const evidenceCards = didCompleteLifecycle
+        ? buildSessionEvidenceCards(completed)
+        : [];
       const observationBatch = didCompleteLifecycle
         ? buildInteractiveObservationBatch(
             gameState,
@@ -928,14 +1117,22 @@ export function createObservationActions(get: GetState, set: SetState) {
           };
 
       // Accumulate insight points
-      const scout = gameState.scout;
+      const scout = didCompleteLifecycle
+        ? applyScoutSkillXp(
+            gameState.scout,
+            calculateEvidencePracticeXp(evidenceCards),
+          )
+        : gameState.scout;
       const currentInsight = normalizeInsightState(
         scout.insightState ?? createInsightState(),
       );
       const capacity = calculateCapacity(scout.attributes.intuition);
       // Incomplete sessions do not bank rewards. Otherwise the same scheduled
       // activity can be abandoned and relaunched to farm its early choices.
-      const bankedInsight = didCompleteLifecycle ? result.insightPointsEarned : 0;
+      const bankedInsight = didCompleteLifecycle
+        ? result.insightPointsEarned
+          + (lastReflectionResult?.insightPointsFromReflection ?? 0)
+        : 0;
       const updatedInsight = accumulateInsight(currentInsight, bankedInsight, capacity);
       const completedFatigue = didCompleteLifecycle
         ? Math.max(0, Math.min(100, scout.fatigue + result.fatigueDelta))
@@ -967,6 +1164,7 @@ export function createObservationActions(get: GetState, set: SetState) {
             lastReflectionResult as ReflectionResult | null,
             gutFeelingId,
             observationBatch.observationIds,
+            evidenceCards,
           )
         : null;
       const reflectionJournal = reflectionJournalEntry

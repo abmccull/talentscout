@@ -4,6 +4,7 @@ import { test, expect } from "../fixtures";
 import type { GamePage } from "../fixtures";
 import { SELECTORS } from "../helpers/selectors";
 import { getDefaultSkillAllocations } from "../helpers/state-injection";
+import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
 async function expectNoBlockingViolations(page: Page, state: string) {
   // Screen changes use a 150 ms opacity transition. Scan the settled UI so
@@ -29,7 +30,7 @@ async function prepareAcademyCase(gamePage: GamePage) {
     currentSeason: 1,
     scout: { primarySpecialization: "youth", reputation: 50 },
   });
-  return gamePage.page.evaluate(() => {
+  const setup = await gamePage.page.evaluate(() => {
     const store = (window as any).__GAME_STORE__;
     const state = store.getState().gameState;
     const youth = Object.values(state.unsignedYouth)[0] as any;
@@ -81,6 +82,8 @@ async function prepareAcademyCase(gamePage: GamePage) {
     store.getState().setScreen("playerProfile");
     return { playerId: player.id };
   });
+  await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
+  return setup;
 }
 
 test.describe("Youth Early Access accessibility", () => {

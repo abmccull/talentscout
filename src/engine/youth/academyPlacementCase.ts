@@ -44,6 +44,22 @@ function clamp(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+export const BASE_YOUTH_RECRUITMENT_BRIEF_CAPACITY = 12;
+export const MINIMUM_YOUTH_RECRUITMENT_BRIEF_CAPACITY = 6;
+
+/** One authority for initial generation, weekly refresh, and invariant checks. */
+export function deriveYouthRecruitmentBriefCapacity(
+  opportunityMultiplier = 1,
+): number {
+  const safeMultiplier = Number.isFinite(opportunityMultiplier)
+    ? Math.max(0.6, Math.min(1.75, opportunityMultiplier))
+    : 1;
+  return Math.max(
+    MINIMUM_YOUTH_RECRUITMENT_BRIEF_CAPACITY,
+    Math.round(BASE_YOUTH_RECRUITMENT_BRIEF_CAPACITY * safeMultiplier),
+  );
+}
+
 interface PressureTrackedYouthRecruitmentBrief extends YouthRecruitmentBrief {
   /** Stable baseline makes weekly pressure advancement replay-safe. */
   initialCompetitionPressure: number;
@@ -182,6 +198,7 @@ export function advanceYouthRecruitmentBriefs(
   currentWeek: number,
   currentSeason: number,
   seasonLength = 38,
+  maximumOpen = Number.POSITIVE_INFINITY,
 ): {
   briefs: Record<string, YouthRecruitmentBrief>;
   expiredIds: string[];
@@ -214,7 +231,28 @@ export function advanceYouthRecruitmentBriefs(
       ...brief,
       competitionPressure,
     }];
-  }));
+  })) as Record<string, YouthRecruitmentBrief>;
+
+  // World conditions can contract the live opportunity market after briefs
+  // were created. Keep the highest-pressure, nearest-deadline work and close
+  // the overflow deterministically so the advertised capacity remains true.
+  if (Number.isFinite(maximumOpen)) {
+    const capacity = Math.max(0, Math.floor(maximumOpen));
+    const active = Object.values(updated)
+      .filter((brief) => brief.status === "open")
+      .sort((left, right) =>
+        right.competitionPressure - left.competitionPressure
+        || left.expiresSeason - right.expiresSeason
+        || left.expiresWeek - right.expiresWeek
+        || left.createdSeason - right.createdSeason
+        || left.createdWeek - right.createdWeek
+        || left.id.localeCompare(right.id)
+      );
+    for (const brief of active.slice(capacity)) {
+      updated[brief.id] = { ...brief, status: "expired" };
+      expiredIds.push(brief.id);
+    }
+  }
   return { briefs: updated, expiredIds };
 }
 
@@ -256,6 +294,10 @@ export function scoreAcademyClubDecision(input: {
   scout: Scout;
   club: Club;
   relationshipScore?: number;
+  placementStrategy?: {
+    pitchPosture?: import("@/engine/core/types").PlacementPitchPosture;
+    supportCondition?: import("@/engine/core/types").PlacementSupportCondition;
+  };
   stakeholderContext?: {
     consequenceState: Pick<ConsequenceEngineState, "memories" | "obligations">;
     now: GameDate;
@@ -271,7 +313,7 @@ export function scoreAcademyClubDecision(input: {
     | "clubDecisionAdjustment"
     | "visibleReasons"
     | "suggestedMitigationActions"
-  >;
+  > & Partial<Pick<YouthMobilityAssessment, "dimensions">>;
 }): AcademyDecisionScore {
   const { report, brief, player, observations } = input;
   const perkModifiers = resolveScoutPerkModifiers(input.scout);
@@ -279,15 +321,15 @@ export function scoreAcademyClubDecision(input: {
     JudgmentCategory,
     NonNullable<NonNullable<ScoutReport["categoryVerdicts"]>[JudgmentCategory]>,
   ]>;
-  const independentHypotheses = new Set(
-    verdictEntries.flatMap(([, verdict]) => verdict.hypothesisIds),
-  ).size;
+  const independentEvidenceCount = report.evidenceAssessment
+    ? new Set(report.evidenceAssessment.claims.flatMap((claim) => claim.evidenceIds)).size
+    : new Set(verdictEntries.flatMap(([, verdict]) => verdict.hypothesisIds)).size;
   const contexts = new Set(observations.map((observation) => observation.context)).size;
   const confidenceCap = clamp(
     35
     + Math.min(35, observations.length * 7)
     + Math.min(18, contexts * 6)
-    + Math.min(8, independentHypotheses * 2),
+    + Math.min(8, independentEvidenceCount * 2),
   );
   const effectiveConfidenceByCategory = new Map<JudgmentCategory, number>();
   let declaredConfidenceTotal = 0;
@@ -309,7 +351,7 @@ export function scoreAcademyClubDecision(input: {
   const calibration = clamp(100 - overconfidenceGap * 2.5);
   let evidence = clamp(
     confidenceAverage * 0.7
-    + Math.min(15, independentHypotheses * 4)
+    + Math.min(15, independentEvidenceCount * 4)
     + Math.min(15, contexts * 5),
   );
 
@@ -341,9 +383,15 @@ export function scoreAcademyClubDecision(input: {
   const lowConfidenceCount = verdictEntries.filter(([, verdict]) =>
     verdict.confidence === "low"
   ).length;
-  const distinctRiskCount = new Set(
-    (report.riskFactors ?? []).map((riskFactor) => riskFactor.trim().toLowerCase()).filter(Boolean),
-  ).size;
+  const distinctRiskCount = report.riskAssessments
+    ? new Set(
+        report.riskAssessments
+          .filter((assessment) => assessment.id !== "noMaterialSignal")
+          .map((assessment) => assessment.id),
+      ).size
+    : new Set(
+        (report.riskFactors ?? []).map((riskFactor) => riskFactor.trim().toLowerCase()).filter(Boolean),
+      ).size;
   const acknowledgedUncertaintyCount = verdictEntries.filter(([, verdict]) =>
     verdict.acknowledgedUncertainty.trim().length >= 4
   ).length;
@@ -363,8 +411,12 @@ export function scoreAcademyClubDecision(input: {
     intendedAudience: report.intendedAudience,
     brief,
     contextCount: contexts,
-    hypothesisCount: independentHypotheses,
-    riskFactorCount: report.riskFactors?.length ?? 0,
+    // The presentation API keeps its legacy field name for save compatibility;
+    // structured reports feed it independent, traceable evidence instead.
+    hypothesisCount: independentEvidenceCount,
+    riskFactorCount: report.riskAssessments
+      ? report.riskAssessments.filter((assessment) => assessment.id !== "noMaterialSignal").length
+      : report.riskFactors?.length ?? 0,
     roleMatch,
   });
   evidence = clamp(evidence + presentationImpact.adjustments.evidence);
@@ -406,6 +458,28 @@ export function scoreAcademyClubDecision(input: {
     -12,
     Math.min(3, Math.round(input.mobilityAssessment?.clubDecisionAdjustment.score ?? 0)),
   );
+  const placementStrategyProvided = input.placementStrategy !== undefined;
+  const pitchPosture = input.placementStrategy?.pitchPosture ?? "evidenceLed";
+  const supportCondition = input.placementStrategy?.supportCondition ?? "none";
+  const postureAdjustment = !placementStrategyProvided
+    ? 0
+    : pitchPosture === "evidenceLed"
+    ? (independentEvidenceCount >= 2 && contexts >= 2 ? 4 : 1)
+    : pitchPosture === "pathwayLed"
+      ? (briefFit >= 70 ? 4 : 1)
+      : (relationship >= 60 ? 4 : 1);
+  const mobilityDimensions = input.mobilityAssessment?.dimensions;
+  const supportAdjustment = supportCondition === "educationPlan"
+    ? ((mobilityDimensions?.familyEducation.riskScore ?? 0) >= 35 ? 3 : 1)
+    : supportCondition === "playingPathway"
+      ? ((mobilityDimensions?.pathwaySupport.riskScore ?? 0) >= 35 ? 3 : 1)
+      : supportCondition === "familySupport"
+        ? (Math.max(
+            mobilityDimensions?.familyEducation.riskScore ?? 0,
+            mobilityDimensions?.adaptation.riskScore ?? 0,
+          ) >= 35 ? 3 : 1)
+        : 0;
+  const placementStrategyAdjustment = Math.min(7, postureAdjustment + supportAdjustment);
   const total = clamp(
     evidence * 0.25
     + briefFit * 0.25
@@ -418,6 +492,7 @@ export function scoreAcademyClubDecision(input: {
     + seasonalRecruitmentAdjustment
     + placementReputationAdjustment
     + mobilityAdjustment
+    + placementStrategyAdjustment
     + (input.rng.next() - 0.5) * 8,
   );
   const breakdown = {
@@ -490,6 +565,20 @@ export function scoreAcademyClubDecision(input: {
             : []),
         ]
       : []),
+    ...(placementStrategyProvided
+      ? [pitchPosture === "evidenceLed"
+          ? "The pitch leads with the evidence trail and the limits of the current read."
+          : pitchPosture === "pathwayLed"
+            ? "The pitch leads with the role and development pathway the club can offer."
+            : "The pitch uses established trust to secure a fair hearing without replacing the evidence."]
+      : []),
+    ...(!placementStrategyProvided || supportCondition === "none"
+      ? []
+      : [supportCondition === "educationPlan"
+          ? "The proposal includes an education plan matched to the move."
+          : supportCondition === "playingPathway"
+            ? "The proposal asks the club to define a credible playing pathway."
+            : "The proposal includes practical family and settlement support."]),
   ];
 
   let outcome: ClubDecisionOutcome;

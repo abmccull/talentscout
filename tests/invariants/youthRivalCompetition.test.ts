@@ -9,6 +9,7 @@ import type {
   UnsignedYouth,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
+import { assessRivalMarketCounterplay } from "@/engine/rivals/organizations";
 import {
   advanceYouthRivalPressure,
   getRivalYouthClaimEligibility,
@@ -309,9 +310,13 @@ describe("rival competition for unsigned youth", () => {
 
     expect(highResult.success).toBe(lowResult.success);
     expect(highResult.chance).toBe(lowResult.chance);
+    expect(lowResult.chance).toBeLessThan(eligibilityLow.chance);
     expect(lowResult).toMatchObject({
       attempted: true,
       success: true,
+      marketCounterplay: { response: "advocate" },
+      marketCounterplaySource: "placementReport",
+      marketCounterplaySourceId: pendingReport.id,
       consequence: "poached",
       placementType: "youthContract",
       displacedPlacementReportIds: [pendingReport.id],
@@ -358,5 +363,44 @@ describe("rival competition for unsigned youth", () => {
     expect(result.rejectionReason).toMatch(/pressure/i);
     expect(result.updatedRival).toBe(earlyRival);
     expect(result.updatedYouth).toBe(target);
+  });
+
+  it("applies advocate and withdraw choices as bounded influence, not control", () => {
+    const target = youth("counterplay", {
+      visibility: 60,
+      buzzLevel: 60,
+      discoveredBy: ["player-scout", "rival-youth-1"],
+    });
+    const activeRival = rival({
+      targetPlayerIds: [target.player.id],
+      currentTarget: target.player.id,
+      competingForPlayers: [target.player.id],
+      scoutingProgress: { [target.player.id]: 5 },
+    });
+    const pressure = {
+      playerId: target.player.id,
+      score: 65,
+      band: "contested" as const,
+      watchers: [],
+      informationExposure: "circulating" as const,
+      leakSourceIds: [],
+      family: {
+        preference: "unverified" as const,
+        explanation: "No family preference is recorded.",
+      },
+      reasons: [],
+    };
+    const advocate = assessRivalMarketCounterplay({ pressure, response: "advocate" });
+    const withdraw = assessRivalMarketCounterplay({ pressure, response: "withdraw" });
+    const baseline = getRivalYouthClaimEligibility(activeRival, target);
+    const advocated = getRivalYouthClaimEligibility(activeRival, target, advocate);
+    const withdrawn = getRivalYouthClaimEligibility(activeRival, target, withdraw);
+
+    expect(advocated.chance).toBeLessThan(baseline.chance);
+    expect(withdrawn.chance).toBeGreaterThan(baseline.chance);
+    expect(advocated.chance).toBeGreaterThanOrEqual(0.08);
+    expect(withdrawn.chance).toBeLessThanOrEqual(0.9);
+    expect(advocated.eligible).toBe(true);
+    expect(withdrawn.eligible).toBe(true);
   });
 });

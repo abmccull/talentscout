@@ -365,7 +365,7 @@ async function skipSplash(page) {
 
 async function createOfflineCareer(page) {
   await skipSplash(page);
-  await page.getByRole("button", { name: "Start Youth Career" }).click();
+  await page.getByRole("button", { name: "Start Youth Scout Career" }).click();
   await page.locator("#scout-first-name").fill("Offline");
   await page.locator("#scout-last-name").fill("Verifier");
   await page.getByText("Field Investigator", { exact: true }).click();
@@ -382,7 +382,20 @@ async function createOfflineCareer(page) {
 }
 
 async function openSettings(page) {
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settingsButton = page.getByRole("button", { name: "Settings", exact: true });
+  if (await settingsButton.isDisabled().catch(() => false)) {
+    const disableTutorials = page.getByRole("button", {
+      name: "Disable tutorials",
+      exact: true,
+    });
+    await disableTutorials.waitFor({ state: "visible", timeout: 10_000 });
+    await disableTutorials.click();
+    await page.waitForFunction(() => {
+      const settings = document.querySelector('[data-tutorial-id="nav-settings"]');
+      return settings instanceof HTMLButtonElement && !settings.disabled;
+    });
+  }
+  await settingsButton.click();
   await page.getByRole("heading", { name: "Settings", exact: true }).waitFor({
     timeout: 30_000,
   });
@@ -585,7 +598,7 @@ async function offlineProbe(page) {
 async function restoreLoadFromMainMenu(page) {
   await skipSplash(page);
   const continueButton = page.getByRole("button", {
-    name: /^Continue(?: from (?:verified backup|cloud recovery))?$/,
+    name: /^Continue Career(?: from (?:Verified Backup|Cloud Recovery))?$/,
   });
   await continueButton.waitFor({ timeout: 30_000 });
   await continueButton.click({ timeout: 30_000 });
@@ -597,8 +610,8 @@ async function restoreLoadFromMainMenu(page) {
 
 async function mainMenuRecoveryDisclosure(page) {
   await skipSplash(page);
-  await page.getByRole("button", { name: "Load Game", exact: true }).click();
-  await page.getByRole("heading", { name: "Load Game", exact: true }).waitFor({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Load Career", exact: true }).click();
+  await page.getByRole("heading", { name: "Load Career", exact: true }).waitFor({ timeout: 10_000 });
   const body = await page.locator("body").innerText();
   return {
     disclosed: /verified backup|recovered|damaged|earlier version/i.test(body),
@@ -1119,7 +1132,7 @@ async function main() {
     const noSteamBridge = await steamUnavailableProbe(noSteamRun.page);
     await skipSplash(noSteamRun.page);
     const menuAvailable = await noSteamRun.page
-      .getByRole("button", { name: "Start Youth Career", exact: true })
+      .getByRole("button", { name: "Start Youth Scout Career", exact: true })
       .isVisible({ timeout: 10_000 })
       .catch(() => false);
     const noSteamLog = await noSteamRun.closeGracefully();

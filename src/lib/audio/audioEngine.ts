@@ -21,14 +21,63 @@ export interface VolumeState {
 type ChangeListener = (volumes: VolumeState) => void;
 
 const STORAGE_KEY = "talentscout_audio";
+const AUDIO_MIX_VERSION = 2;
 
-const DEFAULT_VOLUMES: VolumeState = {
+export const DEFAULT_VOLUMES: VolumeState = {
+  master: 0.75,
+  music: 0.35,
+  sfx: 0.8,
+  ambience: 0.35,
+  muted: false,
+};
+
+const LEGACY_DEFAULT_VOLUMES: VolumeState = {
   master: 0.8,
   music: 0.6,
-  sfx: 1.0,
+  sfx: 1,
   ambience: 0.4,
   muted: false,
 };
+
+interface PersistedVolumeState extends Partial<VolumeState> {
+  mixVersion?: number;
+}
+
+function storedVolume(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, Math.min(1, value))
+    : fallback;
+}
+
+export function deserializeVolumeState(raw: string | null): VolumeState {
+  if (!raw) return { ...DEFAULT_VOLUMES };
+
+  try {
+    const parsed = JSON.parse(raw) as PersistedVolumeState;
+    const legacyMixWasUntouched = parsed.mixVersion == null
+      && parsed.master === LEGACY_DEFAULT_VOLUMES.master
+      && parsed.music === LEGACY_DEFAULT_VOLUMES.music
+      && parsed.sfx === LEGACY_DEFAULT_VOLUMES.sfx
+      && parsed.ambience === LEGACY_DEFAULT_VOLUMES.ambience;
+
+    if (legacyMixWasUntouched) {
+      return {
+        ...DEFAULT_VOLUMES,
+        muted: parsed.muted === true,
+      };
+    }
+
+    return {
+      master: storedVolume(parsed.master, DEFAULT_VOLUMES.master),
+      music: storedVolume(parsed.music, DEFAULT_VOLUMES.music),
+      sfx: storedVolume(parsed.sfx, DEFAULT_VOLUMES.sfx),
+      ambience: storedVolume(parsed.ambience, DEFAULT_VOLUMES.ambience),
+      muted: parsed.muted === true,
+    };
+  } catch {
+    return { ...DEFAULT_VOLUMES };
+  }
+}
 
 const CROSSFADE_DURATION_MS = 1000;
 
@@ -51,6 +100,10 @@ const SFX_COOLDOWNS_MS: Readonly<Record<string, number>> = {
   "calendar-slide": 120,
   travel: 600,
   "camera-shutter": 180,
+};
+
+const SFX_GAIN: Readonly<Record<string, number>> = {
+  click: 0.34,
 };
 
 const DUCKING_SFX = new Set([
@@ -77,6 +130,7 @@ export class AudioEngine {
   /** Deferred playback requests while audio assets are still lazy-loading. */
   private pendingMusicId: string | null = null;
   private pendingAmbienceId: string | null = null;
+  private pendingSfxIds = new Set<string>();
 
   /** Scene mix is temporary and never changes the player's saved settings. */
   private sceneMusicGain = 1;
@@ -178,7 +232,20 @@ export class AudioEngine {
   playSFX(sfxId: string): void {
     if (!this.isBrowserEnv()) return;
     const assets = this.getAssets();
-    if (!assets) return;
+    if (!assets) {
+      if (this.pendingSfxIds.has(sfxId)) return;
+      this.pendingSfxIds.add(sfxId);
+      this._assetsLoading
+        ?.then(() => {
+          this.pendingSfxIds.delete(sfxId);
+          this.playSFX(sfxId);
+        })
+        .catch((err) => {
+          this.pendingSfxIds.delete(sfxId);
+          console.warn("[AudioEngine] Failed to load audio assets:", err);
+        });
+      return;
+    }
 
     const now = Date.now();
     const cooldown = SFX_COOLDOWNS_MS[sfxId] ?? 0;
@@ -186,7 +253,7 @@ export class AudioEngine {
     if (now - lastPlayedAt < cooldown) return;
 
     const howl = assets.getHowl(sfxId, "sfx");
-    const vol = this.effectiveVolume("sfx");
+    const vol = this.effectiveVolume("sfx") * (SFX_GAIN[sfxId] ?? 1);
     howl.volume(vol);
     howl.play();
     this.lastSfxAt.set(sfxId, now);
@@ -382,7 +449,10 @@ export class AudioEngine {
   private persistVolumes(): void {
     if (!this.isBrowserEnv()) return;
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.volumes));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        mixVersion: AUDIO_MIX_VERSION,
+        ...this.volumes,
+      }));
     } catch {
       // localStorage may be unavailable in some environments — ignore silently.
     }
@@ -392,15 +462,12 @@ export class AudioEngine {
     if (!this.isBrowserEnv()) return { ...DEFAULT_VOLUMES };
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return { ...DEFAULT_VOLUMES };
-      const parsed = JSON.parse(raw) as Partial<VolumeState>;
-      return {
-        master: parsed.master ?? DEFAULT_VOLUMES.master,
-        music: parsed.music ?? DEFAULT_VOLUMES.music,
-        sfx: parsed.sfx ?? DEFAULT_VOLUMES.sfx,
-        ambience: parsed.ambience ?? DEFAULT_VOLUMES.ambience,
-        muted: parsed.muted ?? DEFAULT_VOLUMES.muted,
-      };
+      const volumes = deserializeVolumeState(raw);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        mixVersion: AUDIO_MIX_VERSION,
+        ...volumes,
+      }));
+      return volumes;
     } catch {
       return { ...DEFAULT_VOLUMES };
     }

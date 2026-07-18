@@ -5,10 +5,19 @@ import type {
   ScoutReport,
   ScoutingCase,
 } from "@/engine/core/types";
-import { gameWeeksBetween } from "@/engine/core/gameDate";
+import {
+  createGameCalendarIndex,
+  gameWeeksBetweenWithCalendar,
+  type GameCalendarIndex,
+} from "@/engine/core/gameDate";
 import { createNamedRNG } from "@/engine/run";
+import {
+  buildScoutingCaseDepth,
+  buildScoutingCaseDepthIndex,
+  type ScoutingCaseDepthIndex,
+} from "@/engine/reports/scoutingCases";
 
-export type ProspectFollowUpStage = "early-check" | "decision-point";
+export type ProspectFollowUpStage = "early-check" | "decision-point" | "accountability";
 export type ProspectFollowUpPathway = "placed" | "shortlisted";
 
 export interface ProspectFollowUpBeat {
@@ -20,7 +29,11 @@ export interface ProspectFollowUpBeat {
   pathway: ProspectFollowUpPathway;
   title: string;
   update: string;
+  caseQuestion: string;
   unresolvedQuestion: string;
+  comparisonSummary?: string;
+  contextChange?: string;
+  accountabilitySummary: string;
   suggestedActivity: "followUpSession" | "parentCoachMeeting" | "trainingVisit";
   message: InboxMessage;
 }
@@ -38,13 +51,21 @@ interface BeatTemplate {
   suggestedActivity: ProspectFollowUpBeat["suggestedActivity"];
 }
 
+interface FollowUpProjectionIndex {
+  calendar: GameCalendarIndex;
+  caseDepth: ScoutingCaseDepthIndex;
+}
+
 const FOLLOW_UP_STAGES: ReadonlyArray<{
   stage: ProspectFollowUpStage;
   dueAfterWeeks: number;
 }> = [
   { stage: "early-check", dueAfterWeeks: 2 },
   { stage: "decision-point", dueAfterWeeks: 6 },
+  { stage: "accountability", dueAfterWeeks: 18 },
 ];
+
+const FOLLOW_UP_WINDOW_WEEKS = 24;
 
 const PLACED_EARLY_TEMPLATES: readonly BeatTemplate[] = [
   {
@@ -118,42 +139,117 @@ const SHORTLIST_LATE_TEMPLATES: readonly BeatTemplate[] = [
   },
 ];
 
+const PLACED_ACCOUNTABILITY_TEMPLATES: readonly BeatTemplate[] = [
+  {
+    update: "Enough time has passed for the original recommendation to be compared with the player's actual pathway rather than the excitement of the move.",
+    unresolvedQuestion: "Which part of the original judgment has held, which part needs revision, and what should you learn before staking the same conviction again?",
+    suggestedActivity: "trainingVisit",
+  },
+  {
+    update: "The placement now has a real body of training, selection, and support evidence behind it.",
+    unresolvedQuestion: "Does the current pathway still justify the opportunity you recommended, or has the evidence moved the case somewhere else?",
+    suggestedActivity: "followUpSession",
+  },
+  {
+    update: "The club and family can now describe consequences that were impossible to know on placement day.",
+    unresolvedQuestion: "What would you defend in a review meeting, and what would you explicitly revise?",
+    suggestedActivity: "parentCoachMeeting",
+  },
+];
+
+const SHORTLIST_ACCOUNTABILITY_TEMPLATES: readonly BeatTemplate[] = [
+  {
+    update: "The recommendation has remained open long enough for delay itself to become part of the decision.",
+    unresolvedQuestion: "Has new evidence strengthened the case, or is the continued uncertainty now a reason to withdraw the original urgency?",
+    suggestedActivity: "followUpSession",
+  },
+  {
+    update: "A later recruitment cycle is now judging the player against a different set of needs and alternatives.",
+    unresolvedQuestion: "Should you revise the fit, defend the original football read, or close the case without forcing a conclusion?",
+    suggestedActivity: "trainingVisit",
+  },
+  {
+    update: "The family and club have both lived with the uncertainty created by the original shortlist.",
+    unresolvedQuestion: "What promise or condition must become concrete before keeping your recommendation active?",
+    suggestedActivity: "parentCoachMeeting",
+  },
+];
+
 function latestDecision(
   decisions: readonly ClubDecision[],
   outcomes: ReadonlySet<ClubDecision["outcome"]>,
 ): ClubDecision | undefined {
-  return decisions
-    .filter((decision) => outcomes.has(decision.outcome))
-    .sort((left, right) =>
-      right.decidedSeason - left.decidedSeason
-      || right.decidedWeek - left.decidedWeek
-      || right.id.localeCompare(left.id)
-    )[0];
+  let latest: ClubDecision | undefined;
+  for (const decision of decisions) {
+    if (!outcomes.has(decision.outcome)) continue;
+    if (
+      !latest
+      || decision.decidedSeason > latest.decidedSeason
+      || (
+        decision.decidedSeason === latest.decidedSeason
+        && decision.decidedWeek > latest.decidedWeek
+      )
+      || (
+        decision.decidedSeason === latest.decidedSeason
+        && decision.decidedWeek === latest.decidedWeek
+        && decision.id.localeCompare(latest.id) > 0
+      )
+    ) {
+      latest = decision;
+    }
+  }
+  return latest;
 }
 
 function latestShortlistedReport(
   state: GameState,
   scoutingCase: ScoutingCase,
+  index: FollowUpProjectionIndex,
 ): ScoutReport | undefined {
-  const reportIds = new Set(scoutingCase.reportIds ?? []);
-  return Object.values(state.reports ?? {})
-    .filter((report) =>
-      (report.caseId === scoutingCase.id || reportIds.has(report.id))
-      && report.clubResponse === "shortlisted"
-    )
-    .sort((left, right) =>
-      right.submittedSeason - left.submittedSeason
-      || right.submittedWeek - left.submittedWeek
-      || right.id.localeCompare(left.id)
-    )[0];
+  const reports = new Map(
+    (index.caseDepth.reportsByCaseId.get(scoutingCase.id) ?? []).map((report) => [report.id, report]),
+  );
+  for (const reportId of scoutingCase.reportIds ?? []) {
+    const report = state.reports?.[reportId];
+    if (report) reports.set(report.id, report);
+  }
+
+  let latest: ScoutReport | undefined;
+  for (const report of reports.values()) {
+    if (report.clubResponse !== "shortlisted") continue;
+    if (
+      !latest
+      || report.submittedSeason > latest.submittedSeason
+      || (
+        report.submittedSeason === latest.submittedSeason
+        && report.submittedWeek > latest.submittedWeek
+      )
+      || (
+        report.submittedSeason === latest.submittedSeason
+        && report.submittedWeek === latest.submittedWeek
+        && report.id.localeCompare(latest.id) > 0
+      )
+    ) {
+      latest = report;
+    }
+  }
+  return latest;
 }
 
-function resolveAnchor(state: GameState, scoutingCase: ScoutingCase): FollowUpAnchor | undefined {
-  const decisionIds = new Set(scoutingCase.decisionIds ?? []);
-  const decisions = Object.values(state.clubDecisions ?? {}).filter((decision) =>
-    decision.caseId === scoutingCase.id || decisionIds.has(decision.id),
+function resolveAnchor(
+  state: GameState,
+  scoutingCase: ScoutingCase,
+  index: FollowUpProjectionIndex,
+): FollowUpAnchor | undefined {
+  const decisions = new Map(
+    (index.caseDepth.decisionsByCaseId.get(scoutingCase.id) ?? []).map((decision) => [decision.id, decision]),
   );
-  const accepted = latestDecision(decisions, new Set(["accepted"]));
+  for (const decisionId of scoutingCase.decisionIds ?? []) {
+    const decision = state.clubDecisions?.[decisionId];
+    if (decision) decisions.set(decision.id, decision);
+  }
+  const caseDecisions = [...decisions.values()];
+  const accepted = latestDecision(caseDecisions, new Set(["accepted"]));
   if (accepted) {
     return {
       pathway: "placed",
@@ -164,7 +260,10 @@ function resolveAnchor(state: GameState, scoutingCase: ScoutingCase): FollowUpAn
     };
   }
 
-  const activeDecision = latestDecision(decisions, new Set(["trial", "followUpRequested"]));
+  const activeDecision = latestDecision(
+    caseDecisions,
+    new Set(["trial", "followUpRequested"]),
+  );
   if (activeDecision) {
     return {
       pathway: "shortlisted",
@@ -175,7 +274,7 @@ function resolveAnchor(state: GameState, scoutingCase: ScoutingCase): FollowUpAn
     };
   }
 
-  const legacyShortlist = latestShortlistedReport(state, scoutingCase);
+  const legacyShortlist = latestShortlistedReport(state, scoutingCase, index);
   if (!legacyShortlist) return undefined;
   return {
     pathway: "shortlisted",
@@ -186,14 +285,23 @@ function resolveAnchor(state: GameState, scoutingCase: ScoutingCase): FollowUpAn
   };
 }
 
+function buildFollowUpProjectionIndex(state: GameState): FollowUpProjectionIndex {
+  return {
+    calendar: createGameCalendarIndex(state.fixtures),
+    caseDepth: buildScoutingCaseDepthIndex(state),
+  };
+}
+
 function templatesFor(
   pathway: ProspectFollowUpPathway,
   stage: ProspectFollowUpStage,
 ): readonly BeatTemplate[] {
   if (pathway === "placed") {
-    return stage === "early-check" ? PLACED_EARLY_TEMPLATES : PLACED_LATE_TEMPLATES;
+    if (stage === "early-check") return PLACED_EARLY_TEMPLATES;
+    return stage === "decision-point" ? PLACED_LATE_TEMPLATES : PLACED_ACCOUNTABILITY_TEMPLATES;
   }
-  return stage === "early-check" ? SHORTLIST_EARLY_TEMPLATES : SHORTLIST_LATE_TEMPLATES;
+  if (stage === "early-check") return SHORTLIST_EARLY_TEMPLATES;
+  return stage === "decision-point" ? SHORTLIST_LATE_TEMPLATES : SHORTLIST_ACCOUNTABILITY_TEMPLATES;
 }
 
 function makeBeat(
@@ -201,6 +309,7 @@ function makeBeat(
   scoutingCase: ScoutingCase,
   anchor: FollowUpAnchor,
   stage: ProspectFollowUpStage,
+  index: FollowUpProjectionIndex,
 ): ProspectFollowUpBeat | undefined {
   const player = state.players[scoutingCase.playerId]
     ?? state.retiredPlayers?.[scoutingCase.playerId]
@@ -219,21 +328,36 @@ function makeBeat(
     stage,
   );
   const template = rng.pick(templates);
+  const depth = buildScoutingCaseDepth(state, scoutingCase.id, index.caseDepth);
+  if (!depth) return undefined;
+  const latestComparison = depth.comparisons.at(-1);
+  const latestContextChange = depth.contextChanges.at(-1);
+  const openUnknown = depth.unknowns.find((unknown) => unknown.status === "open");
+  const unresolvedQuestion = openUnknown?.statement ?? template.unresolvedQuestion;
+  const comparisonSummary = latestComparison?.summary;
+  const contextChange = latestContextChange
+    ? `${latestContextChange.from} to ${latestContextChange.to}: ${latestContextChange.explanation}`
+    : undefined;
   const playerName = `${player.firstName} ${player.lastName}`.trim();
   const clubName = anchor.clubId ? state.clubs[anchor.clubId]?.name : undefined;
   const title = stage === "early-check"
     ? `${playerName}: First pathway check`
-    : `${playerName}: The next pathway decision`;
+    : stage === "decision-point"
+      ? `${playerName}: The next pathway decision`
+      : `${playerName}: Review the original call`;
   const context = anchor.pathway === "placed"
     ? `${clubName ?? "The academy"} has supplied its first real post-placement update.`
     : `${clubName ?? "The interested club"} has kept the recommendation active.`;
   const body = [
     context,
     template.update,
-    "",
-    `UNRESOLVED: ${template.unresolvedQuestion}`,
+    `CASE QUESTION: ${depth.centralQuestion.text}`,
+    ...(comparisonSummary ? [`FOLLOW-UP COMPARISON: ${comparisonSummary}`] : []),
+    ...(contextChange ? [`CONTEXT CHANGE: ${contextChange}`] : []),
+    `UNRESOLVED: ${unresolvedQuestion}`,
+    `ACCOUNTABILITY: ${depth.accountability.summary}`,
     `NEXT MOVE: Schedule a ${template.suggestedActivity === "parentCoachMeeting" ? "parent/coach meeting" : template.suggestedActivity === "trainingVisit" ? "training visit" : "follow-up session"} if you want to test it.`,
-  ].join("\n");
+  ].join("\n\n");
   const message: InboxMessage = {
     id,
     week: state.currentWeek,
@@ -255,7 +379,11 @@ function makeBeat(
     pathway: anchor.pathway,
     title,
     update: template.update,
-    unresolvedQuestion: template.unresolvedQuestion,
+    caseQuestion: depth.centralQuestion.text,
+    unresolvedQuestion,
+    comparisonSummary,
+    contextChange,
+    accountabilitySummary: depth.accountability.summary,
     suggestedActivity: template.suggestedActivity,
     message,
   };
@@ -270,25 +398,26 @@ export function projectWeeklyProspectFollowUps(state: GameState): ProspectFollow
   if (state.scout.primarySpecialization !== "youth") return [];
   const existingIds = new Set((state.inbox ?? []).map((message) => message.id));
   const beats: ProspectFollowUpBeat[] = [];
+  const index = buildFollowUpProjectionIndex(state);
 
   for (const scoutingCase of Object.values(state.scoutingCases ?? {})
     .sort((left, right) => left.id.localeCompare(right.id))) {
-    const anchor = resolveAnchor(state, scoutingCase);
+    const anchor = resolveAnchor(state, scoutingCase, index);
     if (!anchor) continue;
-    const elapsed = gameWeeksBetween(
-      state.fixtures,
+    const elapsed = gameWeeksBetweenWithCalendar(
+      index.calendar,
       { week: anchor.week, season: anchor.season },
       { week: state.currentWeek, season: state.currentSeason },
     );
-    if (elapsed < 0 || elapsed > 8) continue;
+    if (elapsed < 0 || elapsed > FOLLOW_UP_WINDOW_WEEKS) continue;
 
     // One update per case per week keeps the inbox readable if an old save
-    // resumes after a gap. Normal weekly play still receives weeks 2 and 6.
+    // resumes after a gap. Normal weekly play receives weeks 2, 6, and 18.
     for (const schedule of FOLLOW_UP_STAGES) {
       if (elapsed < schedule.dueAfterWeeks) continue;
       const id = `prospect-follow-up:${scoutingCase.id}:${anchor.sourceId}:${schedule.stage}`;
       if (existingIds.has(id)) continue;
-      const beat = makeBeat(state, scoutingCase, anchor, schedule.stage);
+      const beat = makeBeat(state, scoutingCase, anchor, schedule.stage, index);
       if (beat) beats.push(beat);
       break;
     }

@@ -730,14 +730,28 @@ export function retainRequiredFixtureHistory(
   return retained;
 }
 
+/**
+ * Keep per-fixture ratings in lockstep with the retained fixture ledger.
+ *
+ * Completed-season performance is projected into player season ratings and
+ * WorldHistory before this runs. Retaining ratings for discarded fixtures
+ * would create an orphaned, ever-growing second history that every later
+ * season rollover has to rescan.
+ */
+export function retainMatchRatingsForFixtures(
+  fixtures: Record<string, Fixture>,
+  matchRatings: GameState["matchRatings"] | undefined,
+): GameState["matchRatings"] {
+  const retainedIds = new Set(Object.keys(fixtures ?? {}));
+  return Object.fromEntries(
+    Object.entries(matchRatings ?? {}).filter(([fixtureId]) => retainedIds.has(fixtureId)),
+  );
+}
+
 /** Mutating adapter for one-time backward-save migration. */
 export function migrateHistoricalFixtureRetention(state: GameState): void {
   state.fixtures = retainRequiredFixtureHistory(state, state.currentSeason, false);
-
-  const retainedIds = new Set(Object.keys(state.fixtures));
-  state.matchRatings = Object.fromEntries(
-    Object.entries(state.matchRatings ?? {}).filter(([fixtureId]) => retainedIds.has(fixtureId)),
-  );
+  state.matchRatings = retainMatchRatingsForFixtures(state.fixtures, state.matchRatings);
 }
 
 /**

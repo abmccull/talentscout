@@ -1,4 +1,5 @@
 import { dismissCareerMomentOverlays, test, expect } from "../fixtures";
+import { seedStructuredEvidenceForPlayer } from "../helpers/structured-evidence";
 
 async function prepareYouthReportDraft(gamePage: import("../fixtures").GamePage) {
   await gamePage.goto();
@@ -64,7 +65,6 @@ async function prepareYouthReportDraft(gamePage: import("../fixtures").GamePage)
         [observation.id]: observation,
       },
     });
-    store.getState().startReport(playerId);
 
     return {
       playerId,
@@ -73,6 +73,10 @@ async function prepareYouthReportDraft(gamePage: import("../fixtures").GamePage)
     };
   });
 
+  await seedStructuredEvidenceForPlayer(gamePage.page, setup.playerId);
+  await gamePage.page.evaluate((playerId) => {
+    (window as any).__GAME_STORE__.getState().startReport(playerId);
+  }, setup.playerId);
   await gamePage.waitForScreen("reportWriter");
   return setup;
 }

@@ -339,7 +339,7 @@ function registrationDimension(
       label: "Registration and work-permit friction",
       riskScore: 2,
       status: "clear",
-      summary: `This is a domestic move inside ${geography.targetLabel}, so the game applies no cross-border registration gate.`,
+      summary: `This is a domestic move inside ${geography.targetLabel}, so no cross-border registration clearance is required.`,
       reasons: ["Origin and destination resolve to the same canonical country."],
       mitigationActions: [],
     };
@@ -351,7 +351,7 @@ function registrationDimension(
       label: "Registration and work-permit friction",
       riskScore: 96,
       status: "blocked",
-      summary: "The game blocks this cross-border youth placement until an age-eligible or domestic route is available.",
+      summary: "This cross-border youth placement cannot proceed until an age-eligible or domestic route is available.",
       reasons: [
         `The prospect is ${age}; the Youth Scout model blocks cross-border placements below 16.`,
         `The ${geography.originLabel} to ${geography.targetLabel} route is ${geography.routeFamiliarity}, but route familiarity never overrides the age gate.`,
@@ -378,8 +378,8 @@ function registrationDimension(
     riskScore,
     status,
     summary: age <= 17
-      ? "The game requires youth-registration, guardian, and education clearance before this cross-border move can complete."
-      : "The game requires a cross-border registration/work-permit check before commitment; route familiarity can lower, but not erase, that work.",
+      ? "Youth-registration, guardian, and education clearance are required before this cross-border move can complete."
+      : "A cross-border registration and work-permit check is required before commitment; route familiarity can lower, but not erase, that work.",
     reasons: [
       `The prospect is ${age}, moving from ${geography.originLabel} to ${geography.targetLabel}.`,
       `The existing transfer-flow model treats this route as ${geography.routeFamiliarity}.`,
@@ -441,14 +441,14 @@ function adaptationDimension(
   );
   const reasons = [
     geography.sharedLanguage
-      ? "The game geography has a shared football-language bridge between origin and destination."
+      ? "Origin and destination share a football-language bridge."
       : geography.relatedLanguage
         ? "The modeled language groups are related, but structured language support is still warranted."
         : geography.originProfile && geography.targetProfile
           ? "No shared language bridge is represented for this route."
           : "At least one country lacks an authored mobility profile, so the model does not guess at fluency.",
     geography.sameCulturalArea
-      ? "Origin and destination share the same broad adaptation area in the game model."
+      ? "Origin and destination share a broadly familiar adaptation environment."
       : geography.sameMacroRegion
         ? "The move remains inside one broad world region, limiting some transition pressure."
         : "The move crosses broad world regions, increasing day-to-day adjustment needs.",

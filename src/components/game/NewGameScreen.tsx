@@ -375,7 +375,7 @@ const YOUTH_SKILL_PRESETS: Array<{
   id: Exclude<YouthSkillPresetId, "custom">;
   name: string;
   description: string;
-  firstCaseRead: string;
+  scoutingEdge: string;
   originId: ScoutOriginId;
   flawId: ScoutFlawId;
   doctrineId: ScoutDoctrineId;
@@ -385,7 +385,7 @@ const YOUTH_SKILL_PRESETS: Array<{
     id: "potential",
     name: "Projection Specialist",
     description: "Best at estimating ceilings and revising long-term potential calls.",
-    firstCaseRead: "You will notice the player's long-term runway before the polish is obvious.",
+    scoutingEdge: "Spot long-term potential before a young player's technique and confidence fully develop.",
     originId: "academy-apprentice",
     flawId: "stubborn-convictions",
     doctrineId: "evidence-first",
@@ -395,7 +395,7 @@ const YOUTH_SKILL_PRESETS: Array<{
     id: "technical",
     name: "Technical Spotter",
     description: "Finds unusual technique early, with less emphasis on physical evidence.",
-    firstCaseRead: "You will catch the disguised touch and passing detail others at the rail miss.",
+    scoutingEdge: "Pick out disguised touches, passing detail, and technical habits others overlook.",
     originId: "former-player",
     flawId: "unknown-quantity",
     doctrineId: "move-before-market",
@@ -405,7 +405,7 @@ const YOUTH_SKILL_PRESETS: Array<{
     id: "character",
     name: "Character Reader",
     description: "Prioritizes mentality, temperament, and responses to pressure.",
-    firstCaseRead: "You will read how the player responds when the match turns against him.",
+    scoutingEdge: "Read mentality, temperament, and how players respond when the pressure changes.",
     originId: "grassroots-organizer",
     flawId: "fragile-network",
     doctrineId: "relationships-first",
@@ -415,7 +415,7 @@ const YOUTH_SKILL_PRESETS: Array<{
     id: "balanced",
     name: "Field Investigator",
     description: "A flexible evidence-gatherer with no dominant blind spot.",
-    firstCaseRead: "You will build the broadest first hypothesis, but certainty will take more work.",
+    scoutingEdge: "Build broader evidence profiles with fewer blind spots, though certainty develops more slowly.",
     originId: "video-analyst",
     flawId: "travel-worn",
     doctrineId: "contrarian-eye",
@@ -1084,24 +1084,24 @@ export function NewGameScreen() {
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-300">
                             {isExperiencedYouthPlayer
-                              ? "Returning scout · choose your opening"
-                              : "Quick start · first decision in under five minutes"}
+                              ? "Start your next scouting career"
+                              : "Your first scouting assignment"}
                           </p>
                           <h2 className="mt-2 text-xl font-semibold text-white">
                             {isExperiencedYouthPlayer
-                              ? "No two scouting careers need to start alike."
-                              : "A trusted contact has a name for you."}
+                              ? "Choose how this career begins."
+                              : "A trusted contact has spotted someone."}
                           </h2>
                           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-zinc-300">
                             {isExperiencedYouthPlayer
-                              ? "Open on an unfamiliar lead, take command at the Desk, or replay the guided discovery case."
-                              : "The school match has already started. Choose the instinct you trust, take the call, and make your first live scouting judgment before the wider market notices."}
+                              ? "Follow a fresh lead, plan your first week yourself, or replay the guided school-match assignment."
+                              : "A school match is already underway, and one player may be worth your attention. Choose how you read the game, watch the key moments, and decide whether the prospect deserves a second look."}
                           </p>
                         </div>
                         <span className="w-fit rounded-full border border-amber-400/30 bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-200">
                           {isExperiencedYouthPlayer
-                            ? "Your career · your opening"
-                            : "3 observation beats · 1 irreversible call"}
+                            ? "Choose your first assignment"
+                            : "School match underway · Live lead"}
                         </span>
                       </div>
                     </div>
@@ -1111,10 +1111,10 @@ export function NewGameScreen() {
                       )}
 
                       <fieldset>
-                        <legend className="text-sm font-semibold text-white">What kind of scout are you?</legend>
+                        <legend className="text-sm font-semibold text-white">Choose your scouting style</legend>
                         <p className="mt-1 text-xs text-zinc-400">
-                          This sets your permanent career DNA and changes what you notice in the opening case.
-                          You can use Advanced setup below if you want every control.
+                          Your choice shapes what you notice, how you judge young players, and the strengths you develop throughout your career.
+                          Want full control? Use Advanced setup below.
                         </p>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                           {YOUTH_SKILL_PRESETS.map((preset) => {
@@ -1140,7 +1140,7 @@ export function NewGameScreen() {
                                 </span>
                                 <span className="mt-1 block text-xs leading-relaxed text-zinc-300">{preset.description}</span>
                                 <span className="mt-2 block border-l-2 border-amber-400/50 pl-2 text-xs leading-relaxed text-amber-100/90">
-                                  First case: {preset.firstCaseRead}
+                                  Your edge: {preset.scoutingEdge}
                                 </span>
                               </button>
                             );
@@ -1158,8 +1158,12 @@ export function NewGameScreen() {
                             </p>
                             <p className="mt-1 text-xs leading-relaxed text-zinc-400">
                               {effectiveOpeningMode === "desk"
-                                ? "You will begin at the Desk with your first week open for planning. No opening assignment will be created."
-                                : "You will enter a generated case, gather uncertain evidence, flag the moment that changes your opinion, then decide who to tell. The game will remember it."}
+                                ? "Begin at the Desk and plan your first week yourself."
+                                : effectiveOpeningMode === "dynamic"
+                                  ? "Follow a fresh lead unique to this career, gather evidence, and make a recommendation with lasting consequences."
+                                  : effectiveOpeningMode === "tutorial"
+                                    ? "Replay the guided school-match assignment and work through its evidence, report, and follow-up."
+                                    : "Start with a guided school-match assignment. Watch the key moments, save useful evidence, and decide whether the player is worth following."}
                             </p>
                           </div>
                           <button
@@ -1172,12 +1176,12 @@ export function NewGameScreen() {
                             {isStarting
                               ? "Creating your football world…"
                               : effectiveOpeningMode === "dynamic"
-                              ? "Follow a fresh lead"
+                              ? "Follow the new lead"
                               : effectiveOpeningMode === "desk"
                                 ? "Start at the Desk"
                                 : effectiveOpeningMode === "tutorial"
-                                  ? "Replay the discovery case"
-                                  : "Take the call — get to the match"}
+                                  ? "Replay guided assignment"
+                                  : "Begin first assignment"}
                           </button>
                         </div>
                         <p id="quick-start-requirements" className="mt-2 text-xs text-zinc-400" role="status" aria-live="polite">
@@ -1193,9 +1197,9 @@ export function NewGameScreen() {
                                     : effectiveOpeningMode === "dynamic"
                                       ? "follow a fresh lead"
                                       : effectiveOpeningMode === "tutorial"
-                                        ? "replay the guided case"
-                                        : "take the call"
-                                }. Advanced setup remains available through Continue.`)}
+                                      ? "replay the guided case"
+                                      : "take the call"
+                                }. For full control over your scout and world, choose Continue below.`)}
                         </p>
                       </div>
                     </CardContent>
@@ -2035,17 +2039,17 @@ export function NewGameScreen() {
                         </div>
                         <p className="font-medium text-white">
                           {effectiveOpeningMode === "dynamic"
-                            ? "Dynamic prologue"
+                            ? "Follow a fresh lead"
                             : effectiveOpeningMode === "desk"
-                              ? "Start at the Desk"
-                              : "Replay tutorial"}
+                              ? "Plan the week yourself"
+                              : "Replay guided assignment"}
                         </p>
                         <p className="mt-1 text-sm text-zinc-400">
                           {effectiveOpeningMode === "dynamic"
-                            ? "A new lead will be assembled from this career's world seed."
+                            ? "Begin with a new lead shaped by this career's contacts, venues, pressures, and deadlines."
                             : effectiveOpeningMode === "desk"
-                              ? "Your career opens in the weekly planning workspace."
-                              : "The authored school-match discovery case will guide your first judgment."}
+                              ? "Begin at the Desk with your first week open for planning."
+                              : "Return to the guided school-match assignment for your first judgment."}
                         </p>
                       </CardContent>
                     </Card>

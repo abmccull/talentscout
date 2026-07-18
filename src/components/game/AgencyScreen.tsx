@@ -16,7 +16,6 @@ import {
   ChevronUp,
 } from "lucide-react";
 import {
-  calculateAgencyOverhead,
   calculateInfrastructureEffects,
   MAX_ASSISTANT_SCOUTS,
 } from "@/engine/finance";
@@ -30,6 +29,9 @@ import { deriveRegionalPresence } from "@/engine/world/regionalPresence";
 import { getScoutHomeCountry } from "@/engine/world/travel";
 import { LegacyTab } from "./agency/LegacyTab";
 import { ScreenBackground } from "@/components/ui/screen-background";
+import { AgencyStrategyPanel } from "./agency/AgencyStrategyPanel";
+import { assessAgencyStrategicPostureChange } from "@/engine/finance/agency";
+import { getAgencyStrategicPosture } from "@/engine/finance/agencyCapacity";
 
 // ─── Tab system ──────────────────────────────────────────────────────────────
 
@@ -58,6 +60,7 @@ const ROADMAP_TIERS = [
 
 export function AgencyScreen() {
   const gameState = useGameStore((s) => s.gameState);
+  const setAgencyStrategicPosture = useGameStore((s) => s.setAgencyStrategicPosture);
   const [activeTab, setActiveTab] = useState<TabId>("infrastructure");
   const [roadmapOpen, setRoadmapOpen] = useState(false);
 
@@ -119,6 +122,15 @@ export function AgencyScreen() {
 
   // ── Summary bar data ──────────────────────────────────────────────────────
   const showFullAgencySummary = isIndependent && independentTier >= 3;
+  const postureChangeAssessment = showFullAgencySummary
+    ? assessAgencyStrategicPostureChange(
+        finances,
+        scout,
+        getAgencyStrategicPosture(finances),
+        gameState.currentWeek,
+        gameState.currentSeason,
+      )
+    : null;
 
   return (
     <GameLayout>
@@ -128,8 +140,8 @@ export function AgencyScreen() {
         <h1 className="text-2xl font-bold mb-1">Agency</h1>
         <p className="text-sm text-zinc-400 mb-4">
           {isIndependent
-            ? "Manage your scouting agency — infrastructure, staff, and operations."
-            : "Manage your scouting infrastructure and assistants."}
+            ? "Build a durable scouting practice without sacrificing the standard that made your name."
+            : "Develop the tools, people, and working methods behind your scouting."}
         </p>
 
         {/* Roadmap card for independent Tier 1-2 (collapsible, informational) */}
@@ -219,46 +231,26 @@ export function AgencyScreen() {
 
         {/* Summary bar */}
         {showFullAgencySummary ? (
-          <div className="mb-4 grid grid-cols-4 gap-3" data-tutorial-id="agency-overview">
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Monthly Overhead</p>
-                <p className="text-base font-bold text-amber-400">£{calculateAgencyOverhead(finances, scout.reputation).toLocaleString()}/mo</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Employees</p>
-                <p className="text-base font-bold">
-                  {finances.employees.length}{" "}
-                  <span className="text-sm font-normal text-zinc-500">/ {finances.office.maxEmployees}</span>
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Quality Bonus</p>
-                <p className="text-base font-bold text-emerald-400">+{Math.round(finances.office.qualityBonus * 100)}%</p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Active Clients</p>
-                <p className="text-base font-bold">{clientRelationships.filter((c: { status: string }) => c.status === "active").length}</p>
-              </CardContent>
-            </Card>
+          <div data-tutorial-id="agency-overview">
+            <AgencyStrategyPanel
+              finances={finances}
+              scout={scout}
+              clubs={gameState.clubs}
+              onChangePosture={setAgencyStrategicPosture}
+              postureChangeLocked={postureChangeAssessment?.lockedForWeek}
+            />
           </div>
         ) : (
-          <div className="mb-4 grid grid-cols-3 gap-3" data-tutorial-id="agency-overview">
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3" data-tutorial-id="agency-overview">
             <Card>
               <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Weekly Infrastructure Cost</p>
+                <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-400">Weekly Infrastructure Cost</p>
                 <p className="text-base font-bold text-red-400">£{infraEffects.weeklyCost.toLocaleString()}/wk</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-3">
-                <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Report Quality Bonus</p>
+                <p className="mb-1 text-[10px] uppercase tracking-wider text-zinc-400">Report Quality Bonus</p>
                 <p className="text-base font-bold text-emerald-400">+{(infraEffects.reportQualityBonus * 100).toFixed(0)}%</p>
               </CardContent>
             </Card>

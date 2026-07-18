@@ -43,7 +43,6 @@ import {
   Activity,
   Menu,
   Bell,
-  Map,
 } from "lucide-react";
 
 // ─── Sectioned Navigation ────────────────────────────────────────────────────
@@ -61,7 +60,6 @@ const YOUTH_NAV_ICONS: Partial<Record<GameScreen, React.ElementType>> = {
   internationalView: Globe,
   career: Briefcase,
   handbook: Book,
-  futureRoadmap: Map,
   settings: Settings,
 };
 
@@ -132,7 +130,6 @@ function getNavSections(specialization: string, youthEarlyAccess: boolean): NavS
         { screen: "inbox", label: "Inbox", icon: Mail },
         { screen: "achievements", label: "Achievements", icon: Medal },
         { screen: "handbook", label: "Handbook", icon: Book },
-        { screen: "futureRoadmap", label: "Roadmap", icon: Map },
         { screen: "settings", label: "Settings", icon: Settings },
       ],
     },
@@ -146,7 +143,6 @@ const ALWAYS_VISIBLE = new Set<GameScreen>([
   "playerDatabase",
   "achievements",
   "handbook",
-  "futureRoadmap",
   "settings",
 ]);
 
@@ -328,6 +324,8 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     };
   }));
   const { playSFX } = useAudio();
+  const guidedSessionActive = useTutorialStore((state) => state.guidedSessionActive);
+  const currentGuidedTask = useTutorialStore((state) => state.currentGuidedTask);
 
   // All hooks must be called before any early return
   const [seenNav, setSeenNav] = useState<Set<GameScreen>>(() => loadSeenNav());
@@ -361,6 +359,10 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
     if (!main) return;
 
     main.scrollTo({ top: 0, left: 0 });
+    // Mobile layouts can temporarily hand scrolling to the document while a
+    // deeply placed action is brought into view. Reset both scroll owners so
+    // the next workspace always opens with its title and primary context.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (previousScreenRef.current !== null && previousScreenRef.current !== currentScreen) {
       main.focus({ preventScroll: true });
     }
@@ -413,7 +415,17 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
       ].find((item) => item.screen === activeNavScreen)?.label ?? "TalentScout"
     : "TalentScout";
 
+  const guidedNavigationDestination: GameScreen | null =
+    currentGuidedTask === "openedCalendar" ? "calendar" : null;
+
+  function isGuidedNavigationLocked(screen: GameScreen): boolean {
+    if (!guidedSessionActive) return false;
+    if (screen === currentScreen) return false;
+    return screen !== guidedNavigationDestination;
+  }
+
   function handleNavClick(screen: GameScreen): void {
+    if (isGuidedNavigationLocked(screen)) return;
     if (screen !== currentScreen) playSFX("click");
     const isFirstVisit = !seenNav.has(screen);
     if (isFirstVisit) {
@@ -461,7 +473,9 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+            disabled={guidedSessionActive}
+            title={guidedSessionActive ? "Finish the highlighted tutorial step first" : undefined}
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
             aria-label="Open navigation menu"
           >
             <Menu size={21} aria-hidden="true" />
@@ -474,10 +488,12 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
           </p>
         </div>
         <div className="flex items-center justify-end">
-          <ScreenHelpButton placement="mobileHeader" />
+          {!guidedSessionActive && <ScreenHelpButton placement="mobileHeader" />}
           <button
             onClick={() => handleNavClick("inbox")}
-            className="relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+            disabled={isGuidedNavigationLocked("inbox")}
+            title={isGuidedNavigationLocked("inbox") ? "Finish the highlighted tutorial step first" : undefined}
+            className="relative flex h-11 w-11 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
             aria-label={unreadCount > 0 ? `Open inbox, ${unreadCount} unread` : "Open inbox"}
           >
             <Bell size={20} aria-hidden="true" />
@@ -532,7 +548,9 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             <button
               data-tutorial-id="nav-inbox"
               onClick={() => handleNavClick("inbox")}
-              className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-300 transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.06] hover:text-white"
+              disabled={isGuidedNavigationLocked("inbox")}
+              title={isGuidedNavigationLocked("inbox") ? "Finish the highlighted tutorial step first" : undefined}
+              className="mt-3 flex min-h-11 w-full items-center gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-300 transition hover:border-emerald-400/30 hover:bg-emerald-400/[0.06] hover:text-white disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-white/10 disabled:hover:bg-white/[0.03]"
             >
               <Bell size={16} aria-hidden="true" />
               <span className="flex-1 text-left">Inbox</span>
@@ -544,6 +562,17 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             </button>
           )}
         </div>
+
+        {guidedSessionActive && (
+          <div
+            role="status"
+            className="mx-3 mt-3 rounded-lg border border-emerald-400/20 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-zinc-300"
+          >
+            {currentGuidedTask === "openedCalendar"
+              ? "Planner is highlighted. Open it to continue."
+              : "Guided assignment in progress. Finish the highlighted action to unlock navigation."}
+          </div>
+        )}
 
         <nav className="flex-1 overflow-y-auto p-2" data-tutorial-id="sidebar-nav">
           {visibleSections.map((section) => (
@@ -559,14 +588,20 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
               {section.visibleItems.map(({ screen, label, icon: Icon }) => {
                 const isNew = !useYouthEarlyAccessNav && !seenNav.has(screen);
                 const lockState = getNavLockState(screen, tier, careerPath);
-                const isLocked = lockState === "locked";
+                const isTutorialLocked = isGuidedNavigationLocked(screen);
+                const isLocked = lockState === "locked" || isTutorialLocked;
+                const lockReason = isTutorialLocked
+                  ? "Finish the highlighted tutorial step first"
+                  : isLocked
+                    ? "Unlocks at Tier 3"
+                    : undefined;
                 return (
                   <button
                     key={screen}
                     data-tutorial-id={`nav-${screen}`}
                     onClick={() => !isLocked && handleNavClick(screen)}
                     disabled={isLocked}
-                    title={isLocked ? "Unlocks at Tier 3" : undefined}
+                    title={lockReason}
                     aria-current={activeNavScreen === screen ? "page" : undefined}
                     className={`mb-1 flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
                       isLocked
@@ -615,7 +650,9 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             {showCareerShortcut && (
               <button
                 onClick={() => handleNavClick("career")}
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-zinc-400 transition hover:bg-white/5 hover:text-emerald-300"
+                disabled={isGuidedNavigationLocked("career")}
+                title={isGuidedNavigationLocked("career") ? "Finish the highlighted tutorial step first" : undefined}
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-zinc-400 transition hover:bg-white/5 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent"
                 aria-label="Open career screen"
               >
                 <ChevronRight size={12} />
@@ -654,14 +691,21 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
         >
           {YOUTH_WORKSPACE_ITEMS.map(({ screen, label, icon: Icon }) => {
             const isActive = activeNavScreen === screen;
+            const isTutorialLocked = isGuidedNavigationLocked(screen);
             return (
               <button
                 key={screen}
                 data-tutorial-id={`mobile-nav-${screen}`}
                 onClick={() => handleNavClick(screen)}
+                disabled={isTutorialLocked}
+                title={isTutorialLocked ? "Finish the highlighted tutorial step first" : undefined}
                 aria-current={isActive ? "page" : undefined}
                 className={`flex min-h-11 min-w-0 flex-col items-center justify-center gap-1 rounded-md px-0.5 text-[9px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400 ${
-                  isActive ? "text-emerald-300" : "text-zinc-400 hover:bg-white/5 hover:text-white"
+                  isTutorialLocked
+                    ? "cursor-not-allowed text-zinc-600 opacity-40"
+                    : isActive
+                      ? "text-emerald-300"
+                      : "text-zinc-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <Icon size={18} aria-hidden="true" />
@@ -696,7 +740,7 @@ export function GameLayout({ children }: { children: React.ReactNode }) {
             </button>
           </div>
         )}
-        <ScreenHelpButton />
+        {!guidedSessionActive && <ScreenHelpButton />}
         {children}
       </main>
     </div>

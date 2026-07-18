@@ -59,6 +59,12 @@ export interface ToolPassiveBonus {
   relationshipGainBonus?: number;
   /** Fractional reduction applied to fatigue gained from travel activities (e.g. 0.20 = -20 %). */
   travelFatigueReduction?: number;
+  /** Flat fatigue reduction in a busy week with at least three work blocks. */
+  workflowFatigueReduction?: number;
+  /** Extra bounded youth candidates surfaced by eligible venue searches. */
+  youthDiscoveryBonus?: number;
+  /** Number of prior observation seasons exposed in the trend view. */
+  trendHistoryDepth?: number;
 }
 
 // =============================================================================
@@ -132,7 +138,7 @@ export const TOOL_DEFINITIONS: UnlockableTool[] = [
     description:
       "A purpose-built mobile application for live scouting: real-time note capture, voice-to-text dictation, instant schedule management, and cloud sync across devices. Removes the friction between watching a match and organising the output.",
     bonus:
-      "Streamlined mobile workflow — schedule activities faster with reduced overhead.",
+      "Streamlined mobile workflow — reduces fatigue by 1 in weeks with three or more work blocks.",
     requirements: {
       minTier: 3,
       minReportsSubmitted: 20,
@@ -156,7 +162,7 @@ export const TOOL_DEFINITIONS: UnlockableTool[] = [
     description:
       "A comprehensive repository of youth player profiles aggregated from academy registers, youth tournaments, and national team squads across covered countries. Makes systematic wonderkid hunting viable at scale.",
     bonus:
-      "Comprehensive youth registry access — find emerging talent faster and earlier.",
+      "Comprehensive youth registry access — surfaces one additional candidate in eligible youth searches.",
     requirements: {
       minTier: 3,
       minReputation: 30,
@@ -168,7 +174,7 @@ export const TOOL_DEFINITIONS: UnlockableTool[] = [
     description:
       "A longitudinal tracking system that records and visualises a player's attribute evolution across your observation sessions over multiple seasons. Reveals development trends — acceleration, plateau, or decline — that single observations cannot.",
     bonus:
-      "Multi-season trend visualisation — identify development trajectories across observations.",
+      "Multi-season trend visualisation — exposes up to four seasons of observation-confidence history.",
     requirements: {
       minTier: 3,
       minSkillLevel: { skill: "dataLiteracy", level: 10 },
@@ -292,8 +298,7 @@ const TOOL_PASSIVE_BONUSES: Record<ToolId, ToolPassiveBonus> = {
     accuracyBonus: 0.1,
   },
   scoutingApp: {
-    // Scheduling benefit is systemic (faster activity slot allocation).
-    // No single numeric bonus — handled by the activity scheduling layer.
+    workflowFatigueReduction: 1,
   },
   travelPlanner: {
     travelFatigueReduction: 0.2,
@@ -305,12 +310,10 @@ const TOOL_PASSIVE_BONUSES: Record<ToolId, ToolPassiveBonus> = {
     fatigueReduction: 1,
   },
   youthDatabase: {
-    // Discovery benefit is systemic (youth player visibility).
-    // No single numeric bonus — handled by player-discovery logic.
+    youthDiscoveryBonus: 1,
   },
   performanceTracker: {
-    // Trend-tracking benefit is systemic (observation history UI).
-    // No single numeric bonus — handled by observation aggregation.
+    trendHistoryDepth: 4,
   },
   networkAnalyzer: {
     relationshipGainBonus: 0.1,
@@ -346,6 +349,9 @@ export function getActiveToolBonuses(
   let confidenceBonus: number | undefined;
   let relationshipGainBonus: number | undefined;
   let travelFatigueReduction: number | undefined;
+  let workflowFatigueReduction: number | undefined;
+  let youthDiscoveryBonus: number | undefined;
+  let trendHistoryDepth: number | undefined;
 
   for (const toolId of unlockedTools) {
     const bonus = TOOL_PASSIVE_BONUSES[toolId];
@@ -367,6 +373,16 @@ export function getActiveToolBonuses(
       travelFatigueReduction =
         (travelFatigueReduction ?? 0) + bonus.travelFatigueReduction;
     }
+    if (bonus.workflowFatigueReduction !== undefined) {
+      workflowFatigueReduction =
+        (workflowFatigueReduction ?? 0) + bonus.workflowFatigueReduction;
+    }
+    if (bonus.youthDiscoveryBonus !== undefined) {
+      youthDiscoveryBonus = (youthDiscoveryBonus ?? 0) + bonus.youthDiscoveryBonus;
+    }
+    if (bonus.trendHistoryDepth !== undefined) {
+      trendHistoryDepth = Math.max(trendHistoryDepth ?? 0, bonus.trendHistoryDepth);
+    }
   }
 
   // Build the result object with only the categories that have contributions.
@@ -378,6 +394,12 @@ export function getActiveToolBonuses(
     result.relationshipGainBonus = relationshipGainBonus;
   if (travelFatigueReduction !== undefined)
     result.travelFatigueReduction = travelFatigueReduction;
+  if (workflowFatigueReduction !== undefined)
+    result.workflowFatigueReduction = workflowFatigueReduction;
+  if (youthDiscoveryBonus !== undefined)
+    result.youthDiscoveryBonus = youthDiscoveryBonus;
+  if (trendHistoryDepth !== undefined)
+    result.trendHistoryDepth = trendHistoryDepth;
 
   return result;
 }

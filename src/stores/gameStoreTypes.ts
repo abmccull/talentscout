@@ -15,6 +15,7 @@ import type {
   Fixture,
   FocusSelection,
   GameState,
+  InitialAssessmentInput,
   GossipAction,
   LeaderboardEntry,
   LegacyProfile,
@@ -37,6 +38,9 @@ import type {
   RivalScout,
   ScoutPerformanceSnapshot,
   ScoutReport,
+  EvidenceClassificationId,
+  ObservationHalftimeApproach,
+  ScoutingQuestionId,
   SeasonEvent,
   Specialization,
   StructuredReportInput,
@@ -45,6 +49,7 @@ import type {
   TravelPosture,
   WeekSimulationState,
 } from "@/engine/core/types";
+import type { AgencyStrategicPosture } from "@/engine/finance/agencyCapacity";
 import type { WeeklyWorkerTelemetry } from "@/engine/core/weeklyTransactionProtocol";
 import type { LeadershipResponsibilityChoice } from "@/engine/career/leadership";
 import type { CareerRecoveryPlanId } from "@/engine/career/recovery";
@@ -300,6 +305,7 @@ export interface GameStoreState {
     },
   ) => void;
   beginSession: () => void;
+  setSessionScoutingQuestion: (questionId: ScoutingQuestionId) => void;
   advanceSessionPhase: () => void;
   allocateSessionFocus: (playerId: string, lens: LensType) => void;
   removeSessionFocus: (playerId: string) => void;
@@ -307,15 +313,15 @@ export interface GameStoreState {
     momentId: string,
     reaction: SessionFlaggedMoment["reaction"],
   ) => void;
+  setSessionHalftimeApproach: (approach: ObservationHalftimeApproach) => void;
+  classifySessionEvidence: (
+    cueId: string,
+    classification: EvidenceClassificationId,
+  ) => void;
   selectDialogueOption: (nodeId: string, optionId: string) => void;
   selectDataPoint: (pointId: string) => void;
   selectStrategicChoice: (choiceId: string) => void;
   addSessionNote: (note: string) => void;
-  addSessionHypothesis: (
-    playerId: string,
-    text: string,
-    domain: string,
-  ) => void;
   endObservationSession: () => void;
   resolveOpeningDiscoveryChoice: (choiceId: OpeningCaseChoiceId) => void;
 
@@ -330,6 +336,7 @@ export interface GameStoreState {
     strengths: string[],
     weaknesses: string[],
     structured?: StructuredReportInput,
+    initialAssessment?: InitialAssessmentInput,
   ) => void;
 
   chooseCareerRecovery: (planId: CareerRecoveryPlanId) => void;
@@ -371,6 +378,8 @@ export interface GameStoreState {
 
   chooseCareerPath: (path: CareerPath) => void;
   changeLifestyle: (level: LifestyleLevel) => void;
+  approveStaffWorkProduct: (workProductId: string) => void;
+  rejectStaffWorkProduct: (workProductId: string) => void;
   listReportForSale: (
     reportId: string,
     price: number,
@@ -384,6 +393,7 @@ export interface GameStoreState {
   acceptRetainerContract: (contract: RetainerContract) => void;
   cancelRetainerContract: (contractId: string) => void;
   enrollInCourse: (courseId: string) => void;
+  setAgencyStrategicPosture: (posture: AgencyStrategicPosture) => void;
   upgradeAgencyOffice: (tier: OfficeTier) => void;
   hireAgencyEmployee: (role: AgencyEmployeeRole) => void;
   fireAgencyEmployee: (employeeId: string) => void;

@@ -66,6 +66,8 @@ import {
   assessClubAffordability,
   buildTransferAddOnObligations,
   getTransferContingentReserve,
+  recordRetainerDelivery,
+  recordConsultingReportDelivery,
 } from "@/engine/finance";
 import { creditForLoanRepayment } from "@/engine/finance/creditScore";
 import { sellEquipmentForCash as sellEquipmentForCashEngine } from "@/engine/finance/distress";
@@ -107,6 +109,9 @@ import {
   ensureScoutingCaseForReport,
   recordMarketplaceDelivery,
 } from "@/engine/reports/scoutingCases";
+import { getStaffWorkReviewPreview } from "@/engine/finance/staffWorkReview";
+import { setAgencyStrategicPosture as setAgencyStrategicPostureEngine } from "@/engine/finance/agency";
+import type { AgencyStrategicPosture } from "@/engine/finance/agencyCapacity";
 
 function completeFreeAgentSigning(
   state: GameState,
@@ -250,11 +255,182 @@ export function createFinanceActions(get: GetState, set: SetState) {
       }
     },
 
+    approveStaffWorkProduct: (workProductId: string) => {
+      const { gameState } = get();
+      if (!gameState?.finances) return;
+      const product = gameState.finances.staffWorkProducts.find(
+        (candidate) => candidate.id === workProductId,
+      );
+      if (!product || product.status !== "awaitingReview") return;
+      const alreadyReviewedThisWeek = gameState.finances.staffWorkProducts.some(
+        (candidate) =>
+          candidate.reviewerId === gameState.scout.id
+          && candidate.reviewedWeek === gameState.currentWeek
+          && candidate.reviewedSeason === gameState.currentSeason,
+      );
+      if (alreadyReviewedThisWeek) return;
+
+      const player = gameState.players[product.playerId];
+      const seasonLength = getSeasonLength(gameState.fixtures, gameState.currentSeason);
+      const reviewPreview = getStaffWorkReviewPreview(
+        gameState.finances,
+        product,
+        {
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+        },
+        seasonLength,
+      );
+      const reviewedProduct = {
+        ...product,
+        reviewerId: gameState.scout.id,
+        reviewedWeek: gameState.currentWeek,
+        reviewedSeason: gameState.currentSeason,
+        reviewPriority: reviewPreview.priority,
+        reviewDebtPenalty: reviewPreview.reviewDebtPenalty,
+        signedOffQualityScore: reviewPreview.signedOffQualityScore,
+        reviewPriorityReason: reviewPreview.priorityReason,
+        reviewDeadlineWeek: reviewPreview.deadline?.week,
+        reviewDeadlineSeason: reviewPreview.deadline?.season,
+      };
+      let finances = gameState.finances;
+      let delivered = false;
+      if (product.clientClubId && player) {
+        const beforeRetainer = finances.retainerContracts
+          .filter((contract) => contract.clubId === product.clientClubId)
+          .reduce((sum, contract) => sum + contract.reportsDeliveredThisMonth, 0);
+        const beforeConsulting = finances.consultingContracts
+          .filter((contract) => contract.clubId === product.clientClubId)
+          .reduce((sum, contract) => sum + (contract.deliveredReportIds ?? []).length, 0);
+        finances = recordRetainerDelivery(
+          finances,
+          product.clientClubId,
+          {
+            id: reviewedProduct.id,
+            qualityScore: reviewPreview.signedOffQualityScore,
+          },
+          player,
+        );
+        finances = recordConsultingReportDelivery(
+          finances,
+          product.clientClubId,
+          {
+            id: reviewedProduct.id,
+            qualityScore: reviewPreview.signedOffQualityScore,
+          },
+          player,
+        );
+        const afterRetainer = finances.retainerContracts
+          .filter((contract) => contract.clubId === product.clientClubId)
+          .reduce((sum, contract) => sum + contract.reportsDeliveredThisMonth, 0);
+        const afterConsulting = finances.consultingContracts
+          .filter((contract) => contract.clubId === product.clientClubId)
+          .reduce((sum, contract) => sum + (contract.deliveredReportIds ?? []).length, 0);
+        delivered = afterRetainer > beforeRetainer || afterConsulting > beforeConsulting;
+      }
+      finances = {
+        ...finances,
+        staffWorkProducts: finances.staffWorkProducts.map((candidate) =>
+          candidate.id === workProductId
+            ? {
+                ...reviewedProduct,
+                status: delivered ? "delivered" as const : "approved" as const,
+              }
+            : candidate,
+        ),
+      };
+      const signOffSummary = reviewPreview.reviewDebtPenalty > 0
+        ? `${reviewPreview.signedOffQualityScore}/100 after ${reviewPreview.reviewDebtPenalty} review-debt points`
+        : `${reviewPreview.signedOffQualityScore}/100 with no review debt`;
+      set({
+        gameState: {
+          ...gameState,
+          finances,
+          scout: {
+            ...gameState.scout,
+            fatigue: Math.min(100, gameState.scout.fatigue + 2),
+          },
+          watchlist: gameState.watchlist.includes(product.playerId)
+            ? gameState.watchlist
+            : [...gameState.watchlist, product.playerId],
+          inbox: [...gameState.inbox, {
+            id: `staff-review-approved:${workProductId}`,
+            week: gameState.currentWeek,
+            season: gameState.currentSeason,
+            type: "feedback",
+            title: delivered ? "Staff work delivered" : "Staff lead approved",
+            body: delivered
+              ? `${product.employeeName}'s work passed ${reviewPreview.priorityLabel.toLowerCase()} sign-off at ${signOffSummary} and now counts toward the linked client commitment. It remains separate from your personal report history.`
+              : `${product.employeeName}'s lead passed sign-off at ${signOffSummary} and has been added to your watchlist. You still need first-hand evidence before authoring a report.`,
+            read: false,
+            actionRequired: false,
+            relatedId: product.playerId,
+            relatedEntityType: "player",
+          }],
+        },
+      });
+    },
+
+    rejectStaffWorkProduct: (workProductId: string) => {
+      const { gameState } = get();
+      if (!gameState?.finances) return;
+      const product = gameState.finances.staffWorkProducts.find(
+        (candidate) => candidate.id === workProductId,
+      );
+      if (!product || product.status !== "awaitingReview") return;
+      const alreadyReviewedThisWeek = gameState.finances.staffWorkProducts.some(
+        (candidate) =>
+          candidate.reviewerId === gameState.scout.id
+          && candidate.reviewedWeek === gameState.currentWeek
+          && candidate.reviewedSeason === gameState.currentSeason,
+      );
+      if (alreadyReviewedThisWeek) return;
+      const seasonLength = getSeasonLength(gameState.fixtures, gameState.currentSeason);
+      const reviewPreview = getStaffWorkReviewPreview(
+        gameState.finances,
+        product,
+        {
+          week: gameState.currentWeek,
+          season: gameState.currentSeason,
+        },
+        seasonLength,
+      );
+      set({
+        gameState: {
+          ...gameState,
+          finances: {
+            ...gameState.finances,
+            staffWorkProducts: gameState.finances.staffWorkProducts.map((candidate) =>
+              candidate.id === workProductId
+                ? {
+                    ...candidate,
+                    status: "rejected" as const,
+                    reviewerId: gameState.scout.id,
+                    reviewedWeek: gameState.currentWeek,
+                    reviewedSeason: gameState.currentSeason,
+                    reviewPriority: reviewPreview.priority,
+                    reviewDebtPenalty: reviewPreview.reviewDebtPenalty,
+                    signedOffQualityScore: reviewPreview.signedOffQualityScore,
+                    reviewPriorityReason: reviewPreview.priorityReason,
+                    reviewDeadlineWeek: reviewPreview.deadline?.week,
+                    reviewDeadlineSeason: reviewPreview.deadline?.season,
+                  }
+                : candidate,
+            ),
+          },
+          scout: {
+            ...gameState.scout,
+            fatigue: Math.min(100, gameState.scout.fatigue + 1),
+          },
+        },
+      });
+    },
+
     listReportForSale: (reportId: string, price: number, isExclusive: boolean, targetClubId?: string) => {
       const { gameState } = get();
       if (!gameState || !gameState.finances) return;
       const report = gameState.reports[reportId];
-      if (!report) return;
+      if (!report || report.scoutId !== gameState.scout.id) return;
       const linked = ensureScoutingCaseForReport(gameState.scoutingCases ?? {}, report);
       const existingListingIds = new Set(
         gameState.finances.reportListings.map((listing) => listing.id),
@@ -569,6 +745,20 @@ export function createFinanceActions(get: GetState, set: SetState) {
           },
         });
       }
+    },
+
+    setAgencyStrategicPosture: (posture: AgencyStrategicPosture) => {
+      const { gameState } = get();
+      if (!gameState?.finances) return;
+      const updated = setAgencyStrategicPostureEngine(
+        gameState.finances,
+        gameState.scout,
+        posture,
+        gameState.currentWeek,
+        gameState.currentSeason,
+      );
+      if (!updated || updated === gameState.finances) return;
+      set({ gameState: { ...gameState, finances: updated } });
     },
 
     upgradeAgencyOffice: (tier: OfficeTier) => {

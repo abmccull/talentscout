@@ -30,7 +30,7 @@ function finances(): Pick<FinancialRecord, "office" | "satelliteOffices" | "equi
 }
 
 describe("agency modifier ledger", () => {
-  it("unifies infrastructure, office, satellite, and equipment sources", () => {
+  it("unifies infrastructure, office, satellite, equipment, and career tools", () => {
     const infrastructure = {
       ...createDefaultInfrastructure(),
       dataSubscription: "premium" as const,
@@ -40,6 +40,7 @@ describe("agency modifier ledger", () => {
     const ledger = buildAgencyModifierLedger({
       scoutingInfrastructure: infrastructure,
       finances: finances(),
+      unlockedTools: ["dataSubscription", "scoutingApp", "youthDatabase", "performanceTracker"],
     });
 
     expect(ledger.find((entry) => entry.id === "infrastructure-data")).toMatchObject({
@@ -47,9 +48,17 @@ describe("agency modifier ledger", () => {
       currentValue: "+12%",
     });
     expect(ledger.find((entry) => entry.id === "agency-office")?.formula)
-      .toMatch(/employee quality score/i);
+      .toMatch(/reviewable leads/i);
     expect(ledger.find((entry) => entry.id === "satellite-office-sat-spain"))
       .toMatchObject({ status: "active" });
+    expect(ledger.find((entry) => entry.id === "career-tool-dataSubscription-accuracyBonus"))
+      .toMatchObject({ status: "active", currentValue: "+10%" });
+    expect(ledger.find((entry) => entry.id === "career-tool-scoutingApp-workflowFatigueReduction"))
+      .toMatchObject({ status: "conditional", currentValue: "-1 fatigue" });
+    expect(ledger.find((entry) => entry.id === "career-tool-youthDatabase-youthDiscoveryBonus"))
+      .toMatchObject({ currentValue: "+1 candidate per eligible search" });
+    expect(ledger.find((entry) => entry.id === "career-tool-performanceTracker-trendHistoryDepth"))
+      .toMatchObject({ currentValue: "4 seasons visible" });
     expect(ledger.every((entry) =>
       entry.source.length > 0
       && entry.formula.length > 0

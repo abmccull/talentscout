@@ -1216,7 +1216,7 @@ export function YouthScoutingScreen() {
                 {IS_YOUTH_EARLY_ACCESS ? "Prospects" : "Youth Scouting"}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-300">
-                Your working pipeline of leads, repeat observations, placement decisions, and outcomes. Ratings show your evidence—not hidden truth.
+                Your working pipeline of leads, repeat observations, placement decisions, and outcomes. Ratings reflect what your evidence can support today, not certainty about a player&apos;s future.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 text-xs">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-zinc-300">

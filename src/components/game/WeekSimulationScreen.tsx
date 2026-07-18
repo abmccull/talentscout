@@ -521,7 +521,7 @@ function DayCard({
                       </p>
                       {dayResult.interaction.resolutionMode === "delegated" && (
                         <p className="mt-1 text-xs font-medium text-amber-200">
-                          Delegated by standing order: {delegatedPolicy?.label ?? "Desk policy"}
+                          Delegated by standing order: {delegatedPolicy?.label ?? "Desk instructions"}
                         </p>
                       )}
                       {selectedInteraction?.description && (
@@ -629,7 +629,7 @@ function DayCard({
                         ))}
                       </div>
                       <p className="text-xs text-amber-200" role="status">
-                        Choose an approach to continue. Skip to Results applies your persisted delegation policy and records the opportunity cost.
+                        Choose an approach to continue. Skip to Results follows your standing instructions and locks in the tradeoff.
                       </p>
                     </div>
                   )}
@@ -708,7 +708,7 @@ function DayCard({
 
                 {!hasRecordedOutcome && (
                   <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-300">
-                    No immediate change was recorded. The protected time still preserves your capacity for later commitments.
+                    Nothing shifted immediately. That protected time still keeps you fresh for later commitments.
                   </p>
                 )}
 

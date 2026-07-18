@@ -378,26 +378,46 @@ function isEventChain(source: LegacyStoryCandidateInput["source"]): source is Ev
   return "templateKey" in source;
 }
 
+const CALLBACK_EVENT_DOMAINS = new Set(["career", "prospect", "club", "rival"]);
+
+function callbackEventIdentity(eventId: string): {
+  domain: string;
+  fingerprint: string;
+} | undefined {
+  const [prefix, domain] = eventId.split(":", 3);
+  if (prefix !== "callback" || !domain || !CALLBACK_EVENT_DOMAINS.has(domain)) {
+    return undefined;
+  }
+  return { domain, fingerprint: eventId };
+}
+
 /** Adapter for existing standalone, chain, storyline and special content. */
 export function adaptLegacyStoryCandidate(input: LegacyStoryCandidateInput): StoryCandidateV2 {
   const source = input.source;
   if (isNarrativeEvent(source)) {
-    const inferredKind: StoryCandidateKind = input.kind
-      ?? (source.specialEventId ? "special" : source.chainId ? "chain" : source.storylineId ? "storyline" : "standalone");
-    const templateId = input.templateId ?? source.specialEventId
-      ?? source.chainId
-      ?? source.storylineId
-      ?? source.type;
+    const callback = callbackEventIdentity(source.id);
+    const inferredKind: StoryCandidateKind = callback
+      ? "callback"
+      : input.kind
+        ?? (source.specialEventId ? "special" : source.chainId ? "chain" : source.storylineId ? "storyline" : "standalone");
+    const templateId = callback
+      ? `callback:${callback.domain}`
+      : input.templateId ?? source.specialEventId
+        ?? source.chainId
+        ?? source.storylineId
+        ?? source.type;
     return {
       id: source.id,
       templateId,
       kind: inferredKind,
-      category: input.category ?? source.type,
-      semanticSignature: input.semanticSignature ?? `${inferredKind}:${source.type}`,
+      category: callback ? `callback:${callback.domain}` : input.category ?? source.type,
+      semanticSignature: callback
+        ? `callback:${callback.domain}`
+        : input.semanticSignature ?? `${inferredKind}:${source.type}`,
       baseWeight: input.baseWeight ?? 1,
       cast: [...(input.cast ?? [])],
       topics: [...(input.topics ?? source.relatedIds.map((id) => ({ kind: "entity", id })))],
-      callbackFingerprint: input.callbackFingerprint,
+      callbackFingerprint: callback?.fingerprint ?? input.callbackFingerprint,
       continuation: input.continuation,
       requiresChoice: (source.choices?.length ?? 0) > 0,
     };

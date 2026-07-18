@@ -22,15 +22,15 @@ export const gettingStartedArticles: WikiArticle[] = [
     category: "getting-started",
     order: 0,
     summary:
-      "Week-by-week flow: schedule activities, attend matches, observe players, write reports, and progress your career.",
+      "Week-by-week rhythm: plan your calendar, observe players, file reports, and build your name.",
     searchText:
-      "TalentScout runs on a week-by-week calendar. Plan scarce time, gather uncertain evidence in different contexts, form a judgment, and file a distinct scouting case. Deliver the recommendation, then live with club decisions and long-term player outcomes. Revisions require new evidence and do not manufacture report volume.",
+      "TalentScout runs on a week-by-week calendar. Plan scarce time, gather evidence in different contexts, form a judgment, and file a distinct scouting case. Deliver the recommendation, then live with club decisions and long-term player outcomes. Revisions require new evidence and do not inflate your body of work.",
     content: (
       <SectionBlock>
         <Para>
           TalentScout runs on a week-by-week calendar. Each week you plan your
-          schedule, advance time, and watch the results unfold. The core loop
-          is:
+          schedule, advance time, and watch the results unfold. The weekly
+          rhythm is:
         </Para>
         <NumberedList
           items={[
@@ -125,9 +125,9 @@ export const gettingStartedArticles: WikiArticle[] = [
     category: "getting-started",
     order: 2,
     summary:
-      "Career currency (0-100) that rises with accurate reports and determines your tier, offers, and trust.",
+      "Career trust that rises with strong calls and shapes your tier, offers, and credibility.",
     searchText:
-      "Reputation (0-100) is your career currency. It rises when you submit accurate, high-quality reports and falls when reports are inaccurate or your conviction levels are repeatedly wrong. Your reputation determines: Which career tier you qualify for. The quality of job offers you receive. How seriously clubs take your conviction levels. Whether contacted agents and scouts trust you.",
+      "Reputation is your career currency. It rises when you submit accurate, high-quality reports and falls when your calls miss too often. Your reputation determines which career tier you qualify for, the quality of job offers you receive, how seriously clubs take your conviction, and whether agents and scouts trust you.",
     content: (
       <SectionBlock>
         <Para>

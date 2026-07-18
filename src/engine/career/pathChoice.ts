@@ -18,6 +18,16 @@ import {
   transitionToIndependentCareer,
 } from "./transitions";
 import { hasRequiredCoursesForTier } from "./courses";
+import {
+  deriveCareerOperatingModel,
+  deriveCareerRoleProfile,
+  getMinimumClubTrustForRole,
+  type CareerRoleProfile,
+} from "./roleProfile";
+import {
+  deriveAgencyStrategicHealth,
+  type AgencyStrategicHealth,
+} from "../finance/agency";
 
 // ---------------------------------------------------------------------------
 // Independent tier requirements
@@ -125,7 +135,9 @@ export type CareerTierAdvancementBlocker =
   | "balance"
   | "reports"
   | "retainers"
-  | "employees";
+  | "employees"
+  | "rolePressure"
+  | "agencyHealth";
 
 export interface CareerTierAdvancementDecision {
   source: CareerTierAdvancementSource;
@@ -133,6 +145,12 @@ export interface CareerTierAdvancementDecision {
   targetTier?: CareerTier;
   eligible: boolean;
   blockers: CareerTierAdvancementBlocker[];
+  currentRole: CareerRoleProfile;
+  targetRole?: CareerRoleProfile;
+  agencyHealth?: Pick<
+    AgencyStrategicHealth,
+    "score" | "status" | "seniorAgencyReady" | "promotionBlockers"
+  >;
 }
 
 export interface CareerTierAdvancementResult {
@@ -166,6 +184,7 @@ export function attemptCareerTierAdvancement(
   source: CareerTierAdvancementSource,
 ): CareerTierAdvancementResult {
   const currentTier = getAdvancementCurrentTier(scout, finances, source);
+  const currentRole = deriveCareerRoleProfile({ scout, finances, tier: currentTier });
   if (currentTier >= 5) {
     return {
       scout,
@@ -175,12 +194,25 @@ export function attemptCareerTierAdvancement(
         currentTier,
         eligible: false,
         blockers: ["maxTier"],
+        currentRole,
       },
     };
   }
 
   const targetTier = (currentTier + 1) as CareerTier;
   const blockers: CareerTierAdvancementBlocker[] = [];
+  const targetOperatingModel = source === "performanceReview"
+    ? "club"
+    : targetTier >= 3
+      ? "agency"
+      : "independent";
+  const targetRole = deriveCareerRoleProfile({
+    scout,
+    finances,
+    tier: targetTier,
+    operatingModel: targetOperatingModel,
+  });
+  let agencyHealth: CareerTierAdvancementDecision["agencyHealth"];
 
   if (!hasRequiredCoursesForTier(
     finances?.completedCourses ?? [],
@@ -192,6 +224,12 @@ export function attemptCareerTierAdvancement(
   if (source === "performanceReview") {
     if (scout.careerPath !== "club") blockers.push("careerPath");
     if (!scout.currentClubId) blockers.push("activeEmployer");
+    if (
+      scout.employmentContract?.status === "active"
+      && scout.clubTrust < getMinimumClubTrustForRole(targetTier)
+    ) {
+      blockers.push("rolePressure");
+    }
   } else {
     if (scout.careerPath !== "independent") blockers.push("careerPath");
     if (!finances) {
@@ -219,6 +257,19 @@ export function attemptCareerTierAdvancement(
       ) {
         blockers.push("employees");
       }
+      if (
+        targetTier >= 4
+        && deriveCareerOperatingModel(scout, finances) === "agency"
+      ) {
+        const health = deriveAgencyStrategicHealth(finances, scout);
+        agencyHealth = {
+          score: health.score,
+          status: health.status,
+          seniorAgencyReady: health.seniorAgencyReady,
+          promotionBlockers: health.promotionBlockers,
+        };
+        if (!health.seniorAgencyReady) blockers.push("agencyHealth");
+      }
     }
   }
 
@@ -228,6 +279,9 @@ export function attemptCareerTierAdvancement(
     targetTier,
     eligible: blockers.length === 0,
     blockers,
+    currentRole,
+    targetRole,
+    agencyHealth,
   };
   if (!decision.eligible) return { scout, finances, decision };
 

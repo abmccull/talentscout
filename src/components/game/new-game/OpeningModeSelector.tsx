@@ -16,22 +16,22 @@ const OPENING_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "dynamic",
-    title: "Dynamic prologue",
-    description: "Follow a new lead built from this career's world seed.",
-    detail: "Different venue, source, pressure, evidence, and deadline each career.",
+    title: "Follow a fresh lead",
+    description: "Start with a new assignment created for this career.",
+    detail: "The contact, venue, pressure, evidence, and deadline change every career.",
     recommended: true,
   },
   {
     value: "desk",
-    title: "Start at the Desk",
-    description: "Skip the opening case and take control of your first week.",
-    detail: "Best when you already know the planner, reports, and prospect workflow.",
+    title: "Plan the week yourself",
+    description: "Start at the Desk and choose your own first assignment.",
+    detail: "Best when you already know the Planner, reports, and prospect workflow.",
   },
   {
     value: "tutorial",
-    title: "Replay tutorial",
-    description: "Return to the authored school-match discovery case.",
-    detail: "Revisit the guided evidence, judgment, and recommendation loop.",
+    title: "Replay guided assignment",
+    description: "Return to the school-match introduction.",
+    detail: "Work through observation, judgment, reporting, and follow-up with guidance.",
   },
 ] as const;
 

@@ -52,6 +52,7 @@ export function InfrastructureTab() {
   const modifierLedger = buildAgencyModifierLedger({
     scoutingInfrastructure: infrastructure,
     finances,
+    unlockedTools: gameState.unlockedTools,
   });
 
   return (
@@ -60,19 +61,19 @@ export function InfrastructureTab() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card>
           <CardContent className="pt-4">
-            <p className="text-xs text-zinc-500 mb-1">Weekly Infrastructure Cost</p>
+            <p className="mb-1 text-xs text-zinc-400">Weekly Infrastructure Cost</p>
             <p className="text-lg font-bold text-red-400">{formatCurrency(infraEffects.weeklyCost)}/wk</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <p className="text-xs text-zinc-500 mb-1">Report Quality Bonus</p>
+            <p className="mb-1 text-xs text-zinc-400">Report Quality Bonus</p>
             <p className="text-lg font-bold text-emerald-400">+{(infraEffects.reportQualityBonus * 100).toFixed(0)}%</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <p className="text-xs text-zinc-500 mb-1">Travel Fatigue Reduction</p>
+            <p className="mb-1 text-xs text-zinc-400">Travel Fatigue Reduction</p>
             <p className="text-lg font-bold text-sky-400">{infraEffects.travelFatigueMultiplier < 1 ? `-${((1 - infraEffects.travelFatigueMultiplier) * 100).toFixed(0)}%` : "None"}</p>
           </CardContent>
         </Card>
@@ -106,7 +107,7 @@ export function InfrastructureTab() {
                     </Badge>
                   </div>
                   <p className="mt-2 text-sm font-semibold text-emerald-300">{entry.currentValue}</p>
-                  <p className="mt-1 text-[11px] leading-4 text-zinc-400">Formula: {entry.formula}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-zinc-400">How it applies: {entry.formula}</p>
                   <p className="mt-2 text-[10px] leading-4 text-zinc-500">
                     Affects: {entry.affectedActions.join(" • ")}
                   </p>

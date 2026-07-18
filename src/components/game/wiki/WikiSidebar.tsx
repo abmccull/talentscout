@@ -66,10 +66,10 @@ export function WikiSidebar({
           <input
             ref={inputRef}
             type="search"
-            placeholder="Search Youth Scout guide..."
+            placeholder="Search handbook..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            aria-label="Search Scout wiki"
+            aria-label="Search handbook"
             className="min-h-11 w-full rounded-lg border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-11 text-sm text-zinc-200 placeholder-zinc-600 outline-none transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/30"
           />
           {searchQuery && (
@@ -84,7 +84,7 @@ export function WikiSidebar({
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-2" aria-label="Scout wiki categories">
+      <nav className="flex-1 overflow-y-auto py-2" aria-label="Handbook chapters">
         {categories.map((cat) => {
           const articles = articlesByCategory.get(cat.slug) ?? [];
           const isExpanded = expandedCategories.has(cat.slug);

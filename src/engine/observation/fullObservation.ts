@@ -22,6 +22,7 @@ import {
   applyAtmosphereToObservationSituation,
   createObservationSituation,
 } from "@/engine/observation/situations";
+import { buildContextualScoutingQuestions } from "@/engine/observation/questions";
 
 // =============================================================================
 // SEGMENT CLASSIFICATION
@@ -464,17 +465,23 @@ export function populateFullObservationPhases(
     session.venueAtmosphere ?? createVenueAtmosphere(venueType, rng);
 
   const totalPhases = session.phases.length;
+  const contextualPlayers = session.players.map((player) => ({
+    ...player,
+    naturalRole: player.naturalRole ?? playerProfiles?.[player.playerId]?.naturalRole,
+  }));
 
   const populatedPhases: SessionPhase[] = session.phases.map((phase) => {
     // 1. Generate player moments for this phase.
     const moments = generateMoments(
       rng,
-      session.players,
+      contextualPlayers,
       venueType,
       phase.index,
       totalPhases,
       atmosphere,
       playerProfiles,
+      session.situation,
+      session.opponentContext,
     );
 
     // 2. Generate a narrative description for this phase.
@@ -496,22 +503,35 @@ export function populateFullObservationPhases(
     return applyAtmosphereEvent(phaseWithMoments, rng, atmosphere, totalPhases);
   });
 
+  const situation = applyAtmosphereToObservationSituation(
+    session.situation ?? createObservationSituation({
+      activityType: session.activityType,
+      seed: session.id,
+      venueType,
+      countryId: session.countryId,
+      culturalInsights: session.culturalInsights,
+      travelPosture: session.travelPosture,
+    }),
+    atmosphere,
+    populatedPhases.flatMap((phase) => phase.atmosphereEvent ? [phase.atmosphereEvent] : []),
+    session.culturalInsights,
+  );
+  const targetPlayer = contextualPlayers[0];
+
   return {
     ...session,
     phases: populatedPhases,
+    players: contextualPlayers,
     venueAtmosphere: atmosphere,
-    situation: applyAtmosphereToObservationSituation(
-      session.situation ?? createObservationSituation({
-        activityType: session.activityType,
-        seed: session.id,
-        venueType,
-        countryId: session.countryId,
-        culturalInsights: session.culturalInsights,
-        travelPosture: session.travelPosture,
-      }),
-      atmosphere,
-      populatedPhases.flatMap((phase) => phase.atmosphereEvent ? [phase.atmosphereEvent] : []),
-      session.culturalInsights,
-    ),
+    situation,
+    questionOptions: targetPlayer
+      ? buildContextualScoutingQuestions({
+          player: targetPlayer,
+          activityType: session.activityType,
+          situation,
+          opponent: session.opponentContext,
+          observer: session.observerContext,
+        })
+      : session.questionOptions,
   };
 }

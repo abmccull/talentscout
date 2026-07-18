@@ -2,7 +2,7 @@
  * Gut Feeling mechanic — narrative flash moments during youth scouting.
  *
  * When observing unsigned youth, scouts occasionally get an instinctive
- * "flash" — a gut feeling about a player's hidden potential. These are
+ * "flash" — a gut feeling about a player's visible upside signals. These are
  * not data-driven assessments but narrative moments that make youth
  * scouting feel magical and rewarding.
  *
@@ -17,12 +17,6 @@ import type {
   ObservationContext,
   WonderkidTier,
   AttributeDomain,
-} from "@/engine/core/types";
-import {
-  TECHNICAL_ATTRIBUTES,
-  PHYSICAL_ATTRIBUTES,
-  MENTAL_ATTRIBUTES,
-  TACTICAL_ATTRIBUTES,
 } from "@/engine/core/types";
 
 // =============================================================================
@@ -156,44 +150,29 @@ export const GUT_FEELING_TEMPLATES: Record<
 // =============================================================================
 
 /**
- * Inspect a youth player's true attributes and return the domain with the
- * highest simple average. The "hidden" domain is never returned.
- *
- * Domain groupings (attribute key lists):
- *  - technical: firstTouch, passing, dribbling, crossing, shooting, heading
- *  - physical:  pace, strength, stamina, agility
- *  - mental:    composure, positioning, workRate, decisionMaking, leadership
- *  - tactical:  offTheBall, pressing, defensiveAwareness
+ * Infer an attention domain from the player's visible position and stable id.
+ * Hidden player attributes are deliberately not consulted.
  */
 export function getPlayerPrimaryDomain(youth: UnsignedYouth): AttributeDomain {
-  const attrs = youth.player.attributes;
-
-  const technicalAvg =
-    TECHNICAL_ATTRIBUTES.reduce((sum, key) => sum + (attrs[key] ?? 0), 0) /
-    TECHNICAL_ATTRIBUTES.length;
-
-  const physicalAvg =
-    PHYSICAL_ATTRIBUTES.reduce((sum, key) => sum + (attrs[key] ?? 0), 0) /
-    PHYSICAL_ATTRIBUTES.length;
-
-  const mentalAvg =
-    MENTAL_ATTRIBUTES.reduce((sum, key) => sum + (attrs[key] ?? 0), 0) /
-    MENTAL_ATTRIBUTES.length;
-
-  const tacticalAvg =
-    TACTICAL_ATTRIBUTES.reduce((sum, key) => sum + (attrs[key] ?? 0), 0) /
-    TACTICAL_ATTRIBUTES.length;
-
-  const scores: [AttributeDomain, number][] = [
-    ["technical", technicalAvg],
-    ["physical", physicalAvg],
-    ["mental", mentalAvg],
-    ["tactical", tacticalAvg],
-  ];
-
-  // Sort descending; pick the domain with the highest average
-  scores.sort((a, b) => b[1] - a[1]);
-  return scores[0][0];
+  const position = youth.player.position;
+  const roleDomains: Partial<Record<typeof position, AttributeDomain[]>> = {
+    GK: ["mental", "tactical"],
+    CB: ["tactical", "physical"],
+    LB: ["physical", "tactical"],
+    RB: ["physical", "tactical"],
+    CDM: ["tactical", "mental"],
+    CM: ["tactical", "technical"],
+    CAM: ["technical", "tactical"],
+    LW: ["technical", "physical"],
+    RW: ["technical", "physical"],
+    ST: ["technical", "mental"],
+  };
+  const candidates = roleDomains[position] ?? ["technical", "tactical"];
+  const idHash = [...youth.player.id].reduce(
+    (total, character) => total + character.charCodeAt(0),
+    0,
+  );
+  return candidates[idHash % candidates.length];
 }
 
 // =============================================================================
@@ -205,7 +184,7 @@ export interface GutFeelingPerkModifiers {
   gutFeelingMultiplier?: number;
   /** Exclusive age ceiling for the gut-feeling multiplier. */
   gutFeelingMaxAge?: number;
-  /** Appends a PA estimate to the formatted narrative. */
+  /** Appends a broad, evidence-bounded projection signal to the narrative. */
   paEstimate?: boolean;
 }
 
@@ -281,29 +260,20 @@ export function rollGutFeeling(
     (scout.attributes.intuition + youthSpecLevel) / 40,
   );
 
-  // --- Pick a deliberately fallible narrative tier ---
+  // --- Pick a deliberately fallible upside signal from visible market context ---
   const tierOrder: WonderkidTier[] = [
     "journeyman",
     "qualityPro",
     "worldClass",
     "generational",
   ];
-  const actualTierIndex = tierOrder.indexOf(youth.player.wonderkidTier);
-  let perceivedTierIndex = actualTierIndex;
-  const correctTierChance = 0.3 + reliability * 0.7;
-  if (!rng.chance(correctTierChance)) {
-    const firstDirection = rng.chance(0.5) ? -1 : 1;
-    perceivedTierIndex = Math.max(
-      0,
-      Math.min(tierOrder.length - 1, actualTierIndex + firstDirection),
-    );
-    if (perceivedTierIndex === actualTierIndex) {
-      perceivedTierIndex = Math.max(
-        0,
-        Math.min(tierOrder.length - 1, actualTierIndex - firstDirection),
-      );
-    }
-  }
+  const visibleSignal = youth.buzzLevel * 0.6 + youth.visibility * 0.4;
+  const uncertainty = (1 - reliability) * 34;
+  const noisySignal = Math.max(
+    0,
+    Math.min(100, visibleSignal + rng.nextFloat(-uncertainty, uncertainty)),
+  );
+  const perceivedTierIndex = noisySignal >= 78 ? 3 : noisySignal >= 58 ? 2 : noisySignal >= 34 ? 1 : 0;
   const perceivedTier = tierOrder[perceivedTierIndex];
   const templates = GUT_FEELING_TEMPLATES[perceivedTier][triggerDomain];
   const instinctCaveat = reliability >= 0.65
@@ -328,37 +298,42 @@ export function rollGutFeeling(
 }
 
 // =============================================================================
-// FORMAT: GUT FEELING WITH OPTIONAL PA ESTIMATE
+// FORMAT: GUT FEELING WITH OPTIONAL PROJECTION SIGNAL
 // =============================================================================
 
 /**
- * Return the gut feeling narrative, optionally appended with a rough PA
- * estimate when the scout holds the `paEstimate` perk.
+ * Return the gut feeling narrative, optionally appended with a rough projection
+ * signal when the scout holds the `paEstimate` perk.
  *
- * The estimate is expressed as a broad, fallible star range. The hidden
- * 1–200 PA value is never printed to the player.
+ * The signal is expressed as a broad, fallible star range derived from the
+ * perceived tier and never reads the hidden potential value.
  */
 export function formatGutFeelingWithPA(
   gutFeeling: GutFeeling,
-  youth: UnsignedYouth,
+  _youth: UnsignedYouth,
   perkModifiers?: GutFeelingPerkModifiers,
-  /** Fractional equipment bonus to PA estimate accuracy (e.g. 0.10 = +10%). */
+  /** Fractional equipment bonus to projection-signal stability (e.g. 0.10 = +10%). */
   accuracyBonus?: number,
 ): string {
   if (perkModifiers?.paEstimate !== true) {
     return gutFeeling.narrative;
   }
 
-  const trueStars = youth.player.potentialAbility / 40;
   const hash = [...gutFeeling.id].reduce(
     (total, character) => total + character.charCodeAt(0),
     0,
   );
-  const drift = gutFeeling.reliability >= 0.75 ? 0 : ((hash % 3) - 1) * 0.5;
-  const center = Math.max(0.5, Math.min(5, trueStars + drift));
+  const tierCenter: Record<WonderkidTier, number> = {
+    journeyman: 1.75,
+    qualityPro: 2.75,
+    worldClass: 3.75,
+    generational: 4.5,
+  };
+  const drift = ((hash % 5) - 2) * (1 - gutFeeling.reliability) * 0.25;
+  const center = Math.max(0.5, Math.min(5, tierCenter[gutFeeling.perceivedTier ?? "qualityPro"] + drift));
   const uncertainty = Math.max(
-    0.75,
-    1.5 - gutFeeling.reliability * 0.75 - Math.min(0.5, (accuracyBonus ?? 0) * 2),
+    1,
+    1.75 - gutFeeling.reliability * 0.6 - Math.min(0.25, (accuracyBonus ?? 0)),
   );
   const low = Math.max(0.5, Math.floor((center - uncertainty) * 2) / 2);
   const high = Math.min(5, Math.ceil((center + uncertainty) * 2) / 2);

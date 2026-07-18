@@ -528,6 +528,11 @@ function calculateClubFitScore(
 }
 
 function convictionImpliedConfidence(report: ScoutReport): number {
+  const evidenceConfidence = report.evidenceAssessment?.confidence;
+  if (evidenceConfidence === "robust") return 85;
+  if (evidenceConfidence === "supported") return 70;
+  if (evidenceConfidence === "working") return 50;
+  if (evidenceConfidence === "tentative") return 30;
   const potentialConfidence = report.categoryVerdicts?.potential?.confidence;
   if (potentialConfidence === "high") return 90;
   if (potentialConfidence === "medium") return 65;
@@ -555,8 +560,13 @@ function assessConviction(
 }
 
 function assessInjuryRisk(report: ScoutReport, weeksMissed: number): AcademyRiskAssessment {
+  const structuredAvailabilityRisk = report.riskAssessments?.find(
+    (assessment) => assessment.id === "injuryAvailability",
+  );
   const text = [...(report.riskFactors ?? []), ...report.weaknesses].join(" ").toLowerCase();
-  const flagged = /injur|fitness|availability|durability|physical fragility/.test(text);
+  const flagged = structuredAvailabilityRisk
+    ? structuredAvailabilityRisk.status === "observed" || structuredAvailabilityRisk.status === "untested"
+    : /injur|fitness|availability|durability|physical fragility/.test(text);
   const realized = weeksMissed >= 6;
   if (flagged && realized) return "correctlyFlagged";
   if (!flagged && realized) return "missed";

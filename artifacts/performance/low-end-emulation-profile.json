@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-16T19:41:56.523Z",
+  "generatedAt": "2026-07-18T05:55:04.934Z",
   "evidenceClass": "chromium-emulation-not-physical-low-end-hardware",
   "emulation": {
     "cpuSlowdown": 4,
@@ -30,98 +30,98 @@
     "domNodes": 18000
   },
   "measured": {
-    "coldLoadMs": 6216.04,
+    "coldLoadMs": 5977.12,
     "navigationDurationsMs": [
-      720.8,
-      655.6,
-      624.9,
-      495.9,
-      290.1
+      554.3,
+      450,
+      405,
+      369,
+      151.3
     ],
-    "navigationP95Ms": 720.8,
-    "oneWeekAdvanceMs": 3410.3,
+    "navigationP95Ms": 554.3,
+    "oneWeekAdvanceMs": 2362.6,
     "weeklyWorker": {
-      "computeMs": 729.1999999880791,
-      "changedFieldCount": 34,
-      "changedEntryCount": 2434,
-      "totalFieldCount": 97,
-      "responseBytes": 2221268,
+      "computeMs": 665.6000000089407,
+      "changedFieldCount": 35,
+      "changedEntryCount": 3934,
+      "totalFieldCount": 100,
+      "responseBytes": 4104759,
       "phaseTimings": [
         {
           "phase": "activity-resolution",
-          "elapsedMs": 138.80000001192093
+          "elapsedMs": 59.70000000298023
         },
         {
           "phase": "world-systems",
-          "elapsedMs": 45.900000005960464
+          "elapsedMs": 37.5
         },
         {
           "phase": "core-world-tick",
-          "elapsedMs": 296
+          "elapsedMs": 420.79999999701977
         },
         {
           "phase": "post-tick-accountability",
-          "elapsedMs": 2.7999999821186066
+          "elapsedMs": 4.200000002980232
         },
         {
           "phase": "season-rollover",
-          "elapsedMs": 229.5
+          "elapsedMs": 134.29999999701977
         },
         {
           "phase": "finalize",
-          "elapsedMs": 0.20000001788139343
+          "elapsedMs": 0.10000000894069672
         }
       ],
       "payloadHotspots": [
         {
           "field": "players",
           "strategy": "record-delta",
-          "bytes": 939337
+          "bytes": 1701562
         },
         {
           "field": "fixtures",
           "strategy": "record-delta",
-          "bytes": 559541
+          "bytes": 1016657
         },
         {
           "field": "matchRatings",
           "strategy": "replace",
-          "bytes": 518013
+          "bytes": 953008
         },
         {
           "field": "disciplinaryRecords",
           "strategy": "replace",
-          "bytes": 118205
+          "bytes": 218817
         },
         {
           "field": "unsignedYouth",
           "strategy": "record-delta",
-          "bytes": 28416
+          "bytes": 123711
+        },
+        {
+          "field": "consequenceState",
+          "strategy": "replace",
+          "bytes": 27461
         },
         {
           "field": "inbox",
           "strategy": "array-delta",
-          "bytes": 16264
+          "bytes": 16508
         },
         {
           "field": "youthRecruitmentBriefs",
           "strategy": "record-delta",
           "bytes": 10272
-        },
-        {
-          "field": "regionalKnowledge",
-          "strategy": "record-delta",
-          "bytes": 5637
         }
       ],
       "route": "worker",
-      "roundTripMs": 2573.0999999940395
+      "roundTripMs": 2002.7999999970198
     },
-    "jsHeapUsedBytes": 42126008,
-    "jsHeapTotalBytes": 44269568,
-    "domNodes": 4810,
+    "jsHeapUsedBytes": 42326692,
+    "jsHeapTotalBytes": 44793856,
+    "domNodes": 4805,
     "documents": 2,
-    "layoutCount": 187
+    "layoutCount": 158
   },
   "simulationContext": {
     "profile": "coherent-mature-ordinary-week",
@@ -135,7 +135,7 @@
       "season": 1,
       "week": 21,
       "seasonLength": 46,
-      "fixtureCount": 3490
+      "fixtureCount": 3543
     }
   },
   "checks": {

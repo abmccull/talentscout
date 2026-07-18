@@ -20,7 +20,7 @@ const authorities = [
     consumerToken: "hasGrassrootsAccess",
     formula: "Unlock active grassroots tournaments and street football when local familiarity is at least 20.",
     uiExplanation: "Grassroots and street-football activities appear in the Planner when their visible prerequisites are met.",
-    testName: "makes Grassroots Access unlock grassroots tournaments and street football",
+    testName: "[youth_grassroots_access] makes Grassroots Access unlock grassroots tournaments and street football",
   },
   {
     perkId: "youth_raw_potential_reading",
@@ -28,7 +28,7 @@ const authorities = [
     consumerToken: "canShowYouthProjection",
     formula: "Expose the observation-derived perceived PA star range for youth reports; never expose canonical potential.",
     uiExplanation: "The report draft gains a rough potential range after the perk unlocks.",
-    testName: "makes Raw Potential Reading unlock the youth upside range",
+    testName: "[youth_raw_potential_reading] makes Raw Potential Reading unlock the youth upside range",
   },
   {
     perkId: "youth_instinct_sharpening",
@@ -36,7 +36,7 @@ const authorities = [
     consumerToken: "gutFeelingMultiplier",
     formula: "Multiply gut-feeling trigger chance by 1.4 when prospect age is below 16.",
     uiExplanation: "The perk description states the under-16 trigger-rate multiplier.",
-    testName: "makes Instinct Sharpening increase youth gut-feeling trigger odds",
+    testName: "[youth_instinct_sharpening] makes Instinct Sharpening increase youth gut-feeling trigger odds",
   },
   {
     perkId: "youth_network_expansion",
@@ -44,7 +44,7 @@ const authorities = [
     consumerToken: "hasYouthNetworkTips",
     formula: "Roll a 25% weekly chance for a contact-grounded unsigned-youth lead.",
     uiExplanation: "Successful rolls arrive as named inbox leads with a prospect link.",
-    testName: "makes Youth Network tips appear only after the perk unlocks",
+    testName: "[youth_network_expansion] makes Youth Network tips appear only after the perk unlocks",
   },
   {
     perkId: "youth_placement_reputation",
@@ -52,7 +52,7 @@ const authorities = [
     consumerToken: "placementReputationBonus * 20",
     formula: "Map the 0.25 trust factor to +5 academy-decision score, bounded by the decision model.",
     uiExplanation: "Decision reasons name the +5 trusted-weight adjustment; it cannot bypass mobility or evidence gates.",
-    testName: "makes Placement Reputation change academy club decisions",
+    testName: "[youth_placement_reputation] makes Placement Reputation change academy club decisions",
   },
   {
     perkId: "youth_wonderkid_radar",
@@ -60,7 +60,7 @@ const authorities = [
     consumerToken: "createWonderkidRadarAlert",
     formula: "Alert only for age 16 or younger with perceived PA high at least 4 stars and confidence at least 0.25.",
     uiExplanation: "The inbox calls it an uncertain high-upside signal and asks for follow-up evidence.",
-    testName: "makes Wonderkid Radar produce evidence-based alerts",
+    testName: "[youth_wonderkid_radar] makes Wonderkid Radar produce evidence-based alerts",
   },
   {
     perkId: "youth_academy_whisperer",
@@ -68,7 +68,7 @@ const authorities = [
     consumerToken: "hasTrialDayAccess",
     formula: "Unlock academy trial-day activity when an academy coach/director relationship is at least 40.",
     uiExplanation: "The Planner shows the trial-day action only when the perk and contact prerequisite are active.",
-    testName: "makes Academy Whisperer unlock academy trial days",
+    testName: "[youth_academy_whisperer] makes Academy Whisperer unlock academy trial days",
   },
   {
     perkId: "youth_generational_eye",
@@ -76,7 +76,7 @@ const authorities = [
     consumerToken: "paEstimateMargin",
     formula: "Attach a gut-feeling PA estimate with a base ±5 canonical-point margin, further bounded by existing equipment logic.",
     uiExplanation: "The reflection narrative labels the estimate as a gut feeling rather than verified truth.",
-    testName: "makes Generational Eye reveal a bounded PA estimate during reflection",
+    testName: "[youth_generational_eye] makes Generational Eye reveal a broad cue-derived projection signal",
   },
 ];
 
@@ -107,8 +107,8 @@ for (const authority of authorities) {
   if (!consumerSource.includes(authority.consumerToken)) {
     failures.push(`${authority.perkId} consumer token missing from ${authority.consumer}`);
   }
-  if (!testSource.includes(authority.testName)) {
-    failures.push(`${authority.perkId} invariant test name is missing`);
+  if (!testSource.includes(`[${authority.perkId}]`)) {
+    failures.push(`${authority.perkId} invariant behavior marker is missing`);
   }
 }
 

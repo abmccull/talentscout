@@ -497,9 +497,9 @@ export function SettingsScreen() {
 
             {(
               [
-                { channel: "master" as const, label: "Master Volume" },
+                { channel: "master" as const, label: "Master volume" },
                 { channel: "music" as const, label: "Music" },
-                { channel: "sfx" as const, label: "SFX" },
+                { channel: "sfx" as const, label: "Sound effects" },
                 { channel: "ambience" as const, label: "Ambience" },
               ] satisfies { channel: AudioChannel | "master"; label: string }[]
             ).map(({ channel, label }) => {

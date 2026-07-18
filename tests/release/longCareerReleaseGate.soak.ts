@@ -6,6 +6,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/engine/core/types";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import {
+  observeWeeklySimulationTelemetry,
+  type WeeklySimulationTelemetry,
+} from "@/engine/core/weeklySimulationPipeline";
+import {
   findSaveRetentionReferenceViolations,
   measureSaveRetentionFootprint,
   observeSaveRetentionCompaction,
@@ -685,12 +689,16 @@ async function simulateCareer(
   const weeklyLatency: number[] = [];
   const compactionSamples: SaveRetentionCompactionSample[] = [];
   const pendingCompactionSamples: SaveRetentionCompactionSample[] = [];
+  let latestWeeklyTelemetry: WeeklySimulationTelemetry | undefined;
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
   const worldHealth: RunEvidence["worldHealth"] = [];
   const careerTelemetry = createAutonomousCareerTelemetry();
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
+  });
+  const stopObservingWeeklyTelemetry = observeWeeklySimulationTelemetry((sample) => {
+    latestWeeklyTelemetry = sample;
   });
 
   while ((useGameStore.getState().gameState?.currentSeason ?? 0) <= seasonCount) {
@@ -718,7 +726,17 @@ async function simulateCareer(
     canonicalTicks++;
     calendarWeeksSpanned += 1;
     weeklyLatency.push(elapsed);
-    expect(elapsed, `seed ${seed} batch latency indicates a hang`).toBeLessThan(MAX_SINGLE_BATCH_MS);
+    const phaseBreakdown = latestWeeklyTelemetry
+      && latestWeeklyTelemetry.sourceSeason === before.currentSeason
+      && latestWeeklyTelemetry.sourceWeek === before.currentWeek
+      ? latestWeeklyTelemetry.phases
+        .map((phase) => `${phase.phase}=${phase.elapsedMs.toFixed(1)}ms`)
+        .join(", ")
+      : "unavailable";
+    expect(
+      elapsed,
+      `seed ${seed} batch latency indicates a hang at S${before.currentSeason} W${before.currentWeek}; phases: ${phaseBreakdown}`,
+    ).toBeLessThan(MAX_SINGLE_BATCH_MS);
 
     if (after.currentSeason !== lastCheckedSeason) {
       stabilizeAutonomousCareerState(careerTelemetry);
@@ -770,6 +788,7 @@ async function simulateCareer(
     }
   }
   stopObservingCompaction();
+  stopObservingWeeklyTelemetry();
 
   const finalState = useGameStore.getState().gameState;
   if (!finalState) throw new Error(`Seed ${seed} lost its final state`);

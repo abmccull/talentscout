@@ -68,7 +68,8 @@ export function createWeeklyAsyncActions(
           && current.weekSimulation === sourceSimulation;
         if (!sourceIsStillActive) return;
 
-        const commit = materializeWeeklyWorkerCommit(sourceState, execution.commit);
+        const commit = execution.materializedCommit
+          ?? materializeWeeklyWorkerCommit(sourceState, execution.commit);
 
         set({
           ...commit.patch,
