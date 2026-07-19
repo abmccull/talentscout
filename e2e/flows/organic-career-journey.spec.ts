@@ -507,6 +507,7 @@ test.describe("Organic career journey", () => {
       firstName: "Organic",
       lastName: "Browser",
       specialization: "youth",
+      worldSeed: "organic-browser-career",
     });
 
     expect(await gamePage.getGameStateValue("scout.careerTier")).toBe(1);

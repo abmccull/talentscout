@@ -188,8 +188,14 @@ export class GamePage {
     firstName?: string;
     lastName?: string;
     specialization?: "youth" | "firstTeam" | "regional" | "data";
+    worldSeed?: string;
   } = {}): Promise<void> {
-    const { firstName = "Test", lastName = "Scout", specialization = "youth" } = config;
+    const {
+      firstName = "Test",
+      lastName = "Scout",
+      specialization = "youth",
+      worldSeed,
+    } = config;
 
     if ((await this.getCurrentScreen()) === "mainMenu") {
       await this.page.locator(SELECTORS.newGameButton).first().click();
@@ -234,6 +240,9 @@ export class GamePage {
       await this.page.waitForTimeout(400);
     }
 
+    if (worldSeed) {
+      await this.page.locator("#world-seed").fill(worldSeed);
+    }
     await this.page.click('button:has-text("Continue")');
     await this.page.waitForTimeout(400);
 
