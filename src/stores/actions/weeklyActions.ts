@@ -7,7 +7,7 @@
  * delegation, fast-forward, and related helpers.
  */
 import type { GetState, SetState } from "./types";
-import type { GameScreen, WeekSummary } from "../gameStoreTypes";
+import type { GameScreen } from "../gameStoreTypes";
 import { createWeekSimulationActions } from "./weekSimulationActions";
 import { createMatchActions } from "./matchActions";
 import { processWeeklyEconomy } from "./weeklyEconomy";
@@ -29,7 +29,6 @@ import type {
   NPCScoutReport,
   Territory,
   Specialization,
-  NarrativeEvent,
   RivalScout,
   SeasonEvent,
   ScoutPerformanceSnapshot,
@@ -40,10 +39,8 @@ import type {
   LegacyProfile,
   ConvictionLevel,
 } from "@/engine/core/types";
-import type { ActivityQualityResult } from "@/engine/core/activityQuality";
 import { createRNG } from "@/engine/rng";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
-import { getRunSimulationModifiers } from "@/engine/run";
 import { getActiveSeasonEvents } from "@/engine/core/seasonEvents";
 import { resolveSeasonEventChoice } from "@/engine/core/seasonEventEffects";
 import {
@@ -76,11 +73,7 @@ import {
   canScheduleActivity,
   getAvailableActivities,
   getScheduledActivityInstances,
-  processCompletedWeek,
   applyWeekResults,
-  evaluateFatigueConsequences,
-  readConsecutiveRestWeeks,
-  resolveWeekActivityXp,
   ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
 } from "@/engine/core/calendar";
@@ -102,18 +95,11 @@ import {
   getScoutHomeCountry as getScoutHome,
   processInternationalWeek,
   classifyStandingZone,
-  getRegionalTravelQuote,
   getActiveWorldConditionNames,
   getWorldConditionModifiers,
-  getPlayerScoutingCountry,
 } from "@/engine/world/index";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
 import { ALL_PERKS } from "@/engine/specializations/perks";
-import {
-  getLifecycleWorld,
-  resolvePlayerMovements,
-  withLifecycleWorld,
-} from "@/engine/world/playerLifecycle";
 import {
   initializeFinances,
   processWeeklyFinances,
@@ -126,7 +112,6 @@ import {
   calculateSigningBonus,
   processAssistantScoutWeek,
   processWeeklyInfrastructureCosts,
-  calculateInfrastructureEffects,
   processStarterStipend,
 } from "@/engine/finance";
 import { getCreditScore } from "@/engine/finance/creditScore";
@@ -134,15 +119,6 @@ import { getLifestyleEffects } from "@/engine/finance/expenses";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
 import {
   generateRivalScouts,
-  processRivalScoutWeek,
-  generateRivalIntelligence,
-  resolveRivalSigningAttempt,
-  getPoachCounterBidEligibility,
-  advanceYouthRivalPressure,
-  resolveRivalYouthClaim,
-  selectYouthRivalTarget,
-  migrateRivalOrganizationState,
-  processRivalOrganizationWeek,
 } from "@/engine/rivals";
 import { checkToolUnlocks } from "@/engine/tools";
 import { getActiveToolBonuses } from "@/engine/tools/unlockables";
@@ -164,24 +140,7 @@ import {
   type TutorialState,
 } from "@/stores/tutorialStore";
 import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
-import {
-  applyScenarioOverrides,
-  resolveScenarioOutcome,
-} from "@/engine/scenarios";
-
-const YOUTH_SUMMARY_ACTIVITY_TYPES = new Set<Activity["type"]>([
-  "schoolMatch",
-  "grassrootsTournament",
-  "streetFootball",
-  "academyTrialDay",
-  "youthFestival",
-  "youthTournament",
-  "academyVisit",
-  "watchVideo",
-  "followUpSession",
-  "parentCoachMeeting",
-  "trainingVisit",
-]);
+import { applyScenarioOverrides } from "@/engine/scenarios";
 
 import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import {
@@ -189,10 +148,7 @@ import {
   generatePredictionSuggestions,
 } from "@/engine/data";
 import { createInsightState, accumulateInsight, calculateCapacity, tickCooldown } from "@/engine/insight/insight";
-import {
-  nextGameWeek,
-  resolveClubDecision,
-} from "@/engine/reports/scoutingCases";
+import { nextGameWeek } from "@/engine/reports/scoutingCases";
 import { deriveScoutingCaseObservationFocus } from "@/engine/reports/caseQuestions";
 import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { persistGameState } from "@/lib/saveProvider";
@@ -201,12 +157,9 @@ import {
   isBatchAdvanceInProgress,
 } from "./weeklyQuickScoutActions";
 import {
-  aggregateQualityForType,
   buildDayInteraction,
   buildDaySpanInfo,
   buildScoutQualityDataForState,
-  derivePendingCelebration,
-  deriveScenarioState,
   isDayInteractionPending,
   isQualityRelevantActivity,
   processInternationalTravelLifecycle,
@@ -253,15 +206,9 @@ function withScoutingCaseFocus(
     scoutingQuestionIds: focus.scoutingQuestionIds,
   };
 }
-import {
-  processWeeklyContextualHint,
-  processWeeklyTutorialMilestones,
-} from "./weeklyPresentationEffects";
-import { registerNarrativeDecisions } from "./weeklyNarrativeConsequences";
 import { processWeeklyWorldProgression } from "./weeklyWorldProgression";
 import { processWeeklyTransferAccountability } from "./weeklyTransferAccountability";
 import { processWeeklySpecializationSystems } from "./weeklySpecializationSystems";
-import { prepareWeeklyRivalCampaigns } from "./weeklyRivalCampaigns";
 import { processWeeklyPostTickSystems } from "./weeklyPostTickSystems";
 import { processWeeklySeasonRollover } from "./weeklySeasonRollover";
 import { processWeeklyRelationshipActivities } from "./weeklyRelationshipActivities";
@@ -275,6 +222,9 @@ import {
 } from "./weeklyActivityModifiers";
 import { runWeeklyNarrativeArbitration } from "./weeklyNarrativeArbitration";
 import { finalizeWeeklyState } from "./weeklyFinalizeState";
+import { prepareWeeklyActivityResolution } from "./weeklyActivityPreparation";
+import { runWeeklyRivalLifecycle } from "./weeklyRivalLifecycle";
+import { completeWeeklyHandoff } from "./weeklyCompletionHandoff";
 
 export { projectExpiredNarrativeDefaults } from "./weeklyNarrativeConsequences";
 export {
@@ -534,93 +484,16 @@ export function createWeeklyActions(
     // Non-match interactive sessions are optional, but skipped sessions now
     // incur opportunity-cost penalties in the modifier aggregation stage below.
 
-    const rng = createRNG(`${gameState.seed}-week-${gameState.currentWeek}-${gameState.currentSeason}`);
-
-    // Process scheduled activities → fatigue, skill XP, attribute XP
-    // Travel posture is supplied to the calendar's single authoritative
-    // fatigue path, keeping manual, batch, and save/reload advancement equal.
-    const scheduledTravelActivity = gameState.schedule.activities.find(
-      (activity) => activity?.type === "internationalTravel" || activity?.type === "travel",
-    );
-    const travelDestination = scheduledTravelActivity?.targetId
-      ?? gameState.scout.travelBooking?.destinationCountry;
-    const travelPosture = gameState.scout.travelBooking?.posture;
-    const quotedTravelFatigueMultiplier = travelDestination
-      ? getRegionalTravelQuote(
-          gameState,
-          travelDestination,
-          travelPosture,
-        ).fatigueMultiplier
-      : 1;
-    const infrastructureTravelMultiplier = calculateInfrastructureEffects(
-      gameState.scoutingInfrastructure,
-    ).travelFatigueMultiplier;
-    const travelFatigueMultiplier = Math.max(
-      0,
-      quotedTravelFatigueMultiplier * infrastructureTravelMultiplier,
-    );
-    const weekResult = processCompletedWeek(
-      gameState.schedule,
-      gameState.scout,
+    const {
       rng,
-      scheduledTravelActivity
-        ? { [scheduledTravelActivity.type]: travelFatigueMultiplier }
-        : undefined,
-    );
+      scheduledTravelActivity,
+      weekResult,
+      qualityRollsByDay,
+      qualityByType,
+    } = prepareWeeklyActivityResolution(gameState);
 
-    // ── Roll activity quality per day/instance ─────────────────────────────
-    // This keeps multi-day activities dynamic (e.g., day 1 excellent, day 2 poor)
-    // while remaining deterministic across save/load.
-    const qualityRollsByDay: Array<{
-      dayIndex: number;
-      activity: Activity;
-      result: ActivityQualityResult;
-    }> = [];
-    const qualityBucketsByType = new Map<Activity["type"], ActivityQualityResult[]>();
-    for (let dayIndex = 0; dayIndex < 7; dayIndex++) {
-      const activity = gameState.schedule.activities[dayIndex];
-      if (!isQualityRelevantActivity(activity)) continue;
-      const result = rollDayActivityQuality(gameState, activity, dayIndex);
-      qualityRollsByDay.push({ dayIndex, activity, result });
-      const bucket = qualityBucketsByType.get(activity.type) ?? [];
-      bucket.push(result);
-      qualityBucketsByType.set(activity.type, bucket);
-    }
-    const qualityByType = new Map<Activity["type"], ActivityQualityResult>();
-    for (const [activityType, rolls] of qualityBucketsByType.entries()) {
-      qualityByType.set(activityType, aggregateQualityForType(activityType, rolls));
-    }
 
-    // Each activity earns XP from its own quality roll. Multi-day work uses
-    // the mean of its occupied days; unrelated excellent work cannot inflate
-    // a poor session elsewhere in the week.
-    const qualityMultiplierByDay = new Map(
-      qualityRollsByDay.map(({ dayIndex, result }) => [dayIndex, result.multiplier]),
-    );
-    const qualityMultiplierByInstance = new Map<string, number>();
-    for (const instance of getScheduledActivityInstances(gameState.schedule)) {
-      const multipliers = instance.slotIndexes
-        .map((dayIndex) => qualityMultiplierByDay.get(dayIndex))
-        .filter((value): value is number => value !== undefined);
-      if (multipliers.length === 0) continue;
-      qualityMultiplierByInstance.set(
-        instance.key,
-        multipliers.reduce((sum, value) => sum + value, 0) / multipliers.length,
-      );
-    }
-    const consecutiveRestWeeks = readConsecutiveRestWeeks(
-      gameState.consequenceState?.metrics,
-    );
-    const fatigueConsequences = evaluateFatigueConsequences(
-      gameState.scout.fatigue,
-      consecutiveRestWeeks,
-    );
-    const resolvedXp = resolveWeekActivityXp(gameState.schedule, gameState.scout, {
-      qualityMultiplierByInstance,
-      refreshed: fatigueConsequences.refreshedBuff,
-    });
-    weekResult.skillXpGained = resolvedXp.skillXpGained;
-    weekResult.attributeXpGained = resolvedXp.attributeXpGained;
+
 
     const simChoices = get().weekSimulation;
     const activityModifiers = createWeeklyChoiceModifiers({
@@ -899,8 +772,6 @@ export function createWeeklyActions(
       weekSimulation: simChoices,
     });
     stateWithScheduleApplied = observationActivities.state;
-    const weekPlayersDiscovered = observationActivities.playersDiscovered;
-    const weekObservationsGenerated = observationActivities.observationsGenerated;
 
     stateWithScheduleApplied = processWeeklyPlacementResolution({
       sourceState: gameState,
@@ -1273,427 +1144,22 @@ export function createWeeklyActions(
     // 2. Process the persistent organization layer before individual rivals.
     // The resulting pressure is ephemeral for this week, while the action,
     // agenda progression, opportunity, and fact all survive save/load.
-    const organizationBase = migrateRivalOrganizationState(
-      stateWithPhase2.seed,
-      stateWithPhase2.rivalScouts,
-      stateWithPhase2.rivalOrganizationState,
-      Math.max(1, stateWithPhase2.currentSeason),
-    );
-    const organizationResult = processRivalOrganizationWeek(
-      organizationBase,
-      {
-        rootSeed: stateWithPhase2.seed,
-        season: stateWithPhase2.currentSeason,
-        week: stateWithPhase2.currentWeek,
-        seasonLength: getSeasonLength(
-          stateWithPhase2.fixtures,
-          stateWithPhase2.currentSeason,
-        ),
-        rivalScouts: stateWithPhase2.rivalScouts,
-      },
-    );
-    const organizationFacts = Object.fromEntries(
-      organizationResult.facts.map((fact) => [fact.id, fact]),
-    );
-    stateWithPhase2 = {
-      ...stateWithPhase2,
-      rivalOrganizationState: organizationResult.state,
-      consequenceState: {
-        ...stateWithPhase2.consequenceState,
-        facts: {
-          ...stateWithPhase2.consequenceState.facts,
-          ...organizationFacts,
-        },
-      },
-    };
-    const rivalCampaignWeek = prepareWeeklyRivalCampaigns({
+    const rivalLifecycle = runWeeklyRivalLifecycle({
       state: stateWithPhase2,
-      seasonLength: getSeasonLength(
-        stateWithPhase2.fixtures,
-        stateWithPhase2.currentSeason,
-      ),
+      seedSource: gameState,
     });
-    stateWithPhase2 = rivalCampaignWeek.state;
-
-    // 2a. Process individual rival scouts under this week's organization pressure.
-    const rivalRng = createRNG(
-      `${gameState.seed}-rivals-${gameState.currentWeek}-${gameState.currentSeason}`,
-    );
-    const rivalModifiers = getRunSimulationModifiers(stateWithPhase2.runManifest);
-    const getRivalConditionPressure = (
-      rival: (typeof stateWithPhase2.rivalScouts)[string],
-      playerId?: string,
-    ): number => {
-      const playerCountry = playerId
-        ? getPlayerScoutingCountry(stateWithPhase2, playerId)
-        : undefined;
-      const rivalClub = rival.clubId ? stateWithPhase2.clubs[rival.clubId] : undefined;
-      const rivalCountry = rivalClub
-        ? stateWithPhase2.leagues[rivalClub.leagueId]?.country
-        : undefined;
-      return getWorldConditionModifiers(
-        stateWithPhase2,
-        playerCountry ?? rivalCountry,
-      ).rivalPressureMultiplier;
-    };
-    const rivalResult = processRivalScoutWeek(rivalRng, stateWithPhase2, {
-      discoveryChanceMultiplier:
-        rivalModifiers.rivalDiscoveryChanceMultiplier
-        * organizationResult.pressure.discoveryChanceMultiplier,
-      poachChanceMultiplier:
-        rivalModifiers.rivalPoachChanceMultiplier
-        * organizationResult.pressure.poachChanceMultiplier,
-      signingChanceMultiplier:
-        rivalModifiers.rivalSigningChanceMultiplier
-        * organizationResult.pressure.signingChanceMultiplier,
-      contextualPressureMultiplier: getRivalConditionPressure,
-    });
-    let rivalInboxMessages: InboxMessage[] = [...rivalResult.newMessages];
-    if (rivalResult.poachWarnings.length > 0) {
-      const poachMessages = rivalResult.poachWarnings.map((warning) => {
-        const rivalScout = rivalResult.updatedRivals[warning.rivalId];
-        const player = stateWithPhase2.players[warning.playerId];
-        const rivalName = rivalScout?.name ?? "A rival scout";
-        const playerName = player
-          ? `${player.firstName} ${player.lastName}`
-          : "a player you have reported on";
-        return {
-          id: `rival-poach-${warning.rivalId}-${warning.playerId}-w${stateWithPhase2.currentWeek}`,
-          week: stateWithPhase2.currentWeek,
-          season: stateWithPhase2.currentSeason,
-          type: "event" as const,
-          title: "Rival Scout Alert",
-          body: `${rivalName} is now tracking ${playerName} — a player you have already reported on. Consider submitting a stronger recommendation before they act.`,
-          read: false,
-          actionRequired: false,
-          relatedId: warning.playerId,
-          relatedEntityType: "player" as const,
-        };
-      });
-      rivalInboxMessages = [...rivalInboxMessages, ...poachMessages];
-    }
-    // Generate contact intelligence about rival movements (F8)
-    const intelMessages = generateRivalIntelligence(rivalRng, stateWithPhase2, stateWithPhase2.contacts);
-    rivalInboxMessages = [...rivalInboxMessages, ...intelMessages];
-    // Track rival activities (F8), capping at 50 entries
-    const existingActivities = stateWithPhase2.rivalActivities ?? [];
-    const mergedActivities = [...existingActivities, ...rivalResult.newActivities].slice(-50);
-    stateWithPhase2 = {
-      ...stateWithPhase2,
-      rivalScouts: rivalResult.updatedRivals,
-      rivalActivities: mergedActivities,
-      inbox: [...stateWithPhase2.inbox, ...rivalInboxMessages],
-    };
-
-    // 2b. Process poach signings — generate rivalPoachBid narrative events
-    // Youth rivals compete for the same unsigned prospects using only public
-    // buzz, visibility, venue exposure, and known interest. Successful claims
-    // go through the canonical movement ledger and displace pending pitches.
-    let youthRivalLifecycle = getLifecycleWorld(stateWithPhase2);
-    let youthRivalScouts = { ...stateWithPhase2.rivalScouts };
-    let youthRivalPool = { ...stateWithPhase2.unsignedYouth };
-    let youthRivalActivities = [...(stateWithPhase2.rivalActivities ?? [])];
-    let youthRivalInbox = [...stateWithPhase2.inbox];
-    let youthRivalPlacementReports = { ...stateWithPhase2.placementReports };
-    let youthRivalCases = { ...stateWithPhase2.scoutingCases };
-    let youthRivalDeliveries = { ...stateWithPhase2.reportDeliveries };
-    let youthRivalDecisions = { ...stateWithPhase2.clubDecisions };
-    let youthRivalBriefs = { ...stateWithPhase2.youthRecruitmentBriefs };
-
-    for (const rival of Object.values(youthRivalScouts).filter(
-      (candidate) => candidate.specialization === "youth",
-    )) {
-      const target = selectYouthRivalTarget(
-        createRNG(`${stateWithPhase2.seed}-youth-rival-target-${rival.id}-s${stateWithPhase2.currentSeason}w${stateWithPhase2.currentWeek}`),
-        rival,
-        youthRivalPool,
-      );
-      if (!target) continue;
-      const youth = youthRivalPool[target.youthId];
-      if (!youth) continue;
-      const scoutHasInterest = youth.discoveredBy.includes(stateWithPhase2.scout.id)
-        || Object.values(stateWithPhase2.observations).some(
-          (observation) => observation.playerId === youth.player.id,
-        )
-        || Object.values(stateWithPhase2.reports).some(
-          (report) => report.playerId === youth.player.id,
-        );
-      const pressureResult = advanceYouthRivalPressure({
-        rival,
-        youth,
-        week: stateWithPhase2.currentWeek,
-        season: stateWithPhase2.currentSeason,
-        scoutHasInterest,
-        organizationProgressBonus:
-          organizationResult.pressure.sourceOrganizationId
-          && organizationResult.state.organizations[
-            organizationResult.pressure.sourceOrganizationId
-          ]?.memberRivalIds.includes(rival.id)
-            ? organizationResult.pressure.youthProgressBonus
-            : 0,
-        existingActivities: youthRivalActivities,
-        existingMessages: youthRivalInbox,
-      });
-      youthRivalScouts[rival.id] = pressureResult.updatedRival;
-      youthRivalPool[youth.id] = pressureResult.updatedYouth;
-      youthRivalActivities = pressureResult.activities;
-      youthRivalInbox = pressureResult.messages;
-
-      for (const brief of Object.values(youthRivalBriefs)) {
-        if (
-          brief.status === "open"
-          && (
-            brief.requiredPositions.includes(youth.player.position)
-            || youth.player.secondaryPositions.some((position) => brief.requiredPositions.includes(position))
-          )
-          && pressureResult.pressure > brief.competitionPressure
-        ) {
-          youthRivalBriefs[brief.id] = {
-            ...brief,
-            competitionPressure: pressureResult.pressure,
-          };
-        }
-      }
-
-      const claim = resolveRivalYouthClaim(
-        createRNG(`${stateWithPhase2.seed}-youth-rival-claim-${rival.id}-${youth.id}-s${stateWithPhase2.currentSeason}w${stateWithPhase2.currentWeek}`),
-        {
-          rival: pressureResult.updatedRival,
-          youth: pressureResult.updatedYouth,
-          week: stateWithPhase2.currentWeek,
-          season: stateWithPhase2.currentSeason,
-          scoutHasInterest,
-          placementReports: youthRivalPlacementReports,
-          existingActivities: youthRivalActivities,
-          existingMessages: youthRivalInbox,
-        },
-      );
-      if (!claim.success || !claim.signedPlayer) continue;
-
-      const detachedPlayer = {
-        ...youth.player,
-        clubId: "",
-        contractClubId: undefined,
-        contractExpiry: 0,
-        wage: 0,
-      };
-      const movement = resolvePlayerMovements(
-        {
-          ...youthRivalLifecycle,
-          players: {
-            ...youthRivalLifecycle.players,
-            [detachedPlayer.id]: detachedPlayer,
-          },
-        },
-        [{
-          type: "youthSigning",
-          playerId: detachedPlayer.id,
-          toClubId: rival.clubId,
-          contractLength: 3,
-          wage: Math.max(100, rival.quality * 150),
-          reason: `Rival youth recommendation by ${rival.name}`,
-        }],
-        stateWithPhase2.currentWeek,
-        stateWithPhase2.currentSeason,
-        getSeasonLength(stateWithPhase2.fixtures, stateWithPhase2.currentSeason),
-      );
-      if (movement.applied.length === 0) continue;
-      youthRivalLifecycle = movement.state;
-      const movedPlayer = youthRivalLifecycle.players[detachedPlayer.id];
-      youthRivalPool[youth.id] = {
-        ...claim.updatedYouth,
-        ...(movedPlayer ? { player: movedPlayer } : {}),
-      };
-      youthRivalScouts[rival.id] = claim.updatedRival;
-      youthRivalActivities = claim.activities;
-      youthRivalInbox = claim.messages;
-
-      for (const placementReportId of claim.displacedPlacementReportIds) {
-        const placementReport = youthRivalPlacementReports[placementReportId];
-        if (!placementReport) continue;
-        youthRivalPlacementReports[placementReportId] = {
-          ...placementReport,
-          clubResponse: "rejected",
-        };
-        if (placementReport.deliveryId && !youthRivalDeliveries[placementReport.deliveryId]?.decisionId) {
-          const resolved = resolveClubDecision({
-            scoutingCases: youthRivalCases,
-            reportDeliveries: youthRivalDeliveries,
-            clubDecisions: youthRivalDecisions,
-            deliveryId: placementReport.deliveryId,
-            outcome: "rejected",
-            week: stateWithPhase2.currentWeek,
-            season: stateWithPhase2.currentSeason,
-            reason: `${rival.name} moved first and the prospect is no longer available.`,
-            reasons: [
-              "A rival recruitment team completed the youth signing first.",
-              "Additional certainty came at the cost of the opportunity.",
-            ],
-          });
-          youthRivalCases = resolved.scoutingCases;
-          youthRivalDeliveries = resolved.reportDeliveries;
-          youthRivalDecisions = resolved.clubDecisions;
-          youthRivalPlacementReports[placementReportId] = {
-            ...youthRivalPlacementReports[placementReportId],
-            decisionId: resolved.decision?.id,
-          };
-        } else if (placementReport.caseId && youthRivalCases[placementReport.caseId]) {
-          youthRivalCases[placementReport.caseId] = {
-            ...youthRivalCases[placementReport.caseId],
-            status: "closed",
-            lastUpdatedWeek: stateWithPhase2.currentWeek,
-            lastUpdatedSeason: stateWithPhase2.currentSeason,
-          };
-        }
-      }
-    }
-
-    stateWithPhase2 = {
-      ...withLifecycleWorld(stateWithPhase2, youthRivalLifecycle),
-      rivalScouts: youthRivalScouts,
-      unsignedYouth: youthRivalPool,
-      rivalActivities: youthRivalActivities.slice(-50),
-      inbox: youthRivalInbox,
-      placementReports: youthRivalPlacementReports,
-      scoutingCases: youthRivalCases,
-      reportDeliveries: youthRivalDeliveries,
-      clubDecisions: youthRivalDecisions,
-      youthRecruitmentBriefs: youthRivalBriefs,
-    };
-
-    if (rivalResult.poachSignings && rivalResult.poachSignings.length > 0) {
-      const poachNarrativeEvents: NarrativeEvent[] = [];
-      const poachInboxMessages: InboxMessage[] = [];
-
-      for (const signing of rivalResult.poachSignings) {
-        const rivalScout = stateWithPhase2.rivalScouts[signing.rivalId];
-        const player = stateWithPhase2.players[signing.playerId];
-        if (!rivalScout || !player) continue;
-
-        const resolvedSigning = resolveRivalSigningAttempt(
-          getLifecycleWorld(stateWithPhase2),
-          rivalScout,
-          player.id,
-          stateWithPhase2.currentWeek,
-          stateWithPhase2.currentSeason,
-        );
-        if (!resolvedSigning.success) continue;
-
-        stateWithPhase2 = withLifecycleWorld(
-          stateWithPhase2,
-          resolvedSigning.lifecycle,
-        );
-        const signedPlayer = stateWithPhase2.players[player.id];
-        if (!signedPlayer) continue;
-
-        const rivalName = rivalScout.name;
-        const playerName = `${signedPlayer.firstName} ${signedPlayer.lastName}`;
-        const rivalClub = stateWithPhase2.clubs[rivalScout.clubId];
-        const eligibility = getPoachCounterBidEligibility(
-          getLifecycleWorld(stateWithPhase2),
-          rivalScout,
-          signedPlayer,
-          stateWithPhase2.scout,
-        );
-        const cleanedRival = {
-          ...rivalScout,
-          targetPlayerIds: rivalScout.targetPlayerIds.filter((id) => id !== player.id),
-          competingForPlayers: rivalScout.competingForPlayers.filter((id) => id !== player.id),
-          currentTarget: rivalScout.currentTarget === player.id
-            ? undefined
-            : rivalScout.currentTarget,
-        };
-        stateWithPhase2 = {
-          ...stateWithPhase2,
-          rivalScouts: {
-            ...stateWithPhase2.rivalScouts,
-            [rivalScout.id]: cleanedRival,
-          },
-          rivalActivities: [
-            ...(stateWithPhase2.rivalActivities ?? []),
-            {
-              rivalId: rivalScout.id,
-              type: "playerSigned" as const,
-              playerId: player.id,
-              week: stateWithPhase2.currentWeek,
-              season: stateWithPhase2.currentSeason,
-            },
-          ].slice(-50),
-        };
-
-        const eventId = `poach-bid-${signing.rivalId}-${signing.playerId}-w${stateWithPhase2.currentWeek}`;
-
-        if (!eligibility.eligible) {
-          stateWithPhase2 = {
-            ...stateWithPhase2,
-            rivalScouts: {
-              ...stateWithPhase2.rivalScouts,
-              [rivalScout.id]: {
-                ...cleanedRival,
-                winsAgainstPlayer: (cleanedRival.winsAgainstPlayer ?? 0) + 1,
-              },
-            },
-          };
-          poachInboxMessages.push({
-            id: `rival-signing-${eventId}`,
-            week: stateWithPhase2.currentWeek,
-            season: stateWithPhase2.currentSeason,
-            type: "event" as const,
-            title: `Player Signed by ${rivalClub?.name ?? "Rival Club"}`,
-            body: `${rivalClub?.name ?? "The rival club"} completed the signing of ${playerName} following ${rivalName}'s recommendation. ${eligibility.reason ?? "Your club cannot submit a valid counter-bid."}`,
-            read: false,
-            actionRequired: false,
-            relatedId: player.id,
-            relatedEntityType: "player" as const,
-          });
-          continue;
-        }
-
-        const narrativeEvent: NarrativeEvent = {
-          id: eventId,
-          type: "rivalPoachBid",
-          week: stateWithPhase2.currentWeek,
-          season: stateWithPhase2.currentSeason,
-          title: `Rival Signing: ${playerName}`,
-          description:
-            `${rivalName} has signed ${playerName} — a player you previously reported on. ` +
-            `Your club can attempt a ${eligibility.cost.toLocaleString()} transfer or concede the player.`,
-          relatedIds: [signing.playerId, signing.rivalId],
-          acknowledged: false,
-          choices: [
-            { label: `Counter-Bid (${eligibility.cost.toLocaleString()})`, effect: "counterBid" },
-            { label: "Concede", effect: "concede" },
-          ],
-          selectedChoice: undefined,
-        };
-
-        poachNarrativeEvents.push(narrativeEvent);
-
-        poachInboxMessages.push({
-          id: `narrative-${eventId}`,
-          week: stateWithPhase2.currentWeek,
-          season: stateWithPhase2.currentSeason,
-          type: "event" as const,
-          title: narrativeEvent.title,
-          body: narrativeEvent.description,
-          read: false,
-          actionRequired: true,
-          relatedId: narrativeEvent.id,
-        });
-      }
-
-      stateWithPhase2 = registerNarrativeDecisions({
-        ...stateWithPhase2,
-        narrativeEvents: [...stateWithPhase2.narrativeEvents, ...poachNarrativeEvents],
-        inbox: [...stateWithPhase2.inbox, ...poachInboxMessages],
-      }, poachNarrativeEvents);
-    }
+    stateWithPhase2 = rivalLifecycle.state;
+    const {
+      rivalOpportunity,
+      rivalCampaignWeek,
+      rivalAlertCount,
+    } = rivalLifecycle;
 
     // 3. Arbitrate standalone events, storylines, world arcs, and rival pressure.
     // 3b. Storyline system — trigger new storylines and advance active ones
     stateWithPhase2 = runWeeklyNarrativeArbitration({
       state: stateWithPhase2,
-      rivalOpportunity: organizationResult.opportunity,
+      rivalOpportunity,
       rivalCampaignWeek,
     }).state;
 
@@ -1823,113 +1289,22 @@ export function createWeeklyActions(
     newState = finalizeWeeklyState(gameState, newState);
 
     // ── Build week summary for UI feedback ──────────────────────────────────
-    weeklyPipeline.enter("finalize");
-    newState = weeklyPipeline.complete(newState);
-
-    const newInboxCount = newState.inbox.length - gameState.inbox.length;
-    const isPayWeek = isFinancialPeriodClose(
-      gameState.currentWeek,
-      getSeasonLength(gameState.fixtures, gameState.currentSeason),
-    );
-    const actualFatigueChange = newState.scout.fatigue - gameState.scout.fatigue;
-    const actualReputationChange = newState.scout.reputation - gameState.scout.reputation;
-    const actualPlayersDiscovered = Math.max(
-      0,
-      newState.discoveryRecords.length - gameState.discoveryRecords.length,
-    );
-    const actualObservationsGenerated = Math.max(
-      0,
-      Object.keys(newState.observations).length - Object.keys(gameState.observations).length,
-    );
-    const youthActivityCount = getScheduledActivityInstances(gameState.schedule).filter(({ activity }) =>
-      YOUTH_SUMMARY_ACTIVITY_TYPES.has(activity.type),
-    ).length;
-    void weekPlayersDiscovered;
-    void weekObservationsGenerated;
-    const weekSummary: WeekSummary = {
-      continueScreen:
-        tickResult.endOfSeasonTriggered && newState.seasonAwardsData
-          ? "seasonAwards"
-          : undefined,
-      fatigueChange: actualFatigueChange,
-      reputationChange: actualReputationChange,
-      skillXpGained: weekResult.skillXpGained as Record<string, number>,
-      attributeXpGained: weekResult.attributeXpGained as Record<string, number>,
-      matchesAttended: gameState.scout.primarySpecialization === "youth"
-        ? youthActivityCount
-        : weekResult.matchesAttended.length,
-      reportsWritten: weekResult.reportsWritten.length,
-      meetingsHeld: weekResult.meetingsHeld.length,
-      newMessages: Math.max(0, newInboxCount),
-      rivalAlerts: rivalInboxMessages.length,
-      financeSummary: isPayWeek && gameState.finances
-        ? {
-            income: gameState.finances.monthlyIncome,
-            expenses: Object.values(gameState.finances.expenses).reduce((s, v) => s + v, 0),
-          }
-        : null,
-      activityQualities: qualityRollsByDay.map(({ dayIndex, result }) => ({
-        activityType: result.activityType,
-        tier: result.tier,
-        narrative: `[${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][dayIndex]}] ${result.narrative}`,
-      })),
-      playersDiscovered: actualPlayersDiscovered,
-      observationsGenerated: actualObservationsGenerated,
-    };
-
-    // ── Scenario objective checking ─────────────────────────────────────────
-    const { scenarioProgressUpdate, scenarioOutcomeUpdate } = deriveScenarioState(newState);
-    const pendingCelebration = derivePendingCelebration(
-      gameState,
-      newState,
-      scenarioOutcomeUpdate,
-      newlyUnlocked,
-    );
-    let resolvedScenarioId: string | null = null;
-    if (scenarioOutcomeUpdate !== null) {
-      const latched = resolveScenarioOutcome(newState, scenarioOutcomeUpdate);
-      newState = latched.state;
-      resolvedScenarioId = latched.resolvedScenarioId;
-    }
-    const tierPromoted = newState.scout.careerTier > gameState.scout.careerTier;
-
-    // ── Guided session milestone ──────────────────────────────────────────────
-    processWeeklyTutorialMilestones(
-      gameState,
-      newState,
-      tierPromoted,
-      runtime.getTutorialState(),
-    );
-
-    // ── Weekly mentor check-ins (first season only) ─────────────────────────
-
-    // ── Tutorial trigger: career progression ─────────────────────────────────
-
-    // ── Feature discovery tracking ─────────────────────────────────────────
-    // ── Aha moment triggers ────────────────────────────────────────────────
-    set({
-      gameState: newState,
-      lastWeekSummary: weekSummary,
-      ...(scenarioProgressUpdate !== null ? { scenarioProgress: scenarioProgressUpdate } : {}),
-      ...(scenarioOutcomeUpdate !== null
-        ? {
-            scenarioOutcome: scenarioOutcomeUpdate,
-            scenarioOutcomeScenarioId: resolvedScenarioId,
-          }
-        : {}),
-      ...(pendingCelebration !== null ? { pendingCelebration } : {}),
-      ...(tickResult.endOfSeasonTriggered && newState.seasonAwardsData
-        ? { currentScreen: "calendar" as GameScreen }
-        : {}),
+    completeWeeklyHandoff({
+      beforeWeek: gameState,
+      state: newState,
+      pipeline: weeklyPipeline,
+      tickResult,
+      weekResult,
+      qualityRollsByDay,
+      rivalAlertCount,
+      newlyUnlockedToolIds: newlyUnlocked,
+      set,
+      persistenceEnabled:
+        runtime.persistenceEnabled && !isBatchAdvanceInProgress(),
+      getTutorialState: runtime.getTutorialState,
+      queueAutosave: queueWeeklyAutosave,
     });
-    // ── Evaluate contextual hints ────────────────────────────────────────────
 
-    processWeeklyContextualHint(newState, runtime.getTutorialState());
-
-    // Autosave after each week advance — guard against race condition (Fix #24)
-    if (runtime.persistenceEnabled && !isBatchAdvanceInProgress()) {
-      queueWeeklyAutosave(newState, set);
-    }
   },
 
   // ── Quick Scout Mode (F17) ──────────────────────────────────────────────
