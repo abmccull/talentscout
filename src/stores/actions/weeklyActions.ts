@@ -11,7 +11,6 @@ import type { GameScreen, WeekSummary } from "../gameStoreTypes";
 import { createWeekSimulationActions } from "./weekSimulationActions";
 import { createMatchActions } from "./matchActions";
 import { processWeeklyEconomy } from "./weeklyEconomy";
-import { clearTerminalNarrativeInboxActions } from "./narrativeInboxState";
 import { createAutosaveQueue, scheduleAfterPaint } from "./autosaveQueue";
 import type {
   GameState,
@@ -55,7 +54,6 @@ import {
   getSeasonLength,
 } from "@/engine/core/gameLoop";
 import {
-  compactCompletedSeasonHistory,
   createWeeklySimulationPipeline,
   evaluateWeekAdvancePreflight,
 } from "@/engine/core/weeklySimulationPipeline";
@@ -86,28 +84,10 @@ import {
   ACTIVITY_SLOT_COSTS,
   ACTIVITY_SKILL_XP as ACTIVITY_SKILL_XP_MAP,
 } from "@/engine/core/calendar";
-import { ensureLeadershipDelegationTeam } from "@/engine/career/index";
-import {
-  isCareerRecoveryBlockingOffers,
-  processCareerRecoveryWeek,
-} from "@/engine/career/recovery";
-import {
-  processLeadershipPortfolioWeek,
-} from "@/engine/career/leadership";
-import {
-  careerMomentFromLeadership,
-  careerMomentFromNarrativeEvent,
-  careerMomentFromPerformanceReview,
-  careerMomentFromRecovery,
-  createCareerMoment,
-  enqueueCareerMoments,
-  type CareerMoment,
-} from "@/engine/career/careerMoments";
 import {
   generateLegacyProfile as generateLegacyProfileEngine,
   applyLegacyPerks as applyLegacyPerksEngine,
   hasRepresentedCareerCompletionState,
-  getCareerSeasonOrdinal,
   readLegacyProfile,
   writeLegacyProfile,
 } from "@/engine/career/legacy";
@@ -134,7 +114,6 @@ import {
   resolvePlayerMovements,
   withLifecycleWorld,
 } from "@/engine/world/playerLifecycle";
-import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
 import {
   initializeFinances,
   processWeeklyFinances,
@@ -153,7 +132,6 @@ import {
 import { getCreditScore } from "@/engine/finance/creditScore";
 import { getLifestyleEffects } from "@/engine/finance/expenses";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
-import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
 import {
   generateRivalScouts,
   processRivalScoutWeek,
@@ -204,37 +182,6 @@ const YOUTH_SUMMARY_ACTIVITY_TYPES = new Set<Activity["type"]>([
   "parentCoachMeeting",
   "trainingVisit",
 ]);
-
-/**
- * Return narrative age for the bounded retention window without walking every
- * prior season. The calendar guarantees at least 38 weeks per season, so an
- * event older than the immediately previous season is necessarily outside the
- * ten-week archive window. Future-dated records retain the legacy negative-age
- * behavior and are not pruned as stale.
- */
-export function getNarrativeRetentionAge(
-  event: Pick<NarrativeEvent, "season" | "week">,
-  current: { season: number; week: number },
-  previousSeasonLength: number,
-): number {
-  if (event.season > current.season) return Number.NEGATIVE_INFINITY;
-  if (event.season === current.season) return current.week - event.week;
-  if (event.season === current.season - 1) {
-    return previousSeasonLength - event.week + current.week;
-  }
-  return Number.POSITIVE_INFINITY;
-}
-
-/** Reconcile recurring cast identity after contacts, staff and rivals move. */
-export function refreshWeeklyStakeholderProfiles(state: GameState): GameState {
-  return {
-    ...state,
-    stakeholderProfiles: createStakeholderProfileRegistry(
-      state,
-      state.stakeholderProfiles,
-    ),
-  };
-}
 
 import { deriveTacticalStyleFromPhilosophy } from "@/engine/firstTeam/tacticalStyle";
 import {
@@ -327,8 +274,13 @@ import {
   createWeeklyChoiceModifiers,
 } from "./weeklyActivityModifiers";
 import { runWeeklyNarrativeArbitration } from "./weeklyNarrativeArbitration";
+import { finalizeWeeklyState } from "./weeklyFinalizeState";
 
 export { projectExpiredNarrativeDefaults } from "./weeklyNarrativeConsequences";
+export {
+  getNarrativeRetentionAge,
+  refreshWeeklyStakeholderProfiles,
+} from "./weeklyFinalizeState";
 
 // ── Module-level state ─────────────────────────────────────────────────────
 // ── Local type alias ───────────────────────────────────────────────────────
@@ -1868,194 +1820,9 @@ export function createWeeklyActions(
 
     // Resolved or orphaned narrative prompts must not remain permanently pinned
     // as action-required messages in long-running saves.
-    const repairedNarrativeInbox = clearTerminalNarrativeInboxActions(
-      newState.inbox,
-      newState.narrativeEvents,
-    );
-    if (repairedNarrativeInbox !== newState.inbox) {
-      newState = { ...newState, inbox: repairedNarrativeInbox };
-    }
-
-    const reconciledInbox = reconcileInboxActionRequirements(newState);
-    if (reconciledInbox !== newState.inbox) {
-      newState = { ...newState, inbox: reconciledInbox };
-    }
-
-    // Prune inbox to keep most recent messages, but never drop unread action-required ones (Fix #57)
-    if (newState.inbox.length > 200) {
-      const priority = newState.inbox.filter((m) => m.actionRequired && !m.read);
-      const rest = newState.inbox.filter((m) => !(m.actionRequired && !m.read));
-      const trimmedRest = rest.slice(-Math.max(0, 200 - priority.length));
-      newState = { ...newState, inbox: [...trimmedRest, ...priority] };
-    }
-
-    // Issue 17: Prune old acknowledged narrative events (keep last 10 weeks)
-    if (newState.narrativeEvents.length > 0) {
-      const previousSeasonLength = getSeasonLength(
-        newState.fixtures,
-        Math.max(1, newState.currentSeason - 1),
-      );
-      const prunedNarratives = newState.narrativeEvents.filter(
-        (e) =>
-          !e.acknowledged
-          || getNarrativeRetentionAge(
-            e,
-            {
-              season: newState.currentSeason,
-              week: newState.currentWeek,
-            },
-            previousSeasonLength,
-          ) < 10,
-      );
-      newState = { ...newState, narrativeEvents: prunedNarratives };
-    }
+    newState = finalizeWeeklyState(gameState, newState);
 
     // ── Build week summary for UI feedback ──────────────────────────────────
-    // Career-high and completed-season history must survive setbacks such as a
-    // later firing or bankruptcy; legacy perks are based on what was actually
-    // achieved, not only the scout's final-week tier.
-    newState = {
-      ...newState,
-      legacyScore: {
-        ...newState.legacyScore,
-        careerHighTier: Math.max(
-          newState.legacyScore.careerHighTier,
-          newState.scout.careerTier,
-        ),
-        totalSeasons: Math.max(
-          newState.legacyScore.totalSeasons,
-          getCareerSeasonOrdinal(newState.currentSeason) - 1,
-        ),
-      },
-    };
-
-    newState = processCareerRecoveryWeek(newState, gameState.schedule);
-
-    // Leadership is a real responsibility unlock, not merely a navigation
-    // gate. Bootstrap a small, assigned team exactly once when Tier 4 is first
-    // reached, regardless of the path that produced the promotion.
-    const leadershipBootstrap = isCareerRecoveryBlockingOffers(newState)
-      ? { state: newState, addedScoutIds: [] }
-      : ensureLeadershipDelegationTeam(
-          newState,
-          createRNG(
-            `${newState.seed}-leadership-bootstrap-${newState.scout.id}-tier${newState.scout.careerTier}`,
-          ),
-        );
-    if (leadershipBootstrap.addedScoutIds.length > 0) {
-      newState = {
-        ...leadershipBootstrap.state,
-        inbox: [
-          ...leadershipBootstrap.state.inbox,
-          {
-            id: `leadership-team-tier${leadershipBootstrap.state.scout.careerTier}`,
-            week: leadershipBootstrap.state.currentWeek,
-            season: leadershipBootstrap.state.currentSeason,
-            type: "event",
-            title: "Your scouting team is ready",
-            body: `${leadershipBootstrap.addedScoutIds.length} scouts have joined your department and received regional assignments. You can now delegate focused player follow-ups from NPC Scout Management.`,
-            read: false,
-            actionRequired: false,
-          },
-        ],
-      };
-    }
-    newState = processLeadershipPortfolioWeek(newState);
-
-    const momentCandidates: CareerMoment[] = [];
-    const priorNarrativeIds = new Set(gameState.narrativeEvents.map((event) => event.id));
-    for (const event of newState.narrativeEvents) {
-      if (priorNarrativeIds.has(event.id)) continue;
-      const moment = careerMomentFromNarrativeEvent(event, newState.runManifest.rootSeed);
-      if (moment) momentCandidates.push(moment);
-    }
-    const priorReviewKeys = new Set(gameState.performanceReviews.map((review) =>
-      `${review.season}:${review.outcome}`,
-    ));
-    for (const review of newState.performanceReviews) {
-      if (priorReviewKeys.has(`${review.season}:${review.outcome}`)) continue;
-      const moment = careerMomentFromPerformanceReview(
-        review,
-        newState.runManifest.rootSeed,
-        { week: newState.currentWeek, season: newState.currentSeason },
-      );
-      if (moment) momentCandidates.push(moment);
-    }
-    const previousRecoveryStatus = new Map(
-      [gameState.careerRecovery?.current, ...(gameState.careerRecovery?.history ?? [])]
-        .filter((episode): episode is NonNullable<typeof episode> => Boolean(episode))
-        .map((episode) => [episode.id, episode.status]),
-    );
-    for (const episode of [
-      newState.careerRecovery?.current,
-      ...(newState.careerRecovery?.history ?? []),
-    ]) {
-      if (!episode || previousRecoveryStatus.get(episode.id) === episode.status) continue;
-      const moment = careerMomentFromRecovery(episode, newState.runManifest.rootSeed);
-      if (moment) momentCandidates.push(moment);
-    }
-    const previousLeadershipStatus = new Map(
-      Object.values(gameState.leadershipPortfolio?.responsibilities ?? {})
-        .map((responsibility) => [responsibility.id, responsibility.status]),
-    );
-    for (const responsibility of Object.values(
-      newState.leadershipPortfolio?.responsibilities ?? {},
-    )) {
-      if (previousLeadershipStatus.get(responsibility.id) === responsibility.status) continue;
-      const moment = careerMomentFromLeadership(
-        responsibility,
-        newState.runManifest.rootSeed,
-      );
-      if (moment) momentCandidates.push(moment);
-    }
-    for (const consequence of Object.values(newState.consequenceState.consequences)) {
-      const previousStatus = gameState.consequenceState.consequences[consequence.id]?.status;
-      if (consequence.status !== "applied" || previousStatus === "applied") continue;
-      const isLateCareerCallback = consequence.tags.includes("lateCareerDilemma")
-        && consequence.tags.includes("callback");
-      const isTurningPoint = consequence.tags.includes("turning-point");
-      if (!isLateCareerCallback && !isTurningPoint) continue;
-      const decision = newState.consequenceState.decisions[consequence.decisionId];
-      const positive = consequence.tags.includes("favorable")
-        || consequence.tags.includes("crossroads-success");
-      const title = typeof decision?.metadata?.title === "string"
-        ? decision.metadata.title
-        : positive ? "Your judgment was vindicated" : "The risk came due";
-      const selectedOption = decision?.options.find(
-        (option) => option.id === decision.selectedOptionId,
-      );
-      momentCandidates.push(createCareerMoment({
-        rootSeed: newState.runManifest.rootSeed,
-        id: `consequence:${consequence.id}`,
-        source: { kind: "consequence", id: consequence.id },
-        occurredAt: { week: newState.currentWeek, season: newState.currentSeason },
-        category: positive ? "vindication" : "failure",
-        tone: positive ? "positive" : "negative",
-        magnitude: isLateCareerCallback ? "careerDefining" : "major",
-        cue: positive ? "vindication" : "failure",
-        title,
-        summary: selectedOption
-          ? `${selectedOption.label} produced its long-term ${positive ? "vindication" : "cost"}. The outcome is now part of your permanent career record.`
-          : `A long-running decision produced its ${positive ? "favorable" : "costly"} outcome.`,
-        playerId: typeof decision?.metadata?.relatedPlayerId === "string"
-          ? decision.metadata.relatedPlayerId
-          : undefined,
-        stakeholderIds: decision?.stakeholders.map((stakeholder) => stakeholder.id) ?? [],
-        tags: consequence.tags,
-      }));
-    }
-    if (momentCandidates.length > 0) {
-      newState = {
-        ...newState,
-        careerMoments: enqueueCareerMoments(
-          newState.careerMoments,
-          momentCandidates,
-          { week: newState.currentWeek, season: newState.currentSeason },
-        ),
-      };
-    }
-    newState = compactCompletedSeasonHistory(gameState, newState);
-    newState = refreshWeeklyStakeholderProfiles(newState);
     weeklyPipeline.enter("finalize");
     newState = weeklyPipeline.complete(newState);
 
