@@ -42,9 +42,6 @@ import type {
   ConvictionLevel,
 } from "@/engine/core/types";
 import type { ActivityQualityResult } from "@/engine/core/activityQuality";
-import {
-  getActivityInteractionEffect,
-} from "@/engine/core/activityInteractions";
 import { createRNG } from "@/engine/rng";
 import { getDifficultyModifiers } from "@/engine/core/difficulty";
 import { getRunSimulationModifiers } from "@/engine/run";
@@ -64,14 +61,10 @@ import {
 } from "@/engine/core/weeklySimulationPipeline";
 import { createWeeklyTransactionJob } from "@/engine/core/weeklyTransactionProtocol";
 import {
-  getDelegationPolicyModifier,
-  getWeeklyIntentActivityModifier,
-  normalizeWeeklyStrategyState,
   selectDelegationPolicy,
   selectWeeklyIntent,
   type DelegationPolicyId,
   type WeeklyIntentId,
-  type WeeklyStrategyModifier,
 } from "@/engine/core/weeklyStrategy";
 import {
   expireJobOffersAtWeekEnd,
@@ -211,12 +204,10 @@ import {
   type TutorialState,
 } from "@/stores/tutorialStore";
 import { IS_DEMO, isDemoLimitReached, DEMO_ALLOWED_SPECS } from "@/lib/demo";
-import { getInteractiveActivityCompletionKey } from "@/lib/activityCompletion";
 import {
   applyScenarioOverrides,
   resolveScenarioOutcome,
 } from "@/engine/scenarios";
-import { ACTIVITY_MODE_MAP } from "@/engine/observation/types";
 
 const YOUTH_SUMMARY_ACTIVITY_TYPES = new Set<Activity["type"]>([
   "schoolMatch",
@@ -287,7 +278,6 @@ import {
   buildScoutQualityDataForState,
   derivePendingCelebration,
   deriveScenarioState,
-  getDayChoiceId,
   isDayInteractionPending,
   isQualityRelevantActivity,
   processInternationalTravelLifecycle,
@@ -357,6 +347,10 @@ import { processWeeklyReportActivities } from "./weeklyReportActivities";
 import { processWeeklyActivityFeedback } from "./weeklyActivityFeedback";
 import { processWeeklyObservationActivities } from "./weeklyObservationActivities";
 import { processWeeklyPlacementResolution } from "./weeklyPlacementResolution";
+import {
+  applyWeeklyStrategyAndInteractiveModifiers,
+  createWeeklyChoiceModifiers,
+} from "./weeklyActivityModifiers";
 import {
   applyDirectedWorldConditionArcBeats,
   prepareWorldConditionArcWeek,
@@ -704,71 +698,22 @@ export function createWeeklyActions(
     weekResult.skillXpGained = resolvedXp.skillXpGained;
     weekResult.attributeXpGained = resolvedXp.attributeXpGained;
 
-    const choiceDiscoveryModifiers = new Map<Activity["type"], number>();
-    const choiceProfileModifiers = new Map<Activity["type"], number>();
-    const choiceAnomalyModifiers = new Map<Activity["type"], number>();
-    const choiceRelationshipModifiers = new Map<Activity["type"], number>();
-    const choiceReportQualityModifiers = new Map<Activity["type"], number>();
-    const choiceFocusDepthByType = new Map<Activity["type"], number>();
-    const choiceFocusedPlayersByType = new Map<Activity["type"], string[]>();
     const simChoices = get().weekSimulation;
-    if (simChoices) {
-      for (const day of simChoices.dayResults) {
-        const activity = gameState.schedule.activities[day.dayIndex];
-        if (!activity) continue;
-        const choiceId = getDayChoiceId(day);
-        if (!choiceId) continue;
-        const effect = getActivityInteractionEffect(activity.type, choiceId);
-        choiceDiscoveryModifiers.set(
-          activity.type,
-          (choiceDiscoveryModifiers.get(activity.type) ?? 0) + (effect.discoveryModifier ?? 0),
-        );
-        choiceProfileModifiers.set(
-          activity.type,
-          (choiceProfileModifiers.get(activity.type) ?? 0) + (effect.profileModifier ?? 0),
-        );
-        choiceAnomalyModifiers.set(
-          activity.type,
-          (choiceAnomalyModifiers.get(activity.type) ?? 0) + (effect.anomalyModifier ?? 0),
-        );
-        choiceRelationshipModifiers.set(
-          activity.type,
-          (choiceRelationshipModifiers.get(activity.type) ?? 0) + (effect.relationshipModifier ?? 0),
-        );
-        choiceReportQualityModifiers.set(
-          activity.type,
-          (choiceReportQualityModifiers.get(activity.type) ?? 0) + (effect.reportQualityModifier ?? 0),
-        );
-        if (choiceId === "focus") {
-          const selectedFocusIds = Array.from(
-            new Set(
-              (
-                day.interaction?.focusedPlayerIds
-                ?? (day.interaction?.focusedPlayerId ? [day.interaction.focusedPlayerId] : undefined)
-                ?? simChoices.focusedYouthPlayerIds
-                ?? (simChoices.focusedYouthPlayerId ? [simChoices.focusedYouthPlayerId] : [])
-              ).filter(Boolean),
-            ),
-          ).slice(0, 3);
-
-          if (selectedFocusIds.length > 0) {
-            const existing = choiceFocusedPlayersByType.get(activity.type) ?? [];
-            const merged = [...existing];
-            for (const playerId of selectedFocusIds) {
-              if (!merged.includes(playerId)) merged.push(playerId);
-            }
-            choiceFocusedPlayersByType.set(activity.type, merged);
-
-            // Single-target focus yields deepest reads. Splitting attention reduces depth.
-            const depthGain = Math.max(1, 4 - selectedFocusIds.length); // 1->3, 2->2, 3->1
-            choiceFocusDepthByType.set(
-              activity.type,
-              (choiceFocusDepthByType.get(activity.type) ?? 0) + depthGain,
-            );
-          }
-        }
-      }
-    }
+    const activityModifiers = createWeeklyChoiceModifiers({
+      gameState,
+      weekSimulation: simChoices,
+    });
+    const {
+      discoveryModifiers: choiceDiscoveryModifiers,
+      profileModifiers: choiceProfileModifiers,
+      anomalyModifiers: choiceAnomalyModifiers,
+      relationshipModifiers: choiceRelationshipModifiers,
+      reportQualityModifiers: choiceReportQualityModifiers,
+      focusDepthByType: choiceFocusDepthByType,
+      focusedPlayersByType: choiceFocusedPlayersByType,
+      completedInteractiveIds,
+      completedLiveActivityTypes,
+    } = activityModifiers;
 
     // This serializable identity is telemetry/worker-protocol metadata only.
     // The mature synchronous transaction below remains authoritative until a
@@ -779,146 +724,10 @@ export function createWeeklyActions(
     });
     weeklyPipeline.enter("activity-resolution");
 
-    const strategy = normalizeWeeklyStrategyState(
-      gameState.weeklyStrategy,
-      gameState.currentWeek,
-      gameState.currentSeason,
+    applyWeeklyStrategyAndInteractiveModifiers(
+      { gameState, weekSimulation: simChoices },
+      activityModifiers,
     );
-    const accumulateStrategyModifier = (
-      activityType: Activity["type"],
-      modifier: WeeklyStrategyModifier,
-    ) => {
-      choiceDiscoveryModifiers.set(
-        activityType,
-        (choiceDiscoveryModifiers.get(activityType) ?? 0) + (modifier.discoveryModifier ?? 0),
-      );
-      choiceProfileModifiers.set(
-        activityType,
-        (choiceProfileModifiers.get(activityType) ?? 0) + (modifier.profileModifier ?? 0),
-      );
-      choiceAnomalyModifiers.set(
-        activityType,
-        (choiceAnomalyModifiers.get(activityType) ?? 0) + (modifier.anomalyModifier ?? 0),
-      );
-      choiceRelationshipModifiers.set(
-        activityType,
-        (choiceRelationshipModifiers.get(activityType) ?? 0) + (modifier.relationshipModifier ?? 0),
-      );
-      choiceReportQualityModifiers.set(
-        activityType,
-        (choiceReportQualityModifiers.get(activityType) ?? 0) + (modifier.reportQualityModifier ?? 0),
-      );
-    };
-
-    // Strategy is applied once per scheduled activity instance. This keeps
-    // manual and auto-scheduled weeks equivalent while making the selected
-    // weekly intent a real edge with an explicit opposing cost.
-    for (const instance of getScheduledActivityInstances(gameState.schedule)) {
-      accumulateStrategyModifier(
-        instance.activity.type,
-        getWeeklyIntentActivityModifier(strategy.intentId, instance.activity),
-      );
-    }
-
-    // A skipped live call is not silently converted into a generic choice.
-    // The persisted standing order resolves it and adds its own tradeoff.
-    for (const day of simChoices?.dayResults ?? []) {
-      if (day.interaction?.resolutionMode !== "delegated" || !day.activity) continue;
-      accumulateStrategyModifier(
-        day.activity.type,
-        getDelegationPolicyModifier(
-          day.interaction.delegationPolicyId ?? strategy.delegationPolicyId,
-        ),
-      );
-    }
-
-    // Interactive observation sessions should have concrete gameplay impact.
-    // Each completed scheduled instance adds a mode-specific bonus.
-    const completedInteractiveIds = new Set(gameState.completedInteractiveSessions ?? []);
-    const scheduledInstances = getScheduledActivityInstances(gameState.schedule);
-    const skippedInteractiveByType = new Map<Activity["type"], number>();
-    const completedLiveActivityTypes = new Set<Activity["type"]>();
-    for (const instance of scheduledInstances) {
-      const activity = instance.activity;
-      if (activity.type === "attendMatch") continue; // handled by fixture gate
-      const mode = ACTIVITY_MODE_MAP[activity.type];
-      if (!mode) continue;
-
-      const instanceKey = getInteractiveActivityCompletionKey(activity, instance.dayIndex);
-      if (completedInteractiveIds.has(instanceKey)) {
-        switch (mode) {
-          case "fullObservation":
-            // The live session now writes its own observations. Do not add a
-            // second generic bonus on top of that evidence.
-            completedLiveActivityTypes.add(activity.type);
-            break;
-          case "investigation":
-            choiceRelationshipModifiers.set(
-              activity.type,
-              (choiceRelationshipModifiers.get(activity.type) ?? 0) + 1,
-            );
-            choiceReportQualityModifiers.set(
-              activity.type,
-              (choiceReportQualityModifiers.get(activity.type) ?? 0) + 1,
-            );
-            break;
-          case "analysis":
-            choiceProfileModifiers.set(
-              activity.type,
-              (choiceProfileModifiers.get(activity.type) ?? 0) + 1,
-            );
-            choiceAnomalyModifiers.set(
-              activity.type,
-              (choiceAnomalyModifiers.get(activity.type) ?? 0) + 1,
-            );
-            break;
-          case "quickInteraction":
-            choiceRelationshipModifiers.set(
-              activity.type,
-              (choiceRelationshipModifiers.get(activity.type) ?? 0) + 1,
-            );
-            break;
-        }
-      } else {
-        skippedInteractiveByType.set(
-          activity.type,
-          (skippedInteractiveByType.get(activity.type) ?? 0) + 1,
-        );
-      }
-    }
-
-    // Skipping live sessions carries a small opportunity-cost penalty.
-    for (const [activityType, skippedCount] of skippedInteractiveByType.entries()) {
-      if (skippedCount <= 0) continue;
-      const mode = ACTIVITY_MODE_MAP[activityType];
-      if (!mode) continue;
-      switch (mode) {
-        case "fullObservation":
-          choiceDiscoveryModifiers.set(
-            activityType,
-            (choiceDiscoveryModifiers.get(activityType) ?? 0) - 1,
-          );
-          break;
-        case "investigation":
-          choiceRelationshipModifiers.set(
-            activityType,
-            (choiceRelationshipModifiers.get(activityType) ?? 0) - 1,
-          );
-          break;
-        case "analysis":
-          choiceProfileModifiers.set(
-            activityType,
-            (choiceProfileModifiers.get(activityType) ?? 0) - 1,
-          );
-          break;
-        case "quickInteraction":
-          choiceRelationshipModifiers.set(
-            activityType,
-            (choiceRelationshipModifiers.get(activityType) ?? 0) - 1,
-          );
-          break;
-      }
-    }
 
     let updatedScout = applyWeekResults(gameState.scout, weekResult);
     const priorPerkIds = new Set(gameState.scout.unlockedPerks ?? []);
