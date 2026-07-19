@@ -135,7 +135,6 @@ import {
   withLifecycleWorld,
 } from "@/engine/world/playerLifecycle";
 import { reconcileInboxActionRequirements } from "@/engine/world/inboxActionAuthority";
-import { applyAcceptedNarrativeConsequences } from "@/engine/world/acceptedNarrativeConsequences";
 import {
   initializeFinances,
   processWeeklyFinances,
@@ -154,22 +153,6 @@ import {
 import { getCreditScore } from "@/engine/finance/creditScore";
 import { getLifestyleEffects } from "@/engine/finance/expenses";
 import { isFinancialPeriodClose } from "@/engine/core/annualization";
-import {
-  createStoryDirectorStateV2,
-  directWeeklyNarrativeEvent,
-  directWeeklyStoryEmissionsV2,
-  inferNarrativeEntityRefsV2,
-  recordEventDirectorOutcome,
-  acknowledgeEvent,
-  checkStorylineTriggers,
-  processActiveStorylines,
-  advanceChain,
-  type WeeklyNarrativeEmissionV2,
-} from "@/engine/events";
-import {
-  applyDirectedWorldPulse,
-  prepareWeeklyWorldPulse,
-} from "@/engine/events/worldPulse";
 import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
 import {
   generateRivalScouts,
@@ -189,7 +172,6 @@ import { generateManagerProfiles } from "@/engine/analytics";
 import {
   advanceYouthRecruitmentBriefs,
   deriveYouthRecruitmentBriefCapacity,
-  directWeeklyYouthProfessionalCase,
   generateYouthRecruitmentBriefs,
 } from "@/engine/youth";
 import {
@@ -332,14 +314,7 @@ import { registerNarrativeDecisions } from "./weeklyNarrativeConsequences";
 import { processWeeklyWorldProgression } from "./weeklyWorldProgression";
 import { processWeeklyTransferAccountability } from "./weeklyTransferAccountability";
 import { processWeeklySpecializationSystems } from "./weeklySpecializationSystems";
-import {
-  applyDirectedWeeklyScoutingEcology,
-  prepareWeeklyScoutingEcology,
-} from "./weeklyScoutingEcologyPhase";
-import {
-  applyDirectedWeeklyRivalCampaigns,
-  prepareWeeklyRivalCampaigns,
-} from "./weeklyRivalCampaigns";
+import { prepareWeeklyRivalCampaigns } from "./weeklyRivalCampaigns";
 import { processWeeklyPostTickSystems } from "./weeklyPostTickSystems";
 import { processWeeklySeasonRollover } from "./weeklySeasonRollover";
 import { processWeeklyRelationshipActivities } from "./weeklyRelationshipActivities";
@@ -351,10 +326,7 @@ import {
   applyWeeklyStrategyAndInteractiveModifiers,
   createWeeklyChoiceModifiers,
 } from "./weeklyActivityModifiers";
-import {
-  applyDirectedWorldConditionArcBeats,
-  prepareWorldConditionArcWeek,
-} from "./weeklyWorldConditionArcs";
+import { runWeeklyNarrativeArbitration } from "./weeklyNarrativeArbitration";
 
 export { projectExpiredNarrativeDefaults } from "./weeklyNarrativeConsequences";
 
@@ -1765,200 +1737,12 @@ export function createWeeklyActions(
       }, poachNarrativeEvents);
     }
 
-    // 3. Generate narrative event (12% weekly chance, with F2 chain support)
-    const eventRng = createRNG(
-      `${gameState.runManifest.rootSeed}-events-${gameState.currentWeek}-${gameState.currentSeason}`,
-    );
-    // Ensure eventChains is initialized for chain processing
-    if (!stateWithPhase2.eventChains) {
-      stateWithPhase2 = { ...stateWithPhase2, eventChains: [] };
-    }
-    const priorNarrativeEvents = stateWithPhase2.narrativeEvents;
-    const priorEventDirector = stateWithPhase2.eventDirector;
-    const weeklyResult = directWeeklyNarrativeEvent(eventRng, stateWithPhase2);
-    const narrativeEvent = weeklyResult.event;
-
+    // 3. Arbitrate standalone events, storylines, world arcs, and rival pressure.
     // 3b. Storyline system — trigger new storylines and advance active ones
-    const storylineRng = createRNG(
-      `${gameState.runManifest.rootSeed}-storylines-${gameState.currentWeek}-${gameState.currentSeason}`,
-    );
-
-    // Attempt to start a new storyline (5% weekly chance, max 2 active)
-    const storylineModifiers = getRunSimulationModifiers(stateWithPhase2.runManifest);
-    const newStoryline = checkStorylineTriggers(
-      stateWithPhase2,
-      storylineRng,
-      0.05 * storylineModifiers.storylineChanceMultiplier,
-    );
-    // A new storyline remains provisional until the unified director grants it
-    // this week's opening slot. Existing due beats retain continuation priority.
-    const storylinesForProcessing = newStoryline
-      ? [...stateWithPhase2.activeStorylines, newStoryline]
-      : stateWithPhase2.activeStorylines;
-    const storylineProcessingState = newStoryline
-      ? { ...stateWithPhase2, activeStorylines: storylinesForProcessing }
-      : stateWithPhase2;
-
-    const { events: storylineEvents, updatedStorylines } = processActiveStorylines(
-      storylineProcessingState,
-      storylineRng,
-    );
-
-    // Persistent world-condition arcs share the same opening/continuation gate
-    // as standalone events, chains, storylines, and specials. This prevents a
-    // second narrative authority from flooding the same week with prompts.
-    const worldArcWeek = prepareWorldConditionArcWeek(stateWithPhase2);
-    stateWithPhase2 = worldArcWeek.state;
-    const scoutingEcologyWeek = prepareWeeklyScoutingEcology({
+    stateWithPhase2 = runWeeklyNarrativeArbitration({
       state: stateWithPhase2,
       rivalOpportunity: organizationResult.opportunity,
-    });
-
-    const emissions: WeeklyNarrativeEmissionV2[] = [];
-    if (narrativeEvent) {
-      emissions.push({
-        event: narrativeEvent,
-        ...inferNarrativeEntityRefsV2(stateWithPhase2, narrativeEvent),
-        chain: weeklyResult.advancedChain?.chain ?? weeklyResult.newChain?.chain,
-        continuation: Boolean(weeklyResult.advancedChain),
-      });
-    }
-    for (const event of storylineEvents) {
-      emissions.push({
-        event,
-        ...inferNarrativeEntityRefsV2(stateWithPhase2, event),
-        storyline: updatedStorylines.find((storyline) => storyline.id === event.storylineId),
-        continuation: !newStoryline || event.storylineId !== newStoryline.id,
-      });
-    }
-    const seasonLength = getSeasonLength(
-      stateWithPhase2.fixtures,
-      stateWithPhase2.currentSeason,
-    );
-    const worldPulseWeek = prepareWeeklyWorldPulse({
-      state: stateWithPhase2,
-      seasonLength,
-      blockedByActivity:
-        Boolean(narrativeEvent)
-        || storylineEvents.length > 0
-        || worldArcWeek.beats.length > 0
-        || scoutingEcologyWeek.candidates.length > 0
-        || rivalCampaignWeek.candidates.length > 0,
-    });
-
-    const storyDirection = directWeeklyStoryEmissionsV2({
-      rootSeed: stateWithPhase2.runManifest.rootSeed,
-      state: createStoryDirectorStateV2(stateWithPhase2.storyDirectorV2),
-      now: {
-        week: stateWithPhase2.currentWeek,
-        season: stateWithPhase2.currentSeason,
-      },
-      priorEvents: priorNarrativeEvents,
-      emissions,
-      candidates: [
-        ...worldArcWeek.beats.map((beat) => beat.candidate),
-        ...scoutingEcologyWeek.candidates,
-        ...rivalCampaignWeek.candidates,
-        ...(worldPulseWeek ? [worldPulseWeek.candidate] : []),
-      ],
-      activeChoiceCount: Object.values(stateWithPhase2.consequenceState.decisions)
-        .filter((decision) => decision.status === "offered")
-        .length,
-      seasonLength,
-    });
-    const acceptedEventIds = new Set(
-      storyDirection.accepted.map(({ emission }) => emission.event.id),
-    );
-    const acceptedNarrativeEvents = emissions
-      .map(({ event }) => event)
-      .filter((event) => acceptedEventIds.has(event.id));
-    stateWithPhase2 = applyAcceptedNarrativeConsequences(
-      stateWithPhase2,
-      acceptedNarrativeEvents,
-    ).state;
-    const acceptedNewStoryline = Boolean(
-      newStoryline
-      && acceptedNarrativeEvents.some((event) => event.storylineId === newStoryline.id),
-    );
-    const authoritativeStorylines = newStoryline && !acceptedNewStoryline
-      ? updatedStorylines.filter((storyline) => storyline.id !== newStoryline.id)
-      : updatedStorylines;
-    let authoritativeChains = stateWithPhase2.eventChains ?? [];
-    if (
-      weeklyResult.advancedChain
-      && weeklyResult.advancedChain.event
-      && acceptedEventIds.has(weeklyResult.advancedChain.event.id)
-    ) {
-      authoritativeChains = authoritativeChains.map((chain) =>
-        chain.id === weeklyResult.advancedChain!.chain.id
-          ? weeklyResult.advancedChain!.chain
-          : chain,
-      );
-    }
-    if (weeklyResult.newChain && acceptedEventIds.has(weeklyResult.newChain.event.id)) {
-      authoritativeChains = [...authoritativeChains, weeklyResult.newChain.chain];
-    }
-
-    const featuredEvent = acceptedNarrativeEvents[0] ?? null;
-    stateWithPhase2 = {
-      ...stateWithPhase2,
-      storyDirectorV2: storyDirection.state,
-      eventDirector: recordEventDirectorOutcome(
-        priorEventDirector,
-        featuredEvent,
-        Boolean(featuredEvent?.specialEventId),
-        stateWithPhase2.currentSeason,
-      ),
-      eventChains: authoritativeChains,
-      activeStorylines: authoritativeStorylines,
-    };
-    const acceptedStoryCandidateIds = new Set(
-      storyDirection.acceptedCandidates.map(({ candidate }) => candidate.id),
-    );
-    stateWithPhase2 = applyDirectedWorldConditionArcBeats({
-      state: stateWithPhase2,
-      beats: worldArcWeek.beats,
-      acceptedBeatIds: acceptedStoryCandidateIds,
-    });
-    stateWithPhase2 = applyDirectedWeeklyScoutingEcology({
-      state: stateWithPhase2,
-      prepared: scoutingEcologyWeek,
-      acceptedCandidateIds: acceptedStoryCandidateIds,
-    });
-    stateWithPhase2 = applyDirectedWorldPulse({
-      state: stateWithPhase2,
-      prepared: worldPulseWeek,
-      acceptedCandidateIds: acceptedStoryCandidateIds,
-    });
-    stateWithPhase2 = applyDirectedWeeklyRivalCampaigns({
-      state: stateWithPhase2,
-      prepared: rivalCampaignWeek,
-      acceptedCandidateIds: acceptedStoryCandidateIds,
-    });
-
-    if (acceptedNarrativeEvents.length > 0) {
-      const narrativeInboxMessages: InboxMessage[] = acceptedNarrativeEvents.map((evt) => ({
-        id: `narrative-${evt.id}`,
-        week: stateWithPhase2.currentWeek,
-        season: stateWithPhase2.currentSeason,
-        type: "event" as const,
-        title: evt.title,
-        body: evt.description,
-        read: false,
-        actionRequired: (evt.choices?.length ?? 0) > 0,
-        relatedId: evt.id,
-        relatedEntityType: "narrative" as const,
-      }));
-
-      stateWithPhase2 = registerNarrativeDecisions({
-        ...stateWithPhase2,
-        narrativeEvents: [...stateWithPhase2.narrativeEvents, ...acceptedNarrativeEvents],
-        inbox: [...stateWithPhase2.inbox, ...narrativeInboxMessages],
-      }, acceptedNarrativeEvents);
-    }
-
-    stateWithPhase2 = directWeeklyYouthProfessionalCase({
-      state: stateWithPhase2,
+      rivalCampaignWeek,
     }).state;
 
     // 4. Check for newly unlocked tools
