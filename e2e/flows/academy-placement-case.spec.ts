@@ -84,10 +84,11 @@ test.describe("Academy placement case", () => {
 
     await gamePage.page.getByRole("tab", { name: /^Brief\b/ }).click();
     await expect(gamePage.page.getByRole("heading", { name: "Answer a real club need" })).toBeVisible();
-    await expect(gamePage.page.getByText("Development potential", { exact: true })).toBeVisible();
     const identityBriefing = gamePage.page.getByTestId("recruitment-identity-briefing");
     await expect(identityBriefing).toBeVisible();
     await expect(identityBriefing).toContainText(/same case can land differently/i);
+    await gamePage.page.getByRole("tab", { name: /^Build the case\b/ }).click();
+    await expect(gamePage.page.getByText("Development potential", { exact: true })).toBeVisible();
     const presentationRoom = gamePage.page.getByTestId("report-presentation-room");
     await expect(presentationRoom).toBeVisible();
     await presentationRoom.getByRole("radio", { name: /^Pathway-led\b/ }).click();

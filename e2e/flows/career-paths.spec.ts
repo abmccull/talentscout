@@ -34,15 +34,13 @@ test.describe("Career Paths", () => {
 
     await gamePage.navigateTo("career");
 
-    await gamePage.page.getByTestId("career-world-details").locator(":scope > summary").click();
+    await gamePage.page.getByTestId("career-world-details").click();
+    await gamePage.waitForScreen("internationalView");
+    await gamePage.page.getByTestId("open-world-outlook").click();
 
-    const conditions = gamePage.page.getByText(
-      /These seed-locked conditions shape talent, competition, markets, and story pacing for the full career\./,
-    );
-    await expect(conditions).toBeVisible();
-    await expect(gamePage.page.getByText("talent", { exact: true })).toBeVisible();
-    await expect(gamePage.page.getByText("competition", { exact: true })).toBeVisible();
-    await expect(gamePage.page.getByText("economy", { exact: true })).toBeVisible();
+    await expect(gamePage.page.getByTestId("world-outlook-drawer")).toBeVisible();
+    await expect(gamePage.page.getByRole("heading", { name: "World outlook" })).toBeVisible();
+    await expect(gamePage.page.getByText(/territorial position/i)).toBeVisible();
     const seasonal = gamePage.page.getByTestId("world-condition-panel");
     await expect(seasonal).toBeVisible();
     await expect(seasonal.getByRole("heading", { name: /Season 1 live conditions/i }))
@@ -53,7 +51,7 @@ test.describe("Career Paths", () => {
       .toHaveCount(
         await gamePage.getGameStateValue("worldConditionState.active.length") as number,
       );
-    await expect(seasonal.getByText(/part of the simulation, not flavour text/i))
+    await expect(seasonal.getByText(/These shifts change where prospects emerge/i))
       .toBeVisible();
     gamePage.expectNoConsoleErrors();
   });
@@ -66,6 +64,7 @@ test.describe("Career Paths", () => {
         firstName: "Career",
         lastName: "Tester",
         primarySpecialization: "youth",
+        careerPath: "independent",
       },
     });
 
@@ -73,8 +72,10 @@ test.describe("Career Paths", () => {
 
     expect(await gamePage.getGameStateValue("scout.currentClubId")).toBeFalsy();
     expect(await gamePage.getGameStateValue("scout.salary")).toBe(0);
+    expect(await gamePage.getGameStateValue("scout.careerPath")).toBe("independent");
     await expect(
-      gamePage.page.getByLabel("Overview").getByText("Freelance Scout", { exact: true }),
+      gamePage.page.getByRole("tabpanel", { name: "Overview" })
+        .getByText("Freelance Youth Scout", { exact: true }),
     ).toBeVisible();
 
     gamePage.expectNoConsoleErrors();
