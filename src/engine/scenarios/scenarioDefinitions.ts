@@ -51,6 +51,7 @@ export interface ScenarioDef {
   /** Parameters injected into NewGameConfig / the initial GameState. */
   setup: {
     startingTier: number;
+    /** One-based career season index. Calendar years are presentation only. */
     startingSeason: number;
     startingWeek: number;
     startingReputation: number;
@@ -136,7 +137,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "starter",
     setup: {
       startingTier: 2,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 20,
       startingReputation: 25,
       startingCountry: "england",
@@ -180,7 +181,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "starter",
     setup: {
       startingTier: 2,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 20,
       startingCountry: "england",
@@ -214,7 +215,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "starter",
     setup: {
       startingTier: 2,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 15,
       startingCountry: "england",
@@ -249,7 +250,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "starter",
     setup: {
       startingTier: 3,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 40,
       startingCountry: "england",
@@ -290,7 +291,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "advanced",
     setup: {
       startingTier: 4,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 35,
       startingCountry: "england",
@@ -339,7 +340,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "advanced",
     setup: {
       startingTier: 3,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 30,
       startingCountry: "england",
@@ -381,7 +382,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "advanced",
     setup: {
       startingTier: 3,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 50,
       startingCountry: "england",
@@ -424,7 +425,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "advanced",
     setup: {
       startingTier: 5,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 80,
       startingCountry: "england",
@@ -460,7 +461,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "advanced",
     setup: {
       startingTier: 3,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 40,
       startingCountry: "england",
@@ -510,7 +511,7 @@ const SCENARIO_DEFINITIONS: readonly ScenarioDef[] = [
     category: "advanced",
     setup: {
       startingTier: 1,
-      startingSeason: 2024,
+      startingSeason: 1,
       startingWeek: 1,
       startingReputation: 5,
       startingCountry: "england",
@@ -601,7 +602,7 @@ export const SCENARIO_CONTENT_PACK = defineContentPack({
     id: "talentscout.scenarios",
     kind: "scenario",
     schemaVersion: CONTENT_SCHEMA_VERSION,
-    contentVersion: "scenarios.1",
+    contentVersion: "scenarios.2",
   },
   entries: SCENARIO_DEFINITIONS,
   getDefinitionId: (scenario) => scenario.id,

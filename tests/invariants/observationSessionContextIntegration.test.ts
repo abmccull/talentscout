@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Observation, ReflectionJournalEntry } from "@/engine/core/types";
+import { useGameStore } from "@/stores/gameStore";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -18,7 +19,6 @@ vi.mock("@/lib/db", () => ({
 
 describe("observation session context integration", () => {
   it("carries prior evidence across youth aliases and keeps the contextual opening question", async () => {
-    const { useGameStore } = await import("@/stores/gameStore");
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Context",
       scoutLastName: "Scout",
@@ -107,7 +107,6 @@ describe("observation session context integration", () => {
   }, 30_000);
 
   it("propagates case guidance onto scheduled activities and into the session focus", async () => {
-    const { useGameStore } = await import("@/stores/gameStore");
     await useGameStore.getState().startNewGame({
       scoutFirstName: "Case",
       scoutLastName: "Planner",

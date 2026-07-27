@@ -18,14 +18,15 @@
       "evidence": [],
       "supportingAutomation": [
         "artifacts/release/automated-core-suites.json",
-        "artifacts/replayability/release-summary.json",
+        "artifacts/release/generated/replayability-release-summary.json",
         "artifacts/architecture/module-graph.json",
         "artifacts/coverage/critical/coverage-summary.json",
         "artifacts/performance/low-end-emulation-profile.json"
       ],
       "generatedEvidence": {
         "kind": "candidate-core-suites",
-        "path": "artifacts/release/generated/candidate-core-suites.json"
+        "path": "artifacts/release/generated/candidate-core-suites.json",
+        "replayabilityArtifact": "artifacts/release/generated/replayability-release-summary.json"
       }
     },
     "manualNvda": {
@@ -111,6 +112,33 @@
           "medianSusThreshold",
           "zeroRepeatedP0",
           "zeroRepeatedP1AfterRetest",
+          "anonymizedEvidenceComplete"
+        ]
+      }
+    },
+    "moderatedPairedCareerReplayability": {
+      "status": "Unverified",
+      "evidence": [],
+      "protocol": "docs/release/moderated-paired-career-replayability.md",
+      "generatedEvidence": {
+        "kind": "release-gate-attestation",
+        "path": "artifacts/release/generated/certifications/moderated-paired-career-replayability.json",
+        "requiredPackageKinds": ["windows-installer"],
+        "requiredControls": [
+          "minimumParticipantSample",
+          "balancedParticipantSegments",
+          "counterbalancedCareerOrder",
+          "pairedCareerACompleted",
+          "pairedCareerBCompleted",
+          "contrastInterviewCaptured",
+          "quietStreakPerceptionCaptured",
+          "meaningfulWeekDensityPerceptionCaptured",
+          "clubRecruitmentExpressionSurfaceReviewed",
+          "footballCulturePlaybookSurfaceReviewed",
+          "relationshipConflictFrontSurfaceReviewed",
+          "replayabilityDifferenceThreshold",
+          "noRepeatedP0",
+          "noRepeatedP1AfterRetest",
           "anonymizedEvidenceComplete"
         ]
       }

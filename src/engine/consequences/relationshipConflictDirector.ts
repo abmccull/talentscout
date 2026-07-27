@@ -5,6 +5,7 @@ import { createNamedRNG } from "@/engine/run";
 import {
   type AuthoredConflictCast,
   type MaterializedRelationshipConflict,
+  type RelationshipConflictFrontMetadata,
   materializeAuthoredRelationshipConflict,
   registerMaterializedRelationshipConflict,
   selectAuthoredRelationshipConflict,
@@ -37,6 +38,7 @@ export interface PreparedRelationshipConflictCandidate {
   cast: AuthoredConflictCast;
   materialized: MaterializedRelationshipConflict;
   stakeholderProfiles: StakeholderProfileRegistry;
+  front: RelationshipConflictFrontMetadata;
 }
 
 export interface RelationshipConflictPreparationResult {
@@ -48,19 +50,35 @@ function distinctSorted(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort();
 }
 
-function candidatePlayerIds(state: GameState): string[] {
+function relevantRelationshipSubjectIds(state: GameState): string[] {
   const unsignedPlayerIds = new Set(
     Object.values(state.unsignedYouth ?? {}).map((candidate) => candidate.player.id),
+  );
+  const alumniPlayerIds = new Set(
+    (state.alumniRecords ?? []).map((record) => record.playerId),
   );
   return distinctSorted([
     ...(state.watchlist ?? []),
     ...Object.values(state.reports ?? {}).map((report) => report.playerId),
+    ...Object.values(state.scoutingCases ?? {})
+      .filter((scoutingCase) => scoutingCase.status !== "closed")
+      .map((scoutingCase) => scoutingCase.playerId),
+    ...Object.values(state.placementReports ?? {})
+      .map((report) => state.unsignedYouth?.[report.unsignedYouthId]?.player.id)
+      .filter((playerId): playerId is string => Boolean(playerId)),
     ...unsignedPlayerIds,
-    ...Object.keys(state.players ?? {}),
+    ...alumniPlayerIds,
   ]).filter((id) =>
     Boolean(state.players[id])
+    || Boolean(state.retiredPlayers?.[id])
     || unsignedPlayerIds.has(id),
   );
+}
+
+export function getRelationshipConflictCandidatePlayerIds(state: GameState): string[] {
+  const relevantIds = relevantRelationshipSubjectIds(state);
+  if (relevantIds.length > 0) return relevantIds;
+  return distinctSorted(Object.keys(state.players ?? {}));
 }
 
 function lastConflictDate(state: GameState): GameDate | undefined {
@@ -119,7 +137,7 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     return { blockedReason: "trigger-missed" };
   }
 
-  const playerIds = candidatePlayerIds(state);
+  const playerIds = getRelationshipConflictCandidatePlayerIds(state);
   if (playerIds.length === 0) return { blockedReason: "no-subject" };
   const subjectRng = createNamedRNG(
     state.runManifest.rootSeed,
@@ -135,6 +153,7 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     now,
     registry,
     subject,
+    state,
   });
   if (!cast) return { blockedReason: "no-cast" };
 
@@ -156,6 +175,8 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     now,
     deadlineAt: addGameWeeks(state.fixtures, now, cast.definition.deadlineWeeks),
     outcomeRoll: outcomeRng.next(),
+    existingState: state.consequenceState,
+    advanceWeeks: (start, weeks) => addGameWeeks(state.fixtures, start, weeks),
   });
 
   const semanticSignature = materialized.decision.metadata?.semanticSignature;
@@ -182,6 +203,7 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
       cast,
       materialized,
       stakeholderProfiles: registry,
+      front: materialized.front,
     },
   };
 }

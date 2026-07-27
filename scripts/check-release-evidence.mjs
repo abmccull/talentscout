@@ -353,6 +353,61 @@ async function validateGeneratedGateEvidence(gateId, policy) {
     ) {
       result.failures.push("candidate core suites did not complete from a clean checkout");
     }
+    const replayabilityArtifact = typeof policy.replayabilityArtifact === "string"
+      ? policy.replayabilityArtifact.trim()
+      : "";
+    result.replayabilityArtifact = {
+      path: replayabilityArtifact,
+      status: "Unverified",
+      failures: [],
+    };
+    if (!replayabilityArtifact || isAbsolute(replayabilityArtifact)) {
+      result.replayabilityArtifact.failures.push(
+        "candidate core-suite policy must name a repository-relative replayability artifact",
+      );
+    } else {
+      const replayabilityPath = resolve(root, replayabilityArtifact);
+      if (!isPathInsideRoot(replayabilityPath)) {
+        result.replayabilityArtifact.failures.push(
+          "replayability artifact path escapes the repository root",
+        );
+      } else {
+        try {
+          const replayability = JSON.parse(await readFile(replayabilityPath, "utf8"));
+          const authority = replayability.humanFacingProxies?.authority;
+          if (replayability.passed !== true) {
+            result.replayabilityArtifact.failures.push(
+              "replayability artifact did not pass its simulation thresholds",
+            );
+          }
+          if (String(authority?.sourceHeadSha ?? "").toLowerCase() !== candidateSha) {
+            result.replayabilityArtifact.failures.push(
+              "replayability artifact does not describe the exact candidate commit",
+            );
+          }
+          if (
+            authority?.gitInspectionSucceeded !== true
+            || authority?.sourceTreeClean !== true
+            || authority?.sourceDirtyEntryCount !== 0
+            || authority?.evidenceClass !== "clean_commit_bound"
+            || authority?.releaseCertificationEligible !== true
+          ) {
+            result.replayabilityArtifact.failures.push(
+              "replayability artifact is diagnostic-only, not clean commit-bound release evidence",
+            );
+          }
+        } catch (error) {
+          result.replayabilityArtifact.failures.push(
+            `replayability artifact cannot be read: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }
+    }
+    if (result.replayabilityArtifact.failures.length === 0) {
+      result.replayabilityArtifact.status = "Passed";
+    } else {
+      result.failures.push(...result.replayabilityArtifact.failures);
+    }
     const requiredWorkflowRunId = process.env.RELEASE_WORKFLOW_RUN_ID?.trim();
     if (requiredWorkflowRunId && String(evidence.workflowRunId ?? "") !== requiredWorkflowRunId) {
       result.failures.push("candidate core-suite evidence came from another workflow run");

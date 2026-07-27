@@ -301,7 +301,10 @@ async function addAuditDecisions(gamePage: GamePage) {
 }
 
 test.describe("Interactivity audit rendered evidence", () => {
-  test.setTimeout(600_000);
+  // This release-only journey deliberately writes dozens of desktop/mobile
+  // screenshots and runs repeated Axe scans. Its budget reflects capture IO,
+  // not a relaxed interaction assertion.
+  test.setTimeout(900_000);
 
   test("captures onboarding, core workspaces, and decision states", async ({ gamePage }) => {
     await mkdir(evidenceDir, { recursive: true });
@@ -369,7 +372,10 @@ test.describe("Interactivity audit rendered evidence", () => {
     ] as const;
     for (const [screen, name] of workspaces) {
       await gamePage.setScreen(screen);
-      await captureBoth(gamePage, name, { fullPage: true });
+      await captureBoth(gamePage, name, {
+        fullPage: true,
+        assertResponsiveWidth: true,
+      });
       if (screen === "internationalView") {
         const assignmentPanel = gamePage.page.getByTestId("international-assignment-panel");
         await expectNoVisualOverlap(
@@ -394,7 +400,7 @@ test.describe("Interactivity audit rendered evidence", () => {
     await captureSurfaceBoth(gamePage, "05b-weekly-strategy", "weekly-strategy-panel");
 
     await gamePage.setScreen("career");
-    await captureSurfaceBoth(gamePage, "09a-career-situation", "career-situation-panel");
+    await captureSurfaceBoth(gamePage, "09a-career-command-bridge", "career-command-bridge");
 
     await gamePage.setScreen("internationalView");
     await gamePage.page.getByTestId("open-world-outlook").click();
@@ -499,6 +505,11 @@ test.describe("Interactivity audit rendered evidence", () => {
       store.getState().setScreen("career");
     });
     await gamePage.waitForScreen("career");
+    const careerInventory = gamePage.page.locator("details").filter({
+      hasText: "Career inventory",
+    });
+    await careerInventory.locator("summary").click();
+    await expect(careerInventory).toHaveAttribute("open", "");
     await captureBoth(gamePage, "09d-career-politics", {
       fullPage: true,
       axe: true,

@@ -9,6 +9,11 @@ import {
   buildReplayabilityTelemetry,
   type ReplayabilityTelemetryArtifact,
 } from "@/engine/telemetry/replayabilityDivergence";
+import {
+  buildReplayabilityEvidenceAuthority,
+  buildReplayabilityHumanProxies,
+  type ReplayabilityHumanProxySummary,
+} from "./replayabilityHumanProxies";
 
 function positiveIntegerFromEnvironment(name: string, fallback: number): number {
   const raw = process.env[name];
@@ -21,6 +26,7 @@ function positiveIntegerFromEnvironment(name: string, fallback: number): number 
 }
 
 let artifact: ReplayabilityTelemetryArtifact;
+let humanFacingProxies: ReplayabilityHumanProxySummary;
 const expectedThresholds = process.env.TALENTSCOUT_REPLAYABILITY_PROFILE === "nightly"
   ? REPLAYABILITY_NIGHTLY_THRESHOLDS
   : REPLAYABILITY_RELEASE_THRESHOLDS;
@@ -42,11 +48,19 @@ beforeAll(() => {
     seedPrefix: process.env.TALENTSCOUT_REPLAYABILITY_SEED_PREFIX
       ?? "release-divergence",
   }, expectedThresholds);
+  humanFacingProxies = buildReplayabilityHumanProxies(artifact.config);
   const outputPath = process.env.TALENTSCOUT_REPLAYABILITY_ARTIFACT;
   if (outputPath) {
     const absolutePath = resolve(outputPath);
     mkdirSync(dirname(absolutePath), { recursive: true });
-    writeFileSync(absolutePath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+    writeFileSync(
+      absolutePath,
+      `${JSON.stringify({
+        ...artifact,
+        humanFacingProxies,
+      }, null, 2)}\n`,
+      "utf8",
+    );
   }
 }, 180_000);
 
@@ -119,5 +133,61 @@ describe("release replayability divergence telemetry", () => {
       .toBeLessThanOrEqual(expectedThresholds.maximumDeadDirectorStateRate);
     expect(artifact.metrics.runawayDirectorStateRate)
       .toBeLessThanOrEqual(expectedThresholds.maximumRunawayDirectorStateRate);
+  });
+
+  it("reports production-backed authored surfaces and honestly named rival counterplay", () => {
+    const proxies = humanFacingProxies;
+    expect(proxies.authority.canonicalReleaseArtifact)
+      .toBe("artifacts/release/generated/replayability-release-summary.json");
+    expect(proxies.authority.legacyReleaseArtifactRejected).toBe(true);
+    expect(proxies.quietWeekStreak.p95).toBeLessThanOrEqual(artifact.metrics.maximumQuietWeeks);
+    expect(proxies.rollingEightWeekMeaningfulWeekDensity.minimum).toBeGreaterThan(0);
+    expect(proxies.authoredSurfaceCoverage.clubRecruitmentExpressions).toMatchObject({
+      status: "production_catalog",
+      expressionCount: 12,
+      familyCount: 4,
+    });
+    expect(new Set(
+      proxies.authoredSurfaceCoverage.clubRecruitmentExpressions.expressionIds,
+    ).size).toBe(12);
+    expect(proxies.authoredSurfaceCoverage.footballCulturePlaybooks).toMatchObject({
+      status: "production_catalog",
+      playbookCount: 22,
+      authoredCalendarWindowCount: 54,
+      countriesWithAuthoredCalendarWindows: 22,
+    });
+    expect(Object.values(
+      proxies.authoredSurfaceCoverage.footballCulturePlaybooks
+        .signaledAttributeDomainCountByCountry,
+    ).every((count) => count > 0)).toBe(true);
+    expect(proxies.authoredSurfaceCoverage.relationshipConflicts).toMatchObject({
+      status: "production_catalog",
+      blueprintCount: 13,
+      frontFamilyCount: 13,
+      frontStructureCount: 7,
+      recurrenceNameCount: 13,
+      recurringFrontVariantCount: 39,
+      callbackVariantCount: 33,
+      stakeholderOutcomeVariantCount: 78,
+      authoredCallbackOutcomeVariantCount: 111,
+    });
+    expect(proxies.rivalCounterplay.status).toBe("sampled_harness");
+    expect(proxies.rivalCounterplay.organizationArchetypeCoverage).toBeGreaterThan(0);
+    expect(proxies.rivalCounterplay.organizationSetCoverage).toBeGreaterThan(0);
+  });
+
+  it("marks a dirty source tree as diagnostic-only release evidence", () => {
+    const authority = buildReplayabilityEvidenceAuthority({
+      sourceHeadSha: "a".repeat(40),
+      sourceTreeClean: false,
+      sourceDirtyEntryCount: 3,
+      gitInspectionSucceeded: true,
+    });
+    expect(authority).toMatchObject({
+      evidenceClass: "diagnostic_dirty_worktree",
+      sourceTreeClean: false,
+      sourceDirtyEntryCount: 3,
+      releaseCertificationEligible: false,
+    });
   });
 });

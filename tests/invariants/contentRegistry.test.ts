@@ -81,7 +81,7 @@ describe("versioned authored content registry", () => {
     const definitionIds = getShippedContentDefinitionIds();
     expect(new Set(definitionIds).size).toBe(definitionIds.length);
     expect(definitionIds).toContain("game-mode:youth-scout@modes.1");
-    expect(definitionIds).toContain("scenario:the_rescue_job@scenarios.1");
+    expect(definitionIds).toContain("scenario:the_rescue_job@scenarios.2");
     expect(definitionIds).toContain(
       "event-template:rivalPoach@events.1",
     );
@@ -148,9 +148,9 @@ describe("versioned authored content registry", () => {
       "investigation-consequence-narrative:safe-reliable-information@investigation-consequence-narratives.1",
     );
     expect(youthRunIds).not.toContain("game-mode:first-team-scout@modes.1");
-    expect(youthRunIds).not.toContain("scenario:the_rescue_job@scenarios.1");
+    expect(youthRunIds).not.toContain("scenario:the_rescue_job@scenarios.2");
     expect(getRunContentDefinitionIds("youth-scout", "the_rescue_job")).toContain(
-      "scenario:the_rescue_job@scenarios.1",
+      "scenario:the_rescue_job@scenarios.2",
     );
     expect(() => getRunContentDefinitionIds("youth-scout", "missing")).toThrow(
       "Unknown scenario content",

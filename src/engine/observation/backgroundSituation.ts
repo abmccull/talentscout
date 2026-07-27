@@ -22,6 +22,8 @@ import {
   isScoutAbroad,
 } from "@/engine/world/travel";
 import { normalizeCountryKey } from "@/lib/country";
+import { resolveStateCountrySeasonCalendar } from "@/engine/world/culturalCalendarState";
+import { resolvePersistedCountryCalendarEffects } from "@/engine/world/footballCultureCalendar";
 import {
   createObservationSituation,
   type ObservationSituationSnapshot,
@@ -123,6 +125,15 @@ export function createBackgroundObservationSituation(
         : getScoutHomeCountry(input.state.scout),
     );
   const regionalKnowledge = findRegionalKnowledge(input.state, countryId);
+  const culturalCalendar = resolveStateCountrySeasonCalendar(
+    input.state,
+    countryId,
+    input.state.currentSeason,
+  );
+  const calendarEffects = resolvePersistedCountryCalendarEffects(
+    culturalCalendar,
+    input.state.currentWeek,
+  );
   const activeTravelCountry = isScoutAbroad(input.state.scout, input.state.currentWeek)
     ? canonicalCountry(input.state.scout.travelBooking?.destinationCountry)
     : undefined;
@@ -159,6 +170,7 @@ export function createBackgroundObservationSituation(
       countryId,
       travelPosture,
       culturalInsights: regionalKnowledge?.culturalInsights,
+      calendarEffects,
     }),
   };
 }

@@ -15,10 +15,13 @@ Generated candidate evidence is intentionally ignored by Git:
 
 - `artifacts/release/candidate-package-manifest.json`
 - `artifacts/release/release-evidence-check.json`
+- `artifacts/release/generated/replayability-release-summary.json`
 - `artifacts/release/generated/long-career-release-summary.json`
 - `artifacts/release/generated/long-career-workers/`
 
 The generated check report records the resolved commit, its source, tag, dirty state, package verification, gate evidence, and every blocker.
+
+Replayability output may still be generated from a dirty development checkout for diagnosis. In that case `humanFacingProxies.authority.evidenceClass` is `diagnostic_dirty_worktree` and `releaseCertificationEligible` is false. The candidate-core evidence check reads the replayability artifact directly and accepts it only when its source SHA matches the candidate and its authority records a successful Git inspection, zero dirty entries, and `clean_commit_bound` evidence.
 
 `npm run build` is also candidate-aware. The cross-platform Node wrapper derives
 the full Git `HEAD` when CI has not supplied `NEXT_PUBLIC_BUILD_VERSION`, rejects
@@ -132,3 +135,9 @@ candidate through the explicit two-stage process in
 the original run's artifacts, never rebuilds them, validates every attestation
 and hash, and only then enables an explicitly requested draft GitHub release or
 final-tag Steam upload.
+
+The paired-career replayability interview gate is independent of the general
+moderated-usability gate. It uses the same candidate-bound attestation model,
+but its protocol focuses specifically on whether two ordinary careers feel
+materially different to the same participant without requiring invented
+personas or post-hoc narration.

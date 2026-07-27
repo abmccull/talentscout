@@ -43,6 +43,45 @@ const LEGACY_INSIGHT: CulturalInsight = {
 };
 
 describe("observation situations", () => {
+  it("persists the active cultural calendar window and applies its visible evidence climate", () => {
+    const calendarEffects = {
+      countryId: "england",
+      season: 2,
+      week: 14,
+      activeWindowIds: ["calendar:england:academy-festival-band:s2"],
+      signalByDomain: {
+        technical: 0.04,
+        physical: 0,
+        mental: 0,
+        tactical: 0.06,
+        hidden: 0,
+      },
+      uncertaintyMultiplier: 0.91,
+      misleadingSignalRiskDelta: -0.03,
+      contextTags: ["academy-festival"],
+      biasWarnings: ["Compare coached environments before generalising."],
+      reasons: ["A clustered academy fixture window improves comparison quality."],
+    };
+    const baseline = createObservationSituation({
+      activityType: "academyVisit",
+      seed: "calendar-watch",
+      countryId: "england",
+    });
+    const contextual = createObservationSituation({
+      activityType: "academyVisit",
+      seed: "calendar-watch",
+      countryId: "england",
+      calendarEffects,
+    });
+
+    expect(contextual.culturalCalendarWindowIds).toEqual(calendarEffects.activeWindowIds);
+    expect(contextual.contextTags).toContain("academy-festival");
+    expect(contextual.reasons).toContain(calendarEffects.reasons[0]);
+    expect(contextual.signalByDomain.tactical).toBeGreaterThan(baseline.signalByDomain.tactical);
+    expect(contextual.uncertaintyMultiplier).toBeLessThan(baseline.uncertaintyMultiplier);
+    expect(contextual.misleadingSignalRisk).toBeLessThan(baseline.misleadingSignalRisk);
+  });
+
   it("is stable for one seed and records materially different situation keys", () => {
     const first = createObservationSituation({
       activityType: "attendMatch",

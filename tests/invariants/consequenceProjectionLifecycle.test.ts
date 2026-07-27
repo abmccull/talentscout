@@ -3,9 +3,13 @@ import type { GameState } from "@/engine/core/types";
 import {
   createConsequenceEngineState,
   createDecisionRecord,
+  createStakeholderProfileRegistry,
+  getAuthoredRelationshipConflictDefinitions,
   maintainConsequenceLifecycle,
+  materializeAuthoredRelationshipConflict,
   processDueConsequences,
   projectConsequenceMetrics,
+  registerMaterializedRelationshipConflict,
   registerDecision,
   selectDecisionOption,
   synchronizeConsequenceMetrics,
@@ -39,6 +43,59 @@ function projectionGameState(): GameState {
         dormant: false,
       },
     },
+    consequenceState: createConsequenceEngineState(),
+  } as unknown as GameState;
+}
+
+function relationshipSurfaceGameState(): GameState {
+  return {
+    currentWeek: 1,
+    currentSeason: 1,
+    fixtures: {},
+    runManifest: { rootSeed: "relationship-surface-seed" },
+    scout: {
+      id: "scout-1",
+      reputation: 50,
+      fatigue: 12,
+      clubTrust: 40,
+      specializationReputation: 30,
+      attributes: { persuasion: 11 },
+      currentClubId: "club-1",
+    },
+    contacts: {
+      insider: {
+        id: "insider",
+        name: "Alex Source",
+        type: "clubStaff",
+        organization: "Riverside Academy",
+        relationship: 60,
+        reliability: 66,
+        knownPlayerIds: [],
+        trustLevel: 70,
+        loyalty: 55,
+        dormant: false,
+      },
+    },
+    players: {
+      "player-1": {
+        id: "player-1",
+        firstName: "Ivo",
+        lastName: "Santos",
+      },
+    },
+    watchlist: ["player-1"],
+    reports: {},
+    unsignedYouth: {},
+    retiredPlayers: {},
+    clubs: {
+      "club-1": { id: "club-1", name: "Northbridge", managerId: "manager-1" },
+    },
+    managerProfiles: {
+      "club-1": { clubId: "club-1", managerId: "manager-1", managerName: "Asha Morgan" },
+    },
+    boardProfile: undefined,
+    rivalScouts: {},
+    finances: { employees: [] },
     consequenceState: createConsequenceEngineState(),
   } as unknown as GameState;
 }
@@ -154,6 +211,66 @@ describe("consequence metric projection and lifecycle", () => {
     expect(replayed.appliedConsequenceIds).toEqual([]);
     expect(replayedProjection.scout.reputation).toBe(57);
     expect(replayedProjection.contacts["contact-1"]?.relationship).toBe(15);
+  });
+
+  it("projects delayed reliability and persuasion from relationship fronts exactly once", () => {
+    const gameState = relationshipSurfaceGameState();
+    const definition = getAuthoredRelationshipConflictDefinitions().find(
+      (candidate) => candidate.id === "contact-versus-manager-proof-chain",
+    );
+    const registry = createStakeholderProfileRegistry(gameState);
+    const materialized = materializeAuthoredRelationshipConflict({
+      id: "decision:proof-chain",
+      cast: {
+        definition: definition!,
+        left: registry.profiles["contact:insider"],
+        right: registry.profiles["manager:manager-1"],
+        subject: { kind: "player", id: "player-1" },
+        selectionWeight: 1,
+      },
+      scoutId: gameState.scout.id,
+      now: week1,
+      deadlineAt: week2,
+      outcomeRoll: 0.3,
+      existingState: gameState.consequenceState,
+    });
+    const registered = registerMaterializedRelationshipConflict(
+      gameState.consequenceState,
+      materialized,
+    ).state;
+    const selected = selectDecisionOption(
+      registered,
+      materialized.decision.id,
+      "stage-quiet-verification",
+      week1,
+    ).state;
+
+    const synchronized = synchronizeConsequenceMetrics(gameState, selected);
+    expect(synchronized.metrics).toMatchObject({
+      "contact:insider:trust": 70,
+      "contact:insider:reliability": 66,
+      "scout:reputation": 50,
+      "scout:persuasion": 11,
+    });
+
+    const processed = processDueConsequences(synchronized, { season: 1, week: 4 });
+    const projected = projectConsequenceMetrics(gameState, processed.state);
+    expect(projected.contacts.insider).toMatchObject({
+      reliability: 70,
+      trustLevel: 73,
+    });
+    expect(projected.scout.clubTrust).toBe(42);
+    expect(projected.scout.attributes.persuasion).toBe(12);
+
+    const replayReady = synchronizeConsequenceMetrics(
+      projected,
+      projected.consequenceState,
+    );
+    const replayed = processDueConsequences(replayReady, { season: 1, week: 4 });
+    const replayedProjection = projectConsequenceMetrics(projected, replayed.state);
+    expect(replayed.appliedConsequenceIds).toEqual([]);
+    expect(replayedProjection.contacts.insider.reliability).toBe(70);
+    expect(replayedProjection.scout.attributes.persuasion).toBe(12);
   });
 
   it("expires ephemeral records after their inclusive deadline and is idempotent", () => {

@@ -134,6 +134,7 @@ export type {
 
 export * from "./chronology";
 export * from "./careerMoments";
+export * from "./fingerprint";
 export * from "./lateCareerDilemmas";
 export * from "./lateCareerDilemmaMaterializer";
 export * from "./roleProfile";

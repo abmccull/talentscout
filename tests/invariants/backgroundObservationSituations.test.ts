@@ -10,6 +10,7 @@ import type {
 import { createBackgroundObservationSituation } from "@/engine/observation/backgroundSituation";
 import { createRNG } from "@/engine/rng";
 import { produceWeeklyPlayerObservation } from "@/stores/actions/weeklyObservationProducer";
+import { useGameStore } from "@/stores/gameStore";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -33,7 +34,6 @@ const BRAZIL_INSIGHT: CulturalInsight = {
 };
 
 async function createSituationState(seed: string): Promise<GameState> {
-  const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
     scoutFirstName: "Background",
     scoutLastName: "Observer",

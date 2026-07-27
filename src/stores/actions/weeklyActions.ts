@@ -98,6 +98,7 @@ import {
   getActiveWorldConditionNames,
   getWorldConditionModifiers,
 } from "@/engine/world/index";
+import { refreshCulturalCalendarState } from "@/engine/world/culturalCalendarState";
 import { initializeRegionalKnowledge } from "@/engine/specializations/regionalKnowledge";
 import { ALL_PERKS } from "@/engine/specializations/perks";
 import {
@@ -1240,6 +1241,12 @@ export function createWeeklyActions(
       return;
     }
     newState = seasonRollover.state;
+    if (tickResult.endOfSeasonTriggered) {
+      newState = {
+        ...newState,
+        culturalCalendarState: refreshCulturalCalendarState(newState),
+      };
+    }
 
     // The season-opening world condition is selected inside the core rollover,
     // after the ordinary brief refresh above. Reconcile once more against that

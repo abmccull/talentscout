@@ -19,6 +19,10 @@ import {
   type AcademyRecruitmentBrief,
 } from "@/engine/youth/recruitmentBriefs";
 import {
+  captureRecruitmentDoctrineSnapshot,
+  deriveClubRecruitmentDoctrine,
+} from "@/engine/world/recruitmentIdentity";
+import {
   completeAcademyRecommendationReview,
   completeDueAcademyRecommendationReviews,
   scheduleAcademyRecommendationReviews,
@@ -231,11 +235,15 @@ describe("academy recruitment briefs", () => {
         createdWeek: 35,
         createdSeason: 1,
         status: "open",
-        developmentPriority: "highCeiling",
       });
+      expect(["highCeiling", "earlyReadiness", "resale", "character"])
+        .toContain(candidate.developmentPriority);
       expect(candidate.requiredPositions).toEqual([candidate.targetPosition]);
       expect(candidate.expiresSeason).toBe(2);
       expect(candidate.expiresWeek).toBe(5);
+      expect(candidate.recruitmentSnapshot?.capturedWeek).toBe(35);
+      expect(candidate.recruitmentSnapshot?.capturedSeason).toBe(1);
+      expect(candidate.recruitmentSnapshot?.seasonalObjective).toBe(candidate.developmentPriority);
     }
   });
 
@@ -386,6 +394,39 @@ describe("academy recruitment briefs", () => {
     expect(causal.report.qualityScore).toBeLessThan(95);
     expect(causal.report.conviction).toBe("strongRecommend");
     expect(result.fulfilled).toBe(true);
+  });
+
+  it("carries the preserved doctrine snapshot into scheduled accountability reviews", () => {
+    const causal = causalPlacement();
+    const doctrine = deriveClubRecruitmentDoctrine({
+      club: club(),
+      seed: "review-snapshot",
+      season: 1,
+    });
+    const recruitmentSnapshot = captureRecruitmentDoctrineSnapshot({
+      doctrine,
+      capturedWeek: 3,
+      capturedSeason: 1,
+    });
+    const scheduled = scheduleAcademyRecommendationReviews({
+      scoutingCase: causal.scoutingCase,
+      report: causal.report,
+      placementReport: {
+        ...causal.placementReport,
+        recruitmentSnapshot,
+      },
+      clubDecision: {
+        ...causal.clubDecision,
+        recruitmentSnapshot,
+      },
+      movementHistory: [causal.placementMovement],
+    });
+
+    expect(scheduled.failures).toEqual([]);
+    expect(scheduled.created).toHaveLength(2);
+    for (const review of scheduled.created) {
+      expect(review.recruitmentSnapshot).toEqual(recruitmentSnapshot);
+    }
   });
 });
 

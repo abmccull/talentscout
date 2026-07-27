@@ -47,6 +47,12 @@ import {
   buildReportOpportunityHistory,
   type ReportOpportunityHistorySummary,
 } from "./reportHistoryOpportunityModel";
+import { ReportWorkspaceBridge } from "./reports/ReportWorkspaceBridge";
+import {
+  buildReportWorkspaceViewModel,
+  type ReportWorkspaceAction,
+} from "./reports/reportWorkspaceModel";
+import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
 
 const CONVICTION_LABELS: Record<ConvictionLevel, string> = {
   note: "Note",
@@ -874,6 +880,20 @@ export function ReportHistory() {
   const pendingReportPrice = pendingReport && gameState.finances
     ? calculateReportPrice(pendingReport, gameState.scout, undefined, false, gameState.finances.marketTemperature)
     : 0;
+  const reportWorkspaceViewModel = buildReportWorkspaceViewModel({
+    gameState,
+    reports,
+    casesNeedingDelivery,
+    awaitingDecisionDeliveries,
+    placedCases,
+    listingByReportId,
+    comparisonReportIds,
+    pendingListingReportId,
+    staffWorkQueueCount: staffWorkQueue.length,
+    journalEntryCount: journalEntries.length,
+    activeListingsCount,
+    pendingBidsCount: totalPendingBids,
+  });
 
   const selectedPlayerName = selectedReport
     ? (() => {
@@ -934,6 +954,32 @@ export function ReportHistory() {
     if (!listingReport) return;
     listReportForSale(listingReport.id, price, isExclusive);
     setListingReport(null);
+  }
+
+  function handleWorkspaceAction(action: ReportWorkspaceAction) {
+    const currentGameState = gameState;
+    if (!currentGameState) return;
+    switch (action.kind) {
+      case "openReport": {
+        const report = currentGameState.reports[action.reportId];
+        if (report) setSelectedReport(report);
+        return;
+      }
+      case "openPlayer":
+        selectPlayer(action.playerId);
+        setScreen("playerProfile");
+        return;
+      case "listReport": {
+        const report = currentGameState.reports[action.reportId];
+        if (report) setListingReport(report);
+        return;
+      }
+      case "openCareer":
+        setScreen("career");
+        return;
+      case "openStaffQueue":
+        return;
+    }
   }
 
   const renderTransferOutcome = (report: ScoutReport) => {
@@ -1169,14 +1215,21 @@ export function ReportHistory() {
   return (
     <GameLayout>
       <div className="relative min-h-full p-6 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
-        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.82} />
+        <ScreenBackground src="/images/backgrounds/reports-desk.png" opacity={0.74} />
         <div className="relative z-10">
         <div className="mb-6">
           <h1 className="text-2xl font-bold">Reports</h1>
-          <p className="text-sm text-zinc-400">Filed judgments, marketplace outcomes, and your reflection journal</p>
+          <p className="text-sm text-zinc-400">Filed judgments, accountability trails, and the archive behind your scouting record</p>
         </div>
 
-        {/* Market temperature banner (independent scouts only) */}
+        <ReportWorkspaceBridge
+          viewModel={reportWorkspaceViewModel}
+          onAction={handleWorkspaceAction}
+          onCompare={() => setScreen("reportComparison")}
+          onClearComparison={clearComparison}
+          onPlanScouting={() => setScreen("calendar")}
+        />
+
         {isIndependent && hasFinances && (() => {
           const marketTemp = gameState.finances?.marketTemperature ?? "normal";
           return (
@@ -1186,7 +1239,7 @@ export function ReportHistory() {
               : marketTemp === "cold" ? "border-blue-500/30 bg-blue-950/10 text-blue-400"
               : "border-zinc-700 bg-zinc-900/50 text-zinc-400"
             }`}>
-              <TrendingUp size={14} />
+              <TrendingUp size={14} aria-hidden="true" />
               <span className="font-medium">Market: {marketTemp}</span>
               <span className="text-zinc-500">
                 {marketTemp === "deadline" ? "(+80% pricing)"
@@ -1198,7 +1251,6 @@ export function ReportHistory() {
           );
         })()}
 
-        {/* Post-submit listing prompt (independent scouts only) */}
         {isIndependent && pendingReport && pendingReportPlayer && (
           <div data-tutorial-id="report-marketplace-prompt" className="mb-4">
             <PostSubmitListingPrompt
@@ -1215,257 +1267,38 @@ export function ReportHistory() {
           </div>
         )}
 
-        {/* Stats */}
-        <div className={`mb-6 grid grid-cols-2 gap-4 ${isIndependent ? "sm:grid-cols-3 lg:grid-cols-6" : "sm:grid-cols-4"}`}>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-zinc-400">Total Reports</p>
-              <p className="text-2xl font-bold text-emerald-400">{totalReports}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-zinc-400">Avg Craft</p>
-              <p className={`text-2xl font-bold ${qualityColor(avgQuality)}`}>{avgQuality}</p>
-            </CardContent>
-          </Card>
-          {(["tablePound", "strongRecommend"] as ConvictionLevel[]).map((c) => (
-            <Card key={c}>
-              <CardContent className="p-4">
-                <p className="text-xs text-zinc-400">{CONVICTION_LABELS[c]}</p>
-                <p className="text-2xl font-bold">{convictionCounts[c] ?? 0}</p>
-              </CardContent>
-            </Card>
-          ))}
-          {isIndependent && (
-            <>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs text-zinc-400">Active Listings</p>
-                  <p className="text-2xl font-bold text-emerald-400">{activeListingsCount}</p>
-                </CardContent>
-              </Card>
-              <Card className={totalPendingBids > 0 ? "border-amber-500/30" : ""}>
-                <CardContent className="p-4">
-                  <p className="text-xs text-zinc-400">Pending Bids</p>
-                  <p className={`text-2xl font-bold ${totalPendingBids > 0 ? "text-amber-400" : "text-zinc-500"}`}>
-                    {totalPendingBids}
-                  </p>
-                </CardContent>
-              </Card>
-            </>
-          )}
-        </div>
-
-        {staffWorkQueue.length > 0 && (
-          <Card className="mb-6 border-sky-800/60 bg-sky-950/20" data-testid="staff-work-review-queue">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Staff leads awaiting your review</CardTitle>
-              <p className="text-sm text-zinc-300">
-                Agency scale now creates sign-off pressure: you can review one work product per week, and delayed client work loses sign-off quality before it reaches a club.
+        {reports.length > 0 && (
+          <WorkspaceDisclosure
+            className="mb-4"
+            tone="subtle"
+            title="Search and archive"
+            eyebrow="Reference"
+            description="Open this when you need to query the back catalog rather than act on the live artifact and accountability lanes."
+            summary={<span>{filteredReports.length} visible · {reports.length} filed</span>}
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <label className="block min-w-0 sm:max-w-sm sm:flex-1">
+                <span className="mb-1 block text-xs font-medium text-zinc-300">Search filed reports</span>
+                <input
+                  type="search"
+                  value={reportQuery}
+                  onChange={(event) => {
+                    setReportQuery(event.target.value);
+                    setReportPage(1);
+                  }}
+                  placeholder="Player, summary, or conviction"
+                  className="min-h-11 w-full rounded-md border border-zinc-700 bg-zinc-950/80 px-3 text-sm text-white placeholder:text-zinc-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                />
+              </label>
+              <p className="text-xs text-zinc-300" role="status">
+                {filteredReports.length} report{filteredReports.length === 1 ? "" : "s"}
               </p>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              {staffWorkQueue.slice(0, 4).map(({ product, preview }) => {
-                const player = resolvePlayerEntity(gameState, product.playerId)?.player;
-                return (
-                  <article key={product.id} className="rounded-lg border border-zinc-700 bg-zinc-950/75 p-4">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-semibold text-white">
-                            {player ? `${player.firstName} ${player.lastName}` : "Unknown player"}
-                          </p>
-                          <Badge variant="outline">{product.employeeName}</Badge>
-                          <Badge variant="secondary">Work quality {product.qualityScore}</Badge>
-                          <Badge
-                            variant={
-                              preview.priority === "critical"
-                                ? "destructive"
-                                : preview.priority === "high"
-                                  ? "warning"
-                                  : preview.priority === "standard"
-                                    ? "secondary"
-                                    : "outline"
-                            }
-                          >
-                            {preview.priorityLabel}
-                          </Badge>
-                          <Badge
-                            variant={
-                              preview.deliveryRisk === "blocked"
-                                ? "destructive"
-                                : preview.deliveryRisk === "atRisk"
-                                  ? "warning"
-                                  : preview.deliveryRisk === "safe"
-                                    ? "success"
-                                    : "outline"
-                            }
-                          >
-                            {preview.deliveryRiskLabel}
-                          </Badge>
-                        </div>
-                        <p className="mt-2 text-xs text-zinc-400">{preview.priorityReason}</p>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-300">
-                          <span className="rounded-full border border-zinc-700 px-2 py-1">
-                            Sign-off now {preview.signedOffQualityScore}/100
-                          </span>
-                          <span className="rounded-full border border-zinc-700 px-2 py-1">
-                            Next week {preview.nextWeekSignedOffQualityScore}/100
-                          </span>
-                          {preview.reviewDebtPenalty > 0 && (
-                            <span className="rounded-full border border-amber-500/40 bg-amber-950/20 px-2 py-1 text-amber-200">
-                              Review debt -{preview.reviewDebtPenalty}
-                            </span>
-                          )}
-                          {preview.deadline && (
-                            <span className="rounded-full border border-zinc-700 px-2 py-1">
-                              Client checkpoint S{preview.deadline.season} W{preview.deadline.week}
-                            </span>
-                          )}
-                        </div>
-                        <ul className="mt-3 space-y-1 text-sm text-zinc-300">
-                          {product.signals.map((signal) => (
-                            <li key={signal.id}>
-                              <span className="font-medium capitalize text-zinc-200">{signal.category}:</span>{" "}
-                              {signal.statement} <span className="text-zinc-500">({signal.confidence})</span>
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="mt-3 text-xs text-amber-200/80">{product.limitation}</p>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          className="min-h-11"
-                          disabled={staffReviewUsedThisWeek}
-                          onClick={() => approveStaffWorkProduct(product.id)}
-                        >
-                          Approve lead
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="min-h-11"
-                          disabled={staffReviewUsedThisWeek}
-                          onClick={() => rejectStaffWorkProduct(product.id)}
-                        >
-                          Reject
-                        </Button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-              {staffReviewUsedThisWeek && (
-                <p className="text-xs text-zinc-400">You have used this week&apos;s sign-off slot. Remaining leads stay in queue, but client-linked items will keep losing sign-off quality while they wait.</p>
-              )}
-            </CardContent>
-          </Card>
-        )}
-
-        <Card className="mb-6 border-emerald-900/50 bg-zinc-950/70">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recommendation Action Queue</CardTitle>
-            <p className="text-sm text-zinc-300">
-              Filed opinions, club decisions, and placed-player follow-up from the same case history.
-            </p>
-          </CardHeader>
-          <CardContent className="grid gap-3 pt-0 sm:grid-cols-3">
-            <button
-              type="button"
-              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:border-emerald-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-              onClick={() => {
-                const nextCase = casesNeedingDelivery[0];
-                const report = nextCase ? gameState.reports[nextCase.reportIds.at(-1) ?? ""] : undefined;
-                if (report && isIndependent) setListingReport(report);
-                else if (nextCase) {
-                  selectPlayer(nextCase.playerId);
-                  setScreen("playerProfile");
-                }
-              }}
-              disabled={casesNeedingDelivery.length === 0}
-            >
-              <span className="block text-2xl font-bold text-emerald-300">{casesNeedingDelivery.length}</span>
-              <span className="text-xs text-zinc-300">Filed reports needing delivery</span>
-            </button>
-            <button
-              type="button"
-              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:border-amber-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-              onClick={() => {
-                const delivery = awaitingDecisionDeliveries[0];
-                const scoutingCase = delivery ? gameState.scoutingCases[delivery.caseId] : undefined;
-                if (scoutingCase) {
-                  selectPlayer(scoutingCase.playerId);
-                  setScreen("playerProfile");
-                }
-              }}
-              disabled={awaitingDecisionDeliveries.length === 0}
-            >
-              <span className="block text-2xl font-bold text-amber-300">{awaitingDecisionDeliveries.length}</span>
-              <span className="text-xs text-zinc-300">Awaiting club decisions</span>
-            </button>
-            <button
-              type="button"
-              className="min-h-11 rounded-lg border border-zinc-700 bg-zinc-900/70 p-3 text-left transition hover:border-sky-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-              onClick={() => setScreen("career")}
-              disabled={placedCases.length === 0}
-            >
-              <span className="block text-2xl font-bold text-sky-300">{placedCases.length}</span>
-              <span className="text-xs text-zinc-300">Placed cases to track</span>
-            </button>
-          </CardContent>
-        </Card>
-
-        {/* Comparison action bar */}
-        {comparisonReportIds.length > 0 && (
-          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-emerald-800/50 bg-emerald-950/30 p-3 sm:flex-row sm:items-center" data-tutorial-id="reporthistory-compare">
-            <GitCompareArrows size={16} className="text-emerald-400 shrink-0" aria-hidden="true" />
-            <span className="text-sm text-zinc-300">
-              {comparisonReportIds.length} report{comparisonReportIds.length > 1 ? "s" : ""} selected for comparison
-              {comparisonReportIds.length < 2 && " (select at least 2)"}
-            </span>
-            <div className="flex flex-wrap gap-2 sm:ml-auto">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearComparison}
-                className="text-zinc-400 hover:text-red-400"
-              >
-                Clear
-              </Button>
-              <Button
-                size="sm"
-                disabled={comparisonReportIds.length < 2}
-                onClick={() => setScreen("reportComparison")}
-              >
-                Compare ({comparisonReportIds.length})
-              </Button>
             </div>
-          </div>
+          </WorkspaceDisclosure>
         )}
-
-        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <label className="block min-w-0 sm:max-w-sm sm:flex-1">
-            <span className="mb-1 block text-xs font-medium text-zinc-300">Search filed reports</span>
-            <input
-              type="search"
-              value={reportQuery}
-              onChange={(event) => {
-                setReportQuery(event.target.value);
-                setReportPage(1);
-              }}
-              placeholder="Player, summary, or conviction"
-              className="min-h-11 w-full rounded-md border border-zinc-700 bg-zinc-950/80 px-3 text-sm text-white placeholder:text-zinc-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-            />
-          </label>
-          <p className="text-xs text-zinc-300" role="status">
-            {filteredReports.length} report{filteredReports.length === 1 ? "" : "s"}
-          </p>
-        </div>
 
         {/* Reports table */}
-        <Card data-tutorial-id="reporthistory-list">
+        {reports.length > 0 && <Card data-tutorial-id="reporthistory-list">
           <CardContent className="p-0">
             {filteredReports.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -1473,15 +1306,25 @@ export function ReportHistory() {
                 <p className="text-sm text-zinc-300">
                   {reports.length === 0 ? "No reports filed yet." : "No reports match that search."}
                 </p>
-                <p className="mt-1 text-xs text-zinc-400">
+                <p className="mt-1 max-w-md text-xs text-zinc-400">
                   {reports.length === 0
-                    ? "Observe players and write your first scouting report."
+                    ? "Use Planner to book a live look, then file your first accountable recommendation from the dossier or report writer."
                     : "Try a player name, report summary, or conviction level."}
                 </p>
                 {reports.length === 0 && (
-                  <Button className="mt-4 min-h-11" onClick={() => setScreen("calendar")}>
-                    Plan scouting work
-                  </Button>
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                    <Button className="min-h-11" onClick={() => setScreen("calendar")}>
+                      Plan scouting work
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11"
+                      onClick={() => setScreen("dashboard")}
+                    >
+                      Return to Desk
+                    </Button>
+                  </div>
                 )}
               </div>
             ) : (
@@ -1896,19 +1739,179 @@ export function ReportHistory() {
               </>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
-        <Card className="mt-6">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpen size={16} className="text-emerald-400" aria-hidden="true" />
-              Reflection Journal
-            </CardTitle>
-            <p className="text-sm text-zinc-400">
-              Saved post-session notes, hypotheses, and gut-feeling output from completed observations.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        {staffWorkQueue.length > 0 && (
+          <Card
+            id="report-staff-queue"
+            className="mt-6 border-sky-800/60 bg-sky-950/20"
+            data-testid="staff-work-review-queue"
+          >
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Staff leads awaiting your review</CardTitle>
+              <p className="text-sm text-zinc-300">
+                Agency scale now creates sign-off pressure: you can review one work product per week, and delayed client work loses sign-off quality before it reaches a club.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              {staffWorkQueue.slice(0, 4).map(({ product, preview }) => {
+                const player = resolvePlayerEntity(gameState, product.playerId)?.player;
+                return (
+                  <article key={product.id} className="rounded-lg border border-zinc-700 bg-zinc-950/75 p-4">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-white">
+                            {player ? `${player.firstName} ${player.lastName}` : "Unknown player"}
+                          </p>
+                          <Badge variant="outline">{product.employeeName}</Badge>
+                          <Badge variant="secondary">Work quality {product.qualityScore}</Badge>
+                          <Badge
+                            variant={
+                              preview.priority === "critical"
+                                ? "destructive"
+                                : preview.priority === "high"
+                                  ? "warning"
+                                  : preview.priority === "standard"
+                                    ? "secondary"
+                                    : "outline"
+                            }
+                          >
+                            {preview.priorityLabel}
+                          </Badge>
+                          <Badge
+                            variant={
+                              preview.deliveryRisk === "blocked"
+                                ? "destructive"
+                                : preview.deliveryRisk === "atRisk"
+                                  ? "warning"
+                                  : preview.deliveryRisk === "safe"
+                                    ? "success"
+                                    : "outline"
+                            }
+                          >
+                            {preview.deliveryRiskLabel}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-xs text-zinc-400">{preview.priorityReason}</p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-300">
+                          <span className="rounded-full border border-zinc-700 px-2 py-1">
+                            Sign-off now {preview.signedOffQualityScore}/100
+                          </span>
+                          <span className="rounded-full border border-zinc-700 px-2 py-1">
+                            Next week {preview.nextWeekSignedOffQualityScore}/100
+                          </span>
+                          {preview.reviewDebtPenalty > 0 && (
+                            <span className="rounded-full border border-amber-500/40 bg-amber-950/20 px-2 py-1 text-amber-200">
+                              Review debt -{preview.reviewDebtPenalty}
+                            </span>
+                          )}
+                          {preview.deadline && (
+                            <span className="rounded-full border border-zinc-700 px-2 py-1">
+                              Client checkpoint S{preview.deadline.season} W{preview.deadline.week}
+                            </span>
+                          )}
+                        </div>
+                        <ul className="mt-3 space-y-1 text-sm text-zinc-300">
+                          {product.signals.map((signal) => (
+                            <li key={signal.id}>
+                              <span className="font-medium capitalize text-zinc-200">{signal.category}:</span>{" "}
+                              {signal.statement} <span className="text-zinc-500">({signal.confidence})</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-3 text-xs text-amber-200/80">{product.limitation}</p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          className="min-h-11"
+                          disabled={staffReviewUsedThisWeek}
+                          onClick={() => approveStaffWorkProduct(product.id)}
+                        >
+                          Approve lead
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="min-h-11"
+                          disabled={staffReviewUsedThisWeek}
+                          onClick={() => rejectStaffWorkProduct(product.id)}
+                        >
+                          Reject
+                        </Button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+              {staffReviewUsedThisWeek && (
+                <p className="text-xs text-zinc-400">You have used this week&apos;s sign-off slot. Remaining leads stay in queue, but client-linked items will keep losing sign-off quality while they wait.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <WorkspaceDisclosure
+          className="mt-6"
+          tone="subtle"
+          title="Archive and reference"
+          description="Metrics, journal, and background material stay available without pushing the live report trail below the fold."
+          summary={<span>{totalReports} reports · {journalEntries.length} journal entries</span>}
+          contentClassName="space-y-6"
+        >
+            <div className={`grid grid-cols-2 gap-4 ${isIndependent ? "sm:grid-cols-3 lg:grid-cols-6" : "sm:grid-cols-4"}`}>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-400">Total Reports</p>
+                  <p className="text-2xl font-bold text-emerald-400">{totalReports}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-zinc-400">Avg Craft</p>
+                  <p className={`text-2xl font-bold ${qualityColor(avgQuality)}`}>{avgQuality}</p>
+                </CardContent>
+              </Card>
+              {(["tablePound", "strongRecommend"] as ConvictionLevel[]).map((c) => (
+                <Card key={c}>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-zinc-400">{CONVICTION_LABELS[c]}</p>
+                    <p className="text-2xl font-bold">{convictionCounts[c] ?? 0}</p>
+                  </CardContent>
+                </Card>
+              ))}
+              {isIndependent && (
+                <>
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs text-zinc-400">Active Listings</p>
+                      <p className="text-2xl font-bold text-emerald-400">{activeListingsCount}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className={totalPendingBids > 0 ? "border-amber-500/30" : ""}>
+                    <CardContent className="p-4">
+                      <p className="text-xs text-zinc-400">Pending Bids</p>
+                      <p className={`text-2xl font-bold ${totalPendingBids > 0 ? "text-amber-400" : "text-zinc-500"}`}>
+                        {totalPendingBids}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-3">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-white">
+                  <BookOpen size={16} className="text-emerald-400" aria-hidden="true" />
+                  Reflection journal
+                </h2>
+                <p className="mt-1 text-sm text-zinc-400">
+                  Saved post-session notes, hypotheses, and gut-feeling output from completed observations.
+                </p>
+              </div>
+              <div className="space-y-3">
             {journalEntries.length === 0 ? (
               <div className="rounded-lg border border-[#27272a] bg-[#0c0c0c] px-4 py-8 text-center">
                 <p className="text-sm text-zinc-300">No reflection entries yet.</p>
@@ -2081,8 +2084,9 @@ export function ReportHistory() {
                 );
               })
             )}
-          </CardContent>
-        </Card>
+              </div>
+            </div>
+        </WorkspaceDisclosure>
       </div>
         </div>
 

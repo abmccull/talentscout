@@ -181,6 +181,9 @@ export function processWeeklyPlacementResolution(
         conviction: sourceReport.conviction,
         qualityScore: sourceReport.qualityScore,
         briefId: sourceReport.briefId,
+        recruitmentSnapshot: sourceReport.briefId
+          ? stateWithScheduleApplied.youthRecruitmentBriefs[sourceReport.briefId]?.recruitmentSnapshot
+          : undefined,
         pitchPosture: placementActivity.placementPitchPosture ?? "evidenceLed",
         supportCondition: placementActivity.placementSupportCondition ?? "none",
       };
@@ -404,6 +407,7 @@ export function processWeeklyPlacementResolution(
             reportDeliveries: updatedReportDeliveries,
             clubDecisions: updatedClubDecisions,
             deliveryId: report.deliveryId,
+            recruitmentSnapshot: report.recruitmentSnapshot,
             outcome: "accepted",
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,
@@ -569,6 +573,7 @@ export function processWeeklyPlacementResolution(
             reportDeliveries: updatedReportDeliveries,
             clubDecisions: updatedClubDecisions,
             deliveryId: report.deliveryId,
+            recruitmentSnapshot: report.recruitmentSnapshot,
             outcome: "followUpRequested",
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,
@@ -606,6 +611,7 @@ export function processWeeklyPlacementResolution(
             reportDeliveries: updatedReportDeliveries,
             clubDecisions: updatedClubDecisions,
             deliveryId: report.deliveryId,
+            recruitmentSnapshot: report.recruitmentSnapshot,
             outcome: "rejected",
             week: stateWithScheduleApplied.currentWeek,
             season: stateWithScheduleApplied.currentSeason,

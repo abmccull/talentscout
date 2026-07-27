@@ -25,8 +25,9 @@ partially missing candidates.
 
 ## Stage 2: supply independent evidence
 
-Perform NVDA, VoiceOver, moderated usability, physical minimum-hardware, and
-packaged Windows/macOS/Linux protocols against the packages from that run.
+Perform NVDA, VoiceOver, moderated usability, moderated paired-career
+replayability, physical minimum-hardware, and packaged Windows/macOS/Linux
+protocols against the packages from that run.
 Store the compact machine-readable bundle on an independent branch or commit:
 
 `release-certifications/<candidate-tag>/`

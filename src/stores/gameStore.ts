@@ -103,6 +103,11 @@ import { createConsequenceEngineState } from "@/engine/consequences";
 import { createAccessAgreementState } from "@/engine/consequences/accessAgreements";
 import { createEventDirectorState } from "@/engine/events/eventDirector";
 import { createStoryDirectorStateV2 } from "@/engine/events/storyDirectorV2";
+import {
+  createCareerEraDirectorState,
+  deriveCareerEraContext,
+  directCareerEra,
+} from "@/engine/events/careerEraDirector";
 import { createStakeholderProfileRegistry } from "@/engine/consequences/stakeholderProfiles";
 import { createCareerStoryArchiveState } from "@/engine/consequences/careerStoryArchive";
 import {
@@ -128,6 +133,7 @@ import {
   createWorldConditionArcState,
   startWorldConditionArcs,
 } from "@/engine/world";
+import { refreshCulturalCalendarState } from "@/engine/world/culturalCalendarState";
 import { createScout } from "@/engine/scout/creation";
 import {
   generateStartingContacts,
@@ -175,8 +181,8 @@ import { getActiveSaveProvider } from "@/lib/activeSaveProvider";
 import { useTutorialStore } from "@/stores/tutorialStore";
 import {
   applyScenarioSetup,
-  applyScenarioOverrides,
   getInvalidScenarioReason,
+  reconcileScenarioOpeningState,
 } from "@/engine/scenarios";
 import { getScenarioById } from "@/engine/scenarios/scenarioSetup";
 import type { ScenarioProgress } from "@/engine/scenarios";
@@ -627,6 +633,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       activeStorylines: [],
       eventDirector: createEventDirectorState(),
       storyDirectorV2: createStoryDirectorStateV2(),
+      careerEraDirectorState: createCareerEraDirectorState(),
       consequenceState: createConsequenceEngineState(),
       careerStoryArchive: createCareerStoryArchiveState(),
       eventChains: [],
@@ -721,10 +728,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       lastSaved: Date.now(),
       totalWeeksPlayed: 0,
     };
-
-    // Profiles are derived from the actual generated cast, so initialize only
-    // after the complete authoritative state exists.
-    tempState.stakeholderProfiles = createStakeholderProfileRegistry(tempState);
 
     // ── Phase 2 initialization ──────────────────────────────────────────────
 
@@ -856,10 +859,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       unlockedTools: startingTools,
       managerDirectives: initialDirectives,
     };
-    const gameState = applyWorldConditionSeasonStart(rawGameState);
-
-    // Apply scenario GameState overrides (week, season, reputation, tier, activeScenarioId)
-    const scenarioState = scenario ? applyScenarioOverrides(gameState, scenario) : gameState;
+    // A scenario must establish its real date before any date-sensitive
+    // opening identity or world announcement is authored. The reconciler also
+    // supplies deterministic pre-scenario fixture history and current windows.
+    const scenarioState = scenario
+      ? reconcileScenarioOpeningState(rawGameState, scenario)
+      : applyWorldConditionSeasonStart(rawGameState);
+    // Opening identities must see the complete Phase 2 cast, economy, world
+    // conditions, and (for challenges) canonical scenario date.
+    scenarioState.stakeholderProfiles = createStakeholderProfileRegistry(scenarioState);
+    scenarioState.careerEraDirectorState = directCareerEra(
+      createCareerEraDirectorState(),
+      deriveCareerEraContext(
+        scenarioState,
+        getSeasonLength(scenarioState.fixtures, scenarioState.currentSeason),
+      ),
+    );
+    scenarioState.culturalCalendarState = refreshCulturalCalendarState(scenarioState);
     const tutorialState = useTutorialStore.getState();
     const openingMode = resolveCareerOpeningMode({
       requested: effectiveConfig.openingMode,

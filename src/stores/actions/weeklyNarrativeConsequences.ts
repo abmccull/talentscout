@@ -11,7 +11,7 @@ import {
   projectConsequenceMetrics,
   synchronizeConsequenceMetrics,
 } from "@/engine/consequences";
-import type { EntityRef } from "@/engine/consequences";
+import type { ConsequenceRecord, EntityRef } from "@/engine/consequences";
 import { resolveManagerStakeholderName } from "@/engine/consequences/stakeholderProfiles";
 import {
   computeChainChoiceEffects,
@@ -68,6 +68,56 @@ function resolveArchivedEntityName(state: GameState, entity: EntityRef): string 
     return `${state.scout.firstName} ${state.scout.lastName}`.trim();
   }
   return undefined;
+}
+
+function readableCallbackLabel(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+/** Make delayed relationship fallout visible instead of silently moving meters. */
+export function createRelationshipCallbackMessage(
+  state: GameState,
+  consequence: ConsequenceRecord,
+): InboxMessage | undefined {
+  if (!consequence.tags.includes("relationshipConflict")) return undefined;
+  const decision = state.consequenceState.decisions[consequence.decisionId];
+  if (!decision || decision.source.kind !== "relationshipConflict") return undefined;
+  const option = decision.options.find((candidate) => candidate.id === consequence.optionId);
+  const recurrenceName = typeof decision.metadata?.recurrenceName === "string"
+    ? decision.metadata.recurrenceName
+    : "A relationship promise";
+  const playerId = typeof decision.metadata?.relatedPlayerId === "string"
+    && decision.metadata.relatedPlayerId.length > 0
+    ? decision.metadata.relatedPlayerId
+    : undefined;
+  const playerName = playerId
+    ? resolveArchivedEntityName(state, { kind: "player", id: playerId })
+    : undefined;
+  const stakeholders = decision.stakeholders
+    .map((entity) => resolveArchivedEntityName(state, entity))
+    .filter((name): name is string => Boolean(name));
+  const callbackLabel = readableCallbackLabel(consequence.templateId);
+  const choiceLabel = option?.label ?? readableCallbackLabel(consequence.optionId ?? "recorded choice");
+  const subject = playerName ? ` around ${playerName}` : "";
+  const castLine = stakeholders.length > 0
+    ? `${stakeholders.join(" and ")} now remember how you handled it.`
+    : "The people involved now remember how you handled it.";
+  return {
+    id: `relationship-callback-${consequence.id}`,
+    week: state.currentWeek,
+    season: state.currentSeason,
+    type: "feedback",
+    title: `${recurrenceName}: ${callbackLabel}`,
+    body: `Your decision to "${choiceLabel}"${subject} has produced a delayed consequence. ${castLine} The result is now part of your relationship and career record.`,
+    read: false,
+    actionRequired: false,
+    relatedId: playerId ?? consequence.decisionId,
+    relatedEntityType: playerId ? "player" : "narrative",
+  };
 }
 
 /** Apply deadline-selected narrative defaults through the manual-choice domains. */
@@ -324,7 +374,10 @@ export function processWeeklyConsequenceLifecycle(state: GameState): GameState {
   const outcomeMessages: InboxMessage[] = processed.appliedConsequenceIds.flatMap(
     (consequenceId) => {
       const consequence = processed.state.consequences[consequenceId];
-      if (!consequence?.tags.includes("turning-point")) return [];
+      if (!consequence) return [];
+      const relationshipMessage = createRelationshipCallbackMessage(updated, consequence);
+      if (relationshipMessage) return [relationshipMessage];
+      if (!consequence.tags.includes("turning-point")) return [];
       const success = consequence.tags.includes("crossroads-success");
       const reputationEffect = consequence.effects.find((effect) =>
         effect.type === "adjustMetric" && effect.metricKey === "scout:reputation",

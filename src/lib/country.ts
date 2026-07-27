@@ -31,6 +31,32 @@ export const COUNTRY_DISPLAY_NAMES: Record<string, string> = {
   newzealand: "New Zealand",
 };
 
+export const SHIPPED_COUNTRY_KEYS = Object.freeze([
+  "england",
+  "spain",
+  "germany",
+  "france",
+  "brazil",
+  "argentina",
+  "usa",
+  "mexico",
+  "canada",
+  "nigeria",
+  "ghana",
+  "ivorycoast",
+  "egypt",
+  "southafrica",
+  "senegal",
+  "cameroon",
+  "japan",
+  "southkorea",
+  "saudiarabia",
+  "china",
+  "australia",
+  "newzealand",
+]);
+const SHIPPED_COUNTRY_KEY_SET = new Set<string>(SHIPPED_COUNTRY_KEYS);
+
 const COUNTRY_ALIASES: Record<string, string> = Object.fromEntries(
   Object.entries(COUNTRY_DISPLAY_NAMES).flatMap(([key, label]) => [
     [key, key],
@@ -82,6 +108,15 @@ export function countryKeyFromNationality(value?: string): string | undefined {
   const lower = value?.trim().toLowerCase();
   if (!lower) return undefined;
   return NATIONALITY_TO_COUNTRY[lower] ?? normalizeCountryKey(lower);
+}
+
+export function getShippedCountryKeys(): string[] {
+  return [...SHIPPED_COUNTRY_KEYS];
+}
+
+export function isShippedCountryKey(value?: string): boolean {
+  const key = normalizeCountryKey(value);
+  return !!key && SHIPPED_COUNTRY_KEY_SET.has(key);
 }
 
 export function getCountryDisplayName(country?: string): string {

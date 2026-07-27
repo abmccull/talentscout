@@ -88,6 +88,8 @@ import {
 import { getResolvedPlayerIds, resolvePlayerEntity } from "@/lib/playerResolution";
 import { synchronizeInternationalAssignmentProgress } from "@/engine/world/internationalDeliverables";
 import { isScoutAbroad } from "@/engine/world/travel";
+import { resolveStateCountrySeasonCalendar } from "@/engine/world/culturalCalendarState";
+import { resolvePersistedCountryCalendarEffects } from "@/engine/world/footballCultureCalendar";
 import { normalizeCountryKey } from "@/lib/country";
 import {
   claimOpeningDiscovery,
@@ -787,6 +789,15 @@ export function createObservationActions(get: GetState, set: SetState) {
             (knowledge) => knowledge.countryId === countryId,
           )
         : undefined;
+      const culturalCalendar = resolveStateCountrySeasonCalendar(
+        gameState,
+        countryId,
+        gameState.currentSeason,
+      );
+      const culturalCalendarEffects = resolvePersistedCountryCalendarEffects(
+        culturalCalendar,
+        gameState.currentWeek,
+      );
       const activeTravelPosture = gameState.scout.travelBooking
         && isScoutAbroad(gameState.scout, gameState.currentWeek)
         && normalizeCountryKey(gameState.scout.travelBooking.destinationCountry) === countryId
@@ -812,6 +823,7 @@ export function createObservationActions(get: GetState, set: SetState) {
         season: gameState.currentSeason,
         countryId,
         culturalInsights: regionalKnowledge?.culturalInsights,
+        culturalCalendarEffects,
         observerContext,
         travelPosture: activeTravelPosture,
         careerPath: gameState.scout.careerPath as "club" | "independent" | undefined,

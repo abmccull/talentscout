@@ -24,9 +24,16 @@ const profile = argument("profile", "release");
 if (profile !== "release" && profile !== "nightly") {
   throw new RangeError("--profile must be release or nightly");
 }
+const legacyReleaseArtifactPath = resolve("artifacts/replayability/release-summary.json");
 const artifactPath = resolve(
-  argument("out", "artifacts/replayability/release-summary.json"),
+  argument("out", "artifacts/release/generated/replayability-release-summary.json"),
 );
+if (profile === "release" && artifactPath === legacyReleaseArtifactPath) {
+  throw new Error(
+    "Release replayability evidence is authoritative only at "
+      + "artifacts/release/generated/replayability-release-summary.json",
+  );
+}
 const vitestEntry = resolve("node_modules/vitest/vitest.mjs");
 const child = spawn(
   process.execPath,
@@ -54,11 +61,24 @@ const exitCode = await new Promise((resolveExit, reject) => {
 
 try {
   const artifact = JSON.parse(await readFile(artifactPath, "utf8"));
-  const status = artifact.passed ? "PASS" : "FAIL";
+  const releaseAuthority = artifact.humanFacingProxies?.authority;
+  const releaseCertificationEligible = profile !== "release"
+    || releaseAuthority?.releaseCertificationEligible === true;
+  const status = !artifact.passed
+    ? "FAIL"
+    : releaseCertificationEligible
+      ? "PASS"
+      : "DIAGNOSTIC";
   process.stdout.write(
     `Replayability telemetry ${status}: ${sampleSize} seeds x ${seasons} seasons. `
       + `Artifact: ${artifactPath}\n`,
   );
+  if (profile === "release" && !releaseCertificationEligible) {
+    process.stdout.write(
+      "Release certification ineligible: replayability evidence was generated "
+        + `as ${releaseAuthority?.evidenceClass ?? "diagnostic_unknown_authority"}.\n`,
+    );
+  }
   if (artifact.failures?.length) {
     process.stdout.write(`${artifact.failures.map((failure) => `- ${failure}`).join("\n")}\n`);
   }

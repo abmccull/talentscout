@@ -18,9 +18,10 @@ import {
 } from "@/engine/core/types";
 import { getDifficultyChallengeProfile } from "@/engine/core/difficulty";
 import {
-  combineFootballCultureEffects,
+  resolveFootballCultureContext,
   type CombinedFootballCultureEffects,
 } from "@/engine/world/footballCulture";
+import type { CountryCalendarEffects } from "@/engine/world/footballCultureCalendar";
 import { getTravelPostureEffects } from "@/engine/world/travel";
 
 interface SituationAtmosphereEvent {
@@ -89,6 +90,8 @@ export interface ObservationSituationSnapshot {
   /** Stable key used for diminishing returns; incidental event ids do not make every watch novel. */
   repetitionKey: string;
   culturalInsightIds: string[];
+  /** Persisted country-season windows that shaped this evidence sample. */
+  culturalCalendarWindowIds?: string[];
   contextTags: string[];
   biasWarnings: string[];
   reasons: string[];
@@ -101,6 +104,8 @@ export interface ObservationSituationInput {
   countryId?: string;
   travelPosture?: TravelPosture;
   culturalInsights?: readonly CulturalInsight[];
+  /** Resolved from the save's persisted country-season calendar. */
+  calendarEffects?: CountryCalendarEffects;
   atmosphere?: SituationVenueAtmosphere;
   atmosphereEvents?: readonly SituationAtmosphereEvent[];
 }
@@ -386,7 +391,11 @@ export function createObservationSituation(
   const competitionLevel = pickStable(`${input.seed}:level`, baseline.levels);
   const stakes = pickStable(`${input.seed}:stakes`, baseline.stakes);
   const tacticalFrame = pickStable(`${input.seed}:frame`, baseline.frames);
-  const culture = combineFootballCultureEffects(input.countryId, input.culturalInsights);
+  const culture = resolveFootballCultureContext(
+    input.countryId,
+    input.culturalInsights,
+    { calendarEffects: input.calendarEffects },
+  );
   const travelPostureEffects = getTravelPostureEffects(input.travelPosture);
   const atmosphere = input.atmosphere;
   const events = input.atmosphereEvents ?? [];
@@ -465,6 +474,7 @@ export function createObservationSituation(
     baseline.misleadingRisk
       + chaos * 0.12
       + Math.max(0, eventNoise) * 0.08
+      + culture.misleadingSignalRiskDelta
       + Math.max(0, travelPostureEffects.observationUncertaintyMultiplier - 1) * 0.15,
     0.03,
     0.45,
@@ -498,6 +508,7 @@ export function createObservationSituation(
   if (culture.insightIds.length > 0) {
     reasons.push(`${culture.insightIds.length} earned football-culture insight${culture.insightIds.length === 1 ? "" : "s"} improve interpretation without changing player truth.`);
   }
+  reasons.push(...culture.reasons);
   if (input.travelPosture) {
     const contextLabel = baseline.context
       ? baseline.context.replace(/([A-Z])/g, " $1").toLowerCase()
@@ -526,6 +537,7 @@ export function createObservationSituation(
     misleadingSignalRisk,
     repetitionKey,
     culturalInsightIds: culture.insightIds,
+    culturalCalendarWindowIds: culture.activeWindowIds,
     contextTags,
     biasWarnings: culture.biasWarnings,
     reasons,
@@ -538,6 +550,7 @@ export function applyAtmosphereToObservationSituation(
   atmosphere: SituationVenueAtmosphere,
   events: readonly SituationAtmosphereEvent[],
   culturalInsights?: readonly CulturalInsight[],
+  calendarEffects?: CountryCalendarEffects,
 ): ObservationSituationSnapshot {
   const rebuilt = createObservationSituation({
     activityType: situation.activityType,
@@ -546,6 +559,7 @@ export function applyAtmosphereToObservationSituation(
     countryId: situation.countryId,
     travelPosture: situation.travelPosture,
     culturalInsights,
+    calendarEffects,
     atmosphere,
     atmosphereEvents: events,
   });

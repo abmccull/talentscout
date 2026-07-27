@@ -90,6 +90,16 @@ import {
 } from "@/engine/finance/agencyStrategy";
 import { UrgentQueue } from "./workspace/UrgentQueue";
 import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
+import { CareerCommandBridge } from "./career/CareerCommandBridge";
+import {
+  buildCareerWorkspaceViewModel,
+  type CareerBridgeHighlight,
+} from "./career/careerWorkspaceModel";
+import CareerEraThread from "./workspace/CareerEraThread";
+import {
+  deriveCareerFingerprintAuthority,
+  deriveCareerFingerprintProjection,
+} from "@/engine/career/fingerprint";
 
 // ─── Labels ──────────────────────────────────────────────────────────────────
 
@@ -426,6 +436,13 @@ export function CareerScreen() {
     jobOffers: [] as JobOffer[],
     performanceReviews: [] as PerformanceReview[],
   };
+  const [careerInventoryOpen, setCareerInventoryOpen] = usePersistentDisclosure(
+    "career.lower-overview",
+    jobOffers.length > 0,
+  );
+  const [careerPoliticsOpen, setCareerPoliticsOpen] = usePersistentDisclosure(
+    "career.club-politics",
+  );
 
   const currentClub = scout?.currentClubId ? getClub(scout.currentClubId) : undefined;
   const skillEntries = scout
@@ -527,11 +544,12 @@ export function CareerScreen() {
 
   if (!gameState || !scout) return null;
 
-  const careerRoleLabel = deriveCareerRoleProfile({
+  const roleProfile = deriveCareerRoleProfile({
     scout,
     finances: finances ?? undefined,
     club: currentClub,
-  }).title;
+  });
+  const careerRoleLabel = roleProfile.title;
   const careerBaseLabel = getCareerBaseLabel(scout, currentClub?.name);
   const consequenceCinemaSource = {
     rootSeed: gameState.runManifest.rootSeed,
@@ -766,6 +784,70 @@ export function CareerScreen() {
         };
       }),
   ].sort((a, b) => b.season - a.season || b.week - a.week).slice(0, 40);
+  const pressureHighlight: CareerBridgeHighlight | null = activeObligations[0]
+    ? {
+        id: `obligation-${activeObligations[0].id}`,
+        label: "Current pressure",
+        title: activeObligations[0].terms,
+        body: activeObligations[0].dueAt
+          ? `Due ${formatWeekSeason(activeObligations[0].dueAt.season, activeObligations[0].dueAt.week)}. Breaching it becomes part of your record.`
+          : "This promise is still active and can return through trust, access, or fallout.",
+        meta: activeObligations[0].kind,
+        tone: "amber",
+      }
+    : leadPressure
+      ? {
+          id: `role-pressure-${leadPressure.id}`,
+          label: "Current pressure",
+          title: leadPressure.label,
+          body: leadPressure.reason,
+          meta: `Mitigation: ${leadPressure.mitigation}`,
+          tone: leadPressure.severity === "high"
+            ? "red"
+            : leadPressure.severity === "medium"
+              ? "amber"
+              : "sky",
+        }
+      : null;
+  const opportunityHighlight: CareerBridgeHighlight | null = openRivalOpportunityCount > 0
+    ? {
+        id: "rival-openings",
+        label: "Live opportunity",
+        title: `${openRivalOpportunityCount} rival opening${openRivalOpportunityCount === 1 ? "" : "s"} can still reshape this season`,
+        body: "Persistent organizations are moving on their own timelines. Waiting means giving up initiative, not pausing the world.",
+        meta: `${rivalOrganizationCount} rival organization${rivalOrganizationCount === 1 ? "" : "s"} active`,
+        tone: "violet",
+      }
+    : null;
+  const latestTrackedPlayerTitle = careerTimeline[0]?.title ?? null;
+  const careerFingerprint = deriveCareerFingerprintProjection(
+    deriveCareerFingerprintAuthority(gameState),
+  );
+  const careerWorkspaceViewModel = buildCareerWorkspaceViewModel({
+    scout,
+    finances,
+    currentSeason,
+    currentWeek: gameState.currentWeek,
+    roleProfile,
+    roleBase: careerBaseLabel,
+    monthlyIncome,
+    monthlyExpenses,
+    latestReview: latestPerformanceReview,
+    showPathChoice,
+    jobOffers,
+    pressureHighlight: pressureHighlight ?? undefined,
+    opportunityHighlight: opportunityHighlight ?? undefined,
+    timelinePreview: careerTimeline.slice(0, 3).map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      title: entry.title,
+      description: entry.description,
+      when: formatWeekSeason(entry.season, entry.week),
+    })),
+    managerProfile: currentClubManager,
+    boardProfile: gameState.boardProfile,
+    latestTrackedPlayerTitle,
+  });
 
   if (scout.primarySpecialization === "youth") {
     return (
@@ -773,7 +855,28 @@ export function CareerScreen() {
         <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 [&_.text-zinc-500]:text-zinc-400 [&_.text-zinc-600]:text-zinc-400">
           <ScreenBackground src="/images/backgrounds/career-journey.png" opacity={0.88} />
           <div className="relative z-10 mx-auto max-w-[1480px]">
-            <div className="mb-5 overflow-hidden rounded-2xl border border-emerald-400/20 bg-[radial-gradient(circle_at_top_right,rgba(52,211,153,0.13),transparent_38%),rgba(16,21,27,0.96)] p-5 shadow-2xl shadow-black/25 sm:p-6 lg:p-8">
+            <CareerCommandBridge
+              avatarId={scout.avatarId ?? 1}
+              scoutName={`${scout.firstName} ${scout.lastName}`}
+              specializationLevel={scout.specializationLevel}
+              reputation={scout.reputation}
+              careerTier={scout.careerTier}
+              viewModel={careerWorkspaceViewModel}
+              fingerprint={careerFingerprint}
+              onPlanWeek={() => setScreen("calendar")}
+              currentThread={(
+                <CareerEraThread
+                  era={gameState.careerEraDirectorState?.current}
+                  variant="career"
+                  onOpenProspect={(playerId) => {
+                    selectPlayer(playerId);
+                    setScreen("playerProfile");
+                  }}
+                  onOpenWorld={() => setScreen("internationalView")}
+                />
+              )}
+            />
+            <div className="hidden">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                   <ScoutAvatar avatarId={scout.avatarId ?? 1} size={96} />
@@ -832,28 +935,30 @@ export function CareerScreen() {
               <TabsContent value="overview" className="mt-0 space-y-5" data-tutorial-id="career-overview">
                 <h2 className="sr-only">Career overview</h2>
                 <CareerRecoveryPanel state={gameState} onChoose={chooseCareerRecovery} />
-                <CareerSituationPanel
-                  scout={scout}
-                  finances={finances}
-                  currentSeason={currentSeason}
-                  currentClub={currentClub}
-                  jobOfferCount={jobOffers.length}
-                  latestReview={latestPerformanceReview}
-                  monthlyIncome={monthlyIncome}
-                  monthlyExpenses={monthlyExpenses}
-                  onPlanWeek={() => setScreen("calendar")}
-                />
+                <div className="hidden">
+                  <CareerSituationPanel
+                    scout={scout}
+                    finances={finances}
+                    currentSeason={currentSeason}
+                    currentClub={currentClub}
+                    jobOfferCount={jobOffers.length}
+                    latestReview={latestPerformanceReview}
+                    monthlyIncome={monthlyIncome}
+                    monthlyExpenses={monthlyExpenses}
+                    onPlanWeek={() => setScreen("calendar")}
+                  />
 
-                <UrgentQueue
-                  title="Current pressure"
-                  description="The live obligations, role pressures, and competitive openings that can change the next era of your career."
-                  icon={<Briefcase size={17} className="text-emerald-300" aria-hidden="true" />}
-                  items={careerPressureItems}
-                  emptyTitle="No immediate fires"
-                  emptyBody={employerNeedSummary}
-                  footerActionLabel="Plan next week"
-                  onFooterAction={() => setScreen("calendar")}
-                />
+                  <UrgentQueue
+                    title="Current pressure"
+                    description="The live obligations, role pressures, and competitive openings that can change the next era of your career."
+                    icon={<Briefcase size={17} className="text-emerald-300" aria-hidden="true" />}
+                    items={careerPressureItems}
+                    emptyTitle="No immediate fires"
+                    emptyBody={employerNeedSummary}
+                    footerActionLabel="Plan next week"
+                    onFooterAction={() => setScreen("calendar")}
+                  />
+                </div>
 
                 <details
                   className="group rounded-xl border border-white/10 bg-black/20"
@@ -952,61 +1057,72 @@ export function CareerScreen() {
                   />
                 )}
 
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Briefcase size={17} className="text-emerald-300" aria-hidden="true" />
-                        Career opportunities
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      {jobOffers.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
-                          <p className="font-semibold text-white">No offers on the table</p>
-                          <p className="mt-1 text-sm text-zinc-400">Reputation, successful placements, and strong reviews create better roles over time.</p>
-                        </div>
-                      ) : (
-                        <div className="grid gap-3 md:grid-cols-2">
-                          {jobOffers.map((offer) => (
-                            <JobOfferCard
-                              key={offer.id}
-                              offer={offer}
-                              clubName={getClub(offer.clubId)?.name ?? "Unknown club"}
-                              onAccept={() => acceptJob(offer.id)}
-                              onDecline={() => declineJob(offer.id)}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border-white/10 bg-[#11161c]/95">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Recent reviews</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      {performanceReviews.length === 0 ? (
-                        <p className="text-sm leading-6 text-zinc-400">Your first formal review arrives after enough work has accumulated to judge.</p>
-                      ) : (
-                        [...performanceReviews].reverse().slice(0, 4).map((review) => (
-                          <div key={review.season} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`flex items-center gap-2 text-sm font-semibold ${outcomeColor(review.outcome)}`}>
-                                {outcomeIcon(review.outcome)} {review.outcome}
-                              </span>
-                              <span className="text-xs text-zinc-500">Season {review.season}</span>
-                            </div>
-                            <p className="mt-2 text-xs leading-5 text-zinc-400">
-                              {review.reportsSubmitted} reports · {Math.round(review.averageQuality)} average craft · {review.successfulRecommendations} successful recommendations
-                            </p>
+                <WorkspaceDisclosure
+                  title="Career inventory"
+                  eyebrow="Reference"
+                  description="Offers and formal reviews stay available below the command bridge without competing with the live seat."
+                  summary={<span>{jobOffers.length} offer{jobOffers.length === 1 ? "" : "s"} · {performanceReviews.length} review{performanceReviews.length === 1 ? "" : "s"}</span>}
+                  tone="subtle"
+                  open={careerInventoryOpen}
+                  onToggle={(event) => setCareerInventoryOpen(event.currentTarget.open)}
+                  contentClassName="space-y-5"
+                >
+                  <div className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+                    <Card className="border-white/10 bg-[#11161c]/95">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Briefcase size={17} className="text-emerald-300" aria-hidden="true" />
+                          Career opportunities
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {jobOffers.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
+                            <p className="font-semibold text-white">No offers on the table</p>
+                            <p className="mt-1 text-sm text-zinc-400">Reputation, successful placements, and strong reviews create better roles over time.</p>
                           </div>
-                        ))
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
+                        ) : (
+                          <div className="grid gap-3 md:grid-cols-2">
+                            {jobOffers.map((offer) => (
+                              <JobOfferCard
+                                key={offer.id}
+                                offer={offer}
+                                clubName={getClub(offer.clubId)?.name ?? "Unknown club"}
+                                onAccept={() => acceptJob(offer.id)}
+                                onDecline={() => declineJob(offer.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-white/10 bg-[#11161c]/95">
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base">Recent reviews</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {performanceReviews.length === 0 ? (
+                          <p className="text-sm leading-6 text-zinc-400">Your first formal review arrives after enough work has accumulated to judge.</p>
+                        ) : (
+                          [...performanceReviews].reverse().slice(0, 4).map((review) => (
+                            <div key={review.season} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`flex items-center gap-2 text-sm font-semibold ${outcomeColor(review.outcome)}`}>
+                                  {outcomeIcon(review.outcome)} {review.outcome}
+                                </span>
+                                <span className="text-xs text-zinc-500">Season {review.season}</span>
+                              </div>
+                              <p className="mt-2 text-xs leading-5 text-zinc-400">
+                                {review.reportsSubmitted} reports · {Math.round(review.averageQuality)} average craft · {review.successfulRecommendations} successful recommendations
+                              </p>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </WorkspaceDisclosure>
 
                 <button
                   type="button"
@@ -1033,7 +1149,16 @@ export function CareerScreen() {
                 </button>
 
                 {(scout.managerRelationship || scout.careerTier >= 5) && (
-                  <section aria-labelledby="club-politics-title" className="space-y-3">
+                  <WorkspaceDisclosure
+                    title="Club politics"
+                    eyebrow="Conversations"
+                    description="Open when you need to spend trust, challenge a directive, or manage board and manager memory."
+                    summary={<span>{managerMeetingEligibility?.eligible ? "Manager ready" : "Manager closed"} · {boardMeetingEligibility?.eligible ? "Board ready" : "Board closed"}</span>}
+                    tone="subtle"
+                    open={careerPoliticsOpen}
+                    onToggle={(event) => setCareerPoliticsOpen(event.currentTarget.open)}
+                    contentClassName="space-y-3"
+                  >
                     <div>
                       <h2 id="club-politics-title" className="text-base font-semibold text-white">
                         Club politics
@@ -1043,7 +1168,7 @@ export function CareerScreen() {
                         directives, memories, fatigue, and future access.
                       </p>
                     </div>
-                    <div className="grid gap-5 lg:grid-cols-2">
+                    <div className="grid gap-5 lg:grid-cols-2" aria-labelledby="club-politics-title">
                       <PoliticalMeetingCards
                         scout={scout}
                         managerProfile={currentClubManager}
@@ -1058,7 +1183,7 @@ export function CareerScreen() {
                         onMeetBoard={() => meetBoard(boardMeetingApproach)}
                       />
                     </div>
-                  </section>
+                  </WorkspaceDisclosure>
                 )}
               </TabsContent>
 

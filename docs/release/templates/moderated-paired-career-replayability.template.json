@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "release-gate-attestation",
+  "gateId": "moderatedPairedCareerReplayability",
+  "candidateCommitSha": "<full candidate SHA>",
+  "candidateTag": "v1.0.0-rc.1",
+  "packageManifestSha256": "<candidate package manifest sha256>",
+  "packageHashes": {
+    "windows-installer": "<manifest windows installer sha256>"
+  },
+  "status": "Passed",
+  "operator": "<moderator or release owner>",
+  "completedAt": "2026-07-21T00:00:00.000Z",
+  "controls": {
+    "minimumParticipantSample": { "status": "Passed" },
+    "balancedParticipantSegments": { "status": "Passed" },
+    "counterbalancedCareerOrder": { "status": "Passed" },
+    "pairedCareerACompleted": { "status": "Passed" },
+    "pairedCareerBCompleted": { "status": "Passed" },
+    "contrastInterviewCaptured": { "status": "Passed" },
+    "quietStreakPerceptionCaptured": { "status": "Passed" },
+    "meaningfulWeekDensityPerceptionCaptured": { "status": "Passed" },
+    "clubRecruitmentExpressionSurfaceReviewed": { "status": "Passed" },
+    "footballCulturePlaybookSurfaceReviewed": { "status": "Passed" },
+    "relationshipConflictFrontSurfaceReviewed": { "status": "Passed" },
+    "replayabilityDifferenceThreshold": { "status": "Passed" },
+    "noRepeatedP0": { "status": "Passed" },
+    "noRepeatedP1AfterRetest": { "status": "Passed" },
+    "anonymizedEvidenceComplete": { "status": "Passed" }
+  },
+  "evidence": [
+    {
+      "path": "artifacts/release/generated/certifications/moderated-paired-career-notes.md",
+      "sha256": "<sha256 of anonymized notes>"
+    },
+    {
+      "path": "artifacts/release/generated/certifications/moderated-paired-career-seed-order.json",
+      "sha256": "<sha256 of seed order file>"
+    }
+  ]
+}

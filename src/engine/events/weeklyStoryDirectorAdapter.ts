@@ -180,25 +180,28 @@ export function directWeeklyStoryEmissionsV2(input: {
   emissions: readonly WeeklyNarrativeEmissionV2[];
   /** Additional story sources sharing the same weekly opening/continuation gate. */
   candidates?: readonly StoryCandidateV2[];
+  /** Shared deterministic shaping applied after every source is normalized. */
+  candidateTransform?: (candidate: StoryCandidateV2) => StoryCandidateV2;
   activeChoiceCount?: number;
   seasonLength?: number;
 }): WeeklyStoryDirectionResultV2 {
   const seasonLength = Math.max(1, Math.floor(input.seasonLength ?? 38));
   const activeChoiceCount = input.activeChoiceCount
     ?? unresolvedChoiceCount(input.priorEvents);
+  const transform = input.candidateTransform ?? ((candidate: StoryCandidateV2) => candidate);
   const adaptedEmissions: AdaptedWeeklyStoryItemV2[] = input.emissions.map((emission) => ({
     emission,
-    candidate: adaptWeeklyNarrativeEmissionV2({
+    candidate: transform(adaptWeeklyNarrativeEmissionV2({
       emission,
       priorEvents: input.priorEvents,
-    }),
+    })),
   }));
   const narrativeCandidateIds = new Set(
     adaptedEmissions.map(({ candidate }) => candidate.id),
   );
   const adaptedCandidates: AdaptedWeeklyStoryItemV2[] = (input.candidates ?? [])
     .filter((candidate) => !narrativeCandidateIds.has(candidate.id))
-    .map((candidate) => ({ candidate }));
+    .map((candidate) => ({ candidate: transform(candidate) }));
   const adapted = [...adaptedEmissions, ...adaptedCandidates]
     .sort((left, right) => left.candidate.id.localeCompare(right.candidate.id));
 

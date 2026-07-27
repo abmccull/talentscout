@@ -56,8 +56,11 @@ import { getPerceivedAbility } from "@/engine/scout/perceivedAbility";
 import { getSeasonLength } from "@/engine/core/gameDate";
 import { deriveBriefRecruitmentIdentity } from "@/engine/world/recruitmentIdentity";
 import { CompactMetricStrip } from "./workspace/CompactMetricStrip";
+import CareerEraThread from "./workspace/CareerEraThread";
 import { UrgentQueue } from "./workspace/UrgentQueue";
 import { WorkspaceDisclosure } from "./workspace/WorkspaceDisclosure";
+import { YouthActiveCaseBoard } from "./workspace/desk/YouthActiveCaseBoard";
+import { buildYouthActiveCaseModel } from "./workspace/desk/youthDeskModel";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -224,6 +227,7 @@ export function Dashboard() {
     : [];
   const thisWeekFixtures = upcoming.filter((f) => f.week === currentWeek);
   const unreadMessages = gameState.inbox.filter((m) => !m.read);
+  const currentCareerEra = gameState.careerEraDirectorState?.current;
 
   // Board satisfaction history -- most recent 5 entries
   const satisfactionHistory = (gameState.satisfactionHistory ?? []).slice(-5);
@@ -479,12 +483,6 @@ export function Dashboard() {
         && !!event.choices?.length
         && !event.resolved,
     );
-    const loopSteps = [
-      { label: "Find", detail: "Discover a lead", complete: youthDiscoveredCount > 0 },
-      { label: "Verify", detail: "Build repeat evidence", complete: multiViewCount > 0 },
-      { label: "Recommend", detail: "Back your judgment", complete: youthReportedCount > 0 },
-      { label: "Track", detail: "Follow the outcome", complete: placedYouthCount > 0 },
-    ];
     const revealDeskSection = (sectionId: string): void => {
       const section = document.getElementById(sectionId);
       if (!(section instanceof HTMLDetailsElement)) return;
@@ -520,7 +518,16 @@ export function Dashboard() {
         icon: <Trophy size={18} className="text-violet-300" aria-hidden="true" />,
       },
     ];
-    const urgentDeskQueue = [
+    const activeCaseModel = buildYouthActiveCaseModel({
+      decisionReadyYouth,
+      evidenceQueue,
+      observedYouthEvidence,
+      openRecruitmentBriefs,
+      pendingPlacementCount,
+      scheduledSlots,
+      openDayCount,
+    });
+    const deskSignalQueue = [
       activeSeasonDecisions.length > 0
         ? {
             id: "season-decision",
@@ -600,7 +607,57 @@ export function Dashboard() {
             onAction: () => setScreen("reportHistory"),
           }
         : null,
-    ].filter((item) => item !== null).slice(0, 3);
+    ].filter((item) => item !== null);
+    const dominantDeskPressure = deskSignalQueue[0] ?? {
+      id: "clear-desk",
+      eyebrow: "Primary pressure",
+      title: scheduledSlots === 0
+        ? "The empty week is now the biggest pressure on the desk"
+        : openRecruitmentBriefs[0]
+          ? `${openRecruitmentBriefs[0].requiredPositions.join("/")} pathway is still the live market pressure`
+          : "The desk is clear enough to choose its next case deliberately",
+      body: scheduledSlots === 0
+        ? "An unplanned week creates no new information. Planner should turn open days into a case with consequence."
+        : openRecruitmentBriefs[0]
+          ? "If you delay too long, another scout gets the first convincing recommendation into the room."
+          : "No interruption is dictating the next move, so you can choose whether to deepen a read, chase a new lead, or protect recovery.",
+      meta: scheduledSlots === 0 ? "Planner pressure" : "Desk condition",
+      tone: "emerald" as const,
+      actionLabel: scheduledSlots === 0 ? "Open planner" : "Review desk",
+      onAction: () => setScreen(scheduledSlots === 0 ? "calendar" : "dashboard"),
+    };
+    const consequenceDeskQueue = deskSignalQueue
+      .filter((item) => item.id !== dominantDeskPressure.id)
+      .slice(0, 3);
+    const renderConsequenceSurface = () => consequenceDeskQueue.length > 0 ? (
+      <UrgentQueue
+        title="Consequences in motion"
+        description="Keep the secondary effects visible, but capped. If something matters more, it should become the dominant pressure."
+        icon={<Mail size={17} className="text-sky-300" aria-hidden="true" />}
+        items={consequenceDeskQueue}
+        emptyTitle="No other live consequences"
+        emptyBody="The rest of the desk is quiet enough to focus on the active case."
+        footerActionLabel="Open career view"
+        onFooterAction={() => setScreen("career")}
+      />
+    ) : (
+      <button
+        type="button"
+        className="group flex min-h-16 w-full items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-left transition hover:border-sky-400/25 hover:bg-sky-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300"
+        onClick={() => setScreen("career")}
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sky-400/15 bg-sky-400/[0.06] text-sky-300">
+          <Mail size={16} aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-zinc-100">Consequence rail is quiet</span>
+          <span className="mt-0.5 block text-xs leading-5 text-zinc-400">
+            No secondary fallout is competing with the active case.
+          </span>
+        </span>
+        <ArrowRight size={16} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-sky-200" aria-hidden="true" />
+      </button>
+    );
 
     return (
       <GameLayout>
@@ -608,7 +665,7 @@ export function Dashboard() {
           className="relative min-h-screen overflow-hidden px-4 py-5 sm:px-6 lg:px-8 lg:py-7"
           data-tutorial-id="dashboard-overview"
         >
-          <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.9} />
+          <ScreenBackground src="/images/backgrounds/dashboard-office.png" opacity={0.95} />
           <div className="relative z-10 mx-auto max-w-[1480px]">
             <header className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex items-center gap-3" data-tutorial-id="dashboard-club-header">
@@ -648,307 +705,367 @@ export function Dashboard() {
               </div>
             </header>
 
-            <Card data-testid="desk-primary-decision" className="relative mb-5 overflow-hidden border-emerald-400/25 bg-[#101820]/95 shadow-2xl shadow-black/30">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(52,211,153,0.14),transparent_36%)]" aria-hidden="true" />
-              <CardContent className="relative grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)] lg:p-8">
-                <div>
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <Badge className="border-emerald-400/30 bg-emerald-400/10 text-emerald-200" variant="outline">
-                      {youthDeskAction.eyebrow}
-                    </Badge>
-                    {scheduledSlots > 0 && (
-                      <span className="text-xs text-zinc-300">{scheduledSlots}/7 days committed</span>
-                    )}
+            <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.75fr)]">
+              <div className="min-w-0 space-y-5">
+                <YouthActiveCaseBoard
+                  model={activeCaseModel}
+                  eyebrow={youthDeskAction.eyebrow}
+                  ctaLabel={youthDeskAction.label}
+                  scheduledSlots={scheduledSlots}
+                  onPrimaryAction={openYouthDeskAction}
+                  onSecondaryAction={youthDeskAction.kind !== "planner" ? () => setScreen("calendar") : undefined}
+                  secondaryLabel={youthDeskAction.kind !== "planner" ? "Review itinerary" : undefined}
+                  asideContent={
+                    currentCareerEra ? (
+                      <CareerEraThread
+                        variant="desk"
+                        era={currentCareerEra}
+                        onOpenProspect={(playerId) => {
+                          selectPlayer(playerId);
+                          setScreen("playerProfile");
+                        }}
+                        onOpenWorld={() => setScreen("internationalView")}
+                      />
+                    ) : undefined
+                  }
+                />
+
+                <div className="space-y-5 xl:hidden" aria-label="Scouting context">
+                  <div>
+                    <UrgentQueue
+                      title="Dominant pressure"
+                      description="One pressure should shape the next move. Everything else is secondary until this changes."
+                      icon={<AlertTriangle size={17} className="text-amber-300" aria-hidden="true" />}
+                      items={[dominantDeskPressure]}
+                      emptyTitle="No single pressure is dictating the desk"
+                      emptyBody="You can choose the next case deliberately. Use planner, prospects, or briefs based on what you want the week to prove."
+                      footerActionLabel="Open planner"
+                      onFooterAction={() => setScreen("calendar")}
+                    />
                   </div>
-                  <h2 className="max-w-3xl text-2xl font-bold leading-tight text-white sm:text-3xl lg:text-4xl">
-                    {youthDeskAction.title}
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-300 sm:text-base">
-                    {youthDeskAction.description}
-                  </p>
-                  <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                    <Button className="min-h-11 px-5" onClick={openYouthDeskAction}>
-                      {youthDeskAction.label}
-                      <ArrowRight size={16} className="ml-2" aria-hidden="true" />
-                    </Button>
-                    {youthDeskAction.kind !== "planner" && (
-                      <Button className="min-h-11" variant="outline" onClick={() => setScreen("calendar")}>
-                        Review itinerary
-                      </Button>
-                    )}
-                  </div>
-                  <p className="mt-4 text-xs leading-5 text-zinc-400">
-                    Advancing resolves every scheduled activity. Open days recover some fatigue, but they also leave scouting opportunities unused.
-                  </p>
+
+                  {renderConsequenceSurface()}
                 </div>
+
+                <div className="grid gap-5 xl:grid-cols-1">
+                  <WorkspaceDisclosure
+                    title="Desk instruments"
+                    eyebrow="Reference"
+                    description="Metrics, fatigue calibration, and recommendation counts stay available without competing with the active case."
+                    icon={<Monitor size={18} className="text-sky-300" aria-hidden="true" />}
+                    summary={<span>{deskMetrics.length} signals</span>}
+                    tone="subtle"
+                    contentClassName="space-y-4"
+                  >
+                    <CompactMetricStrip items={deskMetrics} />
+                    <p className="text-xs leading-5 text-zinc-400">
+                      The active case board already carries the loop. Use these desk instruments when you need to cross-check fatigue, workload, and recommendation exposure.
+                    </p>
+                  </WorkspaceDisclosure>
+                </div>
+
+                {gameState.seasonEvents.length > 0 && (
+                  <WorkspaceDisclosure
+                    id="desk-season-context"
+                    title={`Season context · Week ${currentWeek}`}
+                    eyebrow="Calendar"
+                    description="Open only when you need the wider rhythm behind this week's choice."
+                    summary={<span>{gameState.seasonEvents.length} season markers</span>}
+                    tone="subtle"
+                    contentClassName="p-0"
+                  >
+                    <SeasonTimeline
+                      seasonEvents={gameState.seasonEvents}
+                      currentWeek={currentWeek}
+                      seasonLength={seasonLength}
+                      onResolveEvent={(eventId, choiceIndex) => {
+                        useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
+                      }}
+                    />
+                  </WorkspaceDisclosure>
+                )}
 
                 <WorkspaceDisclosure
-                  title="The scout's loop"
-                  description="Every name must earn the next step, and each step changes what the next week should do."
-                  icon={<Target size={18} className="text-emerald-300" aria-hidden="true" />}
-                  summary={<span>{loopSteps.filter((step) => step.complete).length}/4 active</span>}
-                  className="border-white/10 bg-black/20"
-                  contentClassName="pt-3"
+                  title="Live academy briefs"
+                  eyebrow="Deadlines"
+                  description="Club demand sets the audience, timing, and pressure behind every recommendation."
+                  icon={<ClipboardList size={18} className="text-sky-300" aria-hidden="true" />}
+                  summary={<span>{openRecruitmentBriefs.length} open</span>}
+                  contentClassName="space-y-4"
                 >
-                  <ol className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-                    {loopSteps.map((step, index) => (
-                      <li
-                        key={step.label}
-                        className={`rounded-lg border p-3 ${
-                          step.complete
-                            ? "border-emerald-400/30 bg-emerald-400/10"
-                            : "border-white/10 bg-white/[0.025]"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${
-                            step.complete ? "bg-emerald-300 text-zinc-950" : "bg-zinc-700 text-zinc-200"
-                          }`}>
-                            {step.complete ? "✓" : index + 1}
-                          </span>
-                          <span className="text-xs font-semibold text-white">{step.label}</span>
-                        </div>
-                        <p className="mt-2 text-[11px] leading-4 text-zinc-400">{step.detail}</p>
-                      </li>
-                    ))}
-                  </ol>
-                </WorkspaceDisclosure>
-              </CardContent>
-            </Card>
-
-            {gameState.seasonEvents.length > 0 && (
-              <WorkspaceDisclosure
-                id="desk-season-context"
-                title={`Season context · Week ${currentWeek}`}
-                eyebrow="Calendar"
-                description="Open only when you need the wider rhythm behind this week's choice."
-                summary={<span>{gameState.seasonEvents.length} season markers</span>}
-                className="mb-5"
-                contentClassName="p-0"
-              >
-                <SeasonTimeline
-                  seasonEvents={gameState.seasonEvents}
-                  currentWeek={currentWeek}
-                  seasonLength={seasonLength}
-                  onResolveEvent={(eventId, choiceIndex) => {
-                    useGameStore.getState().resolveSeasonEvent(eventId, choiceIndex);
-                  }}
-                />
-              </WorkspaceDisclosure>
-            )}
-
-            <CompactMetricStrip items={deskMetrics} className="mb-5" />
-
-            <Card className="mb-5 overflow-hidden border-sky-400/20 bg-[linear-gradient(135deg,rgba(14,116,144,0.12),rgba(17,22,28,0.96)_42%)]">
-              <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base text-white">
-                    <ClipboardList size={18} className="text-sky-300" aria-hidden="true" />
-                    Live academy briefs
-                  </CardTitle>
-                  <p className="mt-1 text-sm text-zinc-400">Real club needs create the deadline, audience, budget, and risk behind each recommendation.</p>
-                </div>
-                <Badge variant="secondary" className="shrink-0">{openRecruitmentBriefs.length} open</Badge>
-              </CardHeader>
-              <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
-                {openRecruitmentBriefs.length === 0 ? (
-                  <p className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-zinc-400">The current brief cycle is closed. New academy needs will arrive as club squads and deadlines change.</p>
-                ) : (
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    {openRecruitmentBriefs.slice(0, 3).map((brief) => {
-                      const match = matchForBrief(brief);
-                      const receivingClub = gameState.clubs[brief.clubId];
-                      const recruitmentIdentity = receivingClub
-                        ? deriveBriefRecruitmentIdentity(receivingClub, brief)
-                        : undefined;
-                      return (
-                        <article key={brief.id} data-testid="desk-brief" className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-black/20 p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">{receivingClub?.name ?? "Academy client"}</p>
-                              <h3 className="mt-1 text-lg font-bold text-white">{brief.requiredPositions.join("/")} pathway</h3>
-                            </div>
-                            <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-[10px]">
-                              {brief.competitionPressure} pressure
-                            </Badge>
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-300">
-                            <span className="rounded-full border border-white/10 px-2 py-1">S{brief.expiresSeason} W{brief.expiresWeek}</span>
-                            <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
-                            <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
-                          </div>
-                          {recruitmentIdentity && (
-                            <p className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/[0.06] px-3 py-2 text-[11px] leading-4 text-sky-100">
-                              <span className="font-semibold">{recruitmentIdentity.label}:</span>{" "}
-                              this brief weights {brief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()}.
-                            </p>
-                          )}
-                          <p className="mt-3 flex-1 text-xs leading-5 text-zinc-400">
-                            {match
-                              ? `${match.youth.player.firstName} ${match.youth.player.lastName} is your best known positional match with ${match.observationCount} live look${match.observationCount === 1 ? "" : "s"}.`
-                              : "No known prospect currently matches this profile. Finding one now could create first-mover advantage."}
-                          </p>
-                          <Button
-                            className="mt-4 min-h-11 w-full"
-                            variant={match ? "outline" : "secondary"}
-                            onClick={() => {
-                              if (match) {
-                                selectPlayer(match.youth.player.id);
-                                setScreen("playerProfile");
-                              } else {
-                                setScreen("calendar");
-                              }
-                            }}
-                          >
-                            {match ? "Open matching dossier" : "Plan discovery work"}
-                          </Button>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-                {dueRecommendationReviews.length > 0 && (
-                  <button
-                    onClick={() => setScreen("reportHistory")}
-                    className="mt-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-400/25 bg-violet-400/10 px-4 text-left text-sm text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                  >
-                    <span>{dueRecommendationReviews.length} long-term recommendation review{dueRecommendationReviews.length === 1 ? "" : "s"} completed this week.</span>
-                    <ChevronRight size={16} aria-hidden="true" />
-                  </button>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.8fr)]">
-              <WorkspaceDisclosure
-                title="Current working set"
-                eyebrow="Reference"
-                description="Your itinerary and prospect queue live in Planner and Prospects. Expand this only for a quick cross-check."
-                summary={<span>{plannedActivities.length} planned · {deskProspects.length} tracked</span>}
-                contentClassName="space-y-5"
-              >
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base text-white">
-                        <CalendarPlus size={18} className="text-emerald-300" aria-hidden="true" />
-                        This week&apos;s itinerary
-                      </CardTitle>
-                      <p className="mt-1 text-sm text-zinc-400">Your plan is the strategy; simulation reveals the consequences.</p>
-                    </div>
-                    <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("calendar")}>
-                      Edit plan
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
-                    {plannedActivities.length === 0 ? (
-                      <button
-                        onClick={() => setScreen("calendar")}
-                        className="flex min-h-28 w-full flex-col items-center justify-center rounded-xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.04] p-5 text-center transition hover:bg-emerald-400/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                      >
-                        <CalendarPlus size={24} className="mb-2 text-emerald-300" aria-hidden="true" />
-                        <span className="font-semibold text-white">Your week is still blank</span>
-                        <span className="mt-1 text-sm text-zinc-400">Schedule a venue, follow-up, report, or recovery day.</span>
-                      </button>
-                    ) : (
-                      <ol className="space-y-2">
-                        {plannedActivities.slice(0, 6).map((item) => (
-                          <li key={item.key} className="flex min-h-14 items-center gap-3 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2.5">
-                            <span className="flex h-9 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-xs font-bold text-emerald-300">
-                              {DAY_NAMES[item.dayIndex]}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-white">{item.description}</p>
-                              <p className="mt-0.5 text-xs text-zinc-400">{item.slots} day{item.slots === 1 ? "" : "s"}</p>
-                            </div>
-                          </li>
-                        ))}
-                      </ol>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-white/10 bg-[#11161c]/95">
-                  <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base text-white">
-                        <GraduationCap size={18} className="text-amber-300" aria-hidden="true" />
-                        Priority prospects
-                      </CardTitle>
-                      <p className="mt-1 text-sm text-zinc-400">Ranked by evidence need—not hidden potential.</p>
-                    </div>
-                    <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("youthScouting")}>
-                      Open pipeline
-                    </Button>
-                  </CardHeader>
-                  <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
-                    {deskProspects.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-white/15 p-6 text-center">
-                        <Compass size={24} className="mx-auto mb-2 text-zinc-400" aria-hidden="true" />
-                        <p className="font-semibold text-white">No names on your board yet</p>
-                        <p className="mt-1 text-sm text-zinc-400">Plan a youth event or local visit to create your first lead.</p>
-                      </div>
-                    ) : (
-                      <div className="divide-y divide-white/10">
-                        {deskProspects.map((entry) => {
-                          const status = entry.reported
-                            ? "Recommendation filed"
-                            : entry.hasFirmRead
-                              ? "Decision ready"
-                              : entry.observationCount >= 1
-                                ? "Needs another context"
-                                : "Unverified lead";
-                          return (
-                            <button
-                              key={entry.youth.id}
-                              onClick={() => {
-                                selectPlayer(entry.youth.player.id);
-                                setScreen("playerProfile");
-                              }}
-                              className="group flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
-                              aria-label={`Open dossier for ${entry.youth.player.firstName} ${entry.youth.player.lastName}`}
-                            >
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/20 to-sky-400/10 font-bold text-emerald-200">
-                                {entry.youth.player.firstName[0]}{entry.youth.player.lastName[0]}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
-                                    {entry.youth.player.firstName} {entry.youth.player.lastName}
-                                  </p>
-                                  <Badge variant="outline" className="border-white/15 text-[10px] text-zinc-300">
-                                    {entry.youth.player.position}
-                                  </Badge>
-                                </div>
-                                <p className="mt-1 text-xs text-zinc-400">
-                                  Age {entry.youth.player.age} · {entry.observationCount} look{entry.observationCount === 1 ? "" : "s"} · Buzz {entry.youth.buzzLevel}
+                  {openRecruitmentBriefs.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-zinc-400">
+                      The current brief cycle is closed. New academy needs will arrive as club squads and deadlines change.
+                    </p>
+                  ) : (
+                    <div className="grid gap-3 lg:grid-cols-3">
+                      {openRecruitmentBriefs.slice(0, 3).map((brief) => {
+                        const match = matchForBrief(brief);
+                        const receivingClub = gameState.clubs[brief.clubId];
+                        const recruitmentIdentity = receivingClub
+                          ? deriveBriefRecruitmentIdentity(receivingClub, brief)
+                          : undefined;
+                        return (
+                          <article key={brief.id} data-testid="desk-brief" className="flex min-h-48 flex-col rounded-xl border border-white/10 bg-black/20 p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300">
+                                  {receivingClub?.name ?? "Academy client"}
                                 </p>
+                                <h3 className="mt-1 text-lg font-bold text-white">
+                                  {brief.requiredPositions.join("/")} pathway
+                                </h3>
                               </div>
-                              <div className="hidden text-right sm:block">
-                                <p className={`text-xs font-semibold ${entry.hasFirmRead ? "text-amber-300" : "text-zinc-300"}`}>{status}</p>
-                                <p className="mt-1 text-[10px] text-zinc-300">{entry.intelCount} contact note{entry.intelCount === 1 ? "" : "s"}</p>
-                              </div>
-                              <ChevronRight size={17} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" aria-hidden="true" />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </WorkspaceDisclosure>
+                              <Badge variant={brief.competitionPressure >= 70 ? "warning" : "outline"} className="text-[10px]">
+                                {brief.competitionPressure} pressure
+                              </Badge>
+                            </div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-300">
+                              <span className="rounded-full border border-white/10 px-2 py-1">S{brief.expiresSeason} W{brief.expiresWeek}</span>
+                              <span className="rounded-full border border-white/10 px-2 py-1">£{brief.weeklyWageBudget.toLocaleString()}/wk</span>
+                              <span className="rounded-full border border-white/10 px-2 py-1 capitalize">{brief.riskTolerance} risk</span>
+                            </div>
+                            {recruitmentIdentity && (
+                              <p className="mt-3 rounded-lg border border-sky-400/15 bg-sky-400/[0.06] px-3 py-2 text-[11px] leading-4 text-sky-100">
+                                <span className="font-semibold">{recruitmentIdentity.label}:</span>{" "}
+                                this brief weights {brief.developmentPriority.replace(/([A-Z])/g, " $1").toLowerCase()}.
+                              </p>
+                            )}
+                            <p className="mt-3 flex-1 text-xs leading-5 text-zinc-400">
+                              {match
+                                ? `${match.youth.player.firstName} ${match.youth.player.lastName} is your best known positional match with ${match.observationCount} live look${match.observationCount === 1 ? "" : "s"}.`
+                                : "No known prospect currently matches this profile. Finding one now could create first-mover advantage."}
+                            </p>
+                            <Button
+                              className="mt-4 min-h-11 w-full"
+                              variant={match ? "outline" : "secondary"}
+                              onClick={() => {
+                                if (match) {
+                                  selectPlayer(match.youth.player.id);
+                                  setScreen("playerProfile");
+                                } else {
+                                  setScreen("calendar");
+                                }
+                              }}
+                            >
+                              {match ? "Open matching dossier" : "Plan discovery work"}
+                            </Button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {dueRecommendationReviews.length > 0 && (
+                    <button
+                      onClick={() => setScreen("reportHistory")}
+                      className="flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-400/25 bg-violet-400/10 px-4 text-left text-sm text-violet-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                    >
+                      <span>
+                        {dueRecommendationReviews.length} long-term recommendation review{dueRecommendationReviews.length === 1 ? "" : "s"} completed this week.
+                      </span>
+                      <ChevronRight size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </WorkspaceDisclosure>
 
-              <aside className="space-y-5" aria-label="Scouting context">
-                <UrgentQueue
-                  title="Urgent queue"
-                  description="Three things that can materially change your next decision. Everything else belongs in its own workspace."
-                  icon={<Mail size={17} className="text-sky-300" aria-hidden="true" />}
-                  items={urgentDeskQueue}
-                  emptyTitle="No urgent interruptions"
-                  emptyBody="The desk is clear. Use the planner to chase a new lead, deepen evidence, or protect recovery time before advancing."
-                  footerActionLabel="Open career view"
-                  onFooterAction={() => setScreen("career")}
-                />
+                <WorkspaceDisclosure
+                  title="Working set and inbox"
+                  eyebrow="Reference"
+                  description="The support queue stays secondary so the active case keeps the visual priority."
+                  summary={<span>{plannedActivities.length} planned · {deskProspects.length} tracked · {unreadMessages.length} unread</span>}
+                  tone="subtle"
+                  contentClassName="space-y-5"
+                >
+                  <div className="grid gap-3 xl:grid-cols-3">
+                    <Card className="rounded-2xl border-white/10 bg-[#0f1419]/96">
+                      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-base text-white">
+                            <CalendarPlus size={18} className="text-emerald-300" aria-hidden="true" />
+                            This week&apos;s itinerary
+                          </CardTitle>
+                          <p className="mt-1 text-sm text-zinc-400">Your plan is the strategy; simulation reveals the consequences.</p>
+                        </div>
+                        <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("calendar")}>
+                          Edit plan
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
+                        {plannedActivities.length === 0 ? (
+                          <button
+                            onClick={() => setScreen("calendar")}
+                            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-dashed border-emerald-400/30 bg-emerald-400/[0.06] px-4 py-3 text-left transition hover:bg-emerald-400/[0.1] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="rounded-full border border-emerald-400/20 bg-black/20 p-2">
+                                <CalendarPlus size={18} className="text-emerald-300" aria-hidden="true" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block font-semibold text-white">Your week is still blank</span>
+                                <span className="mt-1 block text-sm text-zinc-300">Schedule a venue, follow-up, report, or recovery day.</span>
+                              </span>
+                            </span>
+                            <ChevronRight size={17} className="shrink-0 text-emerald-200" aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <ol className="space-y-2">
+                            {plannedActivities.slice(0, 6).map((item) => (
+                              <li key={item.key} className="flex min-h-14 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-2.5">
+                                <span className="flex h-9 w-11 shrink-0 items-center justify-center rounded-md bg-zinc-800 text-xs font-bold text-emerald-300">
+                                  {DAY_NAMES[item.dayIndex]}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium text-white">{item.description}</p>
+                                  <p className="mt-0.5 text-xs text-zinc-400">{item.slots} day{item.slots === 1 ? "" : "s"}</p>
+                                </div>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl border-white/10 bg-[#0f1419]/96">
+                      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-base text-white">
+                            <GraduationCap size={18} className="text-amber-300" aria-hidden="true" />
+                            Priority prospects
+                          </CardTitle>
+                          <p className="mt-1 text-sm text-zinc-400">Ranked by evidence need, not hidden potential.</p>
+                        </div>
+                        <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("youthScouting")}>
+                          Open pipeline
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
+                        {deskProspects.length === 0 ? (
+                          <button
+                            onClick={() => setScreen("calendar")}
+                            className="flex min-h-14 w-full items-center justify-between gap-3 rounded-xl border border-dashed border-white/15 bg-white/[0.025] px-4 py-3 text-left transition hover:bg-white/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="rounded-full border border-white/10 bg-black/20 p-2">
+                                <Compass size={18} className="text-zinc-300" aria-hidden="true" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block font-semibold text-white">No names on your board yet</span>
+                                <span className="mt-1 block text-sm text-zinc-300">Plan a youth event or local visit to create your first lead.</span>
+                              </span>
+                            </span>
+                            <ChevronRight size={17} className="shrink-0 text-zinc-400" aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <div className="divide-y divide-white/10">
+                            {deskProspects.map((entry) => {
+                              const status = entry.reported
+                                ? "Recommendation filed"
+                                : entry.hasFirmRead
+                                  ? "Decision ready"
+                                  : entry.observationCount >= 1
+                                    ? "Needs another context"
+                                    : "Unverified lead";
+                              return (
+                                <button
+                                  key={entry.youth.id}
+                                  onClick={() => {
+                                    selectPlayer(entry.youth.player.id);
+                                    setScreen("playerProfile");
+                                  }}
+                                  className="group flex min-h-16 w-full items-center gap-3 py-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                                  aria-label={`Open dossier for ${entry.youth.player.firstName} ${entry.youth.player.lastName}`}
+                                >
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400/20 to-sky-400/10 font-bold text-emerald-200">
+                                    {entry.youth.player.firstName[0]}{entry.youth.player.lastName[0]}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="truncate text-sm font-semibold text-white group-hover:text-emerald-200">
+                                        {entry.youth.player.firstName} {entry.youth.player.lastName}
+                                      </p>
+                                      <Badge variant="outline" className="border-white/15 text-[10px] text-zinc-300">
+                                        {entry.youth.player.position}
+                                      </Badge>
+                                    </div>
+                                    <p className="mt-1 text-xs text-zinc-400">
+                                      Age {entry.youth.player.age} · {entry.observationCount} look{entry.observationCount === 1 ? "" : "s"} · Buzz {entry.youth.buzzLevel}
+                                    </p>
+                                  </div>
+                                  <div className="hidden text-right sm:block">
+                                    <p className={`text-xs font-semibold ${entry.hasFirmRead ? "text-amber-300" : "text-zinc-300"}`}>{status}</p>
+                                    <p className="mt-1 text-[10px] text-zinc-300">{entry.intelCount} contact note{entry.intelCount === 1 ? "" : "s"}</p>
+                                  </div>
+                                  <ChevronRight size={17} className="shrink-0 text-zinc-500 transition group-hover:translate-x-0.5 group-hover:text-emerald-300" aria-hidden="true" />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="rounded-2xl border-white/10 bg-[#0f1419]/96">
+                      <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-5 pb-3 sm:p-6 sm:pb-3">
+                        <div>
+                          <CardTitle className="flex items-center gap-2 text-base text-white">
+                            <Mail size={18} className="text-sky-300" aria-hidden="true" />
+                            Inbox follow-up
+                          </CardTitle>
+                          <p className="mt-1 text-sm text-zinc-400">Messages stay secondary until they materially change the case or week.</p>
+                        </div>
+                        <Button className="min-h-11 shrink-0" size="sm" variant="outline" onClick={() => setScreen("inbox")}>
+                          Open inbox
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="p-5 pt-2 sm:p-6 sm:pt-2">
+                        {unreadMessages.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.025] p-4">
+                            <p className="font-semibold text-white">No unread follow-up</p>
+                            <p className="mt-1 text-sm text-zinc-300">The desk is clear enough to stay inside the active case.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {unreadMessages.slice(0, 3).map((message) => (
+                              <button
+                                key={message.id}
+                                type="button"
+                                onClick={() => {
+                                  markMessageRead(message.id);
+                                  setScreen("inbox");
+                                }}
+                                className="flex w-full items-start gap-3 rounded-xl border border-white/10 bg-white/[0.035] px-3 py-3 text-left transition hover:border-sky-400/25 hover:bg-sky-400/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-400"
+                              >
+                                <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${message.actionRequired ? "bg-amber-300" : "bg-sky-300"}`} aria-hidden="true" />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block text-sm font-semibold text-white">{message.title}</span>
+                                  <span className="mt-1 block line-clamp-2 text-xs leading-5 text-zinc-300">{message.body}</span>
+                                </span>
+                                <ChevronRight size={16} className="mt-1 shrink-0 text-zinc-500" aria-hidden="true" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </WorkspaceDisclosure>
+              </div>
+
+              <aside className="hidden space-y-5 xl:block" aria-label="Scouting context">
+                <div data-testid="desk-dominant-pressure">
+                  <UrgentQueue
+                    title="Dominant pressure"
+                    description="One pressure should shape the next move. Everything else is secondary until this changes."
+                    icon={<AlertTriangle size={17} className="text-amber-300" aria-hidden="true" />}
+                    items={[dominantDeskPressure]}
+                    emptyTitle="No single pressure is dictating the desk"
+                    emptyBody="You can choose the next case deliberately. Use planner, prospects, or briefs based on what you want the week to prove."
+                    footerActionLabel="Open planner"
+                    onFooterAction={() => setScreen("calendar")}
+                  />
+                </div>
+
+                {renderConsequenceSurface()}
               </aside>
             </div>
           </div>

@@ -1299,6 +1299,7 @@ export interface ClubDecision {
   deliveryId: string;
   reportId?: string;
   clubId: string;
+  recruitmentSnapshot?: import("../world/recruitmentIdentity").HistoricalRecruitmentDoctrineSnapshot;
   outcome: ClubDecisionOutcome;
   decidedWeek: number;
   decidedSeason: number;
@@ -1402,6 +1403,7 @@ export interface YouthRecruitmentBrief {
   type: "academyPlacement";
   createdWeek: number;
   createdSeason: number;
+  recruitmentSnapshot?: import("../world/recruitmentIdentity").HistoricalRecruitmentDoctrineSnapshot;
   expiresWeek: number;
   expiresSeason: number;
   requiredPositions: Position[];
@@ -1451,6 +1453,7 @@ export interface RecommendationReview {
   reportId: string;
   playerId: string;
   clubId: string;
+  recruitmentSnapshot?: import("../world/recruitmentIdentity").HistoricalRecruitmentDoctrineSnapshot;
   checkpoint: RecommendationReviewCheckpoint;
   dueWeek: number;
   dueSeason: number;
@@ -2477,6 +2480,7 @@ export interface GameState {
   eventDirector: import("../events/eventDirector").EventDirectorState;
   /** Unified novelty, cast, topic, and callback pacing across every story source. */
   storyDirectorV2?: import("../events/storyDirectorV2").StoryDirectorStateV2;
+  careerEraDirectorState?: import("../events/careerEraDirector").CareerEraDirectorState;
   /** Auditable decisions, delayed effects, memories, obligations, and facts. */
   consequenceState: import("../consequences/types").ConsequenceEngineState;
   /** Stable recurring identities layered over authoritative relationship meters. */
@@ -2573,6 +2577,8 @@ export interface GameState {
   worldHistory?: import("../world/worldHistory").WorldHistoryState;
   /** Authoritative club recruitment-philosophy changes resolved at season start. */
   clubPhilosophyTransitionState?: import("../world/clubPhilosophyTransitions").ClubPhilosophyTransitionState;
+  /** Persisted country-season football-culture calendars retained for the live world. */
+  culturalCalendarState?: import("../world/culturalCalendarState").CulturalCalendarState;
   /** Seeded seasonal and regional conditions that alter the live football world. */
   worldConditionState?: import("../world/worldConditions").WorldConditionState;
   /** Persistent signal, choice, and aftermath arcs spawned by world conditions. */
@@ -4180,6 +4186,7 @@ export interface PlacementReport {
   deliveryId?: string;
   decisionId?: string;
   briefId?: string;
+  recruitmentSnapshot?: import("../world/recruitmentIdentity").HistoricalRecruitmentDoctrineSnapshot;
   unsignedYouthId: string;
   targetClubId: string;
   pitchPosture?: PlacementPitchPosture;
@@ -5041,7 +5048,20 @@ export interface CulturalInsight {
   /** What the insight unlocks or reveals for the player. */
   gameplayEffect: string;
   /** Typed interpretation effects. Legacy saves resolve these by type/country. */
-  effects?: import("../world/footballCulture").FootballCultureInsightEffects;
+  effects?: FootballCultureInsightEffects;
+}
+
+/** Persisted, executable interpretation effects earned through cultural insight. */
+export interface FootballCultureInsightEffects {
+  version: 1;
+  /** Additive signal adjustment by evidence domain. Bounded to [-0.2, 0.2]. */
+  signalByDomain: Partial<Record<AttributeDomain, number>>;
+  /** Multiplies observation variance. Below one means the context is easier to read. */
+  uncertaintyMultiplier: number;
+  /** Context tags used by the situation planner and future authored events. */
+  contextTags: string[];
+  /** Player-facing cautions about a likely interpretation trap. */
+  biasWarnings: string[];
 }
 
 /**

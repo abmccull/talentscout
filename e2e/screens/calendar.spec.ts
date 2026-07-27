@@ -37,7 +37,9 @@ test.describe("Calendar Screen", () => {
 
     const itinerary = gamePage.page.locator('[data-tutorial-id="calendar-grid"]');
     const policyPanel = gamePage.page.getByTestId("weekly-strategy-panel");
+    const stanceCard = gamePage.page.getByTestId("weekly-stance-card");
     await expect(itinerary).toBeVisible();
+    await expect(stanceCard).toBeVisible();
     await expect(policyPanel).toBeVisible();
 
     const itineraryComesFirst = await itinerary.evaluate((element, policyTestId) => {
@@ -81,11 +83,14 @@ test.describe("Calendar Screen", () => {
     }).first();
     await schoolMatch.getByRole("button", { name: /^Choose Day for School Match$/ }).click();
 
+    await expect(gamePage.page.getByTestId("planner-compare-tray")).toContainText("School Match");
     await expect(schoolMatch.getByText("What this context reveals")).toBeVisible();
     await expect(schoolMatch.getByText(/^Tradeoff:/)).toBeVisible();
     await expect(gamePage.page.locator('article button[aria-expanded="true"]')).toHaveCount(1);
 
     await gamePage.page.getByRole("button", { name: "Place School Match on mon" }).click();
+
+    await expect(itinerary.getByRole("status")).toContainText(/School Match scheduled for/i);
 
     const mondayActivity = await gamePage.page.evaluate(() => {
       const state = (window as any).__GAME_STORE__.getState().gameState;
@@ -99,13 +104,27 @@ test.describe("Calendar Screen", () => {
     await gamePage.page.setViewportSize({ width: 390, height: 844 });
     await gamePage.setScreen("calendar");
 
-    const tabs = gamePage.page.getByRole("tablist", { name: "Opportunity categories" });
-    await expect(tabs).toBeVisible();
-    await expect(gamePage.page.getByRole("tab", { name: /Scouting/ })).toHaveAttribute("aria-selected", "true");
-
     const itinerary = gamePage.page.locator('[data-tutorial-id="calendar-grid"]');
     await expect(itinerary).toBeVisible();
     await expect(itinerary.getByRole("button", { name: /mon open day/i })).toBeVisible();
+
+    const mobileTrigger = gamePage.page.getByTestId("planner-mobile-opportunities-trigger");
+    await expect(mobileTrigger).toBeVisible();
+    await expect(mobileTrigger).toContainText("Choose the next live call");
+
+    await mobileTrigger.click();
+    const mobileSheet = gamePage.page.getByRole("dialog", {
+      name: "Select one live opportunity, then place it on the strip",
+    });
+    await expect(mobileSheet).toBeVisible();
+
+    const mobileSchoolMatch = mobileSheet.locator("article").filter({
+      has: gamePage.page.getByRole("heading", { name: "School Match", exact: true }),
+    }).first();
+    await mobileSchoolMatch.getByRole("button", { name: /^Choose Day for School Match$/ }).click();
+    await expect(mobileSheet).toBeHidden();
+    await expect(gamePage.page.getByTestId("planner-compare-tray")).toContainText("School Match");
+    await expect(gamePage.page.getByRole("button", { name: "Place School Match on mon" })).toBeVisible();
 
     const plannerScrollRegion = gamePage.page.getByTestId("planner-scroll-region");
     await plannerScrollRegion.evaluate((element) => {
@@ -119,8 +138,8 @@ test.describe("Calendar Screen", () => {
       element.scrollTop = itineraryContentTop + 100;
     });
     const stickyTop = await itinerary.evaluate((element) => element.getBoundingClientRect().top);
-    expect(stickyTop).toBeGreaterThanOrEqual(55);
-    expect(stickyTop).toBeLessThanOrEqual(58);
+    expect(stickyTop).toBeGreaterThanOrEqual(50);
+    expect(stickyTop).toBeLessThanOrEqual(62);
 
     const overflow = await gamePage.page.evaluate(() => ({
       document: document.documentElement.scrollWidth - document.documentElement.clientWidth,

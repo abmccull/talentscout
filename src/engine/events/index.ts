@@ -95,6 +95,7 @@ export type {
 } from "./eventChains";
 
 export * from "./storyDirectorV2";
+export * from "./careerEraDirector";
 export * from "./weeklyStoryDirectorAdapter";
 export {
   startChain,

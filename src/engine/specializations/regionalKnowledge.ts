@@ -30,6 +30,7 @@ import { countryKeyFromNationality, normalizeCountryKey } from "@/lib/country";
 import { getScheduledActivityInstances } from "@/engine/core/calendar";
 import { generateContactForType } from "@/engine/network/contacts";
 import { hydrateCulturalInsight } from "@/engine/world/footballCulture";
+import { listFootballCultureInsightDefinitions } from "@/engine/world/footballCulturePlaybooks";
 
 // =============================================================================
 // CONSTANTS
@@ -868,7 +869,7 @@ export function generateCulturalInsight(
   const thresholdIndex = INSIGHT_THRESHOLDS.indexOf(crossedThreshold);
   if (thresholdIndex < 0) return null;
 
-  const pool = CULTURAL_INSIGHT_POOLS[countryId] ?? DEFAULT_INSIGHT_POOL;
+  const pool = listFootballCultureInsightDefinitions(countryId);
 
   // Filter out already-given insight types
   const existingTypes = new Set(existingInsights.map((i) => i.type));
@@ -876,12 +877,17 @@ export function generateCulturalInsight(
 
   if (available.length === 0) return null;
 
-  // Pick based on threshold index, with fallback to random selection
-  const idx = thresholdIndex < available.length
-    ? thresholdIndex
-    : rng.nextInt(0, available.length - 1);
+  const preferredType = pool[thresholdIndex]?.type;
+  const preferred = preferredType
+    ? available.find((entry) => entry.type === preferredType)
+    : undefined;
+  const selected = preferred ?? available[
+    thresholdIndex < available.length
+      ? thresholdIndex
+      : rng.nextInt(0, available.length - 1)
+  ];
 
-  return hydrateCulturalInsight(countryId, { ...available[idx] });
+  return hydrateCulturalInsight(countryId, { ...selected });
 }
 
 // =============================================================================

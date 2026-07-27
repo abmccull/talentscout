@@ -38,12 +38,14 @@ export {
   deriveRegionRecruitmentIdentity,
   deriveClubRecruitmentIdentity,
   deriveClubRecruitmentDoctrine,
+  deriveAcademyBriefRecruitmentDoctrine,
   deriveBriefRecruitmentIdentity,
   evaluateRecruitmentIdentityFit,
   getPhilosophyPreferredAgeRange,
   getPhilosophyAcademyIntakeAgeRange,
   getPhilosophySpecializationAffinity,
   scoreDoctrineAgeFit,
+  getAcademyBriefRecruitmentDoctrineSeed,
 } from './recruitmentIdentity';
 export type {
   RecruitmentFocus,
@@ -245,4 +247,6 @@ export {
   calculateLoanTerms,
 } from './loans';
 
+export * from './footballCultureCalendar';
+export * from './footballCulturePlaybooks';
 export * from './footballCulture';

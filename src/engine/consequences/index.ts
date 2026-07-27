@@ -12,5 +12,6 @@ export * from "./accessAgreements";
 export * from "./relationshipPosition";
 export * from "./storyThreads";
 export * from "./authoredRelationshipConflicts";
+export * from "./stakeholderEnsembles";
 export * from "./careerStoryArchive";
 export * from "./relationshipConflictDirector";

@@ -4,11 +4,14 @@ import { getRunSimulationModifiers } from "@/engine/run";
 import { createRNG } from "@/engine/rng";
 import { applyAcceptedNarrativeConsequences } from "@/engine/world/acceptedNarrativeConsequences";
 import {
+  applyCareerEraDirection,
+  applyDirectedCareerEraBeat,
   checkStorylineTriggers,
   createStoryDirectorStateV2,
   directWeeklyNarrativeEvent,
   directWeeklyStoryEmissionsV2,
   inferNarrativeEntityRefsV2,
+  prepareCareerEraWeek,
   processActiveStorylines,
   recordEventDirectorOutcome,
   type WeeklyNarrativeEmissionV2,
@@ -114,15 +117,26 @@ export function runWeeklyNarrativeArbitration({
   }
 
   const seasonLength = getSeasonLength(state.fixtures, state.currentSeason);
+  const blockedByAuthoredActivity =
+    Boolean(narrativeEvent)
+    || storylineEvents.length > 0
+    || worldArcWeek.beats.length > 0
+    || scoutingEcologyWeek.candidates.length > 0
+    || rivalCampaignWeek.candidates.length > 0;
+  const careerEraWeek = prepareCareerEraWeek({
+    state,
+    directorState: state.careerEraDirectorState,
+    seasonLength,
+    blockedByActivity: blockedByAuthoredActivity,
+  });
+  state = {
+    ...state,
+    careerEraDirectorState: careerEraWeek.state,
+  };
   const worldPulseWeek = prepareWeeklyWorldPulse({
     state,
     seasonLength,
-    blockedByActivity:
-      Boolean(narrativeEvent)
-      || storylineEvents.length > 0
-      || worldArcWeek.beats.length > 0
-      || scoutingEcologyWeek.candidates.length > 0
-      || rivalCampaignWeek.candidates.length > 0,
+    blockedByActivity: blockedByAuthoredActivity || Boolean(careerEraWeek.candidate),
   });
   const storyDirection = directWeeklyStoryEmissionsV2({
     rootSeed: state.runManifest.rootSeed,
@@ -134,8 +148,11 @@ export function runWeeklyNarrativeArbitration({
       ...worldArcWeek.beats.map((beat) => beat.candidate),
       ...scoutingEcologyWeek.candidates,
       ...rivalCampaignWeek.candidates,
+      ...(careerEraWeek.candidate ? [careerEraWeek.candidate] : []),
       ...(worldPulseWeek ? [worldPulseWeek.candidate] : []),
     ],
+    candidateTransform: (candidate) =>
+      applyCareerEraDirection([candidate], careerEraWeek.state.current)[0],
     activeChoiceCount: Object.values(state.consequenceState.decisions)
       .filter((decision) => decision.status === "offered")
       .length,
@@ -203,6 +220,11 @@ export function runWeeklyNarrativeArbitration({
   state = applyDirectedWorldPulse({
     state,
     prepared: worldPulseWeek,
+    acceptedCandidateIds: acceptedStoryCandidateIds,
+  });
+  state = applyDirectedCareerEraBeat({
+    gameState: state,
+    prepared: careerEraWeek,
     acceptedCandidateIds: acceptedStoryCandidateIds,
   });
   state = applyDirectedWeeklyRivalCampaigns({

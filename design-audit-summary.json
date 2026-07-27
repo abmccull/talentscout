@@ -1,92 +1,75 @@
 {
-  "audit_date": "2026-07-18",
+  "audit_date": "2026-07-21",
   "product": "TalentScout Youth Scout Early Access",
   "product_type": "Football scouting and career simulation",
-  "viewports": [
-    "1440x900 desktop",
-    "390x844 mobile"
-  ],
   "scores": {
-    "overall_design": 9.5,
-    "base_design": 9.48,
-    "system_cohesion": 9.6,
+    "overall_design": 8.7,
+    "base_design": 8.71,
+    "system_cohesion": 9.2,
     "dimensions": {
-      "visual_hierarchy": 9.5,
-      "layout_and_spacing": 9.3,
-      "typography": 9.2,
-      "color_and_contrast": 9.5,
-      "components_and_states": 9.5,
-      "interaction_and_feedback": 9.6,
-      "information_architecture_and_navigation": 9.6,
-      "conversion_or_task_flow_design": 9.7,
-      "accessibility_and_inclusive_ux": 9.6,
-      "imagery_and_iconography": 9.1,
-      "brand_visual_system": 9.6,
-      "emotional_trust_and_polish": 9.5
+      "visual_hierarchy": 8.9,
+      "layout_and_spacing": 8.5,
+      "typography": 8.4,
+      "color_and_contrast": 8.2,
+      "components_and_states": 8.6,
+      "interaction_and_feedback": 8.8,
+      "information_architecture_and_navigation": 9.0,
+      "conversion_or_task_flow_design": 8.8,
+      "accessibility_and_inclusive_ux": 9.0,
+      "imagery_and_iconography": 8.5,
+      "brand_visual_system": 9.0,
+      "emotional_trust_and_polish": 8.8
     }
   },
   "caps_applied": [],
   "evidence": {
-    "root": "artifacts/release/generated/visual-evidence/head-49c4ba29372c__base-tree-43ec01390f14__dirty-ebbf643f6c90",
-    "screenshot_count": 100,
-    "suites": {
-      "interactivity_audit": 86,
-      "academy_case": 14
-    },
+    "root": "artifacts/release/generated/visual-evidence/head-8c51e872056e__base-tree-549dc94512a3__dirty-4b359de37893/core-workspace-polish",
+    "current_screenshot_count": 8,
+    "focused_visual_journey_status": "pass in 20 seconds with responsive-width and blocking Axe gates",
+    "broader_visual_journey_status": "target workspaces captured; later political-meeting step timed out before its hidden inventory dependency and capture budget were repaired",
     "representative_files": [
-      "interactivity-audit/desktop-04-desk.png",
-      "interactivity-audit/mobile-05-planner.png",
-      "interactivity-audit/desktop-08c-world-outlook.png",
-      "interactivity-audit/mobile-09a-career-situation.png",
-      "interactivity-audit/desktop-11d-agency-strategy-panel.png",
-      "interactivity-audit/mobile-12-prospect-dossier.png",
-      "interactivity-audit/mobile-16-observation-reflection.png",
-      "academy-case/mobile-report-writer.png",
-      "academy-case/desktop-report-detail.png"
-    ]
+      "desktop-desk.png",
+      "mobile-desk.png",
+      "desktop-planner.png",
+      "mobile-planner.png",
+      "desktop-reports.png",
+      "mobile-reports.png",
+      "desktop-career.png",
+      "mobile-career.png"
+    ],
+    "mobile_height_comparison": {
+      "desk": { "before": 3184, "after": 2587, "reduction_percent": 18.7 },
+      "planner": { "before": 844, "after": 844, "reduction_percent": 0.0 },
+      "reports": { "before": 2171, "after": 1760, "reduction_percent": 18.9 },
+      "career": { "before": 3556, "after": 2363, "reduction_percent": 33.5 }
+    }
   },
   "verification": {
     "typecheck": "pass",
     "lint": "pass with zero warnings or errors",
-    "unit_tests": "1074/1074 pass",
-    "architecture": "550 modules, 2561 internal edges, zero cycles",
-    "integrated_browser": "39/39 pass",
-    "youth_perk_truth_table": "8/8 pass",
-    "replayability": "100 seeds x 3 seasons pass",
-    "visual_browser": "desktop/mobile capture suites pass",
-    "axe": "no serious or critical violations in final tested surfaces",
-    "horizontal_overflow": "none in final tested surfaces"
+    "unit_tests": "1215/1215 pass across 231 files",
+    "architecture": "617 modules, 2912 internal edges, zero cycles",
+    "production_build": "pass; /play 886 kB, first-load JavaScript 993 kB",
+    "workspace_browser": "16/16 pass",
+    "focused_visual_accessibility": "1/1 pass across eight desktop/mobile captures; no serious or critical Axe findings and no horizontal overflow",
+    "manual_screen_reader": "not completed",
+    "moderated_replayability": "protocol prepared; study not completed"
   },
-  "implemented_system_ownership": {
-    "desk": "weekly decision, urgent work, and live academy briefs",
-    "planner": "seven-day itinerary and desk policy",
-    "prospects": "decision, evidence, development, and history",
-    "reports": "brief, case, risk, review, conviction, and accountability",
-    "world": "geography, access, conditions, rivals, assignments, and world history",
-    "career": "appointment, security, employer need, progression, authority, and runway",
-    "agency": "commercial posture, capacity, concentration, quality debt, and reputation exposure"
-  },
-  "remaining_recommendations": [
-    {
-      "priority": "P1 release evidence",
-      "title": "Complete manual accessibility certification",
-      "acceptance": "NVDA, VoiceOver, 200% zoom, keyboard-only, and packaged Electron focus journeys pass"
-    },
-    {
-      "priority": "P2 content",
-      "title": "Expand portrait and venue variety",
-      "acceptance": "A three-season career avoids obvious visual repetition for unrelated people and markets"
-    },
-    {
-      "priority": "P2 research",
-      "title": "Run first-hour comprehension studies",
-      "acceptance": "At least 8 of 10 mixed-experience players explain and complete the evidence-to-consequence loop unaided"
-    },
-    {
-      "priority": "P2 performance",
-      "title": "Protect perceived startup performance",
-      "acceptance": "Packaged target hardware reaches an interactive Desk quickly and never appears frozen"
-    }
+  "implemented_polish": [
+    "decision-first Desk with quiet-state consequence compression",
+    "ghost-style passive Planner days",
+    "canonical scheduling audio and announced visual receipts",
+    "deduplicated blank professional report artifact",
+    "player-safe Career fingerprint and compressed mobile context",
+    "keyboard-accessible horizontal Desk rails",
+    "fast focused responsive and Axe evidence gate"
   ],
-  "final_judgment": "The Youth Scout core is cohesive and release-worthy from a design-system perspective; the next value is content breadth, release proof, performance, and telemetry rather than structural redesign."
+  "remaining_recommendations": [
+    "Run moderated paired-career and first-hour studies",
+    "Complete manual NVDA and VoiceOver certification",
+    "Validate audiovisual feel on packaged physical-hardware builds",
+    "Observe populated Reports and multi-season Career task flow with expert players",
+    "Reduce the /play first-load bundle below 993 kB"
+  ],
+  "final_judgment": "The requested gaps are materially improved and regression-gated. The interface is not honestly 10/10 until human replayability, manual screen-reader, packaged audiovisual, and maximum-density usability evidence are complete."
 }

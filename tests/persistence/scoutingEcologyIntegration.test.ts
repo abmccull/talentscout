@@ -142,6 +142,92 @@ function workerInput(gameState: GameState): WeeklyWorkerInput {
 describe("combined scouting-ecology persistence", () => {
   it("keeps every new authority through canonical, repeated save migration", () => {
     const source = migratedCombinedState();
+    const clubId = Object.keys(source.clubs)[0] ?? "legacy-club";
+    if (!source.clubs[clubId]) {
+      source.clubs[clubId] = {
+        id: clubId,
+        name: "Legacy Club",
+        shortName: "LEG",
+        leagueId: "legacy-league",
+        reputation: 48,
+        budget: 1_500_000,
+        scoutingPhilosophy: "academyFirst",
+        managerId: "legacy-manager",
+        playerIds: [],
+        academyPlayerIds: [],
+        youthAcademyRating: 11,
+      } as GameState["clubs"][string];
+    }
+    source.youthRecruitmentBriefs = {
+      ...source.youthRecruitmentBriefs,
+      "legacy-brief": {
+        id: "legacy-brief",
+        clubId,
+        type: "academyPlacement",
+        createdWeek: 7,
+        createdSeason: 2,
+        expiresWeek: 14,
+        expiresSeason: 2,
+        requiredPositions: ["CM"],
+        developmentPriority: "highCeiling",
+        maxAge: 17,
+        riskTolerance: "medium",
+        weeklyWageBudget: 1200,
+        competitionPressure: 42,
+        status: "open",
+      },
+    };
+    const historicalTransition = source.clubPhilosophyTransitionState?.history.find(
+      (record) => record.clubId === clubId
+        && record.season === source.youthRecruitmentBriefs["legacy-brief"].createdSeason,
+    );
+    if (!historicalTransition) {
+      throw new Error("The persistence fixture must include dated club doctrine lineage");
+    }
+    source.placementReports = {
+      ...source.placementReports,
+      "legacy-placement": {
+        id: "legacy-placement",
+        reportId: "legacy-report",
+        caseId: "legacy-case",
+        briefId: "legacy-brief",
+        unsignedYouthId: "legacy-youth",
+        targetClubId: clubId,
+        scoutId: source.scout.id,
+        conviction: "recommend",
+        clubResponse: "accepted",
+        qualityScore: 74,
+        week: 8,
+        season: 2,
+      },
+    };
+    source.clubDecisions = {
+      ...source.clubDecisions,
+      "legacy-decision": {
+        id: "legacy-decision",
+        caseId: "legacy-case",
+        deliveryId: "legacy-delivery",
+        clubId,
+        outcome: "accepted",
+        decidedWeek: 9,
+        decidedSeason: 2,
+        placementReportId: "legacy-placement",
+      },
+    };
+    source.recommendationReviews = {
+      ...source.recommendationReviews,
+      "legacy-review": {
+        id: "legacy-review",
+        caseId: "legacy-case",
+        reportId: "legacy-report",
+        playerId: "legacy-player",
+        clubId,
+        checkpoint: "oneSeason",
+        dueWeek: 8,
+        dueSeason: 3,
+        status: "scheduled",
+      },
+    };
     const first = migrateSaveState(source);
     const replay = migrateSaveState(first);
 
@@ -160,6 +246,18 @@ describe("combined scouting-ecology persistence", () => {
     expect(first.clubPhilosophyTransitionState?.history).toEqual([
       expect.objectContaining({ id: expect.stringContaining("club-philosophy:s2:") }),
     ]);
+    expect(first.youthRecruitmentBriefs["legacy-brief"].recruitmentSnapshot).toMatchObject({
+      clubId,
+      family: historicalTransition.toPhilosophy,
+      capturedWeek: 7,
+      capturedSeason: 2,
+    });
+    expect(first.placementReports["legacy-placement"].recruitmentSnapshot)
+      .toEqual(first.youthRecruitmentBriefs["legacy-brief"].recruitmentSnapshot);
+    expect(first.clubDecisions["legacy-decision"].recruitmentSnapshot)
+      .toEqual(first.placementReports["legacy-placement"].recruitmentSnapshot);
+    expect(first.recommendationReviews["legacy-review"].recruitmentSnapshot)
+      .toEqual(first.placementReports["legacy-placement"].recruitmentSnapshot);
     expect(Object.values(first.regionalKnowledge)[0]?.maintenanceState).toEqual({
       lastProcessedSeason: 2,
       lastProcessedWeek: 7,

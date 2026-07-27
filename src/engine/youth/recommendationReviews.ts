@@ -313,6 +313,7 @@ export function scheduleAcademyRecommendationReviews(
       reportId: input.report.id,
       playerId: input.scoutingCase.playerId,
       clubId: input.placementReport.targetClubId,
+      recruitmentSnapshot: input.placementReport.recruitmentSnapshot,
       checkpoint,
       dueWeek: placementMovement.week,
       dueSeason: placementMovement.season + horizon,

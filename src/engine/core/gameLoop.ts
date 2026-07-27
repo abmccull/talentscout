@@ -13,7 +13,7 @@
  *   advanceWeek(state, tickResult) → GameState
  */
 
-import type { RNG } from "../rng/index";
+import { createRNG, type RNG } from "../rng/index";
 import type {
   GameState,
   Fixture,
@@ -170,6 +170,7 @@ import {
   hasSemanticImprovement,
 } from "../players/development";
 import { applyClubPhilosophySeasonStart } from "../world/clubPhilosophyTransitions";
+import { refreshCulturalCalendarState } from "../world/culturalCalendarState";
 import { applyWorldConditionSeasonStart } from "../world/worldConditions";
 import {
   buildStandingsByLeague,
@@ -245,6 +246,19 @@ export interface SimulatedFixture extends Fixture {
   scorers?: Array<{ playerId: string; minute: number }>;
   /** Per-player match ratings generated for this fixture. */
   playerRatings?: Record<string, import("./types").PlayerMatchRating>;
+}
+
+/**
+ * The player-level world facts needed when a challenge begins after week one.
+ * Scout-owned systems are deliberately absent: this projection may establish
+ * inherited football history, but it must never award XP, money, reputation,
+ * contacts, reports, or notifications for weeks the player did not play.
+ */
+export interface HistoricalWorldMatchState {
+  fixtures: GameState["fixtures"];
+  players: GameState["players"];
+  matchRatings: GameState["matchRatings"];
+  disciplinaryRecords: NonNullable<GameState["disciplinaryRecords"]>;
 }
 
 /**
@@ -1487,6 +1501,190 @@ function generateSimulatedCards(
   }
 
   return cards;
+}
+
+/**
+ * Establish football history for the completed weeks of a season without
+ * advancing any player-owned game systems. This is intentionally narrower
+ * than `processWeeklyTick`: it shares the canonical fixture, selection,
+ * rating, card, injury, and form authorities, while excluding development,
+ * transfers, loans, finances, contacts, scout progression, and inbox output.
+ *
+ * A separate named RNG is used for each historical week. The bootstrap is
+ * therefore deterministic and cannot consume or perturb the live weekly RNG
+ * stream that begins when the player takes control.
+ */
+export function simulateHistoricalWorldMatchWeeks(
+  state: GameState,
+  endWeekExclusive: number,
+): HistoricalWorldMatchState {
+  const seasonLength = getSeasonLength(state.fixtures, state.currentSeason);
+  const lastHistoricalWeek = Math.min(
+    seasonLength,
+    Math.max(0, Math.trunc(endWeekExclusive) - 1),
+  );
+  if (lastHistoricalWeek < 1) {
+    return {
+      fixtures: state.fixtures,
+      players: state.players,
+      matchRatings: state.matchRatings,
+      disciplinaryRecords: state.disciplinaryRecords ?? {},
+    };
+  }
+
+  let fixtures = { ...state.fixtures };
+  let players = { ...state.players };
+  let matchRatings = { ...state.matchRatings };
+  let disciplinaryRecords = { ...(state.disciplinaryRecords ?? {}) };
+
+  for (let week = 1; week <= lastHistoricalWeek; week += 1) {
+    const weekState: GameState = {
+      ...state,
+      currentWeek: week,
+      fixtures,
+      players,
+      matchRatings,
+      disciplinaryRecords,
+    };
+    const rng = createRNG(
+      `${state.runManifest.rootSeed}:historical-world-match:s${state.currentSeason}:w${week}`,
+    );
+
+    const availableDisciplinaryRecords = decrementSuspensions(disciplinaryRecords);
+    const detailedFixtures = simulateWeekFixtures(
+      weekState,
+      rng,
+      availableDisciplinaryRecords,
+    );
+    const abstractWeek = simulateAbstractCompetitionWeek({
+      worldSeed: state.seed,
+      season: state.currentSeason,
+      week,
+      seasonLength,
+      leagues: state.leagues,
+      clubs: state.clubs,
+      players,
+      fixtures,
+      matchRatings,
+    });
+    const fixturesPlayed: SimulatedFixture[] = [
+      ...detailedFixtures,
+      ...abstractWeek.fixturesPlayed,
+    ];
+
+    const cardEvents: CardEvent[] = [];
+    for (const played of fixturesPlayed) {
+      const participants = getSimulatedCardParticipants(
+        played,
+        state.clubs,
+        players,
+      );
+      cardEvents.push(...generateSimulatedCards(
+        rng,
+        played.id,
+        participants.homePlayers,
+        participants.awayPlayers,
+        availableDisciplinaryRecords,
+      ));
+    }
+    disciplinaryRecords = processCardAccumulation(
+      cardEvents,
+      availableDisciplinaryRecords,
+      state.currentSeason,
+    ).updatedRecords;
+
+    const formMomentumUpdates = processFormMomentum(weekState, fixturesPlayed);
+    const injuries = processInjuries(weekState, rng);
+    const updatedPlayers = { ...players };
+
+    // Match the canonical advancement order: momentum, availability, then the
+    // persisted rating window which supplies the final public form value.
+    for (const update of formMomentumUpdates) {
+      const player = updatedPlayers[update.playerId];
+      if (!player) continue;
+      updatedPlayers[update.playerId] = {
+        ...player,
+        form: clamp(Math.round(update.form * 10) / 10, -3, 3),
+        formMomentum: update.formMomentum,
+        formTrend: update.formTrend,
+        formLockWeeks: update.formLockWeeks,
+      };
+    }
+
+    for (const [playerId, player] of Object.entries(updatedPlayers)) {
+      if (player.injured && player.injuryWeeksRemaining > 0) {
+        const remaining = player.injuryWeeksRemaining - 1;
+        const recovered = remaining === 0;
+        updatedPlayers[playerId] = {
+          ...player,
+          injured: !recovered,
+          injuryWeeksRemaining: remaining,
+          currentInjury: recovered
+            ? undefined
+            : player.currentInjury
+              ? { ...player.currentInjury, weeksRemaining: remaining }
+              : undefined,
+          injuryHistory: recovered && player.injuryHistory
+            ? { ...player.injuryHistory, reinjuryWindowWeeksLeft: 4 }
+            : player.injuryHistory,
+        };
+      } else if (
+        !player.injured
+        && player.injuryHistory
+        && player.injuryHistory.reinjuryWindowWeeksLeft > 0
+      ) {
+        updatedPlayers[playerId] = {
+          ...player,
+          injuryHistory: {
+            ...player.injuryHistory,
+            reinjuryWindowWeeksLeft:
+              player.injuryHistory.reinjuryWindowWeeksLeft - 1,
+          },
+        };
+      }
+    }
+
+    for (const injuryResult of injuries) {
+      const player = updatedPlayers[injuryResult.playerId];
+      if (!player) continue;
+      updatedPlayers[injuryResult.playerId] = {
+        ...player,
+        injured: true,
+        injuryWeeksRemaining: injuryResult.weeksOut,
+        currentInjury: injuryResult.injury,
+        injuryHistory: addToInjuryHistory(player, injuryResult.injury),
+      };
+    }
+
+    fixtures = { ...fixtures };
+    matchRatings = { ...matchRatings };
+    for (const played of fixturesPlayed) {
+      fixtures[played.id] = played;
+      if (!played.playerRatings) continue;
+      matchRatings[played.id] = played.playerRatings;
+      for (const [playerId, rating] of Object.entries(played.playerRatings)) {
+        const player = updatedPlayers[playerId];
+        if (!player) continue;
+        const recent = [
+          ...(player.recentMatchRatings ?? []),
+          {
+            fixtureId: played.id,
+            week,
+            season: state.currentSeason,
+            rating: rating.rating,
+          },
+        ].slice(-6);
+        updatedPlayers[playerId] = {
+          ...player,
+          recentMatchRatings: recent,
+          form: computeFormFromRatings(recent, player),
+        };
+      }
+    }
+    players = updatedPlayers;
+  }
+
+  return { fixtures, players, matchRatings, disciplinaryRecords };
 }
 
 // =============================================================================
@@ -4241,9 +4439,13 @@ export function advanceWeek(
       satisfactionHistory: updatedSatisfactionHistory,
       freeAgentPool: lifecycleFreeAgentPool,
     };
-    return applyClubPhilosophySeasonStart(
+    const seasonOpenedState = applyClubPhilosophySeasonStart(
       applyWorldConditionSeasonStart(seasonStartState),
     );
+    return {
+      ...seasonOpenedState,
+      culturalCalendarState: refreshCulturalCalendarState(seasonOpenedState),
+    };
   }
   const reconciledClubs = reconcileClubRosters(updatedClubs, updatedPlayers);
 

@@ -618,6 +618,8 @@ describe("release evidence checker", () => {
       generatedEvidence: {
         kind: "candidate-core-suites",
         path: "artifacts/release/generated/candidate-core-suites.json",
+        replayabilityArtifact:
+          "artifacts/release/generated/replayability-release-summary.json",
       },
     };
     writeJson(statusPath, status);
@@ -647,9 +649,47 @@ describe("release evidence checker", () => {
       status: "Passed",
       commands: [{ command: "npm run test:unit", status: "Passed" }],
     });
+    const replayabilityPath = join(
+      cwd,
+      "artifacts",
+      "release",
+      "generated",
+      "replayability-release-summary.json",
+    );
+    const cleanReplayability = {
+      passed: true,
+      humanFacingProxies: {
+        authority: {
+          sourceHeadSha: candidateSha,
+          sourceTreeClean: true,
+          sourceDirtyEntryCount: 0,
+          gitInspectionSucceeded: true,
+          evidenceClass: "clean_commit_bound",
+          releaseCertificationEligible: true,
+        },
+      },
+    };
+    writeJson(replayabilityPath, cleanReplayability);
     expect(check(cwd).gateResults.find(
       (gate: { gateId: string }) => gate.gateId === "automated",
     )).toMatchObject({ configuredStatus: "Unverified", status: "Passed" });
+
+    writeJson(replayabilityPath, {
+      ...cleanReplayability,
+      humanFacingProxies: {
+        authority: {
+          ...cleanReplayability.humanFacingProxies.authority,
+          sourceTreeClean: false,
+          sourceDirtyEntryCount: 2,
+          evidenceClass: "diagnostic_dirty_worktree",
+          releaseCertificationEligible: false,
+        },
+      },
+    });
+    expect(check(cwd).failures).toEqual(expect.arrayContaining([
+      expect.stringContaining("replayability artifact is diagnostic-only"),
+    ]));
+    writeJson(replayabilityPath, cleanReplayability);
 
     const invalid = JSON.parse(readFileSync(evidencePath, "utf8"));
     invalid.sourceAndConfigUnchangedAtCompletion = false;
