@@ -29,6 +29,7 @@ import {
   stabilizeAutonomousCareerState,
 } from "./autonomousYouthCareerDriver";
 import type {
+  AutonomousCareerChooserProfileId,
   AutonomousCareerTelemetry,
   AutonomousWorldHealthSnapshot,
 } from "./autonomousYouthCareerDriver";
@@ -73,6 +74,17 @@ const WORKER_MODE = process.env.SOAK_WORKER_MODE === "true";
 const MAX_HEAP_USED_BYTES = 1536 * 1024 * 1024;
 const MAX_RSS_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_POST_GC_HEAP_GROWTH_BYTES = 1024 * 1024 * 1024;
+const SUPPLEMENTAL_CHOOSER_PROFILES = ["cautious", "aggressive"] as const satisfies readonly AutonomousCareerChooserProfileId[];
+const PROFILE_MATRIX_SEED_COUNT = Number.parseInt(process.env.SOAK_PROFILE_MATRIX_SEEDS ?? "1", 10);
+const PROFILE_MATRIX_SEASON_COUNT = Number.parseInt(
+  process.env.SOAK_PROFILE_MATRIX_SEASONS ?? String(Math.min(RELEASE_SEASON_COUNT, 6)),
+  10,
+);
+const PROFILE_MATRIX_ONLY = process.env.SOAK_PROFILE_MATRIX_ONLY === "true";
+const PROFILE_MATRIX_OUTPUT_PATH = resolve(
+  process.env.SOAK_PROFILE_MATRIX_OUTPUT
+    ?? "artifacts/release/generated/long-career-chooser-profile-matrix.json",
+);
 const COLLECTION_BYTE_BUDGETS: Record<SaveRetentionCollectionKey, number> = {
   players: 32 * 1024 * 1024,
   // Five recent seasons keep broad 500-player comparison detail; older
@@ -641,7 +653,13 @@ function assertAutonomousCareerHealth(
     `seed ${seed} never accepted an organically generated marketplace bid`,
   ).toBeGreaterThan(0);
   expect(final.careerPathChosen, `seed ${seed} never committed to a career path`).toBe(true);
-  expect(final.careerPath, `seed ${seed} diverged from the independent commercial path`).toBe("independent");
+  const expectedCareerPath = telemetry.chooserProfile === "cautious"
+    ? "club"
+    : "independent";
+  expect(
+    final.careerPath,
+    `seed ${seed} diverged from the ${telemetry.chooserProfile} chooser path`,
+  ).toBe(expectedCareerPath);
   expect(final.careerTier, `seed ${seed} did not progress beyond the opening tier gates`).toBeGreaterThanOrEqual(2);
   expect(final.completedCourses, `seed ${seed} never completed a course`).toBeGreaterThan(0);
 }
@@ -649,6 +667,7 @@ function assertAutonomousCareerHealth(
 async function simulateCareer(
   seed: string,
   seasonCount: number,
+  chooserProfile: AutonomousCareerChooserProfileId = "commercial",
 ): Promise<RunEvidence> {
   const { useGameStore } = await import("@/stores/gameStore");
   await useGameStore.getState().startNewGame({
@@ -692,7 +711,7 @@ async function simulateCareer(
   let latestWeeklyTelemetry: WeeklySimulationTelemetry | undefined;
   const seasonGrowth: RunEvidence["seasonGrowth"] = [];
   const worldHealth: RunEvidence["worldHealth"] = [];
-  const careerTelemetry = createAutonomousCareerTelemetry();
+  const careerTelemetry = createAutonomousCareerTelemetry(chooserProfile);
   const stopObservingCompaction = observeSaveRetentionCompaction((sample) => {
     compactionSamples.push(sample);
     pendingCompactionSamples.push(sample);
@@ -878,10 +897,43 @@ async function simulateCareer(
   };
 }
 
+async function simulateChooserProfileMatrix(): Promise<Array<{
+  chooserProfile: AutonomousCareerChooserProfileId;
+  seedCount: number;
+  seasonCount: number;
+  runs: RunEvidence[];
+}>> {
+  const chooserProfileMatrix: Array<{
+    chooserProfile: AutonomousCareerChooserProfileId;
+    seedCount: number;
+    seasonCount: number;
+    runs: RunEvidence[];
+  }> = [];
+  for (const chooserProfile of SUPPLEMENTAL_CHOOSER_PROFILES) {
+    const profileRuns: RunEvidence[] = [];
+    for (let index = 0; index < PROFILE_MATRIX_SEED_COUNT; index += 1) {
+      const seed = `release-soak-${chooserProfile}-${String(index + 1).padStart(2, "0")}`;
+      profileRuns.push(await simulateCareer(seed, PROFILE_MATRIX_SEASON_COUNT, chooserProfile));
+    }
+    chooserProfileMatrix.push({
+      chooserProfile,
+      seedCount: PROFILE_MATRIX_SEED_COUNT,
+      seasonCount: PROFILE_MATRIX_SEASON_COUNT,
+      runs: profileRuns,
+    });
+  }
+  return chooserProfileMatrix;
+}
+
+const canonicalReleaseSoak = PROFILE_MATRIX_ONLY ? it.skip : it;
+const chooserProfileMatrixReleaseSoak = PROFILE_MATRIX_ONLY ? it : it.skip;
+
 describe("full canonical-week release soak", () => {
-  it("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
+  canonicalReleaseSoak("keeps seeded careers coherent, bounded, serializable, and deterministic", async () => {
     expect(RELEASE_SEED_COUNT).toBeGreaterThan(0);
     expect(RELEASE_SEASON_COUNT).toBeGreaterThan(0);
+    expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThanOrEqual(0);
+    expect(PROFILE_MATRIX_SEASON_COUNT).toBeGreaterThan(0);
     const seeds = Array.from(
       { length: RELEASE_SEED_COUNT },
       (_, index) => `release-soak-${String(index + RELEASE_SEED_START).padStart(2, "0")}`,
@@ -905,6 +957,7 @@ describe("full canonical-week release soak", () => {
         skippedOrdinaryWeeks: false,
         seedCount: RELEASE_SEED_COUNT,
         seasonCount: RELEASE_SEASON_COUNT,
+        chooserProfilesExercised: ["commercial"],
         deterministicReplaySeed: seeds[0],
         maxSerializedBytes: MAX_SERIALIZED_BYTES,
         maxGrowthMultiplier: MAX_GROWTH_MULTIPLIER,
@@ -965,5 +1018,47 @@ describe("full canonical-week release soak", () => {
     await mkdir(dirname(OUTPUT_PATH), { recursive: true });
     await writeFile(OUTPUT_PATH, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
     console.info(`LONG_CAREER_RELEASE_GATE ${JSON.stringify(summary.aggregate)}`);
+  });
+
+  chooserProfileMatrixReleaseSoak("captures supplemental chooser divergence once as non-gating evidence", async () => {
+    expect(PROFILE_MATRIX_SEED_COUNT).toBeGreaterThan(0);
+    expect(PROFILE_MATRIX_SEASON_COUNT).toBeGreaterThan(0);
+
+    const chooserProfileMatrix = await simulateChooserProfileMatrix();
+    const allRuns = chooserProfileMatrix.flatMap((entry) => entry.runs);
+    const summary = {
+      schemaVersion: 1,
+      evidenceKind: "long-career-chooser-profile-matrix",
+      generatedAt: new Date().toISOString(),
+      profile: {
+        kind: "supplemental-chooser-profile-matrix",
+        gating: false,
+        canonicalReleaseSoakArtifactPath: OUTPUT_PATH,
+        chooserProfilesExercised: [...SUPPLEMENTAL_CHOOSER_PROFILES],
+        seedCountPerProfile: PROFILE_MATRIX_SEED_COUNT,
+        seasonCount: PROFILE_MATRIX_SEASON_COUNT,
+      },
+      aggregate: {
+        totalRuns: allRuns.length,
+        totalCanonicalTicks: allRuns.reduce((sum, run) => sum + run.canonicalTicks, 0),
+        chooserProfilesValidated: chooserProfileMatrix
+          .filter((entry) => entry.runs.length > 0)
+          .map((entry) => entry.chooserProfile),
+        maxUnresolvedActionBacklog: Math.max(
+          ...allRuns.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.unresolvedActionBacklog)),
+        ),
+        maxFreeAgentRatio: round(Math.max(
+          ...allRuns.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.freeAgentRatio)),
+        ), 3),
+        maxActiveLoanRatio: round(Math.max(
+          ...allRuns.flatMap((run) => run.worldHealth.map((snapshot) => snapshot.activeLoanRatio)),
+        ), 3),
+      },
+      chooserProfileMatrix,
+    };
+
+    await mkdir(dirname(PROFILE_MATRIX_OUTPUT_PATH), { recursive: true });
+    await writeFile(PROFILE_MATRIX_OUTPUT_PATH, `${JSON.stringify(summary, null, 2)}\n`, "utf8");
+    console.info(`LONG_CAREER_CHOOSER_PROFILE_MATRIX ${JSON.stringify(summary.aggregate)}`);
   });
 });

@@ -11,6 +11,9 @@ import {
   getGameModeDefinition,
 } from "@/engine/content/modeDefinitions";
 import {
+  CAREER_ERA_CONTENT_PACK,
+  FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK,
+  RECRUITMENT_DOCTRINE_CONTENT_PACK,
   SHIPPED_CONTENT_PACKS,
   getRunContentDefinitionIds,
   getShippedContentDefinitionIds,
@@ -54,7 +57,11 @@ describe("versioned authored content registry", () => {
       "talentscout.narrative-event-templates",
       "talentscout.scenarios",
       "talentscout.game-modes",
+      "talentscout.career-eras",
+      "talentscout.football-culture-playbooks",
+      "talentscout.recruitment-doctrines",
       "talentscout.insight-narratives",
+      "talentscout.observation-situations",
       "talentscout.observation-atmosphere-events",
       "talentscout.investigation-consequence-narratives",
     ]);
@@ -77,10 +84,35 @@ describe("versioned authored content registry", () => {
     expect(
       new Set(INSIGHT_NARRATIVE_CONTENT_PACK.entries.map((entry) => entry.id)).size,
     ).toBe(INSIGHT_NARRATIVE_CONTENT_PACK.entries.length);
+    expect(new Set(CAREER_ERA_CONTENT_PACK.entries.map((entry) => entry.theme)).size).toBe(
+      CAREER_ERA_CONTENT_PACK.entries.length,
+    );
+    expect(new Set(
+      FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK.entries.map((entry) => entry.countryId),
+    ).size).toBe(FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK.entries.length);
+    expect(new Set(
+      RECRUITMENT_DOCTRINE_CONTENT_PACK.entries.map((entry) => entry.family),
+    ).size).toBe(RECRUITMENT_DOCTRINE_CONTENT_PACK.entries.length);
+    expect(
+      RECRUITMENT_DOCTRINE_CONTENT_PACK.entries.reduce(
+        (count, entry) => count + entry.expressions.length,
+        0,
+      ),
+    ).toBe(20);
 
     const definitionIds = getShippedContentDefinitionIds();
     expect(new Set(definitionIds).size).toBe(definitionIds.length);
     expect(definitionIds).toContain("game-mode:youth-scout@modes.1");
+    expect(definitionIds).toContain("career-era:recovery@career-eras.1");
+    expect(definitionIds).toContain(
+      "football-culture-playbook:england@football-culture-playbooks.1",
+    );
+    expect(definitionIds).toContain(
+      "recruitment-doctrine:academyFirst@recruitment-doctrines.1",
+    );
+    expect(definitionIds).toContain(
+      "observation-situation:schoolMatch-baseline@observation-situations.1",
+    );
     expect(definitionIds).toContain("scenario:the_rescue_job@scenarios.2");
     expect(definitionIds).toContain(
       "event-template:rivalPoach@events.1",
@@ -141,6 +173,16 @@ describe("versioned authored content registry", () => {
     const youthRunIds = getRunContentDefinitionIds("youth-scout");
 
     expect(youthRunIds).toContain("game-mode:youth-scout@modes.1");
+    expect(youthRunIds).toContain("career-era:proveJudgment@career-eras.1");
+    expect(youthRunIds).toContain(
+      "football-culture-playbook:england@football-culture-playbooks.1",
+    );
+    expect(youthRunIds).toContain(
+      "recruitment-doctrine:academyFirst@recruitment-doctrines.1",
+    );
+    expect(youthRunIds).toContain(
+      "observation-situation:schoolMatch-selectionWindow@observation-situations.1",
+    );
     expect(youthRunIds).toContain(
       "observation-atmosphere-event:rain_starts@observation-atmosphere-events.1",
     );

@@ -44,6 +44,7 @@ import { PlannerCompareTray } from "./calendar/PlannerCompareTray";
 import { PlannerOpportunitySheet } from "./calendar/PlannerOpportunitySheet";
 import { PlannerWeekStrip } from "./calendar/PlannerWeekStrip";
 import { PlannerWeeklyStanceCard } from "./calendar/PlannerWeeklyStanceCard";
+import { buildPlannerCareerPressure } from "./calendar/plannerCareerPressure";
 import { TargetPicker } from "./calendar/TargetPicker";
 import { WeeklyStrategyPanel } from "./calendar/WeeklyStrategyPanel";
 import { useTranslations } from "next-intl";
@@ -65,6 +66,10 @@ import {
   normalizeWeeklyStrategyState,
   WEEKLY_INTENTS,
 } from "@/engine/core/weeklyStrategy";
+import {
+  deriveCareerFingerprintAuthority,
+  deriveCareerFingerprintProjection,
+} from "@/engine/career/fingerprint";
 
 const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 
@@ -276,7 +281,16 @@ export function CalendarScreen() {
     [gameState?.currentWeek, gameState?.watchlist, gameState?.managerDirectives, gameState?.scout?.fatigue],
   );
 
-  if (!gameState) return null;
+  const careerPressure = useMemo(
+    () => gameState
+      ? buildPlannerCareerPressure(
+          deriveCareerFingerprintProjection(deriveCareerFingerprintAuthority(gameState)),
+        )
+      : null,
+    [gameState],
+  );
+
+  if (!gameState || !careerPressure) return null;
 
   const { schedule, currentWeek, currentSeason, scout } = gameState;
   const weeklyStrategy = normalizeWeeklyStrategyState(
@@ -926,7 +940,10 @@ export function CalendarScreen() {
 
           <div className="space-y-4">
             <div className="hidden lg:block">
-              <PlannerWeeklyStanceCard strategy={weeklyStrategy} />
+              <PlannerWeeklyStanceCard
+                strategy={weeklyStrategy}
+                careerPressure={careerPressure}
+              />
             </div>
 
             {selectedActivity ? (

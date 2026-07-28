@@ -251,6 +251,7 @@ function applyClubDoctrineEffects(
     seed: state.seed,
     season: state.currentSeason,
     manager: state.managerProfiles?.[club.id],
+    runManifest: state.runManifest,
   });
   if (accumulator.role === "manager") {
     accumulator.evidenceScrutiny += Math.round(

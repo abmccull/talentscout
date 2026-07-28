@@ -21,6 +21,7 @@ import type {
   PlayerRole,
   PlayerTrait,
   Position,
+  RunManifest,
   SystemFitResult,
   TacticalIdentity,
 } from "@/engine/core/types";
@@ -28,6 +29,7 @@ import type { RNG } from "@/engine/rng";
 import { calculateRoleSuitability, getBestRole } from "@/engine/players/roles";
 import {
   deriveClubRecruitmentDoctrine,
+  type ClubRecruitmentDoctrine,
   getPhilosophyPreferredAgeRange,
 } from "@/engine/world/recruitmentIdentity";
 
@@ -382,6 +384,10 @@ function buildFitWeaknesses(
   tacticalFit: number,
   ageFit: number,
   club: Club,
+  context?: {
+    doctrine?: ClubRecruitmentDoctrine;
+    runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
+  },
 ): string[] {
   const weaknesses: string[] = [];
 
@@ -412,10 +418,11 @@ function buildFitWeaknesses(
     weaknesses.push("Injury history concerns — high injury proneness rating.");
   }
 
-  const doctrine = deriveClubRecruitmentDoctrine({
+  const doctrine = context?.doctrine ?? deriveClubRecruitmentDoctrine({
     club,
     seed: `system-fit:${club.id}`,
     season: 0,
+    runManifest: context?.runManifest,
   });
   if (doctrine.tacticalRoleRigidity >= 70 && player.attributes.consistency <= 8) {
     weaknesses.push("Inconsistent performer — a risk for a club chasing immediate results.");
@@ -457,6 +464,10 @@ export function calculateSystemFit(
   preferredRole?: PlayerRole,
   accuracyBonus: number = 0,
   rng?: RNG,
+  context?: {
+    doctrine?: ClubRecruitmentDoctrine;
+    runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
+  },
 ): SystemFitResult {
   const positionFit = applyNoise(Math.round(scorePositionFit(player, manager)), rng, accuracyBonus);
   const { score: roleFitScore, suggestedRole } = scoreRoleFit(player, preferredRole);
@@ -475,7 +486,7 @@ export function calculateSystemFit(
     player, positionFit, roleFit, tacticalFit, ageFit, club, manager, suggestedRole,
   );
   const fitWeaknesses = buildFitWeaknesses(
-    player, positionFit, roleFit, tacticalFit, ageFit, club,
+    player, positionFit, roleFit, tacticalFit, ageFit, club, context,
   );
 
   return {

@@ -13,12 +13,24 @@ import type {
   GameState,
   ManagerProfile,
   Player,
+  RunManifest,
   ScoutReport,
   ScoutingPhilosophy,
   Specialization,
   YouthBriefPriority,
   YouthRecruitmentBrief,
 } from "@/engine/core/types";
+import {
+  DOCTRINE_BASES_BY_FAMILY,
+  DOCTRINE_EXPRESSIONS_BY_FAMILY,
+  listRecruitmentDoctrineExpressions,
+  type ClubRecruitmentExpressionId,
+  type DoctrineBase,
+  type DoctrineExpression,
+  type RecruitmentEvidencePreference,
+  type RecruitmentReach,
+  type RecruitmentRiskTolerance,
+} from "./recruitmentDoctrineCatalog";
 
 export type RecruitmentFocus = YouthBriefPriority;
 
@@ -34,9 +46,12 @@ export type ClubRecruitmentArchetype =
   | "valueTrader"
   | "crossBorderNetwork";
 
-export type RecruitmentEvidencePreference = "live" | "data" | "network" | "balanced";
-export type RecruitmentRiskTolerance = "low" | "medium" | "high";
-export type RecruitmentReach = "local" | "regional" | "international" | "global";
+export type {
+  ClubRecruitmentExpressionId,
+  RecruitmentEvidencePreference,
+  RecruitmentReach,
+  RecruitmentRiskTolerance,
+} from "./recruitmentDoctrineCatalog";
 
 /**
  * One authoritative, player-safe description of how a club recruits.
@@ -69,20 +84,6 @@ export interface ClubRecruitmentDoctrine {
   specializationAffinity: Specialization[];
   reasons: string[];
 }
-
-export type ClubRecruitmentExpressionId =
-  | "academyLocalRoots"
-  | "academyMentorLadder"
-  | "academyPathwayWorkbench"
-  | "winNowPromotionSiege"
-  | "winNowSpineStabilizer"
-  | "winNowTacticalLock"
-  | "marketSmartArbitrageCycle"
-  | "marketSmartContractExpiryHunt"
-  | "marketSmartSellOnWorkshop"
-  | "globalDiasporaMesh"
-  | "globalSatelliteBridge"
-  | "globalPassportPortfolio";
 
 export interface HistoricalRecruitmentDoctrineSnapshot extends ClubRecruitmentDoctrine {
   snapshotVersion: 1;
@@ -151,6 +152,8 @@ const PHILOSOPHY_ORDER: ScoutingPhilosophy[] = [
   "marketSmart",
   "globalRecruiter",
 ];
+const LEGACY_RECRUITMENT_DOCTRINE_EXPRESSION_COUNT = 3;
+const RECRUITMENT_DOCTRINE_LEDGER_PREFIX = "recruitment-doctrine:";
 
 const FOCUS_ORDER: RecruitmentFocus[] = [
   "highCeiling",
@@ -173,332 +176,13 @@ const PRIMARY_FOCUS_BY_PHILOSOPHY: Record<ScoutingPhilosophy, RecruitmentFocus> 
   globalRecruiter: "character",
 };
 
-interface DoctrineBase {
-  preferredSeniorAgeRange: [number, number];
-  academyIntakeAgeRange: [number, number];
-  evidencePreference: RecruitmentEvidencePreference;
-  riskTolerance: RecruitmentRiskTolerance;
-  geographicReach: RecruitmentReach;
-  adaptationTolerance: number;
-  pathwayPatience: number;
-  tacticalRoleRigidity: number;
-  sellingPressure: number;
-  managerInfluence: number;
-  specializationAffinity: Specialization[];
-}
-
-interface DoctrineExpression {
-  id: ClubRecruitmentExpressionId;
-  label: string;
-  overrides: Partial<DoctrineBase> & {
-    evidencePreference?: RecruitmentEvidencePreference;
-    riskTolerance?: RecruitmentRiskTolerance;
-    geographicReach?: RecruitmentReach;
-  };
-  objectiveWeights?: Partial<Record<RecruitmentFocus, number>>;
-  reason: string;
-}
-
-const DOCTRINE_BASES: Record<ScoutingPhilosophy, DoctrineBase> = {
-  academyFirst: {
-    preferredSeniorAgeRange: [17, 23],
-    academyIntakeAgeRange: [14, 16],
-    evidencePreference: "live",
-    riskTolerance: "high",
-    geographicReach: "regional",
-    adaptationTolerance: 62,
-    pathwayPatience: 86,
-    tacticalRoleRigidity: 38,
-    sellingPressure: 34,
-    managerInfluence: 44,
-    specializationAffinity: ["youth", "regional"],
-  },
-  winNow: {
-    preferredSeniorAgeRange: [24, 31],
-    academyIntakeAgeRange: [16, 17],
-    evidencePreference: "live",
-    riskTolerance: "low",
-    geographicReach: "international",
-    adaptationTolerance: 36,
-    pathwayPatience: 22,
-    tacticalRoleRigidity: 78,
-    sellingPressure: 18,
-    managerInfluence: 72,
-    specializationAffinity: ["firstTeam", "data"],
-  },
-  marketSmart: {
-    preferredSeniorAgeRange: [21, 27],
-    academyIntakeAgeRange: [15, 17],
-    evidencePreference: "data",
-    riskTolerance: "medium",
-    geographicReach: "international",
-    adaptationTolerance: 58,
-    pathwayPatience: 61,
-    tacticalRoleRigidity: 45,
-    sellingPressure: 88,
-    managerInfluence: 38,
-    specializationAffinity: ["data", "regional", "firstTeam"],
-  },
-  globalRecruiter: {
-    preferredSeniorAgeRange: [19, 29],
-    academyIntakeAgeRange: [14, 17],
-    evidencePreference: "network",
-    riskTolerance: "medium",
-    geographicReach: "global",
-    adaptationTolerance: 84,
-    pathwayPatience: 54,
-    tacticalRoleRigidity: 34,
-    sellingPressure: 55,
-    managerInfluence: 48,
-    specializationAffinity: ["regional", "data", "firstTeam"],
-  },
-};
-
-const DOCTRINE_EXPRESSIONS: Record<ScoutingPhilosophy, readonly DoctrineExpression[]> = {
-  academyFirst: [
-    {
-      id: "academyLocalRoots",
-      label: "Local roots network",
-      overrides: {
-        preferredSeniorAgeRange: [17, 22],
-        academyIntakeAgeRange: [14, 15],
-        evidencePreference: "live",
-        geographicReach: "local",
-        adaptationTolerance: 54,
-        pathwayPatience: 90,
-        tacticalRoleRigidity: 34,
-        sellingPressure: 28,
-        managerInfluence: 40,
-        specializationAffinity: ["youth", "regional"],
-      },
-      objectiveWeights: { highCeiling: 6, character: 3 },
-      reason: "The club trusts local pathway familiarity and accepts slower integration to protect academy continuity.",
-    },
-    {
-      id: "academyMentorLadder",
-      label: "Mentor ladder",
-      overrides: {
-        preferredSeniorAgeRange: [18, 24],
-        academyIntakeAgeRange: [15, 16],
-        evidencePreference: "balanced",
-        geographicReach: "regional",
-        adaptationTolerance: 68,
-        pathwayPatience: 82,
-        tacticalRoleRigidity: 42,
-        sellingPressure: 30,
-        managerInfluence: 50,
-        specializationAffinity: ["youth", "firstTeam"],
-      },
-      objectiveWeights: { highCeiling: 5, earlyReadiness: 3 },
-      reason: "The academy is built to hand prospects to senior mentors faster without abandoning developmental patience.",
-    },
-    {
-      id: "academyPathwayWorkbench",
-      label: "Pathway workbench",
-      overrides: {
-        preferredSeniorAgeRange: [17, 23],
-        academyIntakeAgeRange: [14, 16],
-        evidencePreference: "data",
-        geographicReach: "regional",
-        adaptationTolerance: 64,
-        pathwayPatience: 78,
-        tacticalRoleRigidity: 48,
-        sellingPressure: 42,
-        managerInfluence: 46,
-        specializationAffinity: ["youth", "data", "regional"],
-      },
-      objectiveWeights: { highCeiling: 4, resale: 3, character: 2 },
-      reason: "The club measures pathway decisions aggressively and tolerates more structured role planning inside the academy.",
-    },
-  ],
-  winNow: [
-    {
-      id: "winNowPromotionSiege",
-      label: "Promotion siege",
-      overrides: {
-        preferredSeniorAgeRange: [23, 30],
-        academyIntakeAgeRange: [16, 17],
-        evidencePreference: "live",
-        riskTolerance: "low",
-        geographicReach: "international",
-        adaptationTolerance: 30,
-        pathwayPatience: 18,
-        tacticalRoleRigidity: 82,
-        sellingPressure: 14,
-        managerInfluence: 78,
-        specializationAffinity: ["firstTeam", "regional"],
-      },
-      objectiveWeights: { earlyReadiness: 6, character: 2 },
-      reason: "Short-term pressure compresses integration time and raises demand for immediate tactical trust.",
-    },
-    {
-      id: "winNowSpineStabilizer",
-      label: "Spine stabilizer",
-      overrides: {
-        preferredSeniorAgeRange: [24, 32],
-        academyIntakeAgeRange: [15, 17],
-        evidencePreference: "balanced",
-        riskTolerance: "low",
-        geographicReach: "international",
-        adaptationTolerance: 40,
-        pathwayPatience: 24,
-        tacticalRoleRigidity: 74,
-        sellingPressure: 20,
-        managerInfluence: 68,
-        specializationAffinity: ["firstTeam", "data"],
-      },
-      objectiveWeights: { earlyReadiness: 5, resale: 2 },
-      reason: "The squad wants dependable central pieces more than pure upside, so role clarity outranks experimentation.",
-    },
-    {
-      id: "winNowTacticalLock",
-      label: "Tactical lock",
-      overrides: {
-        preferredSeniorAgeRange: [22, 29],
-        academyIntakeAgeRange: [16, 17],
-        evidencePreference: "data",
-        riskTolerance: "medium",
-        geographicReach: "international",
-        adaptationTolerance: 34,
-        pathwayPatience: 20,
-        tacticalRoleRigidity: 88,
-        sellingPressure: 16,
-        managerInfluence: 80,
-        specializationAffinity: ["firstTeam", "data", "regional"],
-      },
-      objectiveWeights: { earlyReadiness: 5 },
-      reason: "The manager wants plug-in tactical certainty, so evidence standards rise even while patience collapses.",
-    },
-  ],
-  marketSmart: [
-    {
-      id: "marketSmartArbitrageCycle",
-      label: "Arbitrage cycle",
-      overrides: {
-        preferredSeniorAgeRange: [20, 26],
-        academyIntakeAgeRange: [15, 16],
-        evidencePreference: "data",
-        geographicReach: "international",
-        adaptationTolerance: 56,
-        pathwayPatience: 58,
-        tacticalRoleRigidity: 42,
-        sellingPressure: 92,
-        managerInfluence: 36,
-        specializationAffinity: ["data", "regional", "firstTeam"],
-      },
-      objectiveWeights: { resale: 6, highCeiling: 2 },
-      reason: "The recruitment desk is optimizing valuation cycles and expects exits to be part of the pathway.",
-    },
-    {
-      id: "marketSmartContractExpiryHunt",
-      label: "Contract-expiry hunt",
-      overrides: {
-        preferredSeniorAgeRange: [22, 28],
-        academyIntakeAgeRange: [16, 17],
-        evidencePreference: "balanced",
-        geographicReach: "international",
-        adaptationTolerance: 62,
-        pathwayPatience: 52,
-        tacticalRoleRigidity: 44,
-        sellingPressure: 82,
-        managerInfluence: 34,
-        specializationAffinity: ["data", "firstTeam"],
-      },
-      objectiveWeights: { resale: 5, earlyReadiness: 3 },
-      reason: "The club chases cost-controlled windows and is willing to accept older academy entrants if the market opportunity is clean.",
-    },
-    {
-      id: "marketSmartSellOnWorkshop",
-      label: "Sell-on workshop",
-      overrides: {
-        preferredSeniorAgeRange: [19, 25],
-        academyIntakeAgeRange: [15, 17],
-        evidencePreference: "data",
-        riskTolerance: "high",
-        geographicReach: "global",
-        adaptationTolerance: 66,
-        pathwayPatience: 64,
-        tacticalRoleRigidity: 40,
-        sellingPressure: 96,
-        managerInfluence: 32,
-        specializationAffinity: ["data", "regional", "youth"],
-      },
-      objectiveWeights: { resale: 6, character: 2, highCeiling: 3 },
-      reason: "Future resale is the dominant thesis, so the club tolerates more adaptation risk and younger arbitrage bets.",
-    },
-  ],
-  globalRecruiter: [
-    {
-      id: "globalDiasporaMesh",
-      label: "Diaspora mesh",
-      overrides: {
-        preferredSeniorAgeRange: [18, 28],
-        academyIntakeAgeRange: [14, 16],
-        evidencePreference: "network",
-        geographicReach: "global",
-        adaptationTolerance: 88,
-        pathwayPatience: 56,
-        tacticalRoleRigidity: 32,
-        sellingPressure: 52,
-        managerInfluence: 44,
-        specializationAffinity: ["regional", "youth", "firstTeam"],
-      },
-      objectiveWeights: { character: 5, highCeiling: 3 },
-      reason: "Existing relationship networks reduce uncertainty around travel, adaptation, and family relocation.",
-    },
-    {
-      id: "globalSatelliteBridge",
-      label: "Satellite bridge",
-      overrides: {
-        preferredSeniorAgeRange: [19, 27],
-        academyIntakeAgeRange: [15, 17],
-        evidencePreference: "balanced",
-        geographicReach: "global",
-        adaptationTolerance: 80,
-        pathwayPatience: 50,
-        tacticalRoleRigidity: 38,
-        sellingPressure: 58,
-        managerInfluence: 50,
-        specializationAffinity: ["regional", "data", "firstTeam"],
-      },
-      objectiveWeights: { character: 4, earlyReadiness: 3, resale: 2 },
-      reason: "The club uses bridge destinations and partner knowledge to accelerate cross-border placements.",
-    },
-    {
-      id: "globalPassportPortfolio",
-      label: "Passport portfolio",
-      overrides: {
-        preferredSeniorAgeRange: [20, 29],
-        academyIntakeAgeRange: [15, 17],
-        evidencePreference: "network",
-        riskTolerance: "high",
-        geographicReach: "global",
-        adaptationTolerance: 90,
-        pathwayPatience: 48,
-        tacticalRoleRigidity: 30,
-        sellingPressure: 62,
-        managerInfluence: 46,
-        specializationAffinity: ["regional", "data", "youth"],
-      },
-      objectiveWeights: { character: 4, resale: 3, highCeiling: 2 },
-      reason: "Recruitment explicitly values mobility leverage and accepts more variance when passports expand future routes.",
-    },
-  ],
-};
-
 /** Read-only authored surface used by release telemetry and content audits. */
 export function listClubRecruitmentExpressions(): Array<{
   id: ClubRecruitmentExpressionId;
   label: string;
   family: ScoutingPhilosophy;
 }> {
-  return PHILOSOPHY_ORDER.flatMap((family) =>
-    DOCTRINE_EXPRESSIONS[family].map((expression) => ({
-      id: expression.id,
-      label: expression.label,
-      family,
-    })),
-  );
+  return listRecruitmentDoctrineExpressions();
 }
 
 const CLUB_LABELS: Record<ClubRecruitmentArchetype, string> = {
@@ -549,9 +233,24 @@ function boundedSeasonalTrait(base: number, seed: string): number {
 function pickDoctrineExpression(
   philosophy: ScoutingPhilosophy,
   seed: string,
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">,
 ): DoctrineExpression {
-  const expressions = DOCTRINE_EXPRESSIONS[philosophy];
-  return expressions[Math.floor(seededUnit(seed) * expressions.length)] ?? expressions[0];
+  const expressions = DOCTRINE_EXPRESSIONS_BY_FAMILY[philosophy];
+  const activeExpressions = usesLegacyRecruitmentDoctrineExpressions(runManifest)
+    ? expressions.slice(0, LEGACY_RECRUITMENT_DOCTRINE_EXPRESSION_COUNT)
+    : expressions;
+  return activeExpressions[Math.floor(seededUnit(seed) * activeExpressions.length)]
+    ?? activeExpressions[0];
+}
+
+function usesLegacyRecruitmentDoctrineExpressions(
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">,
+): boolean {
+  if (!runManifest) return false;
+  if (runManifest.manifestVersion === 1) return true;
+  return !(runManifest.contentDefinitionIds ?? []).some((definitionId) =>
+    definitionId.startsWith(RECRUITMENT_DOCTRINE_LEDGER_PREFIX)
+  );
 }
 
 function doctrineFromSnapshot(
@@ -605,19 +304,19 @@ export function captureRecruitmentDoctrineSnapshot(input: {
 export function getPhilosophyPreferredAgeRange(
   philosophy: ScoutingPhilosophy,
 ): [number, number] {
-  return [...DOCTRINE_BASES[philosophy].preferredSeniorAgeRange];
+  return [...DOCTRINE_BASES_BY_FAMILY[philosophy].preferredSeniorAgeRange];
 }
 
 export function getPhilosophyAcademyIntakeAgeRange(
   philosophy: ScoutingPhilosophy,
 ): [number, number] {
-  return [...DOCTRINE_BASES[philosophy].academyIntakeAgeRange];
+  return [...DOCTRINE_BASES_BY_FAMILY[philosophy].academyIntakeAgeRange];
 }
 
 export function getPhilosophySpecializationAffinity(
   philosophy: ScoutingPhilosophy,
 ): Specialization[] {
-  return [...DOCTRINE_BASES[philosophy].specializationAffinity];
+  return [...DOCTRINE_BASES_BY_FAMILY[philosophy].specializationAffinity];
 }
 
 /** Build the canonical recruitment doctrine used by every club-facing system. */
@@ -628,13 +327,15 @@ export function deriveClubRecruitmentDoctrine(input: {
   region?: RegionRecruitmentIdentity;
   manager?: ManagerProfile;
   seasonalObjective?: RecruitmentFocus;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }): ClubRecruitmentDoctrine {
   const { club } = input;
-  const base = DOCTRINE_BASES[club.scoutingPhilosophy];
+  const base = DOCTRINE_BASES_BY_FAMILY[club.scoutingPhilosophy];
   const seedPrefix = `${input.seed}:${club.id}:s${input.season}:doctrine`;
   const expression = pickDoctrineExpression(
     club.scoutingPhilosophy,
     `${seedPrefix}:expression`,
+    input.runManifest,
   );
   const seasonalObjective = input.seasonalObjective ?? weightedSeededPick(
     `${seedPrefix}:objective`,
@@ -726,12 +427,14 @@ export function deriveAcademyBriefRecruitmentDoctrine(input: {
   club: Club;
   season: number;
   seasonalObjective?: RecruitmentFocus;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }): ClubRecruitmentDoctrine {
   return deriveClubRecruitmentDoctrine({
     club: input.club,
     seed: getAcademyBriefRecruitmentDoctrineSeed(input.club.id),
     season: input.season,
     seasonalObjective: input.seasonalObjective,
+    runManifest: input.runManifest,
   });
 }
 
@@ -898,6 +601,7 @@ export function deriveClubRecruitmentIdentity(input: {
   season: number;
   region?: RegionRecruitmentIdentity;
   manager?: ManagerProfile;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }): ClubRecruitmentIdentity {
   const { club, region } = input;
   const archetype = ARCHETYPE_BY_PHILOSOPHY[club.scoutingPhilosophy];
@@ -943,6 +647,7 @@ export function deriveClubRecruitmentIdentity(input: {
     region,
     manager: input.manager,
     seasonalObjective: seasonalFocus,
+    runManifest: input.runManifest,
   });
 
   return {
@@ -1097,6 +802,7 @@ function deriveHistoricalRecruitmentDoctrine(input: {
     },
     season: input.season,
     seasonalObjective: input.seasonalObjective ?? context.seasonalObjective,
+    runManifest: input.state.runManifest,
   });
 }
 

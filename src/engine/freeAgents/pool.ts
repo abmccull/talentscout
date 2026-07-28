@@ -424,7 +424,8 @@ function findInterestedNPCClub(
 export function scoreFreeAgentClubInterest(
   player: Pick<Player, "age" | "position" | "currentAbility">,
   club: Club,
-  state: Pick<GameState, "players" | "managerProfiles" | "seed" | "currentSeason" | "leagues">,
+  state: Pick<GameState, "players" | "managerProfiles" | "seed" | "currentSeason" | "leagues">
+    & { runManifest?: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds"> },
   agent?: Pick<FreeAgent, "country" | "nationality">,
 ): number {
   const coverage = positionCoverage({ ...player, id: "__candidate__" }, club, state);
@@ -437,6 +438,7 @@ export function scoreFreeAgentClubInterest(
     seed: state.seed,
     season: state.currentSeason,
     manager: state.managerProfiles[club.id],
+    runManifest: state.runManifest,
   });
   const ageFit = 0.65 + scoreDoctrineAgeFit(player.age, doctrine) / 100 * 0.7;
   const targetReputation = player.currentAbility / 2;

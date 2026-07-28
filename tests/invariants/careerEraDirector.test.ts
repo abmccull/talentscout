@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GameState } from "@/engine/core/types";
+import { CAREER_ERA_CONTENT_PACK } from "@/engine/content/registry";
 import { createConsequenceEngineState } from "@/engine/consequences";
 import type { CareerEraContext } from "@/engine/events/careerEraDirector";
 import {
@@ -78,6 +79,21 @@ function gameState(overrides: Partial<GameState> = {}): GameState {
 }
 
 describe("career era director", () => {
+  it("ships a validated authored era pack with every supported theme", () => {
+    expect(CAREER_ERA_CONTENT_PACK.manifest.id).toBe("talentscout.career-eras");
+    expect(CAREER_ERA_CONTENT_PACK.manifest.contentVersion).toBe("career-eras.1");
+    expect(CAREER_ERA_CONTENT_PACK.entries.map((entry) => entry.theme)).toEqual([
+      "proveJudgment",
+      "territoryBuild",
+      "relationshipDebt",
+      "rivalPressure",
+      "careerLeverage",
+      "recovery",
+      "leadershipQuality",
+      "agencyRunway",
+    ]);
+  });
+
   it("counts earned territorial knowledge instead of every zero-filled world entry", () => {
     const state = gameState({
       regionalKnowledge: {

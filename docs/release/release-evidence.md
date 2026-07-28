@@ -17,6 +17,7 @@ Generated candidate evidence is intentionally ignored by Git:
 - `artifacts/release/release-evidence-check.json`
 - `artifacts/release/generated/replayability-release-summary.json`
 - `artifacts/release/generated/long-career-release-summary.json`
+- `artifacts/release/generated/long-career-chooser-profile-matrix.json`
 - `artifacts/release/generated/long-career-workers/`
 
 The generated check report records the resolved commit, its source, tag, dirty state, package verification, gate evidence, and every blocker.
@@ -66,6 +67,19 @@ every final season boundary without skipping ordinary weeks, and reproduces
 seed one deterministically. The tracked gate remains
 `Unverified`; the checker computes an effective `Passed` status from this
 generated evidence, avoiding any post-commit policy edit.
+
+Run the optional, non-gating chooser-profile matrix separately:
+
+```powershell
+npm run test:release-soak:chooser-matrix
+```
+
+It exercises the cautious and aggressive autonomous policies once and writes
+`long-career-chooser-profile-matrix.json`. Those supplemental careers are not
+repeated inside every seed worker or the determinism replay. This preserves
+path-diversity diagnostics without inflating the 20-seed certification
+workload, changing its commercial-path digest, or turning supplemental
+coverage into a release blocker.
 
 Completed seed workers are atomic checkpoints. Re-running the same command
 from the same clean commit resumes only workers whose commit tree, Node

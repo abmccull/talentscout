@@ -815,6 +815,7 @@ export function createWeeklyActions(
       academyBriefCapacity,
       academyBriefSeasonLength,
       stateWithScheduleApplied.seed,
+      stateWithScheduleApplied.runManifest,
     );
     const recruitmentBriefs = {
       ...briefCycle.briefs,

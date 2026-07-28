@@ -63,6 +63,7 @@ export const SHARED_CAREER_STATE_KEYS = [
   "scout",
   "schedule",
   "weeklyStrategy",
+  "dashboardState",
   "jobOffers",
   "performanceReviews",
   "careerChronology",

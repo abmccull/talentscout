@@ -68,6 +68,20 @@ function withDate(observation: Observation, index: number): Observation {
   return { ...observation, week: index + 1, season: 1 };
 }
 
+const LEGACY_RECRUITMENT_MANIFEST = {
+  manifestVersion: 2 as const,
+  contentDefinitionIds: [
+    "career-era:proveJudgment@career-eras.1",
+  ],
+};
+
+const EXPANDED_RECRUITMENT_MANIFEST = {
+  manifestVersion: 3 as const,
+  contentDefinitionIds: [
+    "recruitment-doctrine:winNow@recruitment-doctrines.1",
+  ],
+};
+
 describe("scouting evidence invariants", () => {
   it("keeps indexed transaction evidence outcome- and RNG-equivalent", () => {
     const player = makePlayer();
@@ -265,7 +279,6 @@ describe("scouting evidence invariants", () => {
       .toEqual(generateReportContent(player, [observation], scout).attributeAssessments);
   });
 });
-
 describe("report submission invariants", () => {
   it("persists the same craft score prepared for preview and applies side effects once", () => {
     const player = makePlayer();
@@ -520,6 +533,123 @@ describe("report submission invariants", () => {
     expect(store.gameState?.clubResponses).toHaveLength(1);
     expect(store.gameState?.clubResponses[0].response).toBe("ignored");
     expect(Object.values(store.gameState?.reports ?? {})[0].clubResponse).toBe("ignored");
+  });
+
+  it("threads the saved run manifest into cached first-team system-fit weaknesses", () => {
+    const player = {
+      ...makePlayer(),
+      id: "system-fit-player",
+      position: "ST" as const,
+      attributes: {
+        ...makePlayer().attributes,
+        consistency: 8,
+        injuryProneness: 6,
+      },
+    };
+    const runSubmission = (
+      runManifest: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds">,
+    ) => {
+      const scout = {
+        ...makeScout(),
+        primarySpecialization: "firstTeam" as const,
+        careerPath: "club" as const,
+        currentClubId: "winNow-1",
+      };
+      const observation = withDate(observePlayerLight(
+        new RNG("first-team-system-fit-observation"),
+        player,
+        scout,
+        "liveMatch",
+        [],
+      ), 0);
+      const draft = generateReportContent(player, [observation], scout);
+      const gameState = {
+        seed: "first-team-system-fit",
+        runManifest,
+        currentWeek: 1,
+        currentSeason: 1,
+        difficulty: "normal",
+        scout,
+        players: { [player.id]: player },
+        unsignedYouth: {},
+        retiredPlayers: {},
+        observations: { [observation.id]: observation },
+        reports: {},
+        scoutingCases: {},
+        discoveryRecords: [],
+        clubResponses: [],
+        systemFitCache: {},
+        predictions: [],
+        inbox: [],
+        clubs: {
+          "winNow-1": {
+            id: "winNow-1",
+            name: "Home United",
+            shortName: "HOM",
+            leagueId: "league-home",
+            scoutingPhilosophy: "winNow",
+            playerIds: [],
+            academyPlayerIds: [],
+            youthAcademyRating: 10,
+            reputation: 60,
+            budget: 2_500_000,
+            managerId: "case-manager",
+          },
+        },
+        leagues: {
+          "league-home": { id: "league-home", country: "England" },
+        },
+        managerProfiles: {
+          "winNow-1": {
+            clubId: "winNow-1",
+            managerName: "Case Manager",
+            preference: "balanced",
+            reportInfluence: 0.5,
+            preferredFormation: "4-3-3",
+          },
+        },
+        managerDirectives: [],
+        youthRecruitmentBriefs: {},
+        scoutingInfrastructure: {
+          dataSubscription: "none",
+          travelBudget: "economy",
+          officeEquipment: "basic",
+          investmentCosts: { weekly: 0, oneTime: 0 },
+        },
+      } as unknown as GameState;
+      let store = {
+        gameState,
+        selectedPlayerId: player.id,
+        currentScreen: "reportWriter",
+        pendingListingReportId: null,
+      } as unknown as GameStoreState;
+      const get = (() => store) as GetState;
+      const set = ((partial) => {
+        const update = typeof partial === "function" ? partial(store) : partial;
+        store = { ...store, ...update };
+      }) as SetState;
+
+      createReportActions(get, set).submitReport(
+        "recommend",
+        "A recommendation submitted without an active manager directive.",
+        draft.suggestedStrengths.slice(0, 3),
+        draft.suggestedWeaknesses.slice(0, 2),
+      );
+
+      return store.gameState!.systemFitCache[`${player.id}:winNow-1`];
+    };
+
+    const legacyFit = runSubmission(LEGACY_RECRUITMENT_MANIFEST);
+    const expandedFit = runSubmission(EXPANDED_RECRUITMENT_MANIFEST);
+
+    expect(legacyFit.overallFit).toBe(expandedFit.overallFit);
+    expect(legacyFit.tacticalFit).toBe(expandedFit.tacticalFit);
+    expect(legacyFit.fitWeaknesses.some((weakness) =>
+      weakness.includes("Inconsistent performer"),
+    )).toBe(true);
+    expect(expandedFit.fitWeaknesses.some((weakness) =>
+      weakness.includes("Inconsistent performer"),
+    )).toBe(false);
   });
 
   it("requires new evidence for revisions and never turns revisions into report-volume rewards", () => {

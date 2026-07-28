@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RNG } from "@/engine/rng";
+import { RECRUITMENT_DOCTRINE_CONTENT_PACK } from "@/engine/content/registry";
 import type {
   Club,
   GameState,
@@ -14,6 +15,7 @@ import {
   deriveClubRecruitmentIdentity,
   deriveRegionRecruitmentIdentity,
   evaluateRecruitmentIdentityFit,
+  listClubRecruitmentExpressions,
   migrateHistoricalRecruitmentSnapshots,
 } from "@/engine/world/recruitmentIdentity";
 import { generateYouthRecruitmentBriefs } from "@/engine/youth/academyPlacementCase";
@@ -125,6 +127,28 @@ const candidate = {
   secondaryPositions: [],
 };
 
+const LEGACY_RECRUITMENT_LEDGER: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds"> = {
+  manifestVersion: 2,
+  contentDefinitionIds: [
+    "career-era:proveJudgment@career-eras.1",
+    "football-culture-playbook:england@football-culture-playbooks.1",
+  ],
+};
+
+const PRE_LEDGER_RECRUITMENT_MANIFEST: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds"> = {
+  manifestVersion: 1,
+};
+
+const EXPANDED_RECRUITMENT_LEDGER: Pick<GameState["runManifest"], "manifestVersion" | "contentDefinitionIds"> = {
+  manifestVersion: 3,
+  contentDefinitionIds: [
+    "recruitment-doctrine:academyFirst@recruitment-doctrines.1",
+    "recruitment-doctrine:winNow@recruitment-doctrines.1",
+    "recruitment-doctrine:marketSmart@recruitment-doctrines.1",
+    "recruitment-doctrine:globalRecruiter@recruitment-doctrines.1",
+  ],
+};
+
 describe("recruitment identity invariants", () => {
   it("gives every philosophy a recognizable doctrine without a second mutable state path", () => {
     const doctrines = {
@@ -153,7 +177,7 @@ describe("recruitment identity invariants", () => {
     expect(doctrines.academy.pathwayPatience).toBeGreaterThan(doctrines.urgent.pathwayPatience);
     expect(doctrines.market.sellingPressure).toBeGreaterThan(doctrines.academy.sellingPressure);
     expect(doctrines.global.geographicReach).toBe("global");
-    expect(doctrines.market.evidencePreference).toBe("data");
+    expect(["balanced", "data"]).toContain(doctrines.market.evidencePreference);
     expect(doctrines).toEqual({
       academy: deriveClubRecruitmentDoctrine({
         club: club("academy-doctrine", "academyFirst"),
@@ -178,7 +202,62 @@ describe("recruitment identity invariants", () => {
     });
   });
 
-  it("selects all three deterministic expressions within each doctrine family", () => {
+  it("ships twenty authored expressions with five mechanically distinct variants per philosophy", () => {
+    const expressions = listClubRecruitmentExpressions();
+    const countsByFamily = expressions.reduce<Record<Club["scoutingPhilosophy"], number>>(
+      (counts, expression) => {
+        counts[expression.family] = (counts[expression.family] ?? 0) + 1;
+        return counts;
+      },
+      {
+        academyFirst: 0,
+        winNow: 0,
+        marketSmart: 0,
+        globalRecruiter: 0,
+      },
+    );
+
+    expect(expressions).toHaveLength(20);
+    expect(new Set(expressions.map((expression) => expression.id)).size).toBe(20);
+    expect(countsByFamily).toEqual({
+      academyFirst: 5,
+      winNow: 5,
+      marketSmart: 5,
+      globalRecruiter: 5,
+    });
+
+    const focusOrder = ["highCeiling", "earlyReadiness", "resale", "character"] as const;
+    for (const family of RECRUITMENT_DOCTRINE_CONTENT_PACK.entries) {
+      const mechanicalVectors = family.expressions.map((expression) =>
+        JSON.stringify({
+          preferredSeniorAgeRange:
+            expression.overrides.preferredSeniorAgeRange ?? family.base.preferredSeniorAgeRange,
+          academyIntakeAgeRange:
+            expression.overrides.academyIntakeAgeRange ?? family.base.academyIntakeAgeRange,
+          evidencePreference:
+            expression.overrides.evidencePreference ?? family.base.evidencePreference,
+          riskTolerance: expression.overrides.riskTolerance ?? family.base.riskTolerance,
+          geographicReach: expression.overrides.geographicReach ?? family.base.geographicReach,
+          adaptationTolerance:
+            expression.overrides.adaptationTolerance ?? family.base.adaptationTolerance,
+          pathwayPatience:
+            expression.overrides.pathwayPatience ?? family.base.pathwayPatience,
+          tacticalRoleRigidity:
+            expression.overrides.tacticalRoleRigidity ?? family.base.tacticalRoleRigidity,
+          sellingPressure: expression.overrides.sellingPressure ?? family.base.sellingPressure,
+          managerInfluence:
+            expression.overrides.managerInfluence ?? family.base.managerInfluence,
+          specializationAffinity:
+            expression.overrides.specializationAffinity ?? family.base.specializationAffinity,
+          objectiveWeights: focusOrder.map((focus) => expression.objectiveWeights?.[focus] ?? 0),
+        })
+      );
+      expect(family.expressions).toHaveLength(5);
+      expect(new Set(mechanicalVectors).size).toBe(5);
+    }
+  });
+
+  it("selects all five deterministic expressions within each doctrine family", () => {
     const families: Club["scoutingPhilosophy"][] = [
       "academyFirst",
       "winNow",
@@ -188,7 +267,7 @@ describe("recruitment identity invariants", () => {
 
     for (const family of families) {
       const expressions = new Set(
-        Array.from({ length: 24 }, (_, index) =>
+        Array.from({ length: 160 }, (_, index) =>
           deriveClubRecruitmentDoctrine({
             club: club(`${family}-${index}`, family),
             seed: `expression-world-${index}`,
@@ -196,7 +275,106 @@ describe("recruitment identity invariants", () => {
           }).expressionId
         ),
       );
-      expect(expressions.size).toBe(3);
+      expect(expressions.size).toBe(5);
+    }
+  });
+
+  it("keeps representative saved-world doctrine ids on the legacy three-slot pool", () => {
+    const cases = [
+      {
+        family: "academyFirst" as const,
+        clubId: "academyFirst-4",
+        seed: "world-0",
+        season: 5,
+        legacyExpressionId: "academyMentorLadder",
+        expandedExpressionId: "academyCommunityAnchor",
+      },
+      {
+        family: "winNow" as const,
+        clubId: "winNow-4",
+        seed: "world-0",
+        season: 5,
+        legacyExpressionId: "winNowTacticalLock",
+        expandedExpressionId: "winNowLoanStrike",
+      },
+      {
+        family: "marketSmart" as const,
+        clubId: "marketSmart-6",
+        seed: "world-0",
+        season: 7,
+        legacyExpressionId: "marketSmartContractExpiryHunt",
+        expandedExpressionId: "marketSmartMinutesMarketplace",
+      },
+      {
+        family: "globalRecruiter" as const,
+        clubId: "globalRecruiter-3",
+        seed: "world-0",
+        season: 4,
+        legacyExpressionId: "globalPassportPortfolio",
+        expandedExpressionId: "globalPermitChessboard",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const savedWorldDoctrine = deriveClubRecruitmentDoctrine({
+        club: club(testCase.clubId, testCase.family),
+        seed: testCase.seed,
+        season: testCase.season,
+        runManifest: LEGACY_RECRUITMENT_LEDGER,
+      });
+      const preLedgerDoctrine = deriveClubRecruitmentDoctrine({
+        club: club(testCase.clubId, testCase.family),
+        seed: testCase.seed,
+        season: testCase.season,
+        runManifest: PRE_LEDGER_RECRUITMENT_MANIFEST,
+      });
+      const expandedDoctrine = deriveClubRecruitmentDoctrine({
+        club: club(testCase.clubId, testCase.family),
+        seed: testCase.seed,
+        season: testCase.season,
+        runManifest: EXPANDED_RECRUITMENT_LEDGER,
+      });
+
+      expect(savedWorldDoctrine.expressionId).toBe(testCase.legacyExpressionId);
+      expect(preLedgerDoctrine.expressionId).toBe(testCase.legacyExpressionId);
+      expect(expandedDoctrine.expressionId).toBe(testCase.expandedExpressionId);
+    }
+  });
+
+  it("keeps legacy careers on three expressions per family while expanded runs can reach all five", () => {
+    const families: Club["scoutingPhilosophy"][] = [
+      "academyFirst",
+      "winNow",
+      "marketSmart",
+      "globalRecruiter",
+    ];
+
+    for (const family of families) {
+      const legacyExpressions = new Set(
+        Array.from({ length: 160 }, (_, index) =>
+          deriveClubRecruitmentDoctrine({
+            club: club(`${family}-legacy-${index}`, family),
+            seed: `legacy-expression-world-${index}`,
+            season: 5,
+            runManifest: LEGACY_RECRUITMENT_LEDGER,
+          }).expressionId
+        ),
+      );
+      const expandedExpressions = new Set(
+        Array.from({ length: 160 }, (_, index) =>
+          deriveClubRecruitmentDoctrine({
+            club: club(`${family}-expanded-${index}`, family),
+            seed: `expanded-expression-world-${index}`,
+            season: 5,
+            runManifest: EXPANDED_RECRUITMENT_LEDGER,
+          }).expressionId
+        ),
+      );
+
+      expect(legacyExpressions.size).toBe(3);
+      expect(expandedExpressions.size).toBe(5);
+      expect([...expandedExpressions].some((expressionId) => !legacyExpressions.has(expressionId)))
+        .toBe(true);
     }
   });
 
@@ -425,6 +603,49 @@ describe("recruitment identity invariants", () => {
     expect(reconstructed.label).toContain(doctrine.expressionLabel);
     expect(reconstructed.primaryFocus).toBe("highCeiling");
     expect(reconstructed.seasonalFocus).toBe(doctrine.seasonalObjective);
+  });
+
+  it("preserves legacy expression ids when reconstructing authored snapshots from saves", () => {
+    const preservedBrief = brief("legacy-expression-club", {
+      developmentPriority: "character",
+      recruitmentSnapshot: {
+        snapshotVersion: 1,
+        capturedWeek: 4,
+        capturedSeason: 2,
+        primaryFocus: "highCeiling",
+        version: 1,
+        clubId: "legacy-expression-club",
+        family: "academyFirst",
+        archetype: "academyBuilder",
+        expressionId: "academyLocalRoots",
+        expressionLabel: "Local roots network",
+        preferredSeniorAgeRange: [17, 22],
+        academyIntakeAgeRange: [14, 15],
+        evidencePreference: "live",
+        riskTolerance: "high",
+        geographicReach: "local",
+        adaptationTolerance: 54,
+        pathwayPatience: 90,
+        tacticalRoleRigidity: 34,
+        sellingPressure: 28,
+        managerInfluence: 40,
+        directorInfluence: 60,
+        minimumEvidenceQuality: 61,
+        seasonalObjective: "character",
+        specializationAffinity: ["youth", "regional"],
+        reasons: ["Legacy snapshot preserved this doctrine before the catalog extraction."],
+      },
+    });
+
+    const reconstructed = deriveBriefRecruitmentIdentity(
+      club("legacy-expression-club", "winNow"),
+      preservedBrief,
+    );
+
+    expect(reconstructed.doctrine.expressionId).toBe("academyLocalRoots");
+    expect(reconstructed.doctrine.expressionLabel).toBe("Local roots network");
+    expect(reconstructed.doctrine.family).toBe("academyFirst");
+    expect(reconstructed.primaryFocus).toBe("highCeiling");
   });
 
   it("golden-migrates a legacy brief to the exact snapshot produced by live creation", () => {

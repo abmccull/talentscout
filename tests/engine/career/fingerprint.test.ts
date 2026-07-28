@@ -162,4 +162,39 @@ describe('career fingerprint projection', () => {
       tone: 'red',
     });
   });
+
+  it('changes the comparison key when the visible career front changes', () => {
+    const baseline = deriveCareerFingerprintProjection({
+      careerPath: 'club',
+      careerTier: 4,
+      originId: 'academy-apprentice',
+      doctrineIds: ['evidence-first'],
+      worldTraitIds: ['golden-generation', 'trusted-circuit', 'boom-bust-market'],
+      relationships: {
+        activeObligationCount: 0,
+        persistentStakeholderKinds: [],
+      },
+    });
+    const pressured = deriveCareerFingerprintProjection({
+      careerPath: 'independent',
+      careerTier: 4,
+      originId: 'academy-apprentice',
+      doctrineIds: ['evidence-first'],
+      worldTraitIds: ['golden-generation', 'trusted-circuit', 'boom-bust-market'],
+      rivalry: {
+        organizationName: 'Future XI Alliance',
+        pressureBand: 'closing',
+        momentum: 5,
+      },
+      relationships: {
+        activeObligationCount: 2,
+        dominantStakeholderKind: 'family',
+        persistentStakeholderKinds: ['family'],
+      },
+    });
+
+    expect(pressured.comparisonKey).not.toBe(baseline.comparisonKey);
+    expect(pressured.fingerprintId).not.toBe(baseline.fingerprintId);
+    expect(pressured.summary).toContain('future xi alliance');
+  });
 });

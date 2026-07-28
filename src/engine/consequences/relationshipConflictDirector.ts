@@ -14,7 +14,7 @@ import {
   createStakeholderProfileRegistry,
   type StakeholderProfileRegistry,
 } from "./stakeholderProfiles";
-import type { GameDate } from "./types";
+import type { GameDate, JsonValue } from "./types";
 
 export const RELATIONSHIP_CONFLICT_TRIGGER_CHANCE = 0.065;
 export const RELATIONSHIP_CONFLICT_COOLDOWN_WEEKS = 10;
@@ -39,6 +39,7 @@ export interface PreparedRelationshipConflictCandidate {
   materialized: MaterializedRelationshipConflict;
   stakeholderProfiles: StakeholderProfileRegistry;
   front: RelationshipConflictFrontMetadata;
+  quietFallback?: QuietRelationshipFallbackMetadata;
 }
 
 export interface RelationshipConflictPreparationResult {
@@ -46,8 +47,40 @@ export interface RelationshipConflictPreparationResult {
   blockedReason?: RelationshipConflictDirectionResult["blockedReason"];
 }
 
+export interface QuietRelationshipFallbackMetadata {
+  quietIntervention: true;
+  caseId?: string;
+  questionId?: string;
+  question?: string;
+  careerEraId?: string;
+}
+
 function distinctSorted(values: readonly string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort();
+}
+
+function distinctInOrder(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const value of values) {
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    ordered.push(value);
+  }
+  return ordered;
+}
+
+function quietFallbackDecisionMetadata(
+  quietFallback: QuietRelationshipFallbackMetadata | undefined,
+): Record<string, JsonValue> | undefined {
+  if (!quietFallback) return undefined;
+  return {
+    quietIntervention: true,
+    ...(quietFallback.caseId ? { caseId: quietFallback.caseId } : {}),
+    ...(quietFallback.questionId ? { questionId: quietFallback.questionId } : {}),
+    ...(quietFallback.question ? { question: quietFallback.question } : {}),
+    ...(quietFallback.careerEraId ? { careerEraId: quietFallback.careerEraId } : {}),
+  };
 }
 
 function relevantRelationshipSubjectIds(state: GameState): string[] {
@@ -106,6 +139,8 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
   state: GameState;
   triggerChance?: number;
   forceTrigger?: boolean;
+  preferredSubjectIds?: readonly string[];
+  quietFallback?: QuietRelationshipFallbackMetadata;
 }): RelationshipConflictPreparationResult {
   const state = input.state;
   const openDecisions = Object.values(state.consequenceState.decisions)
@@ -137,25 +172,42 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     return { blockedReason: "trigger-missed" };
   }
 
-  const playerIds = getRelationshipConflictCandidatePlayerIds(state);
-  if (playerIds.length === 0) return { blockedReason: "no-subject" };
-  const subjectRng = createNamedRNG(
-    state.runManifest.rootSeed,
-    "weekly-relationship-conflict-subject",
-    state.currentSeason,
-    state.currentWeek,
-    playerIds.join("|"),
+  const preferredSubjectIds = distinctInOrder(
+    (input.preferredSubjectIds ?? []).filter((playerId) =>
+      Boolean(state.players[playerId])
+      || Boolean(state.retiredPlayers?.[playerId])
+      || Object.values(state.unsignedYouth ?? {})
+        .some((candidate) => candidate.player.id === playerId),
+    ),
   );
-  const subject = { kind: "player", id: subjectRng.pick(playerIds) };
+  const playerIds = preferredSubjectIds.length > 0
+    ? preferredSubjectIds
+    : getRelationshipConflictCandidatePlayerIds(state);
+  if (playerIds.length === 0) return { blockedReason: "no-subject" };
   const registry = createStakeholderProfileRegistry(state, state.stakeholderProfiles);
-  const cast = selectAuthoredRelationshipConflict({
-    rootSeed: state.runManifest.rootSeed,
-    now,
-    registry,
-    subject,
-    state,
-  });
+  const candidateSubjects = preferredSubjectIds.length > 0
+    ? playerIds
+    : [createNamedRNG(
+      state.runManifest.rootSeed,
+      "weekly-relationship-conflict-subject",
+      state.currentSeason,
+      state.currentWeek,
+      playerIds.join("|"),
+    ).pick(playerIds)];
+  let cast: AuthoredConflictCast | undefined;
+  for (const playerId of candidateSubjects) {
+    cast = selectAuthoredRelationshipConflict({
+      rootSeed: state.runManifest.rootSeed,
+      now,
+      registry,
+      subject: { kind: "player", id: playerId },
+      quietEligibleOnly: Boolean(input.quietFallback),
+      state,
+    });
+    if (cast) break;
+  }
   if (!cast) return { blockedReason: "no-cast" };
+  const subject = cast.subject;
 
   const decisionId = [
     "relationship-conflict",
@@ -177,6 +229,7 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
     outcomeRoll: outcomeRng.next(),
     existingState: state.consequenceState,
     advanceWeeks: (start, weeks) => addGameWeeks(state.fixtures, start, weeks),
+    decisionMetadata: quietFallbackDecisionMetadata(input.quietFallback),
   });
 
   const semanticSignature = materialized.decision.metadata?.semanticSignature;
@@ -204,6 +257,7 @@ export function prepareWeeklyRelationshipConflictCandidate(input: {
       materialized,
       stakeholderProfiles: registry,
       front: materialized.front,
+      quietFallback: input.quietFallback,
     },
   };
 }

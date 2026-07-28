@@ -219,6 +219,7 @@ export function deriveClubRecruitmentEcosystem(
     seed: state.seed,
     season: state.currentSeason,
     manager: managerForClub(state, club.id),
+    runManifest: state.runManifest,
   });
   const memory = deriveClubRecruitmentMemory(state, club.id);
   const territory = countryId ? deriveTerritoryIdentity(state, countryId) : null;

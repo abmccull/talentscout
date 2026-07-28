@@ -30,6 +30,7 @@ import type {
   TargetOption,
   TournamentEvent,
   ScoutReport,
+  GameState,
 } from "@/engine/core/types";
 import { RNG } from "@/engine/rng";
 import {
@@ -38,6 +39,10 @@ import {
 } from "@/engine/core/activityQuality";
 import { calculateAccumulation } from "@/engine/insight/insight";
 import { getTournamentActivities } from "@/engine/youth/tournaments";
+import {
+  getActiveProfessionalCaseOpportunities,
+  prioritizeProfessionalCaseTargets,
+} from "@/engine/youth/professionalCaseOpportunities";
 import {
   getUnlockedPerks,
   resolveScoutPerkModifiers,
@@ -832,6 +837,10 @@ export function getAvailableActivities(
   },
   youthTournaments?: Record<string, TournamentEvent>,
   reports?: Record<string, ScoutReport>,
+  opportunityContext?: {
+    currentSeason: number;
+    consequenceState?: GameState["consequenceState"];
+  },
 ): Activity[] {
   const activities: Activity[] = [];
   const perkModifiers = resolveScoutPerkModifiers(scout);
@@ -1053,13 +1062,21 @@ export function getAvailableActivities(
   // followUpSession / parentCoachMeeting / writePlacementReport:
   // requires at least 1 observation of an unsigned (unplaced) youth player
   // Deduplicated — one card per activity type, target picker selects player
+  const activeProfessionalCaseOpportunities = opportunityContext
+    ? getActiveProfessionalCaseOpportunities({
+        consequenceState: opportunityContext.consequenceState,
+        currentWeek: week,
+        currentSeason: opportunityContext.currentSeason,
+      })
+    : [];
   const targetedYouth = topObservedUnsignedYouth(observedCounts, unsignedYouth, 5);
 
-  if (targetedYouth.length > 0) {
-    const youthPool: TargetOption[] = targetedYouth.map((entry) => {
+  if (targetedYouth.length > 0 || activeProfessionalCaseOpportunities.length > 0) {
+    const youthPoolByPlayerId = new Map<string, TargetOption>();
+    for (const entry of targetedYouth) {
       const p = entry.youth.player;
       const bestAbility = getBestAbilityReading(p.id, observations);
-      return {
+      youthPoolByPlayerId.set(p.id, {
         id: p.id,
         name: `${p.firstName} ${p.lastName}`,
         age: p.age,
@@ -1069,20 +1086,45 @@ export function getAvailableActivities(
           ? ([bestAbility.perceivedPALow, bestAbility.perceivedPAHigh] as [number, number])
           : undefined,
         observations: entry.observations,
-      };
-    });
+      });
+    }
+    for (const opportunity of activeProfessionalCaseOpportunities) {
+      if (youthPoolByPlayerId.has(opportunity.playerId)) continue;
+      const youth = Object.values(unsignedYouth ?? {}).find((candidate) =>
+        candidate.player.id === opportunity.playerId
+        && !candidate.placed
+        && !candidate.retired,
+      );
+      if (!youth) continue;
+      youthPoolByPlayerId.set(opportunity.playerId, {
+        id: youth.player.id,
+        name: `${youth.player.firstName} ${youth.player.lastName}`,
+        age: youth.player.age,
+        position: youth.player.position,
+        observations: observedCounts.get(youth.player.id) ?? 0,
+      });
+    }
+    const youthPool = [...youthPoolByPlayerId.values()];
 
     activities.push({
       type: "followUpSession",
       slots: ACTIVITY_SLOT_COSTS.followUpSession,
       description: "Follow up on a previously observed youth player",
-      targetPool: youthPool,
+      targetPool: prioritizeProfessionalCaseTargets(
+        youthPool,
+        activeProfessionalCaseOpportunities,
+        "followUpSession",
+      ),
     });
     activities.push({
       type: "parentCoachMeeting",
       slots: ACTIVITY_SLOT_COSTS.parentCoachMeeting,
       description: "Meet the parent or coach of a youth prospect",
-      targetPool: youthPool,
+      targetPool: prioritizeProfessionalCaseTargets(
+        youthPool,
+        activeProfessionalCaseOpportunities,
+        "parentCoachMeeting",
+      ),
     });
     const authoredPlayerIds = new Set(
       Object.values(reports ?? {})
@@ -1095,7 +1137,11 @@ export function getAvailableActivities(
         type: "writePlacementReport",
         slots: ACTIVITY_SLOT_COSTS.writePlacementReport,
         description: "Pitch a filed youth report to a suitable club",
-        targetPool: pitchPool,
+        targetPool: prioritizeProfessionalCaseTargets(
+          pitchPool,
+          activeProfessionalCaseOpportunities,
+          "writePlacementReport",
+        ),
       });
     }
   }

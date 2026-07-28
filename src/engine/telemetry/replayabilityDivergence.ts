@@ -5,6 +5,7 @@ import type {
   NarrativeEventType,
   RivalScout,
 } from "@/engine/core/types";
+import { deriveCareerFingerprintProjection } from "@/engine/career/fingerprint";
 import {
   EVENT_TEMPLATES,
   SCOUTING_SPECIAL_EVENT_DECK,
@@ -35,7 +36,7 @@ import {
 import { getRunContentDefinitionIds } from "@/engine/content/registry";
 import { getWorldConditionContentDefinitionIds } from "@/engine/world";
 
-const TELEMETRY_VERSION = 2 as const;
+const TELEMETRY_VERSION = 3 as const;
 const ACTIVE_RIVAL_ORGANIZATION_COUNT = 3;
 
 export interface ReplayabilityTelemetryConfig {
@@ -48,6 +49,7 @@ export interface ReplayabilityTelemetryConfig {
 export interface ReplayabilityReleaseThresholds {
   minimumSampleSize: number;
   minimumSeasons: number;
+  minimumCareerFingerprintUniqueRatio: number;
   minimumManifestUniqueRatio: number;
   minimumCompositeTrajectoryUniqueRatio: number;
   minimumWorldCombinationCoverage: number;
@@ -71,6 +73,7 @@ export interface ReplayabilityReleaseThresholds {
 export const REPLAYABILITY_RELEASE_THRESHOLDS: ReplayabilityReleaseThresholds = {
   minimumSampleSize: 100,
   minimumSeasons: 3,
+  minimumCareerFingerprintUniqueRatio: 0.7,
   minimumManifestUniqueRatio: 1,
   minimumCompositeTrajectoryUniqueRatio: 0.9,
   minimumWorldCombinationCoverage: 0.875,
@@ -109,6 +112,7 @@ export interface ReplayabilitySemanticTrajectory {
   rivalArchetypeIds: readonly string[];
   rivalActionTokens: readonly string[];
   eventTokens: readonly string[];
+  choiceTokens?: readonly string[];
   sampledSpecialEventIds: readonly string[];
   /** Diagnostic identity is accepted for callers but deliberately excluded. */
   diagnosticMetadata?: {
@@ -129,6 +133,7 @@ function semanticTrajectoryProjection(input: ReplayabilitySemanticTrajectory) {
     rivalArchetypeIds: [...input.rivalArchetypeIds].sort(),
     rivalActionTokens: [...input.rivalActionTokens],
     eventTokens: [...input.eventTokens],
+    choiceTokens: [...(input.choiceTokens ?? [])],
     sampledSpecialEventIds: [...input.sampledSpecialEventIds],
   };
 }
@@ -152,6 +157,7 @@ export function buildSemanticTrajectoryComparisonTokens(
     `doctrine:${projected.doctrineId}`,
     ...projected.rivalArchetypeIds.map((id) => `rival-archetype:${id}`),
     ...projected.eventTokens.map((token, index) => `event-${index}:${token}`),
+    ...projected.choiceTokens.map((token, index) => `choice-${index}:${token}`),
     ...projected.rivalActionTokens.map((token, index) =>
       `rival-action-${index}:${token}`,
     ),
@@ -161,7 +167,37 @@ export function buildSemanticTrajectoryComparisonTokens(
   ];
 }
 
-interface RunTrace {
+export interface ReplayabilityCareerOutcomeFingerprintInput {
+  semanticTrajectory: ReplayabilitySemanticTrajectory;
+  seasonEventCounts: readonly number[];
+  maximumQuietWeeks: number;
+  maximumTensionCapStreak: number;
+  deadDirectorSeasons: number;
+  runawayDirectorSeasons: number;
+}
+
+function careerOutcomeFingerprintProjection(
+  input: ReplayabilityCareerOutcomeFingerprintInput,
+) {
+  return {
+    semanticTrajectory: semanticTrajectoryProjection(input.semanticTrajectory),
+    seasonEventCounts: [...input.seasonEventCounts],
+    maximumQuietWeeks: input.maximumQuietWeeks,
+    maximumTensionCapStreak: input.maximumTensionCapStreak,
+    deadDirectorSeasons: input.deadDirectorSeasons,
+    runawayDirectorSeasons: input.runawayDirectorSeasons,
+  };
+}
+
+export function buildCareerOutcomeFingerprint(
+  input: ReplayabilityCareerOutcomeFingerprintInput,
+): string {
+  return stableFingerprint(careerOutcomeFingerprintProjection(input));
+}
+
+export interface ReplayabilityRunTrace {
+  careerFingerprintId: string;
+  careerProjectionFingerprintId: string;
   manifestFingerprint: string;
   worldTraitIds: string[];
   originId: string;
@@ -170,6 +206,7 @@ interface RunTrace {
   rivalArchetypeIds: string[];
   rivalActionTokens: string[];
   eventTokens: string[];
+  choiceTokens: string[];
   eventTypes: NarrativeEventType[];
   directorSpecialEventIds: string[];
   sampledSpecialEventIds: string[];
@@ -192,6 +229,8 @@ interface RunTrace {
 
 export interface ReplayabilityTelemetryMetrics {
   sameSeedReplayEqual: boolean;
+  careerFingerprintUniqueRatio: number;
+  careerProjectionUniqueRatio: number;
   manifestUniqueRatio: number;
   compositeTrajectoryUniqueRatio: number;
   worldCombinationCoverage: number;
@@ -275,6 +314,21 @@ function narrativeReplayToken(event: NarrativeEvent): string {
   return `event:${event.type}`;
 }
 
+function normalizeReplayChoiceLabel(label: string | undefined): string {
+  const normalized = (label ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized.length > 0 ? normalized : "unnamed";
+}
+
+function narrativeChoiceReplayToken(event: NarrativeEvent): string | null {
+  if (event.selectedChoice === undefined || event.selectedChoice < 0) return null;
+  const selected = event.choices?.[event.selectedChoice];
+  return `${narrativeReplayToken(event)}:choice-${event.selectedChoice}:${normalizeReplayChoiceLabel(selected?.label)}`;
+}
+
 function average(values: readonly number[]): number {
   if (values.length === 0) return 0;
   return Math.round(
@@ -312,8 +366,8 @@ function setOverlap(leftValues: readonly string[], rightValues: readonly string[
 }
 
 function pairwiseAverage(
-  traces: readonly RunTrace[],
-  selector: (trace: RunTrace) => readonly string[],
+  traces: readonly ReplayabilityRunTrace[],
+  selector: (trace: ReplayabilityRunTrace) => readonly string[],
 ): number {
   const MAX_PAIRWISE_SAMPLES = 10_000;
   const sets = traces.map((trace) => [...new Set(selector(trace))]);
@@ -552,7 +606,10 @@ function sampleSpecialEventSequence(
   return sequence;
 }
 
-function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTrace {
+function simulateRun(
+  seed: string,
+  config: ReplayabilityTelemetryConfig,
+): ReplayabilityRunTrace {
   const worldTraitIds = deriveWorldTraitIds(seed, "youth");
   const setupRng = createNamedRNG(seed, "replayability-telemetry-run-setup");
   const originId = setupRng.pick(SCOUT_ORIGINS).id;
@@ -582,6 +639,17 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
       ),
     ],
   });
+  const careerProjection = deriveCareerFingerprintProjection({
+    careerPath: "club",
+    careerTier: 5,
+    originId,
+    doctrineIds: [doctrineId],
+    worldTraitIds,
+    relationships: {
+      activeObligationCount: 0,
+      persistentStakeholderKinds: [],
+    },
+  });
   let state = buildDirectorState(seed, runManifest);
   let rivalState = initializeRivalOrganizations(seed, TELEMETRY_RIVALS).state;
   const rivalArchetypeIds = Object.values(rivalState.organizations)
@@ -589,6 +657,7 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
     .sort();
   const rivalActionTokens: string[] = [];
   const eventTokens: string[] = [];
+  const choiceTokens: string[] = [];
   const eventTypes: NarrativeEventType[] = [];
   const directorSpecialEventIds: string[] = [];
   const seasonEventCounts = Array.from({ length: config.seasons }, () => 0);
@@ -621,6 +690,8 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
         nextEvents.push(resolved.event);
         eventTypes.push(weekly.event.type);
         eventTokens.push(narrativeReplayToken(weekly.event));
+        const choiceToken = narrativeChoiceReplayToken(resolved.event);
+        if (choiceToken) choiceTokens.push(choiceToken);
         seasonEventCounts[season - 1] += 1;
         if (weekly.event.choices?.length) choiceOpportunityCount += 1;
         if (weekly.event.specialEventId) {
@@ -700,8 +771,17 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
     rivalArchetypeIds,
     rivalActionTokens,
     eventTokens,
+    choiceTokens,
     sampledSpecialEventIds,
   };
+  const careerFingerprintId = buildCareerOutcomeFingerprint({
+    semanticTrajectory,
+    seasonEventCounts,
+    maximumQuietWeeks,
+    maximumTensionCapStreak,
+    deadDirectorSeasons,
+    runawayDirectorSeasons,
+  });
   const compositeTrajectoryFingerprint = buildSemanticTrajectoryFingerprint(
     semanticTrajectory,
   );
@@ -710,6 +790,8 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
   );
 
   return {
+    careerFingerprintId,
+    careerProjectionFingerprintId: careerProjection.fingerprintId,
     manifestFingerprint: runManifest.fingerprint,
     worldTraitIds,
     originId,
@@ -718,6 +800,7 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
     rivalArchetypeIds,
     rivalActionTokens,
     eventTokens,
+    choiceTokens,
     eventTypes,
     directorSpecialEventIds,
     sampledSpecialEventIds,
@@ -738,6 +821,11 @@ function simulateRun(seed: string, config: ReplayabilityTelemetryConfig): RunTra
     comparisonTokens,
   };
 }
+
+export type ReplayabilityTraceSimulator = (
+  seed: string,
+  config: ReplayabilityTelemetryConfig,
+) => ReplayabilityRunTrace;
 
 function isMechanicallyDominantEvent(
   definition: (typeof SCOUTING_SPECIAL_EVENT_DECK)[number],
@@ -780,6 +868,7 @@ function thresholdFailures(
   minimum("sample size", config.sampleSize, thresholds.minimumSampleSize);
   minimum("seasons", config.seasons, thresholds.minimumSeasons);
   if (!metrics.sameSeedReplayEqual) failures.push("same-seed replay diverged");
+  minimum("career fingerprint unique ratio", metrics.careerFingerprintUniqueRatio, thresholds.minimumCareerFingerprintUniqueRatio);
   minimum("manifest unique ratio", metrics.manifestUniqueRatio, thresholds.minimumManifestUniqueRatio);
   minimum("composite trajectory unique ratio", metrics.compositeTrajectoryUniqueRatio, thresholds.minimumCompositeTrajectoryUniqueRatio);
   minimum("world combination coverage", metrics.worldCombinationCoverage, thresholds.minimumWorldCombinationCoverage);
@@ -806,6 +895,7 @@ function thresholdFailures(
 export function buildReplayabilityTelemetry(
   partial: Partial<ReplayabilityTelemetryConfig> = {},
   thresholds = REPLAYABILITY_RELEASE_THRESHOLDS,
+  traceSimulator: ReplayabilityTraceSimulator = simulateRun,
 ): ReplayabilityTelemetryArtifact {
   const config: ReplayabilityTelemetryConfig = {
     sampleSize: partial.sampleSize ?? 100,
@@ -821,16 +911,19 @@ export function buildReplayabilityTelemetry(
   }
 
   const traces = Array.from({ length: config.sampleSize }, (_, index) =>
-    simulateRun(`${config.seedPrefix}-${index.toString().padStart(4, "0")}`, config),
+    traceSimulator(`${config.seedPrefix}-${index.toString().padStart(4, "0")}`, config),
   );
   const replayIndices = Array.from(
     new Set([0, Math.floor(config.sampleSize / 2), config.sampleSize - 1]),
   );
   const sameSeedReplayEqual = replayIndices.every((index) => {
     const seed = `${config.seedPrefix}-${index.toString().padStart(4, "0")}`;
-    return stableFingerprint(simulateRun(seed, config)) === stableFingerprint(traces[index]);
+    return stableFingerprint(traceSimulator(seed, config)) === stableFingerprint(traces[index]);
   });
   const worldCombinationKeys = traces.map((trace) => trace.worldTraitIds.join("+"));
+  const careerFingerprintIds = traces.map((trace) => trace.careerFingerprintId);
+  const careerProjectionFingerprintIds = traces
+    .map((trace) => trace.careerProjectionFingerprintId);
   const originIds = traces.map((trace) => trace.originId);
   const flawIds = traces.map((trace) => trace.flawId);
   const doctrineIds = traces.map((trace) => trace.doctrineId);
@@ -906,6 +999,14 @@ export function buildReplayabilityTelemetry(
 
   const metrics: ReplayabilityTelemetryMetrics = {
     sameSeedReplayEqual,
+    careerFingerprintUniqueRatio: ratio(
+      new Set(careerFingerprintIds).size,
+      config.sampleSize,
+    ),
+    careerProjectionUniqueRatio: ratio(
+      new Set(careerProjectionFingerprintIds).size,
+      config.sampleSize,
+    ),
     manifestUniqueRatio: ratio(
       new Set(traces.map((trace) => trace.manifestFingerprint)).size,
       config.sampleSize,

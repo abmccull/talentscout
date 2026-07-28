@@ -27,6 +27,8 @@ interface CareerCommandBridgeProps {
   viewModel: CareerWorkspaceViewModel;
   fingerprint?: CareerFingerprintProjection;
   onPlanWeek: () => void;
+  opportunityActionLabel?: string;
+  onOpportunityAction?: () => void;
   currentThread?: ReactNode;
 }
 
@@ -70,6 +72,8 @@ export function CareerCommandBridge({
   viewModel,
   fingerprint,
   onPlanWeek,
+  opportunityActionLabel,
+  onOpportunityAction,
   currentThread,
 }: CareerCommandBridgeProps) {
   const [securitySignal, runwaySignal, milestoneSignal] = viewModel.signals;
@@ -97,7 +101,10 @@ export function CareerCommandBridge({
               <h1 id="career-command-bridge-title" className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
                 {scoutName}
               </h1>
-              <p className="mt-1 text-sm font-medium text-zinc-200">
+              <p
+                className="mt-1 text-sm font-medium text-zinc-200"
+                data-testid="career-role-title"
+              >
                 {viewModel.roleTitle}
               </p>
               <p className="mt-1 text-sm text-zinc-400">{viewModel.roleBase}</p>
@@ -259,6 +266,20 @@ export function CareerCommandBridge({
                   <p className="mt-2 text-sm font-semibold text-white">{highlight.title}</p>
                   <p className="mt-1.5 text-xs leading-5 text-zinc-300 sm:mt-2 sm:text-sm sm:leading-6">{highlight.body}</p>
                   <p className="mt-2 text-[11px] text-zinc-500 sm:mt-3 sm:text-xs">{highlight.meta}</p>
+                  {highlight.id === opportunityHighlight.id
+                    && opportunityActionLabel
+                    && onOpportunityAction && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-10 w-full border-violet-300/25 bg-violet-300/10 text-violet-100 hover:bg-violet-300/15"
+                      onClick={onOpportunityAction}
+                    >
+                      {opportunityActionLabel}
+                      <ArrowRight size={14} className="ml-2" aria-hidden="true" />
+                    </Button>
+                  )}
                 </article>
               ))}
             </div>

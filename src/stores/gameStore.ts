@@ -6,6 +6,7 @@ import { createProgressionActions } from "./actions/progressionActions";
 import { createFinanceActions } from "./actions/financeActions";
 import { createWeeklyActions } from "./actions/weeklyActions";
 import { createWeeklyAsyncActions } from "./actions/weeklyAsyncActions";
+import { createDashboardActions } from "./actions/dashboardActions";
 import { terminateWeeklySimulationWorker } from "@/lib/weeklySimulationWorkerClient";
 import type {
   GameState,
@@ -117,6 +118,7 @@ import {
 import { createCareerMomentState } from "@/engine/career/careerMoments";
 import { generateSeasonEvents, getActiveSeasonEvents } from "@/engine/core/seasonEvents";
 import { createEmptyPool } from "@/engine/freeAgents/pool";
+import { createDashboardState } from "@/engine/dashboard/state";
 import {
   initializeTransferWindows,
   isTransferWindowOpen,
@@ -326,6 +328,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   currentScreen: "mainMenu",
   // Navigation actions (extracted to actions/navigationActions.ts)
   ...createNavigationActions(get, set),
+  ...createDashboardActions(get, set),
 
   // State
   gameState: null,
@@ -592,6 +595,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ),
         getSeasonLength(fixtures, 1),
         effectiveConfig.worldSeed,
+        runManifest,
       ).map((brief) => [brief.id, brief]),
     );
 
@@ -619,6 +623,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       accessAgreements: createAccessAgreementState(undefined),
       schedule: createWeekSchedule(1, 1),
       weeklyStrategy: createWeeklyStrategyState(1, 1),
+      dashboardState: createDashboardState(),
       jobOffers: [],
       performanceReviews: [],
       inbox: [],
@@ -1439,6 +1444,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
       gameState.youthTournaments,
       gameState.reports,
+      {
+        currentSeason: gameState.currentSeason,
+        consequenceState: gameState.consequenceState,
+      },
     );
   },
 

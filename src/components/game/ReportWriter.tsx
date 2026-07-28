@@ -1,12 +1,11 @@
 "use client";
-
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useGameStore } from "@/stores/gameStore";
 import { GameLayout } from "./GameLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle2, Circle, FileText, ArrowLeft, TrendingUp, TrendingDown, Minus, Lightbulb, Target, DollarSign, X } from "lucide-react";
+import { AlertTriangle, FileText, ArrowLeft, TrendingUp, Lightbulb, Target, DollarSign, X } from "lucide-react";
 import { Tooltip } from "@/components/ui/tooltip";
 import type {
   ConvictionLevel,
@@ -33,8 +32,6 @@ import {
 import {
   calculateInfrastructureEffects,
   estimateReportPriceRange,
-  formatAnalystEvidenceCategory,
-  formatAnalystReviewBias,
   getActiveEquipmentBonuses,
   getApplicableAnalystReview,
 } from "@/engine/finance";
@@ -66,7 +63,6 @@ import {
   canOpenReportWorkflowStep,
   isConciseOpeningReportMode,
   resolveReportWorkflow,
-  type ReportWorkflowStep,
 } from "@/components/game/reportWriterMode";
 import { buildReportWriterStatus } from "@/components/game/reportWriterStatus";
 import {
@@ -77,153 +73,43 @@ import {
   getEvidenceUnknownOptions,
   YOUTH_REPORT_RISK_OPTIONS,
 } from "@/engine/scout/evidenceModel";
-
-const CONVICTION_KEYS: ConvictionLevel[] = ["note", "recommend", "strongRecommend", "tablePound"];
-
-function initialAssessmentConviction(
-  confidence: EvidenceConfidenceBand | undefined,
-): ConvictionLevel {
-  if (confidence === "robust") return "strongRecommend";
-  if (confidence === "supported") return "recommend";
-  return "note";
-}
-
-function confidenceColor(confidence: number): string {
-  if (confidence >= 0.7) return "text-emerald-400";
-  if (confidence >= 0.4) return "text-amber-400";
-  return "text-red-400";
-}
-
-function qualityScoreColor(score: number): string {
-  if (score >= 70) return "text-emerald-400";
-  if (score >= 40) return "text-amber-400";
-  return "text-red-400";
-}
-
-function qualityScoreBg(score: number): string {
-  if (score >= 70) return "bg-emerald-500";
-  if (score >= 40) return "bg-amber-500";
-  return "bg-red-500";
-}
-
-function qualityScoreBorder(score: number): string {
-  if (score >= 70) return "border-emerald-500/30";
-  if (score >= 40) return "border-amber-500/30";
-  return "border-red-500/30";
-}
-
-function describeReportCraft(score: number): {
-  label: string;
-  representativeScore: number;
-} {
-  if (score >= 85) return { label: "Boardroom ready", representativeScore: 90 };
-  if (score >= 70) return { label: "Credible", representativeScore: 77 };
-  if (score >= 40) return { label: "Developing", representativeScore: 55 };
-  return { label: "Fragile", representativeScore: 25 };
-}
-
-const BREAKDOWN_LABELS: Record<keyof QualityBreakdown, { label: string; max: number }> = {
-  observationDepth: { label: "Observation depth", max: 25 },
-  confidenceLevel: { label: "Evidence confidence", max: 20 },
-  convictionFit: { label: "Conviction calibration", max: 15 },
-  detail: { label: "Evidence-backed detail", max: 20 },
-  scoutSkill: { label: "Scout technique", max: 20 },
-};
-
-function formatValue(n: number): string {
-  if (n >= 1_000_000) return `£${(n / 1_000_000).toFixed(2)}M`;
-  if (n >= 1_000) return `£${(n / 1_000).toFixed(0)}K`;
-  return `£${n}`;
-}
-
-function attrLabel(attr: string): string {
-  return attr.replace(/([A-Z])/g, " $1").trim();
-}
-
-function formatPercent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
-interface DescriptorOption {
-  attributes: PlayerAttribute[];
-  descriptor: string;
-  estimatedValue: number;
-  confidence: number;
-}
-
-const MAX_STRENGTHS = 3;
-const MAX_WEAKNESSES = 2;
-const JUDGMENT_CATEGORIES: JudgmentCategory[] = ["potential", "roleFit", "characterRisk"];
-const JUDGMENT_LABELS: Record<JudgmentCategory, string> = {
-  potential: "Development potential",
-  roleFit: "Tactical role fit",
-  characterRisk: "Character and adaptation risk",
-};
-
-interface CategoryDraft {
-  status: "unselected" | "assessed" | "notAssessed";
-  evidenceCardId: string;
-  claimOptionId: string;
-  unknownOptionId: string;
-  confidence: "low" | "medium" | "high";
-}
-
-interface RiskDraft {
-  status: "observed" | "untested" | "noSignal";
-  evidenceCardId?: string;
-}
-
-interface SectionNavigatorItem extends ReportWorkflowStep {
-  targetId: string;
-  label: string;
-  detail: string;
-}
-
-// ---------------------------------------------------------------------------
-// Form display helpers (A1 — Form Visibility)
-// ---------------------------------------------------------------------------
-
-interface FormDisplay {
-  label: string;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-  icon: "up" | "down" | "neutral";
-}
-
-const FORM_MAP: Record<number, FormDisplay> = {
-  3:  { label: "Exceptional Form", color: "text-emerald-400", bgColor: "bg-emerald-500/15", borderColor: "border-emerald-500/40", icon: "up" },
-  2:  { label: "Good Form",        color: "text-emerald-400", bgColor: "bg-emerald-500/10", borderColor: "border-emerald-500/30", icon: "up" },
-  1:  { label: "Decent Form",      color: "text-emerald-300", bgColor: "bg-emerald-500/5",  borderColor: "border-emerald-500/20", icon: "up" },
-  0:  { label: "Average Form",     color: "text-zinc-400",    bgColor: "bg-zinc-500/10",    borderColor: "border-zinc-500/20",    icon: "neutral" },
-};
-FORM_MAP[-1] = { label: "Below Average",  color: "text-red-300",  bgColor: "bg-red-500/5",  borderColor: "border-red-500/20",  icon: "down" };
-FORM_MAP[-2] = { label: "Poor Form",      color: "text-red-400",  bgColor: "bg-red-500/10", borderColor: "border-red-500/30",  icon: "down" };
-FORM_MAP[-3] = { label: "Terrible Form",  color: "text-red-400",  bgColor: "bg-red-500/15", borderColor: "border-red-500/40",  icon: "down" };
-
-function getFormDisplay(form: number): FormDisplay {
-  const clamped = Math.max(-3, Math.min(3, Math.round(form)));
-  return FORM_MAP[clamped] ?? FORM_MAP[0];
-}
-
-function FormIndicator({ form }: { form: number }) {
-  const display = getFormDisplay(form);
-  const IconComponent =
-    display.icon === "up" ? TrendingUp :
-    display.icon === "down" ? TrendingDown :
-    Minus;
-
-  return (
-    <div
-      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-1 ${display.bgColor} ${display.borderColor}`}
-    >
-      <IconComponent size={14} className={display.color} aria-hidden="true" />
-      <span className={`text-xs font-medium ${display.color}`}>
-        {display.label}
-      </span>
-    </div>
-  );
-}
+import { FormIndicator } from "@/components/game/report-writer/FormIndicator";
+import {
+  buildAutoGeneratedSummary,
+  buildSectionNavigatorItems,
+  buildStructuredReportInput,
+  buildSuggestedDescriptorDraft,
+} from "@/components/game/report-writer/helpers";
+import { ReportFinalReview } from "@/components/game/report-writer/ReportFinalReview";
+import { ReportWorkflowNavigator } from "@/components/game/report-writer/ReportWorkflowNavigator";
+import {
+  AnalystReviewBanner,
+  PreparedReportWorkCallout,
+  ReportWriterAlerts,
+} from "@/components/game/report-writer/ReportWriterCallouts";
+import {
+  BREAKDOWN_LABELS,
+  CONVICTION_KEYS,
+  JUDGMENT_CATEGORIES,
+  JUDGMENT_LABELS,
+  MAX_STRENGTHS,
+  MAX_WEAKNESSES,
+  attrLabel,
+  confidenceColor,
+  describeReportCraft,
+  formatPercent,
+  formatValue,
+  initialAssessmentConviction,
+  qualityScoreBg,
+  qualityScoreBorder,
+  qualityScoreColor,
+  type CategoryDraft,
+  type DescriptorOption,
+  type RiskDraft,
+  type SectionNavigatorItem,
+} from "@/components/game/report-writer/shared";
+const PRIVATE_SCOUT_NOTE_LABEL = "Private scout's note";
+const YOUTH_RECOMMENDATION_SUPPORT_COPY = "This recommendation reflects the evidence you selected, the uncertainties you left open, the role you projected, and the action you are prepared to defend in the recruitment room.";
 
 export function ReportWriter() {
   const gameState = useGameStore((state) => state.gameState);
@@ -531,67 +417,22 @@ export function ReportWriter() {
     }), [riskDrafts]);
 
   const structuredInput = useMemo<StructuredReportInput | undefined>(() => {
-    if (conciseOpeningMode || !isYouthCase || !activeBrief || !projectedRole) return undefined;
-    const categoryVerdicts = JUDGMENT_CATEGORIES.reduce<StructuredReportInput["categoryVerdicts"]>(
-      (verdicts, category) => {
-        const categoryDraft = categoryDrafts[category];
-        const card = initialAssessmentCards.find(
-          (candidate) => candidate.id === categoryDraft.evidenceCardId,
-        );
-        const claim = card
-          ? getEvidenceClaimOptions(card).find(
-              (option) => option.id === categoryDraft.claimOptionId,
-            )
-          : undefined;
-        const unknownOptions = categoryDraft.status === "assessed" && card
-          ? [
-              ...FORMAL_CATEGORY_UNKNOWN_OPTIONS[category],
-              ...getEvidenceUnknownOptions(card),
-            ]
-          : FORMAL_CATEGORY_UNKNOWN_OPTIONS[category];
-        const unknown = unknownOptions.find(
-          (option) => option.id === categoryDraft.unknownOptionId,
-        );
-        verdicts[category] = {
-          verdict: categoryDraft.status === "notAssessed"
-            ? "No reportable claim is being made from the available evidence."
-            : claim?.statement ?? "",
-          confidence: categoryDraft.confidence,
-          hypothesisIds: [],
-          acknowledgedUncertainty: unknown?.statement ?? "",
-          status: categoryDraft.status === "unselected" ? undefined : categoryDraft.status,
-          evidenceIds: categoryDraft.status === "assessed" && card ? [card.id] : [],
-          classification: categoryDraft.status === "assessed" ? claim?.classification : undefined,
-          claimSupport: categoryDraft.status === "assessed" ? claim?.support : undefined,
-          unknownOptionId: unknown?.id,
-        };
-        return verdicts;
-      },
-      {} as StructuredReportInput["categoryVerdicts"],
-    );
-    const evidenceIds = [...new Set(
-      Object.values(categoryVerdicts).flatMap((verdict) => verdict.evidenceIds ?? []),
-    )];
-    return {
-      briefId: activeBrief.id,
-      intendedClubId: activeBrief.clubId,
+    return buildStructuredReportInput({
+      conciseOpeningMode,
+      isYouthCase,
+      activeBrief,
+      projectedRole,
+      categoryDrafts,
+      initialAssessmentCards,
       intendedAudience,
       presentationApproach,
       recruitmentNeed,
-      projectedRole,
       recommendedAction,
-      riskFactors: selectedRiskAssessments
-        .filter((risk) => risk.id !== "noMaterialSignal")
-        .map((risk) => `${risk.label}${risk.status === "untested" ? " remains untested" : " observed"}`),
+      selectedRiskAssessments,
       estimatedWeeklyWage,
-      decisionDeadlineWeek: verificationDeadline?.week ?? activeBrief.expiresWeek,
-      decisionDeadlineSeason: verificationDeadline?.season ?? activeBrief.expiresSeason,
-      categoryVerdicts,
-      alternativePlayerIds: alternativePlayerId ? [alternativePlayerId] : [],
-      evidenceVersion: 1,
-      evidenceIds,
-      riskAssessments: selectedRiskAssessments,
-    };
+      verificationDeadline,
+      alternativePlayerId,
+    });
   }, [
     activeBrief,
     alternativePlayerId,
@@ -762,65 +603,29 @@ export function ReportWriter() {
   useEffect(() => {
     if (!draft || draftApplied.current) return;
     draftApplied.current = true;
-    const nextStrengths = draft.suggestedStrengthClaims
-      .slice(0, MAX_STRENGTHS)
-      .map((claim) => claim.descriptor);
-    const selectedStrengthAttrs = new Set(
-      nextStrengths
-        .flatMap((descriptor) => strengthClaimsByDescriptor.get(descriptor)?.attributes ?? []),
-    );
-    const nextWeaknesses = draft.suggestedWeaknessClaims
-      .filter((claim) => {
-        return !claim.attributes.some((attribute) => selectedStrengthAttrs.has(attribute));
-      })
-      .slice(0, MAX_WEAKNESSES)
-      .map((claim) => claim.descriptor);
-      if (nextStrengths.length > 0) {
-        setSelectedStrengths(nextStrengths);
-      }
+    const { strengths: nextStrengths, weaknesses: nextWeaknesses } =
+      buildSuggestedDescriptorDraft({
+        draft,
+        strengthClaimsByDescriptor,
+        weaknessClaimsByDescriptor,
+      });
+    if (nextStrengths.length > 0) {
+      setSelectedStrengths(nextStrengths);
+    }
     if (nextWeaknesses.length > 0) {
       setSelectedWeaknesses(nextWeaknesses);
     }
-    // Auto-generate summary
-    const lines: string[] = [];
-    lines.push(
-      `Based on ${observations.length} observation${observations.length !== 1 ? "s" : ""}, ${player?.firstName} ${player?.lastName} presents as a ${draft.perceivedCAStars ? `${draft.perceivedCAStars}-star` : "developing"} ${player?.position}.`
+    setSummary(
+      buildAutoGeneratedSummary({
+        draft,
+        observationsCount: observations.length,
+        player,
+        strengths: nextStrengths,
+        weaknesses: nextWeaknesses,
+        strengthClaimsByDescriptor,
+        weaknessClaimsByDescriptor,
+      }),
     );
-    if (nextStrengths.length > 0) {
-      lines.push(`Key strengths include ${nextStrengths.slice(0, 2).map(s => {
-        const attr = strengthClaimsByDescriptor.get(s)?.attributes[0];
-        return attr ? attrLabel(attr).toLowerCase() : s.toLowerCase().split(" — ")[0];
-      }).join(" and ")}.`);
-    }
-    if (nextWeaknesses.length > 0) {
-      lines.push(`Areas of concern: ${nextWeaknesses.slice(0, 2).map(w => {
-        const attr = weaknessClaimsByDescriptor.get(w)?.attributes[0];
-        return attr ? attrLabel(attr).toLowerCase() : w.toLowerCase().split(" — ")[0];
-      }).join(" and ")}.`);
-    }
-    const revealedTraits = player?.playerTraitsRevealed ?? [];
-    if (revealedTraits.length > 0) {
-      const traitStrs = revealedTraits.slice(0, 2).map(t => t.replace(/([A-Z])/g, " $1").trim().toLowerCase());
-      lines.push(`Notable tendencies: ${traitStrs.join(", ")}.`);
-    }
-    if (player?.personalityProfile && !player.personalityProfile.hiddenUntilRevealed) {
-      const archetypeLabel = ARCHETYPE_LABELS[player.personalityProfile.archetype];
-      lines.push(`Character: ${archetypeLabel}.`);
-      if (player.personalityProfile.dressingRoomImpact <= -2) {
-        lines.push("Warning: potential dressing room disruption risk.");
-      } else if (player.personalityProfile.dressingRoomImpact >= 2) {
-        lines.push("Positive dressing room influence expected.");
-      }
-      if (player.personalityProfile.bigMatchModifier >= 2) {
-        lines.push("Thrives in big-match scenarios.");
-      } else if (player.personalityProfile.bigMatchModifier <= -1) {
-        lines.push("May struggle in high-pressure fixtures.");
-      }
-    }
-    if (draft.perceivedPARange) {
-      lines.push(`Potential ceiling estimated at ${draft.perceivedPARange[0]}–${draft.perceivedPARange[1]} stars.`);
-    }
-    setSummary(lines.join(" "));
     playSFX("pen-scribble");
   }, [
     draft,
@@ -997,85 +802,18 @@ export function ReportWriter() {
   const canSubmit = reportStatus.canSubmit;
   const observationsBlocker = reportStatus.blockers.find((blocker) => blocker.id === "observation-required");
   const freshEvidenceBlocker = reportStatus.blockers.find((blocker) => blocker.id === "fresh-evidence-required");
-  const sectionNavigatorItems: SectionNavigatorItem[] = (() => {
-    if (conciseOpeningMode) {
-      const assessmentRemaining = reportStatus.countsByStep.assessment;
-      return [
-        {
-          id: "assessment",
-          targetId: "report-section-evidence",
-          label: "Assessment",
-          detail: canSubmit
-            ? "Five decisions logged"
-            : reportStatus.primaryBlocker ?? "Complete the five evidence decisions",
-          complete: canSubmit,
-          decisionsRemaining: assessmentRemaining,
-        },
-      ];
-    }
-
-    if (isYouthCase) {
-      const briefRemaining = reportStatus.countsByStep.brief;
-      const caseRemaining = reportStatus.countsByStep.case;
-      const riskRemaining = reportStatus.countsByStep.risk;
-      const finalRemaining = reportStatus.countsByStep.final;
-      return [
-        {
-          id: "brief",
-          targetId: "report-section-brief",
-          label: "Brief",
-          detail: activeBrief
-            ? `${activeBriefClub?.name ?? "Club"} selected`
-            : "Select a matching academy brief",
-          complete: briefRemaining === 0,
-          decisionsRemaining: briefRemaining,
-        },
-        {
-          id: "case",
-          targetId: "report-section-framing",
-          label: "Build the case",
-          detail: caseRemaining === 0
-            ? `${completedJudgmentCount}/${JUDGMENT_CATEGORIES.length} defended`
-            : `${caseRemaining} decision${caseRemaining === 1 ? "" : "s"} still need support`,
-          complete: caseRemaining === 0,
-          decisionsRemaining: caseRemaining,
-        },
-        {
-          id: "risk",
-          targetId: "report-section-risks",
-          label: "Risk",
-          detail: riskRemaining === 0 && selectedRiskAssessments.length > 0
-            ? `${riskSignalCount > 0 ? riskSignalCount : "No"} specific risk ${riskSignalCount === 1 ? "signal" : "signals"} logged`
-            : reportStatus.blockers.find((blocker) => blocker.stepId === "risk")?.message ?? "Record a risk stance",
-          complete: riskRemaining === 0,
-          decisionsRemaining: riskRemaining,
-        },
-        {
-          id: "final",
-          targetId: "report-section-file",
-          label: "Final review",
-          detail: canSubmit
-            ? "Ready to file"
-            : `${reportStatus.totalRemaining} issue${reportStatus.totalRemaining === 1 ? "" : "s"} to resolve`,
-          complete: canSubmit,
-          decisionsRemaining: finalRemaining,
-        },
-      ];
-    }
-
-    return [
-      {
-        id: "final",
-        targetId: "report-section-file",
-        label: "Final review",
-        detail: privateNarrativeNote
-          ? `${t(`convictions.${conviction}`)} conviction selected`
-          : reportStatus.primaryBlocker ?? "Add your private note and check conviction",
-        complete: canSubmit,
-        decisionsRemaining: reportStatus.countsByStep.final,
-      },
-    ];
-  })();
+  const sectionNavigatorItems: SectionNavigatorItem[] = buildSectionNavigatorItems({
+    conciseOpeningMode,
+    isYouthCase,
+    canSubmit,
+    reportStatus,
+    activeBriefClubName: activeBrief ? activeBriefClub?.name ?? "Club" : undefined,
+    completedJudgmentCount,
+    selectedRiskAssessmentsLength: selectedRiskAssessments.length,
+    riskSignalCount,
+    privateNarrativeNote,
+    convictionLabel: t(`convictions.${conviction}`),
+  });
   const workflow = resolveReportWorkflow(sectionNavigatorItems, reviewSectionId);
   const requiredSectionCount = workflow.requiredSteps;
   const completedSectionCount = workflow.completedRequiredSteps;
@@ -1123,100 +861,24 @@ export function ReportWriter() {
           </div>
         </div>
 
-        <section className="sticky top-2 z-30 mb-4" aria-label="Report progress">
-          <div className="rounded-2xl border border-white/10 bg-[#0d1216]/95 p-3 shadow-2xl shadow-black/45 backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="mr-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
-                  Report progress
-                </p>
-                <Badge variant="outline" className={decisionsRemaining === 0 ? "border-emerald-400/30 text-emerald-100" : "border-amber-400/30 text-amber-100"}>
-                  {decisionsRemaining} decision{decisionsRemaining === 1 ? "" : "s"} remaining
-                </Badge>
-                <span className="text-xs text-zinc-400">
-                  {completedSectionCount}/{requiredSectionCount} ready
-                </span>
-                {previousReport && (
-                  <span className="text-xs text-zinc-400">
-                    Revision {(previousReport.revision ?? 1) + 1}
-                  </span>
-                )}
-              </div>
-              {nextSectionTask && activeSectionId !== nextSectionTask.id && (
-                <button
-                  type="button"
-                  onClick={() => openWorkflowSection(nextSectionTask)}
-                  className="min-h-10 rounded-lg border border-emerald-400/35 bg-emerald-400/10 px-3 text-xs font-semibold text-emerald-100 transition hover:border-emerald-300/50 hover:bg-emerald-400/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300"
-                >
-                  Continue: {nextSectionTask.label}
-                </button>
-              )}
-            </div>
-
-            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5" role="tablist" aria-label="Report steps">
-              {sectionNavigatorItems.map((item) => {
-                const Icon = item.complete ? CheckCircle2 : Circle;
-                const canOpen = canOpenReportWorkflowStep(item, workflow.nextRequiredStepId);
-                const active = item.id === activeSectionId;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="tab"
-                    onClick={() => openWorkflowSection(item)}
-                    disabled={!canOpen}
-                    aria-selected={active}
-                    aria-current={active ? "step" : undefined}
-                    aria-label={`${item.label}. ${item.detail}`}
-                    className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-300 sm:gap-2 sm:px-3 ${
-                      active
-                        ? "border-emerald-300/55 bg-emerald-400/12 text-emerald-50"
-                        : item.complete
-                          ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-200"
-                          : "border-white/10 bg-white/[0.025] text-zinc-300 hover:border-white/20"
-                    } disabled:cursor-not-allowed disabled:opacity-40`}
-                  >
-                    <Icon size={14} aria-hidden="true" />
-                    <span className="sm:hidden">
-                      {item.id === "case" ? "Case" : item.id === "final" ? "Review" : item.label}
-                    </span>
-                    <span className="hidden sm:inline">{item.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {sectionNavigatorItems.find((item) => item.id === activeSectionId) && (
-              <p className="mt-2 text-[11px] leading-4 text-zinc-400" aria-live="polite">
-                {sectionNavigatorItems.find((item) => item.id === activeSectionId)?.detail}
-              </p>
-            )}
-          </div>
-        </section>
+        <ReportWorkflowNavigator
+          decisionsRemaining={decisionsRemaining}
+          completedSectionCount={completedSectionCount}
+          requiredSectionCount={requiredSectionCount}
+          previousReportRevision={previousReport?.revision}
+          nextSectionTask={nextSectionTask}
+          activeSectionId={activeSectionId}
+          sectionNavigatorItems={sectionNavigatorItems}
+          nextRequiredStepId={workflow.nextRequiredStepId}
+          onOpenSection={openWorkflowSection}
+        />
 
         {preparedWorkItem && (
-          <details
-            className="group mb-5 rounded-xl border border-sky-400/20 bg-sky-400/[0.07] px-4 py-3"
-            data-testid="prepared-report-work"
-          >
-            <summary className="flex min-h-8 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-sky-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-300">
-              <span>{preparedWorkItem.freshObservationIds.length} prepared evidence item{preparedWorkItem.freshObservationIds.length === 1 ? "" : "s"}</span>
-              <span className="text-[10px] uppercase tracking-wider text-sky-300 group-open:hidden">Review</span>
-              <span className="hidden text-[10px] uppercase tracking-wider text-sky-300 group-open:inline">Hide</span>
-            </summary>
-            <div className="mt-3 border-t border-sky-300/15 pt-3" aria-labelledby="prepared-report-work-heading">
-              <h2 id="prepared-report-work-heading" className="text-sm font-bold text-white">
-                {player.firstName} {player.lastName} is prepped for filing
-              </h2>
-              <p className="mt-2 text-xs leading-5 text-zinc-200">
-                Your organized evidence adds +{preparedWorkItem.preparationQualityPoints} craft support and {formatPercent(preparedWorkItem.preparationQualityBonus)} stronger preparation to this report.
-              </p>
-              <p className="mt-2 text-[11px] leading-5 text-zinc-400">
-                Prepared in S{preparedWorkItem.createdSeason} W{preparedWorkItem.createdWeek}. You still choose the verdict and file it yourself.
-              </p>
-            </div>
-          </details>
+          <PreparedReportWorkCallout
+            preparedWorkItem={preparedWorkItem}
+            playerName={`${player.firstName} ${player.lastName}`}
+          />
         )}
-
         {isYouthCase && !conciseOpeningMode && (
           <details
             id="report-section-brief"
@@ -1805,52 +1467,13 @@ export function ReportWriter() {
           </details>
         )}
 
-        {observationsBlocker && (
-          <div role="alert" className="mb-6 flex flex-col gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="flex items-start gap-2 text-sm leading-5 text-red-200">
-              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-              <span>{t("noObservations")} {observationsBlocker.message}</span>
-            </p>
-            <Button className="min-h-11 shrink-0" variant="outline" onClick={handleBack}>
-              Plan observation
-            </Button>
-          </div>
-        )}
-        {freshEvidenceBlocker && previousReport && (
-          <div role="status" className="mb-6 rounded-lg border border-amber-400/30 bg-amber-400/10 p-4">
-            <p className="flex items-start gap-2 text-sm leading-5 text-amber-200">
-              <AlertTriangle size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-              {freshEvidenceBlocker.message} Rewriting the same evidence does not earn reputation or performance credit for revision {(previousReport.revision ?? 1) + 1}.
-            </p>
-          </div>
-        )}
-        {analystReview && (
-          <section
-            aria-labelledby="analyst-review-heading"
-            className="mb-6 rounded-xl border border-violet-400/30 bg-violet-400/10 p-4"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300">
-                  Analyst review ready
-                </p>
-                <h2 id="analyst-review-heading" className="mt-1 text-sm font-bold text-white">
-                  {analystReview.analystName} · {formatAnalystEvidenceCategory(analystReview.evidenceCategory)}
-                </h2>
-              </div>
-              <Badge variant="outline" className="border-violet-300/30 text-violet-200">
-                +{analystReview.craftQualityBonus} craft · one use
-              </Badge>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-violet-50/90">{analystReview.critique}</p>
-            <p className="mt-3 text-xs leading-5 text-violet-100/70">
-              Method bias — {formatAnalystReviewBias(analystReview.bias)}: {analystReview.biasDisclosure}
-            </p>
-            <p className="mt-2 text-[11px] text-zinc-400">
-              The visible craft band includes this review. It is consumed exactly once when this eligible report is filed.
-            </p>
-          </section>
-        )}
+        <ReportWriterAlerts
+          observationsBlockerMessage={observationsBlocker ? `${t("noObservations")} ${observationsBlocker.message}` : undefined}
+          freshEvidenceBlockerMessage={freshEvidenceBlocker?.message}
+          previousReportRevision={previousReport?.revision}
+          onHandleBack={handleBack}
+        />
+        {analystReview && <AnalystReviewBanner analystReview={analystReview} />}
 
         <div id="report-section-evidence" className="scroll-mt-28 space-y-6">
           {conciseOpeningMode ? (
@@ -1887,162 +1510,43 @@ export function ReportWriter() {
               </div>
             </div>
           ) : (
-            <div hidden={isYouthCase && !isWorkflowSectionActive("final")}>
-            <Card
-              id="report-section-file"
-              data-testid="report-final-review"
-              data-tutorial-id="report-conviction"
-              className={`scroll-mt-28 border ${qualityScoreBorder(displayQualityScore)} bg-[#10151b]/98 shadow-2xl shadow-black/25 lg:sticky lg:top-20 lg:z-20`}
-            >
-              <CardContent className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(340px,0.85fr)]">
-                <div>
-                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">Final review</p>
-                      <h2 className="mt-1 text-xl font-bold text-white">Check the case, then file it</h2>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      aria-label={`Craft assessment: ${craftRead.label}`}
-                      className={`${qualityScoreBorder(displayQualityScore)} ${qualityScoreColor(displayQualityScore)}`}
-                    >
-                      Craft: {craftRead.label}
-                    </Badge>
-                  </div>
-                  {isYouthCase && (
-                    <dl className="mb-4 grid gap-2 text-xs sm:grid-cols-2">
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                        <dt className="text-zinc-400">Club brief</dt>
-                        <dd className="mt-1 font-semibold text-white">{activeBriefClub?.name ?? "No club selected"}</dd>
-                      </div>
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                        <dt className="text-zinc-400">Recommended action</dt>
-                        <dd className="mt-1 font-semibold text-white">{attrLabel(recommendedAction)}</dd>
-                      </div>
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                        <dt className="text-zinc-400">Defended judgments</dt>
-                        <dd className="mt-1 font-semibold text-white">{completedJudgmentCount}/{JUDGMENT_CATEGORIES.length}</dd>
-                      </div>
-                      <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-                        <dt className="text-zinc-400">Risk posture</dt>
-                        <dd className="mt-1 font-semibold text-white">
-                          {selectedRiskAssessments.some((risk) => risk.id === "noMaterialSignal")
-                            ? "No specific signal claimed"
-                            : `${riskSignalCount} signal${riskSignalCount === 1 ? "" : "s"} recorded`}
-                        </dd>
-                      </div>
-                    </dl>
-                  )}
-                  {isYouthCase ? (
-                    <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[0.06] p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-200">Filed recommendation</p>
-                      <p className="mt-2 text-sm leading-6 text-zinc-100">
-                        {effectiveSummary || "Complete the evidence judgments above to assemble the recommendation."}
-                      </p>
-                      <p className="mt-3 text-[11px] leading-5 text-zinc-400">
-                        This recommendation reflects the evidence you selected, the uncertainties you left open, the role you projected, and the action you are prepared to defend in the recruitment room.
-                      </p>
-                    </div>
-                  ) : (
-                    <>
-                      <label htmlFor="report-summary" className="text-sm font-semibold text-zinc-200">
-                        Private scout&apos;s note
-                      </label>
-                      <p id="report-summary-help" className="mt-1 text-xs leading-5 text-zinc-400">
-                        Keep any personal phrasing or nuance you want colleagues to read. The recommendation must still stand on the observations, strengths, concerns, and conviction recorded in the dossier.
-                      </p>
-                      <textarea
-                        id="report-summary"
-                        value={summary}
-                        onChange={(event) => {
-                          setIsDirty(true);
-                          setSummary(event.target.value);
-                        }}
-                        aria-describedby="report-summary-help"
-                        rows={5}
-                        placeholder="Private wording for how you want this report to read"
-                        className="mt-3 min-h-32 w-full resize-y rounded-xl border border-white/10 bg-black/25 p-3 text-sm leading-6 text-white outline-none transition placeholder:text-zinc-500 focus:border-emerald-400/40 focus:ring-1 focus:ring-emerald-400/40"
-                      />
-                    </>
-                  )}
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">Conviction</p>
-                      <p className="mt-1 text-sm text-zinc-300">How much reputation belongs behind this call?</p>
-                    </div>
-                    <span className={`text-xs font-semibold ${canSubmit ? "text-emerald-300" : "text-amber-300"}`}>
-                      {canSubmit
-                        ? "Ready to file"
-                        : `${reportStatus.totalRemaining} issue${reportStatus.totalRemaining === 1 ? "" : "s"} to resolve`}
-                    </span>
-                  </div>
-                  <fieldset>
-                    <legend className="sr-only">Report conviction</legend>
-                    <div className="grid grid-cols-2 gap-2">
-                      {CONVICTION_KEYS.map((key) => {
-                        const isDisabled = key === "tablePound" && remainingTablePounds <= 0;
-                        return (
-                          <div key={`decision-${key}`} className="relative">
-                            <input
-                              id={`report-conviction-${key}`}
-                              className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                              type="radio"
-                              name="report-conviction"
-                              value={key}
-                              checked={conviction === key}
-                              disabled={isDisabled}
-                              onChange={() => {
-                                setIsDirty(true);
-                                setConviction(key);
-                                useTutorialStore.getState().completeMilestone("wroteReport");
-                                playSFX("page-turn");
-                              }}
-                            />
-                            <label
-                              htmlFor={`report-conviction-${key}`}
-                              className={`block min-h-12 rounded-lg border px-3 py-2 text-left text-xs font-semibold transition peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-emerald-400 ${
-                                isDisabled ? "cursor-not-allowed opacity-40" : "cursor-pointer hover:border-white/20"
-                              } ${
-                                conviction === key
-                                  ? key === "tablePound"
-                                    ? "border-red-400/60 bg-red-400/10 text-red-200"
-                                    : "border-emerald-400/50 bg-emerald-400/10 text-emerald-200"
-                                  : "border-white/10 bg-white/[0.025] text-zinc-300"
-                              }`}
-                            >
-                              {t(`convictions.${key}`)}
-                            </label>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </fieldset>
-                  {isTablePound && (
-                    <p className="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 p-3 text-xs leading-5 text-red-200">
-                      This stakes meaningful reputation on the outcome. Use it only when the evidence deserves that risk.
-                    </p>
-                  )}
-                  <p className="mt-2 text-[11px] text-zinc-400">
-                    Table-pounds remaining this season: <span className="font-semibold text-white">{remainingTablePounds}</span>
-                  </p>
-                  <div className="mt-4 grid grid-cols-2 gap-2" data-tutorial-id="report-submit">
-                    <Button className="min-h-11" variant="outline" onClick={handleBack}>{tc("cancel")}</Button>
-                    <Button
-                      className={`min-h-11 ${isTablePound ? "bg-red-600 hover:bg-red-700" : ""}`}
-                      onClick={handleSubmit}
-                      disabled={!canSubmit}
-                    >
-                      <FileText size={14} className="mr-2" aria-hidden="true" />
-                      {previousReport ? `File revision ${(previousReport.revision ?? 1) + 1}` : t("submitReport")}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            </div>
+            <ReportFinalReview
+              isYouthCase={isYouthCase}
+              isWorkflowSectionActive={isWorkflowSectionActive}
+              displayQualityScore={displayQualityScore}
+              craftReadLabel={craftRead.label}
+              activeBriefClubName={activeBriefClub?.name}
+              recommendedActionLabel={attrLabel(recommendedAction)}
+              completedJudgmentCount={completedJudgmentCount}
+              riskSignalCount={riskSignalCount}
+              selectedNoMaterialSignal={selectedRiskAssessments.some((risk) => risk.id === "noMaterialSignal")}
+              effectiveSummary={effectiveSummary}
+              youthRecommendationSupportCopy={YOUTH_RECOMMENDATION_SUPPORT_COPY}
+              privateScoutNoteLabel={PRIVATE_SCOUT_NOTE_LABEL}
+              summary={summary}
+              onSummaryChange={(nextValue) => {
+                setIsDirty(true);
+                setSummary(nextValue);
+              }}
+              canSubmit={canSubmit}
+              reportStatusTotalRemaining={reportStatus.totalRemaining}
+              conviction={conviction}
+              remainingTablePounds={remainingTablePounds}
+              onConvictionChange={(key) => {
+                setIsDirty(true);
+                setConviction(key);
+                useTutorialStore.getState().completeMilestone("wroteReport");
+                playSFX("page-turn");
+              }}
+              isTablePound={isTablePound}
+              handleBack={handleBack}
+              handleSubmit={handleSubmit}
+              previousReportRevision={previousReport?.revision}
+              submitLabel={t("submitReport")}
+              cancelLabel={tc("cancel")}
+              blockers={reportStatus.blockers.map((blocker) => blocker.message)}
+              convictionLabel={(key) => t(`convictions.${key}`)}
+            />
           )}
 
           <details id="report-dossier" className="group scroll-mt-24 rounded-2xl border border-white/10 bg-[#11161c]/95 p-4 sm:p-5">

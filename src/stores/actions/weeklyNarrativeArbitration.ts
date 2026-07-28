@@ -1,4 +1,9 @@
 import type { GameState, InboxMessage } from "@/engine/core/types";
+import {
+  applyPreparedRelationshipConflict,
+  prepareWeeklyRelationshipConflictCandidate,
+  type QuietRelationshipFallbackMetadata,
+} from "@/engine/consequences/relationshipConflictDirector";
 import { getSeasonLength } from "@/engine/core/gameLoop";
 import { getRunSimulationModifiers } from "@/engine/run";
 import { createRNG } from "@/engine/rng";
@@ -20,6 +25,7 @@ import {
   applyDirectedWorldPulse,
   prepareWeeklyWorldPulse,
 } from "@/engine/events/worldPulse";
+import { deriveScoutingCaseQuestions } from "@/engine/reports/caseQuestions";
 import type { RivalOrganizationOpportunity } from "@/engine/rivals/organizations";
 import { directWeeklyYouthProfessionalCase } from "@/engine/youth";
 import { registerNarrativeDecisions } from "./weeklyNarrativeConsequences";
@@ -46,6 +52,59 @@ export interface WeeklyNarrativeArbitrationResult {
   state: GameState;
   acceptedNarrativeEventIds: string[];
   acceptedStoryCandidateIds: string[];
+}
+
+interface QuietFallbackTarget {
+  preferredSubjectIds: string[];
+  quietFallback: QuietRelationshipFallbackMetadata;
+}
+
+function countOpenDecisions(state: GameState): number {
+  return Object.values(state.consequenceState.decisions)
+    .filter((decision) => decision.status === "offered")
+    .length;
+}
+
+function selectQuietFallbackTarget(state: GameState): QuietFallbackTarget | undefined {
+  const careerEra = state.careerEraDirectorState?.current;
+  const caseTarget = Object.values(state.scoutingCases ?? {})
+    .filter((scoutingCase) => scoutingCase.status !== "closed")
+    .map((scoutingCase) => {
+      const snapshot = deriveScoutingCaseQuestions(state, scoutingCase.id);
+      const question = snapshot?.activeQuestions[0];
+      if (!snapshot || !question) return null;
+      return { scoutingCase, snapshot, question };
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+    .sort((left, right) =>
+      (right.snapshot.activeQuestions.length - left.snapshot.activeQuestions.length)
+      || (right.snapshot.callbacks.length - left.snapshot.callbacks.length)
+      || left.scoutingCase.id.localeCompare(right.scoutingCase.id)
+    )[0];
+  if (caseTarget) {
+    return {
+      preferredSubjectIds: [caseTarget.scoutingCase.playerId],
+      quietFallback: {
+        quietIntervention: true,
+        caseId: caseTarget.scoutingCase.id,
+        questionId: caseTarget.question.id,
+        question: caseTarget.question.prompt,
+        ...(careerEra?.primaryProspectId === caseTarget.scoutingCase.playerId && careerEra.id
+          ? { careerEraId: careerEra.id }
+          : {}),
+      },
+    };
+  }
+  if (careerEra?.primaryProspectId) {
+    return {
+      preferredSubjectIds: [careerEra.primaryProspectId],
+      quietFallback: {
+        quietIntervention: true,
+        careerEraId: careerEra.id,
+      },
+    };
+  }
+  return undefined;
 }
 
 /**
@@ -133,12 +192,25 @@ export function runWeeklyNarrativeArbitration({
     ...state,
     careerEraDirectorState: careerEraWeek.state,
   };
+  const quietFallbackTarget = !blockedByAuthoredActivity
+    && (state.eventDirector?.quietWeeks ?? 0) >= 4
+    && countOpenDecisions(state) === 0
+    ? selectQuietFallbackTarget(state)
+    : undefined;
+  const quietRelationshipConflict = quietFallbackTarget
+    ? prepareWeeklyRelationshipConflictCandidate({
+      state,
+      forceTrigger: true,
+      preferredSubjectIds: quietFallbackTarget.preferredSubjectIds,
+      quietFallback: quietFallbackTarget.quietFallback,
+    }).prepared
+    : undefined;
   const worldPulseWeek = prepareWeeklyWorldPulse({
     state,
     seasonLength,
     blockedByActivity: blockedByAuthoredActivity || Boolean(careerEraWeek.candidate),
   });
-  const storyDirection = directWeeklyStoryEmissionsV2({
+  const primaryStoryDirection = directWeeklyStoryEmissionsV2({
     rootSeed: state.runManifest.rootSeed,
     state: createStoryDirectorStateV2(state.storyDirectorV2),
     now: { week: state.currentWeek, season: state.currentSeason },
@@ -148,19 +220,40 @@ export function runWeeklyNarrativeArbitration({
       ...worldArcWeek.beats.map((beat) => beat.candidate),
       ...scoutingEcologyWeek.candidates,
       ...rivalCampaignWeek.candidates,
-      ...(careerEraWeek.candidate ? [careerEraWeek.candidate] : []),
-      ...(worldPulseWeek ? [worldPulseWeek.candidate] : []),
+      ...(quietRelationshipConflict ? [quietRelationshipConflict.candidate] : []),
     ],
     candidateTransform: (candidate) =>
       applyCareerEraDirection([candidate], careerEraWeek.state.current)[0],
-    activeChoiceCount: Object.values(state.consequenceState.decisions)
-      .filter((decision) => decision.status === "offered")
-      .length,
+    activeChoiceCount: countOpenDecisions(state),
     seasonLength,
   });
+  const quietFallbackAccepted = Boolean(
+    quietRelationshipConflict
+    && primaryStoryDirection.acceptedCandidates.some(
+      ({ candidate }) => candidate.id === quietRelationshipConflict.candidate.id,
+    ),
+  );
+  const passiveStoryDirection = !quietFallbackAccepted
+    && (careerEraWeek.candidate || worldPulseWeek)
+    ? directWeeklyStoryEmissionsV2({
+      rootSeed: state.runManifest.rootSeed,
+      state: primaryStoryDirection.state,
+      now: { week: state.currentWeek, season: state.currentSeason },
+      priorEvents: priorNarrativeEvents,
+      emissions: [],
+      candidates: [
+        ...(careerEraWeek.candidate ? [careerEraWeek.candidate] : []),
+        ...(worldPulseWeek ? [worldPulseWeek.candidate] : []),
+      ],
+      candidateTransform: (candidate) =>
+        applyCareerEraDirection([candidate], careerEraWeek.state.current)[0],
+      activeChoiceCount: countOpenDecisions(state),
+      seasonLength,
+    })
+    : undefined;
 
   const acceptedEventIds = new Set(
-    storyDirection.accepted.map(({ emission }) => emission.event.id),
+    primaryStoryDirection.accepted.map(({ emission }) => emission.event.id),
   );
   const acceptedNarrativeEvents = emissions
     .map(({ event }) => event)
@@ -193,7 +286,7 @@ export function runWeeklyNarrativeArbitration({
   const featuredEvent = acceptedNarrativeEvents[0] ?? null;
   state = {
     ...state,
-    storyDirectorV2: storyDirection.state,
+    storyDirectorV2: passiveStoryDirection?.state ?? primaryStoryDirection.state,
     eventDirector: recordEventDirectorOutcome(
       priorEventDirector,
       featuredEvent,
@@ -205,7 +298,10 @@ export function runWeeklyNarrativeArbitration({
   };
 
   const acceptedStoryCandidateIds = new Set(
-    storyDirection.acceptedCandidates.map(({ candidate }) => candidate.id),
+    [
+      ...primaryStoryDirection.acceptedCandidates,
+      ...(passiveStoryDirection?.acceptedCandidates ?? []),
+    ].map(({ candidate }) => candidate.id),
   );
   state = applyDirectedWorldConditionArcBeats({
     state,
@@ -217,6 +313,33 @@ export function runWeeklyNarrativeArbitration({
     prepared: scoutingEcologyWeek,
     acceptedCandidateIds: acceptedStoryCandidateIds,
   });
+  if (
+    quietRelationshipConflict
+    && acceptedStoryCandidateIds.has(quietRelationshipConflict.candidate.id)
+  ) {
+    state = applyPreparedRelationshipConflict(state, quietRelationshipConflict).state;
+    const careerEraId = quietRelationshipConflict.materialized.decision.metadata?.careerEraId;
+    const currentCareerEra = state.careerEraDirectorState?.current;
+    if (
+      typeof careerEraId === "string"
+      && currentCareerEra
+      && currentCareerEra.id === careerEraId
+    ) {
+      state = {
+        ...state,
+        careerEraDirectorState: {
+          ...state.careerEraDirectorState!,
+          current: {
+            ...currentCareerEra,
+            lastReinforcedAt: {
+              week: state.currentWeek,
+              season: state.currentSeason,
+            },
+          },
+        },
+      };
+    }
+  }
   state = applyDirectedWorldPulse({
     state,
     prepared: worldPulseWeek,

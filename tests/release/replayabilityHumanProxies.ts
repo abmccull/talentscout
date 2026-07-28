@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { deriveCareerFingerprintProjection } from "@/engine/career/fingerprint";
 import type {
   EventChain,
   GameState,
@@ -45,7 +46,9 @@ const ACTIVE_RIVAL_ORGANIZATION_COUNT = 3;
 
 interface ProxyTrace {
   maximumQuietWeeks: number;
-  meaningfulWeeks: boolean[];
+  preArbitrationChoiceOpportunityWeeks: boolean[];
+  setupCareerFingerprintProjectionId: string;
+  setupCareerFingerprintProjectionTitle: string;
   rivalArchetypeIds: string[];
   rivalSetKey: string;
   rivalActionTokens: string[];
@@ -69,10 +72,16 @@ export interface ReplayabilityHumanProxySummary {
     p95: number;
     maximum: number;
   };
-  rollingEightWeekMeaningfulWeekDensity: {
+  rollingEightWeekPreArbitrationChoiceOpportunityDensity: {
     minimum: number;
     p50: number;
     p95: number;
+  };
+  setupCareerFingerprintProjections: {
+    status: "sampled_setup_projection";
+    uniqueFingerprintCount: number;
+    uniqueTitleCount: number;
+    sampleTitles: string[];
   };
   authoredSurfaceCoverage: {
     clubRecruitmentExpressions: {
@@ -412,6 +421,17 @@ function simulateProxyTrace(
         `scouting-special-event:${definition.id}`),
     ],
   });
+  const setupCareerFingerprintProjection = deriveCareerFingerprintProjection({
+    careerPath: "club",
+    careerTier: 5,
+    originId,
+    doctrineIds: [doctrineId],
+    worldTraitIds,
+    relationships: {
+      activeObligationCount: 0,
+      persistentStakeholderKinds: [],
+    },
+  });
   let state = buildDirectorState(seed, runManifest);
   let rivalState = initializeRivalOrganizations(seed, TELEMETRY_RIVALS).state;
   const rivalArchetypeIds = Object.values(rivalState.organizations)
@@ -419,7 +439,7 @@ function simulateProxyTrace(
     .sort();
   const rivalSetKey = rivalArchetypeIds.join("+");
   const rivalActionTokens: string[] = [];
-  const meaningfulWeeks: boolean[] = [];
+  const preArbitrationChoiceOpportunityWeeks: boolean[] = [];
   let maximumQuietWeeks = 0;
 
   for (let season = 1; season <= config.seasons; season += 1) {
@@ -458,7 +478,9 @@ function simulateProxyTrace(
           `${organization?.archetypeId ?? "unknown"}:${rivalWeek.activity.action}`,
         );
       }
-      meaningfulWeeks.push(Boolean(weekly.event || rivalWeek.opportunity || rivalWeek.activity));
+      preArbitrationChoiceOpportunityWeeks.push(
+        Boolean(weekly.event?.choices?.length || rivalWeek.opportunity),
+      );
     }
   }
 
@@ -466,7 +488,9 @@ function simulateProxyTrace(
 
   return {
     maximumQuietWeeks,
-    meaningfulWeeks,
+    preArbitrationChoiceOpportunityWeeks,
+    setupCareerFingerprintProjectionId: setupCareerFingerprintProjection.fingerprintId,
+    setupCareerFingerprintProjectionTitle: setupCareerFingerprintProjection.title,
     rivalArchetypeIds,
     rivalSetKey,
     rivalActionTokens,
@@ -484,8 +508,14 @@ export function buildReplayabilityHumanProxies(config: {
   );
   const quietWeeks = traces.map((trace) => trace.maximumQuietWeeks);
   const rollingDensities = traces.flatMap((trace) =>
-    averageWindowDensity(trace.meaningfulWeeks, 8),
+    averageWindowDensity(trace.preArbitrationChoiceOpportunityWeeks, 8),
   );
+  const uniqueSetupCareerFingerprintProjections = new Set(
+    traces.map((trace) => trace.setupCareerFingerprintProjectionId),
+  );
+  const uniqueSetupCareerProjectionTitles = [...new Set(
+    traces.map((trace) => trace.setupCareerFingerprintProjectionTitle),
+  )].sort();
   const uniqueRivalSets = new Set(traces.map((trace) => trace.rivalSetKey));
   const uniqueActionSignatures = new Set(traces.flatMap((trace) => trace.rivalActionTokens));
   const uniqueArchetypes = new Set(traces.flatMap((trace) => trace.rivalArchetypeIds));
@@ -526,10 +556,16 @@ export function buildReplayabilityHumanProxies(config: {
       p95: percentile(quietWeeks, 0.95),
       maximum: Math.max(...quietWeeks),
     },
-    rollingEightWeekMeaningfulWeekDensity: {
+    rollingEightWeekPreArbitrationChoiceOpportunityDensity: {
       minimum: Math.min(...rollingDensities),
       p50: percentile(rollingDensities, 0.5),
       p95: percentile(rollingDensities, 0.95),
+    },
+    setupCareerFingerprintProjections: {
+      status: "sampled_setup_projection",
+      uniqueFingerprintCount: uniqueSetupCareerFingerprintProjections.size,
+      uniqueTitleCount: uniqueSetupCareerProjectionTitles.length,
+      sampleTitles: uniqueSetupCareerProjectionTitles.slice(0, 8),
     },
     authoredSurfaceCoverage: {
       clubRecruitmentExpressions: {

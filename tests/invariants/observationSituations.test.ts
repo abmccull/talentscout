@@ -15,6 +15,7 @@ import {
   hydrateCulturalInsight,
   resolveCulturalInsightEffects,
 } from "@/engine/world/footballCulture";
+import { selectObservationSituationDefinition } from "@/engine/observation/situationCatalog";
 
 const SCOUT_CONFIG: NewGameConfig = {
   scoutFirstName: "Situation",
@@ -43,6 +44,32 @@ const LEGACY_INSIGHT: CulturalInsight = {
 };
 
 describe("observation situations", () => {
+  it("persists non-default authored variant identity through existing snapshot fields", () => {
+    const seeds = Array.from({ length: 64 }, (_, index) => `school-variant-${index}`);
+    const baselineSeed = seeds.find((seed) =>
+      selectObservationSituationDefinition("schoolMatch", seed)?.defaultBaseline);
+    const variantSeed = seeds.find((seed) =>
+      !selectObservationSituationDefinition("schoolMatch", seed)?.defaultBaseline);
+
+    expect(baselineSeed).toBeDefined();
+    expect(variantSeed).toBeDefined();
+
+    const baseline = createObservationSituation({
+      activityType: "schoolMatch",
+      seed: baselineSeed!,
+      countryId: "england",
+    });
+    const alternate = createObservationSituation({
+      activityType: "schoolMatch",
+      seed: variantSeed!,
+      countryId: "england",
+    });
+
+    expect(alternate.repetitionKey).not.toBe(baseline.repetitionKey);
+    expect(alternate.contextTags.some((tag) => tag.startsWith("variant:"))).toBe(true);
+    expect(alternate.reasons.join(" ")).not.toBe(baseline.reasons.join(" "));
+  });
+
   it("persists the active cultural calendar window and applies its visible evidence climate", () => {
     const calendarEffects = {
       countryId: "england",

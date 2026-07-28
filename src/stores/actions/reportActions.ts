@@ -543,6 +543,7 @@ export function createReportActions(get: GetState, set: SetState) {
             undefined,
             fitAccuracy,
             fitRng,
+            { runManifest: gameState.runManifest },
           );
           const fitCacheKey = `${canonicalPlayerId}:${gameState.scout.currentClubId}`;
           updatedSystemFitCache = { ...updatedSystemFitCache, [fitCacheKey]: systemFitResult };

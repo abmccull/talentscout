@@ -15,6 +15,7 @@ import type {
   Player,
   PlayerMatchRating,
   PlayerMovementEvent,
+  RunManifest,
   ScoutingPhilosophy,
   StandingEntry,
   TacticalStyle,
@@ -144,6 +145,7 @@ export interface WorldHistoryState {
 export interface WorldHistorySnapshot {
   /** Optional on legacy/test snapshots; full GameState callers always provide it. */
   seed?: string;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
   totalWeeksPlayed: number;
   leagues: Record<string, League>;
   clubs: Record<string, Club>;
@@ -343,6 +345,7 @@ function buildSeasonRecord(
         seed: snapshot.seed ?? `world-history:${club.id}`,
         season: completedSeason,
         manager,
+        runManifest: snapshot.runManifest,
       });
 
       return {

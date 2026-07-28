@@ -107,7 +107,7 @@ type DevelopmentEnvironmentState = Pick<
   | "matchRatings"
   | "activeLoans"
   | "worldConditionState"
-> & Partial<Pick<GameState, "seed">>;
+> & Partial<Pick<GameState, "seed" | "runManifest">>;
 
 interface EvaluationOptions {
   /** Evaluate a proposed destination before the player has joined it. */
@@ -271,6 +271,7 @@ export function createDevelopmentEnvironmentIndex(
       seed: state.seed ?? `development:${club.id}`,
       season: state.currentSeason,
       manager: state.managerProfiles[club.id],
+      runManifest: state.runManifest,
     }));
   }
 
@@ -433,6 +434,7 @@ function philosophyFactor(
       seed: state.seed ?? `development:${club.id}`,
       season: state.currentSeason,
       manager,
+      runManifest: state.runManifest,
     });
   const developing = player.age <= doctrine.preferredSeniorAgeRange[1];
   const patienceContribution = developing

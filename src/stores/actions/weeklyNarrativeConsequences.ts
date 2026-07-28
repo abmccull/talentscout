@@ -78,6 +78,64 @@ function readableCallbackLabel(value: string): string {
     .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
+function describeCallbackStateChange(
+  state: GameState,
+  consequence: ConsequenceRecord,
+): string | undefined {
+  let recordedDetail: string | undefined;
+  for (const effect of consequence.effects) {
+    switch (effect.type) {
+      case "createObligation": {
+        const creditor = resolveArchivedEntityName(state, effect.obligation.creditor)
+          ?? readableCallbackLabel(effect.obligation.creditor.kind);
+        return `Next state: you now owe ${creditor} ${effect.obligation.terms}.`;
+      }
+      case "transitionObligation": {
+        const obligation = state.consequenceState.obligations[effect.obligationId];
+        const creditor = obligation
+          ? resolveArchivedEntityName(state, obligation.creditor)
+          : undefined;
+        const counterparty = creditor ?? "the stakeholder involved";
+        const obligationLabel = obligation?.kind
+          ? readableCallbackLabel(obligation.kind)
+          : "relationship";
+        return `Next state: the ${obligationLabel.toLowerCase()} obligation with ${counterparty} is now ${effect.status}.`;
+      }
+      case "createOpportunityLock": {
+        const label = typeof effect.lock.metadata?.label === "string"
+          ? effect.lock.metadata.label
+          : readableCallbackLabel(effect.lock.opportunityId);
+        const subject = typeof effect.lock.metadata?.playerName === "string"
+          ? effect.lock.metadata.playerName
+          : undefined;
+        const expiry = effect.lock.expiresAt
+          ? ` until S${effect.lock.expiresAt.season} W${effect.lock.expiresAt.week}`
+          : "";
+        return `Next state: ${label}${subject ? ` around ${subject}` : ""} is live${expiry}.`;
+      }
+      case "transitionOpportunityLock": {
+        const lock = state.consequenceState.opportunityLocks[effect.opportunityLockId];
+        const label = typeof lock?.metadata?.label === "string"
+          ? lock.metadata.label
+          : lock
+            ? readableCallbackLabel(lock.opportunityId)
+            : "The access window";
+        return `Next state: ${label} is now ${effect.status}.`;
+      }
+      case "recordFact": {
+        const detail = effect.fact.metadata?.detail;
+        if (typeof detail === "string" && detail.trim().length > 0) {
+          recordedDetail ??= detail.trim();
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return recordedDetail ? `Next state: ${recordedDetail}` : undefined;
+}
+
 /** Make delayed relationship fallout visible instead of silently moving meters. */
 export function createRelationshipCallbackMessage(
   state: GameState,
@@ -104,15 +162,21 @@ export function createRelationshipCallbackMessage(
   const choiceLabel = option?.label ?? readableCallbackLabel(consequence.optionId ?? "recorded choice");
   const subject = playerName ? ` around ${playerName}` : "";
   const castLine = stakeholders.length > 0
-    ? `${stakeholders.join(" and ")} now remember how you handled it.`
-    : "The people involved now remember how you handled it.";
+    ? `${stakeholders.join(" and ")} have now come back to how you handled it${subject}.`
+    : `The people involved have now come back to how you handled it${subject}.`;
+  const stateChange = describeCallbackStateChange(state, consequence)
+    ?? "Next state: the relationship now carries a visible consequence instead of moving silently in the background.";
   return {
     id: `relationship-callback-${consequence.id}`,
     week: state.currentWeek,
     season: state.currentSeason,
     type: "feedback",
     title: `${recurrenceName}: ${callbackLabel}`,
-    body: `Your decision to "${choiceLabel}"${subject} has produced a delayed consequence. ${castLine} The result is now part of your relationship and career record.`,
+    body: [
+      castLine,
+      `Remembered decision: "${choiceLabel}".`,
+      stateChange,
+    ].join("\n"),
     read: false,
     actionRequired: false,
     relatedId: playerId ?? consequence.decisionId,

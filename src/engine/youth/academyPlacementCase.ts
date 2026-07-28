@@ -6,6 +6,7 @@ import type {
   Observation,
   Player,
   PlayerRole,
+  RunManifest,
   Scout,
   ScoutReport,
   YouthRecruitmentBrief,
@@ -127,6 +128,7 @@ export function generateYouthRecruitmentBriefs(
   maximumOpen = 12,
   seasonLength = 38,
   rootSeed = `academy-briefs-s${season}`,
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">,
 ): YouthRecruitmentBrief[] {
   const open = Object.values(existing).filter((brief) => brief.status === "open");
   let slots = Math.max(0, maximumOpen - open.length);
@@ -167,6 +169,7 @@ export function generateYouthRecruitmentBriefs(
         seed: rootSeed,
         season,
         region: regionIdentities.get(club.leagueId),
+        runManifest,
       }),
       tie: rng.next(),
     }))
@@ -185,7 +188,7 @@ export function generateYouthRecruitmentBriefs(
       players,
       week,
       season,
-      { maxActiveBriefs: 1, seasonLength },
+      { maxActiveBriefs: 1, seasonLength, runManifest },
     );
     if (!brief) continue;
     generated.push(mapBrief(brief, club, identity));

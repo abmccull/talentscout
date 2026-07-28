@@ -14,6 +14,7 @@ import {
   createObservationSituation,
   type ObservationSituationSnapshot,
 } from "@/engine/observation/situations";
+import { selectObservationSituationDefinition } from "@/engine/observation/situationCatalog";
 
 const PLAYER_ID = "player-1";
 
@@ -180,6 +181,54 @@ describe("observation information gain", () => {
     expect(novelResult?.reasons).toContain(
       "Revisits a known context under materially different football conditions.",
     );
+  });
+
+  it("treats a repeated youth context under a different authored variant as novel evidence", () => {
+    const seeds = Array.from({ length: 96 }, (_, index) => `school-repeat-${index}`);
+    const baselineSeed = seeds.find((seed) =>
+      selectObservationSituationDefinition("schoolMatch", seed)?.defaultBaseline);
+    const alternateSeed = seeds.find((seed) =>
+      !selectObservationSituationDefinition("schoolMatch", seed)?.defaultBaseline);
+
+    expect(baselineSeed).toBeDefined();
+    expect(alternateSeed).toBeDefined();
+
+    const repeated = createObservationSituation({
+      activityType: "schoolMatch",
+      seed: baselineSeed!,
+      countryId: "england",
+    });
+    const alternate = createObservationSituation({
+      activityType: "schoolMatch",
+      seed: alternateSeed!,
+      countryId: "england",
+    });
+    const observations = [
+      observation("obs-known", "schoolMatch", "session-known", ["firstTouch"], repeated),
+    ];
+    const repeatedResult = getHighestValueNextContext({
+      observations,
+      playerId: PLAYER_ID,
+      candidateContexts: ["schoolMatch"],
+      candidateSituations: { schoolMatch: repeated },
+    });
+    const alternateResult = getHighestValueNextContext({
+      observations,
+      playerId: PLAYER_ID,
+      candidateContexts: ["schoolMatch"],
+      candidateSituations: { schoolMatch: alternate },
+    });
+
+    expect(repeatedResult).toMatchObject({
+      contextIsNovel: false,
+      situationIsNovel: false,
+    });
+    expect(alternateResult).toMatchObject({
+      contextIsNovel: false,
+      situationIsNovel: true,
+    });
+    expect(alternateResult?.repetitionKey).not.toBe(repeatedResult?.repetitionKey);
+    expect(alternateResult?.score).toBeGreaterThan(repeatedResult?.score ?? Number.POSITIVE_INFINITY);
   });
 
   it("prioritizes contexts that address the scout's selected information need", () => {

@@ -1,5 +1,14 @@
 import { gameWeeksBetween, getSeasonLength } from "@/engine/core/gameDate";
 import type { GameState, InboxMessage } from "@/engine/core/types";
+import type { DecisionRecord } from "@/engine/consequences/types";
+
+const INBOX_CAREER_DECISION_SOURCE_KINDS = new Set([
+  "lateCareerDilemma",
+  "relationshipConflict",
+  "rivalCampaign",
+  "worldConditionArc",
+  "professionalCase",
+]);
 
 function hasOfferedConsequenceDecision(state: GameState, relatedId: string): boolean {
   return Object.values(state.consequenceState?.decisions ?? {}).some((decision) =>
@@ -94,4 +103,25 @@ export function reconcileInboxActionRequirements(
     return { ...message, actionRequired: false };
   });
   return changed ? reconciled : state.inbox;
+}
+
+export function selectLiveInboxActionMessages(state: GameState): InboxMessage[] {
+  return reconcileInboxActionRequirements(state).filter((message) => message.actionRequired);
+}
+
+export function selectOfferedInboxCareerDecisions(state: GameState): DecisionRecord[] {
+  return Object.values(state.consequenceState?.decisions ?? {})
+    .filter((decision) =>
+      decision.status === "offered"
+      && INBOX_CAREER_DECISION_SOURCE_KINDS.has(decision.source.kind)
+    )
+    .sort((left, right) =>
+      left.deadlineAt.season - right.deadlineAt.season
+      || left.deadlineAt.week - right.deadlineAt.week
+      || left.id.localeCompare(right.id),
+    );
+}
+
+export function selectActiveInboxNarrativeEvents(state: GameState): GameState["narrativeEvents"] {
+  return (state.narrativeEvents ?? []).filter((event) => !event.acknowledged);
 }

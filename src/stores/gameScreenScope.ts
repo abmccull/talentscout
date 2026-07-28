@@ -1,4 +1,9 @@
-import { IS_YOUTH_EARLY_ACCESS } from "@/lib/demo";
+import type { Specialization } from "@/engine/core/types";
+import { getSequenceById } from "@/components/game/tutorial/tutorialSteps";
+import {
+  IS_YOUTH_EARLY_ACCESS,
+  YOUTH_EARLY_ACCESS_ALLOWED_SPECS,
+} from "@/lib/demo";
 import type { GameScreen } from "./gameStoreTypes";
 
 export type YouthEarlyAccessScreenAccess =
@@ -139,6 +144,49 @@ export function isYouthEarlyAccessScreenAllowed(screen: GameScreen): boolean {
 /** Screens that may be targeted by the currently running build. */
 export function isGameScreenAllowedForBuild(screen: GameScreen): boolean {
   return !IS_YOUTH_EARLY_ACCESS || isYouthEarlyAccessScreenAllowed(screen);
+}
+
+function parseSequenceSpecialization(sequenceId: string): Specialization | null {
+  if (
+    !sequenceId.startsWith("onboarding:")
+    && !sequenceId.startsWith("ahaMoment:")
+  ) {
+    return null;
+  }
+
+  const specialization = sequenceId.split(":")[1];
+  switch (specialization) {
+    case "youth":
+    case "firstTeam":
+    case "regional":
+    case "data":
+      return specialization;
+    default:
+      return null;
+  }
+}
+
+export function isSpecializationAvailableForBuild(
+  specialization: Specialization,
+): boolean {
+  return (
+    !IS_YOUTH_EARLY_ACCESS ||
+    YOUTH_EARLY_ACCESS_ALLOWED_SPECS.includes(specialization)
+  );
+}
+
+export function isTutorialSequenceAvailableForBuild(sequenceId: string): boolean {
+  const specialization = parseSequenceSpecialization(sequenceId);
+  if (specialization && !isSpecializationAvailableForBuild(specialization)) {
+    return false;
+  }
+
+  const sequence = getSequenceById(sequenceId);
+  if (!sequence) return false;
+
+  return sequence.steps.every((step) =>
+    isGameScreenAllowedForBuild(step.screen as GameScreen)
+  );
 }
 
 /**

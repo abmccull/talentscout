@@ -140,6 +140,130 @@ function forcedRelationshipWeek(state: GameState): PreparedWeeklyScoutingEcology
 }
 
 describe("weekly scouting ecology phase", () => {
+  it("persists quiet fallback case and career metadata and keeps cooldown intact", () => {
+    const state = ecologyFixture();
+    state.scoutingCases = {
+      "case-1": {
+        id: "case-1",
+        playerId: "prospect",
+        scoutId: "scout",
+        status: "reported",
+        reportIds: ["report-1"],
+        decisionIds: ["decision-1"],
+        professionalContext: {
+          centralQuestion: "Can he handle the next level now?",
+        },
+      },
+    } as unknown as GameState["scoutingCases"];
+    state.reports = {
+      "report-1": {
+        id: "report-1",
+        caseId: "case-1",
+        playerId: "prospect",
+        riskFactors: ["Needs another live context."],
+        categoryVerdicts: {
+          roleFit: {
+            verdict: "Promising but still role-dependent.",
+            confidence: "medium",
+            hypothesisIds: [],
+            acknowledgedUncertainty: "Needs another role-fit read.",
+          },
+        },
+        submittedWeek: 1,
+        submittedSeason: 1,
+        evidenceObservationIds: ["obs-1"],
+      },
+    } as unknown as GameState["reports"];
+    state.observations = {
+      "obs-1": {
+        id: "obs-1",
+        playerId: "prospect",
+        context: "schoolMatch",
+      },
+    } as unknown as GameState["observations"];
+    state.clubDecisions = {
+      "decision-1": {
+        id: "decision-1",
+        caseId: "case-1",
+        outcome: "followUpRequested",
+        decidedWeek: 1,
+        decidedSeason: 1,
+        requestedEvidenceCategory: "roleFit",
+        reasons: ["The club wants a clearer answer on the role fit."],
+      },
+    } as unknown as GameState["clubDecisions"];
+    state.careerEraDirectorState = {
+      version: 1,
+      current: {
+        id: "career-era-1",
+        theme: "proveJudgment",
+        title: "Prove the read",
+        premise: "The case still needs one more hard answer.",
+        deskPrompt: "Stay close to the prospect.",
+        startedAt: { season: 1, week: 1 },
+        endsAt: { season: 1, week: 8 },
+        primaryProspectId: "prospect",
+        reinforcementCount: 0,
+      },
+      history: [],
+      processedWeekKeys: [],
+    } as GameState["careerEraDirectorState"];
+
+    const prepared = prepareWeeklyRelationshipConflictCandidate({
+      state,
+      forceTrigger: true,
+      preferredSubjectIds: ["prospect"],
+      quietFallback: {
+        quietIntervention: true,
+        caseId: "case-1",
+        questionId: "case-1:club-follow-up",
+        question: "What new evidence would answer the club's remaining role fit doubt?",
+        careerEraId: "career-era-1",
+      },
+    }).prepared;
+
+    expect(prepared).toBeDefined();
+
+    const accepted = applyDirectedWeeklyScoutingEcology({
+      state,
+      prepared: {
+        relationshipConflict: prepared,
+        candidates: [prepared!.candidate],
+      },
+      acceptedCandidateIds: new Set([prepared!.candidate.id]),
+    });
+    const decision = accepted.consequenceState.decisions[prepared!.candidate.id];
+
+    expect(decision?.metadata).toMatchObject({
+      quietIntervention: true,
+      caseId: "case-1",
+      questionId: "case-1:club-follow-up",
+      careerEraId: "career-era-1",
+    });
+
+    const cooledDown = {
+      ...accepted,
+      currentWeek: 2,
+      consequenceState: {
+        ...accepted.consequenceState,
+        decisions: {},
+        history: [decision! as unknown as typeof accepted.consequenceState.history[number]],
+      },
+    } as GameState;
+    const replay = prepareWeeklyRelationshipConflictCandidate({
+      state: cooledDown,
+      forceTrigger: true,
+      preferredSubjectIds: ["prospect"],
+      quietFallback: {
+        quietIntervention: true,
+        caseId: "case-1",
+      },
+    });
+
+    expect(replay.prepared).toBeUndefined();
+    expect(replay.blockedReason).toBe("cooldown");
+  });
+
   it("keeps a prepared relationship conflict side-effect free when rejected", () => {
     const state = ecologyFixture();
     const snapshot = structuredClone(state);

@@ -41,6 +41,10 @@ test.describe("Calendar Screen", () => {
     await expect(itinerary).toBeVisible();
     await expect(stanceCard).toBeVisible();
     await expect(policyPanel).toBeVisible();
+    const careerPressure = stanceCard.getByTestId("planner-career-pressure");
+    await expect(careerPressure).toBeVisible();
+    await expect(careerPressure).toContainText(/this week's pressure/i);
+    await expect(careerPressure).toHaveAttribute("data-career-fingerprint", /.+/);
 
     const itineraryComesFirst = await itinerary.evaluate((element, policyTestId) => {
       const policy = document.querySelector(`[data-testid="${policyTestId}"]`);

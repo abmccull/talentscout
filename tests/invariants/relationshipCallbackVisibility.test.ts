@@ -34,7 +34,36 @@ function selectedRelationshipConsequence() {
         scheduledConsequences: [{
           id: "the-room-remembers",
           dueAt: { season: 1, week: 3 },
-          effects: [],
+          effects: [
+            {
+              id: "callback-fact",
+              type: "recordFact",
+              fact: {
+                id: "fact:academy-credit:callback",
+                kind: "relationshipCallback",
+                value: true,
+                observedAt: { season: 1, week: 3 },
+                visibility: "stakeholders",
+                metadata: {
+                  detail: "The room has started talking about the decision.",
+                },
+              },
+            },
+            {
+              id: "callback-obligation",
+              type: "createObligation",
+              obligation: {
+                id: "obligation:academy-credit:repair",
+                debtor: { kind: "scout", id: "scout-1" },
+                creditor: { kind: "contact", id: "coach-1" },
+                kind: "creditRepair",
+                terms: "a public correction that names the coach's role in the file",
+                status: "active",
+                createdAt: { season: 1, week: 3 },
+                sourceDecisionId: "relationship-conflict:academy-credit",
+              },
+            },
+          ],
           tags: ["relationshipConflict", "callback"],
         }],
       },
@@ -107,6 +136,8 @@ describe("relationship callback visibility", () => {
     expect(message?.body).toContain("Ivo Santos");
     expect(message?.body).toContain("Mara Ellis");
     expect(message?.body).toContain("Asha Morgan");
+    expect(message?.body).toContain("Remembered decision:");
+    expect(message?.body).toContain("Next state: you now owe Mara Ellis");
   });
 
   it("does not invent a relationship story for an unrelated consequence", () => {

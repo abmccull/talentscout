@@ -185,6 +185,13 @@ export interface GameStoreState {
 
   gameState: GameState | null;
   isLoaded: boolean;
+  markDashboardItemViewed: (itemId: string, fingerprint?: string) => void;
+  snoozeDashboardItemUntilNextWeek: (itemId: string, fingerprint?: string) => void;
+  toggleDashboardItemPinned: (itemId: string, fingerprint?: string) => void;
+  dismissDashboardItem: (itemId: string, fingerprint?: string) => void;
+  syncDashboardVisibleItems: (visibleItemIds: string[]) => void;
+  dismissDashboardInsight: (insightId: string, fingerprint?: string) => void;
+  syncDashboardInsights: (insights: Array<{ id: string; fingerprint?: string }>) => void;
 
   activeMatch: {
     fixtureId: string;

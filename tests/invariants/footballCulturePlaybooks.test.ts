@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { CulturalInsight } from "@/engine/core/types";
+import { FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK } from "@/engine/content/registry";
 import { createRNG } from "@/engine/rng";
 import { generateCulturalInsight } from "@/engine/specializations/regionalKnowledge";
 import {
   getExplicitFootballCulturePlaybook,
   getFootballCulturePlaybook,
+  listExplicitFootballCulturePlaybooks,
   listFootballCultureInsightDefinitions,
 } from "@/engine/world/footballCulturePlaybooks";
 import {
@@ -19,6 +21,19 @@ import {
 import { getShippedCountryKeys } from "@/lib/country";
 
 describe("football culture playbooks", () => {
+  it("ships a validated explicit playbook catalog for every shipped country", () => {
+    expect(FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK.manifest.id).toBe(
+      "talentscout.football-culture-playbooks",
+    );
+    expect(FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK.manifest.contentVersion).toBe(
+      "football-culture-playbooks.1",
+    );
+    expect(FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK.entries).toHaveLength(22);
+    expect(listExplicitFootballCulturePlaybooks()).toHaveLength(
+      FOOTBALL_CULTURE_PLAYBOOK_CONTENT_PACK.entries.length,
+    );
+  });
+
   it("ships explicit playbooks for every shipped country with four insight types and calendar windows", () => {
     const shippedCountries = getShippedCountryKeys();
 

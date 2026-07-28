@@ -13,6 +13,7 @@ import type {
   Player,
   PlayerMovementEvent,
   Position,
+  RunManifest,
   ScoutReport,
   ScoutingCase,
   YouthRecruitmentBrief,
@@ -77,6 +78,7 @@ export interface AcademyRecruitmentBriefGenerationOptions {
   /** Maximum concurrently active briefs for this club. Defaults to two. */
   maxActiveBriefs?: number;
   seasonLength?: number;
+  runManifest?: Pick<RunManifest, "manifestVersion" | "contentDefinitionIds">;
 }
 
 export type AcademyBriefFulfillmentFailure =
@@ -294,6 +296,7 @@ export function generateAcademyRecruitmentBriefs(
   const doctrine = deriveAcademyBriefRecruitmentDoctrine({
     club,
     season,
+    runManifest: options.runManifest,
   });
   const ageRange = doctrine.academyIntakeAgeRange;
   const minimumReportQuality = Math.min(76, doctrine.minimumEvidenceQuality);

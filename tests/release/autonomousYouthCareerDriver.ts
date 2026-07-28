@@ -1,4 +1,8 @@
 import { canChooseCareerPath } from "@/engine/career/pathChoice";
+import {
+  deriveCareerFingerprintAuthority,
+  deriveCareerFingerprintProjection,
+} from "@/engine/career/fingerprint";
 import { COURSE_CATALOG } from "@/engine/career/courses";
 import { getActiveSeasonEvents } from "@/engine/core/seasonEvents";
 import type {
@@ -84,7 +88,128 @@ const RISKY_OPTION_HINTS = [
   "callclub",
 ] as const;
 
+const COMMERCIAL_OPTION_HINTS = [
+  "market",
+  "bid",
+  "exclusive",
+  "upgrade",
+  "retainer",
+  "consulting",
+  "agency",
+  "sale",
+  "sell",
+  "revenue",
+  "contract",
+  "offer",
+  "listing",
+  "commission",
+  "fee",
+  "cash",
+  "independent",
+] as const;
+
+export type AutonomousCareerChooserProfileId =
+  | "commercial"
+  | "cautious"
+  | "aggressive";
+
+interface AutonomousChooserProfile {
+  id: AutonomousCareerChooserProfileId;
+  intentRotation: readonly WeeklyIntentId[];
+  delegationRotation: readonly DelegationPolicyId[];
+  safeWeight: number;
+  riskyWeight: number;
+  commercialWeight: number;
+  defaultOptionBonus: number;
+  tieBreaker: "first" | "last";
+  preferredCareerPath: GameState["scout"]["careerPath"];
+  reportListingLimit: number;
+  exclusiveUpgradeMultiplier: number;
+  lowTierCourseReserve: number;
+  highTierCourseReserve: number;
+  retainerLimitOffset: number;
+}
+
+const AUTONOMOUS_CHOOSER_PROFILES: Record<
+  AutonomousCareerChooserProfileId,
+  AutonomousChooserProfile
+> = {
+  commercial: {
+    id: "commercial",
+    intentRotation: INTENT_ROTATION,
+    delegationRotation: DELEGATION_ROTATION,
+    safeWeight: 3,
+    riskyWeight: -2,
+    commercialWeight: 4,
+    defaultOptionBonus: 2,
+    tieBreaker: "first",
+    preferredCareerPath: "independent",
+    reportListingLimit: 2,
+    exclusiveUpgradeMultiplier: 1.2,
+    lowTierCourseReserve: 600,
+    highTierCourseReserve: 1_500,
+    retainerLimitOffset: 0,
+  },
+  cautious: {
+    id: "cautious",
+    intentRotation: [
+      "balancedDesk",
+      "evidenceDepth",
+      "relationshipCapital",
+      "assignmentDelivery",
+      "balancedDesk",
+      "evidenceDepth",
+    ],
+    delegationRotation: [
+      "protectRelationships",
+      "protectEvidence",
+      "protectCoverage",
+      "adaptiveDesk",
+    ],
+    safeWeight: 5,
+    riskyWeight: -5,
+    commercialWeight: 1,
+    defaultOptionBonus: 8,
+    tieBreaker: "first",
+    preferredCareerPath: "club",
+    reportListingLimit: 1,
+    exclusiveUpgradeMultiplier: 1.35,
+    lowTierCourseReserve: 1_000,
+    highTierCourseReserve: 2_500,
+    retainerLimitOffset: -1,
+  },
+  aggressive: {
+    id: "aggressive",
+    intentRotation: [
+      "speculativeEdge",
+      "discoveryBreadth",
+      "evidenceDepth",
+      "assignmentDelivery",
+      "relationshipCapital",
+      "speculativeEdge",
+    ],
+    delegationRotation: [
+      "adaptiveDesk",
+      "protectCoverage",
+      "adaptiveDesk",
+      "protectEvidence",
+    ],
+    safeWeight: 1,
+    riskyWeight: 2,
+    commercialWeight: 2,
+    defaultOptionBonus: 0,
+    tieBreaker: "last",
+    preferredCareerPath: "independent",
+    reportListingLimit: 2,
+    exclusiveUpgradeMultiplier: 1.05,
+    lowTierCourseReserve: 250,
+    highTierCourseReserve: 800,
+    retainerLimitOffset: 1,
+  },
+};
+
 export interface AutonomousCareerTelemetry {
+  chooserProfile: AutonomousCareerChooserProfileId;
   weeksDriven: number;
   authoredReports: number;
   listedReports: number;
@@ -127,6 +252,9 @@ export interface AutonomousWorldHealthSnapshot {
   completedCourses: number;
   activeRetainers: number;
   activeConsultingContracts: number;
+  careerFingerprintId: string;
+  careerFingerprintTitle: string;
+  visibleCareerCallbackCount: number;
 }
 
 interface ReportCandidate {
@@ -143,8 +271,17 @@ function round(value: number, precision = 3): number {
   return Math.round(value * scale) / scale;
 }
 
-function createTelemetry(): AutonomousCareerTelemetry {
+function chooserProfile(
+  profileId: AutonomousCareerChooserProfileId = "commercial",
+): AutonomousChooserProfile {
+  return AUTONOMOUS_CHOOSER_PROFILES[profileId];
+}
+
+function createTelemetry(
+  profileId: AutonomousCareerChooserProfileId,
+): AutonomousCareerTelemetry {
   return {
+    chooserProfile: profileId,
     weeksDriven: 0,
     authoredReports: 0,
     listedReports: 0,
@@ -188,16 +325,27 @@ function scheduleIndex(state: GameState): number {
   return Math.max(0, (state.currentSeason - 1) * 64 + state.currentWeek - 1);
 }
 
-function chooseWeeklyIntent(state: GameState): WeeklyIntentId {
-  return INTENT_ROTATION[scheduleIndex(state) % INTENT_ROTATION.length];
+function chooseWeeklyIntent(
+  state: GameState,
+  telemetry: AutonomousCareerTelemetry,
+): WeeklyIntentId {
+  const rotation = chooserProfile(telemetry.chooserProfile).intentRotation;
+  return rotation[scheduleIndex(state) % rotation.length];
 }
 
-function chooseDelegationPolicy(state: GameState): DelegationPolicyId {
-  return DELEGATION_ROTATION[scheduleIndex(state) % DELEGATION_ROTATION.length];
+function chooseDelegationPolicy(
+  state: GameState,
+  telemetry: AutonomousCareerTelemetry,
+): DelegationPolicyId {
+  const rotation = chooserProfile(telemetry.chooserProfile).delegationRotation;
+  return rotation[scheduleIndex(state) % rotation.length];
 }
 
-function buildPriorities(state: GameState): QuickScoutPriorities {
-  const intent = chooseWeeklyIntent(state);
+function buildPriorities(
+  state: GameState,
+  telemetry: AutonomousCareerTelemetry,
+): QuickScoutPriorities {
+  const intent = chooseWeeklyIntent(state, telemetry);
   const observedCounts = new Map<string, number>();
   for (const observation of Object.values(state.observations)) {
     if (observation.scoutId !== state.scout.id) continue;
@@ -222,26 +370,41 @@ function scoreText(...parts: Array<string | undefined>): string {
     .toLowerCase();
 }
 
-function safeChoiceScore(text: string): number {
+function profileChoiceScore(
+  text: string,
+  profileId: AutonomousCareerChooserProfileId,
+): number {
+  const profile = chooserProfile(profileId);
   let score = 0;
   for (const hint of SAFE_OPTION_HINTS) {
-    if (text.includes(hint)) score += 3;
+    if (text.includes(hint)) score += profile.safeWeight;
   }
   for (const hint of RISKY_OPTION_HINTS) {
-    if (text.includes(hint)) score -= 4;
+    if (text.includes(hint)) score += profile.riskyWeight;
+  }
+  for (const hint of COMMERCIAL_OPTION_HINTS) {
+    if (text.includes(hint)) score += profile.commercialWeight;
   }
   return score;
 }
 
-function chooseSafeOptionIndex(
+export function chooseAutonomousOptionIndex(
   choices: Array<{ label?: string; description?: string; effect?: string }>,
+  profileId: AutonomousCareerChooserProfileId = "commercial",
 ): number {
   if (choices.length === 0) return 0;
+  const profile = chooserProfile(profileId);
   let bestIndex = 0;
   let bestScore = Number.NEGATIVE_INFINITY;
   for (const [index, choice] of choices.entries()) {
-    const score = safeChoiceScore(scoreText(choice.label, choice.description, choice.effect));
-    if (score > bestScore) {
+    const score = profileChoiceScore(
+      scoreText(choice.label, choice.description, choice.effect),
+      profileId,
+    );
+    const beatsTie = score === bestScore
+      && profile.tieBreaker === "last"
+      && index > bestIndex;
+    if (score > bestScore || beatsTie) {
       bestIndex = index;
       bestScore = score;
     }
@@ -249,19 +412,30 @@ function chooseSafeOptionIndex(
   return bestIndex;
 }
 
-function chooseSafeDecisionOption(decision: DecisionRecord): DecisionOption {
-  const defaultOption = decision.defaultOptionId
-    ? decision.options.find((option) => option.id === decision.defaultOptionId)
-    : undefined;
-  if (defaultOption) return defaultOption;
-
+export function chooseAutonomousDecisionOption(
+  decision: DecisionRecord,
+  profileId: AutonomousCareerChooserProfileId,
+): DecisionOption {
+  const profile = chooserProfile(profileId);
   let best = decision.options[0];
   let bestScore = Number.NEGATIVE_INFINITY;
-  for (const option of decision.options) {
-    const score = safeChoiceScore(scoreText(option.id, option.label, ...option.knownTradeoffs));
-    if (score > bestScore) {
+  let bestIndex = 0;
+  for (const [index, option] of decision.options.entries()) {
+    const score = profileChoiceScore(
+      scoreText(option.id, option.label, ...option.knownTradeoffs),
+      profileId,
+    ) + (
+      decision.defaultOptionId === option.id
+        ? profile.defaultOptionBonus
+        : 0
+    );
+    const beatsTie = score === bestScore
+      && profile.tieBreaker === "last"
+      && index > bestIndex;
+    if (score > bestScore || beatsTie) {
       best = option;
       bestScore = score;
+      bestIndex = index;
     }
   }
   return best;
@@ -453,6 +627,7 @@ function listFreshReports(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   const state = store.gameState;
   if (!state || !state.finances || state.scout.careerPath !== "independent") return;
+  const profile = chooserProfile(telemetry.chooserProfile);
 
   const listings = state.finances.reportListings ?? [];
   const latestReports = selectLatestReportsByCase(Object.values(state.reports))
@@ -460,7 +635,7 @@ function listFreshReports(telemetry: AutonomousCareerTelemetry): void {
     .filter((report) => report.qualityScore >= 45)
     .filter((report) => !listingExistsForReport(listings, report.id));
 
-  for (const report of latestReports.slice(0, 2)) {
+  for (const report of latestReports.slice(0, profile.reportListingLimit)) {
     store.listReportForSale(
       report.id,
       listingPriceForReport(report),
@@ -475,10 +650,14 @@ function listFreshReports(telemetry: AutonomousCareerTelemetry): void {
   }
 }
 
-function chooseBestPendingBid(listing: ReportListing): {
+function chooseBestPendingBid(
+  listing: ReportListing,
+  telemetry: AutonomousCareerTelemetry,
+): {
   bid: MarketplaceBid;
   exclusiveUpgrade: boolean;
 } | null {
+  const profile = chooserProfile(telemetry.chooserProfile);
   const pending = listing.bids.filter((bid) => bid.status === "pending");
   if (pending.length === 0) return null;
 
@@ -489,7 +668,10 @@ function chooseBestPendingBid(listing: ReportListing): {
     .filter((bid) => bid.isExclusiveUpgrade)
     .sort((left, right) => right.amount - left.amount || left.id.localeCompare(right.id))[0];
 
-  if (upgrade && (!standard || upgrade.amount >= standard.amount * 1.2)) {
+  if (
+    upgrade
+    && (!standard || upgrade.amount >= standard.amount * profile.exclusiveUpgradeMultiplier)
+  ) {
     return { bid: upgrade, exclusiveUpgrade: true };
   }
   if (standard) {
@@ -507,7 +689,7 @@ function resolveCommercialInbox(telemetry: AutonomousCareerTelemetry): void {
   if (!state || !state.finances) return;
 
   for (const listing of state.finances.reportListings) {
-    const choice = chooseBestPendingBid(listing);
+    const choice = chooseBestPendingBid(listing, telemetry);
     if (!choice) continue;
     if (choice.exclusiveUpgrade) {
       store.acceptExclusiveUpgradeBid(choice.bid.id);
@@ -523,10 +705,12 @@ function resolveAgencyOffers(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   const state = store.gameState;
   if (!state || !state.finances) return;
+  const profile = chooserProfile(telemetry.chooserProfile);
 
   const finances = state.finances;
   const activeRetainers = finances.retainerContracts.filter((contract) => contract.status === "active").length;
-  const maxRetainers = state.scout.careerTier >= 4 ? 3 : state.scout.careerTier >= 3 ? 2 : 1;
+  const profileCap = state.scout.careerTier >= 4 ? 3 : state.scout.careerTier >= 3 ? 2 : 1;
+  const maxRetainers = Math.max(1, profileCap + profile.retainerLimitOffset);
   let accepted = activeRetainers;
 
   for (const contract of [...(finances.pendingRetainerOffers ?? [])]) {
@@ -551,12 +735,16 @@ function chooseCareerPathIfReady(telemetry: AutonomousCareerTelemetry): void {
   const state = store.gameState;
   if (!state || !state.finances) return;
   if (!canChooseCareerPath(state.scout, state.finances)) return;
-  store.chooseCareerPath("independent");
+  store.chooseCareerPath(chooserProfile(telemetry.chooserProfile).preferredCareerPath);
   recordMeaningfulDecision(telemetry, "careerPathChoices");
 }
 
-function nextCourseToEnroll(state: GameState): string | null {
+function nextCourseToEnroll(
+  state: GameState,
+  telemetry: AutonomousCareerTelemetry,
+): string | null {
   if (!state.finances || state.finances.activeEnrollment) return null;
+  const profile = chooserProfile(telemetry.chooserProfile);
   const completed = new Set(state.finances.completedCourses);
   for (const courseId of COURSE_PRIORITY) {
     if (completed.has(courseId)) continue;
@@ -564,7 +752,9 @@ function nextCourseToEnroll(state: GameState): string | null {
     if (!course) continue;
     if (state.scout.careerTier < course.minTier) continue;
     if (course.prerequisites.some((prerequisite) => !completed.has(prerequisite))) continue;
-    const reserve = state.scout.careerTier >= 3 ? 1_500 : 600;
+    const reserve = state.scout.careerTier >= 3
+      ? profile.highTierCourseReserve
+      : profile.lowTierCourseReserve;
     if ((state.finances.balance ?? 0) < course.cost + reserve) continue;
     return courseId;
   }
@@ -575,7 +765,7 @@ function enrollCourseIfAffordable(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   const state = store.gameState;
   if (!state) return;
-  const courseId = nextCourseToEnroll(state);
+  const courseId = nextCourseToEnroll(state, telemetry);
   if (!courseId) return;
   const beforeEnrollment = state.finances?.activeEnrollment?.courseId;
   store.enrollInCourse(courseId);
@@ -589,7 +779,10 @@ function resolveSeasonEvents(telemetry: AutonomousCareerTelemetry): void {
   const store = useGameStore.getState();
   for (const event of store.getActiveSeasonEvents()) {
     if (!event.choices || event.choices.length === 0) continue;
-    const choiceIndex = chooseSafeOptionIndex(event.choices);
+    const choiceIndex = chooseAutonomousOptionIndex(
+      event.choices,
+      telemetry.chooserProfile,
+    );
     store.resolveSeasonEvent(event.id, choiceIndex);
     recordMeaningfulDecision(telemetry, "seasonEventChoices");
   }
@@ -608,7 +801,10 @@ function resolveNarrativeAndConsequenceChoices(telemetry: AutonomousCareerTeleme
   for (const event of store.getActiveNarrativeEvents()) {
     if (event.selectedChoice !== undefined) continue;
     if (event.choices && event.choices.length > 0) {
-      const choiceIndex = chooseSafeOptionIndex(event.choices);
+      const choiceIndex = chooseAutonomousOptionIndex(
+        event.choices,
+        telemetry.chooserProfile,
+      );
       store.resolveNarrativeEventChoice(event.id, choiceIndex);
       recordMeaningfulDecision(telemetry, "narrativeChoices");
     } else {
@@ -623,7 +819,10 @@ function resolveNarrativeAndConsequenceChoices(telemetry: AutonomousCareerTeleme
     .filter((decision) => decision.status === "offered")
     .sort((left, right) => left.id.localeCompare(right.id));
   for (const decision of offeredDecisions) {
-    const option = chooseSafeDecisionOption(decision);
+    const option = chooseAutonomousDecisionOption(
+      decision,
+      telemetry.chooserProfile,
+    );
     store.resolveConsequenceDecision(decision.id, option.id);
     recordMeaningfulDecision(telemetry, "consequenceChoices");
   }
@@ -641,9 +840,9 @@ export async function driveAutonomousYouthCareerWeek(
   }
 
   clearWeekSchedule();
-  store.setWeeklyIntent(chooseWeeklyIntent(state));
-  store.setDelegationPolicy(chooseDelegationPolicy(state));
-  store.autoSchedule(buildPriorities(state));
+  store.setWeeklyIntent(chooseWeeklyIntent(state, telemetry));
+  store.setDelegationPolicy(chooseDelegationPolicy(state, telemetry));
+  store.autoSchedule(buildPriorities(state, telemetry));
   ensureScheduledWork();
 
   const sourceSeason = useGameStore.getState().gameState?.currentSeason;
@@ -728,6 +927,54 @@ function countUnresolvedActionBacklog(state: GameState): number {
     + (state.openingCase?.stage === "decision" ? 1 : 0);
 }
 
+export function collectAutonomousCareerPresentationSignals(
+  state: Pick<
+    GameState,
+    | "assistantScouts"
+    | "careerEraDirectorState"
+    | "careerRecovery"
+    | "consequenceState"
+    | "contacts"
+    | "countries"
+    | "currentSeason"
+    | "currentWeek"
+    | "discoveryRecords"
+    | "finances"
+    | "npcScouts"
+    | "performanceReviews"
+    | "playerMovementHistory"
+    | "regionalKnowledge"
+    | "rivalOrganizationState"
+    | "runManifest"
+    | "scout"
+  >,
+): {
+  careerFingerprintId: string;
+  careerFingerprintTitle: string;
+  visibleCareerCallbackCount: number;
+} {
+  const fingerprint = deriveCareerFingerprintProjection(
+    deriveCareerFingerprintAuthority(state),
+  );
+  const discoveredPlayerIds = new Set(
+    (state.discoveryRecords ?? []).map((record) => record.playerId),
+  );
+  const placementCallbacks = (state.discoveryRecords ?? []).filter((record) =>
+    record.placementSeason != null && record.placementWeek != null
+  ).length;
+  const movementCallbacks = (state.playerMovementHistory ?? []).filter((movement) =>
+    discoveredPlayerIds.has(movement.playerId)
+  ).length;
+  return {
+    careerFingerprintId: fingerprint.fingerprintId,
+    careerFingerprintTitle: fingerprint.title,
+    visibleCareerCallbackCount:
+      placementCallbacks
+      + movementCallbacks
+      + (state.performanceReviews?.length ?? 0),
+  };
+}
+
 export function collectAutonomousWorldHealth(
   state: GameState,
   telemetry: AutonomousCareerTelemetry,
@@ -735,6 +982,7 @@ export function collectAutonomousWorldHealth(
   const activePlayers = Object.keys(state.players).length;
   const freeAgents = state.freeAgentPool?.agents.length ?? 0;
   const activeLoans = state.activeLoans?.length ?? 0;
+  const presentation = collectAutonomousCareerPresentationSignals(state);
   return {
     season: state.currentSeason,
     activePlayers,
@@ -759,9 +1007,14 @@ export function collectAutonomousWorldHealth(
     completedCourses: state.finances?.completedCourses.length ?? 0,
     activeRetainers: state.finances?.retainerContracts.filter((contract) => contract.status === "active").length ?? 0,
     activeConsultingContracts: state.finances?.consultingContracts.filter((contract) => contract.status === "active").length ?? 0,
+    careerFingerprintId: presentation.careerFingerprintId,
+    careerFingerprintTitle: presentation.careerFingerprintTitle,
+    visibleCareerCallbackCount: presentation.visibleCareerCallbackCount,
   };
 }
 
-export function createAutonomousCareerTelemetry(): AutonomousCareerTelemetry {
-  return createTelemetry();
+export function createAutonomousCareerTelemetry(
+  profileId: AutonomousCareerChooserProfileId = "commercial",
+): AutonomousCareerTelemetry {
+  return createTelemetry(profileId);
 }

@@ -148,6 +148,26 @@ describe("evergreen Youth professional cases", () => {
         (sum, consequence) => sum + (consequence.outcomeRoll ?? 0),
         0,
       )).toBeCloseTo(1, 10);
+      for (const consequence of option.scheduledConsequences) {
+        expect((consequence.tags ?? []).some((tag) =>
+          tag === "callback-access" || tag === "callback-obligation",
+        )).toBe(true);
+        expect(consequence.effects.some((effect) =>
+          effect.type === "createObligation"
+          || effect.type === "createOpportunityLock"
+          || effect.type === "addMemory",
+        )).toBe(true);
+        const callbackFact = consequence.effects.find((effect) =>
+          effect.type === "recordFact" && effect.fact.kind === "professionalCaseCallback",
+        );
+        expect(callbackFact?.type).toBe("recordFact");
+        if (callbackFact?.type === "recordFact") {
+          expect(callbackFact.fact.metadata?.actorName).toBeTruthy();
+          expect(callbackFact.fact.metadata?.rememberedDecision).toBe(option.label);
+          expect(String(callbackFact.fact.metadata?.detail)).toContain("Remembered decision:");
+          expect(String(callbackFact.fact.metadata?.detail)).toContain("Next state:");
+        }
+      }
     }
     expect(decision.metadata).toMatchObject({
       caseId: first.caseId,
@@ -242,6 +262,11 @@ describe("evergreen Youth professional cases", () => {
       .toHaveLength(1);
     expect(callbackFacts).toHaveLength(1);
     expect(callbackFacts[0].metadata?.outcome).toMatch(/^(opening|setback)$/);
+    expect(callbackFacts[0].metadata?.actorName).toBeTruthy();
+    expect(callbackFacts[0].metadata?.rememberedDecision).toBe(option.label);
+    expect(String(callbackFacts[0].metadata?.detail)).toContain("Remembered decision:");
+    expect(String(callbackFacts[0].metadata?.detail)).toContain("Next state:");
+    expect(callbackFacts[0].metadata?.stateChange).toBeTruthy();
 
     const callbackState = {
       ...offered.state,
@@ -253,6 +278,8 @@ describe("evergreen Youth professional cases", () => {
     expect(emitted.inbox.at(-1)?.body).toContain(
       String(callbackFacts[0].metadata?.detail),
     );
+    expect(emitted.inbox.at(-1)?.body).toContain("Remembered decision:");
+    expect(emitted.inbox.at(-1)?.body).toContain("Next state:");
   });
 
   it("emits a delayed callback exactly once from an applied case fact", () => {

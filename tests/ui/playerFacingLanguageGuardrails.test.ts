@@ -33,7 +33,11 @@ describe("player-facing language guardrails", () => {
 
   it("keeps the youth report structured while its language stays inside the scouting world", () => {
     const reportWriter = source("components/game/ReportWriter.tsx");
-    const playerProfile = source("components/game/PlayerProfile.tsx");
+    const playerProfile = [
+      "components/game/PlayerProfile.tsx",
+      "components/game/player-profile/PlayerProfileEvidenceCards.tsx",
+      "components/game/player-profile/PlayerProfileHistoryCards.tsx",
+    ].map(source).join("\n");
 
     expect(reportWriter).not.toContain("openingCurrentRead");
     expect(reportWriter).not.toContain("openingKeyUncertainty");
@@ -43,7 +47,7 @@ describe("player-facing language guardrails", () => {
     expect(reportWriter).not.toMatch(/hidden player ability/i);
     expect(reportWriter).not.toMatch(/provenance:|structured choices|free typing|evidence and claim builder|assembled from your selected/i);
     expect(reportWriter).not.toMatch(/Decision window[^\n]*gameState\.difficulty/i);
-    expect(reportWriter).toContain("Private scout&apos;s note");
+    expect(reportWriter).toContain("Private scout's note");
     expect(reportWriter).toContain("prepared to defend in the recruitment room");
     expect(playerProfile).not.toMatch(/generate one via the data analysis system/i);
     expect(playerProfile).toContain("Commission an analyst review");

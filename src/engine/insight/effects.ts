@@ -449,7 +449,16 @@ export function applyInsightActionResult(
       const cacheKey = `${player.id}:${club.id}`;
       systemFitCache = {
         ...systemFitCache,
-        [cacheKey]: calculateSystemFit(player, club, manager, context.players),
+        [cacheKey]: calculateSystemFit(
+          player,
+          club,
+          manager,
+          context.players,
+          undefined,
+          0,
+          undefined,
+          { runManifest: input.state.runManifest },
+        ),
       };
     }
   }

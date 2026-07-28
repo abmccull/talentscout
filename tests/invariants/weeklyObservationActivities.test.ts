@@ -4,6 +4,8 @@ import { addActivity, createWeekSchedule, processCompletedWeek } from "@/engine/
 import { createRNG } from "@/engine/rng";
 import { processWeeklyObservationActivities } from "@/stores/actions/weeklyObservationActivities";
 import { processWeeklyPlacementResolution } from "@/stores/actions/weeklyPlacementResolution";
+import { createConsequenceEngineState } from "@/engine/consequences";
+import { buildProfessionalCaseOpportunityLockMetadata } from "@/engine/youth/professionalCaseOpportunities";
 
 vi.mock("@/lib/activeSaveProvider", () => ({
   getActiveSaveProvider: async () => ({ save: async () => undefined }),
@@ -50,6 +52,23 @@ function scheduleSchoolMatch(state: GameState): GameState {
     type: "schoolMatch",
     slots: 1,
     description: "Observe a local school match",
+  };
+  return {
+    ...state,
+    schedule: addActivity(
+      createWeekSchedule(state.currentWeek, state.currentSeason),
+      activity,
+      0,
+    ),
+  };
+}
+
+function scheduleFollowUpSession(state: GameState, targetId: string): GameState {
+  const activity: Activity = {
+    type: "followUpSession",
+    slots: 1,
+    targetId,
+    description: "Follow up on a priority youth case",
   };
   return {
     ...state,
@@ -130,6 +149,70 @@ describe("weekly observation transaction", () => {
     expect(result.observationsGenerated).toBe(0);
     expect(result.playersDiscovered).toBe(0);
     expect(result.state.observations).toEqual(empty.observations);
+  }, 30_000);
+
+  it("consumes a matching professional-case lock once through weekly completion and does not replay it", async () => {
+    const initial = await createObservationState("observation-professional-case-lock");
+    const targetYouth = Object.values(initial.unsignedYouth).find(
+      (youth) => !youth.placed && !youth.retired,
+    );
+    expect(targetYouth).toBeTruthy();
+    if (!targetYouth) return;
+
+    const caseId = `case_${initial.scout.id}_${targetYouth.player.id}`;
+    const state = scheduleFollowUpSession(initial, targetYouth.player.id);
+    state.consequenceState = {
+      ...createConsequenceEngineState(),
+      opportunityLocks: {
+        "lock:follow-up": {
+          id: "lock:follow-up",
+          opportunityId: `professional-case:${caseId}:role-conversion:opening`,
+          exclusiveSetId: `professional-case:${caseId}:role-conversion`,
+          owner: { kind: "scout", id: state.scout.id },
+          status: "active",
+          createdAt: { season: state.currentSeason, week: state.currentWeek - 1 },
+          expiresAt: { season: state.currentSeason, week: state.currentWeek + 3 },
+          sourceDecisionId: "decision:role-conversion",
+          metadata: buildProfessionalCaseOpportunityLockMetadata({
+            label: "Role-conversion access window",
+            playerId: targetYouth.player.id,
+            caseId,
+            familyId: "role-conversion",
+            actorName: "Maya Okoro",
+            countryId: targetYouth.player.nationality,
+            playerName: `${targetYouth.player.firstName} ${targetYouth.player.lastName}`,
+            clubName: "Northbridge Academy",
+          }),
+        },
+      },
+    };
+    state.scoutingCases = {
+      ...state.scoutingCases,
+      [caseId]: {
+        id: caseId,
+        playerId: targetYouth.player.id,
+        openedWeek: state.currentWeek - 2,
+        openedSeason: state.currentSeason,
+        lastUpdatedWeek: state.currentWeek - 2,
+        lastUpdatedSeason: state.currentSeason,
+      } as NonNullable<GameState["scoutingCases"]>[string],
+    };
+
+    const first = resolveObservationWeek(state);
+    const factId = `fact:${caseId}:opportunity:lock:follow-up`;
+    const messageId = `prospect-follow-up:${caseId}:lock:follow-up`;
+
+    expect(first.state.consequenceState.opportunityLocks["lock:follow-up"]?.status).toBe("consumed");
+    expect(first.state.consequenceState.facts[factId]).toMatchObject({
+      kind: "professionalCaseOpportunityResolved",
+      value: "followUpSession",
+    });
+    expect(first.state.inbox.filter((message) => message.id === messageId)).toHaveLength(1);
+
+    const replay = resolveObservationWeek(first.state);
+    expect(replay.state.consequenceState.opportunityLocks["lock:follow-up"]?.status).toBe("consumed");
+    expect(replay.state.consequenceState.facts[factId]).toEqual(first.state.consequenceState.facts[factId]);
+    expect(replay.state.inbox.filter((message) => message.id === messageId)).toHaveLength(1);
   }, 30_000);
 });
 

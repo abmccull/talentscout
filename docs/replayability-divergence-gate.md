@@ -14,8 +14,9 @@ The release runner refuses the legacy `artifacts/replayability/release-summary.j
 The artifact contains configuration, thresholds, metrics, catalog distributions, exact failure reasons, stable trajectory fingerprints, and human-facing proxy fields:
 
 - quiet-streak proxy with `p95` and `maximum` sampled quiet-week streaks;
-- rolling eight-week meaningful-week density summaries;
-- `authoredSurfaceCoverage.clubRecruitmentExpressions`, sourced from the 12-expression production catalog;
+- `rollingEightWeekPreArbitrationChoiceOpportunityDensity`, a generated choice-opportunity proxy that includes authored choice prompts plus rival opportunities before any downstream arbitration or player-visible delivery;
+- `setupCareerFingerprintProjections`, an explicitly non-gating sampled setup projection over authored identity/world inputs, not a simulated player-facing outcome fingerprint;
+- `authoredSurfaceCoverage.clubRecruitmentExpressions`, sourced from the 20-expression production catalog;
 - `authoredSurfaceCoverage.footballCulturePlaybooks`, sourced from the 22 explicit production playbooks and their authored calendar windows;
 - `authoredSurfaceCoverage.relationshipConflicts`, sourced from the production conflict-blueprint, front-family, front-structure, recurrence, recurring-front-variant, callback-variant, and stakeholder-outcome inventories;
 - `rivalCounterplay`, which retains sampled rival-organization archetype, action-signature, and organization-set telemetry under its actual meaning.

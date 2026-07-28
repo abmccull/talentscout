@@ -146,6 +146,7 @@ export interface AuthoredRelationshipConflictDefinition {
   frontFamilyId: string;
   recurrenceName: string;
   frontStructure: RelationshipFrontStructure;
+  quietEligible?: boolean;
   leftRole: StakeholderProfileRole;
   rightRole: StakeholderProfileRole;
   leftPriority: StakeholderPriority;
@@ -265,6 +266,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "family-journalist-media",
     recurrenceName: "The Embargo Triangle",
     frontStructure: "publicPrivate",
+    quietEligible: true,
     leftRole: "family",
     rightRole: "journalist",
     leftPriority: "privacy",
@@ -600,6 +602,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "budget-proof",
     recurrenceName: "The Milestone Dossier",
     frontStructure: "verificationDelay",
+    quietEligible: true,
     leftRole: "director",
     rightRole: "coach",
     leftPriority: "financialSecurity",
@@ -696,6 +699,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "closed-session-proof",
     recurrenceName: "The Closed Session File",
     frontStructure: "verificationDelay",
+    quietEligible: true,
     leftRole: "organizer",
     rightRole: "scout",
     leftPriority: "access",
@@ -775,6 +779,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "source-protection",
     recurrenceName: "The Protected Lead",
     frontStructure: "confidentiality",
+    quietEligible: true,
     leftRole: "contact",
     rightRole: "journalist",
     leftPriority: "discretion",
@@ -872,6 +877,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "proof-chain",
     recurrenceName: "The Proof Chain",
     frontStructure: "verificationDelay",
+    quietEligible: true,
     leftRole: "contact",
     rightRole: "manager",
     leftPriority: "discretion",
@@ -1213,6 +1219,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "local-peace",
     recurrenceName: "The Local Peace",
     frontStructure: "favor",
+    quietEligible: true,
     leftRole: "organizer",
     rightRole: "rival",
     leftPriority: "access",
@@ -1321,6 +1328,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "private-window",
     recurrenceName: "The Private Window",
     frontStructure: "confidentiality",
+    quietEligible: true,
     leftRole: "agent",
     rightRole: "family",
     leftPriority: "discretion",
@@ -1419,6 +1427,7 @@ const CONFLICT_DEFINITIONS: readonly AuthoredRelationshipConflictDefinition[] = 
     frontFamilyId: "off-record-line",
     recurrenceName: "The Off-Record Line",
     frontStructure: "publicPrivate",
+    quietEligible: true,
     leftRole: "journalist",
     rightRole: "manager",
     leftPriority: "publicity",
@@ -2208,12 +2217,14 @@ export function selectAuthoredRelationshipConflict(input: {
   registry: StakeholderProfileRegistry;
   subject: EntityRef;
   excludedEntityKeys?: ReadonlySet<string>;
+  quietEligibleOnly?: boolean;
   state?: GameState;
 }): AuthoredConflictCast | undefined {
   const profiles = Object.values(input.registry.profiles)
     .filter((profile) => profile.active !== false);
   const candidates = CONFLICT_DEFINITIONS.flatMap((definition) => {
     if (definition.subjectKind !== input.subject.kind) return [];
+    if (input.quietEligibleOnly && definition.quietEligible !== true) return [];
     const leftProfiles = profiles.filter((profile) =>
       profile.role === definition.leftRole
       && !input.excludedEntityKeys?.has(entityKey(profile.entity)),
@@ -2293,6 +2304,7 @@ export function materializeAuthoredRelationshipConflict(input: {
   outcomeRoll: number;
   existingState?: Pick<ConsequenceEngineState, "decisions" | "history">;
   advanceWeeks?: (start: GameDate, weeks: number) => GameDate;
+  decisionMetadata?: Record<string, JsonValue>;
 }): MaterializedRelationshipConflict {
   const { definition, left, right, subject } = input.cast;
   const front = buildFrontMetadata(definition, input.cast, input.existingState);
@@ -2401,6 +2413,7 @@ export function materializeAuthoredRelationshipConflict(input: {
         leftStakeholderKey: front.leftStakeholderKey,
         rightStakeholderKey: front.rightStakeholderKey,
         semanticSignature: `relationship:${front.frontFamilyId}:${front.frontStructure}:${definition.leftRole}:${definition.rightRole}:${subject.kind}`,
+        ...input.decisionMetadata,
       },
     },
   };
